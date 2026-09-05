@@ -1,0 +1,23 @@
+{
+  "name": "assoc-graph",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ingest": "tsx src/ingest.ts",
+    "dev": "tsx src/server.ts",
+    "reindex": "tsx src/reindex.ts",
+    "purge": "tsx src/purge.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@hono/node-server": "^2.1.1",
+    "fast-xml-parser": "^5.11.1",
+    "fflate": "^0.8.3",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

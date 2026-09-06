@@ -169,10 +169,14 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
 }
 
 // Buckets count backward from now() in fixed bucket_days steps (i = 0 is the most
-// recent bucket ending at now()), so this never needs date_trunc and sidesteps the
-// ISO-week-vs-rolling-week ambiguity; bucket=week is a rolling 7-day window, not a
-// Monday-aligned one. The oldest bucket is clamped to the window edge, so buckets
-// exactly partition the same window docsFor uses for the same params.
+// recent bucket, open-ended at 'infinity' rather than now(), so this never needs
+// date_trunc and sidesteps the ISO-week-vs-rolling-week ambiguity; bucket=week is a
+// rolling 7-day window, not a Monday-aligned one. The newest bucket has no upper
+// bound because scopeCte likewise has none on published_at: a future-dated doc
+// (source clock skew) still counts in docsFor's total, so it must land somewhere
+// here too, or the sum-of-buckets invariant breaks. The oldest bucket is clamped to
+// the window edge, so buckets exactly partition the same window docsFor uses for
+// the same params.
 const timelineSql = `
   with ${scopeCte},
   bounds as (select $2::int as days, $7::int as bucket_days),
@@ -182,7 +186,8 @@ const timelineSql = `
         now() - make_interval(days => b.days),
         now() - make_interval(days => (i + 1) * b.bucket_days)
       ) as bucket_start,
-      now() - make_interval(days => i * b.bucket_days) as bucket_end
+      case when i = 0 then 'infinity'::timestamptz
+        else now() - make_interval(days => i * b.bucket_days) end as bucket_end
     from bounds b, generate_series(0, ceil(b.days::float8 / b.bucket_days::float8)::int - 1) as i
   )
   select b.bucket_start,

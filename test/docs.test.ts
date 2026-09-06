@@ -32,9 +32,10 @@ describe('docsFor', () => {
   })
 
   it('AC5: widens with the window', async () => {
+    // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const { total, docs } = await docsFor(lula, { ...base, days: 365 })
-    assert.equal(total, 5)
-    assert.equal(docs.length, 5)
+    assert.equal(total, 8)
+    assert.equal(docs.length, 8)
   })
 
   it('AC6: filters by source', async () => {

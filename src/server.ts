@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { db, migrate } from './db.js'
-import { docsFor, graphFor, sourcesFor, type DocsQuery, type GraphQuery } from './graph.js'
+import { docsFor, graphFor, risingFor, sourcesFor, type DocsQuery, type GraphQuery, type RisingQuery } from './graph.js'
 import { normalize } from './extract.js'
 import type { Person } from './types.js'
 
@@ -34,6 +34,16 @@ const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => ({
   offset: int(q.offset, 0, 0, 1_000_000),
 })
 
+const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery => ({
+  days: int(q.days, 7, 1, 365),
+  baseline: int(q.baseline, 30, 1, 365),
+  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg'].includes(q.source ?? '') ? q.source! : 'all',
+  domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
+  kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
+  limit: int(q.limit, 20, 1, 100),
+  min: int(q.min, 3, 1, 1000),
+})
+
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
   return c.json(rows)
@@ -55,6 +65,12 @@ app.get('/api/people/:id/docs', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
   if (!rows[0]) return c.json({ error: 'person not found' }, 404)
   return c.json(await docsFor(rows[0], parseDocsQuery(c.req.query())))
+})
+
+app.get('/api/people/:id/rising', async (c) => {
+  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
+  if (!rows[0]) return c.json({ error: 'person not found' }, 404)
+  return c.json(await risingFor(rows[0], parseRisingQuery(c.req.query())))
 })
 
 app.use('/*', serveStatic({ root: './public' }))

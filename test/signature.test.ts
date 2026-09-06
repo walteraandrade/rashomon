@@ -34,17 +34,19 @@ describe('signature (issue #6)', () => {
   it('AC4: signature never exceeds 5 entries and is not padded when more terms qualify', async () => {
     const g = await graphFor(lula, { ...base, days: 2000 })
     assert.ok(g.signature.length <= 5)
-    const expectedPmi = pmi(3, 3, 16, 14)
+    // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each) and, incidentally, a 3rd "defende"
+    // (docs /6, /15 and /17 all use it), widening the tie set from 6 to 9 candidate terms
+    const expectedPmi = pmi(3, 3, 19, 17)
     assert.deepEqual(g.signature, [
+      { term: 'defende', kind: 'word', count: 3, pmi: expectedPmi },
       { term: 'desemprego', kind: 'word', count: 3, pmi: expectedPmi },
       { term: 'educacao', kind: 'word', count: 3, pmi: expectedPmi },
-      { term: 'inflacao', kind: 'word', count: 3, pmi: expectedPmi },
-      { term: 'reforma', kind: 'word', count: 3, pmi: expectedPmi },
-      { term: 'saude', kind: 'word', count: 3, pmi: expectedPmi },
+      { term: 'estabilidade', kind: 'word', count: 3, pmi: expectedPmi },
+      { term: 'fiscal', kind: 'word', count: 3, pmi: expectedPmi },
     ])
     assert.ok(
       !g.signature.some((s) => s.term === 'seguranca'),
-      'a 6th equally-qualifying term must be dropped by the fixed limit 5, not silently kept',
+      'a lower-alphabet equally-qualifying term must be dropped by the fixed limit 5, not silently kept',
     )
   })
 
@@ -56,9 +58,12 @@ describe('signature (issue #6)', () => {
 
   it('AC6: signature orders by pmi desc, ties broken by term ascending', async () => {
     const g = await graphFor(lula, { ...base, days: 1000 })
-    const tie = pmi(3, 3, 13, 11)
+    // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others
+    const tie = pmi(3, 3, 16, 14)
     assert.deepEqual(g.signature, [
       { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
+      { term: 'estabilidade', kind: 'word', count: 3, pmi: tie },
+      { term: 'fiscal', kind: 'word', count: 3, pmi: tie },
       { term: 'inflacao', kind: 'word', count: 3, pmi: tie },
       { term: 'reforma', kind: 'word', count: 3, pmi: tie },
     ])

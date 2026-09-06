@@ -1,6 +1,11 @@
 import { db } from './db.js'
 import { mentions, terms } from './extract.js'
-import type { Person, RawDoc } from './types.js'
+import type { Person, RawDoc, Source } from './types.js'
+
+// Tone is a GDELT measure. A doc keeps the source that first delivered it, so a
+// later gkg row sharing the uri must not leak its tone into an rss/gnews doc.
+export const tonedSources: Source[] = ['gdelt', 'gkg']
+const toneFor = (doc: RawDoc) => (tonedSources.includes(doc.source) ? doc.tone ?? null : null)
 
 export const pruneRemoved = async (ps: Person[]) => {
   const ids = ps.map((p) => p.id)
@@ -23,9 +28,11 @@ export const upsertPersons = (ps: Person[]) =>
 export const insertDoc = async (doc: RawDoc, ps: Person[]): Promise<boolean> => {
   const inserted = await db.query<{ id: number; inserted: boolean }>(
     `insert into docs (source, uri, text, published_at, extra_terms, domain, tone) values ($1, $2, $3, $4, $5, $6, $7)
-     on conflict (uri) do update set domain = coalesce(docs.domain, excluded.domain), tone = coalesce(docs.tone, excluded.tone)
+     on conflict (uri) do update set
+       domain = coalesce(docs.domain, excluded.domain),
+       tone = case when docs.source = any($8::text[]) then coalesce(docs.tone, excluded.tone) else null end
      returning id, (xmax = 0) as inserted`,
-    [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, doc.tone ?? null],
+    [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, toneFor(doc), tonedSources],
   )
   const row = inserted.rows[0]
   if (!row?.inserted) return false

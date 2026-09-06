@@ -25,7 +25,7 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
 - `src/server.ts` Hono routes + static files.
 - `src/query.ts` query parsers for every route; each parameter is clamped there.
-- `public/design-5.html` is the current UI (radial atlas). `public/index.html` is the legacy UI. Other `design-*.html` files are alternatives kept for reference; do not extend them.
+- `public/design-5.html` is the current UI (radial atlas), served at `/`. `public/index.html` is the legacy UI, reachable only by name. Other `design-*.html` files are alternatives kept for reference; do not extend them.
 - `test/` node:test suites. `test/fixture.ts` seeds two people and six docs; extend it rather than creating ad-hoc data.
 
 ## Style

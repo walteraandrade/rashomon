@@ -47,6 +47,8 @@ app.get('/api/people/:id/rising', async (c) => {
 // Not nested under /people/:id: it spans every tracked person at once.
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))
 
+// The radial atlas is the current UI; index.html stays reachable as the legacy one.
+app.get('/', serveStatic({ path: './public/design-5.html' }))
 app.use('/*', serveStatic({ root: './public' }))
 
 await migrate()

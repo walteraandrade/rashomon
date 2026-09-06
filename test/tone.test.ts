@@ -34,6 +34,22 @@ describe('toneFor', () => {
     assert.deepEqual(cell(r, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', tone: -1, n: 3 })
   })
 
+  it('excludes an untoned doc from a surfaced cell instead of counting it', async () => {
+    // doc /36 is an untoned rss doc, same person and domain as the estadao.com.br cell above;
+    // if toneSql ever swapped count(d.tone)/avg(d.tone) for count(*)/avg(coalesce(d.tone,0)),
+    // this cell would silently become { tone: -0.75, n: 4 } instead
+    const r = await toneFor(base)
+    assert.deepEqual(cell(r, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', tone: -1, n: 3 })
+  })
+
+  it('counts a doc mentioning two tracked persons once in each person group', async () => {
+    // doc /37 names both tarcisio and bolsonaro, toned 0.4, on poder360.com.br; it sits at day
+    // 35, outside the default 30-day window, so a wider window is used here
+    const r = await toneFor({ days: 90, min: 1 })
+    assert.deepEqual(cell(r, 'tarcisio', 'poder360.com.br'), { person_id: 'tarcisio', domain: 'poder360.com.br', tone: 0.4, n: 1 })
+    assert.deepEqual(cell(r, 'bolsonaro', 'poder360.com.br'), { person_id: 'bolsonaro', domain: 'poder360.com.br', tone: 0.4, n: 1 })
+  })
+
   it('has no cells for a person without toned docs', async () => {
     const r = await toneFor(base)
     assert.ok(!r.cells.some((c) => c.person_id === 'lula'))

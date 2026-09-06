@@ -169,6 +169,24 @@
   .docpanel-footer { padding: 10px 14px; border-top: 1px solid var(--line); flex-shrink: 0; }
   .docpanel-footer button { width: 100%; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--fg); padding: 8px 0; cursor: pointer; font-size: 12px; }
   .docpanel-footer button:hover { border-color: var(--line-strong); }
+  .docpanel-footer button + button { margin-top: 6px; }
+
+  /* ---------- timeline panel ---------- */
+  #timelinePanel {
+    position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 6;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 14px 8px; display: none;
+  }
+  #timelinePanel.open { display: block; }
+  @media (min-width: 901px) {
+    #timelinePanel.doc-open { right: 648px; }
+  }
+  .tl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .tl-title { font: 600 15px Inter, sans-serif; color: var(--fg); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-close { background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .tl-close:hover { color: var(--fg); background: rgba(255,255,255,.06); }
+  #tlBody .doc-msg { padding: 8px 0; text-align: left; }
+  .tl-axis { fill: var(--muted); font: 400 10px Inter, sans-serif; }
 
   /* ---------- sources ---------- */
   aside#sources { background: var(--bg2); border-left: 1px solid var(--line); overflow-y: auto; }
@@ -257,6 +275,13 @@
       <span><i style="background:var(--theme)"></i>tema</span>
       <span id="tonelegend" hidden><i style="background:var(--tone-neg)"></i>tom −<i style="background:var(--tone-pos)"></i>tom +</span>
     </div>
+    <section id="timelinePanel">
+      <div class="tl-head">
+        <span class="tl-title" id="tlTitle"></span>
+        <button class="tl-close" id="tlClose" aria-label="fechar linha do tempo" title="fechar">×</button>
+      </div>
+      <div id="tlBody"></div>
+    </section>
   </div>
   <aside id="sources">
     <h2>fontes <span id="domainlabel"></span></h2>
@@ -275,8 +300,9 @@
   </div>
   <div class="docpanel-sub" id="docSub"></div>
   <div class="docpanel-body" id="docBody"></div>
-  <div class="docpanel-footer" id="docFooter" hidden>
-    <button id="docMore">carregar mais</button>
+  <div class="docpanel-footer" id="docFooter">
+    <button id="docMore" hidden>carregar mais</button>
+    <button id="docTimeline">linha do tempo</button>
   </div>
 </aside>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
@@ -577,9 +603,21 @@
       const co = chordLinks.filter((l) => linkIsTouching(l, n.id)).length
       tip.innerHTML = `<b>${n.kind === 'hashtag' ? '#' : ''}${n.term}</b>` +
         `<div class="row muted">docs <b class="num">${n.count}</b> &nbsp; pmi <b class="num">${n.pmi}</b>${n.tone === null || n.tone === undefined ? '' : ` &nbsp; tom <b class="num">${n.tone}</b>`}</div>` +
-        `<div class="row muted">aparece junto com <b class="num">${co}</b> ${co === 1 ? 'termo' : 'termos'} da lista</div>`
-    }).on('mouseenter', (e, n) => { if (n.kind !== 'person') setHighlight(n.id) })
-      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null) })
+        `<div class="row muted">aparece junto com <b class="num">${co}</b> ${co === 1 ? 'termo' : 'termos'} da lista</div>` +
+        hoverSparkSvg
+    }).on('mouseenter', (e, n) => {
+      if (n.kind === 'person') return
+      setHighlight(n.id)
+      const key = timelineCacheKey(n)
+      hoverKey = key
+      if (timelineCache.has(key)) {
+        hoverSparkSvg = sparklineSvg(timelineCache.get(key))
+      } else {
+        hoverSparkSvg = ''
+        fetchSpark(n, key)
+      }
+    })
+      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null); hoverKey = null; hoverSparkSvg = '' })
       .on('click', (e, n) => { if (n.kind !== 'person') openDocPanel(n) })
 
     node.call(d3.drag()
@@ -624,7 +662,7 @@
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  const closeDocPanel = () => dp.classList.remove('open')
+  const closeDocPanel = () => { dp.classList.remove('open'); $('timelinePanel').classList.remove('doc-open') }
 
   const bskyUrl = (d) => {
     try {
@@ -644,7 +682,7 @@
     $('docSub').textContent = `${docPanel.total} ${docPanel.total === 1 ? 'doc' : 'docs'} sobre ${personName}`
     if (docPanel.docs.length === 0) {
       $('docBody').innerHTML = '<div class="doc-msg">nenhum documento encontrado nessa janela.</div>'
-      $('docFooter').hidden = true
+      $('docMore').hidden = true
       return
     }
     $('docBody').innerHTML = docPanel.docs.map((d) => {
@@ -661,7 +699,7 @@
         ${safeHref ? `<a class="doc-link" href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">abrir ↗</a>` : ''}
       </div>`
     }).join('')
-    $('docFooter').hidden = docPanel.docs.length >= docPanel.total
+    $('docMore').hidden = docPanel.docs.length >= docPanel.total
   }
 
   const loadDocs = async (append) => {
@@ -680,7 +718,7 @@
       renderDocBody()
     } catch (e) {
       $('docBody').innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
-      $('docFooter').hidden = true
+      $('docMore').hidden = true
     }
   }
 
@@ -694,14 +732,102 @@
     $('docTermLabel').textContent = n.kind === 'hashtag' ? `#${n.term}` : n.term
     $('docSub').textContent = ''
     $('docBody').innerHTML = '<div class="doc-msg">carregando…</div>'
-    $('docFooter').hidden = true
+    $('docMore').hidden = true
     dp.classList.add('open')
+    $('timelinePanel').classList.add('doc-open')
     loadDocs(false)
   }
 
   $('docClose').addEventListener('click', closeDocPanel)
   $('docMore').addEventListener('click', () => { docPanel.offset += docPanel.limit; loadDocs(true) })
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dp.classList.contains('open')) closeDocPanel() })
+
+  // ---------- timeline: sparkline (hover tooltip) ----------
+  const timelineCache = new Map()
+  let hoverKey = null
+  let hoverSparkSvg = ''
+
+  const timelineCacheKey = (n) => `${state.person}|${n.kind}:${n.term}|${state.days}|${state.source}|${state.domain}`
+
+  const sparklineSvg = (buckets) => {
+    if (!buckets || buckets.length === 0) return ''
+    const counts = buckets.map((b) => b.count)
+    const max = Math.max(1, ...counts)
+    const w = 90, h = 24
+    const stepX = counts.length > 1 ? w / (counts.length - 1) : 0
+    const points = counts.map((c, i) => `${(i * stepX).toFixed(1)},${(h - (c / max) * h).toFixed(1)}`).join(' ')
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;margin-top:6px"><polyline points="${points}" fill="none" stroke="var(--person)" stroke-width="1.5"/></svg>`
+  }
+
+  const fetchSpark = async (n, key) => {
+    try {
+      const params = new URLSearchParams({ term: n.term, kind: n.kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
+      const res = await fetch(`/api/people/${state.person}/timeline?` + params)
+      if (!res.ok) throw new Error('falha ao carregar')
+      const buckets = await res.json()
+      timelineCache.set(key, buckets)
+      if (hoverKey === key) {
+        hoverSparkSvg = sparklineSvg(buckets)
+        tip.innerHTML += hoverSparkSvg
+      }
+    } catch {
+      // sparkline stays text-only on failure, no error UI in the hover tooltip
+    }
+  }
+
+  // ---------- timeline: full chart under the atlas ----------
+  const timelinePanel = { term: '', kind: 'all' }
+  const tlSection = $('timelinePanel')
+  const tlBody = $('tlBody')
+
+  const renderTimelineChart = (buckets) => {
+    const w = Math.max(280, tlBody.clientWidth || 560)
+    const h = 110, padBottom = 18
+    const max = Math.max(1, ...buckets.map((b) => b.count))
+    const barW = w / buckets.length
+    const bars = buckets.map((b, i) => {
+      const barH = Math.max(1, (b.count / max) * (h - padBottom))
+      const x = i * barW + barW * 0.15
+      const y = (h - padBottom) - barH
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW * 0.7).toFixed(1)}" height="${barH.toFixed(1)}" fill="var(--person)" />`
+    }).join('')
+    const labels = buckets.map((b, i) => {
+      const x = i * barW + barW / 2
+      return `<text class="tl-axis" x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(d3.timeFormat('%d/%m')(new Date(b.bucket_start)))}</text>`
+    }).join('')
+    return `<svg width="${w}" height="${h}">${bars}${labels}</svg>`
+  }
+
+  const closeTimelinePanel = () => {
+    tlSection.classList.remove('open')
+    $('legend').style.display = ''
+  }
+
+  const loadTimelinePanel = async () => {
+    const { term, kind } = docPanel
+    timelinePanel.term = term
+    timelinePanel.kind = kind
+    $('tlTitle').textContent = kind === 'hashtag' ? `#${term}` : term
+    tlBody.innerHTML = '<div class="doc-msg">carregando linha do tempo…</div>'
+    tlSection.classList.add('open')
+    $('legend').style.display = 'none'
+    try {
+      const params = new URLSearchParams({ term, kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
+      const res = await fetch(`/api/people/${state.person}/timeline?` + params)
+      if (!res.ok) throw new Error('não foi possível carregar a linha do tempo')
+      const buckets = await res.json()
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      const empty = buckets.length === 0 || buckets.every((b) => b.count === 0)
+      tlBody.innerHTML = renderTimelineChart(buckets.length ? buckets : [{ bucket_start: new Date().toISOString(), count: 0 }]) +
+        (empty ? '<div class="doc-msg">nenhuma menção nessa janela.</div>' : '')
+    } catch (e) {
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      tlBody.innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
+    }
+  }
+
+  $('docTimeline').addEventListener('click', loadTimelinePanel)
+  $('tlClose').addEventListener('click', closeTimelinePanel)
 
   // ---------- init ----------
   const selectPerson = (id) => {

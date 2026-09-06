@@ -63,6 +63,21 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/24', text: 'Bolsonaro inaugura obra na região metropolitana', publishedAt: daysAgo(2150), domain: 'example.org' },
 ]
 
+// Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a
+// future-dated doc is picked up by `scope` (person-agnostic) for *any* days/source/domain='all'
+// query, which would shift the hardcoded pmi/stats.docs numbers in graph.test.ts and
+// signature*.test.ts regardless of which person or term it uses. Node's test runner spawns one
+// process per test file, so test/timeline-future.test.ts seeds this on top of the normal
+// fixture in its own isolated database, exercising the open-ended newest bucket without
+// touching any other suite.
+export const futureDoc: RawDoc = {
+  source: 'rss',
+  uri: 'https://example.org/26',
+  text: 'Bolsonaro comenta golpe em entrevista antecipada',
+  publishedAt: daysAgo(-1),
+  domain: 'example.org',
+}
+
 let ready: Promise<void> | null = null
 
 export const seed = () =>

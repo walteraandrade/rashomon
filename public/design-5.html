@@ -180,7 +180,7 @@
   }
   #timelinePanel.open { display: block; }
   @media (min-width: 901px) {
-    #timelinePanel.doc-open { right: 648px; }
+    #timelinePanel.doc-open { right: 376px; }
   }
   .tl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .tl-title { font: 600 15px Inter, sans-serif; color: var(--fg); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -220,6 +220,7 @@
     .person-pick select { font-size: 16px; max-width: 60vw; }
     aside#docPanel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 60vh; border-left: 0; border-top: 1px solid var(--line-strong); transform: translateY(100%); }
     aside#docPanel.open { transform: translateY(0); }
+    #timelinePanel.doc-open { position: fixed; left: 16px; right: 16px; bottom: calc(60vh + 10px); z-index: 21; }
   }
 </style>
 </head>
@@ -801,6 +802,14 @@
   let tlBuckets = null
   let tlEmpty = false
 
+  const BUCKET_DAYS_MS = 7 * 86_400_000
+
+  const bucketSpanMs = (buckets, i) => {
+    if (i !== 0 || buckets.length < 2) return BUCKET_DAYS_MS
+    const diff = new Date(buckets[1].bucket_start) - new Date(buckets[0].bucket_start)
+    return diff > 0 ? diff : BUCKET_DAYS_MS
+  }
+
   const renderTimelineChart = (buckets) => {
     const w = tlBody.clientWidth || 560
     const h = 110, padBottom = 18
@@ -808,11 +817,16 @@
     const barW = w / buckets.length
     const bars = buckets.map((b, i) => {
       const barH = Math.max(1, (b.count / max) * (h - padBottom))
+      const spanFactor = Math.min(1, bucketSpanMs(buckets, i) / BUCKET_DAYS_MS)
+      const fullBarW = barW * 0.7
+      const visW = fullBarW * spanFactor
       const x = i * barW + barW * 0.15
       const y = (h - padBottom) - barH
-      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW * 0.7).toFixed(1)}" height="${barH.toFixed(1)}" fill="var(--person)" />`
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${visW.toFixed(1)}" height="${barH.toFixed(1)}" fill="var(--person)" />`
     }).join('')
+    const step = Math.max(1, Math.ceil(buckets.length / 8))
     const labels = buckets.map((b, i) => {
+      if (i % step !== 0 && i !== buckets.length - 1) return ''
       const x = i * barW + barW / 2
       return `<text class="tl-axis" x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(d3.timeFormat('%d/%m')(new Date(b.bucket_start)))}</text>`
     }).join('')
@@ -862,6 +876,12 @@
 
   $('docTimeline').addEventListener('click', loadTimelinePanel)
   $('tlClose').addEventListener('click', closeTimelinePanel)
+
+  let resizeTimer = null
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(refreshTimelineChart, 120)
+  })
 
   // ---------- init ----------
   const selectPerson = (id) => {

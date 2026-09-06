@@ -10,6 +10,8 @@ pnpm ingest          # default sources: bluesky, rss, gnews, gkg; or: pnpm inges
 pnpm ingest gdelt    # GDELT DOC API, slow and rate limited, off by default
 pnpm dev             # http://localhost:3210
 pnpm reindex         # recompute terms and person matches after changing extract.ts or seed.json
+pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
+pnpm export-docs     # dumps every doc as one JSON line to stdout, for kikori's training set
 pnpm typecheck       # tsc
 pnpm test            # node:test against an in-memory database
 ```
@@ -48,6 +50,12 @@ Returns `{ person, stats, nodes, links, signature }`. Each node also carries `to
 
 `GET /api/tone?days=30&min=3` returns `{ persons, domains, cells }` across every tracked person (not nested under `/people/:id`). `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted distinct set of domains that appear in `cells` (a domain that never clears `min` never appears). `cells` holds one `{ person_id, domain, tone, n }` row per `(person, domain)` pair with at least `min` toned docs in the window; `tone` is the average, rounded to 2 decimals, `n` is the toned-doc count. Tone is a GDELT-only signal (see below), so non-GDELT docs never contribute to `tone` or `n` here.
 
+`GET /api/people/:id/testimony?days=30&source=all&method=onnx&min=3` returns `{ method, overall, by_source, by_domain }`, a second, source-agnostic signal scored -10..+10 per `(doc, person)` by a pluggable scorer (see below), stored separately from and never merged with GDELT's `tone`. `overall` is `{ score, n }` averaged over every doc scored under `method` in the window, no floor. `by_source` lists one `{ source, score, n }` row per source with at least one non-null score (no `min` floor). `by_domain` lists one `{ domain, source, score, n }` row per `(domain, source)` pair with `n >= min`; a doc with no resolvable `domain` never appears here, though it still counts in `overall`/`by_source`. `method` reads whatever rows exist in `doc_testimony` for that label, including a retired scorer's; an unscored `method` returns `{ score: null, n: 0 }` everywhere, not a 404.
+
+## Testimony and scoring
+
+`doc_testimony` holds one `{ doc_id, person_id, method, score }` row per attempt: `score` is `null` when the scorer could not form an opinion (e.g. empty text), inserted anyway so the pair is not retried. `pnpm score` (env `TESTIMONY_SCORER`, default `onnx`) scores every `(doc, person)` pair in `doc_persons` that lacks a row for that method yet; re-running under a different `TESTIMONY_SCORER` value adds a second, independent row set rather than overwriting the first. Scorers live in `src/scorers/`: `stub` is deterministic and hermetic (tests only), `onnx` loads `TESTIMONY_MODEL` via `@huggingface/transformers` (cache dir `MODEL_DIR`, default `./data/models`) and is never exercised by `pnpm test`.
+
 ## Domain and tone
 
 Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` element, not the Google redirect link), author handle for Bluesky. `tone` comes only from GDELT GKG (V2Tone, first field, roughly -10..+10; political news sits around -1). Other sources have `tone = null`. A doc keeps the source that first stored it, so a later GKG row sharing the URL never adds tone to an rss/gnews doc. Outlet names are stripped from Google News text so they do not become terms.
@@ -59,7 +67,8 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 - `src/collectors/*` one collector per source, same signature (Strategy)
 - `src/extract.ts` hashtags, words, stopwords, person matching
 - `src/store.ts` doc and person inserts, shared by ingest and reindex
-- `src/graph.ts` scoring SQL (counts, PMI, term-term links)
+- `src/graph.ts` scoring SQL (counts, PMI, term-term links, testimony aggregation)
+- `src/scorers/*` one scorer per method, same signature; `src/score.ts` scores unscored `(doc, person)` pairs; `src/export-docs.ts` dumps docs for kikori's training set
 - `src/server.ts` Hono API + static UI
 - `public/design-5.html` current UI (radial atlas), served at `/`; `public/index.html` legacy UI; other `design-*.html` kept for reference
 - `test/` node:test suites; `test/fixture.ts` seeds the in-memory database

@@ -147,7 +147,7 @@
   /* ---------- split view: imprensa x rede ---------- */
   #segSource.seg-disabled { opacity: .4; pointer-events: none; }
   #splitView {
-    display: none; grid-column: 2 / -1; grid-template-columns: 1fr 1fr;
+    display: none; grid-column: 2; grid-template-columns: 1fr 1fr;
     gap: 1px; background: var(--line); overflow: hidden;
   }
   .split-col { background: var(--bg); display: flex; flex-direction: column; min-width: 0; overflow-y: auto; }
@@ -473,9 +473,10 @@
     const showSplit = !isTone && splitMode
     $('graph').style.display = !isTone && !splitMode ? '' : 'none'
     $('splitView').style.display = showSplit ? 'grid' : 'none'
-    $('sources').style.display = !isTone && !splitMode ? '' : 'none'
+    $('sources').style.display = !isTone ? '' : 'none'
     $('signature').style.display = !isTone && !splitMode ? '' : 'none'
     $('stats').style.display = !isTone && !splitMode ? '' : 'none'
+    $('docTimeline').hidden = showSplit
   }
 
   const setView = (view) => {
@@ -489,7 +490,7 @@
   const setSplitMode = (on) => {
     splitMode = on
     updateVisibility()
-    if (on) loadSplit()
+    if (on) { closeTimelinePanel(); loadSplit() }
     else load()
   }
 
@@ -655,19 +656,27 @@
     if (!state.person) return
     closeDocPanel()
     closeTimelinePanel()
-    if (splitMode) { loadSplit(); return }
     const id = ++requestId
+    loadSources(id)
+    if (splitMode) { loadSplit(); return }
     try {
       const res = await fetch(`/api/people/${state.person}/graph?` + query())
       const g = await res.json()
       if (id !== requestId) return
       currentGraph = g
       render(g)
-      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + query())).json()
-      if (id === requestId) renderSources(srcs)
       if (id === requestId && state.rising) loadRising(id)
     } catch (e) {
       $('stats').innerHTML = `erro: ${e.message}`
+    }
+  }
+
+  const loadSources = async (id) => {
+    try {
+      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + query())).json()
+      if (id === requestId) renderSources(srcs)
+    } catch (e) {
+      if (id === requestId) $('sourceList').innerHTML = '<div class="rising-msg">erro ao carregar fontes</div>'
     }
   }
 

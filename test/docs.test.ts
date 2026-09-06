@@ -9,7 +9,7 @@ const [lula] = persons
 describe('docsFor', () => {
   before(seed)
 
-  it('returns every doc about the person in the window, newest first, when no term is given', async () => {
+  it('AC1,AC2: returns every doc about the person in the window, newest first, when no term is given', async () => {
     const { total, docs } = await docsFor(lula, base)
     assert.equal(total, 3)
     assert.equal(docs.length, 3)
@@ -17,34 +17,34 @@ describe('docsFor', () => {
     assert.ok(new Date(docs[1].published_at) > new Date(docs[2].published_at))
   })
 
-  it('filters by term and kind, matching normalized tokens exactly', async () => {
+  it('AC3: filters by term and kind, matching normalized tokens exactly', async () => {
     const { total, docs } = await docsFor(lula, { ...base, term: 'reforma', kind: 'word' })
     assert.equal(total, 2)
     assert.equal(docs.length, 2)
   })
 
-  it('falls back to matching every kind when kind is unknown', async () => {
+  it('AC4: falls back to matching every kind when kind is unknown', async () => {
     const { total } = await docsFor(lula, { ...base, term: 'reforma', kind: 'bogus' })
     assert.equal(total, 2)
   })
 
-  it('widens with the window', async () => {
+  it('AC5: widens with the window', async () => {
     const { total, docs } = await docsFor(lula, { ...base, days: 365 })
     assert.equal(total, 4)
     assert.equal(docs.length, 4)
   })
 
-  it('filters by source', async () => {
+  it('AC6: filters by source', async () => {
     const { total } = await docsFor(lula, { ...base, source: 'bluesky' })
     assert.equal(total, 1)
   })
 
-  it('filters by domain', async () => {
+  it('AC7: filters by domain', async () => {
     const { total } = await docsFor(lula, { ...base, domain: 'g1.globo.com' })
     assert.equal(total, 1)
   })
 
-  it('paginates with limit and offset while total reflects the full match count', async () => {
+  it('AC8: paginates with limit and offset while total reflects the full match count', async () => {
     const q = { ...base, term: 'reforma', kind: 'word', limit: 1 }
     const first = await docsFor(lula, { ...q, offset: 0 })
     const second = await docsFor(lula, { ...q, offset: 1 })
@@ -56,13 +56,19 @@ describe('docsFor', () => {
     assert.ok(new Date(first.docs[0].published_at) > new Date(second.docs[0].published_at))
   })
 
-  it('never returns a tone for non-GDELT sources', async () => {
+  it('AC9: never returns a tone for non-GDELT sources', async () => {
     const { docs } = await docsFor(lula, base)
     assert.ok(docs.every((d) => d.tone === null))
   })
 
-  it('returns an empty result for a person without matching docs', async () => {
+  it('AC10: returns an empty result for a person without matching docs', async () => {
     const { total, docs } = await docsFor({ id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }, base)
+    assert.equal(total, 0)
+    assert.deepEqual(docs, [])
+  })
+
+  it('AC10: returns an empty result for an empty window', async () => {
+    const { total, docs } = await docsFor(lula, { ...base, days: 1 })
     assert.equal(total, 0)
     assert.deepEqual(docs, [])
   })

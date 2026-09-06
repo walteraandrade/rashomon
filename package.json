@@ -6,7 +6,9 @@
     "ingest": "tsx src/ingest.ts",
     "dev": "tsx src/server.ts",
     "reindex": "tsx src/reindex.ts",
-    "purge": "tsx src/purge.ts"
+    "purge": "tsx src/purge.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -19,5 +21,6 @@
     "@types/node": "^26.4.1",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
-  }
+  },
+  "packageManager": "pnpm@11.17.0"
 }

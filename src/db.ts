@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite'
 
-export const db = new PGlite('./data/pg')
+// DATA_DIR points at the PGlite directory; 'memory://' gives a throwaway in-memory database (tests).
+export const db = new PGlite(process.env.DATA_DIR ?? './data/pg')
 
 export const migrate = () =>
   db.exec(`

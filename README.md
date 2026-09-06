@@ -40,6 +40,8 @@ Returns `{ person, stats, nodes, links, signature }`. Each node also carries `to
 
 `GET /api/people/:id/docs?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg&domain=all&limit=50&offset=0` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings.
 
+`GET /api/people/:id/rising?days=7&baseline=30&kind=all|hashtag|word|theme&source=all|bluesky|gdelt|rss|gnews|gkg&domain=all&limit=20&min=3` returns `{ days, baseline, terms }`, each term `{ term, kind, count_recent, count_baseline, lift }` (no `tone`). `count_recent`/`count_baseline` are raw doc counts turned into per-day rates rounded to 2 decimals; the baseline window is the `baseline` days immediately preceding the recent window, never overlapping it. `lift` is `(count_recent_raw / days) / ((count_baseline_raw + 1) / baseline)`, a pinned formula, not to be changed without a test.
+
 ## Domain and tone
 
 Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` element, not the Google redirect link), author handle for Bluesky. `tone` comes only from GDELT GKG (V2Tone, first field, roughly -10..+10; political news sits around -1). Other sources have `tone = null`. Outlet names are stripped from Google News text so they do not become terms.

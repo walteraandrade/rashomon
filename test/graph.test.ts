@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
-import { graphFor, sourcesFor, type GraphQuery } from '../src/graph.js'
+import { graphFor, risingFor, sourcesFor, type GraphQuery, type RisingQuery } from '../src/graph.js'
+import { nameTokens } from '../src/extract.js'
 import { persons, seed } from './fixture.js'
 
 const base: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
@@ -18,9 +19,10 @@ describe('graphFor', () => {
   })
 
   it('widens with the window', async () => {
+    // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const g = await graphFor(lula, { ...base, days: 365 })
-    assert.equal(g.stats.docs, 7)
-    assert.equal(g.stats.about, 5)
+    assert.equal(g.stats.docs, 10)
+    assert.equal(g.stats.about, 8)
   })
 
   it('never lists the person name as a term', async () => {
@@ -102,9 +104,12 @@ describe('graphFor', () => {
 
   it('signature: orders by pmi desc, ties by term ascending', async () => {
     const g = await graphFor(lula, { ...base, days: 1000 })
-    const tie = pmi(3, 3, 13, 11)
+    // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others
+    const tie = pmi(3, 3, 16, 14)
     assert.deepEqual(g.signature, [
       { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
+      { term: 'estabilidade', kind: 'word', count: 3, pmi: tie },
+      { term: 'fiscal', kind: 'word', count: 3, pmi: tie },
       { term: 'inflacao', kind: 'word', count: 3, pmi: tie },
       { term: 'reforma', kind: 'word', count: 3, pmi: tie },
     ])
@@ -123,5 +128,98 @@ describe('sourcesFor', () => {
     const bsky = rows.find((r) => r.source === 'bluesky')
     assert.equal(bsky?.domain, 'ana.bsky.social')
     assert.equal(bsky?.tone, null)
+  })
+})
+
+describe('risingFor', () => {
+  before(seed)
+
+  // reforma/tributaria/anuncia/disputam/eleicao/tarcisio/hashtag:reforma/defende all sit in the
+  // last-7-days recent window against the 8-37-day-ago baseline (default days:7, baseline:30);
+  // "estabilidade fiscal" (docs /17-/19, day31/day35/day50) instead lands entirely in the baseline,
+  // which is why it never appears at these default windows (see AC5 below).
+  const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', kind: 'all', limit: 20, min: 1 }
+  const rnode = (r: Awaited<ReturnType<typeof risingFor>>, id: string) => r.terms.find((t) => `${t.kind}:${t.term}` === id)
+  const rate = (raw: number, span: number) => Math.round((raw / span) * 100) / 100
+  const lift = (cRecent: number, days: number, cBaseline: number, baseline: number) =>
+    Math.round(((cRecent / days) / ((cBaseline + 1) / baseline)) * 100) / 100
+
+  it('AC2: sorts terms by lift desc, ties by term', async () => {
+    const r = await risingFor(lula, risingBase)
+    assert.deepEqual(
+      r.terms.map((t) => `${t.kind}:${t.term}`),
+      ['word:reforma', 'word:tributaria', 'word:anuncia', 'word:disputam', 'word:eleicao', 'hashtag:reforma', 'word:tarcisio', 'word:defende'],
+    )
+  })
+
+  it('AC3,AC4: count_recent, count_baseline and lift match the pinned formula', async () => {
+    const r = await risingFor(lula, risingBase)
+    // "tributaria" appears in docs /1 and /6 (both day1, in the recent window) and in no doc in the 8-37 day baseline
+    assert.deepEqual(rnode(r, 'word:tributaria'), {
+      term: 'tributaria',
+      kind: 'word',
+      count_recent: rate(2, 7),
+      count_baseline: rate(0, 30),
+      lift: lift(2, 7, 0, 30),
+    })
+  })
+
+  it('AC5: a term absent from the baseline outranks a term present in it at a comparable recent rate', async () => {
+    const r = await risingFor(lula, risingBase)
+    // "anuncia" and "defende" both have exactly 1 recent-window doc; "anuncia" has none in the
+    // baseline, "defende" has 1 (doc /8, day35's "estabilidade" text also carries "defende")
+    const anuncia = rnode(r, 'word:anuncia')
+    const defende = rnode(r, 'word:defende')
+    assert.equal(anuncia?.count_recent, defende?.count_recent)
+    assert.equal(defende?.count_baseline, rate(1, 30))
+    assert.ok((anuncia?.lift ?? 0) > (defende?.lift ?? 0))
+  })
+
+  it('AC6: a term with an unchanged daily rate has lift exactly 1', async () => {
+    const r = await risingFor(lula, { ...risingBase, days: 40, baseline: 40 })
+    // "estabilidade" has 2 mentions in the last 40 days (day31, day35) and 1 in the 40 days before (day50)
+    assert.equal(rnode(r, 'word:estabilidade')?.lift, 1)
+  })
+
+  it('AC7: min filters on the raw recent count', async () => {
+    const at2 = await risingFor(lula, { ...risingBase, min: 2 })
+    assert.ok(rnode(at2, 'word:tributaria'))
+    const at3 = await risingFor(lula, { ...risingBase, min: 3 })
+    assert.equal(rnode(at3, 'word:tributaria'), undefined)
+  })
+
+  it('AC8: never lists the person name as a rising term', async () => {
+    const excluded = new Set(nameTokens(lula))
+    const r = await risingFor(lula, { ...risingBase, days: 2000, baseline: 2000 })
+    assert.ok(!r.terms.some((t) => excluded.has(t.term)))
+  })
+
+  it('AC9: kind, source and domain filter both windows identically', async () => {
+    const hashtagOnly = await risingFor(lula, { ...risingBase, kind: 'hashtag' })
+    assert.ok(hashtagOnly.terms.length > 0)
+    assert.ok(hashtagOnly.terms.every((t) => t.kind === 'hashtag'))
+
+    const bluesky = await risingFor(lula, { ...risingBase, source: 'bluesky' })
+    assert.ok(bluesky.terms.some((t) => t.term === 'disputam'))
+    assert.ok(!bluesky.terms.some((t) => t.term === 'reforma'))
+
+    const domainScoped = await risingFor(lula, { ...risingBase, domain: 'example.org' })
+    assert.ok(!domainScoped.terms.some((t) => t.term === 'anuncia'), 'anuncia only appears on g1.globo.com')
+  })
+
+  it('AC10: returns an empty terms array for a person without docs', async () => {
+    const r = await risingFor({ id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }, risingBase)
+    assert.deepEqual(r, { days: 7, baseline: 30, terms: [] })
+  })
+
+  it('AC10: returns an empty terms array for an empty recent window', async () => {
+    const r = await risingFor(lula, { ...risingBase, days: 1 })
+    assert.deepEqual(r.terms, [])
+  })
+
+  it('AC11: limit clamps the result size', async () => {
+    const r = await risingFor(lula, { ...risingBase, limit: 1 })
+    assert.equal(r.terms.length, 1)
+    assert.equal(r.terms[0].term, 'reforma')
   })
 })

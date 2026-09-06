@@ -22,12 +22,23 @@ export type DocsQuery = {
   offset: number
 }
 
+export type RisingQuery = {
+  days: number
+  baseline: number
+  source: string
+  domain: string
+  kind: string
+  limit: number
+  min: number
+}
+
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
 type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
 type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
+type RisingRow = { term: string; kind: string; count_recent: number; count_baseline: number; lift: number }
 
 const scopeCte = `
   scope as (
@@ -145,6 +156,66 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
     db.query<{ total: number }>(docsCountSql, params),
   ])
   return { total: count.rows[0].total, docs: docs.rows }
+}
+
+// Two disjoint windows (recent, then baseline immediately before it), instead of
+// reusing scopeCte twice, so a doc is never double-counted into both windows.
+const risingSql = `
+  with
+  recent_scope as (
+    select d.id from docs d
+    where d.published_at >= now() - make_interval(days => $2)
+      and ($4 = 'all' or d.source = $4)
+      and ($5 = 'all' or d.domain = $5)
+  ),
+  recent_about as (
+    select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = $1
+  ),
+  baseline_scope as (
+    select d.id from docs d
+    where d.published_at < now() - make_interval(days => $2)
+      and d.published_at >= now() - make_interval(days => $2 + $3)
+      and ($4 = 'all' or d.source = $4)
+      and ($5 = 'all' or d.domain = $5)
+  ),
+  baseline_about as (
+    select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = $1
+  ),
+  recent_terms as (
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_recent
+    from doc_terms t join recent_about a on a.doc_id = t.doc_id
+    where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
+    group by 1, 2
+  ),
+  baseline_terms as (
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_baseline
+    from doc_terms t join baseline_about a on a.doc_id = t.doc_id
+    where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
+    group by 1, 2
+  )
+  select r.term, r.kind,
+    round((r.c_recent / $2)::numeric, 2)::float8 as count_recent,
+    round((coalesce(b.c_baseline, 0) / $3)::numeric, 2)::float8 as count_baseline,
+    round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift
+  from recent_terms r left join baseline_terms b using (term, kind)
+  where r.c_recent >= $8
+  order by lift desc, term
+  limit $9`
+
+export const risingFor = async (person: Person, q: RisingQuery) => {
+  const exclude = nameTokens(person)
+  const { rows } = await db.query<RisingRow>(risingSql, [
+    person.id,
+    q.days,
+    q.baseline,
+    q.source,
+    q.domain,
+    q.kind,
+    exclude,
+    q.min,
+    q.limit,
+  ])
+  return { days: q.days, baseline: q.baseline, terms: rows }
 }
 
 export const graphFor = async (person: Person, q: GraphQuery) => {

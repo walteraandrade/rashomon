@@ -38,6 +38,14 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/14', text: 'Lula fala sobre educação, saúde e segurança no debate', publishedAt: daysAgo(1502), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/15', text: 'Lula defende educação, saúde e segurança para todos', publishedAt: daysAgo(1503), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/16', text: 'Lula prioriza educação, saúde e segurança no plano de governo', publishedAt: daysAgo(1504), domain: 'example.org' },
+  // docs 17-19: "estabilidade fiscal" appears twice in a 31-50 day range, so it sits
+  // outside the days:30 window used by the pre-existing graphFor/docsFor/sourcesFor
+  // assertions but inside the days:365 ones, and inside risingFor's baseline window
+  // at the default days:7/baseline:30 split — a term present only in the baseline,
+  // which risingFor must exclude by construction (its recent count is zero).
+  { source: 'rss', uri: 'https://example.org/17', text: 'Lula defende estabilidade fiscal para o país', publishedAt: daysAgo(31), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/18', text: 'Lula reforça a estabilidade fiscal em entrevista', publishedAt: daysAgo(35), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/19', text: 'Lula lembra a estabilidade fiscal conquistada', publishedAt: daysAgo(50), domain: 'example.org' },
 ]
 
 let ready: Promise<void> | null = null

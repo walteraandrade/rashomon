@@ -188,6 +188,8 @@
   .src .n { color: var(--muted); font-size: 11.5px; }
   .src .t { width: 36px; text-align: center; border-radius: 5px; padding: 2px 0; font-size: 10.5px; }
   .src .t:empty { visibility: hidden; }
+  #risingBox h2 { position: static; }
+  #risingList .rising-msg { padding: 10px 14px; color: var(--muted); font-size: 12px; }
 
   /* ---------- responsive ---------- */
   @media (max-width: 900px) {
@@ -240,6 +242,9 @@
     <div class="group">
       <label class="switchrow"><input type="checkbox" id="tone"><span class="switch-track"></span><span class="switch-txt">cor por tom</span></label>
     </div>
+    <div class="group">
+      <label class="switchrow"><input type="checkbox" id="rising"><span class="switch-track"></span><span class="switch-txt">em alta (7d)</span></label>
+    </div>
   </aside>
   <div id="graph">
     <svg id="chart" preserveAspectRatio="xMidYMid meet"></svg>
@@ -256,6 +261,10 @@
   <aside id="sources">
     <h2>fontes <span id="domainlabel"></span></h2>
     <div id="sourceList"></div>
+    <div id="risingBox" hidden>
+      <h2>em alta</h2>
+      <div id="risingList"></div>
+    </div>
   </aside>
 </div>
 <aside id="docPanel">
@@ -279,11 +288,12 @@
   const toneColor = (t) => (t === null || t === undefined ? 'var(--line)' : toneScale(t))
   const nodeFill = (n) => (state.tone && n.kind !== 'person' && n.tone !== null && n.tone !== undefined ? toneScale(n.tone) : kindColor[n.kind])
 
-  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false }
+  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false, rising: false }
   let requestId = 0
   let sim = null
   let people = []
   let currentGraph = null
+  let risingIds = new Set()
 
   const svg = d3.select('#chart')
   const root = svg.append('g').attr('class', 'root')
@@ -344,6 +354,60 @@
     layerNodes.selectAll('.node circle').attr('fill', nodeFill)
   })
 
+  // ---------- rising terms ----------
+  const applyRisingRing = () => {
+    layerNodes.selectAll('.node circle')
+      .attr('stroke', (d) => risingIds.has(d.id) ? 'var(--person)' : (d.kind === 'person' ? 'rgba(255,211,92,.35)' : 'rgba(0,0,0,.4)'))
+      .attr('stroke-width', (d) => risingIds.has(d.id) ? 2.5 : (d.kind === 'person' ? 2 : 1))
+  }
+
+  const renderRising = (terms) => {
+    if (terms.length === 0) {
+      $('risingList').innerHTML = '<div class="rising-msg">nada em alta agora</div>'
+      return
+    }
+    $('risingList').innerHTML = terms.slice(0, 10).map((t) => `
+      <div class="src" data-kind="${t.kind}" data-term="${escapeHtml(t.term)}">
+        <span class="d">${t.kind === 'hashtag' ? '#' + t.term : t.term}</span>
+        <span class="n num" style="color:var(--person)">${t.lift}×</span>
+      </div>`).join('')
+    $('risingList').querySelectorAll('.src').forEach((el) => el.addEventListener('click', () => {
+      openDocPanel({ term: el.dataset.term, kind: el.dataset.kind })
+    }))
+  }
+
+  const loadRising = async (id = requestId) => {
+    if (!state.person) return
+    $('risingList').innerHTML = '<div class="rising-msg">carregando…</div>'
+    try {
+      const params = new URLSearchParams({ source: state.source, domain: state.domain, kind: state.kind })
+      const res = await fetch(`/api/people/${state.person}/rising?` + params)
+      if (!res.ok) throw new Error('falha ao carregar')
+      const data = await res.json()
+      if (id !== requestId) return
+      risingIds = new Set(data.terms.map((t) => `${t.kind}:${t.term}`))
+      applyRisingRing()
+      renderRising(data.terms)
+    } catch (e) {
+      if (id !== requestId) return
+      risingIds = new Set()
+      applyRisingRing()
+      $('risingList').innerHTML = '<div class="rising-msg">erro ao carregar</div>'
+    }
+  }
+
+  $('rising').addEventListener('change', () => {
+    state.rising = $('rising').checked
+    $('risingBox').hidden = !state.rising
+    if (!state.rising) {
+      risingIds = new Set()
+      applyRisingRing()
+      $('risingList').innerHTML = ''
+      return
+    }
+    loadRising()
+  })
+
   // ---------- fetch / load ----------
   const query = () => new URLSearchParams({
     days: state.days, source: state.source, kind: state.kind, sort: state.sort,
@@ -362,6 +426,7 @@
       render(g)
       const srcs = await (await fetch(`/api/people/${state.person}/sources?` + query())).json()
       if (id === requestId) renderSources(srcs)
+      if (id === requestId && state.rising) loadRising(id)
     } catch (e) {
       $('stats').innerHTML = `erro: ${e.message}`
     }

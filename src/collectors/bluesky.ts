@@ -1,25 +1,26 @@
 import type { Collector, Person, RawDoc } from '../types.js'
-import { headers, sequential } from '../http.js'
+import { headers, sequential, sleep } from '../http.js'
 
 const publicHost = 'https://api.bsky.app'
 const authHost = 'https://bsky.social'
 const maxPages = 5
+const pauseMs = 1500
 
 type Page = { posts: any[]; cursor?: string }
-type Session = { host: string; headers: Record<string, string>; pages: number }
+type Session = { host: string; headers: Record<string, string>; pages: number; mode: string }
 
 const login = async (): Promise<Session> => {
   const identifier = process.env.BSKY_HANDLE
   const password = process.env.BSKY_APP_PASSWORD
-  if (!identifier || !password) return { host: publicHost, headers, pages: 1 }
+  if (!identifier || !password) return { host: publicHost, headers, pages: 1, mode: 'public (no BSKY_HANDLE/BSKY_APP_PASSWORD)' }
   const res = await fetch(`${authHost}/xrpc/com.atproto.server.createSession`, {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({ identifier, password }),
   })
-  if (!res.ok) throw new Error(`bluesky login ${res.status}`)
+  if (!res.ok) throw new Error(`bluesky login ${res.status}: ${(await res.text()).slice(0, 200)}`)
   const { accessJwt } = (await res.json()) as { accessJwt: string }
-  return { host: authHost, headers: { ...headers, authorization: `Bearer ${accessJwt}` }, pages: maxPages }
+  return { host: authHost, headers: { ...headers, authorization: `Bearer ${accessJwt}` }, pages: maxPages, mode: `authenticated as ${identifier}` }
 }
 
 const fetchPage = async (s: Session, q: string, cursor?: string): Promise<Page> => {
@@ -29,7 +30,7 @@ const fetchPage = async (s: Session, q: string, cursor?: string): Promise<Page> 
   url.searchParams.set('limit', '100')
   if (cursor) url.searchParams.set('cursor', cursor)
   const res = await fetch(url, { headers: s.headers })
-  if (!res.ok) throw new Error(`bluesky ${res.status}`)
+  if (!res.ok) throw new Error(`bluesky ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`)
   return res.json() as Promise<Page>
 }
 
@@ -45,10 +46,25 @@ const collectPerson = async (s: Session, person: Person, cursor?: string, left =
   if (left === 0) return []
   const page = await fetchPage(s, person.name, cursor)
   const docs = page.posts.map(toDoc)
-  return page.cursor ? [...docs, ...(await collectPerson(s, person, page.cursor, left - 1))] : docs
+  if (!page.cursor || left === 1) return docs
+  await sleep(pauseMs)
+  return [...docs, ...(await collectPerson(s, person, page.cursor, left - 1))]
+}
+
+const collectSafely = async (s: Session, person: Person): Promise<RawDoc[]> => {
+  try {
+    const docs = await collectPerson(s, person)
+    await sleep(pauseMs)
+    return docs
+  } catch (e) {
+    console.log(`[bluesky] ${person.name}: ${(e as Error).message}`)
+    await sleep(pauseMs * 4)
+    return []
+  }
 }
 
 export const bluesky: Collector = async (persons) => {
   const session = await login()
-  return (await sequential(persons, (p) => collectPerson(session, p))).flat()
+  console.log(`[bluesky] ${session.mode}, up to ${session.pages} page(s) per person`)
+  return (await sequential(persons, (p) => collectSafely(session, p))).flat()
 }

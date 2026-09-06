@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rashomon</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700&family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #14171c; --raised: #1a1e25; --line: #242932; --line-strong: #2f3641;
+    --fg: #e8eaee; --fg-2: #b4b9c4; --muted: #8a90a0; --faint: #5b6170;
+    --accent: #e6b450; --accent-ink: #1a1405;
+    --hashtag: #5fd3b0; --word: #7aa2f7; --theme: #e88ab8;
+    --neg: #ef6f7d; --pos: #7fcf7a; --neutral: #6b7280;
+    --r: 6px; --rail: 232px; --sources: 272px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.45 Geist, system-ui, -apple-system, sans-serif; display: grid; grid-template-rows: 56px 1fr; font-variant-numeric: tabular-nums; }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; padding: 0; cursor: pointer; }
+  button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  header { display: flex; align-items: center; gap: 28px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .brand { font: 700 20px/1 'League Spartan', sans-serif; letter-spacing: .01em; color: var(--fg); }
+  .people { display: flex; gap: 4px; height: 100%; }
+  .people button { position: relative; padding: 0 12px; font: 700 18px/1 'League Spartan', sans-serif; color: var(--muted); height: 100%; }
+  .people button:hover { color: var(--fg-2); }
+  .people button[aria-selected="true"] { color: var(--fg); }
+  .people button[aria-selected="true"]::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--accent); }
+  #stats { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
+  #stats b { color: var(--fg); font-weight: 600; }
+
+  .layout { display: grid; grid-template-columns: var(--rail) 1fr var(--sources); min-height: 0; }
+  .rail { border-right: 1px solid var(--line); padding: 20px 16px; overflow-y: auto; display: grid; gap: 22px; align-content: start; }
+  .group { display: grid; gap: 8px; align-content: start; }
+  .group > span { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r); padding: 2px; gap: 2px; }
+  .seg.wrap { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+  .seg button { padding: 6px 8px; border-radius: 4px; color: var(--fg-2); font-size: 13px; text-align: center; white-space: nowrap; }
+  .seg button:hover { color: var(--fg); background: rgba(255,255,255,.04); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .seg .kind[aria-pressed="false"] i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .seg .kind[aria-pressed="true"] i { display: none; }
+  .stepper { display: grid; grid-template-columns: 32px 1fr 32px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+  .stepper button { color: var(--fg-2); font-size: 16px; line-height: 30px; }
+  .stepper button:hover { background: rgba(255,255,255,.05); color: var(--fg); }
+  .stepper input { width: 100%; background: none; border: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center; padding: 0; height: 30px; -moz-appearance: textfield; }
+  .stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--fg-2); cursor: pointer; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch i { width: 34px; height: 20px; border-radius: 10px; background: var(--line-strong); position: relative; transition: background .15s; flex: none; }
+  .switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg-2); transition: transform .15s; }
+  .switch input:checked + i { background: var(--accent); }
+  .switch input:checked + i::after { transform: translateX(14px); background: var(--accent-ink); }
+  .switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  main { position: relative; min-width: 0; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+  .viewbar { display: flex; align-items: center; gap: 4px; padding: 12px 20px 0; border-bottom: 1px solid var(--line); }
+  .viewbar button { padding: 8px 12px 12px; color: var(--muted); font-size: 13px; font-weight: 500; position: relative; }
+  .viewbar button:hover { color: var(--fg-2); }
+  .viewbar button[aria-selected="true"] { color: var(--fg); }
+  .viewbar button[aria-selected="true"]::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--fg); }
+  .viewbar .hint { margin-left: auto; font-size: 12px; color: var(--faint); }
+  .view { display: none; overflow: auto; min-height: 0; }
+  .view.on { display: block; }
+  main.loading .view { opacity: .45; transition: opacity .15s; }
+
+  /* ranking */
+  #ranking { padding: 8px 20px 24px; }
+  .row { display: grid; grid-template-columns: 28px 200px 1fr 56px 48px; gap: 12px; align-items: center; padding: 0 8px; height: 34px; border-radius: 4px; cursor: pointer; }
+  .row:hover, .row.open { background: var(--raised); }
+  .row .rank { color: var(--faint); font-size: 12px; text-align: right; }
+  .row .term { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .row .term i { width: 3px; height: 16px; border-radius: 2px; flex: none; }
+  .row .term span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .bar { position: relative; height: 12px; }
+  .row .bar b { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+  .row .bar em { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--line-strong); }
+  .row .val { text-align: right; font-weight: 500; }
+  .row .tone { font-size: 11px; text-align: center; padding: 2px 0; border-radius: 3px; color: var(--fg); }
+  .row .tone:empty { visibility: hidden; }
+  .detail { display: none; padding: 6px 8px 12px 48px; color: var(--fg-2); font-size: 13px; }
+  .row.open + .detail { display: block; }
+  .detail .meta { color: var(--muted); margin-bottom: 8px; }
+  .detail .meta b { color: var(--fg); font-weight: 500; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; }
+  .chips span i { width: 6px; height: 6px; border-radius: 50%; }
+  .chips span small { color: var(--muted); }
+  .rhead { display: grid; grid-template-columns: 28px 200px 1fr 56px 48px; gap: 12px; padding: 10px 8px 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: var(--bg); z-index: 1; }
+  .rhead .val, .rhead .tone { text-align: right; }
+
+  /* svg views */
+  #scatter, #matrix { padding: 12px 20px 20px; height: 100%; }
+  svg { display: block; width: 100%; height: 100%; }
+  .axis text { fill: var(--muted); font: 11px Geist, system-ui, sans-serif; }
+  .axis line, .axis path { stroke: var(--line-strong); }
+  .axis-title { fill: var(--muted); font-size: 12px; }
+  .quad { fill: var(--faint); font-size: 11px; }
+  .dot { stroke: var(--bg); stroke-width: 1.5; cursor: pointer; }
+  .lbl { fill: var(--fg-2); font-size: 11px; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+  .cell { cursor: pointer; }
+  .mlbl { fill: var(--fg-2); font-size: 11px; }
+  .mlbl.dim { fill: var(--faint); }
+
+  #tip { position: absolute; display: none; z-index: 5; pointer-events: none; background: var(--raised); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 8px 10px; font-size: 12px; max-width: 260px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  #tip b { color: var(--fg); font-weight: 600; }
+  #tip span { color: var(--muted); }
+  #empty { position: absolute; inset: 48px 0 0; display: none; place-items: center; color: var(--muted); text-align: center; padding: 20px; }
+  #empty code { background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; color: var(--fg); }
+
+  aside { border-left: 1px solid var(--line); overflow-y: auto; }
+  aside h2 { margin: 0; padding: 20px 16px 8px; font-size: 12px; color: var(--muted); font-weight: 500; display: flex; justify-content: space-between; }
+  aside h2 button { color: var(--accent); font-size: 12px; }
+  .src { display: grid; grid-template-columns: 1fr 40px 44px; grid-template-rows: auto auto; gap: 0 8px; align-items: center; padding: 6px 16px; cursor: pointer; }
+  .src:hover { background: var(--raised); }
+  .src.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }
+  .src .d { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .src .bar { grid-column: 1 / -1; height: 3px; margin-top: 5px; border-radius: 2px; }
+  .src .bar:empty { display: none; }
+  .src .bar b { display: block; height: 100%; border-radius: 2px; }
+  .src .n { color: var(--muted); text-align: right; font-size: 13px; }
+  .src .t { font-size: 11px; text-align: center; padding: 2px 0; border-radius: 3px; }
+  .src .t:empty { visibility: hidden; }
+
+  @media (max-width: 960px) {
+    body { grid-template-rows: auto 1fr; }
+    header { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 12px 20px; }
+    .people { height: 40px; }
+    #stats { width: 100%; margin-left: 0; }
+    .layout { display: block; overflow-y: auto; }
+    .rail { border-right: 0; border-bottom: 1px solid var(--line); grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px 20px; overflow: visible; padding: 16px; }
+    .rail .switch { align-self: end; }
+    main { height: 80vh; border-bottom: 1px solid var(--line); }
+    .row { grid-template-columns: 24px 130px 1fr 48px 40px; gap: 8px; }
+    .rhead { grid-template-columns: 24px 130px 1fr 48px 40px; gap: 8px; }
+    aside { border-left: 0; overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">rashomon</div>
+  <nav class="people" id="people" role="tablist" aria-label="Pessoa"></nav>
+  <div id="stats"></div>
+</header>
+<div class="layout">
+  <section class="rail" aria-label="Filtros">
+    <div class="group"><span>Janela</span>
+      <div class="seg" data-control="days"><button data-v="7">7d</button><button data-v="30">30d</button><button data-v="90">90d</button><button data-v="365">1 ano</button></div>
+    </div>
+    <div class="group"><span>Fonte</span>
+      <div class="seg wrap" data-control="source"><button data-v="all">todas</button><button data-v="bluesky">bluesky</button><button data-v="gnews">g. news</button><button data-v="rss">rss</button><button data-v="gkg">gdelt gkg</button><button data-v="gdelt">gdelt</button></div>
+    </div>
+    <div class="group"><span>Tipo de termo</span>
+      <div class="seg wrap" data-control="kind"><button data-v="all">todos</button><button class="kind" data-v="hashtag"><i style="background:var(--hashtag)"></i>hashtag</button><button class="kind" data-v="word"><i style="background:var(--word)"></i>palavra</button><button class="kind" data-v="theme"><i style="background:var(--theme)"></i>tema</button></div>
+    </div>
+    <div class="group"><span>Ordenar por</span>
+      <div class="seg" data-control="sort"><button data-v="count">contagem</button><button data-v="pmi">pmi</button></div>
+    </div>
+    <div class="group"><span>Termos</span>
+      <div class="stepper" data-control="limit" data-min="5" data-max="200" data-step="5"><button data-d="-1" aria-label="menos termos">−</button><input type="number" value="40" min="5" max="200"><button data-d="1" aria-label="mais termos">+</button></div>
+    </div>
+    <div class="group"><span>Mínimo de docs</span>
+      <div class="stepper" data-control="min" data-min="1" data-max="1000" data-step="1"><button data-d="-1" aria-label="menos">−</button><input type="number" value="2" min="1"><button data-d="1" aria-label="mais">+</button></div>
+    </div>
+    <label class="switch">cor por tom<input id="tone" type="checkbox"><i></i></label>
+  </section>
+
+  <main id="main">
+    <div class="viewbar" role="tablist" aria-label="Visualização">
+      <button data-view="ranking" aria-selected="true">Ranking</button>
+      <button data-view="scatter" aria-selected="false">Dispersão</button>
+      <button data-view="matrix" aria-selected="false">Ligações</button>
+      <span class="hint" id="hint"></span>
+    </div>
+    <div class="view on" id="ranking"></div>
+    <div class="view" id="scatter"></div>
+    <div class="view" id="matrix"></div>
+    <div id="tip"></div>
+    <div id="empty">Nada nessa janela.<br>Rode <code>pnpm ingest</code> para coletar dados.</div>
+  </main>
+
+  <aside>
+    <h2>Fontes <button id="cleardomain" hidden>limpar filtro</button></h2>
+    <div id="sources"></div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const KIND = { hashtag: 'var(--hashtag)', word: 'var(--word)', theme: 'var(--theme)' }
+  const KIND_LABEL = { hashtag: 'hashtag', word: 'palavra', theme: 'tema' }
+  const HINT = {
+    ranking: 'clique num termo para ver com quais outros ele aparece',
+    scatter: 'direita = mais exclusivo da pessoa, cima = mais frequente',
+    matrix: 'quão escuro, mais vezes os dois termos aparecem no mesmo texto',
+  }
+  const toneScale = d3.scaleLinear().domain([-3, 0, 3]).range(['#ef6f7d', '#6b7280', '#7fcf7a']).clamp(true)
+  const hasTone = (t) => t !== null && t !== undefined
+  const fmt = (n, d = 2) => (n === null || n === undefined ? '' : Number(n).toFixed(d).replace(/\.?0+$/, ''))
+  const label = (n) => (n.kind === 'hashtag' ? `#${n.term}` : n.term)
+  const termColor = (n) => (state.tone && hasTone(n.tone) ? toneScale(n.tone) : KIND[n.kind])
+
+  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false, view: 'ranking', open: null }
+  let graph = null
+  let requestId = 0
+
+  const query = () => new URLSearchParams({ days: state.days, source: state.source, kind: state.kind, sort: state.sort, limit: state.limit, min: state.min, domain: state.domain })
+
+  const load = async () => {
+    if (!state.person) return
+    const id = ++requestId
+    $('main').classList.add('loading')
+    try {
+      const [g, srcs] = await Promise.all([
+        fetch(`/api/people/${state.person}/graph?${query()}`).then((r) => r.json()),
+        fetch(`/api/people/${state.person}/sources?${query()}`).then((r) => r.json()),
+      ])
+      if (id !== requestId) return
+      graph = g
+      render()
+      renderSources(srcs)
+    } catch (e) {
+      $('stats').textContent = `erro: ${e.message}`
+    } finally {
+      if (id === requestId) $('main').classList.remove('loading')
+    }
+  }
+
+  const neighbors = (id) => {
+    const termId = (l) => (typeof l === 'string' ? l : l.id)
+    return graph.links
+      .filter((l) => (termId(l.source) === id || termId(l.target) === id) && !termId(l.source).startsWith('person:') && !termId(l.target).startsWith('person:'))
+      .map((l) => ({ id: termId(l.source) === id ? termId(l.target) : termId(l.source), count: l.count }))
+      .map((x) => ({ ...x, node: graph.nodes.find((n) => n.id === x.id) }))
+      .filter((x) => x.node)
+      .sort((a, b) => b.count - a.count)
+  }
+
+  const render = () => {
+    const g = graph
+    $('stats').innerHTML = `<b>${g.stats.about}</b> docs sobre <b>${g.person.name}</b> de ${g.stats.docs} na janela${state.domain === 'all' ? '' : ` · <b>${state.domain}</b>`}`
+    $('empty').style.display = g.nodes.length ? 'none' : 'grid'
+    $('hint').textContent = g.nodes.length ? HINT[state.view] : ''
+    renderRanking()
+    renderScatter()
+    renderMatrix()
+  }
+
+  const renderRanking = () => {
+    const nodes = graph.nodes
+    const byPmi = state.sort === 'pmi'
+    const vals = nodes.map((n) => (byPmi ? n.pmi : n.count))
+    const lo = Math.min(0, d3.min(vals) ?? 0), hi = Math.max(0, d3.max(vals) ?? 1)
+    const x = d3.scaleLinear().domain([lo, hi]).range([0, 100])
+    const zero = x(0)
+    $('ranking').innerHTML = `<div class="rhead"><span></span><span>termo</span><span>${byPmi ? 'pmi, ordenado por pmi × log(docs) para não premiar termos raros' : 'docs em que aparece junto'}</span><span class="val">${byPmi ? 'pmi' : 'docs'}</span><span class="tone">tom</span></div>` +
+      nodes.map((n, i) => {
+        const v = byPmi ? n.pmi : n.count
+        const a = Math.min(zero, x(v)), b = Math.max(zero, x(v))
+        return `<div class="row ${state.open === n.id ? 'open' : ''}" data-id="${n.id}" tabindex="0" role="button" aria-expanded="${state.open === n.id}">
+          <span class="rank">${i + 1}</span>
+          <span class="term"><i style="background:${termColor(n)}"></i><span title="${label(n)}">${label(n)}</span></span>
+          <span class="bar">${lo < 0 ? `<em style="left:${zero}%"></em>` : ''}<b style="left:${a}%;width:${Math.max(0.6, b - a)}%;background:${termColor(n)};opacity:${v < 0 ? 0.45 : 1}"></b></span>
+          <span class="val">${fmt(v)}</span>
+          <span class="tone" style="background:${hasTone(n.tone) ? toneScale(n.tone) : ''}">${fmt(n.tone, 1)}</span>
+        </div>
+        <div class="detail">${state.open === n.id ? detail(n) : ''}</div>`
+      }).join('')
+    $('ranking').querySelectorAll('.row').forEach((el) => {
+      const toggle = () => { state.open = state.open === el.dataset.id ? null : el.dataset.id; renderRanking() }
+      el.addEventListener('click', toggle)
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } })
+    })
+  }
+
+  const detail = (n) => {
+    const ns = neighbors(n.id).slice(0, 12)
+    const meta = `<div class="meta">${KIND_LABEL[n.kind]} · <b>${n.count}</b> docs · pmi <b>${fmt(n.pmi)}</b>${hasTone(n.tone) ? ` · tom <b>${fmt(n.tone, 1)}</b>` : ''}</div>`
+    if (!ns.length) return meta + `<div class="meta">não aparece junto com nenhum outro termo da lista</div>`
+    return meta + `<div class="meta">aparece no mesmo texto que</div><div class="chips">${ns.map((x) => `<span><i style="background:${termColor(x.node)}"></i>${label(x.node)}<small>${x.count}</small></span>`).join('')}</div>`
+  }
+
+  const tip = $('tip')
+  const showTip = (e, html) => {
+    const box = $('main').getBoundingClientRect()
+    tip.style.display = 'block'
+    tip.innerHTML = html
+    const left = Math.min(e.clientX - box.left + 14, box.width - 280)
+    tip.style.left = `${left}px`; tip.style.top = `${e.clientY - box.top + 14}px`
+  }
+  const hideTip = () => (tip.style.display = 'none')
+  const nodeTip = (n) => `<b>${label(n)}</b><br><span>${KIND_LABEL[n.kind]}</span><br><span>docs</span> ${n.count} &nbsp; <span>pmi</span> ${fmt(n.pmi)}${hasTone(n.tone) ? ` &nbsp; <span>tom</span> ${fmt(n.tone, 1)}` : ''}`
+
+  const renderScatter = () => {
+    const el = $('scatter')
+    el.innerHTML = ''
+    const nodes = graph.nodes
+    if (!nodes.length) return
+    const W = 900, H = 540, m = { t: 24, r: 24, b: 48, l: 56 }
+    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMidYMid meet')
+    const xExt = d3.extent(nodes, (n) => n.pmi)
+    const x = d3.scaleLinear().domain([Math.min(0, xExt[0]) - 0.3, xExt[1] + 0.3]).range([m.l, W - m.r]).nice()
+    const y = d3.scaleSqrt().domain([0, d3.max(nodes, (n) => n.count)]).range([H - m.b, m.t]).nice()
+    const r = d3.scaleSqrt().domain([1, d3.max(nodes, (n) => n.count)]).range([4, 14])
+    svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(8).tickSize(-(H - m.t - m.b)).tickPadding(8)).call((g) => g.select('.domain').remove()).selectAll('line').attr('stroke-opacity', 0.35)
+    svg.append('g').attr('class', 'axis').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(6).tickSize(-(W - m.l - m.r)).tickPadding(8)).call((g) => g.select('.domain').remove()).selectAll('line').attr('stroke-opacity', 0.35)
+    if (x.domain()[0] < 0) svg.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--faint)').attr('stroke-dasharray', '3 3')
+    svg.append('text').attr('class', 'axis-title').attr('x', W - m.r).attr('y', H - 10).attr('text-anchor', 'end').text('pmi: quanto mais à direita, mais o termo é exclusivo dessa pessoa')
+    svg.append('text').attr('class', 'axis-title').attr('x', m.l).attr('y', 14).text('docs em que aparece junto')
+    svg.append('text').attr('class', 'quad').attr('x', W - m.r).attr('y', m.t + 14).attr('text-anchor', 'end').text('frequente e exclusivo')
+    const sorted = [...nodes].sort((a, b) => b.count - a.count)
+    svg.append('g').selectAll('circle').data(sorted).join('circle').attr('class', 'dot')
+      .attr('cx', (n) => x(n.pmi)).attr('cy', (n) => y(n.count)).attr('r', (n) => r(n.count)).attr('fill', termColor).attr('fill-opacity', 0.9)
+      .on('mousemove', (e, n) => showTip(e, nodeTip(n))).on('mouseleave', hideTip)
+    const labeled = new Set([...sorted.slice(0, 14), ...[...nodes].sort((a, b) => b.pmi - a.pmi).slice(0, 8)].map((n) => n.id))
+    const pad = 2
+    const placed = sorted.map((n) => ({ x: x(n.pmi) - r(n.count), y: y(n.count) - r(n.count), width: 2 * r(n.count), height: 2 * r(n.count) }))
+    const collides = (bb) => placed.some((p) => !(bb.x - pad > p.x + p.width || bb.x + bb.width + pad < p.x || bb.y - pad > p.y + p.height || bb.y + bb.height + pad < p.y))
+    const textW = (s) => s.length * 6.3, textH = 11
+    const box = (s, w) => ({ x: s.a === 'start' ? s.x : s.a === 'end' ? s.x - w : s.x - w / 2, y: s.y - textH + 2, width: w, height: textH })
+    svg.append('g').selectAll('text').data(sorted.filter((n) => labeled.has(n.id))).join('text').attr('class', 'lbl').text(label)
+      .each(function (n) {
+        const el = d3.select(this), w = textW(label(n))
+        const spots = [
+          { x: x(n.pmi) + r(n.count) + 3, y: y(n.count) + 4, a: 'start' },
+          { x: x(n.pmi) - r(n.count) - 3, y: y(n.count) + 4, a: 'end' },
+          { x: x(n.pmi), y: y(n.count) - r(n.count) - 4, a: 'middle' },
+          { x: x(n.pmi), y: y(n.count) + r(n.count) + 12, a: 'middle' },
+        ]
+        const ok = spots.find((s) => !collides(box(s, w)))
+        if (!ok) return el.remove()
+        el.attr('x', ok.x).attr('y', ok.y).attr('text-anchor', ok.a)
+        placed.push(box(ok, w))
+      })
+  }
+
+  const renderMatrix = () => {
+    const el = $('matrix')
+    el.innerHTML = ''
+    const top = [...graph.nodes].sort((a, b) => b.count - a.count).slice(0, 22)
+    if (top.length < 2) { if (graph.nodes.length) el.innerHTML = '<div class="meta" style="color:var(--muted);padding:12px 0">precisa de pelo menos dois termos</div>'; return }
+    const idx = new Map(top.map((n, i) => [n.id, i]))
+    const termId = (l) => (typeof l === 'string' ? l : l.id)
+    const cells = graph.links
+      .filter((l) => idx.has(termId(l.source)) && idx.has(termId(l.target)))
+      .flatMap((l) => [{ a: termId(l.source), b: termId(l.target), count: l.count }, { a: termId(l.target), b: termId(l.source), count: l.count }])
+    const maxC = d3.max(cells, (c) => c.count) || 1
+    const cell = 24, labelW = 150, labelH = 110
+    const W = labelW + top.length * cell + 20, H = labelH + top.length * cell + 20
+    const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMinYMin meet').style('max-height', `${H}px`)
+    const short = (s) => (s.length > 18 ? s.slice(0, 17) + '…' : s)
+    svg.append('g').selectAll('text').data(top).join('text').attr('class', 'mlbl').attr('x', labelW - 8).attr('y', (n, i) => labelH + i * cell + cell / 2 + 4).attr('text-anchor', 'end').text((n) => short(label(n)))
+    svg.append('g').selectAll('text').data(top).join('text').attr('class', 'mlbl')
+      .attr('transform', (n, i) => `translate(${labelW + i * cell + cell / 2 + 4},${labelH - 8}) rotate(-60)`).text((n) => short(label(n)))
+    svg.append('g').selectAll('rect.bg').data(top.flatMap((a, i) => top.map((b, j) => ({ i, j })))).join('rect').attr('class', 'bg')
+      .attr('x', (d) => labelW + d.j * cell).attr('y', (d) => labelH + d.i * cell).attr('width', cell - 2).attr('height', cell - 2).attr('rx', 2)
+      .attr('fill', (d) => (d.i === d.j ? 'var(--line)' : 'var(--panel)'))
+    svg.append('g').selectAll('rect.cell').data(cells).join('rect').attr('class', 'cell')
+      .attr('x', (c) => labelW + idx.get(c.b) * cell).attr('y', (c) => labelH + idx.get(c.a) * cell).attr('width', cell - 2).attr('height', cell - 2).attr('rx', 2)
+      .attr('fill', 'var(--accent)').attr('fill-opacity', (c) => 0.15 + 0.85 * Math.sqrt(c.count / maxC))
+      .on('mousemove', (e, c) => {
+        const a = top[idx.get(c.a)], b = top[idx.get(c.b)]
+        showTip(e, `<b>${label(a)}</b> e <b>${label(b)}</b><br><span>aparecem juntos em</span> ${c.count} ${c.count === 1 ? 'doc' : 'docs'}`)
+      }).on('mouseleave', hideTip)
+  }
+
+  const renderSources = (rows) => {
+    const total = rows.reduce((a, r) => a + r.docs, 0)
+    const max = d3.max(rows, (r) => r.docs) || 1
+    $('cleardomain').hidden = state.domain === 'all'
+    const all = [{ domain: 'all', label: 'todas as fontes', docs: total, tone: null }, ...rows.map((r) => ({ ...r, label: r.domain ?? r.source ?? 'desconhecido', filterable: !!r.domain }))]
+    $('sources').innerHTML = all.map((r) => `
+      <div class="src ${(r.domain ?? '') === state.domain ? 'active' : ''}" data-domain="${r.domain ?? ''}" title="${r.filterable === false ? `${r.source}: sem domínio, não dá para filtrar` : r.source ?? ''}" style="${r.filterable === false ? 'cursor:default' : ''}">
+        <span class="d">${r.label}</span>
+        <span class="n">${r.docs}</span>
+        <span class="t" style="background:${hasTone(r.tone) ? toneScale(r.tone) : ''}">${fmt(r.tone, 1)}</span>
+        <span class="bar">${r.domain === 'all' ? '' : `<b style="width:${(100 * r.docs) / max}%;background:${hasTone(r.tone) ? toneScale(r.tone) : 'var(--line-strong)'}"></b>`}</span>
+      </div>`).join('')
+    $('sources').querySelectorAll('.src').forEach((el) => el.addEventListener('click', () => {
+      const d = el.dataset.domain
+      if (!d) return
+      state.domain = d === state.domain || d === 'all' ? 'all' : d
+      load()
+    }))
+  }
+
+  const syncControls = () => {
+    document.querySelectorAll('.seg').forEach((seg) => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === String(state[seg.dataset.control])))))
+    document.querySelectorAll('.stepper').forEach((s) => (s.querySelector('input').value = state[s.dataset.control]))
+    document.querySelectorAll('.viewbar [data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === state.view)))
+    document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === state.view))
+    $('hint').textContent = graph?.nodes.length ? HINT[state.view] : ''
+  }
+
+  const bind = () => {
+    document.querySelectorAll('.seg').forEach((seg) => seg.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return
+      state[seg.dataset.control] = b.dataset.v
+      syncControls(); load()
+    }))
+    document.querySelectorAll('.stepper').forEach((s) => {
+      const input = s.querySelector('input')
+      const clamp = (v) => Math.max(+s.dataset.min, Math.min(+s.dataset.max, v))
+      const set = (v) => { state[s.dataset.control] = clamp(Number.isFinite(v) ? v : +s.dataset.min); syncControls(); load() }
+      s.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => set(state[s.dataset.control] + +b.dataset.d * +s.dataset.step)))
+      input.addEventListener('change', () => set(parseInt(input.value, 10)))
+    })
+    $('tone').addEventListener('change', () => { state.tone = $('tone').checked; if (graph) render() })
+    document.querySelectorAll('.viewbar [data-view]').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.view; hideTip(); syncControls() }))
+    $('cleardomain').addEventListener('click', () => { state.domain = 'all'; load() })
+    $('people').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return
+      state.person = b.dataset.id; state.domain = 'all'; state.open = null
+      $('people').querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', String(x === b)))
+      load()
+    })
+  }
+
+  const init = async () => {
+    const people = await (await fetch('/api/people')).json()
+    state.person = people[0]?.id ?? null
+    $('people').innerHTML = people.map((p, i) => `<button role="tab" data-id="${p.id}" aria-selected="${i === 0}">${p.name}</button>`).join('')
+    bind(); syncControls(); load()
+  }
+  init()
+</script>
+</body>
+</html>

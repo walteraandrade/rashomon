@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rashomon // command center</title>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #08090b; --bg-2: #0c0e11; --panel: #101318; --panel-2: #0d1015; --line: #1d212a; --line-soft: #171a21;
+    --fg: #e5e7ec; --muted: #767c8c; --dim: #4c5262;
+    --accent: #f2a93b; --accent-dim: #6b5223;
+    --person: #f2a93b; --hashtag: #4fd6a8; --word: #6ea8f5; --theme: #e685c2; --link: #23272f;
+    --tone-neg: #f0616b; --tone-pos: #7fd88a; --tone-mid: #545b6b;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); font: 13px/1.4 var(--sans);
+    display: grid; grid-template-rows: auto 1fr auto; height: 100vh; overflow: hidden;
+  }
+  ::selection { background: var(--accent-dim); color: var(--fg); }
+  button { font: inherit; color: inherit; }
+  .tnum { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+  /* ---------- topbar ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap;
+    padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    font: 700 17px/1 'League Spartan', sans-serif; letter-spacing: .01em; color: var(--fg);
+    margin-right: 4px; white-space: nowrap;
+  }
+  .brand b { color: var(--accent); }
+  .ctlgroup { display: flex; align-items: center; gap: 6px; }
+  .ctlgroup .lbl {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim);
+    font-family: var(--mono); white-space: nowrap;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--bg-2); }
+  .seg button {
+    appearance: none; background: transparent; border: none; border-right: 1px solid var(--line);
+    padding: 5px 9px; font-size: 11.5px; color: var(--muted); cursor: pointer; white-space: nowrap;
+    font-family: var(--mono);
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button:hover { color: var(--fg); background: var(--panel-2); }
+  .seg button.on { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+  .stepper { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--bg-2); }
+  .stepper button {
+    appearance: none; background: transparent; border: none; color: var(--muted); cursor: pointer;
+    width: 20px; font-size: 13px; line-height: 1;
+  }
+  .stepper button:hover { color: var(--accent); background: var(--panel-2); }
+  .stepper .val {
+    min-width: 28px; text-align: center; padding: 5px 2px; font-size: 11.5px; color: var(--fg);
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line); font-family: var(--mono);
+  }
+  .tonebtn {
+    appearance: none; border: 1px solid var(--line); background: var(--bg-2); color: var(--muted);
+    border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono);
+  }
+  .tonebtn .box { width: 9px; height: 9px; border: 1px solid var(--dim); display: inline-block; }
+  .tonebtn.on { color: var(--accent); border-color: var(--accent-dim); }
+  .tonebtn.on .box { background: var(--accent); border-color: var(--accent); }
+  .topbar-spacer { flex: 1 1 auto; }
+  .kbdhint { color: var(--dim); font-size: 10.5px; font-family: var(--mono); white-space: nowrap; }
+  .kbdhint kbd { color: var(--muted); border: 1px solid var(--line-soft); border-radius: 3px; padding: 0 4px; }
+
+  /* ---------- body layout ---------- */
+  .body { display: grid; grid-template-columns: 176px 1fr 300px; min-height: 0; }
+
+  /* people rail */
+  .rail-people { border-right: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+  .rail-people h2, .panel h2 {
+    margin: 0; padding: 8px 12px; font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--dim); border-bottom: 1px solid var(--line); background: var(--panel-2); position: sticky; top: 0;
+  }
+  .person-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+    border-bottom: 1px solid var(--line-soft); border-left: 2px solid transparent;
+  }
+  .person-row:hover { background: var(--bg-2); }
+  .person-row.on { background: var(--bg-2); border-left-color: var(--accent); }
+  .person-row .av {
+    width: 26px; height: 26px; border-radius: 3px; background: var(--bg-2); border: 1px solid var(--line);
+    display: grid; place-items: center; font: 600 10px var(--mono); color: var(--muted); flex: none;
+  }
+  .person-row.on .av { color: var(--accent); border-color: var(--accent-dim); }
+  .person-row .meta { min-width: 0; flex: 1; }
+  .person-row .nm { font-size: 12px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .person-row .ct { font-size: 10.5px; color: var(--dim); font-family: var(--mono); }
+
+  /* graph pane */
+  .graph-pane { position: relative; overflow: hidden; background:
+    radial-gradient(ellipse at 30% 20%, #0d1014 0%, var(--bg) 60%); }
+  svg { width: 100%; height: 100%; display: block; }
+  .node text { fill: var(--fg); pointer-events: none; font: 500 11px var(--sans); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+  .node.person text { font: 700 15px 'League Spartan', sans-serif; }
+  .node circle { stroke: var(--bg); stroke-width: 1.5px; }
+  .node { transition: opacity .12s; }
+  .node.hl circle { stroke: var(--fg); stroke-width: 2px; }
+  .link { transition: opacity .12s, stroke .12s; stroke-linecap: round; }
+  #tip {
+    position: absolute; display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+    padding: 8px 10px; font-size: 11.5px; pointer-events: none; z-index: 5; min-width: 140px;
+  }
+  #tip .t-term { font: 600 12px var(--sans); color: var(--fg); margin-bottom: 4px; }
+  #tip .t-row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); }
+  #tip .t-row b { color: var(--fg); font-family: var(--mono); font-weight: 500; }
+  #legend {
+    position: absolute; left: 12px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 10.5px; color: var(--muted);
+    font-family: var(--mono); background: rgba(8,9,11,.6); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line-soft);
+  }
+  #legend i { display: inline-block; width: 8px; height: 8px; margin-right: 5px; vertical-align: -1px; border-radius: 1px; }
+  #legend .hint { flex-basis: 100%; color: var(--dim); }
+  #tonelegend:not([hidden]) { display: flex; gap: 10px; }
+  #empty {
+    position: absolute; inset: 0; display: none; place-items: center; color: var(--muted); text-align: center;
+    font-size: 13px;
+  }
+  #empty code { font-family: var(--mono); color: var(--accent); background: var(--panel); padding: 2px 6px; border-radius: 3px; border: 1px solid var(--line); }
+
+  /* right rail: termos + fontes */
+  .rail-right { border-left: 1px solid var(--line); background: var(--panel); display: grid; grid-template-rows: 1fr 1fr; min-height: 0; overflow: hidden; }
+  .panel { display: grid; grid-template-rows: auto 1fr; min-height: 0; overflow: hidden; }
+  .panel + .panel { border-top: 1px solid var(--line); }
+  .panel .list { overflow-y: auto; }
+  .term-row {
+    display: grid; grid-template-columns: 1fr 30px 32px 34px 30px; gap: 6px; align-items: center;
+    padding: 5px 10px; cursor: default; border-bottom: 1px solid var(--line-soft);
+  }
+  .term-row:hover, .term-row.hl { background: var(--bg-2); }
+  .term-row .tm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--fg); }
+  .term-row .kd {
+    font-family: var(--mono); font-size: 9px; text-align: center; padding: 1px 0; border-radius: 3px;
+    letter-spacing: .03em; font-weight: 600;
+  }
+  .term-row .n { text-align: right; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .term-row .p { text-align: right; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .term-row .tn { height: 8px; border-radius: 2px; background: var(--line-soft); position: relative; overflow: hidden; }
+  .term-row .tn i { position: absolute; top: 0; bottom: 0; }
+  .term-head {
+    display: grid; grid-template-columns: 1fr 30px 32px 34px 30px; gap: 6px; padding: 4px 10px;
+    font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim);
+    border-bottom: 1px solid var(--line); background: var(--panel-2); position: sticky; top: 0;
+  }
+  .term-head span:not(:first-child) { text-align: right; }
+
+  .src-row { display: grid; grid-template-columns: 1fr auto 30px; gap: 8px; padding: 6px 10px; cursor: pointer; align-items: center; border-bottom: 1px solid var(--line-soft); }
+  .src-row:hover { background: var(--bg-2); }
+  .src-row.on { background: var(--bg-2); box-shadow: inset 2px 0 0 var(--accent); }
+  .src-row .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+  .src-row .n { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .src-row .t { width: 28px; text-align: center; border-radius: 3px; padding: 1px 0; font-size: 10px; font-family: var(--mono); }
+  .src-row .t:empty { visibility: hidden; }
+
+  /* ---------- status bar ---------- */
+  .statusbar {
+    display: flex; align-items: center; gap: 16px; padding: 4px 14px; border-top: 1px solid var(--line);
+    background: var(--panel); color: var(--dim); font-size: 10.5px; font-family: var(--mono);
+  }
+  .statusbar .fetched { margin-left: auto; }
+  .statusbar b { color: var(--muted); }
+
+  @media (max-width: 800px) {
+    .body { grid-template-columns: 1fr; grid-template-rows: auto minmax(280px, 45vh) 1fr; }
+    .rail-people { border-right: 0; border-bottom: 1px solid var(--line); max-height: 96px; }
+    .rail-people h2 { display: none; }
+    .rail-people .list { display: flex; overflow-x: auto; }
+    .person-row { border-bottom: 0; border-left: 0; border-right: 1px solid var(--line-soft); flex: none; }
+    .person-row.on { box-shadow: inset 0 -2px 0 var(--accent); }
+    .rail-right { border-left: 0; border-top: 1px solid var(--line); grid-template-rows: 1fr 1fr; }
+    .topbar { gap: 6px 10px; }
+    .kbdhint { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">ASSOC<b>//</b>GRAPH</div>
+  <div class="ctlgroup"><span class="lbl">janela</span><div class="seg" data-field="days">
+    <button data-value="7">7d</button><button data-value="30">30d</button><button data-value="90">90d</button><button data-value="365">1a</button>
+  </div></div>
+  <div class="ctlgroup"><span class="lbl">fonte</span><div class="seg" data-field="source">
+    <button data-value="all">todas</button><button data-value="bluesky">bsky</button><button data-value="gnews">gnews</button><button data-value="gdelt">gdelt</button><button data-value="gkg">gkg</button><button data-value="rss">rss</button>
+  </div></div>
+  <div class="ctlgroup"><span class="lbl">tipo</span><div class="seg" data-field="kind">
+    <button data-value="all">todos</button><button data-value="hashtag">#</button><button data-value="word">wrd</button><button data-value="theme">thm</button>
+  </div></div>
+  <div class="ctlgroup"><span class="lbl">ordem</span><div class="seg" data-field="sort">
+    <button data-value="count">cnt</button><button data-value="pmi">pmi</button>
+  </div></div>
+  <div class="ctlgroup"><span class="lbl">nós</span><div class="stepper" data-field="limit">
+    <button data-dir="-1">-</button><span class="val tnum"></span><button data-dir="1">+</button>
+  </div></div>
+  <div class="ctlgroup"><span class="lbl">mín</span><div class="stepper" data-field="min">
+    <button data-dir="-1">-</button><span class="val tnum"></span><button data-dir="1">+</button>
+  </div></div>
+  <button class="tonebtn" id="tone"><span class="box"></span>tom</button>
+  <div class="topbar-spacer"></div>
+  <div class="kbdhint"><kbd>1-4</kbd> janela &nbsp; <kbd>j</kbd>/<kbd>k</kbd> pessoa &nbsp; <kbd>t</kbd> tom</div>
+</div>
+
+<div class="body">
+  <aside class="rail-people">
+    <h2>pessoas</h2>
+    <div class="list" id="people"></div>
+  </aside>
+
+  <main class="graph-pane" id="graph">
+    <svg viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="tip"></div>
+    <div id="empty">nada nessa janela.<br>roda&nbsp;<code>pnpm ingest</code></div>
+    <div id="legend">
+      <span><i style="background:var(--person)"></i>pessoa</span>
+      <span><i style="background:var(--hashtag)"></i>hashtag</span>
+      <span><i style="background:var(--word)"></i>palavra</span>
+      <span><i style="background:var(--theme)"></i>tema</span>
+      <span id="tonelegend" hidden><i style="background:var(--tone-neg)"></i>tom-<i style="background:var(--tone-pos)"></i>tom+</span>
+    </div>
+  </main>
+
+  <aside class="rail-right">
+    <section class="panel">
+      <h2>termos <span id="termcount" class="tnum" style="color:var(--dim)"></span></h2>
+      <div class="list">
+        <div class="term-head"><span>termo</span><span>tipo</span><span>cnt</span><span>pmi</span><span>tom</span></div>
+        <div id="terms"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>fontes <span id="domainlabel" style="color:var(--dim); text-transform:none; letter-spacing:0"></span></h2>
+      <div class="list" id="sources"></div>
+    </section>
+  </aside>
+</div>
+
+<div class="statusbar">
+  <span id="stats">-</span>
+  <span id="reqinfo"></span>
+  <span class="fetched" id="fetched"></span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const kindColor = { person: 'var(--person)', hashtag: 'var(--hashtag)', word: 'var(--word)', theme: 'var(--theme)' }
+  const kindTag = { person: 'PES', hashtag: 'HTG', word: 'WRD', theme: 'THM' }
+  const kindBg = { person: 'rgba(242,169,59,.16)', hashtag: 'rgba(79,214,168,.16)', word: 'rgba(110,168,245,.16)', theme: 'rgba(230,133,194,.16)' }
+  const toneScale = d3.scaleLinear().domain([-3, 0, 3]).range(['#f0616b', '#545b6b', '#7fd88a']).clamp(true)
+  const toneColor = (t) => (t === null || t === undefined ? 'var(--line-soft)' : toneScale(t))
+  const nodeColor = (n) => (state.tone && n.kind !== 'person' && n.tone !== null ? toneScale(n.tone) : kindColor[n.kind])
+
+  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false }
+
+  const svg = d3.select('svg')
+  const tip = $('tip')
+  let requestId = 0
+  let sim = null
+  let people = []
+  let currentNodes = []
+
+  let nodeSel = null
+  let linkSel = null
+  let linkData = []
+  const idOf = (x) => String(x.id ?? x)
+  const isSpoke = (l) => idOf(l.source).startsWith('person:')
+  const linkIsTouching = (l, id) => idOf(l.source) === id || idOf(l.target) === id
+
+  const setHighlight = (id, { scroll } = {}) => {
+    const neighbors = new Set()
+    if (id) linkData.forEach((l) => { if (!isSpoke(l) && linkIsTouching(l, id)) { neighbors.add(idOf(l.source)); neighbors.add(idOf(l.target)) } })
+    if (nodeSel) {
+      nodeSel.style('opacity', (n) => (!id || n.kind === 'person' || n.id === id || neighbors.has(n.id) ? 1 : 0.15))
+      nodeSel.classed('hl', (n) => n.id === id)
+    }
+    if (linkSel) {
+      linkSel
+        .style('opacity', (l) => {
+          if (!id) return isSpoke(l) ? 0.45 : 0
+          if (linkIsTouching(l, id)) return isSpoke(l) ? 0.7 : 0.9
+          return isSpoke(l) ? 0.06 : 0
+        })
+        .attr('stroke', (l) => (id && !isSpoke(l) && linkIsTouching(l, id) ? 'var(--accent)' : 'var(--link)'))
+    }
+    document.querySelectorAll('.term-row').forEach((el) => {
+      const active = id && el.dataset.id === id
+      el.classList.toggle('hl', !!active)
+      if (active && scroll) el.scrollIntoView({ block: 'nearest' })
+    })
+  }
+
+  const paramsForGraph = () => ({
+    days: state.days, source: state.source, kind: state.kind, sort: state.sort,
+    limit: String(state.limit), min: String(state.min), domain: state.domain,
+  })
+
+  // ---------- topbar wiring ----------
+  const syncSeg = (field) => {
+    document.querySelectorAll(`.seg[data-field="${field}"] button`).forEach((b) => {
+      b.classList.toggle('on', b.dataset.value === String(state[field]))
+    })
+  }
+  document.querySelectorAll('.seg').forEach((seg) => {
+    const field = seg.dataset.field
+    seg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      state[field] = b.dataset.value
+      syncSeg(field)
+      load()
+    }))
+  })
+
+  const stepperCfg = { limit: { min: 5, max: 200, step: 5 }, min: { min: 1, max: 50, step: 1 } }
+  const syncStepper = (field) => { document.querySelector(`.stepper[data-field="${field}"] .val`).textContent = state[field] }
+  document.querySelectorAll('.stepper').forEach((st) => {
+    const field = st.dataset.field
+    const cfg = stepperCfg[field]
+    st.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      const dir = Number(b.dataset.dir)
+      state[field] = Math.min(cfg.max, Math.max(cfg.min, state[field] + dir * cfg.step))
+      syncStepper(field)
+      load()
+    }))
+  })
+
+  const toneBtn = $('tone')
+  toneBtn.addEventListener('click', () => {
+    state.tone = !state.tone
+    toneBtn.classList.toggle('on', state.tone)
+    $('tonelegend').hidden = !state.tone
+    svg.selectAll('.node circle').attr('fill', nodeColor)
+  })
+
+  // ---------- keyboard shortcuts ----------
+  const dayShortcuts = { '1': '7', '2': '30', '3': '90', '4': '365' }
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    if (dayShortcuts[e.key]) {
+      state.days = dayShortcuts[e.key]
+      syncSeg('days')
+      load()
+    } else if (e.key === 'j' || e.key === 'k') {
+      const idx = people.findIndex((p) => p.id === state.person)
+      const next = e.key === 'j' ? Math.min(people.length - 1, idx + 1) : Math.max(0, idx - 1)
+      if (people[next]) selectPerson(people[next].id)
+    } else if (e.key === 't') {
+      toneBtn.click()
+    }
+  })
+
+  // ---------- people rail ----------
+  const initials = (name) => {
+    const w = name.trim().split(/\s+/)
+    return (w.length > 1 ? w[0][0] + w[1][0] : name.slice(0, 2)).toUpperCase()
+  }
+
+  const renderPeople = () => {
+    $('people').innerHTML = people.map((p) => `
+      <div class="person-row ${p.id === state.person ? 'on' : ''}" data-id="${p.id}">
+        <span class="av">${initials(p.name)}</span>
+        <span class="meta">
+          <div class="nm">${p.name}</div>
+          <div class="ct tnum">${p.about === undefined ? '…' : p.about} docs</div>
+        </span>
+      </div>`).join('')
+    $('people').querySelectorAll('.person-row').forEach((el) => el.addEventListener('click', () => selectPerson(el.dataset.id)))
+  }
+
+  const refreshPeopleCounts = async () => {
+    const q = new URLSearchParams({ days: state.days, source: state.source, kind: 'all', sort: 'count', limit: '1', min: '1', domain: state.domain })
+    await Promise.all(people.map(async (p) => {
+      try {
+        const g = await (await fetch(`/api/people/${p.id}/graph?` + q)).json()
+        p.about = g.stats ? g.stats.about : 0
+      } catch { p.about = 0 }
+    }))
+    renderPeople()
+  }
+
+  const selectPerson = (id) => {
+    if (id === state.person) return
+    state.person = id
+    state.domain = 'all'
+    renderPeople()
+    load()
+  }
+
+  // ---------- fetch + render ----------
+  const load = async () => {
+    if (!state.person) return
+    const id = ++requestId
+    const q = paramsForGraph()
+    try {
+      const res = await fetch(`/api/people/${state.person}/graph?` + new URLSearchParams(q))
+      const g = await res.json()
+      if (id !== requestId) return
+      renderGraph(g)
+      renderTerms(g.nodes)
+      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + new URLSearchParams(q))).json()
+      if (id === requestId) renderSources(srcs)
+      if (id === requestId) $('fetched').textContent = `atualizado ${new Date().toLocaleTimeString('pt-BR')}`
+    } catch (e) {
+      $('stats').textContent = `erro: ${e.message}`
+    }
+  }
+
+  const renderTerms = (nodes) => {
+    currentNodes = nodes
+    $('termcount').textContent = nodes.length
+    const maxCount = d3.max(nodes, (n) => n.count) || 1
+    $('terms').innerHTML = nodes.map((n) => {
+      const tonePct = n.tone === null || n.tone === undefined ? null : Math.max(0, Math.min(100, ((n.tone + 3) / 6) * 100))
+      const bar = tonePct === null ? '' : `<i style="left:0;width:${tonePct}%;background:${toneColor(n.tone)}"></i>`
+      return `
+      <div class="term-row" data-id="${n.id}">
+        <span class="tm" title="${n.term}">${n.kind === 'hashtag' ? '#' : ''}${n.term}</span>
+        <span class="kd" style="color:${kindColor[n.kind]};background:${kindBg[n.kind]}">${kindTag[n.kind]}</span>
+        <span class="n">${n.count}</span>
+        <span class="p">${n.pmi}</span>
+        <span class="tn">${bar}</span>
+      </div>`
+    }).join('')
+    $('terms').querySelectorAll('.term-row').forEach((el) => {
+      el.addEventListener('mouseenter', () => setHighlight(el.dataset.id))
+      el.addEventListener('mouseleave', () => setHighlight(null))
+    })
+  }
+
+  const renderSources = (rows) => {
+    $('domainlabel').textContent = state.domain === 'all' ? '' : `· ${state.domain}`
+    const all = [{ domain: 'all', label: 'todas', docs: rows.reduce((a, r) => a + r.docs, 0), tone: null }, ...rows]
+    const box = $('sources')
+    box.innerHTML = all.map((r) => `
+      <div class="src-row ${r.domain === state.domain ? 'on' : ''}" data-domain="${r.domain ?? ''}" title="${r.source ?? ''}">
+        <span class="d">${r.label ?? r.domain ?? r.source ?? 'desconhecido'}</span>
+        <span class="n">${r.docs}</span>
+        <span class="t" style="background:${toneColor(r.tone)}">${r.tone === null || r.tone === undefined ? '' : r.tone}</span>
+      </div>`).join('')
+    box.querySelectorAll('.src-row').forEach((el) => el.addEventListener('click', () => {
+      const d = el.dataset.domain
+      state.domain = !d || d === state.domain ? 'all' : d
+      load()
+    }))
+  }
+
+  const renderGraph = (g) => {
+    if (sim) sim.stop()
+    svg.selectAll('*').remove()
+    $('stats').textContent = `${g.stats.about} docs sobre ${g.person.name} de ${g.stats.docs} na janela`
+    $('reqinfo').textContent = `${g.nodes.length} nos · ${g.links.length} links`
+    $('empty').style.display = g.nodes.length ? 'none' : 'grid'
+    const [width, height] = [1200, 700]
+    const cx = width / 2, cy = height / 2
+    const maxCount = d3.max(g.nodes, (n) => n.count) || 1
+    const r = d3.scaleSqrt().domain([1, maxCount]).range([4, 18])
+    const personR = 28
+    const n = g.nodes.length
+    // Ring radius encodes rank by the active sort: closer to the center = stronger association.
+    // Angle follows the golden angle so consecutive ranks land far apart and the layout is deterministic.
+    const ring = d3.scaleLinear().domain([0, Math.max(1, n - 1)]).range([120, 310])
+    const golden = Math.PI * (3 - Math.sqrt(5))
+    const nodes = [
+      { id: `person:${g.person.id}`, kind: 'person', term: g.person.name, fx: cx, fy: cy, x: cx, y: cy },
+      ...g.nodes.map((d, i) => ({ ...d, rank: i, x: cx + ring(i) * Math.cos(i * golden), y: cy + ring(i) * Math.sin(i * golden) })),
+    ]
+    const byId = new Map(nodes.map((d) => [d.id, d]))
+    const links = g.links.map((l) => ({ ...l, source: byId.get(l.source), target: byId.get(l.target) })).filter((l) => l.source && l.target)
+    linkData = links
+    const maxLink = d3.max(links.filter((l) => !isSpoke(l)), (l) => l.count) || 1
+    const root = svg.append('g')
+    svg.call(d3.zoom().scaleExtent([0.3, 4]).on('zoom', (e) => root.attr('transform', e.transform)))
+
+    linkSel = root.append('g').selectAll('line').data(links).join('line')
+      .attr('class', 'link')
+      .attr('stroke', 'var(--link)')
+      .attr('stroke-width', (l) => (isSpoke(l) ? 1 : 1 + 3 * Math.sqrt(l.count / maxLink)))
+      .style('opacity', (l) => (isSpoke(l) ? 0.45 : 0))
+
+    nodeSel = root.append('g').selectAll('g').data(nodes).join('g').attr('class', (d) => `node ${d.kind}`)
+    nodeSel.append('circle').attr('r', (d) => (d.kind === 'person' ? personR : r(d.count))).attr('fill', nodeColor)
+    nodeSel.append('text').text((d) => (d.kind === 'hashtag' ? `#${d.term}` : d.term))
+    const placeLabels = () => nodeSel.select('text')
+      .attr('text-anchor', (d) => (d.kind === 'person' ? 'middle' : d.x >= cx ? 'start' : 'end'))
+      .attr('dx', (d) => (d.kind === 'person' ? 0 : (d.x >= cx ? 1 : -1) * (r(d.count) + 5)))
+      .attr('dy', (d) => (d.kind === 'person' ? personR + 18 : 4))
+
+    nodeSel.on('mousemove', (e, d) => {
+      if (d.kind === 'person') return
+      tip.style.display = 'block'
+      const box = tip.parentElement.getBoundingClientRect()
+      tip.style.left = e.clientX - box.left + 14 + 'px'; tip.style.top = e.clientY - box.top + 14 + 'px'
+      const co = links.filter((l) => !isSpoke(l) && linkIsTouching(l, d.id)).length
+      tip.innerHTML = `<div class="t-term">${d.kind === 'hashtag' ? '#' : ''}${d.term}</div>
+        <div class="t-row"><span>docs</span><b>${d.count}</b></div>
+        <div class="t-row"><span>pmi</span><b>${d.pmi}</b></div>
+        ${d.tone === null || d.tone === undefined ? '' : `<div class="t-row"><span>tom</span><b>${d.tone}</b></div>`}
+        <div class="t-row"><span>junto com</span><b>${co} ${co === 1 ? 'termo' : 'termos'}</b></div>`
+    }).on('mouseenter', (e, d) => { if (d.kind !== 'person') setHighlight(d.id, { scroll: true }) })
+      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null) })
+
+    const tick = () => {
+      linkSel.attr('x1', (l) => l.source.x).attr('y1', (l) => l.source.y).attr('x2', (l) => l.target.x).attr('y2', (l) => l.target.y)
+      nodeSel.attr('transform', (d) => `translate(${d.x},${d.y})`)
+      placeLabels()
+    }
+
+    nodeSel.call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y })
+      .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); if (d.kind !== 'person') { d.fx = null; d.fy = null } }))
+
+    sim = d3.forceSimulation(nodes)
+      .force('ring', d3.forceRadial((d) => (d.kind === 'person' ? 0 : ring(d.rank)), cx, cy).strength((d) => (d.kind === 'person' ? 0 : 0.9)))
+      .force('together', d3.forceLink(links.filter((l) => !isSpoke(l))).id((d) => d.id).strength(0.015).distance(90))
+      .force('collide', d3.forceCollide((d) => (d.kind === 'person' ? personR + 30 : r(d.count) + 20)).iterations(4))
+      .on('tick', tick)
+      .stop()
+    sim.tick(300)
+    tick()
+    sim.alpha(0)
+
+    d3.select('#legend').selectAll('.hint').data([0]).join('span').attr('class', 'hint')
+      .text('perto do centro = associação mais forte · passe o mouse num termo para ver com quais ele aparece junto')
+  }
+
+  const init = async () => {
+    people = await (await fetch('/api/people')).json()
+    state.person = people[0]?.id ?? null
+    renderPeople()
+    syncSeg('days'); syncSeg('source'); syncSeg('kind'); syncSeg('sort')
+    syncStepper('limit'); syncStepper('min')
+    refreshPeopleCounts()
+    load()
+  }
+  init()
+</script>
+</body>
+</html>

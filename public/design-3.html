@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rashomon · mapa</title>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070a12;
+    --bg-2: #0a0e1a;
+    --panel-bg: rgba(16, 21, 34, .66);
+    --panel-bg-solid: rgba(16, 21, 34, .92);
+    --panel-border: rgba(255, 255, 255, .09);
+    --fg: #eef1f7;
+    --muted: #a3acc2;
+    --muted-2: #6a7390;
+    --accent: #5eead4;
+    --accent-fg: #06231d;
+    --person: #ffcf5c;
+    --hashtag: #3ddc97;
+    --word: #5b9dff;
+    --theme: #ff86c8;
+    --link: rgba(255, 255, 255, .16);
+    --tone-neg: #ff6b6b;
+    --tone-pos: #3ddc97;
+    --tone-neu: #6a7390;
+    --shadow: 0 24px 70px rgba(0, 0, 0, .55), 0 4px 16px rgba(0, 0, 0, .4);
+    --radius-lg: 22px;
+    --radius-md: 15px;
+    --radius-sm: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.4 Inter, system-ui, sans-serif;
+    overflow: hidden;
+  }
+  h1, h2, .display { font-family: 'League Spartan', sans-serif; }
+  .num { font-variant-numeric: tabular-nums; }
+  button { font: inherit; color: inherit; }
+
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+
+  #bgtexture {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, .05) 1px, transparent 1.4px);
+    background-size: 26px 26px;
+    background-position: -4px -4px;
+  }
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 46%, transparent 0%, transparent 40%, rgba(4, 6, 12, .55) 100%),
+      linear-gradient(180deg, rgba(4, 6, 12, .35), transparent 18%, transparent 78%, rgba(4, 6, 12, .5));
+  }
+  #graph { position: absolute; inset: 0; }
+  svg { width: 100%; height: 100%; display: block; }
+
+  .node text {
+    fill: var(--fg);
+    pointer-events: none;
+    font-size: 12px;
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+  .node.person text { font: 700 17px 'League Spartan', sans-serif; letter-spacing: .01em; }
+  .glowring {
+    animation: pulse 2.6s ease-in-out infinite;
+    transform-origin: center;
+  }
+  @keyframes pulse { 0%, 100% { opacity: .28; } 50% { opacity: .55; } }
+  @media (prefers-reduced-motion: reduce) { .glowring { animation: none; opacity: .4; } }
+
+  .glass {
+    background: var(--panel-bg);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--panel-border);
+    box-shadow: var(--shadow);
+    border-radius: var(--radius-lg);
+  }
+
+  /* person switcher, top left */
+  #personpanel {
+    position: absolute; top: 18px; left: 18px; max-width: min(78vw, 420px);
+    padding: 10px;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  #persontabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .persontab {
+    appearance: none; border: 1px solid transparent; background: transparent; cursor: pointer;
+    padding: 9px 16px; border-radius: 999px; color: var(--muted);
+    font: 700 14px 'League Spartan', sans-serif; letter-spacing: .01em;
+    transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+    white-space: nowrap;
+  }
+  .persontab:hover { color: var(--fg); background: rgba(255, 255, 255, .06); }
+  .persontab.active {
+    color: var(--bg); background: var(--person);
+    box-shadow: 0 0 0 1px rgba(255, 207, 92, .5), 0 0 22px rgba(255, 207, 92, .35);
+  }
+  #statsline { padding: 8px 10px 2px; font-size: 12px; color: var(--muted); }
+  #statsline b { color: var(--fg); font-weight: 600; }
+
+  /* empty state */
+  #empty {
+    position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 20px;
+  }
+  #empty div {
+    padding: 22px 28px; max-width: 360px;
+    color: var(--muted); font-size: 14px;
+  }
+  #empty code {
+    background: rgba(255, 255, 255, .08); padding: 2px 7px; border-radius: 6px; color: var(--fg);
+    font-family: ui-monospace, monospace; font-size: 13px;
+  }
+
+  /* floating info card (hover tooltip) */
+  #tip {
+    position: absolute; display: none; min-width: 190px; max-width: 240px;
+    padding: 12px 14px; border-radius: var(--radius-md); z-index: 20;
+    pointer-events: none;
+  }
+  #tip .term { font: 700 15px 'League Spartan', sans-serif; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  #tip .chip {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px; color: var(--bg);
+  }
+  #tip .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; }
+  #tip .row b { color: var(--fg); font-weight: 600; }
+  #tip .tonebar { position: relative; height: 6px; border-radius: 4px; background: rgba(255, 255, 255, .1); margin-top: 8px; }
+  #tip .tonebar i { position: absolute; top: -3px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--bg); transform: translateX(-50%); }
+
+  /* bottom center dock */
+  #dock {
+    position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 14px; padding: 12px 16px;
+    max-width: calc(100vw - 48px);
+    transition: opacity .18s ease, left .2s ease, max-width .2s ease;
+  }
+  .dockgroup { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+  .dockgroup .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted-2); padding-left: 2px; }
+  .seg { display: flex; flex-wrap: wrap; background: rgba(255, 255, 255, .05); border-radius: 14px; padding: 3px; gap: 2px; max-width: 100%; }
+  .seg button {
+    appearance: none; border: none; background: transparent; cursor: pointer; color: var(--muted);
+    padding: 6px 11px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap;
+    transition: background .15s ease, color .15s ease;
+  }
+  .seg button:hover { color: var(--fg); }
+  .seg button.active { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .divider { width: 1px; align-self: stretch; background: var(--panel-border); margin: 2px 0; }
+
+  .slidergroup { width: 108px; }
+  .slidergroup .lbl { display: flex; justify-content: space-between; width: 100%; }
+  .slidergroup .lbl em { font-style: normal; color: var(--fg); font-variant-numeric: tabular-nums; }
+  input[type="range"] {
+    -webkit-appearance: none; width: 100%; height: 4px; border-radius: 4px;
+    background: rgba(255, 255, 255, .14); outline: none; margin-top: 4px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 2px solid var(--bg-2);
+    box-shadow: 0 0 0 1px rgba(94, 234, 212, .4);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px; height: 15px; border-radius: 50%; background: var(--accent); cursor: pointer;
+    border: 2px solid var(--bg-2);
+  }
+
+  .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .toggle .sw {
+    width: 34px; height: 19px; border-radius: 999px; background: rgba(255, 255, 255, .16);
+    position: relative; transition: background .15s ease; flex: none;
+  }
+  .toggle .sw::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%;
+    background: var(--fg); transition: transform .15s ease;
+  }
+  .toggle input { display: none; }
+  .toggle input:checked + .sw { background: var(--accent); }
+  .toggle input:checked + .sw::after { transform: translateX(15px); background: var(--accent-fg); }
+  .toggle span.lbl2 { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  #legend { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; max-width: 100%; }
+  #legend .item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  #legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+  #legend .hint { font-size: 11px; color: var(--muted-2); white-space: nowrap; }
+
+  /* zoom cluster bottom right */
+  #zoomcluster {
+    position: absolute; right: 18px; bottom: 18px; display: flex; flex-direction: column;
+    padding: 6px; gap: 2px; transition: right .2s ease;
+  }
+  #zoomcluster button {
+    appearance: none; border: none; background: transparent; cursor: pointer; color: var(--muted);
+    width: 38px; height: 38px; border-radius: var(--radius-sm); font-size: 17px; font-weight: 600;
+    transition: background .15s ease, color .15s ease;
+  }
+  #zoomcluster button:hover { background: rgba(255, 255, 255, .08); color: var(--fg); }
+  #zoomcluster button#recenter { font-size: 14px; }
+  #zoomcluster .zdiv { height: 1px; background: var(--panel-border); margin: 2px 6px; }
+
+  /* right drawer */
+  #drawertoggle {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    padding: 14px 8px; border-radius: var(--radius-md) 0 0 var(--radius-md);
+    border-right: none; cursor: pointer; color: var(--muted);
+    writing-mode: vertical-rl; text-orientation: mixed; font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; z-index: 15; transition: right .2s ease, color .15s ease;
+  }
+  #drawertoggle:hover { color: var(--fg); }
+  #drawer {
+    position: absolute; top: 18px; bottom: 18px; right: 18px; width: 300px;
+    display: flex; flex-direction: column; overflow: hidden;
+    transition: transform .2s ease, opacity .2s ease;
+    transform: translateX(0);
+  }
+  #drawer.closed { transform: translateX(calc(100% + 26px)); pointer-events: none; opacity: 0; }
+  #drawer.closed ~ #drawertoggle { right: 0; }
+  #drawer:not(.closed) ~ #drawertoggle { right: 318px; }
+  #drawer h2 {
+    margin: 0; padding: 14px 16px 10px; font: 600 11px 'Inter', sans-serif; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted-2); border-bottom: 1px solid var(--panel-border);
+    display: flex; justify-content: space-between; flex: none;
+  }
+  #domainlabel { color: var(--accent); text-transform: none; letter-spacing: 0; font-weight: 600; }
+  #sources { overflow-y: auto; flex: 1; }
+  .src {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 9px 16px;
+    cursor: pointer; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, .04);
+  }
+  .src:hover { background: rgba(255, 255, 255, .05); }
+  .src.active { background: rgba(94, 234, 212, .1); box-shadow: inset 3px 0 0 var(--accent); }
+  .src .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .src .n { color: var(--muted); font-size: 12px; }
+  .src .t {
+    width: 34px; text-align: center; border-radius: 5px; padding: 2px 0; font-size: 11px; color: #06120e;
+    font-weight: 600;
+  }
+  .src .t:empty { visibility: hidden; }
+
+  @media (max-width: 1150px) {
+    .divider { display: none; }
+  }
+  @media (max-width: 1100px) {
+    #drawer { width: 78vw; max-width: 320px; }
+  }
+  @media (max-width: 800px) {
+    #personpanel { max-width: 60vw; padding: 8px; }
+    .persontab { padding: 7px 12px; font-size: 12.5px; }
+    #statsline { font-size: 11px; padding: 6px 8px 2px; }
+    #dock {
+      flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); gap: 10px 14px;
+      padding: 10px 14px; bottom: 12px;
+    }
+    .divider { display: none; }
+    #legend { flex-wrap: wrap; justify-content: center; gap: 6px 10px; }
+    #zoomcluster { bottom: auto; top: 18px; right: 18px; }
+    #drawer { top: 12px; bottom: 12px; right: 12px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bgtexture"></div>
+  <div id="graph"><svg viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div id="vignette"></div>
+
+  <div id="tip" class="glass"></div>
+  <div id="empty"><div class="glass">nada nessa janela. rode <code>pnpm ingest</code></div></div>
+
+  <div id="personpanel" class="glass">
+    <div id="persontabs"></div>
+    <div id="statsline"></div>
+  </div>
+
+  <div id="dock" class="glass">
+    <div class="dockgroup">
+      <span class="lbl">Janela</span>
+      <div class="seg" data-key="days" data-type="int">
+        <button data-value="7">7d</button>
+        <button data-value="30">30d</button>
+        <button data-value="90">90d</button>
+        <button data-value="365">1a</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="dockgroup">
+      <span class="lbl">Fonte</span>
+      <div class="seg" data-key="source">
+        <button data-value="all">todas</button>
+        <button data-value="bluesky">bluesky</button>
+        <button data-value="gdelt">gdelt</button>
+        <button data-value="rss">rss</button>
+        <button data-value="gnews">g.news</button>
+        <button data-value="gkg">gkg</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="dockgroup">
+      <span class="lbl">Tipo</span>
+      <div class="seg" data-key="kind">
+        <button data-value="all">todos</button>
+        <button data-value="hashtag">hashtag</button>
+        <button data-value="word">palavra</button>
+        <button data-value="theme">tema</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="dockgroup">
+      <span class="lbl">Ordem</span>
+      <div class="seg" data-key="sort">
+        <button data-value="count">contagem</button>
+        <button data-value="pmi">pmi</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="dockgroup slidergroup">
+      <span class="lbl">Nós <em id="limitval">40</em></span>
+      <input id="limit" type="range" min="5" max="200" step="5" value="40">
+    </div>
+    <div class="dockgroup slidergroup">
+      <span class="lbl">Mín. <em id="minval">2</em></span>
+      <input id="min" type="range" min="1" max="20" step="1" value="2">
+    </div>
+    <div class="divider"></div>
+    <label class="toggle">
+      <input id="tone" type="checkbox">
+      <span class="sw"></span>
+      <span class="lbl2">cor por tom</span>
+    </label>
+    <div class="divider"></div>
+    <div id="legend">
+      <span class="item"><i style="background:var(--person)"></i>pessoa</span>
+      <span class="item"><i style="background:var(--hashtag)"></i>hashtag</span>
+      <span class="item"><i style="background:var(--word)"></i>palavra</span>
+      <span class="item"><i style="background:var(--theme)"></i>tema</span>
+      <span class="item" id="tonelegend" hidden><i style="background:var(--tone-neg)"></i>neg &nbsp;<i style="background:var(--tone-pos)"></i>pos</span>
+      <span class="hint">perto do centro = associação mais forte · passe o mouse num termo para ver com quais ele aparece junto</span>
+    </div>
+  </div>
+
+  <div id="zoomcluster" class="glass">
+    <button id="zoomin" title="Aumentar zoom">+</button>
+    <div class="zdiv"></div>
+    <button id="zoomout" title="Diminuir zoom">&minus;</button>
+    <div class="zdiv"></div>
+    <button id="recenter" title="Recentrar">&#8982;</button>
+  </div>
+
+  <aside id="drawer" class="glass">
+    <h2>fontes <span id="domainlabel"></span></h2>
+    <div id="sources"></div>
+  </aside>
+  <button id="drawertoggle" class="glass">fontes</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const kindLabel = { hashtag: 'hashtag', word: 'palavra', theme: 'tema', person: 'pessoa' }
+  const color = { person: 'var(--person)', hashtag: 'var(--hashtag)', word: 'var(--word)', theme: 'var(--theme)' }
+
+  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, tone: false, domain: 'all' }
+  let manualDrawer = false
+
+  const toneScale = d3.scaleLinear().domain([-3, 0, 3]).range(['#ff6b6b', '#6a7390', '#3ddc97']).clamp(true)
+  const toneColor = (t) => (t === null || t === undefined ? 'rgba(255,255,255,.14)' : toneScale(t))
+  const nodeColor = (n) => (state.tone && n.kind !== 'person' && n.tone !== null && n.tone !== undefined ? toneScale(n.tone) : color[n.kind])
+
+  const svg = d3.select('#graph svg')
+  const defs = svg.append('defs')
+  defs.append('filter').attr('id', 'glow').attr('x', '-80%').attr('y', '-80%').attr('width', '260%').attr('height', '260%')
+    .append('feGaussianBlur').attr('stdDeviation', 5)
+  const root = svg.append('g')
+  const zoomBehavior = d3.zoom().scaleExtent([0.25, 4]).on('zoom', (e) => root.attr('transform', e.transform))
+  svg.call(zoomBehavior)
+
+  const tip = $('tip')
+  let requestId = 0
+  let sim = null
+  let nodeSel = null
+  let linkSel = null
+  let linkData = []
+
+  const idOf = (x) => String(x.id ?? x)
+  const isSpoke = (l) => idOf(l.source).startsWith('person:')
+  const linkIsTouching = (l, id) => idOf(l.source) === id || idOf(l.target) === id
+
+  const setHighlight = (id) => {
+    const neighbors = new Set()
+    if (id) linkData.forEach((l) => { if (!isSpoke(l) && linkIsTouching(l, id)) { neighbors.add(idOf(l.source)); neighbors.add(idOf(l.target)) } })
+    if (nodeSel) nodeSel.style('opacity', (n) => (!id || n.kind === 'person' || n.id === id || neighbors.has(n.id) ? 1 : 0.15))
+    if (linkSel) {
+      linkSel
+        .style('opacity', (l) => {
+          if (!id) return isSpoke(l) ? 0.45 : 0
+          if (linkIsTouching(l, id)) return isSpoke(l) ? 0.7 : 0.9
+          return isSpoke(l) ? 0.06 : 0
+        })
+        .attr('stroke', (l) => (id && !isSpoke(l) && linkIsTouching(l, id) ? 'var(--accent)' : 'var(--link)'))
+    }
+  }
+
+  const buildParams = () => ({ days: state.days, source: state.source, kind: state.kind, sort: state.sort, limit: state.limit, min: state.min, domain: state.domain })
+
+  const load = async () => {
+    if (!state.person) return
+    const id = ++requestId
+    try {
+      const q = new URLSearchParams(buildParams())
+      const res = await fetch(`/api/people/${state.person}/graph?` + q)
+      const g = await res.json()
+      if (id !== requestId) return
+      render(g)
+      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + q)).json()
+      if (id === requestId) renderSources(srcs)
+    } catch (e) {
+      $('statsline').innerHTML = `erro: ${e.message}`
+    }
+  }
+
+  const renderSources = (rows) => {
+    $('domainlabel').textContent = state.domain === 'all' ? '' : `· ${state.domain}`
+    const all = [{ domain: 'all', label: 'todas', docs: rows.reduce((a, r) => a + r.docs, 0), tone: null }, ...rows]
+    const box = $('sources')
+    box.innerHTML = all.map((r) => `
+      <div class="src ${r.domain === state.domain ? 'active' : ''}" data-domain="${r.domain ?? ''}" title="${r.source ?? ''}">
+        <span class="d">${r.label ?? r.domain ?? r.source ?? 'desconhecido'}</span>
+        <span class="n num">${r.docs}</span>
+        <span class="t num" style="background:${toneColor(r.tone)}">${r.tone === null || r.tone === undefined ? '' : r.tone}</span>
+      </div>`).join('')
+    box.querySelectorAll('.src').forEach((el) => el.addEventListener('click', () => {
+      const d = el.dataset.domain
+      state.domain = !d || d === state.domain ? 'all' : d
+      load()
+    }))
+  }
+
+  const render = (g) => {
+    if (sim) sim.stop()
+    root.selectAll('*').remove()
+    tip.style.display = 'none'
+    $('statsline').innerHTML = `<b>${g.stats.about}</b> docs sobre <b>${g.person.name}</b> de <b>${g.stats.docs}</b> na janela`
+    $('empty').style.display = g.nodes.length ? 'none' : 'grid'
+    if (!g.nodes.length) return
+
+    const [width, height] = [1200, 700]
+    const cx = width / 2, cy = height / 2
+    const maxCount = d3.max(g.nodes, (n) => n.count) || 1
+    const r = d3.scaleSqrt().domain([1, maxCount]).range([4, 18])
+    const personR = 28
+    const n = g.nodes.length
+    // Ring radius encodes rank by the active sort: closer to the center = stronger association.
+    // Angle follows the golden angle so consecutive ranks land far apart and the layout is deterministic.
+    const ring = d3.scaleLinear().domain([0, Math.max(1, n - 1)]).range([120, 310])
+    const golden = Math.PI * (3 - Math.sqrt(5))
+    const nodes = [
+      { id: `person:${g.person.id}`, kind: 'person', term: g.person.name, fx: cx, fy: cy, x: cx, y: cy },
+      ...g.nodes.map((d, i) => ({ ...d, rank: i, x: cx + ring(i) * Math.cos(i * golden), y: cy + ring(i) * Math.sin(i * golden) })),
+    ]
+    const byId = new Map(nodes.map((d) => [d.id, d]))
+    const links = g.links.map((l) => ({ ...l, source: byId.get(l.source), target: byId.get(l.target) })).filter((l) => l.source && l.target)
+    linkData = links
+    const maxLink = d3.max(links.filter((l) => !isSpoke(l)), (l) => l.count) || 1
+
+    linkSel = root.append('g').selectAll('line').data(links).join('line')
+      .attr('stroke', 'var(--link)')
+      .attr('stroke-width', (l) => (isSpoke(l) ? 1 : 1 + 3 * Math.sqrt(l.count / maxLink)))
+      .style('opacity', (l) => (isSpoke(l) ? 0.45 : 0))
+
+    nodeSel = root.append('g').selectAll('g').data(nodes).join('g').attr('class', (d) => `node ${d.kind}`)
+    nodeSel.filter((d) => d.kind === 'person').append('circle')
+      .attr('class', 'glowring').attr('r', personR + 10).attr('fill', 'none')
+      .attr('stroke', 'var(--person)').attr('stroke-width', 6).attr('filter', 'url(#glow)')
+    nodeSel.append('circle').attr('r', (d) => (d.kind === 'person' ? personR : r(d.count))).attr('fill', nodeColor)
+    nodeSel.append('text').text((d) => (d.kind === 'hashtag' ? `#${d.term}` : d.term))
+    const placeLabels = () => nodeSel.select('text')
+      .attr('text-anchor', (d) => (d.kind === 'person' ? 'middle' : d.x >= cx ? 'start' : 'end'))
+      .attr('dx', (d) => (d.kind === 'person' ? 0 : (d.x >= cx ? 1 : -1) * (r(d.count) + 5)))
+      .attr('dy', (d) => (d.kind === 'person' ? personR + 18 : 4))
+
+    nodeSel.on('mousemove', (e, d) => {
+      if (d.kind === 'person') return
+      tip.style.display = 'block'
+      const box = $('stage').getBoundingClientRect()
+      let left = e.clientX - box.left + 18, top = e.clientY - box.top + 18
+      if (left + 240 > box.width) left = e.clientX - box.left - 258
+      if (top + 140 > box.height) top = e.clientY - box.top - 150
+      tip.style.left = left + 'px'; tip.style.top = top + 'px'
+      const co = links.filter((l) => !isSpoke(l) && linkIsTouching(l, d.id)).length
+      const toneHtml = d.tone === null || d.tone === undefined
+        ? `<div class="row"><span>tom</span><b>sem dado</b></div>`
+        : `<div class="row"><span>tom</span><b class="num">${d.tone}</b></div><div class="tonebar"><i style="left:${50 + (Math.max(-10, Math.min(10, d.tone)) / 10) * 50}%;background:${toneScale(d.tone)}"></i></div>`
+      tip.innerHTML = `
+        <div class="term"><span>${d.kind === 'hashtag' ? '#' : ''}${d.term}</span><span class="chip" style="background:${color[d.kind]}">${kindLabel[d.kind]}</span></div>
+        <div class="row"><span>docs</span><b class="num">${d.count}</b></div>
+        <div class="row"><span>pmi</span><b class="num">${d.pmi}</b></div>
+        ${toneHtml}
+        <div class="row"><span>aparece junto com ${co} ${co === 1 ? 'termo' : 'termos'} da lista</span></div>`
+    }).on('mouseenter', (e, d) => { if (d.kind !== 'person') setHighlight(d.id) })
+      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null) })
+
+    const tick = () => {
+      linkSel.attr('x1', (l) => l.source.x).attr('y1', (l) => l.source.y).attr('x2', (l) => l.target.x).attr('y2', (l) => l.target.y)
+      nodeSel.attr('transform', (d) => `translate(${d.x},${d.y})`)
+      placeLabels()
+    }
+
+    nodeSel.call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y })
+      .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); if (d.kind !== 'person') { d.fx = null; d.fy = null } }))
+
+    sim = d3.forceSimulation(nodes)
+      .force('ring', d3.forceRadial((d) => (d.kind === 'person' ? 0 : ring(d.rank)), cx, cy).strength((d) => (d.kind === 'person' ? 0 : 0.9)))
+      .force('together', d3.forceLink(links.filter((l) => !isSpoke(l))).id((d) => d.id).strength(0.015).distance(90))
+      .force('collide', d3.forceCollide((d) => (d.kind === 'person' ? personR + 30 : r(d.count) + 20)).iterations(4))
+      .on('tick', tick)
+      .stop()
+    sim.tick(300)
+    tick()
+    sim.alpha(0)
+  }
+
+  const setActive = (group, value) => {
+    group.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.value === String(value)))
+  }
+
+  const initSegments = () => {
+    document.querySelectorAll('.seg').forEach((group) => {
+      const key = group.dataset.key
+      setActive(group, state[key])
+      group.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
+        state[key] = btn.dataset.value
+        setActive(group, state[key])
+        load()
+      }))
+    })
+  }
+
+  const initSliders = () => {
+    const limitInput = $('limit'), minInput = $('min')
+    limitInput.addEventListener('input', () => ($('limitval').textContent = limitInput.value))
+    minInput.addEventListener('input', () => ($('minval').textContent = minInput.value))
+    limitInput.addEventListener('change', () => { state.limit = +limitInput.value; load() })
+    minInput.addEventListener('change', () => { state.min = +minInput.value; load() })
+  }
+
+  const initTone = () => {
+    $('tone').addEventListener('change', () => {
+      state.tone = $('tone').checked
+      $('tonelegend').hidden = !state.tone
+      root.selectAll('.node circle:not(.glowring)').attr('fill', nodeColor)
+    })
+  }
+
+  const initZoom = () => {
+    $('zoomin').addEventListener('click', () => svg.transition().duration(180).call(zoomBehavior.scaleBy, 1.35))
+    $('zoomout').addEventListener('click', () => svg.transition().duration(180).call(zoomBehavior.scaleBy, 1 / 1.35))
+    $('recenter').addEventListener('click', () => svg.transition().duration(220).call(zoomBehavior.transform, d3.zoomIdentity))
+  }
+
+  const positionZoomCluster = () => {
+    const zc = $('zoomcluster')
+    if (window.innerWidth <= 800) { zc.style.right = ''; zc.style.bottom = ''; return }
+    const drawerOpen = !$('drawer').classList.contains('closed')
+    const gap = drawerOpen ? $('drawer').offsetWidth + 36 : 18
+    zc.style.right = gap + 'px'
+    zc.style.bottom = '18px'
+  }
+
+  const positionDock = () => {
+    const dock = $('dock')
+    const narrow = window.innerWidth <= 800
+    const drawerOpen = !$('drawer').classList.contains('closed')
+    const reservedRight = (narrow ? 0 : 56) + (drawerOpen ? $('drawer').offsetWidth + 20 : 0)
+    if (!reservedRight) { dock.style.left = ''; dock.style.maxWidth = ''; return }
+    const center = Math.max(160, (window.innerWidth - reservedRight) / 2)
+    dock.style.left = center + 'px'
+    dock.style.maxWidth = Math.max(280, center * 2 - 24) + 'px'
+  }
+
+  const applyDrawerBreakpoint = () => {
+    if (!manualDrawer) $('drawer').classList.toggle('closed', window.innerWidth < 1100)
+    positionZoomCluster()
+    positionDock()
+  }
+
+  const initDrawer = () => {
+    applyDrawerBreakpoint()
+    $('drawertoggle').addEventListener('click', () => {
+      manualDrawer = true
+      $('drawer').classList.toggle('closed')
+      positionZoomCluster()
+      positionDock()
+    })
+    window.addEventListener('resize', applyDrawerBreakpoint)
+  }
+
+  const initPeople = async () => {
+    const people = await (await fetch('/api/people')).json()
+    state.person = people[0]?.id ?? null
+    $('persontabs').innerHTML = people.map((p) => `<button class="persontab ${p.id === state.person ? 'active' : ''}" data-id="${p.id}">${p.name}</button>`).join('')
+    $('persontabs').querySelectorAll('.persontab').forEach((btn) => btn.addEventListener('click', () => {
+      state.person = btn.dataset.id
+      state.domain = 'all'
+      $('persontabs').querySelectorAll('.persontab').forEach((b) => b.classList.toggle('active', b === btn))
+      load()
+    }))
+  }
+
+  const init = async () => {
+    await initPeople()
+    initSegments()
+    initSliders()
+    initTone()
+    initZoom()
+    initDrawer()
+    load()
+  }
+  init()
+</script>
+</body>
+</html>

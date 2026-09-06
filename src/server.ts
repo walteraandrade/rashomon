@@ -5,7 +5,7 @@ import { db, migrate } from './db.js'
 import { graphFor, sourcesFor, type GraphQuery } from './graph.js'
 import type { Person } from './types.js'
 
-const port = 3210
+const port = Number(process.env.PORT ?? 3210)
 const app = new Hono()
 
 const int = (v: string | undefined, d: number, lo: number, hi: number) => {

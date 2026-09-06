@@ -1,6 +1,6 @@
-# assoc-graph
+# rashomon
 
-Which words a Brazilian political figure is associated with, across Bluesky, Google News, GDELT and RSS feeds. MVP.
+Rashomon: which words a Brazilian political figure is associated with, across Bluesky, Google News, GDELT and RSS feeds. MVP.
 
 ## Run
 

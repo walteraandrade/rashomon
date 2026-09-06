@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rashomon · atlas radial</title>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05060c; --bg2: #0a0c17; --panel: #0d0f1c; --line: rgba(255,255,255,.09); --line-strong: rgba(255,255,255,.16);
+    --fg: #e9ebf5; --muted: #7d84a3; --muted-dim: #565c78;
+    --person: #ffd35c; --hashtag: #45ffc4; --word: #7fb0ff; --theme: #ff8fd8;
+    --tone-neg: #ff6b7d; --tone-pos: #7ee787; --tone-mid: #626a8c;
+    --spoke: rgba(255,255,255,.16); --chord: rgba(140,150,190,.16);
+    --radius: 9px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { grid-template-columns: minmax(0, 1fr);
+    background: var(--bg); color: var(--fg); font: 13.5px/1.4 Inter, system-ui, sans-serif;
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden;
+  }
+  ::selection { background: rgba(255,211,92,.25); }
+  button { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; min-width: 0; align-items: center; gap: 22px; padding: 10px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); min-height: 58px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
+  .brand .wordmark { font: 800 20px/1 'League Spartan', sans-serif; letter-spacing: .01em; }
+  .brand .tagline { font: 500 10.5px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .14em; color: var(--muted-dim); }
+  .person-pick { position: relative; display: inline-flex; align-items: center; }
+  .person-pick select {
+    appearance: none; background: none; border: 0; cursor: pointer; padding: 6px 26px 8px 8px;
+    font: 600 20px/1 'League Spartan', sans-serif; letter-spacing: .01em; color: var(--person); max-width: 420px;
+    border-bottom: 2px solid var(--person); box-shadow: 0 2px 8px -2px rgba(255,211,92,.6);
+  }
+  .person-pick select:focus-visible { outline: 2px solid var(--person); outline-offset: 2px; }
+  .person-pick select option { font: 14px Inter, system-ui, sans-serif; background: var(--panel); color: var(--fg); }
+  .person-pick::after {
+    content: ''; position: absolute; right: 10px; top: 45%; width: 7px; height: 7px; pointer-events: none;
+    border-right: 2px solid var(--person); border-bottom: 2px solid var(--person); transform: translateY(-50%) rotate(45deg);
+  }
+  #stats { margin-left: auto; text-align: right; color: var(--muted); font-size: 11.5px; line-height: 1.35; flex-shrink: 0; }
+  #stats b { color: var(--fg); font-weight: 600; }
+
+  /* ---------- layout ---------- */
+  .layout { display: grid; grid-template-columns: 218px minmax(0, 1fr) 272px; overflow: hidden; }
+
+  /* ---------- toolbar ---------- */
+  #toolbar {
+    background: var(--bg2); border-right: 1px solid var(--line); overflow-y: auto; overflow-x: hidden;
+    padding: 16px 13px 24px; display: flex; flex-direction: column; gap: 20px;
+  }
+  .group { display: flex; flex-direction: column; gap: 7px; flex-shrink: 0; }
+  .group-label {
+    display: flex; align-items: center; gap: 6px; font: 600 10px/1 Inter, sans-serif;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim);
+  }
+  .group-label svg { width: 13px; height: 13px; opacity: .8; flex-shrink: 0; }
+  .seg { display: grid; gap: 4px; }
+  .seg.cols2 { grid-template-columns: 1fr 1fr; }
+  .seg.cols4 { grid-template-columns: repeat(4, 1fr); }
+  .segbtn {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 7px; cursor: pointer;
+    padding: 6px 6px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 5px;
+    transition: background .12s ease, color .12s ease, border-color .12s ease;
+  }
+  .segbtn:hover { color: var(--fg); border-color: var(--line-strong); }
+  .segbtn.active { background: rgba(255,211,92,.1); border-color: rgba(255,211,92,.5); color: var(--person); }
+  .segbtn .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .segbtn.active .dot { box-shadow: 0 0 5px currentColor; }
+
+  .stepper { display: grid; grid-template-columns: 26px 1fr 26px; align-items: center; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
+  .stepper button { background: none; border: none; cursor: pointer; padding: 7px 0; color: var(--muted); font-size: 14px; line-height: 1; }
+  .stepper button:hover { color: var(--person); background: rgba(255,255,255,.04); }
+  .stepper .val { text-align: center; font-size: 12.5px; padding: 6px 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+
+  .switchrow { display: flex; align-items: center; gap: 8px; cursor: pointer; position: relative; }
+  .switchrow input { position: absolute; left: 0; top: 0; width: 30px; height: 17px; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+  .switch-track { width: 30px; height: 17px; border-radius: 20px; background: var(--panel); border: 1px solid var(--line); position: relative; flex-shrink: 0; transition: background .15s ease, border-color .15s ease; }
+  .switch-track::after { content: ''; position: absolute; top: 1px; left: 1px; width: 13px; height: 13px; border-radius: 50%; background: var(--muted); transition: transform .15s ease, background .15s ease; }
+  .switchrow input:checked + .switch-track { background: rgba(255,211,92,.14); border-color: rgba(255,211,92,.55); }
+  .switchrow input:checked + .switch-track::after { transform: translateX(13px); background: var(--person); box-shadow: 0 0 5px rgba(255,211,92,.8); }
+  .switch-txt { font-size: 12px; color: var(--fg); }
+
+  /* ---------- graph ---------- */
+  #graph {
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(ellipse 60% 55% at 50% 48%, rgba(90,100,150,.14), transparent 70%),
+      var(--bg);
+  }
+  #chart { width: 100%; height: 100%; display: block; }
+  .ring-deco { fill: none; stroke: rgba(255,255,255,.035); }
+  .spoke { fill: none; }
+  .chord { fill: none; }
+  .node circle { cursor: pointer; }
+  .node.person circle { cursor: default; }
+  .label { fill: var(--fg); font: 500 11.5px Inter, sans-serif; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
+  .label.person { font: 700 17px 'League Spartan', sans-serif; fill: var(--person); stroke: var(--bg); }
+  .node, .spoke, .chord, .label { transition: opacity .12s ease; }
+
+  #tip {
+    position: absolute; display: none; background: var(--panel); border: 1px solid var(--line-strong);
+    border-radius: 8px; padding: 9px 11px; font-size: 12px; pointer-events: none; max-width: 240px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 5;
+  }
+  #tip b { color: var(--fg); font-weight: 600; }
+  #tip .muted { color: var(--muted); }
+  #tip .row { margin-top: 2px; }
+
+  #legend {
+    position: absolute; left: 16px; bottom: 14px; display: flex; gap: 14px; font-size: 11px; color: var(--muted);
+    background: rgba(10,12,23,.55); backdrop-filter: blur(4px); padding: 7px 12px; border-radius: 20px; border: 1px solid var(--line);
+  }
+  #legend span { display: flex; align-items: center; gap: 5px; }
+  #legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  #tonelegend { display: flex; gap: 14px; }
+
+  #empty {
+    position: absolute; inset: 0; display: none; place-items: center; text-align: center; color: var(--muted); padding: 20px;
+  }
+  #empty code { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--fg); }
+
+  /* ---------- sources ---------- */
+  aside#sources { background: var(--bg2); border-left: 1px solid var(--line); overflow-y: auto; }
+  aside#sources h2 {
+    margin: 0; padding: 12px 14px 10px; font: 600 10.5px Inter, sans-serif; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted-dim); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--bg2); display: flex; align-items: center; gap: 6px;
+  }
+  #domainlabel { color: var(--person); text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .src {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 9px; padding: 7px 14px; cursor: pointer; align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+  }
+  .src:hover { background: rgba(255,255,255,.03); }
+  .src.active { background: rgba(255,211,92,.07); box-shadow: inset 3px 0 0 var(--person); }
+  .src .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .src .n { color: var(--muted); font-size: 11.5px; }
+  .src .t { width: 36px; text-align: center; border-radius: 5px; padding: 2px 0; font-size: 10.5px; }
+  .src .t:empty { visibility: hidden; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+    #toolbar { flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--line); padding: 12px; align-items: flex-start; }
+    .group { min-width: 132px; }
+    aside#sources { border-left: 0; border-top: 1px solid var(--line); max-height: 32vh; }
+    #stats { display: none; }
+    .person-pick select { font-size: 16px; max-width: 60vw; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="wordmark">rashomon</span><span class="tagline">atlas radial</span></div>
+  <div class="person-pick"><select id="personTabs" aria-label="Pessoa"></select></div>
+  <div id="stats"></div>
+</header>
+<div class="layout">
+  <aside id="toolbar">
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6V8l2.6 1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>janela</div>
+      <div class="seg cols4" id="segDays"></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 5.2 8 2l6 3.2v5.6L8 14 2 10.8Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 5.2 8 8.4l6-3.2M8 8.4v5.6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>fonte</div>
+      <div class="seg cols2" id="segSource"></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 8.4 8.4 2h3.4a2 2 0 0 1 2 2v3.4L7.6 14a1.4 1.4 0 0 1-2 0L2 10.4a1.4 1.4 0 0 1 0-2Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="11" cy="5" r="1" fill="currentColor"/></svg>tipo</div>
+      <div class="seg cols2" id="segKind"></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M3 12V6M8 12V3M13 12V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>ordem</div>
+      <div class="seg cols2" id="segSort"></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><circle cx="5" cy="5.5" r="1.6" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="11" cy="5.5" r="1.6" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="11" r="1.6" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>nós</div>
+      <div class="stepper" id="stepLimit"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 3h12L9.5 8.4V13l-3-1.6V8.4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>mín. docs</div>
+      <div class="stepper" id="stepMin"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+    </div>
+    <div class="group">
+      <label class="switchrow"><input type="checkbox" id="tone"><span class="switch-track"></span><span class="switch-txt">cor por tom</span></label>
+    </div>
+  </aside>
+  <div id="graph">
+    <svg id="chart" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="tip"></div>
+    <div id="empty">nada nessa janela.<br>roda <code>pnpm ingest</code></div>
+    <div id="legend">
+      <span><i style="background:var(--person)"></i>pessoa</span>
+      <span><i style="background:var(--hashtag)"></i>hashtag</span>
+      <span><i style="background:var(--word)"></i>palavra</span>
+      <span><i style="background:var(--theme)"></i>tema</span>
+      <span id="tonelegend" hidden><i style="background:var(--tone-neg)"></i>tom −<i style="background:var(--tone-pos)"></i>tom +</span>
+    </div>
+  </div>
+  <aside id="sources">
+    <h2>fontes <span id="domainlabel"></span></h2>
+    <div id="sourceList"></div>
+  </aside>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const kindColor = { person: 'var(--person)', hashtag: 'var(--hashtag)', word: 'var(--word)', theme: 'var(--theme)' }
+  const kindColorHex = { hashtag: '#45ffc4', word: '#7fb0ff', theme: '#ff8fd8' }
+  const toneScale = d3.scaleLinear().domain([-3, 0, 3]).range(['#ff6b7d', '#626a8c', '#7ee787']).clamp(true)
+  const toneColor = (t) => (t === null || t === undefined ? 'var(--line)' : toneScale(t))
+  const nodeFill = (n) => (state.tone && n.kind !== 'person' && n.tone !== null && n.tone !== undefined ? toneScale(n.tone) : kindColor[n.kind])
+
+  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false }
+  let requestId = 0
+  let sim = null
+  let people = []
+  let currentGraph = null
+
+  const svg = d3.select('#chart')
+  const root = svg.append('g').attr('class', 'root')
+  const layerRingsDeco = root.append('g')
+  const layerChords = root.append('g')
+  const layerSpokes = root.append('g')
+  const layerNodes = root.append('g')
+  const layerLabels = root.append('g')
+  const tip = $('tip')
+
+  svg.call(d3.zoom().scaleExtent([0.25, 5]).on('zoom', (e) => root.attr('transform', e.transform)))
+
+  // ---------- toolbar: static option groups ----------
+  const buildSeg = (containerId, options, key, colored) => {
+    const el = $(containerId)
+    el.innerHTML = options.map(([value, label]) => `
+      <button class="segbtn" data-value="${value}">${colored && kindColorHex[value] ? `<span class="dot" style="background:${kindColorHex[value]};color:${kindColorHex[value]}"></span>` : ''}${label}</button>
+    `).join('')
+    el.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => {
+      state[key] = btn.dataset.value
+      if (key === 'kind') paintSeg('segKind', state.kind)
+      refreshSegActive()
+      load()
+    }))
+  }
+
+  const refreshSegActive = () => {
+    paintSeg('segDays', state.days)
+    paintSeg('segSource', state.source)
+    paintSeg('segKind', state.kind)
+    paintSeg('segSort', state.sort)
+  }
+  const paintSeg = (id, value) => {
+    $(id).querySelectorAll('.segbtn').forEach((b) => b.classList.toggle('active', b.dataset.value === value))
+  }
+
+  buildSeg('segDays', [['7', '7d'], ['30', '30d'], ['90', '90d'], ['365', '1a']], 'days')
+  buildSeg('segSource', [['all', 'todas'], ['bluesky', 'bluesky'], ['gdelt', 'gdelt'], ['rss', 'rss'], ['gnews', 'g.news'], ['gkg', 'gkg']], 'source')
+  buildSeg('segKind', [['all', 'todos'], ['hashtag', 'hashtag'], ['word', 'palavra'], ['theme', 'tema']], 'kind', true)
+  buildSeg('segSort', [['count', 'contagem'], ['pmi', 'pmi']], 'sort')
+  refreshSegActive()
+
+  // ---------- steppers ----------
+  const buildStepper = (id, key, min, max, step) => {
+    const el = $(id)
+    const valEl = el.querySelector('.val')
+    const render = () => { valEl.textContent = state[key] }
+    el.querySelector('.dec').addEventListener('click', () => { state[key] = Math.max(min, state[key] - step); render(); load() })
+    el.querySelector('.inc').addEventListener('click', () => { state[key] = Math.min(max, state[key] + step); render(); load() })
+    render()
+  }
+  buildStepper('stepLimit', 'limit', 5, 200, 5)
+  buildStepper('stepMin', 'min', 1, 999, 1)
+
+  $('tone').addEventListener('change', () => {
+    state.tone = $('tone').checked
+    $('tonelegend').hidden = !state.tone
+    layerNodes.selectAll('.node circle').attr('fill', nodeFill)
+  })
+
+  // ---------- fetch / load ----------
+  const query = () => new URLSearchParams({
+    days: state.days, source: state.source, kind: state.kind, sort: state.sort,
+    limit: state.limit, min: state.min, domain: state.domain,
+  })
+
+  const load = async () => {
+    if (!state.person) return
+    const id = ++requestId
+    try {
+      const res = await fetch(`/api/people/${state.person}/graph?` + query())
+      const g = await res.json()
+      if (id !== requestId) return
+      currentGraph = g
+      render(g)
+      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + query())).json()
+      if (id === requestId) renderSources(srcs)
+    } catch (e) {
+      $('stats').innerHTML = `erro: ${e.message}`
+    }
+  }
+
+  const renderSources = (rows) => {
+    $('domainlabel').textContent = state.domain === 'all' ? '' : `· ${state.domain}`
+    const all = [{ domain: 'all', label: 'todas', docs: rows.reduce((a, r) => a + r.docs, 0), tone: null }, ...rows]
+    const box = $('sourceList')
+    box.innerHTML = all.map((r) => `
+      <div class="src ${r.domain === state.domain ? 'active' : ''}" data-domain="${r.domain ?? ''}" title="${r.source ?? ''}">
+        <span class="d">${r.label ?? r.domain ?? r.source ?? 'desconhecido'}</span>
+        <span class="n num">${r.docs}</span>
+        <span class="t num" style="background:${toneColor(r.tone)}">${r.tone === null || r.tone === undefined ? '' : r.tone}</span>
+      </div>`).join('')
+    box.querySelectorAll('.src').forEach((el) => el.addEventListener('click', () => {
+      const d = el.dataset.domain
+      state.domain = !d || d === state.domain ? 'all' : d
+      load()
+    }))
+  }
+
+  // ---------- rank rings + golden-angle seeding ----------
+  // Ring radius encodes rank by the active sort: closer to the center = stronger association.
+  // Angle follows the golden angle so consecutive ranks land far apart and the layout is deterministic.
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+  const RING_RANGE = [120, 310]
+  const RING_RANGE_DECO = [120, 215, 310]
+
+  // ---------- render ----------
+  const render = (g) => {
+    if (sim) sim.stop()
+    layerNodes.selectAll('*').remove()
+    layerLabels.selectAll('*').remove()
+    layerSpokes.selectAll('*').remove()
+    layerChords.selectAll('*').remove()
+    layerRingsDeco.selectAll('*').remove()
+
+    $('stats').innerHTML = `<b>${g.stats.about}</b> docs sobre <b>${g.person.name}</b> de <b>${g.stats.docs}</b> na janela`
+    const hasNodes = g.nodes.length > 0
+    $('empty').style.display = hasNodes ? 'none' : 'grid'
+    if (!hasNodes) { svg.attr('viewBox', '-300 -300 600 600'); return }
+
+    const half = RING_RANGE[1] + 170
+    svg.attr('viewBox', `${-half} ${-half} ${half * 2} ${half * 2}`)
+
+    const maxCount = d3.max(g.nodes, (n) => n.count) || 1
+    const r = d3.scaleSqrt().domain([1, maxCount]).range([4, 18])
+    const personR = 28
+    const nodeR = (n) => (n.kind === 'person' ? personR : r(n.count))
+
+    const ring = d3.scaleLinear().domain([0, Math.max(1, g.nodes.length - 1)]).range(RING_RANGE)
+    const personNode = { id: `person:${g.person.id}`, kind: 'person', term: g.person.name, fx: 0, fy: 0, x: 0, y: 0, count: 0 }
+    const terms = g.nodes.map((n, i) => ({ ...n, rank: i, x: ring(i) * Math.cos(i * GOLDEN_ANGLE), y: ring(i) * Math.sin(i * GOLDEN_ANGLE) }))
+    const nodes = [personNode, ...terms]
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+
+    // links resolved to node objects up front so both spokes and term-term links carry live coordinates
+    const links = g.links.map((l) => ({ ...l, source: byId.get(l.source), target: byId.get(l.target) })).filter((l) => l.source && l.target)
+    const isSpoke = (l) => l.source.kind === 'person'
+    const chordLinks = links.filter((l) => !isSpoke(l))
+    const linkIsTouching = (l, id) => l.source.id === id || l.target.id === id
+    const maxLinkCount = d3.max(chordLinks, (l) => l.count) || 1
+    const lw = (l) => 1 + 3 * Math.sqrt(l.count / maxLinkCount)
+
+    // faint hairline rings as a quiet visual cue only: closer = stronger, no per-kind meaning anymore
+    RING_RANGE_DECO.forEach((rr) => layerRingsDeco.append('circle').attr('class', 'ring-deco').attr('r', rr))
+
+    const spokeSel = layerSpokes.selectAll('path').data(links.filter(isSpoke)).join('path')
+      .attr('class', 'spoke')
+      .attr('stroke', 'var(--spoke)')
+      .attr('stroke-width', 1)
+      .style('opacity', 0.45)
+
+    const chordSel = layerChords.selectAll('path').data(chordLinks).join('path')
+      .attr('class', 'chord')
+      .attr('stroke', 'var(--chord)')
+      .attr('stroke-width', lw)
+      .style('opacity', 0)
+
+    const node = layerNodes.selectAll('g').data(nodes, (n) => n.id).join('g')
+      .attr('class', (n) => `node ${n.kind}`)
+
+    node.append('circle')
+      .attr('r', nodeR)
+      .attr('fill', nodeFill)
+      .attr('stroke', (n) => n.kind === 'person' ? 'rgba(255,211,92,.35)' : 'rgba(0,0,0,.4)')
+      .attr('stroke-width', (n) => n.kind === 'person' ? 2 : 1)
+
+    // label the person plus the top MIN_LABELS terms by rank (closest to the center), upright, offset outward
+    const MIN_LABELS = 25
+    const labelIds = new Set([personNode.id, ...terms.slice(0, MIN_LABELS).map((n) => n.id)])
+    const labelNodes = nodes.filter((n) => labelIds.has(n.id))
+
+    const label = layerLabels.selectAll('text').data(labelNodes, (n) => n.id).join('text')
+      .attr('class', (n) => `label ${n.kind}`)
+      .attr('dy', '.32em')
+      .text((n) => (n.kind === 'person' ? n.term : n.kind === 'hashtag' ? `#${n.term}` : n.term))
+
+    const placeLabel = (sel) => sel.each(function (n) {
+      const t = d3.select(this)
+      if (n.kind === 'person') {
+        t.attr('text-anchor', 'middle').attr('x', n.x).attr('y', n.y + personR + 22)
+        return
+      }
+      t.attr('text-anchor', n.x >= 0 ? 'start' : 'end').attr('x', n.x + (n.x >= 0 ? 1 : -1) * (nodeR(n) + 5)).attr('y', n.y + 4)
+    })
+
+    const setHighlight = (id) => {
+      const neighbors = new Set()
+      if (id) chordLinks.forEach((l) => { if (linkIsTouching(l, id)) { neighbors.add(l.source.id); neighbors.add(l.target.id) } })
+      node.style('opacity', (n) => (!id || n.kind === 'person' || n.id === id || neighbors.has(n.id) ? 1 : 0.15))
+      label.style('opacity', (n) => (!id || n.kind === 'person' || n.id === id || neighbors.has(n.id) ? 1 : 0.15))
+      spokeSel.style('opacity', (l) => (!id ? 0.45 : linkIsTouching(l, id) ? 0.7 : 0.06))
+      chordSel
+        .style('opacity', (l) => (!id ? 0 : linkIsTouching(l, id) ? 0.9 : 0))
+        .attr('stroke', (l) => (id && linkIsTouching(l, id) ? 'var(--person)' : 'var(--chord)'))
+    }
+
+    node.on('mousemove', (e, n) => {
+      if (n.kind === 'person') return
+      tip.style.display = 'block'
+      const box = tip.parentElement.getBoundingClientRect()
+      tip.style.left = e.clientX - box.left + 14 + 'px'; tip.style.top = e.clientY - box.top + 14 + 'px'
+      const co = chordLinks.filter((l) => linkIsTouching(l, n.id)).length
+      tip.innerHTML = `<b>${n.kind === 'hashtag' ? '#' : ''}${n.term}</b>` +
+        `<div class="row muted">docs <b class="num">${n.count}</b> &nbsp; pmi <b class="num">${n.pmi}</b>${n.tone === null || n.tone === undefined ? '' : ` &nbsp; tom <b class="num">${n.tone}</b>`}</div>` +
+        `<div class="row muted">aparece junto com <b class="num">${co}</b> ${co === 1 ? 'termo' : 'termos'} da lista</div>`
+    }).on('mouseenter', (e, n) => { if (n.kind !== 'person') setHighlight(n.id) })
+      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null) })
+
+    node.call(d3.drag()
+      .on('start', (e, n) => { if (!e.active) sim.alphaTarget(0.3).restart(); n.fx = n.x; n.fy = n.y })
+      .on('drag', (e, n) => { n.fx = e.x; n.fy = e.y })
+      .on('end', (e, n) => { if (!e.active) sim.alphaTarget(0); if (n.kind !== 'person') { n.fx = null; n.fy = null } }))
+
+    const spokePath = (l) => `M${l.source.x},${l.source.y} L${l.target.x},${l.target.y}`
+    const chordPath = (l) => `M${l.source.x},${l.source.y} L${l.target.x},${l.target.y}`
+
+    const tick = () => {
+      node.attr('transform', (n) => `translate(${n.x},${n.y})`)
+      placeLabel(label)
+      spokeSel.attr('d', spokePath)
+      chordSel.attr('d', chordPath)
+    }
+
+    sim = d3.forceSimulation(nodes)
+      .force('ring', d3.forceRadial((n) => (n.kind === 'person' ? 0 : ring(n.rank)), 0, 0).strength((n) => (n.kind === 'person' ? 0 : 0.9)))
+      .force('together', d3.forceLink(chordLinks).id((n) => n.id).strength(0.015).distance(90))
+      .force('collide', d3.forceCollide((n) => (n.kind === 'person' ? personR + 30 : nodeR(n) + 20)).iterations(4))
+      .on('tick', tick)
+      .stop()
+    sim.tick(300)
+    tick()
+    sim.alpha(0)
+
+    d3.select('#legend').selectAll('.hint').data([0]).join('span').attr('class', 'hint')
+      .text('perto do centro = associação mais forte · passe o mouse num termo para ver com quais ele aparece junto')
+  }
+
+  // ---------- init ----------
+  const selectPerson = (id) => {
+    state.person = id
+    state.domain = 'all'
+    $('personTabs').value = id
+    load()
+  }
+
+  const init = async () => {
+    people = await (await fetch('/api/people')).json()
+    $('personTabs').innerHTML = people.map((p) => `<option value="${p.id}">${p.name}</option>`).join('')
+    $('personTabs').addEventListener('change', (e) => selectPerson(e.target.value))
+    if (people.length) selectPerson(people[0].id)
+  }
+  init()
+</script>
+</body>
+</html>

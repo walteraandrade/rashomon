@@ -122,6 +122,36 @@ export const futureDoc: RawDoc = {
   domain: 'example.org',
 }
 
+// doc_id is not known ahead of time (docs get a serial id on insert), so this resolves
+// uri -> doc_id at seed time rather than hardcoding it.
+export const insertTestimony = async (uri: string, personId: string, method: string, score: number | null) => {
+  const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])
+  await db.query(`insert into doc_testimony (doc_id, person_id, method, score) values ($1, $2, $3, $4)`, [
+    rows[0].id,
+    personId,
+    method,
+    score,
+  ])
+}
+
+// Testimony rows for issue #21's /testimony route, layered on top of the existing docs
+// 30-38/1/5/37 rather than adding new docs, per the researcher brief: their tone/domain/
+// cross-person shapes already match what testimony needs.
+export const seedTestimony = async () => {
+  await insertTestimony('https://estadao.com.br/30', 'tarcisio', 'stub', 4)
+  await insertTestimony('https://estadao.com.br/31', 'tarcisio', 'stub', 6)
+  await insertTestimony('https://estadao.com.br/32', 'tarcisio', 'stub', 2)
+  await insertTestimony('https://oglobo.globo.com/33', 'tarcisio', 'stub', 5)
+  await insertTestimony('https://oglobo.globo.com/34', 'tarcisio', 'stub', -1)
+  await insertTestimony('https://example.org/35', 'tarcisio', 'stub', -8)
+  await insertTestimony('https://estadao.com.br/36', 'tarcisio', 'stub', null)
+  await insertTestimony('https://poder360.com.br/37', 'tarcisio', 'stub', 7)
+  await insertTestimony('https://poder360.com.br/37', 'bolsonaro', 'stub', -7)
+  await insertTestimony('https://g1.globo.com/1', 'lula', 'stub', 6)
+  await insertTestimony('https://gdeltproject.org/38', 'lula', 'stub', 3)
+  await insertTestimony('https://g1.globo.com/5', 'lula', 'stub', -2)
+}
+
 let ready: Promise<void> | null = null
 
 export const seed = () =>
@@ -131,4 +161,5 @@ export const seed = () =>
     await db.exec(`delete from doc_terms; delete from doc_persons; delete from docs; delete from persons;`)
     await upsertPersons(persons)
     for (const d of docs) await insertDoc(d, persons)
+    await seedTestimony()
   })())

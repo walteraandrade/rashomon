@@ -24,7 +24,7 @@ issue ──▶ spec workflow ──▶ [human: read spec, add label spec-approv
 
 1. **Spec**. Run the `spec` workflow with `{ "issue": 2 }`. The researcher reads the code, the spec writer posts a spec as a comment on the issue.
 2. **Gate 1**. Read the spec on GitHub. Edit it if needed (edit the comment). Add the label `spec-approved`.
-3. **Build**. Run the `build` workflow with `{ "issue": 2, "slug": "docs-endpoint" }`. It creates `../rashomon-<slug>` on branch `feat/<slug>`, builds API then UI, writes acceptance tests, validates, fixes up to two rounds, and opens a PR. If the validator still returns it, the branch stays in the worktree for a human.
+3. **Build**. Run the `build` workflow with `{ "issue": 2, "slug": "docs-endpoint" }` (add `"base": "<branch>"` while the branch the feature depends on is not merged yet; default `master`). It creates `../rashomon-<slug>` on branch `feat/<slug>`, builds API then UI, writes acceptance tests, validates, fixes up to two rounds, and opens a PR. If the validator still returns it, the branch stays in the worktree for a human.
 4. **Gate 2**. Review the PR. CI runs typecheck and tests. Merge or comment.
 
 In Claude Code, ask in plain words: "run the spec workflow for issue 2", then "run the build workflow for issue 2 with slug docs-endpoint". Workflows only run when you ask. The named registry is read when a session starts; in a session where the files were just created or edited, run them by path (`.claude/workflows/spec.js`) instead of by name. The same applies to the role agents: when `.claude/agents/` is not registered yet, pass the role bodies as `args.roles` (`{ researcher: "...", "spec-writer": "..." }`) and the workflow runs them on general-purpose agents with the same instructions.

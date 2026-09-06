@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build an approved spec in its own worktree: API, UI, acceptance tests, validation loop, pull request',
-  whenToUse: 'Second step of the rashomon factory, after the issue carries the spec-approved label. args: { issue: <number>, slug: <kebab-case> }',
+  whenToUse: 'Second step of the rashomon factory, after the issue carries the spec-approved label. args: { issue: <number>, slug: <kebab-case>, base?: <branch, default master> }',
   phases: [
     { title: 'Gate', detail: 'issue must carry spec-approved and a spec comment' },
     { title: 'Build', detail: 'builder-api then builder-ui on feat/<slug>' },
@@ -22,6 +22,7 @@ const role = (name, prompt, opts = {}) =>
   roles
     ? agent(`You are acting as the "${name}" agent of the rashomon factory. Follow this role definition strictly:\n\n${roles[name]}\n\n---\n\n${prompt}`, { ...opts, agentType: 'general-purpose', model: MODEL[name] ?? 'sonnet' })
     : agent(prompt, { ...opts, agentType: name })
+const base = args?.base ?? 'master'
 const branch = `feat/${slug}`
 const worktree = `../rashomon-${slug}`
 
@@ -73,7 +74,7 @@ if (!gate?.approved) {
   return { issue, status: 'blocked', reason: 'missing spec-approved label or spec comment' }
 }
 
-const where = `Work ONLY inside the worktree ${worktree} on branch ${branch}. If the worktree does not exist yet, create it from this repository root with: git worktree add ${worktree} -b ${branch} master (if the branch exists, omit -b). Run pnpm install --frozen-lockfile there if node_modules is missing (a symlink to this repo's node_modules is fine). Never switch branches in the main repository.`
+const where = `Work ONLY inside the worktree ${worktree} on branch ${branch}. If the worktree does not exist yet, create it from this repository root with: git worktree add ${worktree} -b ${branch} ${base} (if the branch exists, omit -b). Run pnpm install --frozen-lockfile there if node_modules is missing (a symlink to this repo's node_modules is fine). Never switch branches in the main repository.`
 const specText = `Issue #${issue}: ${gate.title}\n\nApproved spec:\n${gate.spec}`
 
 phase('Build')
@@ -109,6 +110,6 @@ if (!approved) {
 }
 
 phase('Release')
-const pr = await role('release', `${where}\n\nPush ${branch} and open a pull request against master that closes #${issue}. Title: ${gate.title}. Include in the body: what changed, the test verifier table, the validator verdict, screenshot paths from the UI report.\n\nTest table:\n${tests.table}\n\nValidator: approve with ${verdict.gaps.length} nits.\n\nUI report:\n${uiReport}`,
+const pr = await role('release', `${where}\n\nPush ${branch} and open a pull request against ${base} that closes #${issue}. Title: ${gate.title}. Include in the body: what changed, the test verifier table, the validator verdict, screenshot paths from the UI report.\n\nTest table:\n${tests.table}\n\nValidator: approve with ${verdict.gaps.length} nits.\n\nUI report:\n${uiReport}`,
   { label: `pr #${issue}`, effort: 'low' })
 return { issue, branch, worktree, status: 'pr-opened', pr }

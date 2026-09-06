@@ -357,8 +357,8 @@
   // ---------- rising terms ----------
   const applyRisingRing = () => {
     layerNodes.selectAll('.node circle')
-      .attr('stroke', (d) => risingIds.has(d.id) ? 'var(--person)' : null)
-      .attr('stroke-width', (d) => risingIds.has(d.id) ? 2.5 : null)
+      .attr('stroke', (d) => risingIds.has(d.id) ? 'var(--person)' : (d.kind === 'person' ? 'rgba(255,211,92,.35)' : 'rgba(0,0,0,.4)'))
+      .attr('stroke-width', (d) => risingIds.has(d.id) ? 2.5 : (d.kind === 'person' ? 2 : 1))
   }
 
   const renderRising = (terms) => {
@@ -376,7 +376,7 @@
     }))
   }
 
-  const loadRising = async () => {
+  const loadRising = async (id = requestId) => {
     if (!state.person) return
     $('risingList').innerHTML = '<div class="rising-msg">carregando…</div>'
     try {
@@ -384,10 +384,12 @@
       const res = await fetch(`/api/people/${state.person}/rising?` + params)
       if (!res.ok) throw new Error('falha ao carregar')
       const data = await res.json()
+      if (id !== requestId) return
       risingIds = new Set(data.terms.map((t) => `${t.kind}:${t.term}`))
       applyRisingRing()
       renderRising(data.terms)
     } catch (e) {
+      if (id !== requestId) return
       risingIds = new Set()
       applyRisingRing()
       $('risingList').innerHTML = '<div class="rising-msg">erro ao carregar</div>'
@@ -424,7 +426,7 @@
       render(g)
       const srcs = await (await fetch(`/api/people/${state.person}/sources?` + query())).json()
       if (id === requestId) renderSources(srcs)
-      if (id === requestId && state.rising) applyRisingRing()
+      if (id === requestId && state.rising) loadRising(id)
     } catch (e) {
       $('stats').innerHTML = `erro: ${e.message}`
     }

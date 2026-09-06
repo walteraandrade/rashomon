@@ -735,6 +735,9 @@
     $('docMore').hidden = true
     dp.classList.add('open')
     $('timelinePanel').classList.add('doc-open')
+    if (tlSection.classList.contains('open') && (timelinePanel.term !== n.term || timelinePanel.kind !== n.kind)) {
+      loadTimelinePanel()
+    }
     loadDocs(false)
   }
 

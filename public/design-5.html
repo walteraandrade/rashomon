@@ -335,6 +335,7 @@
 
   const load = async () => {
     if (!state.person) return
+    closeDocPanel()
     const id = ++requestId
     try {
       const res = await fetch(`/api/people/${state.person}/graph?` + query())

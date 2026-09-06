@@ -108,7 +108,7 @@
   .chip .term { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
   .chip .count { color: var(--muted); font-size: 11px; }
   .chip .pmi { color: var(--muted-dim); font-size: 10.5px; }
-  .col-msg { padding: 22px 16px; color: var(--muted); font-size: 12.5px; text-align: center; }
+  li.col-msg { padding: 22px 16px; color: var(--muted); font-size: 12.5px; text-align: center; list-style: none; }
   .col-msg .hint { display: block; margin-top: 6px; color: var(--muted-dim); font-size: 11.5px; }
 
   /* ---------- responsive ---------- */
@@ -233,14 +233,19 @@
 
   // ---------- people selects ----------
   const populateSelect = (el, selectedPersonId) => {
-    el.innerHTML = people.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
+    el.innerHTML = people.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')
     el.value = selectedPersonId
   }
 
   const loadPeople = async () => {
     const res = await fetch('/api/people')
     people = await res.json()
-    if (people.length === 0) return
+    if (people.length === 0) {
+      sides.a.loading = false
+      sides.b.loading = false
+      renderAll()
+      return
+    }
     sides.a.personId = people[0].id
     sides.b.personId = people.length > 1 ? people[1].id : people[0].id
     populateSelect($('personA'), sides.a.personId)
@@ -320,30 +325,35 @@
   const attachChipHandlers = (listEl) => {
     listEl.querySelectorAll('.chip').forEach((el) => el.addEventListener('click', () => {
       selectedId = selectedId === el.dataset.id ? null : el.dataset.id
-      renderAll()
+      selectChip()
     }))
+  }
+
+  const selectChip = () => {
+    document.querySelectorAll('.chip').forEach((el) => el.classList.toggle('selected', el.dataset.id === selectedId))
+    renderDetail()
   }
 
   const renderColumn = (listEl, countEl, items, sameSideLoading, sameSideError, otherLoading, kind, toHtml = chipHtml) => {
     if (sameSideLoading || otherLoading) {
       countEl.textContent = ''
-      listEl.innerHTML = '<div class="col-msg">carregando…</div>'
+      listEl.innerHTML = '<li class="col-msg">carregando…</li>'
       return
     }
     if (sameSideError) {
       countEl.textContent = ''
-      listEl.innerHTML = `<div class="col-msg">${escapeHtml(sameSideError)}</div>`
+      listEl.innerHTML = `<li class="col-msg">${escapeHtml(sameSideError)}</li>`
       return
     }
     countEl.textContent = `(${items.length})`
     if (items.length === 0) {
       const bothEmpty = sides.a.nodes.length === 0 && sides.b.nodes.length === 0
       if (bothEmpty) {
-        listEl.innerHTML = '<div class="col-msg">nada nessa janela.<span class="hint">tenta aumentar a janela ou reduzir mín. docs</span></div>'
+        listEl.innerHTML = '<li class="col-msg">nada nessa janela.<span class="hint">tenta aumentar a janela ou reduzir mín. docs</span></li>'
       } else if (kind === 'shared') {
-        listEl.innerHTML = '<div class="col-msg">nada em comum.</div>'
+        listEl.innerHTML = '<li class="col-msg">nada em comum.</li>'
       } else {
-        listEl.innerHTML = '<div class="col-msg">nada exclusivo aqui.</div>'
+        listEl.innerHTML = '<li class="col-msg">nada exclusivo aqui.</li>'
       }
       return
     }
@@ -360,6 +370,11 @@
     const { mapA, mapB } = diff()
     const nodeA = mapA.get(selectedId)
     const nodeB = mapB.get(selectedId)
+    if (!nodeA && !nodeB) {
+      selectedId = null
+      el.innerHTML = '<span class="empty-hint">clica num termo para ver os detalhes.</span>'
+      return
+    }
     const ref = nodeA ?? nodeB
     const term = ref.kind === 'hashtag' ? '#' + ref.term : ref.term
     const sideHtml = (label, n) => n

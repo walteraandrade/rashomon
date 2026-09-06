@@ -521,6 +521,19 @@
 
   const closeDocPanel = () => dp.classList.remove('open')
 
+  const bskyUrl = (d) => {
+    try {
+      if (d.source !== 'bluesky') return null
+      if (typeof d.domain !== 'string' || d.domain === '') return null
+      if (typeof d.uri !== 'string' || !d.uri.startsWith('at://')) return null
+      const rkey = d.uri.slice(d.uri.lastIndexOf('/') + 1)
+      if (rkey === '') return null
+      return `https://bsky.app/profile/${d.domain}/post/${rkey}`
+    } catch {
+      return null
+    }
+  }
+
   const renderDocBody = () => {
     const personName = currentGraph?.person?.name ?? ''
     $('docSub').textContent = `${docPanel.total} ${docPanel.total === 1 ? 'doc' : 'docs'} sobre ${personName}`
@@ -530,8 +543,8 @@
       return
     }
     $('docBody').innerHTML = docPanel.docs.map((d) => {
-      let safeHref = null
-      try { if (['http:', 'https:'].includes(new URL(d.uri).protocol)) safeHref = d.uri } catch {}
+      let safeHref = d.source === 'bluesky' ? bskyUrl(d) : null
+      if (!safeHref) { try { if (['http:', 'https:'].includes(new URL(d.uri).protocol)) safeHref = d.uri } catch {} }
       return `
       <div class="doc-row">
         <div class="doc-meta">

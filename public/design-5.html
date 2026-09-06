@@ -44,6 +44,8 @@
     content: ''; position: absolute; right: 10px; top: 45%; width: 7px; height: 7px; pointer-events: none;
     border-right: 2px solid var(--person); border-bottom: 2px solid var(--person); transform: translateY(-50%) rotate(45deg);
   }
+  .compare-link { color: var(--muted); text-decoration: none; font: 500 12px Inter, sans-serif; flex-shrink: 0; }
+  .compare-link:hover { color: var(--person); }
   .header-right { margin-left: auto; display: flex; align-items: center; gap: 18px; flex-shrink: 1; min-width: 0; }
   #stats { text-align: right; color: var(--muted); font-size: 11.5px; line-height: 1.35; flex-shrink: 0; }
   #stats b { color: var(--fg); font-weight: 600; }
@@ -279,6 +281,7 @@
 <header>
   <div class="brand"><span class="wordmark">rashomon</span><span class="tagline">atlas radial</span></div>
   <div class="person-pick"><select id="personTabs" aria-label="Pessoa"></select></div>
+  <a class="compare-link" href="compare.html">comparar pessoas</a>
   <div class="seg cols2 header-seg" id="segView"></div>
   <div class="header-right">
     <div id="signature"></div>

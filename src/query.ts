@@ -1,5 +1,9 @@
 import { normalize } from './extract.js'
-import type { DocsQuery, GraphQuery, RisingQuery, TimelineQuery, ToneQuery } from './graph.js'
+import type { DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
+
+// Independent of TESTIMONY_SCORER's own default in src/score.ts: a client can request
+// method=stub in tests/debugging regardless of what `pnpm score` last ran.
+const DEFAULT_TESTIMONY_METHOD = 'onnx'
 
 export const int = (v: string | undefined, d: number, lo: number, hi: number) => {
   const n = Number.parseInt(v ?? '', 10)
@@ -59,5 +63,15 @@ export const parseTimelineQuery = (q: Record<string, string | undefined>): Timel
 // GraphQuery.min's default of 2, so a copy-paste from parseQuery can't silently change it.
 export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery => ({
   days: int(q.days, 30, 1, 365),
+  min: int(q.min, 3, 1, 1000),
+})
+
+// Own dedicated parser, not a copy of parseQuery's or parseToneQuery's min: this one
+// defaults to 3 too, but as a separate literal, so changing either of theirs cannot
+// silently change this one.
+export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => ({
+  days: int(q.days, 30, 1, 365),
+  source: parseSourceList(q.source),
+  method: /^[\w.\/-]{1,128}$/.test(q.method ?? '') ? q.method! : DEFAULT_TESTIMONY_METHOD,
   min: int(q.min, 3, 1, 1000),
 })

@@ -7,12 +7,15 @@
     "dev": "tsx src/server.ts",
     "reindex": "tsx src/reindex.ts",
     "purge": "tsx src/purge.ts",
+    "score": "tsx src/score.ts",
+    "export-docs": "tsx src/export-docs.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@hono/node-server": "^2.1.1",
+    "@huggingface/transformers": "^4.2.0",
     "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",
     "hono": "^4.13.7"

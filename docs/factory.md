@@ -27,7 +27,7 @@ issue ──▶ spec workflow ──▶ [human: read spec, add label spec-approv
 3. **Build**. Run the `build` workflow with `{ "issue": 2, "slug": "docs-endpoint" }`. It creates `../rashomon-<slug>` on branch `feat/<slug>`, builds API then UI, writes acceptance tests, validates, fixes up to two rounds, and opens a PR. If the validator still returns it, the branch stays in the worktree for a human.
 4. **Gate 2**. Review the PR. CI runs typecheck and tests. Merge or comment.
 
-In Claude Code, ask in plain words: "run the spec workflow for issue 2", then "run the build workflow for issue 2 with slug docs-endpoint". Workflows only run when you ask.
+In Claude Code, ask in plain words: "run the spec workflow for issue 2", then "run the build workflow for issue 2 with slug docs-endpoint". Workflows only run when you ask. The named registry is read when a session starts; in a session where the files were just created or edited, run them by path (`.claude/workflows/spec.js`) instead of by name.
 
 ## Rules the factory relies on
 

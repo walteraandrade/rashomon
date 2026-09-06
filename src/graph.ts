@@ -101,7 +101,7 @@ const docsSql = `
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
   where ${docsWhereSql}
-  order by d.published_at desc
+  order by d.published_at desc, d.id desc
   limit $7 offset $8`
 
 const docsCountSql = `

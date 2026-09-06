@@ -9,12 +9,15 @@ const [lula] = persons
 describe('docsFor', () => {
   before(seed)
 
-  it('AC1,AC2: returns every doc about the person in the window, newest first, when no term is given', async () => {
+  it('AC1,AC2: returns every doc about the person in the window, newest first, ties broken by id desc, when no term is given', async () => {
     const { total, docs } = await docsFor(lula, base)
     assert.equal(total, 3)
     assert.equal(docs.length, 3)
-    assert.ok(new Date(docs[0].published_at) > new Date(docs[1].published_at))
-    assert.ok(new Date(docs[1].published_at) > new Date(docs[2].published_at))
+    for (let i = 1; i < docs.length; i++) {
+      const prevTime = new Date(docs[i - 1].published_at).getTime()
+      const curTime = new Date(docs[i].published_at).getTime()
+      assert.ok(prevTime > curTime || (prevTime === curTime && docs[i - 1].id > docs[i].id))
+    }
   })
 
   it('AC3: filters by term and kind, matching normalized tokens exactly', async () => {
@@ -44,7 +47,8 @@ describe('docsFor', () => {
     assert.equal(total, 1)
   })
 
-  it('AC8: paginates with limit and offset while total reflects the full match count', async () => {
+  it('AC8: paginates with limit and offset while total reflects the full match count, stable across a tied timestamp', async () => {
+    // both reforma docs share the exact same published_at in the fixture, on purpose
     const q = { ...base, term: 'reforma', kind: 'word', limit: 1 }
     const first = await docsFor(lula, { ...q, offset: 0 })
     const second = await docsFor(lula, { ...q, offset: 1 })
@@ -52,8 +56,8 @@ describe('docsFor', () => {
     assert.equal(second.total, 2)
     assert.equal(first.docs.length, 1)
     assert.equal(second.docs.length, 1)
-    assert.notEqual(first.docs[0].id, second.docs[0].id)
-    assert.ok(new Date(first.docs[0].published_at) > new Date(second.docs[0].published_at))
+    const ids = new Set([first.docs[0].id, second.docs[0].id])
+    assert.equal(ids.size, 2, 'union of the two pages must not repeat or skip a doc')
   })
 
   it('AC9: never returns a tone for non-GDELT sources', async () => {

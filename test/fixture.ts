@@ -9,12 +9,16 @@ export const persons: Person[] = [
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
 
+// day1 is shared by two docs on purpose: pagination must stay stable (no
+// duplicate/skipped row) when published_at ties, per docsSql's id desc tiebreaker.
+const day1 = daysAgo(1)
+
 export const docs: RawDoc[] = [
-  { source: 'gnews', uri: 'https://g1.globo.com/1', text: 'Lula anuncia reforma tributária #reforma', publishedAt: daysAgo(1), domain: 'g1.globo.com' },
+  { source: 'gnews', uri: 'https://g1.globo.com/1', text: 'Lula anuncia reforma tributária #reforma', publishedAt: day1, domain: 'g1.globo.com' },
   { source: 'bluesky', uri: 'at://did:plc:x/post/2', text: 'Lula e Tarcísio disputam a eleição', publishedAt: daysAgo(2), domain: 'ana.bsky.social' },
   { source: 'gnews', uri: 'https://folha.uol.com.br/3', text: 'Tarcísio inaugura rodovia no interior', publishedAt: daysAgo(3), domain: 'folha.uol.com.br', tone: -1.5 },
   { source: 'rss', uri: 'https://example.org/4', text: 'Congresso avança na pauta econômica', publishedAt: daysAgo(4), domain: 'example.org' },
-  { source: 'gnews', uri: 'https://valor.globo.com/6', text: 'Lula defende reforma tributária', publishedAt: daysAgo(5), domain: 'valor.globo.com' },
+  { source: 'gnews', uri: 'https://valor.globo.com/6', text: 'Lula defende reforma tributária', publishedAt: day1, domain: 'valor.globo.com' },
   { source: 'gnews', uri: 'https://g1.globo.com/5', text: 'Lula viaja para a Bahia', publishedAt: daysAgo(100), domain: 'g1.globo.com' },
 ]
 

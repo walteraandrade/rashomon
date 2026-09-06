@@ -36,6 +36,8 @@ Add `domain=<host>` to restrict the graph to one outlet (or one Bluesky handle).
 
 Returns `{ person, stats, nodes, links }`. Each node also carries `tone`: average GDELT tone of the docs where the term co-occurs with the person, null when no GDELT doc contributed. `pmi` is log2 of how much more often the term co-occurs with the person than chance, measured against every collected doc in the window.
 
+`GET /api/people/:id/docs?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg&domain=all&limit=50&offset=0` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings.
+
 ## Domain and tone
 
 Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` element, not the Google redirect link), author handle for Bluesky. `tone` comes only from GDELT GKG (V2Tone, first field, roughly -10..+10; political news sits around -1). Other sources have `tone = null`. Outlet names are stripped from Google News text so they do not become terms.

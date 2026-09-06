@@ -12,10 +12,21 @@ export type GraphQuery = {
   sort: 'count' | 'pmi'
 }
 
+export type DocsQuery = {
+  term: string
+  kind: string
+  days: number
+  source: string
+  domain: string
+  limit: number
+  offset: number
+}
+
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
 type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
+type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
 
 const scopeCte = `
   scope as (
@@ -74,6 +85,39 @@ const sourcesSql = `
 
 export const sourcesFor = async (person: Person, q: GraphQuery) =>
   (await db.query<SourceRow>(sourcesSql, [person.id, q.days, q.source, 'all'])).rows
+
+// term/kind reuse the doc_terms (kind, term) index via exists, so a doc carrying the term
+// under two kinds (only possible with kind = 'all' or an unknown kind) is still counted/returned once.
+// An unrecognized kind falls back to 'all' here too, so callers that bypass parseDocsQuery still get that fallback.
+const docsWhereSql = `(
+    $5 = '' or exists (
+      select 1 from doc_terms t where t.doc_id = d.id and t.term = $5
+        and (t.kind = $6 or $6 not in ('hashtag', 'word', 'theme'))
+    )
+  )`
+
+const docsSql = `
+  with ${scopeCte}
+  select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
+  from docs d join about a on a.doc_id = d.id
+  where ${docsWhereSql}
+  order by d.published_at desc, d.id desc
+  limit $7 offset $8`
+
+const docsCountSql = `
+  with ${scopeCte}
+  select count(*)::int as total
+  from docs d join about a on a.doc_id = d.id
+  where ${docsWhereSql}`
+
+export const docsFor = async (person: Person, q: DocsQuery) => {
+  const params = [person.id, q.days, q.source, q.domain, q.term, q.kind]
+  const [docs, count] = await Promise.all([
+    db.query<DocRow>(docsSql, [...params, q.limit, q.offset]),
+    db.query<{ total: number }>(docsCountSql, params),
+  ])
+  return { total: count.rows[0].total, docs: docs.rows }
+}
 
 export const graphFor = async (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)

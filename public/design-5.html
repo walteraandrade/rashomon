@@ -126,6 +126,36 @@
   }
   #empty code { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--fg); }
 
+  /* ---------- doc panel ---------- */
+  aside#docPanel {
+    position: fixed; top: 58px; right: 272px; bottom: 0; width: 360px;
+    background: var(--panel); border-left: 1px solid var(--line-strong);
+    box-shadow: -24px 0 48px -24px rgba(0,0,0,.6);
+    display: flex; flex-direction: column; z-index: 20;
+    transform: translateX(100%); opacity: 0; pointer-events: none; visibility: hidden;
+    transition: transform .16s ease, opacity .16s ease, visibility 0s linear .16s;
+  }
+  aside#docPanel.open { transform: translateX(0); opacity: 1; pointer-events: auto; visibility: visible; transition-delay: 0s; }
+  .docpanel-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 4px; flex-shrink: 0; }
+  .docpanel-head .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .docpanel-term { font: 600 15px Inter, sans-serif; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .docpanel-close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+  .docpanel-close:hover { color: var(--fg); background: rgba(255,255,255,.06); }
+  .docpanel-sub { padding: 0 14px 10px; color: var(--muted); font-size: 11.5px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .docpanel-body { flex: 1; overflow-y: auto; }
+  .doc-msg { padding: 22px 14px; color: var(--muted); font-size: 12.5px; text-align: center; }
+  .doc-row { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.03); }
+  .doc-meta { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .doc-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; flex-shrink: 0; }
+  .doc-domain { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .doc-date { font-size: 11px; color: var(--muted-dim); flex-shrink: 0; }
+  .doc-text { margin: 0 0 5px; font-size: 12.5px; line-height: 1.45; color: var(--fg); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .doc-link { font-size: 11.5px; color: var(--person); text-decoration: none; }
+  .doc-link:hover { text-decoration: underline; }
+  .docpanel-footer { padding: 10px 14px; border-top: 1px solid var(--line); flex-shrink: 0; }
+  .docpanel-footer button { width: 100%; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--fg); padding: 8px 0; cursor: pointer; font-size: 12px; }
+  .docpanel-footer button:hover { border-color: var(--line-strong); }
+
   /* ---------- sources ---------- */
   aside#sources { background: var(--bg2); border-left: 1px solid var(--line); overflow-y: auto; }
   aside#sources h2 {
@@ -153,6 +183,8 @@
     aside#sources { border-left: 0; border-top: 1px solid var(--line); max-height: 32vh; }
     #stats { display: none; }
     .person-pick select { font-size: 16px; max-width: 60vw; }
+    aside#docPanel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 60vh; border-left: 0; border-top: 1px solid var(--line-strong); transform: translateY(100%); }
+    aside#docPanel.open { transform: translateY(0); }
   }
 </style>
 </head>
@@ -209,6 +241,18 @@
     <div id="sourceList"></div>
   </aside>
 </div>
+<aside id="docPanel">
+  <div class="docpanel-head">
+    <span class="dot" id="docTermDot"></span>
+    <span class="docpanel-term" id="docTermLabel"></span>
+    <button class="docpanel-close" id="docClose" aria-label="fechar" title="fechar">×</button>
+  </div>
+  <div class="docpanel-sub" id="docSub"></div>
+  <div class="docpanel-body" id="docBody"></div>
+  <div class="docpanel-footer" id="docFooter" hidden>
+    <button id="docMore">carregar mais</button>
+  </div>
+</aside>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script>
   const $ = (id) => document.getElementById(id)
@@ -291,6 +335,7 @@
 
   const load = async () => {
     if (!state.person) return
+    closeDocPanel()
     const id = ++requestId
     try {
       const res = await fetch(`/api/people/${state.person}/graph?` + query())
@@ -430,6 +475,7 @@
         `<div class="row muted">aparece junto com <b class="num">${co}</b> ${co === 1 ? 'termo' : 'termos'} da lista</div>`
     }).on('mouseenter', (e, n) => { if (n.kind !== 'person') setHighlight(n.id) })
       .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null) })
+      .on('click', (e, n) => { if (n.kind !== 'person') openDocPanel(n) })
 
     node.call(d3.drag()
       .on('start', (e, n) => { if (!e.active) sim.alphaTarget(0.3).restart(); n.fx = n.x; n.fy = n.y })
@@ -459,6 +505,85 @@
     d3.select('#legend').selectAll('.hint').data([0]).join('span').attr('class', 'hint')
       .text('perto do centro = associação mais forte · passe o mouse num termo para ver com quais ele aparece junto')
   }
+
+  // ---------- doc panel ----------
+  const docPanel = { term: '', kind: 'all', offset: 0, limit: 50, total: 0, docs: [] }
+  const dp = $('docPanel')
+  const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+  const fmtDocDate = (iso) => {
+    const d = new Date(iso)
+    const days = Math.floor((Date.now() - d.getTime()) / 86_400_000)
+    if (days <= 0) return 'hoje'
+    if (days === 1) return 'ontem'
+    if (days < 7) return `há ${days} dias`
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  const closeDocPanel = () => dp.classList.remove('open')
+
+  const renderDocBody = () => {
+    const personName = currentGraph?.person?.name ?? ''
+    $('docSub').textContent = `${docPanel.total} ${docPanel.total === 1 ? 'doc' : 'docs'} sobre ${personName}`
+    if (docPanel.docs.length === 0) {
+      $('docBody').innerHTML = '<div class="doc-msg">nenhum documento encontrado nessa janela.</div>'
+      $('docFooter').hidden = true
+      return
+    }
+    $('docBody').innerHTML = docPanel.docs.map((d) => {
+      let safeHref = null
+      try { if (['http:', 'https:'].includes(new URL(d.uri).protocol)) safeHref = d.uri } catch {}
+      return `
+      <div class="doc-row">
+        <div class="doc-meta">
+          <span class="doc-badge">${escapeHtml(d.source)}</span>
+          <span class="doc-domain">${escapeHtml(d.domain ?? '')}</span>
+          <span class="doc-date num">${fmtDocDate(d.published_at)}</span>
+        </div>
+        <p class="doc-text">${escapeHtml(d.text)}</p>
+        ${safeHref ? `<a class="doc-link" href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">abrir ↗</a>` : ''}
+      </div>`
+    }).join('')
+    $('docFooter').hidden = docPanel.docs.length >= docPanel.total
+  }
+
+  const loadDocs = async (append) => {
+    const { term, kind } = docPanel
+    try {
+      const params = new URLSearchParams({
+        term: docPanel.term, kind: docPanel.kind, days: state.days, source: state.source,
+        domain: state.domain, limit: docPanel.limit, offset: docPanel.offset,
+      })
+      const res = await fetch(`/api/people/${state.person}/docs?` + params)
+      if (!res.ok) throw new Error('não foi possível carregar os documentos')
+      const data = await res.json()
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      docPanel.total = data.total
+      docPanel.docs = append ? [...docPanel.docs, ...data.docs] : data.docs
+      renderDocBody()
+    } catch (e) {
+      $('docBody').innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
+      $('docFooter').hidden = true
+    }
+  }
+
+  const openDocPanel = (n) => {
+    docPanel.term = n.term
+    docPanel.kind = n.kind
+    docPanel.offset = 0
+    docPanel.docs = []
+    docPanel.total = 0
+    $('docTermDot').style.background = kindColorHex[n.kind] ?? 'var(--muted)'
+    $('docTermLabel').textContent = n.kind === 'hashtag' ? `#${n.term}` : n.term
+    $('docSub').textContent = ''
+    $('docBody').innerHTML = '<div class="doc-msg">carregando…</div>'
+    $('docFooter').hidden = true
+    dp.classList.add('open')
+    loadDocs(false)
+  }
+
+  $('docClose').addEventListener('click', closeDocPanel)
+  $('docMore').addEventListener('click', () => { docPanel.offset += docPanel.limit; loadDocs(true) })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dp.classList.contains('open')) closeDocPanel() })
 
   // ---------- init ----------
   const selectPerson = (id) => {

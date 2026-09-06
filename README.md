@@ -9,8 +9,12 @@ pnpm install
 pnpm ingest          # default sources: bluesky, rss, gnews, gkg; or: pnpm ingest gkg
 pnpm ingest gdelt    # GDELT DOC API, slow and rate limited, off by default
 pnpm dev             # http://localhost:3210
-pnpm reindex         # recompute terms after changing extract.ts
+pnpm reindex         # recompute terms and person matches after changing extract.ts or seed.json
+pnpm typecheck       # tsc
+pnpm test            # node:test against an in-memory database
 ```
+
+`PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`.
 
 Bluesky without login returns one page (100 posts) per person. To paginate, set `BSKY_HANDLE` and `BSKY_APP_PASSWORD` (app password, not the account password).
 
@@ -42,8 +46,10 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 
 - `src/collectors/*` one collector per source, same signature (Strategy)
 - `src/extract.ts` hashtags, words, stopwords, person matching
+- `src/store.ts` doc and person inserts, shared by ingest and reindex
 - `src/graph.ts` scoring SQL (counts, PMI, term-term links)
 - `src/server.ts` Hono API + static UI
-- `public/index.html` d3-force graph
+- `public/design-5.html` current UI (radial atlas); `public/index.html` legacy UI; other `design-*.html` kept for reference
+- `test/` node:test suites; `test/fixture.ts` seeds the in-memory database
 - `seed.json` tracked people and aliases. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
 - `data/` PGlite database (gitignored)

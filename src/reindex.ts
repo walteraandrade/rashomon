@@ -1,6 +1,7 @@
 import persons from '../seed.json' with { type: 'json' }
 import { db, migrate } from './db.js'
 import { domainOf, mentions, terms } from './extract.js'
+import { upsertPersons } from './store.js'
 import type { Term } from './types.js'
 
 type Row = { id: number; text: string; extra_terms: Term[] }
@@ -16,15 +17,7 @@ const reindexDoc = async ({ id, text, extra_terms }: Row) => {
 const main = async () => {
   await migrate()
   await db.exec(`delete from doc_terms; delete from doc_persons;`)
-  await Promise.all(
-    persons.map((p) =>
-      db.query(
-        `insert into persons (id, name, aliases) values ($1, $2, $3)
-         on conflict (id) do update set name = excluded.name, aliases = excluded.aliases`,
-        [p.id, p.name, p.aliases],
-      ),
-    ),
-  )
+  await upsertPersons(persons)
   const missing = await db.query<{ id: number; uri: string }>(`select id, uri from docs where domain is null and source <> 'bluesky'`)
   await missing.rows.reduce<Promise<void>>(
     async (acc, r) => (await acc, void (await db.query(`update docs set domain = $2 where id = $1`, [r.id, domainOf(r.uri) ?? null]))),

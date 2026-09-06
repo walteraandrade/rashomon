@@ -13,14 +13,14 @@ describe('graphFor', () => {
 
   it('counts docs in the window and docs about the person', async () => {
     const g = await graphFor(lula, base)
-    assert.equal(g.stats.docs, 5)
-    assert.equal(g.stats.about, 3)
+    assert.equal(g.stats.docs, 6)
+    assert.equal(g.stats.about, 4)
   })
 
   it('widens with the window', async () => {
     const g = await graphFor(lula, { ...base, days: 365 })
-    assert.equal(g.stats.docs, 6)
-    assert.equal(g.stats.about, 4)
+    assert.equal(g.stats.docs, 7)
+    assert.equal(g.stats.about, 5)
   })
 
   it('never lists the person name as a term', async () => {
@@ -30,8 +30,8 @@ describe('graphFor', () => {
 
   it('computes pmi as log2 lift against the whole window', async () => {
     const g = await graphFor(lula, base)
-    assert.equal(node(g, 'word:reforma')?.pmi, pmi(2, 2, 5, 3))
-    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 5, 3))
+    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 6, 4))
+    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 6, 4))
     assert.equal(node(g, 'word:congresso'), undefined)
   })
 
@@ -77,6 +77,37 @@ describe('graphFor', () => {
     const g = await graphFor({ id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }, base)
     assert.equal(g.stats.about, 0)
     assert.deepEqual(g.nodes, [])
+  })
+
+  it('signature: top terms meet the count floor of max(3, 5% of about)', async () => {
+    const g = await graphFor(lula, base)
+    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: 0.58 }])
+  })
+
+  it('signature: never lists the person name as a term', async () => {
+    const g = await graphFor(lula, base)
+    assert.ok(!g.signature.some((s) => s.term === 'lula'))
+  })
+
+  it('signature: ignores kind, min, limit and sort', async () => {
+    const a = await graphFor(lula, base)
+    const b = await graphFor(lula, { ...base, kind: 'hashtag', min: 10, limit: 1, sort: 'pmi' })
+    assert.deepEqual(a.signature, b.signature)
+  })
+
+  it('signature: empty for a person without docs', async () => {
+    const g = await graphFor({ id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }, base)
+    assert.deepEqual(g.signature, [])
+  })
+
+  it('signature: orders by pmi desc, ties by term ascending', async () => {
+    const g = await graphFor(lula, { ...base, days: 1000 })
+    const tie = pmi(3, 3, 13, 11)
+    assert.deepEqual(g.signature, [
+      { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
+      { term: 'inflacao', kind: 'word', count: 3, pmi: tie },
+      { term: 'reforma', kind: 'word', count: 3, pmi: tie },
+    ])
   })
 })
 

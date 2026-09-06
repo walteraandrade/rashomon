@@ -44,8 +44,22 @@
     content: ''; position: absolute; right: 10px; top: 45%; width: 7px; height: 7px; pointer-events: none;
     border-right: 2px solid var(--person); border-bottom: 2px solid var(--person); transform: translateY(-50%) rotate(45deg);
   }
-  #stats { margin-left: auto; text-align: right; color: var(--muted); font-size: 11.5px; line-height: 1.35; flex-shrink: 0; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 18px; flex-shrink: 1; min-width: 0; }
+  #stats { text-align: right; color: var(--muted); font-size: 11.5px; line-height: 1.35; flex-shrink: 0; }
   #stats b { color: var(--fg); font-weight: 600; }
+
+  #signature { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  #signature::-webkit-scrollbar { display: none; }
+  .sig-label { font: 600 10px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim); flex-shrink: 0; }
+  .sig-chip {
+    display: flex; align-items: center; gap: 5px; cursor: pointer; flex-shrink: 0;
+    padding: 3px 9px; border-radius: 20px; background: rgba(255,211,92,.08); border: 1px solid rgba(255,211,92,.25);
+    transition: border-color .12s ease, background .12s ease;
+  }
+  .sig-chip:hover { border-color: rgba(255,211,92,.6); background: rgba(255,211,92,.14); }
+  .sig-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .sig-chip .sig-term { color: var(--person); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+  .sig-chip .sig-pmi { color: var(--muted); font-size: 10.5px; }
 
   /* ---------- layout ---------- */
   .layout { display: grid; grid-template-columns: 218px minmax(0, 1fr) 272px; overflow: hidden; }
@@ -192,7 +206,10 @@
 <header>
   <div class="brand"><span class="wordmark">rashomon</span><span class="tagline">atlas radial</span></div>
   <div class="person-pick"><select id="personTabs" aria-label="Pessoa"></select></div>
-  <div id="stats"></div>
+  <div class="header-right">
+    <div id="signature"></div>
+    <div id="stats"></div>
+  </div>
 </header>
 <div class="layout">
   <aside id="toolbar">
@@ -384,6 +401,27 @@
     layerRingsDeco.selectAll('*').remove()
 
     $('stats').innerHTML = `<b>${g.stats.about}</b> docs sobre <b>${g.person.name}</b> de <b>${g.stats.docs}</b> na janela`
+
+    const sigEl = $('signature')
+    if (!g.signature || g.signature.length === 0) {
+      sigEl.style.display = 'none'
+      sigEl.innerHTML = ''
+    } else {
+      sigEl.style.display = 'flex'
+      sigEl.innerHTML = `<span class="sig-label">assinatura</span>` + g.signature.map((s) => `
+        <span class="sig-chip" data-id="${s.kind}:${s.term}">
+          <span class="dot" style="background:${kindColorHex[s.kind]}"></span>
+          <span class="sig-term">${s.kind === 'hashtag' ? '#' + s.term : s.term}</span>
+          <span class="sig-pmi num">${s.pmi}</span>
+        </span>`).join('')
+    }
+
+    let highlightFn = () => {}
+    sigEl.querySelectorAll('.sig-chip').forEach((el) => {
+      el.addEventListener('mouseenter', () => highlightFn(el.dataset.id))
+      el.addEventListener('mouseleave', () => highlightFn(null))
+    })
+
     const hasNodes = g.nodes.length > 0
     $('empty').style.display = hasNodes ? 'none' : 'grid'
     if (!hasNodes) { svg.attr('viewBox', '-300 -300 600 600'); return }
@@ -454,6 +492,7 @@
     })
 
     const setHighlight = (id) => {
+      id = byId.has(id) ? id : null
       const neighbors = new Set()
       if (id) chordLinks.forEach((l) => { if (linkIsTouching(l, id)) { neighbors.add(l.source.id); neighbors.add(l.target.id) } })
       node.style('opacity', (n) => (!id || n.kind === 'person' || n.id === id || neighbors.has(n.id) ? 1 : 0.15))
@@ -463,6 +502,7 @@
         .style('opacity', (l) => (!id ? 0 : linkIsTouching(l, id) ? 0.9 : 0))
         .attr('stroke', (l) => (id && linkIsTouching(l, id) ? 'var(--person)' : 'var(--chord)'))
     }
+    highlightFn = setHighlight
 
     node.on('mousemove', (e, n) => {
       if (n.kind === 'person') return

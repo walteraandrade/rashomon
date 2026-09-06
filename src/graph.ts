@@ -57,11 +57,13 @@ type TimelineRow = { bucket_start: Date; count: number }
 type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
 type ToneListRow = { id: string; name: string }
 
+// $3 must already be normalized by parseSourceList; unlike kind, an unknown or empty
+// source is not rescued here and would scope to zero docs.
 const scopeCte = `
   scope as (
     select d.id from docs d
     where d.published_at >= now() - make_interval(days => $2)
-      and ($3 = 'all' or d.source = $3)
+      and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
       and ($4 = 'all' or d.domain = $4)
   ),
   about as (

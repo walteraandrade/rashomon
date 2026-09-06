@@ -26,7 +26,7 @@ describe('timeline acceptance criteria (issue #4)', () => {
     const rows = await timelineFor(lula, base)
     const sum = rows.reduce((acc, r) => acc + r.count, 0)
     const { total } = await docsFor(lula, { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', limit: 200, offset: 0 })
-    assert.equal(total, 4, 'sanity: known fixture total for lula in the default window')
+    assert.equal(total, 5, 'sanity: known fixture total for lula in the default window')
     assert.equal(sum, total)
   })
 

@@ -407,6 +407,7 @@
     state.view = view
     paintSeg('segView', view)
     const isTone = view === 'tone'
+    if (isTone) closeDocPanel()
     document.querySelector('.person-pick').style.display = isTone ? 'none' : ''
     $('toolbar').style.display = isTone ? 'none' : ''
     $('graph').style.display = isTone ? 'none' : ''

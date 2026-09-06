@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { toneFor, type ToneQuery } from '../src/graph.js'
-import { parseToneQuery } from '../src/server.js'
+import { parseToneQuery } from '../src/query.js'
 import { seed } from './fixture.js'
 
 // Independent verification of issue #5's numbered acceptance criteria, written against

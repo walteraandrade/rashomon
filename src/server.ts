@@ -13,18 +13,15 @@ import {
   type GraphQuery,
   type RisingQuery,
   type TimelineQuery,
-  type ToneQuery,
 } from './graph.js'
 import { normalize } from './extract.js'
 import type { Person } from './types.js'
+import { int, parseToneQuery } from './query.js'
 
 const port = Number(process.env.PORT ?? 3210)
 const app = new Hono()
 
-const int = (v: string | undefined, d: number, lo: number, hi: number) => {
-  const n = Number.parseInt(v ?? '', 10)
-  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
-}
+export { parseToneQuery }
 
 const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({
   days: int(q.days, 30, 1, 365),
@@ -63,13 +60,6 @@ const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuer
   source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg'].includes(q.source ?? '') ? q.source! : 'all',
   domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
   bucket: q.bucket === 'day' ? 'day' : 'week',
-})
-
-// Dedicated parser, not a copy of parseQuery: min defaults to 3 here, distinct from
-// GraphQuery.min's default of 2, so a copy-paste from parseQuery can't silently change it.
-export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery => ({
-  days: int(q.days, 30, 1, 365),
-  min: int(q.min, 3, 1, 1000),
 })
 
 app.get('/api/people', async (c) => {
@@ -112,9 +102,5 @@ app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.quer
 
 app.use('/*', serveStatic({ root: './public' }))
 
-// Guarded so importing this module (e.g. to unit-test parseToneQuery) never binds a port.
-const isMain = import.meta.url === `file://${process.argv[1]}`
-if (isMain) {
-  await migrate()
-  serve({ fetch: app.fetch, port }, () => console.log(`http://localhost:${port}`))
-}
+await migrate()
+serve({ fetch: app.fetch, port }, () => console.log(`http://localhost:${port}`))

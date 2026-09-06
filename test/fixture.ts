@@ -5,6 +5,7 @@ import type { Person, RawDoc } from '../src/types.js'
 export const persons: Person[] = [
   { id: 'lula', name: 'Lula', aliases: ['Lula', 'Luiz Inácio'] },
   { id: 'tarcisio', name: 'Tarcísio', aliases: ['Tarcísio', 'Tarcísio de Freitas'] },
+  { id: 'bolsonaro', name: 'Bolsonaro', aliases: ['Bolsonaro', 'Jair Bolsonaro'] },
 ]
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
@@ -46,6 +47,20 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/17', text: 'Lula defende estabilidade fiscal para o país', publishedAt: daysAgo(31), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/18', text: 'Lula reforça a estabilidade fiscal em entrevista', publishedAt: daysAgo(35), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/19', text: 'Lula lembra a estabilidade fiscal conquistada', publishedAt: daysAgo(50), domain: 'example.org' },
+  // docs 20-24: bolsonaro-only docs, all dated 2100+ days ago — well past the widest
+  // window any existing test opens (graph.test.ts/signature.test.ts go up to days:2000
+  // to reach termsSql/signatureSql's global `scope`, which counts every doc in the
+  // window regardless of person). Used by test/timeline.test.ts. Docs 20/21 sit in the
+  // same 7-day span but on different calendar days (day-vs-week split); doc 22 is
+  // isolated, leaving an empty week bucket between it and the 20/21 cluster; doc 23
+  // sits near the oldest edge of a days:2140 window (exercises the bucket clamp,
+  // since 2140 is not a multiple of 7); doc 24 has no "golpe" term and sits just past
+  // that window (control, excluded by the window itself).
+  { source: 'rss', uri: 'https://example.org/20', text: 'Bolsonaro nega qualquer participação em golpe de estado', publishedAt: daysAgo(2102), domain: 'example.org' },
+  { source: 'gnews', uri: 'https://oantagonista.com.br/21', text: 'Bolsonaro é investigado por suposto golpe contra a democracia', publishedAt: daysAgo(2105), domain: 'oantagonista.com.br' },
+  { source: 'rss', uri: 'https://example.org/22', text: 'Bolsonaro volta a falar sobre teorias de golpe militar', publishedAt: daysAgo(2116), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/23', text: 'Bolsonaro presta depoimento sobre planejamento de golpe', publishedAt: daysAgo(2139), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/24', text: 'Bolsonaro inaugura obra na região metropolitana', publishedAt: daysAgo(2150), domain: 'example.org' },
 ]
 
 let ready: Promise<void> | null = null

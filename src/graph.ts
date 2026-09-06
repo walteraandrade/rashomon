@@ -26,7 +26,7 @@ type TermRow = { term: string; kind: string; count: number; pmi: number; tone: n
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
 type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
-type DocRow = { id: number; source: string; domain: string | null; published_at: string; text: string; uri: string; tone: number | null }
+type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
 
 const scopeCte = `
   scope as (

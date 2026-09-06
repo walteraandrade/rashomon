@@ -132,10 +132,10 @@
     background: var(--panel); border-left: 1px solid var(--line-strong);
     box-shadow: -24px 0 48px -24px rgba(0,0,0,.6);
     display: flex; flex-direction: column; z-index: 20;
-    transform: translateX(100%); opacity: 0; pointer-events: none;
-    transition: transform .16s ease, opacity .16s ease;
+    transform: translateX(100%); opacity: 0; pointer-events: none; visibility: hidden;
+    transition: transform .16s ease, opacity .16s ease, visibility 0s linear .16s;
   }
-  aside#docPanel.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
+  aside#docPanel.open { transform: translateX(0); opacity: 1; pointer-events: auto; visibility: visible; transition-delay: 0s; }
   .docpanel-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 4px; flex-shrink: 0; }
   .docpanel-head .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
   .docpanel-term { font: 600 15px Inter, sans-serif; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -535,7 +535,7 @@
       return `
       <div class="doc-row">
         <div class="doc-meta">
-          <span class="doc-badge">${d.source}</span>
+          <span class="doc-badge">${escapeHtml(d.source)}</span>
           <span class="doc-domain">${escapeHtml(d.domain ?? '')}</span>
           <span class="doc-date num">${fmtDocDate(d.published_at)}</span>
         </div>
@@ -547,7 +547,7 @@
   }
 
   const loadDocs = async (append) => {
-    const term = docPanel.term
+    const { term, kind } = docPanel
     try {
       const params = new URLSearchParams({
         term: docPanel.term, kind: docPanel.kind, days: state.days, source: state.source,
@@ -556,7 +556,7 @@
       const res = await fetch(`/api/people/${state.person}/docs?` + params)
       if (!res.ok) throw new Error('não foi possível carregar os documentos')
       const data = await res.json()
-      if (term !== docPanel.term) return
+      if (term !== docPanel.term || kind !== docPanel.kind) return
       docPanel.total = data.total
       docPanel.docs = append ? [...docPanel.docs, ...data.docs] : data.docs
       renderDocBody()

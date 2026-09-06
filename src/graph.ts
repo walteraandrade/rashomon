@@ -23,6 +23,7 @@ export type DocsQuery = {
 }
 
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
+type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
 type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
@@ -62,6 +63,33 @@ const termsSql = `
   select term, kind, count, round(pmi::numeric, 2)::float8 as pmi, round(tone::numeric, 2)::float8 as tone from scored
   order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term
   limit $9`
+
+// signature: same scope as termsSql but ignores kind/min/limit/sort and applies its own
+// floor (count >= max(3, 5% of about)), so it stays a stable "what sticks" facet rather
+// than a projection of the toolbar's current filters.
+const signatureSql = `
+  with ${scopeCte},
+  n as (select count(*)::float8 as total from scope),
+  np as (select count(*)::float8 as total from about),
+  term_all as (
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
+    from doc_terms t join scope s on s.id = t.doc_id group by 1, 2
+  ),
+  term_p as (
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt
+    from doc_terms t join about a on a.doc_id = t.doc_id
+    where not (t.term = any($5::text[]))
+    group by 1, 2
+  ),
+  scored as (
+    select p.term, p.kind, p.c_pt::int as count,
+      ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
+    from term_p p join term_all a using (term, kind), n, np
+    where p.c_pt >= greatest(3, np.total * 0.05)
+  )
+  select term, kind, count, round(pmi::numeric, 2)::float8 as pmi from scored
+  order by pmi desc, term
+  limit 5`
 
 const linksSql = `
   with ${scopeCte}
@@ -121,9 +149,10 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
 
 export const graphFor = async (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
-  const [terms, stats] = await Promise.all([
+  const [terms, stats, signature] = await Promise.all([
     db.query<TermRow>(termsSql, [person.id, q.days, q.source, q.domain, q.kind, exclude, q.min, q.sort, q.limit]),
     db.query<Stats>(statsSql, [person.id, q.days, q.source, q.domain]),
+    db.query<SignatureRow>(signatureSql, [person.id, q.days, q.source, q.domain, exclude]),
   ])
   const ids = terms.rows.map((t) => `${t.kind}:${t.term}`)
   const links = ids.length ? await db.query<LinkRow>(linksSql, [person.id, q.days, q.source, q.domain, ids]) : { rows: [] }
@@ -135,5 +164,6 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
       ...terms.rows.map((t) => ({ source: `person:${person.id}`, target: `${t.kind}:${t.term}`, count: t.count })),
       ...links.rows.map((l) => ({ source: l.s, target: l.t, count: l.count })),
     ],
+    signature: signature.rows,
   }
 }

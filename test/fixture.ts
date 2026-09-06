@@ -20,6 +20,15 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/4', text: 'Congresso avança na pauta econômica', publishedAt: daysAgo(4), domain: 'example.org' },
   { source: 'gnews', uri: 'https://valor.globo.com/6', text: 'Lula defende reforma tributária', publishedAt: day1, domain: 'valor.globo.com' },
   { source: 'gnews', uri: 'https://g1.globo.com/5', text: 'Lula viaja para a Bahia', publishedAt: daysAgo(100), domain: 'g1.globo.com' },
+  { source: 'rss', uri: 'https://example.org/7', text: 'Lula fala muito sobre reforma', publishedAt: daysAgo(1), domain: 'example.org' },
+  // docs 8-13: two extra terms ("inflacao", "desemprego") that each hit 3 mentions,
+  // dated past the 365-day ceiling so they only surface in wide-window signature tests.
+  { source: 'rss', uri: 'https://example.org/8', text: 'Lula fala sobre a inflação persistente', publishedAt: daysAgo(400), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/9', text: 'Lula cita novamente a inflação alta', publishedAt: daysAgo(401), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/10', text: 'Lula reafirma compromisso com a inflação', publishedAt: daysAgo(402), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/11', text: 'Lula debate o desemprego crescente', publishedAt: daysAgo(410), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/12', text: 'Lula anuncia plano contra desemprego', publishedAt: daysAgo(411), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/13', text: 'Lula cobra combate ao desemprego total', publishedAt: daysAgo(412), domain: 'example.org' },
 ]
 
 let ready: Promise<void> | null = null

@@ -11,8 +11,8 @@ describe('docsFor', () => {
 
   it('AC1,AC2: returns every doc about the person in the window, newest first, ties broken by id desc, when no term is given', async () => {
     const { total, docs } = await docsFor(lula, base)
-    assert.equal(total, 3)
-    assert.equal(docs.length, 3)
+    assert.equal(total, 4)
+    assert.equal(docs.length, 4)
     for (let i = 1; i < docs.length; i++) {
       const prevTime = new Date(docs[i - 1].published_at).getTime()
       const curTime = new Date(docs[i].published_at).getTime()
@@ -22,19 +22,19 @@ describe('docsFor', () => {
 
   it('AC3: filters by term and kind, matching normalized tokens exactly', async () => {
     const { total, docs } = await docsFor(lula, { ...base, term: 'reforma', kind: 'word' })
-    assert.equal(total, 2)
-    assert.equal(docs.length, 2)
+    assert.equal(total, 3)
+    assert.equal(docs.length, 3)
   })
 
   it('AC4: falls back to matching every kind when kind is unknown', async () => {
     const { total } = await docsFor(lula, { ...base, term: 'reforma', kind: 'bogus' })
-    assert.equal(total, 2)
+    assert.equal(total, 3)
   })
 
   it('AC5: widens with the window', async () => {
     const { total, docs } = await docsFor(lula, { ...base, days: 365 })
-    assert.equal(total, 4)
-    assert.equal(docs.length, 4)
+    assert.equal(total, 5)
+    assert.equal(docs.length, 5)
   })
 
   it('AC6: filters by source', async () => {
@@ -48,12 +48,12 @@ describe('docsFor', () => {
   })
 
   it('AC8: paginates with limit and offset while total reflects the full match count, stable across a tied timestamp', async () => {
-    // both reforma docs share the exact same published_at in the fixture, on purpose
+    // two of the three reforma docs share the exact same published_at in the fixture, on purpose
     const q = { ...base, term: 'reforma', kind: 'word', limit: 1 }
     const first = await docsFor(lula, { ...q, offset: 0 })
     const second = await docsFor(lula, { ...q, offset: 1 })
-    assert.equal(first.total, 2)
-    assert.equal(second.total, 2)
+    assert.equal(first.total, 3)
+    assert.equal(second.total, 3)
     assert.equal(first.docs.length, 1)
     assert.equal(second.docs.length, 1)
     const ids = new Set([first.docs[0].id, second.docs[0].id])

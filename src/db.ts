@@ -32,6 +32,7 @@ export const migrate = () =>
     alter table docs add column if not exists extra_terms jsonb not null default '[]';
     alter table docs add column if not exists domain text;
     alter table docs add column if not exists tone float8;
+    update docs set tone = null where tone is not null and source not in ('gdelt', 'gkg');
     create index if not exists docs_domain_idx on docs (domain);
     create table if not exists gkg_files (
       slot text primary key,

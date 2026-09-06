@@ -14,10 +14,12 @@ const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString
 // duplicate/skipped row) when published_at ties, per docsSql's id desc tiebreaker.
 const day1 = daysAgo(1)
 
+export const collidingUri = 'https://example.org/40'
+
 export const docs: RawDoc[] = [
   { source: 'gnews', uri: 'https://g1.globo.com/1', text: 'Lula anuncia reforma tributária #reforma', publishedAt: day1, domain: 'g1.globo.com' },
   { source: 'bluesky', uri: 'at://did:plc:x/post/2', text: 'Lula e Tarcísio disputam a eleição', publishedAt: daysAgo(2), domain: 'ana.bsky.social' },
-  { source: 'gnews', uri: 'https://folha.uol.com.br/3', text: 'Tarcísio inaugura rodovia no interior', publishedAt: daysAgo(3), domain: 'folha.uol.com.br', tone: -1.5 },
+  { source: 'gkg', uri: 'https://folha.uol.com.br/3', text: 'Tarcísio inaugura rodovia no interior', publishedAt: daysAgo(3), domain: 'folha.uol.com.br', tone: -1.5 },
   { source: 'rss', uri: 'https://example.org/4', text: 'Congresso avança na pauta econômica', publishedAt: daysAgo(4), domain: 'example.org' },
   { source: 'gnews', uri: 'https://valor.globo.com/6', text: 'Lula defende reforma tributária', publishedAt: day1, domain: 'valor.globo.com' },
   { source: 'gnews', uri: 'https://g1.globo.com/5', text: 'Lula viaja para a Bahia', publishedAt: daysAgo(100), domain: 'g1.globo.com' },
@@ -99,6 +101,10 @@ export const docs: RawDoc[] = [
   // stats.docs/about and every pmi literal computed at a window covering day1, which were
   // recomputed to match.
   { source: 'gkg', uri: 'https://gdeltproject.org/38', text: 'Lula assina parceria estrangeira para expandir setor tecnológico', publishedAt: day1, domain: 'gdeltproject.org', tone: 0.6 },
+  // same uri from rss then gkg, far outside every window the other suites use:
+  // the rss row wins and must never pick up the gkg tone.
+  { source: 'rss', uri: collidingUri, text: 'Tarcísio anuncia obra em Santos', publishedAt: daysAgo(3000), domain: 'example.org' },
+  { source: 'gkg', uri: collidingUri, text: 'Tarcísio anuncia obra em Santos', publishedAt: daysAgo(3000), domain: 'example.org', tone: -3.2 },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

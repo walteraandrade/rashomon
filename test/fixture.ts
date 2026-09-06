@@ -29,6 +29,15 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/11', text: 'Lula debate o desemprego crescente', publishedAt: daysAgo(410), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/12', text: 'Lula anuncia plano contra desemprego', publishedAt: daysAgo(411), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/13', text: 'Lula cobra combate ao desemprego total', publishedAt: daysAgo(412), domain: 'example.org' },
+  // docs 14-16: three more terms ("educacao", "saude", "seguranca") that each hit 3
+  // mentions and, unlike the pairs above, appear exclusively in about-lula docs, so
+  // their pmi ties exactly with reforma/inflacao/desemprego's at a wide-enough window.
+  // Dated well past every other days: window used in the suite (max 1000) so they
+  // only surface when a test opts into an even wider window, verifying the signature
+  // query's fixed limit-5 cap without disturbing any existing assertion.
+  { source: 'rss', uri: 'https://example.org/14', text: 'Lula fala sobre educação, saúde e segurança no debate', publishedAt: daysAgo(1502), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/15', text: 'Lula defende educação, saúde e segurança para todos', publishedAt: daysAgo(1503), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/16', text: 'Lula prioriza educação, saúde e segurança no plano de governo', publishedAt: daysAgo(1504), domain: 'example.org' },
 ]
 
 let ready: Promise<void> | null = null

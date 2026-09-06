@@ -23,7 +23,8 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `src/extract.ts` normalization, hashtags, words, stopwords, person matching.
 - `src/store.ts` inserts docs and persons (shared by ingest and reindex).
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
-- `src/server.ts` Hono routes + static files. Query parsing clamps every parameter.
+- `src/server.ts` Hono routes + static files.
+- `src/query.ts` query parsers for every route; each parameter is clamped there.
 - `public/design-5.html` is the current UI (radial atlas). `public/index.html` is the legacy UI. Other `design-*.html` files are alternatives kept for reference; do not extend them.
 - `test/` node:test suites. `test/fixture.ts` seeds two people and six docs; extend it rather than creating ad-hoc data.
 

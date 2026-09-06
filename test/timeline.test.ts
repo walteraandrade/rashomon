@@ -52,8 +52,10 @@ describe('timelineFor', () => {
     const withAllKind = await timelineFor(bolsonaro, { ...q, kind: 'all' })
     const sumHashtag = withHashtagKind.reduce((a, r) => a + r.count, 0)
     const sumAll = withAllKind.reduce((a, r) => a + r.count, 0)
-    assert.equal(sumHashtag, 5)
-    assert.equal(sumAll, 5)
+    // doc /37 (day 35, issue #5's two-person tone fixture) also names bolsonaro, widening this
+    // window's count from 5 to 6
+    assert.equal(sumHashtag, 6)
+    assert.equal(sumAll, 6)
   })
 
   it('AC6: an unrecognized kind still matches the term under any kind', async () => {

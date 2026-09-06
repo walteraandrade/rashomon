@@ -41,6 +41,11 @@ export type TimelineQuery = {
   bucket: 'day' | 'week'
 }
 
+export type ToneQuery = {
+  days: number
+  min: number
+}
+
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
@@ -49,6 +54,8 @@ type Stats = { docs: number; about: number }
 type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
 type RisingRow = { term: string; kind: string; count_recent: number; count_baseline: number; lift: number }
 type TimelineRow = { bucket_start: Date; count: number }
+type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
+type ToneListRow = { id: string; name: string }
 
 const scopeCte = `
   scope as (
@@ -204,6 +211,33 @@ export const timelineFor = async (person: Person, q: TimelineQuery) => {
   const bucketDays = q.bucket === 'day' ? 1 : 7
   const params = [person.id, q.days, q.source, q.domain, q.term, q.kind, bucketDays]
   return (await db.query<TimelineRow>(timelineSql, params)).rows
+}
+
+// Cross-person on purpose: scopeCte's `about` scopes to a single person_id via $1, which
+// does not fit a matrix spanning every tracked person, so this joins doc_persons/persons
+// directly instead. avg()/count() ignore SQL null automatically, so untoned (non-GDELT)
+// docs contribute nothing to either aggregate without a source/kind check.
+const toneSql = `
+  select p.id as person_id, d.domain as domain,
+    round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as n
+  from docs d
+  join doc_persons dp on dp.doc_id = d.id
+  join persons p on p.id = dp.person_id
+  where d.published_at >= now() - make_interval(days => $1)
+    and d.domain is not null
+  group by p.id, d.domain
+  having count(d.tone) >= $2
+  order by p.id, d.domain`
+
+const tonePersonsSql = `select id, name from persons order by name`
+
+export const toneFor = async (q: ToneQuery) => {
+  const [cells, people] = await Promise.all([
+    db.query<ToneCellRow>(toneSql, [q.days, q.min]),
+    db.query<ToneListRow>(tonePersonsSql),
+  ])
+  const domains = [...new Set(cells.rows.map((c) => c.domain))].sort()
+  return { persons: people.rows, domains, cells: cells.rows }
 }
 
 // Two disjoint windows (recent, then baseline immediately before it), instead of

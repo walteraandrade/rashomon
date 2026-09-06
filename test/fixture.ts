@@ -61,6 +61,37 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/22', text: 'Bolsonaro volta a falar sobre teorias de golpe militar', publishedAt: daysAgo(2116), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/23', text: 'Bolsonaro presta depoimento sobre planejamento de golpe', publishedAt: daysAgo(2139), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/24', text: 'Bolsonaro inaugura obra na região metropolitana', publishedAt: daysAgo(2150), domain: 'example.org' },
+  // docs 30-32: three gdelt/estadao.com.br docs about Tarcísio inside the default 30-day
+  // window, tones -2/-1/0 (avg -1, n=3) — the "meets the default min=3" fixture for
+  // issue #5's tone-by-outlet matrix. "geopolitica" is used nowhere else in the fixture
+  // so it cannot shift any pinned term-level pmi/count/tone assertion; adding these docs
+  // to the days:30/365/1000/2000 scope does shift the person-agnostic n.total used by
+  // termsSql/signatureSql's pmi formula, so every pinned pmi literal at those windows in
+  // graph.test.ts/signature.test.ts/signature-acceptance.test.ts was recomputed to match.
+  { source: 'gdelt', uri: 'https://estadao.com.br/30', text: 'Tarcísio discute geopolítica durante evento internacional', publishedAt: daysAgo(6), domain: 'estadao.com.br', tone: -2 },
+  { source: 'gdelt', uri: 'https://estadao.com.br/31', text: 'Tarcísio comenta geopolítica em entrevista à imprensa', publishedAt: daysAgo(7), domain: 'estadao.com.br', tone: -1 },
+  { source: 'gdelt', uri: 'https://estadao.com.br/32', text: 'Tarcísio aborda geopolítica no fórum econômico', publishedAt: daysAgo(8), domain: 'estadao.com.br', tone: 0 },
+  // docs 33-34: two gdelt/oglobo.globo.com docs about Tarcísio, tones 1/0.5 (n=2) — stays
+  // below the default min=3, the "dropped below threshold" / "surfaces at min=2" fixture.
+  { source: 'gdelt', uri: 'https://oglobo.globo.com/33', text: 'Tarcísio fala sobre commodities agrícolas na feira', publishedAt: daysAgo(9), domain: 'oglobo.globo.com', tone: 1 },
+  { source: 'gdelt', uri: 'https://oglobo.globo.com/34', text: 'Tarcísio detalha exportação de commodities no porto', publishedAt: daysAgo(10), domain: 'oglobo.globo.com', tone: 0.5 },
+  // doc 35: gdelt doc about Tarcísio with no domain — must never surface as a null/empty
+  // entry in /api/tone's domains list, even though it carries a tone.
+  { source: 'gdelt', uri: 'https://example.org/35', text: 'Tarcísio comenta infraestrutura portuária em evento fechado', publishedAt: daysAgo(11), tone: -3 },
+  // doc 36: untoned rss doc, same domain/person/window as docs 30-32, proving toneSql's
+  // count(d.tone)/avg(d.tone) truly skip null tone instead of a count(*)/coalesce rewrite that
+  // would silently inflate the estadao.com.br cell to n=4. Words distinct from every other
+  // fixture doc so it cannot shift any pinned term-level pmi/count/tone assertion.
+  { source: 'rss', uri: 'https://estadao.com.br/36', text: 'Tarcísio recebe embaixadores em cerimônia diplomática', publishedAt: daysAgo(7), domain: 'estadao.com.br' },
+  // doc 37: single gdelt doc naming both Tarcísio and Bolsonaro, toned — the "doc mentioning
+  // two tracked persons contributes to both persons' groups" edge case from the spec.
+  // Deliberately: (a) avoids Lula, kept at zero toned docs anywhere for the existing "person
+  // without toned docs" fixture; (b) sits at day 35, just outside the default 30-day window, so
+  // bolsonaro's "zero docs in the default window" timeline fixture (all other bolsonaro docs are
+  // 2100+ days old) stays intact; (c) avoids "golpe", bolsonaro's pinned timeline term. It still
+  // falls inside the wider 365/1000/2000-day windows, so pinned pmi/stats literals for lula at
+  // those windows were recomputed (n.total only — the doc names neither lula nor a lula term).
+  { source: 'gdelt', uri: 'https://poder360.com.br/37', text: 'Tarcísio e Bolsonaro debatem aliança para o pleito em reunião reservada', publishedAt: daysAgo(35), domain: 'poder360.com.br', tone: 0.4 },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

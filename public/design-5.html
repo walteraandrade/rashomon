@@ -62,7 +62,10 @@
   .sig-chip .sig-pmi { color: var(--muted); font-size: 10.5px; }
 
   /* ---------- layout ---------- */
-  .layout { display: grid; grid-template-columns: 218px minmax(0, 1fr) 272px; overflow: hidden; }
+  .layout { display: grid; grid-template-columns: 218px minmax(0, 1fr) 272px; overflow: hidden; position: relative; }
+
+  /* ---------- header view switch ---------- */
+  .header-seg { width: 190px; flex-shrink: 0; }
 
   /* ---------- toolbar ---------- */
   #toolbar {
@@ -141,6 +144,21 @@
   }
   #empty code { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--fg); }
 
+  /* ---------- tone by outlet ---------- */
+  #toneView { grid-column: 1 / -1; overflow: auto; padding: 22px 26px; background: var(--bg); }
+  .tone-controls { display: flex; gap: 26px; align-items: flex-end; margin-bottom: 12px; }
+  .tone-controls .group { flex-shrink: 0; }
+  .tone-controls .seg.cols4 { grid-template-columns: repeat(4, 52px); }
+  .tone-note { color: var(--muted); font-size: 11.5px; margin-bottom: 18px; }
+  #toneTableWrap { min-height: 160px; overflow-x: auto; }
+  #toneTableWrap .doc-msg { padding: 46px 0; }
+  table#toneTable { border-collapse: collapse; font-size: 12px; }
+  table#toneTable th, table#toneTable td { padding: 7px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table#toneTable th.domain-col { color: var(--muted); font-weight: 500; font-size: 11px; text-align: left; }
+  table#toneTable th.person-row-label { font: 700 15px 'League Spartan', sans-serif; color: var(--person); text-align: left; padding-right: 20px; }
+  td.tone-cell { text-align: center; border-radius: 4px; min-width: 64px; }
+  td.tone-cell.empty { color: var(--muted-dim); background: none; }
+
   /* ---------- doc panel ---------- */
   aside#docPanel {
     position: fixed; top: 58px; right: 272px; bottom: 0; width: 360px;
@@ -218,6 +236,9 @@
     aside#sources { border-left: 0; border-top: 1px solid var(--line); max-height: 32vh; }
     #stats { display: none; }
     .person-pick select { font-size: 16px; max-width: 60vw; }
+    .header-seg { width: auto; }
+    #toneView { padding: 16px; }
+    .tone-controls { flex-wrap: wrap; gap: 14px; }
     aside#docPanel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 60vh; border-left: 0; border-top: 1px solid var(--line-strong); transform: translateY(100%); }
     aside#docPanel.open { transform: translateY(0); }
     #timelinePanel.doc-open { position: fixed; left: 16px; right: 16px; bottom: calc(60vh + 10px); z-index: 21; }
@@ -228,6 +249,7 @@
 <header>
   <div class="brand"><span class="wordmark">rashomon</span><span class="tagline">atlas radial</span></div>
   <div class="person-pick"><select id="personTabs" aria-label="Pessoa"></select></div>
+  <div class="seg cols2 header-seg" id="segView"></div>
   <div class="header-right">
     <div id="signature"></div>
     <div id="stats"></div>
@@ -268,7 +290,6 @@
   </aside>
   <div id="graph">
     <svg id="chart" preserveAspectRatio="xMidYMid meet"></svg>
-    <div id="tip"></div>
     <div id="empty">nada nessa janela.<br>roda <code>pnpm ingest</code></div>
     <div id="legend">
       <span><i style="background:var(--person)"></i>pessoa</span>
@@ -293,6 +314,21 @@
       <div id="risingList"></div>
     </div>
   </aside>
+  <section id="toneView" hidden>
+    <div class="tone-controls">
+      <div class="group">
+        <div class="group-label">janela</div>
+        <div class="seg cols4" id="toneSegDays"></div>
+      </div>
+      <div class="group">
+        <div class="group-label">mín. docs</div>
+        <div class="stepper" id="toneStepMin"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+      </div>
+    </div>
+    <div class="tone-note">tom só existe em textos do GDELT.</div>
+    <div id="toneTableWrap"></div>
+  </section>
+  <div id="tip"></div>
 </div>
 <aside id="docPanel">
   <div class="docpanel-head">
@@ -316,7 +352,8 @@
   const toneColor = (t) => (t === null || t === undefined ? 'var(--line)' : toneScale(t))
   const nodeFill = (n) => (state.tone && n.kind !== 'person' && n.tone !== null && n.tone !== undefined ? toneScale(n.tone) : kindColor[n.kind])
 
-  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false, rising: false }
+  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false, rising: false, view: 'atlas' }
+  const toneState = { days: '30', min: 3 }
   let requestId = 0
   let sim = null
   let people = []
@@ -365,6 +402,30 @@
   buildSeg('segSort', [['count', 'contagem'], ['pmi', 'pmi']], 'sort')
   refreshSegActive()
 
+  // ---------- view switch (atlas vs tom por veículo) ----------
+  const setView = (view) => {
+    state.view = view
+    paintSeg('segView', view)
+    const isTone = view === 'tone'
+    if (isTone) closeDocPanel()
+    document.querySelector('.person-pick').style.display = isTone ? 'none' : ''
+    $('toolbar').style.display = isTone ? 'none' : ''
+    $('graph').style.display = isTone ? 'none' : ''
+    $('sources').style.display = isTone ? 'none' : ''
+    $('signature').style.display = isTone ? 'none' : ''
+    $('stats').style.display = isTone ? 'none' : ''
+    $('toneView').style.display = isTone ? 'block' : 'none'
+    if (isTone) loadTone()
+  }
+
+  const buildViewSeg = () => {
+    const el = $('segView')
+    el.innerHTML = `<button class="segbtn" data-value="atlas">atlas</button><button class="segbtn" data-value="tone">tom por veículo</button>`
+    el.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.value)))
+    paintSeg('segView', state.view)
+  }
+  buildViewSeg()
+
   // ---------- steppers ----------
   const buildStepper = (id, key, min, max, step) => {
     const el = $(id)
@@ -376,6 +437,75 @@
   }
   buildStepper('stepLimit', 'limit', 5, 200, 5)
   buildStepper('stepMin', 'min', 1, 999, 1)
+
+  // ---------- tone by outlet ----------
+  let toneRequestId = 0
+
+  const mountToneControls = () => {
+    const daysEl = $('toneSegDays')
+    daysEl.innerHTML = [['7', '7d'], ['30', '30d'], ['90', '90d'], ['365', '1a']]
+      .map(([v, l]) => `<button class="segbtn" data-value="${v}">${l}</button>`).join('')
+    daysEl.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => {
+      toneState.days = btn.dataset.value
+      paintSeg('toneSegDays', toneState.days)
+      loadTone()
+    }))
+    paintSeg('toneSegDays', toneState.days)
+
+    const minEl = $('toneStepMin')
+    const valEl = minEl.querySelector('.val')
+    const renderMin = () => { valEl.textContent = toneState.min }
+    minEl.querySelector('.dec').addEventListener('click', () => { toneState.min = Math.max(1, toneState.min - 1); renderMin(); loadTone() })
+    minEl.querySelector('.inc').addEventListener('click', () => { toneState.min = Math.min(20, toneState.min + 1); renderMin(); loadTone() })
+    renderMin()
+  }
+  mountToneControls()
+
+  const renderToneCell = (personName, domain, cell) => {
+    if (!cell) return `<td class="tone-cell empty">–</td>`
+    return `<td class="tone-cell num" style="background:${toneScale(cell.tone)}" data-person="${escapeHtml(personName)}" data-domain="${escapeHtml(domain)}" data-tone="${cell.tone}" data-n="${cell.n}">${cell.tone}</td>`
+  }
+
+  const renderToneTable = (data) => {
+    const wrap = $('toneTableWrap')
+    if (data.cells.length === 0) {
+      wrap.innerHTML = '<div class="doc-msg">nenhum tom nessa janela.</div>'
+      return
+    }
+    const byKey = new Map(data.cells.map((c) => [`${c.person_id}|${c.domain}`, c]))
+    const head = `<tr><th></th>${data.domains.map((d) => `<th class="domain-col" title="${escapeHtml(d)}">${escapeHtml(d)}</th>`).join('')}</tr>`
+    const body = data.persons.map((p) => {
+      const cells = data.domains.map((d) => renderToneCell(p.name, d, byKey.get(`${p.id}|${d}`))).join('')
+      return `<tr><th class="person-row-label">${escapeHtml(p.name)}</th>${cells}</tr>`
+    }).join('')
+    wrap.innerHTML = `<table id="toneTable"><thead>${head}</thead><tbody>${body}</tbody></table>`
+    wrap.querySelectorAll('.tone-cell:not(.empty)').forEach((el) => {
+      el.addEventListener('mousemove', (e) => {
+        tip.style.display = 'block'
+        const box = tip.parentElement.getBoundingClientRect()
+        tip.style.left = e.clientX - box.left + 14 + 'px'; tip.style.top = e.clientY - box.top + 14 + 'px'
+        tip.innerHTML = `<b>${escapeHtml(el.dataset.person)}</b><div class="row muted">${escapeHtml(el.dataset.domain)}</div>` +
+          `<div class="row muted">tom <b class="num">${el.dataset.tone}</b> &nbsp; <b class="num">${el.dataset.n}</b> docs</div>`
+      })
+      el.addEventListener('mouseleave', () => { tip.style.display = 'none' })
+    })
+  }
+
+  const loadTone = async () => {
+    const id = ++toneRequestId
+    $('toneTableWrap').innerHTML = '<div class="doc-msg">carregando…</div>'
+    try {
+      const params = new URLSearchParams({ days: toneState.days, min: toneState.min })
+      const res = await fetch('/api/tone?' + params)
+      if (!res.ok) throw new Error('falha ao carregar')
+      const data = await res.json()
+      if (id !== toneRequestId) return
+      renderToneTable(data)
+    } catch (e) {
+      if (id !== toneRequestId) return
+      $('toneTableWrap').innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
+    }
+  }
 
   $('tone').addEventListener('change', () => {
     state.tone = $('tone').checked

@@ -8,10 +8,12 @@ import {
   risingFor,
   sourcesFor,
   timelineFor,
+  toneFor,
   type DocsQuery,
   type GraphQuery,
   type RisingQuery,
   type TimelineQuery,
+  type ToneQuery,
 } from './graph.js'
 import { normalize } from './extract.js'
 import type { Person } from './types.js'
@@ -63,6 +65,13 @@ const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuer
   bucket: q.bucket === 'day' ? 'day' : 'week',
 })
 
+// Dedicated parser, not a copy of parseQuery: min defaults to 3 here, distinct from
+// GraphQuery.min's default of 2, so a copy-paste from parseQuery can't silently change it.
+export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery => ({
+  days: int(q.days, 30, 1, 365),
+  min: int(q.min, 3, 1, 1000),
+})
+
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
   return c.json(rows)
@@ -98,7 +107,14 @@ app.get('/api/people/:id/rising', async (c) => {
   return c.json(await risingFor(rows[0], parseRisingQuery(c.req.query())))
 })
 
+// Not nested under /people/:id: it spans every tracked person at once.
+app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))
+
 app.use('/*', serveStatic({ root: './public' }))
 
-await migrate()
-serve({ fetch: app.fetch, port }, () => console.log(`http://localhost:${port}`))
+// Guarded so importing this module (e.g. to unit-test parseToneQuery) never binds a port.
+const isMain = import.meta.url === `file://${process.argv[1]}`
+if (isMain) {
+  await migrate()
+  serve({ fetch: app.fetch, port }, () => console.log(`http://localhost:${port}`))
+}

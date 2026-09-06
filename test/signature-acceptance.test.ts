@@ -11,6 +11,7 @@ import { persons, seed } from './fixture.js'
 const scope: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'word', limit: 5, min: 5, sort: 'pmi' }
 const [lula] = persons
 const nobody = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
+const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
 const isSortedByPmiDescTermAsc = (rows: { term: string; pmi: number }[]) =>
   rows.every((r, i) => i === 0 || rows[i - 1].pmi > r.pmi || (rows[i - 1].pmi === r.pmi && rows[i - 1].term < r.term))
@@ -20,7 +21,8 @@ describe('signature acceptance criteria (issue #6)', () => {
 
   it('AC1: default 30-day scope for lula returns exactly the spec-pinned reforma row', async () => {
     const g = await graphFor(lula, scope)
-    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: 0.58 }])
+    // n is 12 (was 6), widened by docs /30-/35 (tarcisio tone fixtures for issue #5)
+    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 12, 4) }])
   })
 
   it('AC2: signature never contains one of the person own name tokens', async () => {

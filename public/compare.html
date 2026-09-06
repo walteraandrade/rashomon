@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rashomon · comparar</title>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05060c; --bg2: #0a0c17; --panel: #0d0f1c; --line: rgba(255,255,255,.09); --line-strong: rgba(255,255,255,.16);
+    --fg: #e9ebf5; --muted: #7d84a3; --muted-dim: #565c78;
+    --person: #ffd35c; --hashtag: #45ffc4; --word: #7fb0ff; --theme: #ff8fd8;
+    --radius: 9px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); font: 13.5px/1.4 Inter, system-ui, sans-serif;
+    display: flex; flex-direction: column; min-height: 100%;
+  }
+  ::selection { background: rgba(255,211,92,.25); }
+  button { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; min-width: 0; align-items: center; gap: 22px; padding: 10px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); min-height: 58px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
+  .brand .wordmark { font: 800 20px/1 'League Spartan', sans-serif; letter-spacing: .01em; }
+  .brand .tagline { font: 500 10.5px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .14em; color: var(--muted-dim); }
+  .back-link { color: var(--muted); text-decoration: none; font: 500 12px Inter, sans-serif; flex-shrink: 0; }
+  .back-link:hover { color: var(--person); }
+
+  .person-picks { display: flex; align-items: center; gap: 14px; margin-left: auto; flex-shrink: 0; }
+  .person-pick-group { display: flex; flex-direction: column; gap: 2px; }
+  .person-pick-group .pp-label { font: 600 9.5px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim); }
+  .person-pick-group select {
+    appearance: none; background: none; border: 0; cursor: pointer; padding: 4px 22px 6px 2px;
+    font: 600 16px/1 'League Spartan', sans-serif; letter-spacing: .01em; color: var(--person); max-width: 220px;
+    border-bottom: 2px solid var(--person);
+  }
+  .person-pick-group select option { font: 13px Inter, system-ui, sans-serif; background: var(--panel); color: var(--fg); }
+
+  /* ---------- toolbar ---------- */
+  #toolbar {
+    background: var(--bg2); border-bottom: 1px solid var(--line);
+    padding: 12px 18px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 22px;
+  }
+  .group { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  .group-label {
+    font: 600 10px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim);
+  }
+  .seg { display: grid; gap: 4px; grid-auto-flow: column; }
+  .segbtn {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 7px; cursor: pointer;
+    padding: 6px 9px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 5px;
+    transition: background .12s ease, color .12s ease, border-color .12s ease; white-space: nowrap;
+  }
+  .segbtn:hover { color: var(--fg); border-color: var(--line-strong); }
+  .segbtn.active { background: rgba(255,211,92,.1); border-color: rgba(255,211,92,.5); color: var(--person); }
+  .segbtn .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  .stepper { display: grid; grid-template-columns: 24px 34px 24px; align-items: center; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
+  .stepper button { background: none; border: none; cursor: pointer; padding: 6px 0; color: var(--muted); font-size: 13px; line-height: 1; }
+  .stepper button:hover { color: var(--person); background: rgba(255,255,255,.04); }
+  .stepper .val { text-align: center; font-size: 12px; padding: 6px 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+
+  /* ---------- notice / detail ---------- */
+  #notice {
+    padding: 8px 18px; background: rgba(255,211,92,.08); border-bottom: 1px solid rgba(255,211,92,.25);
+    color: var(--person); font-size: 12px;
+  }
+  #notice[hidden] { display: none; }
+
+  #detail {
+    padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
+    color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 18px; min-height: 38px;
+  }
+  #detail .term { color: var(--fg); font-weight: 600; }
+  #detail .side { display: flex; gap: 6px; align-items: baseline; }
+  #detail .side b { color: var(--fg); font-weight: 600; }
+  #detail .empty-hint { color: var(--muted-dim); }
+
+  /* ---------- columns ---------- */
+  .columns { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--line); overflow: hidden; min-height: 0; }
+  .col { background: var(--bg); display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .col-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--line); flex-shrink: 0;
+  }
+  .col-title { font: 600 11px Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-dim); }
+  .col-count { color: var(--person); font-size: 11.5px; }
+  .chip-list { list-style: none; margin: 0; padding: 8px 12px 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .chip {
+    display: grid; grid-template-columns: 8px 1fr auto auto; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: 7px; border: 1px solid transparent; cursor: pointer;
+    background: rgba(255,255,255,.02);
+  }
+  .chip:hover { background: rgba(255,255,255,.05); }
+  .chip.selected { border-color: var(--person); background: rgba(255,211,92,.1); box-shadow: 0 0 0 1px rgba(255,211,92,.35); }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .chip .term { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .chip .count { color: var(--muted); font-size: 11px; }
+  .chip .pmi { color: var(--muted-dim); font-size: 10.5px; }
+  .col-msg { padding: 22px 16px; color: var(--muted); font-size: 12.5px; text-align: center; }
+  .col-msg .hint { display: block; margin-top: 6px; color: var(--muted-dim); font-size: 11.5px; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 900px) {
+    .columns { grid-template-columns: 1fr; grid-auto-rows: minmax(160px, 1fr); overflow-y: auto; }
+    header { flex-direction: column; align-items: flex-start; }
+    .person-picks { margin-left: 0; }
+    #toolbar { gap: 14px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="wordmark">rashomon</span><span class="tagline">comparar</span></div>
+  <a class="back-link" href="design-5.html">← atlas</a>
+  <div class="person-picks">
+    <div class="person-pick-group">
+      <span class="pp-label">pessoa A</span>
+      <select id="personA" aria-label="Pessoa A"></select>
+    </div>
+    <div class="person-pick-group">
+      <span class="pp-label">pessoa B</span>
+      <select id="personB" aria-label="Pessoa B"></select>
+    </div>
+  </div>
+</header>
+<div id="toolbar">
+  <div class="group">
+    <div class="group-label">janela</div>
+    <div class="seg" id="segDays"></div>
+  </div>
+  <div class="group">
+    <div class="group-label">fonte</div>
+    <div class="seg" id="segSource"></div>
+  </div>
+  <div class="group">
+    <div class="group-label">tipo</div>
+    <div class="seg" id="segKind"></div>
+  </div>
+  <div class="group">
+    <div class="group-label">ordem</div>
+    <div class="seg" id="segSort"></div>
+  </div>
+  <div class="group">
+    <div class="group-label">nós</div>
+    <div class="stepper" id="stepLimit"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+  </div>
+  <div class="group">
+    <div class="group-label">mín. docs</div>
+    <div class="stepper" id="stepMin"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+  </div>
+</div>
+<div id="notice" hidden>comparando a mesma pessoa</div>
+<div id="detail"><span class="empty-hint">clica num termo para ver os detalhes.</span></div>
+<div class="columns">
+  <section class="col" data-col="a">
+    <div class="col-head"><span class="col-title">só em A</span><span class="col-count num" id="countA"></span></div>
+    <ul class="chip-list" id="listA"></ul>
+  </section>
+  <section class="col" data-col="shared">
+    <div class="col-head"><span class="col-title">em comum</span><span class="col-count num" id="countShared"></span></div>
+    <ul class="chip-list" id="listShared"></ul>
+  </section>
+  <section class="col" data-col="b">
+    <div class="col-head"><span class="col-title">só em B</span><span class="col-count num" id="countB"></span></div>
+    <ul class="chip-list" id="listB"></ul>
+  </section>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const kindColorHex = { hashtag: '#45ffc4', word: '#7fb0ff', theme: '#ff8fd8' }
+  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+  const KIND_VALUES = ['hashtag', 'word', 'theme', 'all']
+  const SOURCE_VALUES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'all']
+  const sanitizeKind = (v) => (KIND_VALUES.includes(v) ? v : 'all')
+  const sanitizeSource = (v) => (SOURCE_VALUES.includes(v) ? v : 'all')
+
+  const state = { days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2 }
+  const sides = {
+    a: { personId: null, requestId: 0, loading: true, error: null, nodes: [] },
+    b: { personId: null, requestId: 0, loading: true, error: null, nodes: [] },
+  }
+  let people = []
+  let selectedId = null
+
+  // ---------- shared filter toolbar ----------
+  const buildSeg = (containerId, options, key, colored) => {
+    const el = $(containerId)
+    el.innerHTML = options.map(([value, label]) => `
+      <button class="segbtn" data-value="${value}">${colored && kindColorHex[value] ? `<span class="dot" style="background:${kindColorHex[value]}"></span>` : ''}${label}</button>
+    `).join('')
+    el.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => {
+      state[key] = key === 'kind' ? sanitizeKind(btn.dataset.value) : key === 'source' ? sanitizeSource(btn.dataset.value) : btn.dataset.value
+      paintSeg(containerId, state[key])
+      loadBoth()
+    }))
+  }
+  const paintSeg = (id, value) => {
+    $(id).querySelectorAll('.segbtn').forEach((b) => b.classList.toggle('active', b.dataset.value === value))
+  }
+
+  buildSeg('segDays', [['7', '7d'], ['30', '30d'], ['90', '90d'], ['365', '1a']], 'days')
+  buildSeg('segSource', [['all', 'todas'], ['bluesky', 'bluesky'], ['gdelt', 'gdelt'], ['rss', 'rss'], ['gnews', 'g.news'], ['gkg', 'gkg']], 'source')
+  buildSeg('segKind', [['all', 'todos'], ['hashtag', 'hashtag'], ['word', 'palavra'], ['theme', 'tema']], 'kind', true)
+  buildSeg('segSort', [['count', 'contagem'], ['pmi', 'pmi']], 'sort')
+  paintSeg('segDays', state.days)
+  paintSeg('segSource', state.source)
+  paintSeg('segKind', state.kind)
+  paintSeg('segSort', state.sort)
+
+  const buildStepper = (id, key, min, max, step) => {
+    const el = $(id)
+    const valEl = el.querySelector('.val')
+    const render = () => { valEl.textContent = state[key] }
+    el.querySelector('.dec').addEventListener('click', () => { state[key] = Math.max(min, state[key] - step); render(); loadBoth() })
+    el.querySelector('.inc').addEventListener('click', () => { state[key] = Math.min(max, state[key] + step); render(); loadBoth() })
+    render()
+  }
+  buildStepper('stepLimit', 'limit', 1, 200, 5)
+  buildStepper('stepMin', 'min', 1, 1000, 1)
+
+  // ---------- people selects ----------
+  const populateSelect = (el, selectedPersonId) => {
+    el.innerHTML = people.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')
+    el.value = selectedPersonId
+  }
+
+  const loadPeople = async () => {
+    const res = await fetch('/api/people')
+    people = await res.json()
+    if (people.length === 0) return
+    sides.a.personId = people[0].id
+    sides.b.personId = people.length > 1 ? people[1].id : people[0].id
+    populateSelect($('personA'), sides.a.personId)
+    populateSelect($('personB'), sides.b.personId)
+  }
+
+  $('personA').addEventListener('change', () => { sides.a.personId = $('personA').value; loadSide('a') })
+  $('personB').addEventListener('change', () => { sides.b.personId = $('personB').value; loadSide('b') })
+
+  // ---------- fetch ----------
+  const query = () => new URLSearchParams({
+    days: state.days, source: sanitizeSource(state.source), kind: sanitizeKind(state.kind),
+    sort: state.sort, limit: state.limit, min: state.min, domain: 'all',
+  })
+
+  const loadSide = async (key) => {
+    const side = sides[key]
+    if (!side.personId) return
+    const id = ++side.requestId
+    side.loading = true
+    side.error = null
+    renderAll()
+    try {
+      const res = await fetch(`/api/people/${side.personId}/graph?` + query())
+      if (id !== side.requestId) return
+      if (!res.ok) {
+        side.error = `erro ao carregar dados de ${personName(side.personId)}.`
+        side.nodes = []
+      } else {
+        const data = await res.json()
+        if (id !== side.requestId) return
+        side.nodes = data.nodes
+        side.error = null
+      }
+    } catch (e) {
+      if (id !== side.requestId) return
+      side.error = `erro ao carregar dados de ${personName(side.personId)}.`
+      side.nodes = []
+    }
+    side.loading = false
+    renderAll()
+  }
+
+  const loadBoth = () => { loadSide('a'); loadSide('b') }
+
+  const personName = (id) => people.find((p) => p.id === id)?.name ?? id
+
+  // ---------- diff ----------
+  const diff = () => {
+    const mapA = new Map(sides.a.nodes.map((n) => [n.id, n]))
+    const mapB = new Map(sides.b.nodes.map((n) => [n.id, n]))
+    const exclusiveA = [...mapA.values()].filter((n) => !mapB.has(n.id))
+    const exclusiveB = [...mapB.values()].filter((n) => !mapA.has(n.id))
+    const shared = [...mapA.values()].filter((n) => mapB.has(n.id)).map((n) => ({ a: n, b: mapB.get(n.id) }))
+    return { exclusiveA, exclusiveB, shared, mapA, mapB }
+  }
+
+  // ---------- render ----------
+  const chipHtml = (n) => `
+    <li class="chip ${n.id === selectedId ? 'selected' : ''}" data-id="${escapeHtml(n.id)}">
+      <span class="dot" style="background:${kindColorHex[n.kind] ?? 'var(--muted)'}"></span>
+      <span class="term">${n.kind === 'hashtag' ? '#' + escapeHtml(n.term) : escapeHtml(n.term)}</span>
+      <span class="count num">${n.count}</span>
+      <span class="pmi num">${n.pmi}</span>
+    </li>`
+
+  const attachChipHandlers = (listEl) => {
+    listEl.querySelectorAll('.chip').forEach((el) => el.addEventListener('click', () => {
+      selectedId = selectedId === el.dataset.id ? null : el.dataset.id
+      renderAll()
+    }))
+  }
+
+  const renderColumn = (listEl, countEl, items, sameSideLoading, sameSideError, otherLoading, kind) => {
+    if (sameSideLoading || otherLoading) {
+      countEl.textContent = ''
+      listEl.innerHTML = '<div class="col-msg">carregando…</div>'
+      return
+    }
+    if (sameSideError) {
+      countEl.textContent = ''
+      listEl.innerHTML = `<div class="col-msg">${escapeHtml(sameSideError)}</div>`
+      return
+    }
+    countEl.textContent = `(${items.length})`
+    if (items.length === 0) {
+      const bothEmpty = sides.a.nodes.length === 0 && sides.b.nodes.length === 0
+      if (bothEmpty) {
+        listEl.innerHTML = '<div class="col-msg">nada nessa janela.<span class="hint">tenta aumentar a janela ou reduzir mín. docs</span></div>'
+      } else if (kind === 'shared') {
+        listEl.innerHTML = '<div class="col-msg">nada em comum.</div>'
+      } else {
+        listEl.innerHTML = '<div class="col-msg">nada exclusivo aqui.</div>'
+      }
+      return
+    }
+    listEl.innerHTML = items.map(chipHtml).join('')
+    attachChipHandlers(listEl)
+  }
+
+  const renderDetail = () => {
+    const el = $('detail')
+    if (!selectedId) {
+      el.innerHTML = '<span class="empty-hint">clica num termo para ver os detalhes.</span>'
+      return
+    }
+    const { mapA, mapB } = diff()
+    const nodeA = mapA.get(selectedId)
+    const nodeB = mapB.get(selectedId)
+    const ref = nodeA ?? nodeB
+    const term = ref.kind === 'hashtag' ? '#' + ref.term : ref.term
+    const sideHtml = (label, n) => n
+      ? `<span class="side">${label} <b class="num">${n.count}</b> docs · pmi <b class="num">${n.pmi}</b></span>`
+      : `<span class="side empty-hint">${label} ausente aqui</span>`
+    el.innerHTML = `<span class="term">${escapeHtml(term)}</span>${sideHtml('A', nodeA)}${sideHtml('B', nodeB)}`
+  }
+
+  const renderAll = () => {
+    $('notice').hidden = !(sides.a.personId && sides.b.personId && sides.a.personId === sides.b.personId)
+
+    const loadingA = sides.a.loading
+    const loadingB = sides.b.loading
+    const { exclusiveA, exclusiveB, shared } = diff()
+
+    renderColumn($('listA'), $('countA'), exclusiveA, loadingA, sides.a.error, loadingB, 'a')
+    renderColumn($('listShared'), $('countShared'), shared.map((s) => s.a), loadingA || loadingB, null, false, 'shared')
+    renderColumn($('listB'), $('countB'), exclusiveB, loadingB, sides.b.error, loadingA, 'b')
+
+    renderDetail()
+  }
+
+  ;(async () => {
+    await loadPeople()
+    loadBoth()
+  })()
+</script>
+</body>
+</html>

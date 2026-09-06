@@ -133,6 +133,7 @@
   }
   #legend span { display: flex; align-items: center; gap: 5px; }
   #legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .tl-open #legend { display: none; }
   #tonelegend { display: flex; gap: 14px; }
 
   #empty {
@@ -175,7 +176,7 @@
   #timelinePanel {
     position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 6;
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 10px 14px 8px; display: none;
+    padding: 10px 14px 8px; display: none; overflow: hidden;
   }
   #timelinePanel.open { display: block; }
   @media (min-width: 901px) {
@@ -319,6 +320,7 @@
   let sim = null
   let people = []
   let currentGraph = null
+  let refreshTimelineChart = () => {}
   let risingIds = new Set()
 
   const svg = d3.select('#chart')
@@ -443,6 +445,7 @@
   const load = async () => {
     if (!state.person) return
     closeDocPanel()
+    closeTimelinePanel()
     const id = ++requestId
     try {
       const res = await fetch(`/api/people/${state.person}/graph?` + query())
@@ -610,8 +613,12 @@
       setHighlight(n.id)
       const key = timelineCacheKey(n)
       hoverKey = key
-      if (timelineCache.has(key)) {
-        hoverSparkSvg = sparklineSvg(timelineCache.get(key))
+      const cached = timelineCache.get(key)
+      if (cached instanceof Promise) {
+        hoverSparkSvg = ''
+        cached.then((buckets) => { if (hoverKey === key && buckets) hoverSparkSvg = sparklineSvg(buckets) })
+      } else if (cached) {
+        hoverSparkSvg = sparklineSvg(cached)
       } else {
         hoverSparkSvg = ''
         fetchSpark(n, key)
@@ -662,7 +669,7 @@
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  const closeDocPanel = () => { dp.classList.remove('open'); $('timelinePanel').classList.remove('doc-open') }
+  const closeDocPanel = () => { dp.classList.remove('open'); $('timelinePanel').classList.remove('doc-open'); refreshTimelineChart() }
 
   const bskyUrl = (d) => {
     try {
@@ -737,6 +744,8 @@
     $('timelinePanel').classList.add('doc-open')
     if (tlSection.classList.contains('open') && (timelinePanel.term !== n.term || timelinePanel.kind !== n.kind)) {
       loadTimelinePanel()
+    } else {
+      refreshTimelineChart()
     }
     loadDocs(false)
   }
@@ -762,29 +771,38 @@
     return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;margin-top:6px"><polyline points="${points}" fill="none" stroke="var(--person)" stroke-width="1.5"/></svg>`
   }
 
-  const fetchSpark = async (n, key) => {
-    try {
-      const params = new URLSearchParams({ term: n.term, kind: n.kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
-      const res = await fetch(`/api/people/${state.person}/timeline?` + params)
-      if (!res.ok) throw new Error('falha ao carregar')
-      const buckets = await res.json()
-      timelineCache.set(key, buckets)
-      if (hoverKey === key) {
-        hoverSparkSvg = sparklineSvg(buckets)
-        tip.innerHTML += hoverSparkSvg
+  const fetchSpark = (n, key) => {
+    const pending = (async () => {
+      try {
+        const params = new URLSearchParams({ term: n.term, kind: n.kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
+        const res = await fetch(`/api/people/${state.person}/timeline?` + params)
+        if (!res.ok) throw new Error('falha ao carregar')
+        const buckets = await res.json()
+        timelineCache.set(key, buckets)
+        if (hoverKey === key) {
+          hoverSparkSvg = sparklineSvg(buckets)
+          tip.innerHTML += hoverSparkSvg
+        }
+        return buckets
+      } catch {
+        // sparkline stays text-only on failure, no error UI in the hover tooltip
+        timelineCache.delete(key)
+        return null
       }
-    } catch {
-      // sparkline stays text-only on failure, no error UI in the hover tooltip
-    }
+    })()
+    timelineCache.set(key, pending)
+    return pending
   }
 
   // ---------- timeline: full chart under the atlas ----------
   const timelinePanel = { term: '', kind: 'all' }
   const tlSection = $('timelinePanel')
   const tlBody = $('tlBody')
+  let tlBuckets = null
+  let tlEmpty = false
 
   const renderTimelineChart = (buckets) => {
-    const w = Math.max(280, tlBody.clientWidth || 560)
+    const w = tlBody.clientWidth || 560
     const h = 110, padBottom = 18
     const max = Math.max(1, ...buckets.map((b) => b.count))
     const barW = w / buckets.length
@@ -801,9 +819,20 @@
     return `<svg width="${w}" height="${h}">${bars}${labels}</svg>`
   }
 
+  const paintTimelineBody = () => {
+    if (!tlBuckets) return
+    tlBody.innerHTML = renderTimelineChart(tlBuckets) +
+      (tlEmpty ? '<div class="doc-msg">nenhuma menção nessa janela.</div>' : '')
+  }
+
+  refreshTimelineChart = () => {
+    if (tlSection.classList.contains('open')) paintTimelineBody()
+  }
+
   const closeTimelinePanel = () => {
     tlSection.classList.remove('open')
-    $('legend').style.display = ''
+    $('graph').classList.remove('tl-open')
+    tlBuckets = null
   }
 
   const loadTimelinePanel = async () => {
@@ -811,20 +840,22 @@
     timelinePanel.term = term
     timelinePanel.kind = kind
     $('tlTitle').textContent = kind === 'hashtag' ? `#${term}` : term
+    tlBuckets = null
     tlBody.innerHTML = '<div class="doc-msg">carregando linha do tempo…</div>'
     tlSection.classList.add('open')
-    $('legend').style.display = 'none'
+    $('graph').classList.add('tl-open')
     try {
       const params = new URLSearchParams({ term, kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
       const res = await fetch(`/api/people/${state.person}/timeline?` + params)
       if (!res.ok) throw new Error('não foi possível carregar a linha do tempo')
       const buckets = await res.json()
       if (term !== docPanel.term || kind !== docPanel.kind) return
-      const empty = buckets.length === 0 || buckets.every((b) => b.count === 0)
-      tlBody.innerHTML = renderTimelineChart(buckets.length ? buckets : [{ bucket_start: new Date().toISOString(), count: 0 }]) +
-        (empty ? '<div class="doc-msg">nenhuma menção nessa janela.</div>' : '')
+      tlEmpty = buckets.length === 0 || buckets.every((b) => b.count === 0)
+      tlBuckets = buckets.length ? buckets : [{ bucket_start: new Date().toISOString(), count: 0 }]
+      paintTimelineBody()
     } catch (e) {
       if (term !== docPanel.term || kind !== docPanel.kind) return
+      tlBuckets = null
       tlBody.innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
     }
   }

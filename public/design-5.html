@@ -133,6 +133,7 @@
   }
   #legend span { display: flex; align-items: center; gap: 5px; }
   #legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .tl-open #legend { display: none; }
   #tonelegend { display: flex; gap: 14px; }
 
   #empty {
@@ -169,6 +170,24 @@
   .docpanel-footer { padding: 10px 14px; border-top: 1px solid var(--line); flex-shrink: 0; }
   .docpanel-footer button { width: 100%; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--fg); padding: 8px 0; cursor: pointer; font-size: 12px; }
   .docpanel-footer button:hover { border-color: var(--line-strong); }
+  .docpanel-footer button + button { margin-top: 6px; }
+
+  /* ---------- timeline panel ---------- */
+  #timelinePanel {
+    position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 6;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 14px 8px; display: none; overflow: hidden;
+  }
+  #timelinePanel.open { display: block; }
+  @media (min-width: 901px) {
+    #timelinePanel.doc-open { right: 376px; }
+  }
+  .tl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .tl-title { font: 600 15px Inter, sans-serif; color: var(--fg); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-close { background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .tl-close:hover { color: var(--fg); background: rgba(255,255,255,.06); }
+  #tlBody .doc-msg { padding: 8px 0; text-align: left; }
+  .tl-axis { fill: var(--muted); font: 400 10px Inter, sans-serif; }
 
   /* ---------- sources ---------- */
   aside#sources { background: var(--bg2); border-left: 1px solid var(--line); overflow-y: auto; }
@@ -201,6 +220,7 @@
     .person-pick select { font-size: 16px; max-width: 60vw; }
     aside#docPanel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 60vh; border-left: 0; border-top: 1px solid var(--line-strong); transform: translateY(100%); }
     aside#docPanel.open { transform: translateY(0); }
+    #timelinePanel.doc-open { position: fixed; left: 16px; right: 16px; bottom: calc(60vh + 10px); z-index: 21; }
   }
 </style>
 </head>
@@ -257,6 +277,13 @@
       <span><i style="background:var(--theme)"></i>tema</span>
       <span id="tonelegend" hidden><i style="background:var(--tone-neg)"></i>tom −<i style="background:var(--tone-pos)"></i>tom +</span>
     </div>
+    <section id="timelinePanel">
+      <div class="tl-head">
+        <span class="tl-title" id="tlTitle"></span>
+        <button class="tl-close" id="tlClose" aria-label="fechar linha do tempo" title="fechar">×</button>
+      </div>
+      <div id="tlBody"></div>
+    </section>
   </div>
   <aside id="sources">
     <h2>fontes <span id="domainlabel"></span></h2>
@@ -275,8 +302,9 @@
   </div>
   <div class="docpanel-sub" id="docSub"></div>
   <div class="docpanel-body" id="docBody"></div>
-  <div class="docpanel-footer" id="docFooter" hidden>
-    <button id="docMore">carregar mais</button>
+  <div class="docpanel-footer" id="docFooter">
+    <button id="docMore" hidden>carregar mais</button>
+    <button id="docTimeline">linha do tempo</button>
   </div>
 </aside>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
@@ -293,6 +321,7 @@
   let sim = null
   let people = []
   let currentGraph = null
+  let refreshTimelineChart = () => {}
   let risingIds = new Set()
 
   const svg = d3.select('#chart')
@@ -417,6 +446,7 @@
   const load = async () => {
     if (!state.person) return
     closeDocPanel()
+    closeTimelinePanel()
     const id = ++requestId
     try {
       const res = await fetch(`/api/people/${state.person}/graph?` + query())
@@ -577,9 +607,25 @@
       const co = chordLinks.filter((l) => linkIsTouching(l, n.id)).length
       tip.innerHTML = `<b>${n.kind === 'hashtag' ? '#' : ''}${n.term}</b>` +
         `<div class="row muted">docs <b class="num">${n.count}</b> &nbsp; pmi <b class="num">${n.pmi}</b>${n.tone === null || n.tone === undefined ? '' : ` &nbsp; tom <b class="num">${n.tone}</b>`}</div>` +
-        `<div class="row muted">aparece junto com <b class="num">${co}</b> ${co === 1 ? 'termo' : 'termos'} da lista</div>`
-    }).on('mouseenter', (e, n) => { if (n.kind !== 'person') setHighlight(n.id) })
-      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null) })
+        `<div class="row muted">aparece junto com <b class="num">${co}</b> ${co === 1 ? 'termo' : 'termos'} da lista</div>` +
+        hoverSparkSvg
+    }).on('mouseenter', (e, n) => {
+      if (n.kind === 'person') return
+      setHighlight(n.id)
+      const key = timelineCacheKey(n)
+      hoverKey = key
+      const cached = timelineCache.get(key)
+      if (cached instanceof Promise) {
+        hoverSparkSvg = ''
+        cached.then((buckets) => { if (hoverKey === key && buckets) hoverSparkSvg = sparklineSvg(buckets) })
+      } else if (cached) {
+        hoverSparkSvg = sparklineSvg(cached)
+      } else {
+        hoverSparkSvg = ''
+        fetchSpark(n, key)
+      }
+    })
+      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null); hoverKey = null; hoverSparkSvg = '' })
       .on('click', (e, n) => { if (n.kind !== 'person') openDocPanel(n) })
 
     node.call(d3.drag()
@@ -624,7 +670,7 @@
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  const closeDocPanel = () => dp.classList.remove('open')
+  const closeDocPanel = () => { dp.classList.remove('open'); $('timelinePanel').classList.remove('doc-open'); refreshTimelineChart() }
 
   const bskyUrl = (d) => {
     try {
@@ -644,7 +690,7 @@
     $('docSub').textContent = `${docPanel.total} ${docPanel.total === 1 ? 'doc' : 'docs'} sobre ${personName}`
     if (docPanel.docs.length === 0) {
       $('docBody').innerHTML = '<div class="doc-msg">nenhum documento encontrado nessa janela.</div>'
-      $('docFooter').hidden = true
+      $('docMore').hidden = true
       return
     }
     $('docBody').innerHTML = docPanel.docs.map((d) => {
@@ -661,7 +707,7 @@
         ${safeHref ? `<a class="doc-link" href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">abrir ↗</a>` : ''}
       </div>`
     }).join('')
-    $('docFooter').hidden = docPanel.docs.length >= docPanel.total
+    $('docMore').hidden = docPanel.docs.length >= docPanel.total
   }
 
   const loadDocs = async (append) => {
@@ -680,7 +726,7 @@
       renderDocBody()
     } catch (e) {
       $('docBody').innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
-      $('docFooter').hidden = true
+      $('docMore').hidden = true
     }
   }
 
@@ -694,14 +740,148 @@
     $('docTermLabel').textContent = n.kind === 'hashtag' ? `#${n.term}` : n.term
     $('docSub').textContent = ''
     $('docBody').innerHTML = '<div class="doc-msg">carregando…</div>'
-    $('docFooter').hidden = true
+    $('docMore').hidden = true
     dp.classList.add('open')
+    $('timelinePanel').classList.add('doc-open')
+    if (tlSection.classList.contains('open') && (timelinePanel.term !== n.term || timelinePanel.kind !== n.kind)) {
+      loadTimelinePanel()
+    } else {
+      refreshTimelineChart()
+    }
     loadDocs(false)
   }
 
   $('docClose').addEventListener('click', closeDocPanel)
   $('docMore').addEventListener('click', () => { docPanel.offset += docPanel.limit; loadDocs(true) })
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dp.classList.contains('open')) closeDocPanel() })
+
+  // ---------- timeline: sparkline (hover tooltip) ----------
+  const timelineCache = new Map()
+  let hoverKey = null
+  let hoverSparkSvg = ''
+
+  const timelineCacheKey = (n) => `${state.person}|${n.kind}:${n.term}|${state.days}|${state.source}|${state.domain}`
+
+  const sparklineSvg = (buckets) => {
+    if (!buckets || buckets.length === 0) return ''
+    const counts = buckets.map((b) => b.count)
+    const max = Math.max(1, ...counts)
+    const w = 90, h = 24
+    const stepX = counts.length > 1 ? w / (counts.length - 1) : 0
+    const points = counts.map((c, i) => `${(i * stepX).toFixed(1)},${(h - (c / max) * h).toFixed(1)}`).join(' ')
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;margin-top:6px"><polyline points="${points}" fill="none" stroke="var(--person)" stroke-width="1.5"/></svg>`
+  }
+
+  const fetchSpark = (n, key) => {
+    const pending = (async () => {
+      try {
+        const params = new URLSearchParams({ term: n.term, kind: n.kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
+        const res = await fetch(`/api/people/${state.person}/timeline?` + params)
+        if (!res.ok) throw new Error('falha ao carregar')
+        const buckets = await res.json()
+        timelineCache.set(key, buckets)
+        if (hoverKey === key) {
+          hoverSparkSvg = sparklineSvg(buckets)
+          tip.innerHTML += hoverSparkSvg
+        }
+        return buckets
+      } catch {
+        // sparkline stays text-only on failure, no error UI in the hover tooltip
+        timelineCache.delete(key)
+        return null
+      }
+    })()
+    timelineCache.set(key, pending)
+    return pending
+  }
+
+  // ---------- timeline: full chart under the atlas ----------
+  const timelinePanel = { term: '', kind: 'all' }
+  const tlSection = $('timelinePanel')
+  const tlBody = $('tlBody')
+  let tlBuckets = null
+  let tlEmpty = false
+
+  const BUCKET_DAYS_MS = 7 * 86_400_000
+
+  const bucketSpanMs = (buckets, i) => {
+    if (i !== 0 || buckets.length < 2) return BUCKET_DAYS_MS
+    const diff = new Date(buckets[1].bucket_start) - new Date(buckets[0].bucket_start)
+    return diff > 0 ? diff : BUCKET_DAYS_MS
+  }
+
+  const renderTimelineChart = (buckets) => {
+    const w = tlBody.clientWidth || 560
+    const h = 110, padBottom = 18
+    const max = Math.max(1, ...buckets.map((b) => b.count))
+    const barW = w / buckets.length
+    const bars = buckets.map((b, i) => {
+      const barH = Math.max(1, (b.count / max) * (h - padBottom))
+      const spanFactor = Math.min(1, bucketSpanMs(buckets, i) / BUCKET_DAYS_MS)
+      const fullBarW = barW * 0.7
+      const visW = fullBarW * spanFactor
+      const x = i * barW + barW * 0.15
+      const y = (h - padBottom) - barH
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${visW.toFixed(1)}" height="${barH.toFixed(1)}" fill="var(--person)" />`
+    }).join('')
+    const step = Math.max(1, Math.ceil(buckets.length / 8))
+    const labels = buckets.map((b, i) => {
+      if (i % step !== 0 && i !== buckets.length - 1) return ''
+      const x = i * barW + barW / 2
+      return `<text class="tl-axis" x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(d3.timeFormat('%d/%m')(new Date(b.bucket_start)))}</text>`
+    }).join('')
+    return `<svg width="${w}" height="${h}">${bars}${labels}</svg>`
+  }
+
+  const paintTimelineBody = () => {
+    if (!tlBuckets) return
+    tlBody.innerHTML = renderTimelineChart(tlBuckets) +
+      (tlEmpty ? '<div class="doc-msg">nenhuma menção nessa janela.</div>' : '')
+  }
+
+  refreshTimelineChart = () => {
+    if (tlSection.classList.contains('open')) paintTimelineBody()
+  }
+
+  const closeTimelinePanel = () => {
+    tlSection.classList.remove('open')
+    $('graph').classList.remove('tl-open')
+    tlBuckets = null
+  }
+
+  const loadTimelinePanel = async () => {
+    const { term, kind } = docPanel
+    timelinePanel.term = term
+    timelinePanel.kind = kind
+    $('tlTitle').textContent = kind === 'hashtag' ? `#${term}` : term
+    tlBuckets = null
+    tlBody.innerHTML = '<div class="doc-msg">carregando linha do tempo…</div>'
+    tlSection.classList.add('open')
+    $('graph').classList.add('tl-open')
+    try {
+      const params = new URLSearchParams({ term, kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
+      const res = await fetch(`/api/people/${state.person}/timeline?` + params)
+      if (!res.ok) throw new Error('não foi possível carregar a linha do tempo')
+      const buckets = await res.json()
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      tlEmpty = buckets.length === 0 || buckets.every((b) => b.count === 0)
+      tlBuckets = buckets.length ? buckets : [{ bucket_start: new Date().toISOString(), count: 0 }]
+      paintTimelineBody()
+    } catch (e) {
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      tlBuckets = null
+      tlBody.innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
+    }
+  }
+
+  $('docTimeline').addEventListener('click', loadTimelinePanel)
+  $('tlClose').addEventListener('click', closeTimelinePanel)
+
+  let resizeTimer = null
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(refreshTimelineChart, 120)
+  })
 
   // ---------- init ----------
   const selectPerson = (id) => {

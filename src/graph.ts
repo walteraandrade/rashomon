@@ -32,6 +32,15 @@ export type RisingQuery = {
   min: number
 }
 
+export type TimelineQuery = {
+  term: string
+  kind: string
+  days: number
+  source: string
+  domain: string
+  bucket: 'day' | 'week'
+}
+
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
@@ -39,6 +48,7 @@ type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
 type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
 type RisingRow = { term: string; kind: string; count_recent: number; count_baseline: number; lift: number }
+type TimelineRow = { bucket_start: Date; count: number }
 
 const scopeCte = `
   scope as (
@@ -156,6 +166,44 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
     db.query<{ total: number }>(docsCountSql, params),
   ])
   return { total: count.rows[0].total, docs: docs.rows }
+}
+
+// Buckets count backward from now() in fixed bucket_days steps (i = 0 is the most
+// recent bucket, open-ended at 'infinity' rather than now(), so this never needs
+// date_trunc and sidesteps the ISO-week-vs-rolling-week ambiguity; bucket=week is a
+// rolling 7-day window, not a Monday-aligned one. The newest bucket has no upper
+// bound because scopeCte likewise has none on published_at: a future-dated doc
+// (source clock skew) still counts in docsFor's total, so it must land somewhere
+// here too, or the sum-of-buckets invariant breaks. The oldest bucket is clamped to
+// the window edge, so buckets exactly partition the same window docsFor uses for
+// the same params.
+const timelineSql = `
+  with ${scopeCte},
+  bounds as (select $2::int as days, $7::int as bucket_days),
+  buckets as (
+    select i,
+      greatest(
+        now() - make_interval(days => b.days),
+        now() - make_interval(days => (i + 1) * b.bucket_days)
+      ) as bucket_start,
+      case when i = 0 then 'infinity'::timestamptz
+        else now() - make_interval(days => i * b.bucket_days) end as bucket_end
+    from bounds b, generate_series(0, ceil(b.days::float8 / b.bucket_days::float8)::int - 1) as i
+  )
+  select b.bucket_start,
+    count(d.id)::int as count
+  from buckets b
+  left join about a on true
+  left join docs d on d.id = a.doc_id
+    and d.published_at >= b.bucket_start and d.published_at < b.bucket_end
+    and ${docsWhereSql}
+  group by b.bucket_start
+  order by b.bucket_start asc`
+
+export const timelineFor = async (person: Person, q: TimelineQuery) => {
+  const bucketDays = q.bucket === 'day' ? 1 : 7
+  const params = [person.id, q.days, q.source, q.domain, q.term, q.kind, bucketDays]
+  return (await db.query<TimelineRow>(timelineSql, params)).rows
 }
 
 // Two disjoint windows (recent, then baseline immediately before it), instead of

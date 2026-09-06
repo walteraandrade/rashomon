@@ -2,7 +2,17 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { db, migrate } from './db.js'
-import { docsFor, graphFor, risingFor, sourcesFor, type DocsQuery, type GraphQuery, type RisingQuery } from './graph.js'
+import {
+  docsFor,
+  graphFor,
+  risingFor,
+  sourcesFor,
+  timelineFor,
+  type DocsQuery,
+  type GraphQuery,
+  type RisingQuery,
+  type TimelineQuery,
+} from './graph.js'
 import { normalize } from './extract.js'
 import type { Person } from './types.js'
 
@@ -44,6 +54,15 @@ const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery =>
   min: int(q.min, 3, 1, 1000),
 })
 
+const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuery => ({
+  term: normalize((q.term ?? '').trim()),
+  kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
+  days: int(q.days, 30, 1, 365),
+  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg'].includes(q.source ?? '') ? q.source! : 'all',
+  domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
+  bucket: q.bucket === 'day' ? 'day' : 'week',
+})
+
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
   return c.json(rows)
@@ -65,6 +84,12 @@ app.get('/api/people/:id/docs', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
   if (!rows[0]) return c.json({ error: 'person not found' }, 404)
   return c.json(await docsFor(rows[0], parseDocsQuery(c.req.query())))
+})
+
+app.get('/api/people/:id/timeline', async (c) => {
+  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
+  if (!rows[0]) return c.json({ error: 'person not found' }, 404)
+  return c.json(await timelineFor(rows[0], parseTimelineQuery(c.req.query())))
 })
 
 app.get('/api/people/:id/rising', async (c) => {

@@ -11,3 +11,4 @@ export type RawDoc = {
 }
 export type Collector = (persons: Person[]) => Promise<RawDoc[]>
 export type Term = { term: string; kind: 'hashtag' | 'word' | 'theme' }
+export type Scorer = (text: string, person: Person) => Promise<number | null>

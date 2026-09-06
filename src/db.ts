@@ -41,4 +41,12 @@ export const migrate = () =>
     );
     create index if not exists docs_published_idx on docs (published_at);
     create index if not exists doc_terms_term_idx on doc_terms (kind, term);
+    create table if not exists doc_testimony (
+      doc_id int references docs(id) on delete cascade,
+      person_id text references persons(id),
+      method text not null,
+      score float8,
+      primary key (doc_id, person_id, method)
+    );
+    create index if not exists doc_testimony_person_idx on doc_testimony (person_id, method);
   `)

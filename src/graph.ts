@@ -46,6 +46,13 @@ export type ToneQuery = {
   min: number
 }
 
+export type TestimonyQuery = {
+  days: number
+  source: string
+  method: string
+  min: number
+}
+
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
@@ -240,6 +247,64 @@ export const toneFor = async (q: ToneQuery) => {
   ])
   const domains = [...new Set(cells.rows.map((c) => c.domain))].sort()
   return { persons: people.rows, domains, cells: cells.rows }
+}
+
+// Scoped to one person via $1, unlike toneSql (cross-person by construction): testimony's
+// PK already carries person_id, so an inner join on (doc_id, person_id, method) can never
+// leak another person's score for a shared doc into this scope. The inner join to
+// doc_testimony (not left join) is what makes an unscored pair contribute nothing anywhere,
+// including no zero-n placeholder row, per the spec.
+const testimonyScopeCte = `
+  scope as (
+    select d.source, d.domain, dt.score
+    from doc_persons dp
+    join docs d on d.id = dp.doc_id
+    join doc_testimony dt on dt.doc_id = dp.doc_id and dt.person_id = dp.person_id and dt.method = $4
+    where dp.person_id = $1
+      and d.published_at >= now() - make_interval(days => $2)
+      and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
+  )`
+
+const testimonyOverallSql = `
+  with ${testimonyScopeCte}
+  select round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n from scope`
+
+// No $5 (min) here on purpose: by_source has an implicit floor of 1 (having count(score) >= 1),
+// never gated by the caller's min, per the spec.
+const testimonyBySourceSql = `
+  with ${testimonyScopeCte}
+  select source, round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n
+  from scope
+  group by source
+  having count(score) >= 1
+  order by source`
+
+const testimonyByDomainSql = `
+  with ${testimonyScopeCte}
+  select domain, source, round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n
+  from scope
+  where domain is not null
+  group by domain, source
+  having count(score) >= $5
+  order by domain, source`
+
+type TestimonyOverallRow = { score: number | null; n: number }
+type TestimonyBySourceRow = { source: string; score: number; n: number }
+type TestimonyByDomainRow = { domain: string; source: string; score: number; n: number }
+
+export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
+  const params = [person.id, q.days, q.source, q.method]
+  const [overall, bySource, byDomain] = await Promise.all([
+    db.query<TestimonyOverallRow>(testimonyOverallSql, params),
+    db.query<TestimonyBySourceRow>(testimonyBySourceSql, params),
+    db.query<TestimonyByDomainRow>(testimonyByDomainSql, [...params, q.min]),
+  ])
+  return {
+    method: q.method,
+    overall: overall.rows[0] ?? { score: null, n: 0 },
+    by_source: bySource.rows,
+    by_domain: byDomain.rows,
+  }
 }
 
 // Two disjoint windows (recent, then baseline immediately before it), instead of

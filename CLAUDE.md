@@ -25,7 +25,7 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
 - `src/server.ts` Hono routes + static files. Query parsing clamps every parameter.
 - `public/design-5.html` is the current UI (radial atlas). `public/index.html` is the legacy UI. Other `design-*.html` files are alternatives kept for reference; do not extend them.
-- `test/` node:test suites. `test/fixture.ts` seeds two people and five docs; extend it rather than creating ad-hoc data.
+- `test/` node:test suites. `test/fixture.ts` seeds two people and six docs; extend it rather than creating ad-hoc data.
 
 ## Style
 
@@ -33,3 +33,7 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - Functional style, small pure functions, no classes. Comments only when the why is not obvious.
 - Commit messages short and imperative. Branch names `feat/ | fix/ | chore/ | refactor/ | docs/ | test/` + short kebab slug.
 - Keep the API contract stable: `GET /api/people`, `GET /api/people/:id/graph`, `GET /api/people/:id/sources`. New capabilities are new routes or new optional query parameters, never breaking changes to existing fields.
+
+## Factory
+
+Feature work goes through the pipeline in `docs/factory.md`: `spec` workflow → human adds `spec-approved` → `build` workflow → PR → human review. Roles live in `.claude/agents/`; whoever builds never validates. Builders work in `../rashomon-<slug>` worktrees, never on the main checkout.

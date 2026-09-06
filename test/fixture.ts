@@ -92,6 +92,13 @@ export const docs: RawDoc[] = [
   // falls inside the wider 365/1000/2000-day windows, so pinned pmi/stats literals for lula at
   // those windows were recomputed (n.total only — the doc names neither lula nor a lula term).
   { source: 'gdelt', uri: 'https://poder360.com.br/37', text: 'Tarcísio e Bolsonaro debatem aliança para o pleito em reunião reservada', publishedAt: daysAgo(35), domain: 'poder360.com.br', tone: 0.4 },
+  // doc 38: gkg doc about lula, day1 (in the default 30-day window), toned 0.6 — issue #8's
+  // press-vs-network fixture. Words ("assina", "parceria", "estrangeira", "expandir", "setor",
+  // "tecnologico") are unique across the whole fixture, so it only adds new lula terms at
+  // count 1 (below every existing min threshold used by pinned tests) and widens n.total,
+  // stats.docs/about and every pmi literal computed at a window covering day1, which were
+  // recomputed to match.
+  { source: 'gkg', uri: 'https://gdeltproject.org/38', text: 'Lula assina parceria estrangeira para expandir setor tecnológico', publishedAt: day1, domain: 'gdeltproject.org', tone: 0.6 },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

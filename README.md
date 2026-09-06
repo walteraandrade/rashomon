@@ -32,6 +32,8 @@ Bluesky without login returns one page (100 posts) per person. To paginate, set 
 
 Add `domain=<host>` to restrict the graph to one outlet (or one Bluesky handle).
 
+`source` also accepts a comma-separated list (e.g. `source=gnews,rss,gkg`) on `graph`, `sources` and `docs`: it matches docs whose source is any of the listed values. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all`; a single token behaves exactly as before. `rising` and `timeline` still take a single `source` value.
+
 `GET /api/people/:id/sources?days=30&source=all` lists outlets that mention the person: `domain`, `source`, `docs`, `tone` (average GDELT tone, null when unknown), `tone_n`.
 
 Returns `{ person, stats, nodes, links, signature }`. Each node also carries `tone`: average GDELT tone of the docs where the term co-occurs with the person, null when no GDELT doc contributed. `pmi` is log2 of how much more often the term co-occurs with the person than chance, measured against every collected doc in the window.

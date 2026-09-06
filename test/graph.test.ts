@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
-import { graphFor, risingFor, sourcesFor, type GraphQuery, type RisingQuery } from '../src/graph.js'
+import { docsFor, graphFor, risingFor, sourcesFor, type GraphQuery, type RisingQuery } from '../src/graph.js'
 import { nameTokens } from '../src/extract.js'
+import { parseSourceList } from '../src/query.js'
 import { persons, seed } from './fixture.js'
 
 const base: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
@@ -15,17 +16,17 @@ describe('graphFor', () => {
   it('counts docs in the window and docs about the person', async () => {
     const g = await graphFor(lula, base)
     // days:30 also picks up docs /30-/36 (tarcisio gdelt/rss tone fixtures for issue #5; doc /37
-    // sits at day 35, just outside this window), none of which are about lula (about stays 4),
-    // but they do widen the person-agnostic scope (docs 6 -> 13)
-    assert.equal(g.stats.docs, 13)
-    assert.equal(g.stats.about, 4)
+    // sits at day 35, just outside this window) and doc /38 (gkg, about lula, issue #8's
+    // press-vs-network fixture), widening both the person-agnostic scope (docs 13 -> 14) and about (4 -> 5)
+    assert.equal(g.stats.docs, 14)
+    assert.equal(g.stats.about, 5)
   })
 
   it('widens with the window', async () => {
     // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const g = await graphFor(lula, { ...base, days: 365 })
-    assert.equal(g.stats.docs, 18)
-    assert.equal(g.stats.about, 8)
+    assert.equal(g.stats.docs, 19)
+    assert.equal(g.stats.about, 9)
   })
 
   it('never lists the person name as a term', async () => {
@@ -35,8 +36,8 @@ describe('graphFor', () => {
 
   it('computes pmi as log2 lift against the whole window', async () => {
     const g = await graphFor(lula, base)
-    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 13, 4))
-    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 13, 4))
+    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 14, 5))
+    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 14, 5))
     assert.equal(node(g, 'word:congresso'), undefined)
   })
 
@@ -86,7 +87,7 @@ describe('graphFor', () => {
 
   it('signature: top terms meet the count floor of max(3, 5% of about)', async () => {
     const g = await graphFor(lula, base)
-    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 13, 4) }])
+    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 14, 5) }])
   })
 
   it('signature: never lists the person name as a term', async () => {
@@ -108,9 +109,9 @@ describe('graphFor', () => {
   it('signature: orders by pmi desc, ties by term ascending', async () => {
     const g = await graphFor(lula, { ...base, days: 1000 })
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others;
-    // n is 24 (was 22), widened by docs /36-/37 (untoned and two-person docs for issue #5);
-    // neither doc names lula, so np stays 14
-    const tie = pmi(3, 3, 24, 14)
+    // n is 25 (was 24), widened by doc /38 (gkg, about lula, issue #8's press-vs-network fixture),
+    // which also names lula, so np is 15 (was 14)
+    const tie = pmi(3, 3, 25, 15)
     assert.deepEqual(g.signature, [
       { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
       { term: 'estabilidade', kind: 'word', count: 3, pmi: tie },
@@ -118,6 +119,61 @@ describe('graphFor', () => {
       { term: 'inflacao', kind: 'word', count: 3, pmi: tie },
       { term: 'reforma', kind: 'word', count: 3, pmi: tie },
     ])
+  })
+})
+
+describe('multi-source filtering (issue #8)', () => {
+  before(seed)
+
+  it('AC1: a comma-separated list counts only docs whose source is in the list', async () => {
+    const g = await graphFor(lula, { ...base, source: 'gnews,rss,gkg' })
+    // hand-counted from the fixture: within the default 30-day window, gnews has docs /1,/6
+    // (about lula) and /3 (not about lula); rss has /4 (not about lula), /7, /36 (about tarcisio);
+    // gkg has /38 (about lula) -> 7 docs in scope, 4 about lula (/1, /6, /7, /38)
+    assert.equal(g.stats.docs, 7)
+    assert.equal(g.stats.about, 4)
+  })
+
+  it('AC1: sourcesFor and docsFor agree with the same hand-counted scope', async () => {
+    const rows = await sourcesFor(lula, { ...base, source: 'gnews,rss,gkg' })
+    assert.equal(rows.reduce((acc, r) => acc + r.docs, 0), 4)
+    const { total } = await docsFor(lula, { term: '', kind: 'all', days: 30, source: 'gnews,rss,gkg', domain: 'all', limit: 50, offset: 0 })
+    assert.equal(total, 4)
+  })
+
+  it('AC2: an unknown token is silently dropped, same result as the valid token alone', async () => {
+    const withBogus = await graphFor(lula, { ...base, source: 'gnews,bogus' })
+    const gnewsOnly = await graphFor(lula, { ...base, source: 'gnews' })
+    assert.deepEqual(withBogus, gnewsOnly)
+  })
+
+  it('AC3: every token invalid normalizes (via parseSourceList) to "all"', async () => {
+    const normalized = await graphFor(lula, { ...base, source: parseSourceList('bogus1,bogus2') })
+    const all = await graphFor(lula, { ...base, source: 'all' })
+    assert.deepEqual(normalized, all)
+  })
+
+  it('AC4: an empty source normalizes (via parseSourceList) to "all"', async () => {
+    const normalized = await graphFor(lula, { ...base, source: parseSourceList('') })
+    const all = await graphFor(lula, { ...base, source: 'all' })
+    assert.deepEqual(normalized, all)
+  })
+
+  it('AC5: a single valid token behaves exactly like before this change', async () => {
+    const bs = await graphFor(lula, { ...base, source: 'bluesky' })
+    assert.equal(bs.stats.about, 1)
+  })
+
+  it('AC7: mixing a GDELT and a non-GDELT source yields tone only for terms carried by the gkg doc', async () => {
+    const g = await graphFor(lula, { ...base, source: 'gnews,rss,gkg' })
+    // "parceria" only appears in doc /38 (gkg, tone 0.6); "reforma" only appears in gnews/rss docs
+    assert.equal(g.nodes.find((n) => n.term === 'parceria')?.tone, 0.6)
+    assert.equal(g.nodes.find((n) => n.term === 'reforma')?.tone, null)
+  })
+
+  it('AC7: source without gkg never surfaces a tone', async () => {
+    const g = await graphFor(lula, { ...base, source: 'gnews,rss' })
+    assert.equal(g.nodes.find((n) => n.term === 'reforma')?.tone, null)
   })
 })
 
@@ -151,9 +207,17 @@ describe('risingFor', () => {
 
   it('AC2: sorts terms by lift desc, ties by term', async () => {
     const r = await risingFor(lula, risingBase)
+    // doc /38 (gkg, day1, issue #8's press-vs-network fixture) adds six single-mention terms
+    // ("assina", "estrangeira", "expandir", "parceria", "setor", "tecnologico") to the recent
+    // window, each tying by lift with the existing single-mention terms in its tier and
+    // interleaving alphabetically within that tier.
     assert.deepEqual(
       r.terms.map((t) => `${t.kind}:${t.term}`),
-      ['word:reforma', 'word:tributaria', 'word:anuncia', 'word:disputam', 'word:eleicao', 'hashtag:reforma', 'word:tarcisio', 'word:defende'],
+      [
+        'word:reforma', 'word:tributaria', 'word:anuncia', 'word:assina', 'word:disputam', 'word:eleicao',
+        'word:estrangeira', 'word:expandir', 'word:parceria', 'hashtag:reforma', 'word:setor', 'word:tarcisio',
+        'word:tecnologico', 'word:defende',
+      ],
     )
   })
 

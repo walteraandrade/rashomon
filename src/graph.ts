@@ -61,7 +61,7 @@ const scopeCte = `
   scope as (
     select d.id from docs d
     where d.published_at >= now() - make_interval(days => $2)
-      and ($3 = 'all' or d.source = $3)
+      and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
       and ($4 = 'all' or d.domain = $4)
   ),
   about as (

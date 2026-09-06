@@ -6,9 +6,19 @@ export const int = (v: string | undefined, d: number, lo: number, hi: number) =>
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
 }
 
+export const SOURCES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg']
+
+// Accepts a comma-separated list, drops unknown tokens silently, dedupes, and falls
+// back to 'all' when nothing valid survives — a superset of the old single-token check,
+// so a lone valid token behaves exactly as before.
+export const parseSourceList = (v: string | undefined): string => {
+  const tokens = [...new Set((v ?? '').split(',').filter((s) => SOURCES.includes(s)))]
+  return tokens.length ? tokens.join(',') : 'all'
+}
+
 export const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({
   days: int(q.days, 30, 1, 365),
-  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg'].includes(q.source ?? '') ? q.source! : 'all',
+  source: parseSourceList(q.source),
   domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   limit: int(q.limit, 40, 1, 200),
@@ -20,7 +30,7 @@ export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery
   term: normalize((q.term ?? '').trim()),
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   days: int(q.days, 30, 1, 365),
-  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg'].includes(q.source ?? '') ? q.source! : 'all',
+  source: parseSourceList(q.source),
   domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
   limit: int(q.limit, 50, 1, 200),
   offset: int(q.offset, 0, 0, 1_000_000),

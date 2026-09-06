@@ -11,8 +11,9 @@ describe('docsFor', () => {
 
   it('AC1,AC2: returns every doc about the person in the window, newest first, ties broken by id desc, when no term is given', async () => {
     const { total, docs } = await docsFor(lula, base)
-    assert.equal(total, 4)
-    assert.equal(docs.length, 4)
+    // widened by doc /38 (gkg, day1, issue #8's press-vs-network fixture)
+    assert.equal(total, 5)
+    assert.equal(docs.length, 5)
     for (let i = 1; i < docs.length; i++) {
       const prevTime = new Date(docs[i - 1].published_at).getTime()
       const curTime = new Date(docs[i].published_at).getTime()
@@ -34,8 +35,8 @@ describe('docsFor', () => {
   it('AC5: widens with the window', async () => {
     // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const { total, docs } = await docsFor(lula, { ...base, days: 365 })
-    assert.equal(total, 8)
-    assert.equal(docs.length, 8)
+    assert.equal(total, 9)
+    assert.equal(docs.length, 9)
   })
 
   it('AC6: filters by source', async () => {
@@ -62,8 +63,16 @@ describe('docsFor', () => {
   })
 
   it('AC9: never returns a tone for non-GDELT sources', async () => {
-    const { docs } = await docsFor(lula, base)
+    // doc /38 (gkg) now sits in this window with a real tone; scope this assertion to the
+    // non-GDELT sources it was actually checking, and cover the gkg case separately below.
+    const { docs } = await docsFor(lula, { ...base, source: 'gnews,rss,bluesky' })
     assert.ok(docs.every((d) => d.tone === null))
+  })
+
+  it('AC9: returns a tone for gkg docs', async () => {
+    const { docs } = await docsFor(lula, { ...base, source: 'gkg' })
+    assert.equal(docs.length, 1)
+    assert.equal(docs[0].tone, 0.6)
   })
 
   it('AC10: returns an empty result for a person without matching docs', async () => {
@@ -76,5 +85,17 @@ describe('docsFor', () => {
     const { total, docs } = await docsFor(lula, { ...base, days: 1 })
     assert.equal(total, 0)
     assert.deepEqual(docs, [])
+  })
+
+  it('issue #8: a comma-separated source list returns only docs whose source is in the list', async () => {
+    const { total, docs } = await docsFor(lula, { ...base, source: 'gnews,rss' })
+    assert.equal(total, 3)
+    assert.ok(docs.every((d) => d.source === 'gnews' || d.source === 'rss'))
+  })
+
+  it('issue #8: adding gkg to the list includes the gkg doc', async () => {
+    const { total, docs } = await docsFor(lula, { ...base, source: 'gnews,rss,gkg' })
+    assert.equal(total, 4)
+    assert.ok(docs.some((d) => d.source === 'gkg'))
   })
 })

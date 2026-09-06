@@ -476,6 +476,7 @@
     $('sources').style.display = !isTone ? '' : 'none'
     $('signature').style.display = !isTone && !splitMode ? '' : 'none'
     $('stats').style.display = !isTone && !splitMode ? '' : 'none'
+    // /timeline only accepts a single source and would silently answer with source=all in split mode, so hide it
     $('docTimeline').hidden = showSplit
   }
 
@@ -488,6 +489,7 @@
   }
 
   const setSplitMode = (on) => {
+    ++requestId
     splitMode = on
     updateVisibility()
     if (on) { closeTimelinePanel(); loadSplit() }
@@ -1042,7 +1044,7 @@
       st.loading = false
       st.graph = null
       st.error = e.message
-      renderSplitColumn(col)
+      recomputeSharedIds()
     }
   }
 

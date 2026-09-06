@@ -26,4 +26,9 @@ describe('parseSourceList', () => {
   it('every token invalid falls back to "all"', () => {
     assert.equal(parseSourceList('bogus1,bogus2'), 'all')
   })
+
+  it('trims whitespace around tokens', () => {
+    assert.equal(parseSourceList('gnews, rss'), 'gnews,rss')
+    assert.equal(parseSourceList(' gnews , rss '), 'gnews,rss')
+  })
 })

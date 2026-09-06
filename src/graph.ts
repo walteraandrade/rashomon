@@ -57,6 +57,8 @@ type TimelineRow = { bucket_start: Date; count: number }
 type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
 type ToneListRow = { id: string; name: string }
 
+// $3 must already be normalized by parseSourceList; unlike kind, an unknown or empty
+// source is not rescued here and would scope to zero docs.
 const scopeCte = `
   scope as (
     select d.id from docs d

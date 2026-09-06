@@ -83,9 +83,9 @@ describe('press vs network acceptance criteria (issue #8)', () => {
     assert.equal(parseSourceList('gnews,rss,gnews'), 'gnews,rss')
   })
 
-  it('AC6: matches the enum case-sensitively and applies no whitespace trimming beyond the comma split', () => {
+  it('AC6: matches the enum case-sensitively and trims whitespace around each token', () => {
     assert.equal(parseSourceList('GNEWS'), 'all', 'uppercase must not match the lowercase enum')
-    assert.equal(parseSourceList('gnews, rss'), 'gnews', '" rss" with a leading space is not the literal token "rss"')
+    assert.equal(parseSourceList('gnews, rss'), 'gnews,rss', '" rss" with a leading space still matches "rss" once trimmed')
   })
 
   it('AC7: mixing gkg with non-GDELT sources gives non-null tone only to terms carried by the gkg doc', async () => {

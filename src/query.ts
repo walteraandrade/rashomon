@@ -12,7 +12,7 @@ export const SOURCES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg']
 // back to 'all' when nothing valid survives — a superset of the old single-token check,
 // so a lone valid token behaves exactly as before.
 export const parseSourceList = (v: string | undefined): string => {
-  const tokens = [...new Set((v ?? '').split(',').filter((s) => SOURCES.includes(s)))]
+  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => SOURCES.includes(s)))]
   return tokens.length ? tokens.join(',') : 'all'
 }
 

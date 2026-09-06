@@ -13,6 +13,15 @@ export const meta = {
 const issue = args?.issue
 const slug = args?.slug
 if (!issue || !slug || !/^[a-z0-9-]{3,40}$/.test(slug)) throw new Error('pass args: { issue: <number>, slug: <kebab-case, max 40> }')
+
+// Custom agents in .claude/agents/ are registered when a session starts. In a session where they
+// are not available yet, pass their role texts via args.roles and the same pipeline runs on general-purpose agents.
+const MODEL = { validator: 'opus' }
+const roles = args?.roles ?? null
+const role = (name, prompt, opts = {}) =>
+  roles
+    ? agent(`You are acting as the "${name}" agent of the rashomon factory. Follow this role definition strictly:\n\n${roles[name]}\n\n---\n\n${prompt}`, { ...opts, agentType: 'general-purpose', model: MODEL[name] ?? 'sonnet' })
+    : agent(prompt, { ...opts, agentType: name })
 const branch = `feat/${slug}`
 const worktree = `../rashomon-${slug}`
 
@@ -57,10 +66,8 @@ const VERDICT = {
 }
 
 phase('Gate')
-const gate = await agent(
-  `Run \`gh issue view ${issue} --json title,labels,comments\`. Decide if the label spec-approved is present and a comment contains a spec (sections Goal, API, Acceptance criteria). Return the most recent spec comment verbatim.`,
-  { agentType: 'researcher', label: `gate #${issue}`, schema: GATE, effort: 'low' },
-)
+const gate = await role('researcher', `Run \`gh issue view ${issue} --json title,labels,comments\`. Decide if the label spec-approved is present and a comment contains a spec (sections Goal, API, Acceptance criteria). Return the most recent spec comment verbatim.`,
+  { label: `gate #${issue}`, schema: GATE, effort: 'low' })
 if (!gate?.approved) {
   log(`issue #${issue} is not approved: add the label spec-approved after reviewing the spec comment`)
   return { issue, status: 'blocked', reason: 'missing spec-approved label or spec comment' }
@@ -72,22 +79,18 @@ const specText = `Issue #${issue}: ${gate.title}\n\nApproved spec:\n${gate.spec}
 phase('Build')
 const apiReport = gate.hasApi === false
   ? 'no API work in this spec'
-  : await agent(`${where}\n\n${specText}\n\nImplement the API, SQL and store parts of the spec with tests. Leave public/ untouched.`, { agentType: 'builder-api', label: `api #${issue}` })
+  : await role('builder-api', `${where}\n\n${specText}\n\nImplement the API, SQL and store parts of the spec with tests. Leave public/ untouched.`, { label: `api #${issue}` })
 const uiReport = gate.hasUi === false
   ? 'no UI work in this spec'
-  : await agent(`${where}\n\n${specText}\n\nAPI builder report:\n${apiReport}\n\nImplement the UI part of the spec and verify it in a browser. Leave src/ and test/ untouched.`, { agentType: 'builder-ui', label: `ui #${issue}` })
+  : await role('builder-ui', `${where}\n\n${specText}\n\nAPI builder report:\n${apiReport}\n\nImplement the UI part of the spec and verify it in a browser. Leave src/ and test/ untouched.`, { label: `ui #${issue}` })
 
 let tests = null
 let verdict = null
 for (let round = 1; round <= 2; round++) {
-  tests = await agent(
-    `${where}\n\n${specText}\n\nWrite acceptance tests from the spec's criteria, run pnpm test, commit them, and report.`,
-    { agentType: 'test-verifier', label: `tests #${issue} r${round}`, phase: 'Verify', schema: TESTS },
-  )
-  verdict = await agent(
-    `${where}\n\n${specText}\n\nBuilder reports:\n${apiReport}\n\n${uiReport}\n\nTest verifier report (${tests?.failures ?? '?'} failing):\n${tests?.table ?? 'none'}\n\nJudge the branch against the spec and CLAUDE.md.`,
-    { agentType: 'validator', label: `validate #${issue} r${round}`, phase: 'Verify', schema: VERDICT },
-  )
+  tests = await role('test-verifier', `${where}\n\n${specText}\n\nWrite acceptance tests from the spec's criteria, run pnpm test, commit them, and report.`,
+    { label: `tests #${issue} r${round}`, phase: 'Verify', schema: TESTS })
+  verdict = await role('validator', `${where}\n\n${specText}\n\nBuilder reports:\n${apiReport}\n\n${uiReport}\n\nTest verifier report (${tests?.failures ?? '?'} failing):\n${tests?.table ?? 'none'}\n\nJudge the branch against the spec and CLAUDE.md.`,
+    { label: `validate #${issue} r${round}`, phase: 'Verify', schema: VERDICT })
   const blocking = (verdict?.gaps ?? []).filter((g) => g.severity !== 'nit')
   if (verdict?.verdict === 'approve' && (tests?.failures ?? 1) === 0) break
   if (round === 2) break
@@ -95,8 +98,8 @@ for (let round = 1; round <= 2; round++) {
   const failing = tests?.failures ? `\nFailing acceptance tests:\n${tests.table}` : ''
   const uiGaps = blocking.some((g) => g.area === 'ui')
   const apiGaps = blocking.some((g) => g.area !== 'ui') || (tests?.failures ?? 0) > 0
-  if (apiGaps) await agent(`${where}\n\n${specText}\n\nFix these gaps, keep tests green:\n${gapsText}${failing}`, { agentType: 'builder-api', label: `fix api #${issue}`, phase: 'Verify' })
-  if (uiGaps) await agent(`${where}\n\n${specText}\n\nFix these UI gaps and re-verify in the browser:\n${gapsText}`, { agentType: 'builder-ui', label: `fix ui #${issue}`, phase: 'Verify' })
+  if (apiGaps) await role('builder-api', `${where}\n\n${specText}\n\nFix these gaps, keep tests green:\n${gapsText}${failing}`, { label: `fix api #${issue}`, phase: 'Verify' })
+  if (uiGaps) await role('builder-ui', `${where}\n\n${specText}\n\nFix these UI gaps and re-verify in the browser:\n${gapsText}`, { label: `fix ui #${issue}`, phase: 'Verify' })
 }
 
 const approved = verdict?.verdict === 'approve' && (tests?.failures ?? 1) === 0
@@ -106,8 +109,6 @@ if (!approved) {
 }
 
 phase('Release')
-const pr = await agent(
-  `${where}\n\nPush ${branch} and open a pull request against master that closes #${issue}. Title: ${gate.title}. Include in the body: what changed, the test verifier table, the validator verdict, screenshot paths from the UI report.\n\nTest table:\n${tests.table}\n\nValidator: approve with ${verdict.gaps.length} nits.\n\nUI report:\n${uiReport}`,
-  { agentType: 'release', label: `pr #${issue}`, effort: 'low' },
-)
+const pr = await role('release', `${where}\n\nPush ${branch} and open a pull request against master that closes #${issue}. Title: ${gate.title}. Include in the body: what changed, the test verifier table, the validator verdict, screenshot paths from the UI report.\n\nTest table:\n${tests.table}\n\nValidator: approve with ${verdict.gaps.length} nits.\n\nUI report:\n${uiReport}`,
+  { label: `pr #${issue}`, effort: 'low' })
 return { issue, branch, worktree, status: 'pr-opened', pr }

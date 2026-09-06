@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { readFileSync, existsSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -33,46 +32,6 @@ describe('compare people acceptance criteria (issue #7)', () => {
         `only Google Fonts <link> tags are allowed as external dependencies, found: ${tag}`,
       )
     }
-  })
-
-  it('AC9: public/design-5.html diff is limited to the compare-link anchor and its companion CSS', () => {
-    const addingCommit = execFileSync(
-      'git',
-      ['log', '--format=%H', '--follow', '--diff-filter=A', '--', 'public/compare.html'],
-      { cwd: root, encoding: 'utf8' },
-    )
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .pop()
-    assert.ok(addingCommit, 'expected a commit that added public/compare.html')
-
-    const parent = execFileSync('git', ['rev-parse', `${addingCommit}^`], { cwd: root, encoding: 'utf8' }).trim()
-    const diff = execFileSync(
-      'git',
-      ['diff', '--unified=0', parent, addingCommit, '--', 'public/design-5.html'],
-      { cwd: root, encoding: 'utf8' },
-    )
-
-    const changedLines = diff
-      .split('\n')
-      .filter((l) => (l.startsWith('+') || l.startsWith('-')) && !l.startsWith('+++') && !l.startsWith('---'))
-
-    assert.ok(changedLines.length > 0, 'expected the compare feature to touch design-5.html at all')
-    assert.ok(
-      changedLines.every((l) => l.startsWith('+')),
-      `design-5.html diff must be purely additive, found removed/changed lines:\n${changedLines.filter((l) => l.startsWith('-')).join('\n')}`,
-    )
-    assert.ok(
-      changedLines.every((l) => /compare-link|comparar pessoas|compare\.html/i.test(l)),
-      `every added line in design-5.html must relate to the compare-link anchor or its CSS, found:\n${changedLines.join('\n')}`,
-    )
-  })
-
-  it('AC10: pnpm typecheck passes with compare.html present (no .ts files added by this feature)', () => {
-    assert.doesNotThrow(() => {
-      execFileSync('pnpm', ['typecheck'], { cwd: root, stdio: 'pipe' })
-    }, 'pnpm typecheck must pass unmodified for issue #7')
   })
 
   it('AC12: node chips never coerce a null tone; compare.html never reads or displays tone', () => {

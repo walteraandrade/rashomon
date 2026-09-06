@@ -412,6 +412,8 @@
     $('toolbar').style.display = isTone ? 'none' : ''
     $('graph').style.display = isTone ? 'none' : ''
     $('sources').style.display = isTone ? 'none' : ''
+    $('signature').style.display = isTone ? 'none' : ''
+    $('stats').style.display = isTone ? 'none' : ''
     $('toneView').style.display = isTone ? 'block' : 'none'
     if (isTone) loadTone()
   }
@@ -482,7 +484,7 @@
         tip.style.display = 'block'
         const box = tip.parentElement.getBoundingClientRect()
         tip.style.left = e.clientX - box.left + 14 + 'px'; tip.style.top = e.clientY - box.top + 14 + 'px'
-        tip.innerHTML = `<b>${el.dataset.person}</b><div class="row muted">${escapeHtml(el.dataset.domain)}</div>` +
+        tip.innerHTML = `<b>${escapeHtml(el.dataset.person)}</b><div class="row muted">${escapeHtml(el.dataset.domain)}</div>` +
           `<div class="row muted">tom <b class="num">${el.dataset.tone}</b> &nbsp; <b class="num">${el.dataset.n}</b> docs</div>`
       })
       el.addEventListener('mouseleave', () => { tip.style.display = 'none' })

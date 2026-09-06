@@ -14,16 +14,17 @@ describe('graphFor', () => {
 
   it('counts docs in the window and docs about the person', async () => {
     const g = await graphFor(lula, base)
-    // days:30 also picks up docs /30-/35 (tarcisio, gdelt tone fixtures for issue #5), which
-    // are not about lula (about stays 4) but do widen the person-agnostic scope (docs 6 -> 12)
-    assert.equal(g.stats.docs, 12)
+    // days:30 also picks up docs /30-/36 (tarcisio gdelt/rss tone fixtures for issue #5; doc /37
+    // sits at day 35, just outside this window), none of which are about lula (about stays 4),
+    // but they do widen the person-agnostic scope (docs 6 -> 13)
+    assert.equal(g.stats.docs, 13)
     assert.equal(g.stats.about, 4)
   })
 
   it('widens with the window', async () => {
     // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const g = await graphFor(lula, { ...base, days: 365 })
-    assert.equal(g.stats.docs, 16)
+    assert.equal(g.stats.docs, 18)
     assert.equal(g.stats.about, 8)
   })
 
@@ -34,8 +35,8 @@ describe('graphFor', () => {
 
   it('computes pmi as log2 lift against the whole window', async () => {
     const g = await graphFor(lula, base)
-    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 12, 4))
-    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 12, 4))
+    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 13, 4))
+    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 13, 4))
     assert.equal(node(g, 'word:congresso'), undefined)
   })
 
@@ -85,7 +86,7 @@ describe('graphFor', () => {
 
   it('signature: top terms meet the count floor of max(3, 5% of about)', async () => {
     const g = await graphFor(lula, base)
-    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 12, 4) }])
+    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 13, 4) }])
   })
 
   it('signature: never lists the person name as a term', async () => {
@@ -107,8 +108,9 @@ describe('graphFor', () => {
   it('signature: orders by pmi desc, ties by term ascending', async () => {
     const g = await graphFor(lula, { ...base, days: 1000 })
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others;
-    // n is 22 (was 16), widened by docs /30-/35 (tarcisio tone fixtures for issue #5)
-    const tie = pmi(3, 3, 22, 14)
+    // n is 24 (was 22), widened by docs /36-/37 (untoned and two-person docs for issue #5);
+    // neither doc names lula, so np stays 14
+    const tie = pmi(3, 3, 24, 14)
     assert.deepEqual(g.signature, [
       { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
       { term: 'estabilidade', kind: 'word', count: 3, pmi: tie },

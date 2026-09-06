@@ -78,6 +78,20 @@ export const docs: RawDoc[] = [
   // doc 35: gdelt doc about Tarcísio with no domain — must never surface as a null/empty
   // entry in /api/tone's domains list, even though it carries a tone.
   { source: 'gdelt', uri: 'https://example.org/35', text: 'Tarcísio comenta infraestrutura portuária em evento fechado', publishedAt: daysAgo(11), tone: -3 },
+  // doc 36: untoned rss doc, same domain/person/window as docs 30-32, proving toneSql's
+  // count(d.tone)/avg(d.tone) truly skip null tone instead of a count(*)/coalesce rewrite that
+  // would silently inflate the estadao.com.br cell to n=4. Words distinct from every other
+  // fixture doc so it cannot shift any pinned term-level pmi/count/tone assertion.
+  { source: 'rss', uri: 'https://estadao.com.br/36', text: 'Tarcísio recebe embaixadores em cerimônia diplomática', publishedAt: daysAgo(7), domain: 'estadao.com.br' },
+  // doc 37: single gdelt doc naming both Tarcísio and Bolsonaro, toned — the "doc mentioning
+  // two tracked persons contributes to both persons' groups" edge case from the spec.
+  // Deliberately: (a) avoids Lula, kept at zero toned docs anywhere for the existing "person
+  // without toned docs" fixture; (b) sits at day 35, just outside the default 30-day window, so
+  // bolsonaro's "zero docs in the default window" timeline fixture (all other bolsonaro docs are
+  // 2100+ days old) stays intact; (c) avoids "golpe", bolsonaro's pinned timeline term. It still
+  // falls inside the wider 365/1000/2000-day windows, so pinned pmi/stats literals for lula at
+  // those windows were recomputed (n.total only — the doc names neither lula nor a lula term).
+  { source: 'gdelt', uri: 'https://poder360.com.br/37', text: 'Tarcísio e Bolsonaro debatem aliança para o pleito em reunião reservada', publishedAt: daysAgo(35), domain: 'poder360.com.br', tone: 0.4 },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

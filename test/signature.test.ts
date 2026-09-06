@@ -14,7 +14,7 @@ describe('signature (issue #6)', () => {
 
   it('AC1: default 30-day scope for lula yields exactly the reforma signature', async () => {
     const g = await graphFor(lula, base)
-    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 12, 4) }])
+    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 13, 4) }])
   })
 
   it('AC2: signature never contains one of the person own name tokens', async () => {
@@ -36,8 +36,9 @@ describe('signature (issue #6)', () => {
     assert.ok(g.signature.length <= 5)
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each) and, incidentally, a 3rd "defende"
     // (docs /6, /15 and /17 all use it), widening the tie set from 6 to 9 candidate terms; n is
-    // 25 (was 19), widened by docs /30-/35 (tarcisio tone fixtures for issue #5)
-    const expectedPmi = pmi(3, 3, 25, 17)
+    // 27 (was 25), widened by docs /36-/37 (untoned and two-person docs for issue #5); neither
+    // doc names lula, so np stays 17
+    const expectedPmi = pmi(3, 3, 27, 17)
     assert.deepEqual(g.signature, [
       { term: 'defende', kind: 'word', count: 3, pmi: expectedPmi },
       { term: 'desemprego', kind: 'word', count: 3, pmi: expectedPmi },
@@ -60,8 +61,9 @@ describe('signature (issue #6)', () => {
   it('AC6: signature orders by pmi desc, ties broken by term ascending', async () => {
     const g = await graphFor(lula, { ...base, days: 1000 })
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others;
-    // n is 22 (was 16), widened by docs /30-/35 (tarcisio tone fixtures for issue #5)
-    const tie = pmi(3, 3, 22, 14)
+    // n is 24 (was 22), widened by docs /36-/37 (untoned and two-person docs for issue #5);
+    // neither doc names lula, so np stays 14
+    const tie = pmi(3, 3, 24, 14)
     assert.deepEqual(g.signature, [
       { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
       { term: 'estabilidade', kind: 'word', count: 3, pmi: tie },

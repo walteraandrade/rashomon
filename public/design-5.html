@@ -144,6 +144,34 @@
   }
   #empty code { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--fg); }
 
+  /* ---------- split view: imprensa x rede ---------- */
+  #segSource.seg-disabled { opacity: .4; pointer-events: none; }
+  #splitView {
+    display: none; grid-column: 2 / -1; grid-template-columns: 1fr 1fr;
+    gap: 1px; background: var(--line); overflow: hidden;
+  }
+  .split-col { background: var(--bg); display: flex; flex-direction: column; min-width: 0; overflow-y: auto; }
+  .split-col-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 14px 10px;
+    position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line); z-index: 1;
+  }
+  .split-col-title { font: 600 10.5px Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-dim); flex-shrink: 0; }
+  .split-col-stats { color: var(--muted); font-size: 11px; line-height: 1.35; text-align: right; }
+  .split-col-stats b { color: var(--fg); font-weight: 600; }
+  .split-row {
+    display: grid; grid-template-columns: 10px auto 1fr auto auto; align-items: center; gap: 8px;
+    padding: 7px 14px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.03);
+  }
+  .split-row:hover { background: rgba(255,255,255,.03); }
+  .split-shared { width: 6px; height: 6px; border-radius: 50%; background: var(--person); box-shadow: 0 0 4px rgba(255,211,92,.8); }
+  .split-row .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .split-row .term { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .split-row .count { color: var(--muted); font-size: 11.5px; }
+  .split-row .tonechip { width: 32px; text-align: center; border-radius: 5px; padding: 2px 0; font-size: 10.5px; }
+  .split-row .tonechip:empty { visibility: hidden; }
+  .split-msg { padding: 24px 16px; color: var(--muted); font-size: 12.5px; text-align: center; }
+  .split-msg code { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--fg); }
+
   /* ---------- tone by outlet ---------- */
   #toneView { grid-column: 1 / -1; overflow: auto; padding: 22px 26px; background: var(--bg); }
   .tone-controls { display: flex; gap: 26px; align-items: flex-end; margin-bottom: 12px; }
@@ -242,6 +270,8 @@
     aside#docPanel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 60vh; border-left: 0; border-top: 1px solid var(--line-strong); transform: translateY(100%); }
     aside#docPanel.open { transform: translateY(0); }
     #timelinePanel.doc-open { position: fixed; left: 16px; right: 16px; bottom: calc(60vh + 10px); z-index: 21; }
+    #splitView { grid-template-columns: 1fr; grid-column: 1; }
+    .split-col { max-height: 50vh; }
   }
 </style>
 </head>
@@ -264,6 +294,9 @@
     <div class="group">
       <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 5.2 8 2l6 3.2v5.6L8 14 2 10.8Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 5.2 8 8.4l6-3.2M8 8.4v5.6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>fonte</div>
       <div class="seg cols2" id="segSource"></div>
+    </div>
+    <div class="group">
+      <label class="switchrow"><input type="checkbox" id="splitMode"><span class="switch-track"></span><span class="switch-txt">imprensa × rede</span></label>
     </div>
     <div class="group">
       <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 8.4 8.4 2h3.4a2 2 0 0 1 2 2v3.4L7.6 14a1.4 1.4 0 0 1-2 0L2 10.4a1.4 1.4 0 0 1 0-2Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="11" cy="5" r="1" fill="currentColor"/></svg>tipo</div>
@@ -305,6 +338,22 @@
       </div>
       <div id="tlBody"></div>
     </section>
+  </div>
+  <div id="splitView">
+    <div class="split-col" data-col="press">
+      <div class="split-col-head">
+        <span class="split-col-title">imprensa</span>
+        <span class="split-col-stats"></span>
+      </div>
+      <div class="split-col-body"></div>
+    </div>
+    <div class="split-col" data-col="network">
+      <div class="split-col-head">
+        <span class="split-col-title">rede</span>
+        <span class="split-col-stats"></span>
+      </div>
+      <div class="split-col-body"></div>
+    </div>
   </div>
   <aside id="sources">
     <h2>fontes <span id="domainlabel"></span></h2>
@@ -361,6 +410,18 @@
   let refreshTimelineChart = () => {}
   let risingIds = new Set()
 
+  // ---------- split mode: imprensa x rede ----------
+  let splitMode = false
+  let sharedSplitIds = new Set()
+  const SPLIT_COLUMNS = [
+    { id: 'press', label: 'imprensa', source: 'gnews,rss,gkg' },
+    { id: 'network', label: 'rede', source: 'bluesky' },
+  ]
+  const splitState = {
+    press: { requestId: 0, loading: false, error: null, graph: null },
+    network: { requestId: 0, loading: false, error: null, graph: null },
+  }
+
   const svg = d3.select('#chart')
   const root = svg.append('g').attr('class', 'root')
   const layerRingsDeco = root.append('g')
@@ -403,19 +464,33 @@
   refreshSegActive()
 
   // ---------- view switch (atlas vs tom por veículo) ----------
+  const updateVisibility = () => {
+    const isTone = state.view === 'tone'
+    document.querySelector('.person-pick').style.display = isTone ? 'none' : ''
+    $('toolbar').style.display = isTone ? 'none' : ''
+    $('toneView').style.display = isTone ? 'block' : 'none'
+    $('segSource').classList.toggle('seg-disabled', splitMode)
+    const showSplit = !isTone && splitMode
+    $('graph').style.display = !isTone && !splitMode ? '' : 'none'
+    $('splitView').style.display = showSplit ? 'grid' : 'none'
+    $('sources').style.display = !isTone && !splitMode ? '' : 'none'
+    $('signature').style.display = !isTone && !splitMode ? '' : 'none'
+    $('stats').style.display = !isTone && !splitMode ? '' : 'none'
+  }
+
   const setView = (view) => {
     state.view = view
     paintSeg('segView', view)
-    const isTone = view === 'tone'
-    if (isTone) closeDocPanel()
-    document.querySelector('.person-pick').style.display = isTone ? 'none' : ''
-    $('toolbar').style.display = isTone ? 'none' : ''
-    $('graph').style.display = isTone ? 'none' : ''
-    $('sources').style.display = isTone ? 'none' : ''
-    $('signature').style.display = isTone ? 'none' : ''
-    $('stats').style.display = isTone ? 'none' : ''
-    $('toneView').style.display = isTone ? 'block' : 'none'
-    if (isTone) loadTone()
+    if (view === 'tone') closeDocPanel()
+    updateVisibility()
+    if (view === 'tone') loadTone()
+  }
+
+  const setSplitMode = (on) => {
+    splitMode = on
+    updateVisibility()
+    if (on) loadSplit()
+    else load()
   }
 
   const buildViewSeg = () => {
@@ -425,6 +500,8 @@
     paintSeg('segView', state.view)
   }
   buildViewSeg()
+
+  $('splitMode').addEventListener('change', () => setSplitMode($('splitMode').checked))
 
   // ---------- steppers ----------
   const buildStepper = (id, key, min, max, step) => {
@@ -568,8 +645,9 @@
   })
 
   // ---------- fetch / load ----------
-  const query = () => new URLSearchParams({
-    days: state.days, source: state.source, kind: state.kind, sort: state.sort,
+  const query = () => queryFor(state.source)
+  const queryFor = (source) => new URLSearchParams({
+    days: state.days, source, kind: state.kind, sort: state.sort,
     limit: state.limit, min: state.min, domain: state.domain,
   })
 
@@ -577,6 +655,7 @@
     if (!state.person) return
     closeDocPanel()
     closeTimelinePanel()
+    if (splitMode) { loadSplit(); return }
     const id = ++requestId
     try {
       const res = await fetch(`/api/people/${state.person}/graph?` + query())
@@ -788,7 +867,7 @@
   }
 
   // ---------- doc panel ----------
-  const docPanel = { term: '', kind: 'all', offset: 0, limit: 50, total: 0, docs: [] }
+  const docPanel = { term: '', kind: 'all', source: 'all', offset: 0, limit: 50, total: 0, docs: [] }
   const dp = $('docPanel')
   const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
   const fmtDocDate = (iso) => {
@@ -844,7 +923,7 @@
     const { term, kind } = docPanel
     try {
       const params = new URLSearchParams({
-        term: docPanel.term, kind: docPanel.kind, days: state.days, source: state.source,
+        term: docPanel.term, kind: docPanel.kind, days: state.days, source: docPanel.source,
         domain: state.domain, limit: docPanel.limit, offset: docPanel.offset,
       })
       const res = await fetch(`/api/people/${state.person}/docs?` + params)
@@ -860,9 +939,10 @@
     }
   }
 
-  const openDocPanel = (n) => {
+  const openDocPanel = (n, source = state.source) => {
     docPanel.term = n.term
     docPanel.kind = n.kind
+    docPanel.source = source
     docPanel.offset = 0
     docPanel.docs = []
     docPanel.total = 0
@@ -884,6 +964,83 @@
   $('docClose').addEventListener('click', closeDocPanel)
   $('docMore').addEventListener('click', () => { docPanel.offset += docPanel.limit; loadDocs(true) })
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dp.classList.contains('open')) closeDocPanel() })
+
+  // ---------- split view: imprensa x rede ----------
+  const splitColEl = (col) => document.querySelector(`.split-col[data-col="${col.id}"]`)
+
+  const recomputeSharedIds = () => {
+    const [a, b] = SPLIT_COLUMNS.map((c) => splitState[c.id].graph)
+    sharedSplitIds = a && b
+      ? new Set(a.nodes.map((n) => n.id).filter((id) => b.nodes.some((n) => n.id === id)))
+      : new Set()
+    SPLIT_COLUMNS.forEach(renderSplitColumn)
+  }
+
+  const renderSplitColumn = (col) => {
+    const st = splitState[col.id]
+    const el = splitColEl(col)
+    const statsEl = el.querySelector('.split-col-stats')
+    const bodyEl = el.querySelector('.split-col-body')
+    if (st.loading) {
+      statsEl.innerHTML = ''
+      bodyEl.innerHTML = '<div class="split-msg">carregando…</div>'
+      return
+    }
+    if (st.error) {
+      statsEl.innerHTML = ''
+      bodyEl.innerHTML = `<div class="split-msg">erro: ${escapeHtml(st.error)}</div>`
+      return
+    }
+    const g = st.graph
+    if (!g) { statsEl.innerHTML = ''; bodyEl.innerHTML = '' ; return }
+    statsEl.innerHTML = `<b>${g.stats.about}</b> docs sobre <b>${escapeHtml(g.person.name)}</b> de <b>${g.stats.docs}</b> na janela`
+    if (g.nodes.length === 0) {
+      bodyEl.innerHTML = '<div class="split-msg">nada nessa janela.<br>roda <code>pnpm ingest</code></div>'
+      return
+    }
+    bodyEl.innerHTML = g.nodes.map((n) => `
+      <div class="split-row" data-id="${escapeHtml(n.id)}">
+        ${sharedSplitIds.has(n.id) ? `<span class="split-shared" title="também aparece do outro lado"></span>` : '<span></span>'}
+        <span class="dot" style="background:${kindColorHex[n.kind]}"></span>
+        <span class="term">${escapeHtml(n.kind === 'hashtag' ? '#' + n.term : n.term)}</span>
+        <span class="count num">${n.count}</span>
+        <span class="tonechip num" style="${n.tone === null || n.tone === undefined ? '' : `background:${toneColor(n.tone)}`}">${n.tone === null || n.tone === undefined ? '' : n.tone}</span>
+      </div>`).join('')
+    bodyEl.querySelectorAll('.split-row').forEach((rowEl) => {
+      rowEl.addEventListener('click', () => {
+        const n = g.nodes.find((x) => x.id === rowEl.dataset.id)
+        if (n) openDocPanel(n, col.source)
+      })
+    })
+  }
+
+  const loadSplitColumn = async (col) => {
+    const st = splitState[col.id]
+    const id = ++st.requestId
+    st.loading = true
+    st.error = null
+    renderSplitColumn(col)
+    try {
+      const res = await fetch(`/api/people/${state.person}/graph?` + queryFor(col.source))
+      if (!res.ok) throw new Error('falha ao carregar')
+      const g = await res.json()
+      if (id !== st.requestId) return
+      st.loading = false
+      st.graph = g
+      recomputeSharedIds()
+    } catch (e) {
+      if (id !== st.requestId) return
+      st.loading = false
+      st.graph = null
+      st.error = e.message
+      renderSplitColumn(col)
+    }
+  }
+
+  const loadSplit = () => {
+    if (!state.person) return
+    SPLIT_COLUMNS.forEach(loadSplitColumn)
+  }
 
   // ---------- timeline: sparkline (hover tooltip) ----------
   const timelineCache = new Map()

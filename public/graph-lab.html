@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
+<title>rashomon · laboratório de grafos</title>
+<style>
+:root { --bg:#111412; --panel:#181c19; --line:#303830; --ink:#edf0e9; --muted:#a3ada2; --accent:#e2c47c; --soft:#272a20; --green:#b1c6af; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 Inter,system-ui,sans-serif; }
+button,input,select { font:inherit; color:inherit; }
+button,a,select { -webkit-tap-highlight-color:transparent; }
+button { cursor:pointer; }
+button:disabled { cursor:wait; opacity:.5; }
+a { color:var(--accent); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+[hidden] { display:none !important; }
+.top { display:flex; align-items:center; gap:18px; padding:18px 3.5%; border-bottom:1px solid var(--line); }
+.brand { font-weight:800; font-size:23px; letter-spacing:-1px; color:var(--ink); text-decoration:none; }
+.eyebrow { color:var(--muted); text-transform:uppercase; letter-spacing:.15em; font-size:10px; font-weight:600; }
+.top a:last-child { margin-left:auto; font-size:12px; text-decoration:none; }
+.lab-tag { border-left:1px solid var(--line); padding-left:18px; }
+main { max-width:1600px; margin:auto; padding:32px 3.5% 24px; }
+.intro { display:flex; justify-content:space-between; align-items:end; gap:24px; margin-bottom:28px; }
+h1 { font-size:clamp(30px,3.2vw,48px); line-height:1.12; font-weight:500; letter-spacing:-.045em; margin:8px 0 12px; }
+p { margin:0; color:var(--muted); }
+.intro p { max-width:650px; }
+.stamp { color:var(--accent); white-space:nowrap; font-size:12px; }
+.choices { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin-bottom:24px; }
+.choice { background:none; border:0; text-align:left; padding:19px 22px; position:relative; color:var(--muted); }
+.choice + .choice { border-left:1px solid var(--line); }
+.choice:first-child { padding-left:0; }
+.choice[aria-pressed="true"] { color:var(--ink); }
+.choice[aria-pressed="true"]::after { content:''; position:absolute; bottom:-1px; height:3px; background:var(--accent); left:0; right:0; }
+.choice-top { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+.choice .number { color:var(--accent); font:12px ui-monospace,monospace; }
+.choice strong { font-weight:500; font-size:18px; letter-spacing:-.025em; }
+.choice small { font-size:12px; }
+.recommended { font-size:9px; border:1px solid #665b3d; border-radius:3px; padding:2px 5px; color:var(--accent); margin-left:auto; }
+.controls { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin-bottom:22px; }
+.controls label { display:grid; gap:5px; font-size:10px; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); }
+select,input { background:var(--panel); border:1px solid var(--line); border-radius:5px; min-height:38px; padding:7px 10px; max-width:230px; font-size:12px; letter-spacing:normal; text-transform:none; }
+.search { margin-left:auto; }
+.search input { width:190px; }
+.status { margin:0 0 14px; font-size:12px; color:var(--accent); }
+.workspace { display:grid; grid-template-columns:minmax(0,1fr) 270px; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.canvas { min-width:0; }
+.canvas-head { display:flex; justify-content:space-between; gap:15px; padding:21px 24px 10px; }
+h2 { font-weight:500; font-size:17px; margin:0 0 4px; letter-spacing:-.025em; }
+.canvas-head p { font-size:12px; max-width:650px; }
+.quiet-button { align-self:start; border:1px solid var(--line); background:none; padding:5px 9px; border-radius:4px; color:var(--muted); font-size:11px; white-space:nowrap; }
+.viewport { overflow:auto; padding:0 12px; min-height:510px; }
+.graph-svg { width:100%; min-width:760px; display:block; }
+.graph-svg text { font-family:Inter,system-ui,sans-serif; }
+.term { cursor:pointer; }
+.term .hit { fill:var(--panel); stroke:var(--line); }
+.term:hover .hit,.term:focus-visible .hit { stroke:var(--accent); }
+.term.selected .hit { fill:var(--soft); stroke:var(--accent); }
+.term.dim { opacity:.32; }
+.term .name { fill:var(--ink); font-size:14px; }
+.term .value,.rank { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+.term.selected .name { fill:var(--accent); }
+.edge { fill:none; stroke:var(--accent); stroke-linecap:round; opacity:.48; pointer-events:none; }
+.guide { fill:none; stroke:var(--line); stroke-dasharray:3 7; }
+.caption { fill:var(--muted); font-size:10px; letter-spacing:1.3px; }
+.legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; padding:14px 24px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
+.legend i { display:inline-block; width:20px; height:2px; vertical-align:middle; margin-right:7px; background:var(--accent); }
+.legend .dot { width:8px; height:8px; border-radius:50%; background:var(--green); }
+.inspector { padding:23px 22px; border-left:1px solid var(--line); background:var(--panel); min-width:0; }
+.inspector h3 { font-size:26px; font-weight:500; line-height:1.15; letter-spacing:-.035em; margin:12px 0 20px; overflow-wrap:anywhere; }
+.metric { display:flex; gap:25px; border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:20px; }
+.metric strong { display:block; font-size:25px; font-weight:500; font-variant-numeric:tabular-nums; }
+.metric span { display:block; font-size:11px; color:var(--muted); }
+.inspector p { font-size:12px; margin-bottom:16px; }
+.related { margin:10px 0 20px; }
+.related button { width:100%; border:0; border-bottom:1px solid var(--line); background:none; display:flex; align-items:center; gap:12px; text-align:left; padding:10px 0; font-size:12px; }
+.related button:hover { color:var(--accent); }
+.related span { flex:1; overflow-wrap:anywhere; }
+.related b { font-weight:400; color:var(--accent); font-variant-numeric:tabular-nums; }
+.primary { width:100%; padding:10px; background:var(--accent); color:#22251d; font-size:12px; font-weight:600; border:0; border-radius:4px; }
+.doc { border-top:1px solid var(--line); padding:12px 0; }
+.doc p { margin:6px 0; }
+.doc a { font-size:12px; }
+.method { display:grid; grid-template-columns:1fr 1fr 1fr; gap:36px; padding-top:23px; }
+.method p { font-size:12px; margin-top:6px; }
+.method strong { font-size:12px; font-weight:500; color:var(--ink); }
+.footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; color:var(--muted); font-size:10px; border-top:1px solid var(--line); margin-top:24px; padding-top:16px; }
+.empty { padding:140px 30px; text-align:center; color:var(--muted); }
+.matrix { border-collapse:separate; border-spacing:3px; margin:18px auto 28px; font-variant-numeric:tabular-nums; }
+.matrix th { color:var(--muted); font-size:11px; font-weight:400; }
+.matrix thead th { height:120px; vertical-align:bottom; padding-bottom:12px; }
+.matrix thead span { writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; max-height:180px; overflow:hidden; }
+.matrix tbody th { text-align:right; padding-right:12px; max-width:180px; }
+.matrix th button { color:inherit; background:none; border:0; font-size:12px; white-space:nowrap; max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+.matrix td { padding:0; }
+.matrix td button,.matrix td .diagonal { width:33px; height:33px; display:grid; place-items:center; border:1px solid transparent; border-radius:3px; font-size:10px; padding:0; }
+.matrix td button:hover,.matrix td button:focus-visible { border-color:var(--accent); }
+.matrix .active th { color:var(--accent); }
+.matrix .diagonal { background:#222822; color:var(--muted); }
+.matrix-scale { display:inline-block; width:70px; height:7px; background:linear-gradient(90deg,#252d26,#cfb575); vertical-align:middle; margin:0 6px; }
+@media(min-width:1400px) { .viewport { min-height:550px; } }
+@media(max-width:1100px) { .workspace { grid-template-columns:minmax(0,1fr) 235px; } .inspector { padding:22px 16px; } .recommended { display:none; } }
+@media(max-width:950px) { .workspace { grid-template-columns:1fr; } .inspector { border-left:0; border-top:1px solid var(--line); } .related { display:grid; grid-template-columns:1fr 1fr; gap:0 25px; } .inspector .primary { width:auto; min-width:200px; } .viewport { min-height:0; } }
+@media(max-width:600px) { main { padding:24px 16px; } .top { padding:14px 16px; } .top a:last-child { font-size:10px; } .lab-tag { font-size:8px; padding-left:12px; } .intro { display:block; } .stamp { display:block; margin-top:14px; } .choices { grid-template-columns:1fr; } .choice,.choice:first-child { padding:13px 4px; } .choice + .choice { border-left:0; border-top:1px solid var(--line); } .choice-top { margin:0 0 3px; } .choice strong { font-size:16px; } .choice small { margin-left:28px; } .recommended { display:block; } .controls { gap:10px; } .controls label { flex:1 1 40%; } select,input,.search input { width:100%; max-width:none; } .search { margin-left:0; } .canvas-head { padding:18px 16px 8px; } .canvas-head h2 { font-size:15px; } .legend { padding:14px 16px; } .method { grid-template-columns:1fr; gap:14px; } .related { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header class="top"><a class="brand" href="design-5.html">rashomon<span style="color:var(--accent)">.</span></a><span class="eyebrow lab-tag">laboratório visual / 01</span><a href="design-5.html">Interface atual ↗</a></header>
+<main>
+  <section class="intro">
+    <div><div class="eyebrow">Menos ruído. Mais contexto.</div><h1>O que fica associado a alguém?</h1><p>Três maneiras de ler a mesma rede. Escolha um termo para acompanhar suas relações, sem disputar espaço com dezenas de linhas.</p></div>
+    <span class="stamp">Estudo de design · não substitui o atlas</span>
+  </section>
+  <nav class="choices" aria-label="Propostas de visualização">
+    <button class="choice" data-view="columns" aria-pressed="true"><span class="choice-top"><span class="number">01</span><strong>Relações em colunas</strong><span class="recommended">RECOMENDADO</span></span><small>Leia primeiro. Explore as conexões depois.</small></button>
+    <button class="choice" data-view="orbit" aria-pressed="false"><span class="choice-top"><span class="number">02</span><strong>Órbita organizada</strong></span><small>A visão de rede, sem palavras sobrepostas.</small></button>
+    <button class="choice" data-view="matrix" aria-pressed="false"><span class="choice-top"><span class="number">03</span><strong>Matriz de relações</strong></span><small>Compare pares. Nenhuma linha cruzada.</small></button>
+  </nav>
+  <div class="controls">
+    <label>Dados<select id="dataset"><option value="demo">Exemplo ilustrativo</option><option value="live">Base local</option></select></label>
+    <label id="personField" hidden>Pessoa<select id="person"></select></label>
+    <label id="daysField" hidden>Período<select id="days"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="365">Último ano</option></select></label>
+    <label>Ordem<select id="sort"><option value="count">Mais frequentes</option><option value="pmi">Mais específicos (PMI ponderado)</option></select></label>
+    <label>Termos<select id="limit"><option>12</option><option selected>18</option><option>24</option></select></label>
+    <label class="search">Encontrar no recorte<input id="search" type="search" placeholder="Destaque uma palavra…"></label>
+  </div>
+  <p class="status" id="status" role="status">Exemplo fictício para comparar os desenhos. Não representa uma pessoa real.</p>
+  <section class="workspace" aria-label="Visualização e detalhes">
+    <div class="canvas">
+      <div class="canvas-head"><div><h2 id="chartTitle"></h2><p id="chartDescription"></p></div><button id="clear" class="quiet-button">Limpar seleção</button></div>
+      <div class="viewport" id="viewport" role="region" aria-label="Grafo interativo; role horizontalmente em telas pequenas" tabindex="0"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <aside class="inspector" id="inspector" aria-label="Detalhes do termo"></aside>
+  </section>
+  <section class="method" aria-label="Sobre a proposta">
+    <div><strong id="benefitTitle"></strong><p id="benefit"></p></div>
+    <div><strong>O que os dados dizem</strong><p>Uma relação significa que dois termos aparecem nos mesmos documentos sobre a pessoa. Não indica apoio, causalidade ou opinião.</p></div>
+    <div><strong id="tradeoffTitle">A escolha de design</strong><p id="tradeoff"></p></div>
+  </section>
+  <footer class="footer"><span>Mesmos termos e filtros nas três propostas · todas as fontes · mínimo de 2 documentos</span><span>Sem física, sem animação, sem cores de sentimento.</span></footer>
+</main>
+<script>
+const $ = id => document.getElementById(id)
+const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+const fmt = value => Number(value).toLocaleString('pt-BR')
+const label = n => (n.kind === 'hashtag' ? '#' : '') + n.term
+const short = (s, max = 24) => s.length > max ? s.slice(0, max - 1) + '…' : s
+const kinds = { word:'Palavra', hashtag:'Hashtag', theme:'Tema' }
+const proposals = {
+  columns: { title:'Leia os termos. Siga uma relação.', description:'Ranking em duas colunas, de cima para baixo. Só as relações do termo selecionado ficam visíveis.', benefitTitle:'01 / Melhor para leitura cotidiana', benefit:'Rótulos alinhados, frequência explícita e posições fixas. Você encontra uma palavra antes de precisar entender o desenho.', tradeoff:'A ordem é mais importante que a geometria. As colunas não representam grupos políticos ou temas; são apenas a continuação do ranking.' },
+  orbit: { title:'Uma rede que deixa as palavras respirar.', description:'Rótulos do lado de fora; conexões do lado de dentro. Selecione um termo para isolar sua vizinhança.', benefitTitle:'02 / Melhor para explorar', benefit:'Preserva a identidade de um grafo, mas separa os rótulos das ligações. Os nós não se movem quando você interage.', tradeoff:'A posição na órbita não mede afinidade. O tamanho do círculo representa frequência; a espessura da linha representa documentos em comum.' },
+  matrix: { title:'Cada cruzamento conta uma relação.', description:'Linha × coluna = documentos em comum. Selecione uma célula para ver o par ou um rótulo para explorar o termo.', benefitTitle:'03 / Melhor para investigar', benefit:'Todas as relações cabem em uma superfície sem cruzamentos. Bom para comparar pares e reconhecer blocos de coocorrência.', tradeoff:'É menos intuitiva à primeira vista. A matriz usa rolagem para preservar a leitura, em vez de reduzir o tamanho dos rótulos.' }
+}
+// Deliberately fictional: never attach illustrative counts to a real politician.
+const demoNodes = ['educação','orçamento','saúde','congresso','reforma','economia','municípios','investimento','escolas','trabalho','infraestrutura','meio ambiente','transporte','habitação','cultura','segurança','participação','tecnologia','pesquisa','energia','serviços','mobilidade','cidadania','desenvolvimento'].map((term, i) => ({ id:'word:'+term, term, kind:'word', count:184-i*6, pmi:Number((1.1+(i*7%19)/10).toFixed(2)), tone:null }))
+const demoLinks = demoNodes.flatMap((a,i) => demoNodes.slice(i+1).flatMap((b,j) => (i+j)%3 === 0 || i===0 ? [{source:a.id,target:b.id,count:Math.max(2,Math.round(Math.min(a.count,b.count)*(.15+((i+j)%6)/10)))}] : []))
+const demo = {person:{id:'example',name:'Pessoa de exemplo'},stats:{about:420,docs:1800},nodes:demoNodes,links:demoLinks}
+let graph = demo, nodes = [], links = [], selected = demoNodes[0].id, pair = null, view = 'columns', busy = false
+let graphRequest = 0, docsRequest = 0, graphController, docsController
+const initialView = location.hash.slice(1)
+if (Object.hasOwn(proposals, initialView)) view = initialView
+const endpoint = () => '/api/people/' + encodeURIComponent($('person').value)
+const params = () => new URLSearchParams({days:$('days').value,sort:$('sort').value,limit:$('limit').value,min:'2',source:'all',kind:'all',domain:'all'})
+const json = async (url, signal) => {
+  const response = await fetch(url, {signal})
+  if (!response.ok) throw new Error('HTTP ' + response.status)
+  return response.json()
+}
+const matching = n => label(n).normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().includes($('search').value.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase())
+const neighbors = id => links.filter(l => l.source===id || l.target===id).map(l => ({node:nodes.find(n => n.id === (l.source===id ? l.target : l.source)),count:l.count})).sort((a,b) => b.count-a.count)
+const cancelDocs = () => { ++docsRequest; docsController?.abort() }
+const choose = (id, second = null) => {
+  selected = id; pair = second; cancelDocs()
+  const focusKey = document.activeElement?.getAttribute('data-focus')
+  render()
+  // SVG/table nodes are rebuilt; retain keyboard focus without scrolling the page.
+  if (focusKey) [...document.querySelectorAll('[data-focus]')].find(el => el.dataset.focus === focusKey)?.focus({preventScroll:true})
+}
+const bindTerms = () => {
+  $('viewport').querySelectorAll('[data-node]').forEach(el => {
+    el.addEventListener('click', () => choose(el.dataset.node, el.dataset.pair || null))
+    if (el.tagName.toLowerCase() === 'g') el.addEventListener('keydown', e => {
+      if (e.key==='Enter' || e.key===' ') { e.preventDefault(); choose(el.dataset.node) }
+    })
+  })
+}
+const termGroup = (n, i, x, y, w, anchor, orbit = false) => {
+  const near = !selected || n.id === selected || neighbors(selected).some(r => r.node.id === n.id)
+  const dim = $('search').value ? !matching(n) : !near
+  const classes = `term${selected===n.id || pair===n.id ? ' selected':''}${dim ? ' dim':''}`
+  const valueX = x+w-12, nameX = x+36
+  const barWidth = Math.max(2,(w-50)*n.count/Math.max(...nodes.map(t => t.count),1))
+  return `<g class="${classes}" role="button" tabindex="0" aria-pressed="${selected===n.id}" aria-label="${esc(label(n))}, ${n.count} documentos" data-node="${esc(n.id)}" data-focus="term-${i}">
+    <title>${esc(label(n))} · ${fmt(n.count)} documentos · ${kinds[n.kind] || esc(n.kind)}</title>
+    <rect class="hit" x="${x}" y="${y-18}" width="${w}" height="36" rx="4"/>
+    <text class="rank" x="${x+10}" y="${y+4}">${String(i+1).padStart(2,'0')}</text>
+    <defs><clipPath id="label-${i}"><rect x="${nameX}" y="${y-15}" width="${w-84}" height="30"/></clipPath></defs>
+    <text class="name" x="${nameX}" y="${y+4}" clip-path="url(#label-${i})">${esc(short(label(n),orbit ? 23:24))}</text>
+    <text class="value" x="${valueX}" y="${y+4}" text-anchor="end">${fmt(n.count)}</text>
+    ${orbit ? '' : `<rect x="${nameX}" y="${y+14}" width="${barWidth}" height="2" fill="${selected===n.id ? 'var(--accent)':'#566650'}"/>`}
+    ${orbit ? `<circle cx="${anchor}" cy="${y}" r="${3+9*Math.sqrt(n.count/Math.max(...nodes.map(t => t.count),1))}" fill="${selected===n.id?'var(--accent)':'var(--green)'}"/>`:''}
+  </g>`
+}
+const network = () => {
+  const isOrbit = view === 'orbit', half = Math.ceil(nodes.length/2), height = Math.max(510,half*44+94)
+  const positions = nodes.map((n,i) => {
+    const left = i<half, row = left ? i : i-half, count = left ? half : nodes.length-half
+    const y = 72 + row*(height-136)/Math.max(count-1,1)
+    const normalizedY = (y-height/2)/(height/2-40)
+    const radialX = Math.sqrt(Math.max(0,1-normalizedY**2))*110
+    const anchor = isOrbit ? 450+(left?-1:1)*radialX : left?324:576
+    return {n,i,left,y,anchor,x:left?12:588,w:300}
+  })
+  const byId = new Map(positions.map(p => [p.n.id,p]))
+  const visibleLinks = selected ? links.filter(l => l.source===selected || l.target===selected) : []
+  const maxLink = Math.max(...links.map(l=>l.count),1)
+  const paths = visibleLinks.map(l => {
+    const a=byId.get(l.source),b=byId.get(l.target)
+    const curve = isOrbit ? `M${a.anchor},${a.y} Q450,${height/2} ${b.anchor},${b.y}` : `M${a.anchor},${a.y} C450,${a.y} 450,${b.y} ${b.anchor},${b.y}`
+    return `<path class="edge" d="${curve}" stroke-width="${1+4*l.count/maxLink}"/>`
+  }).join('')
+  const guides = isOrbit ? `<ellipse class="guide" cx="450" cy="${height/2}" rx="110" ry="${height/2-40}"/>` : `<path class="guide" d="M450,52 V${height-34}"/>`
+  $('viewport').innerHTML = `<svg class="graph-svg" viewBox="0 0 900 ${height}" aria-label="${esc(proposals[view].title)}">
+    <text class="caption" x="22" y="30">${isOrbit?'TERMOS ASSOCIADOS':'POSIÇÃO / TERMO'}</text><text class="caption" x="298" y="30" text-anchor="end">DOCS</text>
+    <text class="caption" x="598" y="30">${isOrbit?'TERMOS ASSOCIADOS':'CONTINUAÇÃO DO RANKING'}</text><text class="caption" x="874" y="30" text-anchor="end">DOCS</text>
+    ${guides}${paths}
+    ${!selected ? `<rect x="370" y="${height/2-27}" width="160" height="54" rx="27" fill="var(--bg)" stroke="var(--line)"/><text x="450" y="${height/2-3}" text-anchor="middle" fill="var(--accent)" font-size="12">${esc(short(graph.person.name,22))}</text><text x="450" y="${height/2+14}" text-anchor="middle" fill="var(--muted)" font-size="10">selecione um termo</text>`:''}
+    ${positions.map(p => termGroup(p.n,p.i,p.x,p.y,p.w,p.anchor,isOrbit)).join('')}
+  </svg>`
+  $('legend').innerHTML = `<span><i></i>Espessura = documentos em comum</span><span>${isOrbit?'<i class="dot"></i>Círculo = frequência':'Barra = frequência do termo'}</span><span>Clique ou use Tab + Enter · arraste a barra para ver mais →</span>`
+}
+const matrix = () => {
+  const counts = new Map(links.flatMap(l => [[JSON.stringify([l.source,l.target]),l.count],[JSON.stringify([l.target,l.source]),l.count]]))
+  const max = Math.max(...links.map(l=>l.count),1)
+  const cells = nodes.map((a,i) => `<tr class="${selected===a.id?'active':''}" style="opacity:${matching(a)?1:.3}"><th scope="row"><button data-node="${esc(a.id)}" data-focus="row-${i}" title="${esc(label(a))}">${esc(label(a))}</button></th>${nodes.map((b,j) => {
+    if (i===j) return '<td><span class="diagonal" aria-label="Mesmo termo">·</span></td>'
+    const count = counts.get(JSON.stringify([a.id,b.id]))
+    const strength = count ? Math.sqrt(count/max) : 0
+    const color = count ? `rgb(${Math.round(47+160*strength)},${Math.round(57+124*strength)},${Math.round(45+72*strength)})` : '#202720'
+    const description = `${label(a)} + ${label(b)}: ${count ? fmt(count)+' documentos em comum' : 'relação não retornada (menos de 2 documentos)'}`
+    return `<td><button data-node="${esc(a.id)}" data-pair="${esc(b.id)}" data-focus="cell-${i}-${j}" aria-label="${esc(description)}" title="${esc(description)}" style="background:${color};color:${strength>.45?'#111812':'#c1cbbc'};${selected===a.id&&pair===b.id?'border-color:var(--ink)':''}">${count ? fmt(count) : '–'}</button></td>`
+  }).join('')}</tr>`).join('')
+  $('viewport').innerHTML = `<table class="matrix" aria-label="Documentos em comum entre termos"><thead><tr><th scope="col">TERMO / TERMO</th>${nodes.map((n,i) => `<th scope="col"><button data-node="${esc(n.id)}" data-focus="col-${i}" title="${esc(label(n))}"><span>${esc(label(n))}</span></button></th>`).join('')}</tr></thead><tbody>${cells}</tbody></table>`
+  $('legend').innerHTML = `<span>Menos <span class="matrix-scale"></span> mais documentos · máximo ${fmt(max)}</span><span>– relação não retornada (&lt; 2 docs)</span><span>· mesmo termo</span>`
+}
+const inspect = () => {
+  const n = nodes.find(n=>n.id===selected), other = nodes.find(n=>n.id===pair)
+  if (!n) {
+    $('inspector').innerHTML = `<div class="eyebrow">Sobre a pessoa</div><h3>${esc(graph.person.name)}</h3><div class="metric"><div><strong>${fmt(graph.stats.about)}</strong><span>documentos sobre a pessoa</span></div></div><p>Selecione uma palavra para ver a frequência e os termos com os quais ela aparece.</p><p>${nodes.length} termos neste recorte. A busca destaca os rótulos sem reorganizar o desenho.</p>`
+    return
+  }
+  const related = neighbors(n.id), pairLink = other && related.find(r => r.node.id===other.id)
+  $('inspector').innerHTML = `<div class="eyebrow">${other?'Par selecionado':esc(kinds[n.kind]||n.kind)+' em foco'}</div><h3>${esc(label(n))}${other?` <span style="color:var(--muted)">×</span> ${esc(label(other))}`:''}</h3>
+    ${other ? `<div class="metric"><div><strong>${pairLink?fmt(pairLink.count):'–'}</strong><span>${pairLink?'documentos em comum':'relação não retornada (< 2 docs)'}</span></div></div>` : `<div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div>`}
+    <p>${esc(graph.person.name)} · ${$('dataset').value==='demo'?'dados ilustrativos':$('days').selectedOptions[0].textContent.toLowerCase()}.</p>
+    <div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? related.slice(0,6).map(r=>`<button data-related="${esc(r.node.id)}"><span>${esc(label(r.node))}</span><b>${fmt(r.count)}</b></button>`).join('') : '<p style="margin-top:12px">Nenhuma relação retornada neste recorte.</p>'}</div>
+    <p>PMI mede especificidade, não sentimento. A ordenação por especificidade usa PMI × ln(1 + documentos).</p>
+    ${$('dataset').value==='live'?`<button class="primary" id="showDocs">Ver documentos de “${esc(short(label(n),18))}”</button><div id="docs" aria-live="polite"></div>`:'<p>Exemplo fictício. Use a base local para consultar documentos reais.</p>'}`
+  $('inspector').querySelectorAll('[data-related]').forEach(el=>el.addEventListener('click',()=>choose(el.dataset.related)))
+  $('showDocs')?.addEventListener('click',()=>loadDocs(n))
+}
+const loadDocs = async n => {
+  cancelDocs(); const id=docsRequest; docsController=new AbortController()
+  $('showDocs').disabled=true; $('docs').textContent='Carregando documentos…'
+  try {
+    const q=params(); q.set('term',n.term); q.set('kind',n.kind); q.set('limit','5')
+    const data=await json(endpoint()+'/docs?'+q,docsController.signal)
+    if (id!==docsRequest) return
+    $('docs').innerHTML = data.docs.length ? data.docs.map(d=> {
+      let href=null
+      try { const url=new URL(d.uri); if (['http:','https:'].includes(url.protocol)) href=url.href } catch {}
+      return `<article class="doc"><div class="eyebrow">${esc(d.domain || d.source)}</div><p>${esc(d.text)}</p>${href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>`:''}</article>`
+    }).join('') : '<p>Nenhum documento encontrado.</p>'
+  } catch(e) { if(id===docsRequest && e.name!=='AbortError') $('docs').textContent='Não foi possível carregar. Tente novamente.' }
+  finally { if(id===docsRequest && $('showDocs')) $('showDocs').disabled=false }
+}
+const render = () => {
+  document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)))
+  const p=proposals[view]
+  $('chartTitle').textContent=p.title; $('chartDescription').textContent=p.description
+  $('benefitTitle').textContent=p.benefitTitle; $('benefit').textContent=p.benefit; $('tradeoff').textContent=p.tradeoff
+  if (busy || !graph) return
+  nodes=graph.nodes.slice(0,Number($('limit').value))
+  const ids=new Set(nodes.map(n=>n.id)); links=graph.links.filter(l=>ids.has(l.source)&&ids.has(l.target))
+  if (!ids.has(selected)) { selected=null; pair=null }
+  if (!ids.has(pair)) pair=null
+  if (!nodes.length) { $('viewport').innerHTML='<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'; $('legend').textContent='Sem dados para desenhar.' }
+  else { if(view==='matrix') matrix(); else network(); bindTerms() }
+  inspect()
+}
+const load = async () => {
+  const id=++graphRequest; graphController?.abort(); graphController=new AbortController(); cancelDocs()
+  const live=$('dataset').value==='live'
+  $('personField').hidden=!live; $('daysField').hidden=!live
+  $('search').value=''; pair=null
+  if (!live) {
+    busy=false; $('viewport').setAttribute('aria-busy','false')
+    const sorted=[...demo.nodes].sort((a,b)=>$('sort').value==='pmi'?b.pmi*Math.log1p(b.count)-a.pmi*Math.log1p(a.count):b.count-a.count)
+    graph={...demo,nodes:sorted}; selected=sorted[0]?.id
+    $('status').textContent='Exemplo fictício para comparar os desenhos. Não representa uma pessoa real.'
+    render(); return
+  }
+  busy=true; graph=null; selected=null
+  $('status').textContent='Carregando a base local…'; $('viewport').setAttribute('aria-busy','true')
+  $('viewport').innerHTML='<div class="empty">Carregando a rede…</div>'; $('inspector').textContent='Aguardando dados.'; $('legend').textContent=''
+  try {
+    if (!$('person').options.length) {
+      const people=await json('/api/people',graphController.signal)
+      if(id!==graphRequest) return
+      people.forEach(p=> $('person').add(new Option(p.name,p.id)))
+      if (!people.length) throw new Error('Nenhuma pessoa cadastrada')
+    }
+    const data=await json(endpoint()+'/graph?'+params(),graphController.signal)
+    if(id!==graphRequest) return
+    graph=data; selected=data.nodes[0]?.id || null; busy=false
+    $('status').textContent=`Base local · ${data.person.name} · ${fmt(data.stats.about)} documentos sobre a pessoa · ${$('days').selectedOptions[0].textContent.toLowerCase()}`
+    render()
+  } catch(e) {
+    if(id!==graphRequest || e.name==='AbortError') return
+    busy=false
+    $('status').textContent='Não foi possível carregar a base local. A demonstração continua disponível.'
+    $('viewport').innerHTML='<div class="empty">A base está vazia ou indisponível.<br>Abra esta página pelo servidor do projeto ou volte ao exemplo ilustrativo.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
+    $('retry').addEventListener('click',load); $('inspector').textContent='Nenhum dado carregado.'
+  } finally { if(id===graphRequest) $('viewport').setAttribute('aria-busy','false') }
+}
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{ view=b.dataset.view; history.replaceState(null,'','#'+view); cancelDocs(); render() }))
+for(const id of ['dataset','person','days','sort','limit']) $(id).addEventListener('change',load)
+$('search').addEventListener('input',()=>{ cancelDocs(); render() })
+$('clear').addEventListener('click',()=>{ $('search').value=''; choose(null) })
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') { $('search').value=''; choose(null) } })
+render()
+</script>
+</body>
+</html>

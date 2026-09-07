@@ -5,6 +5,7 @@ import { rss } from './rss.js'
 import { gnews } from './gnews.js'
 import { gkg } from './gkg.js'
 import { camara } from './camara.js'
+import { senado } from './senado.js'
 
-export const collectors: Record<Source, Collector> = { bluesky, gdelt, rss, gnews, gkg, camara }
-export const defaultSources: Source[] = ['bluesky', 'rss', 'gnews', 'gkg']
+export const collectors: Record<Source, Collector> = { bluesky, gdelt, rss, gnews, gkg, camara, senado }
+export const defaultSources: Source[] = ['bluesky', 'rss', 'gnews', 'gkg', 'senado']

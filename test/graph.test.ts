@@ -3,7 +3,10 @@ import { describe, it, before } from 'node:test'
 import { docsFor, graphFor, risingFor, sourcesFor, type GraphQuery, type RisingQuery } from '../src/graph.js'
 import { nameTokens } from '../src/extract.js'
 import { parseSourceList } from '../src/query.js'
+import { insertDoc, upsertPersons } from '../src/store.js'
 import { persons, seed } from './fixture.js'
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
 
 const base: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
 const [lula, tarcisio] = persons
@@ -174,6 +177,33 @@ describe('multi-source filtering (issue #8)', () => {
   it('AC7: source without gkg never surfaces a tone', async () => {
     const g = await graphFor(lula, { ...base, source: 'gnews,rss' })
     assert.equal(g.nodes.find((n) => n.term === 'reforma')?.tone, null)
+  })
+})
+
+describe('senado source (issue #25)', () => {
+  before(seed)
+
+  it('AC8: source=senado for a person with no senado docs returns an empty, stats.docs===0 graph', async () => {
+    const g = await graphFor(tarcisio, { ...base, source: 'senado' })
+    assert.deepEqual(g.nodes, [])
+    assert.deepEqual(g.links, [])
+    assert.deepEqual(g.signature, [])
+    assert.equal(g.stats.docs, 0)
+    assert.equal(g.stats.about, 0)
+  })
+
+  it("surfaces a senado doc's terms for the tagged senator at a wide-enough window", async () => {
+    const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
+    await upsertPersons([alcolumbre])
+    const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/222222'
+    await insertDoc(
+      { source: 'senado', uri, text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: daysAgo(3200), domain: 'senado.leg.br' },
+      [...persons, alcolumbre],
+    )
+    const g = await graphFor(alcolumbre, { ...base, days: 3300, source: 'senado' })
+    assert.equal(g.stats.about, 1)
+    assert.ok(g.nodes.some((n) => n.term === 'soberania'))
+    assert.equal(g.nodes.find((n) => n.term === 'soberania')?.tone, null)
   })
 })
 

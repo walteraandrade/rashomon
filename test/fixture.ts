@@ -110,6 +110,17 @@ export const docs: RawDoc[] = [
   // recomputing. Text follows the collector's own "{name}: {sumario}" convention (issue #24),
   // vocabulary unused elsewhere in the fixture.
   { source: 'camara', uri: 'https://www.camara.leg.br/discursos/74847/2018-01-01T10:00', text: 'Jair Bolsonaro: discute segurança pública e cooperação federativa em pronunciamento na tribuna', publishedAt: daysAgo(3000), domain: 'camara.leg.br' },
+  // doc 40: a senado pronouncement (issue #25), dated well past every window any pinned literal
+  // in this suite reaches (the widest is timeline.test.ts's days:2151), and with vocabulary
+  // ("soberania", "infraestrutura", "portuaria") unique across the fixture, so no pinned
+  // pmi/count/tone/stats literal shifts. Untoned by construction (senado is not in
+  // tonedSources). It names "Davi Alcolumbre" as a name-prefix, not one of this fixture's three
+  // tracked persons (lula/tarcisio/bolsonaro), so it stores with zero doc_persons rows here on
+  // purpose -- person-tagging via the name-prefix convention is proven independently against the
+  // full seed.json in test/extract.test.ts, and against a locally-tracked "alcolumbre" person in
+  // test/store.test.ts and test/graph.test.ts, without perturbing this fixture's pinned
+  // `/api/tone` persons.length===3 assertions.
+  { source: 'senado', uri: 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999', text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: daysAgo(3200), domain: 'senado.leg.br' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

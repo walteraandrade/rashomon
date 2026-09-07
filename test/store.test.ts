@@ -48,6 +48,27 @@ describe('insertDoc camara', () => {
   })
 })
 
+describe('insertDoc senado (issue #25)', () => {
+  const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
+  const family = [...persons, alcolumbre]
+  before(async () => (await seed(), upsertPersons([alcolumbre])))
+  const tagged = async (uri: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
+  const termsOf = async (uri: string) =>
+    (await db.query<{ term: string }>(`select t.term from doc_terms t join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
+
+  it('tags the speaking senator via the name-prefix, stores terms, and leaves tone null', async () => {
+    const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/111111'
+    await insertDoc(
+      { source: 'senado', uri, text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: new Date().toISOString(), domain: 'senado.leg.br' },
+      family,
+    )
+    assert.deepEqual(await tagged(uri), ['alcolumbre'])
+    assert.ok((await termsOf(uri)).includes('soberania'))
+    assert.deepEqual(await stored(uri), { source: 'senado', tone: null })
+  })
+})
+
 describe('insertDoc tone', () => {
   before(seed)
 

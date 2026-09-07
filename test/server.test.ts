@@ -36,13 +36,23 @@ describe('parseSourceList', () => {
     assert.equal(parseSourceList('camara'), 'camara')
     assert.equal(parseSourceList('camara,gdelt'), 'camara,gdelt')
   })
+
+  it('accepts senado, alone or in a comma list', () => {
+    assert.equal(parseSourceList('senado'), 'senado')
+    assert.equal(parseSourceList('senado,gnews'), 'senado,gnews')
+  })
 })
 
-// issue #24: the two independent inline literals in parseRisingQuery/parseTimelineQuery
-// must accept 'camara' too, so they cannot silently drift from SOURCES again.
+// issues #24/#25: the two independent inline literals in parseRisingQuery/parseTimelineQuery
+// must accept 'camara' and 'senado' too, so they cannot silently drift from SOURCES again.
 describe('parseRisingQuery/parseTimelineQuery source', () => {
   it('resolves source: camara to camara, not all', () => {
     assert.equal(parseRisingQuery({ source: 'camara' }).source, 'camara')
     assert.equal(parseTimelineQuery({ source: 'camara' }).source, 'camara')
+  })
+
+  it('resolves source: senado to senado, not all', () => {
+    assert.equal(parseRisingQuery({ source: 'senado' }).source, 'senado')
+    assert.equal(parseTimelineQuery({ source: 'senado' }).source, 'senado')
   })
 })

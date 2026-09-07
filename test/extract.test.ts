@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { domainOf, hashtags, mentions, nameTokens, normalize, words } from '../src/extract.js'
+import seed from '../seed.json' with { type: 'json' }
+import { domainOf, hashtags, mentions, nameTokens, normalize, personsMentioned, words } from '../src/extract.js'
 
 describe('normalize', () => {
   it('lowercases and strips accents', () => {
@@ -41,6 +42,30 @@ describe('mentions', () => {
   it('does not match inside other words or partial aliases', () => {
     assert.ok(!mentions('preço do leite subiu', leite))
     assert.ok(!mentions('lulista convicto', lula))
+  })
+})
+
+describe('personsMentioned', () => {
+  const ids = (text: string) => personsMentioned(text, seed).map((p) => p.id)
+
+  it('tags only the person whose longer alias owns the surname', () => {
+    assert.deepEqual(ids('Flávio Bolsonaro critica o governo'), ['flavio-bolsonaro'])
+    assert.deepEqual(ids('Eduardo Bolsonaro viaja aos EUA'), ['eduardo-bolsonaro'])
+    assert.deepEqual(ids('Michelle Bolsonaro discursa'), ['michelle-bolsonaro'])
+  })
+
+  it('still tags Jair on a bare surname', () => {
+    assert.deepEqual(ids('Bolsonaro nega participação'), ['bolsonaro'])
+    assert.deepEqual(ids('JAIR BOLSONARO é réu'), ['bolsonaro'])
+  })
+
+  it('tags both when the bare surname appears apart from the longer alias', () => {
+    assert.deepEqual(ids('Flávio Bolsonaro defende Bolsonaro'), ['flavio-bolsonaro', 'bolsonaro'])
+  })
+
+  it('does not tag Ciro Gomes on Ciro Nogueira, an excluded name', () => {
+    assert.deepEqual(ids('Ciro Nogueira comenta o orçamento'), [])
+    assert.deepEqual(ids('Ciro critica Lula'), ['lula', 'ciro'])
   })
 })
 

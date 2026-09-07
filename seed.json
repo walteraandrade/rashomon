@@ -7,7 +7,7 @@
   { "id": "zema", "name": "Romeu Zema", "aliases": ["Zema", "Romeu Zema"] },
   { "id": "eduardo-leite", "name": "Eduardo Leite", "aliases": ["Eduardo Leite"] },
   { "id": "michelle-bolsonaro", "name": "Michelle Bolsonaro", "aliases": ["Michelle Bolsonaro"] },
-  { "id": "ciro", "name": "Ciro Gomes", "aliases": ["Ciro Gomes", "Ciro"] },
+  { "id": "ciro", "name": "Ciro Gomes", "aliases": ["Ciro Gomes", "Ciro"], "exclude": ["Ciro Nogueira"] },
   { "id": "marcal", "name": "Pablo Marçal", "aliases": ["Marçal", "Pablo Marçal"] },
   { "id": "moraes", "name": "Alexandre de Moraes", "aliases": ["Alexandre de Moraes", "ministro Moraes", "Xandão"] },
   { "id": "gilmar", "name": "Gilmar Mendes", "aliases": ["Gilmar Mendes", "Gilmar"] },

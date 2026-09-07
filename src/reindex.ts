@@ -1,13 +1,13 @@
 import persons from '../seed.json' with { type: 'json' }
 import { db, migrate } from './db.js'
-import { domainOf, mentions, terms } from './extract.js'
+import { domainOf, personsMentioned, terms } from './extract.js'
 import { upsertPersons } from './store.js'
 import type { Term } from './types.js'
 
 type Row = { id: number; text: string; extra_terms: Term[] }
 
 const reindexDoc = async ({ id, text, extra_terms }: Row) => {
-  const matched = persons.filter((p) => mentions(text, p))
+  const matched = personsMentioned(text, persons)
   await Promise.all([
     ...matched.map((p) => db.query(`insert into doc_persons values ($1, $2)`, [id, p.id])),
     ...terms(text, extra_terms).map((t) => db.query(`insert into doc_terms values ($1, $2, $3)`, [id, t.term, t.kind])),

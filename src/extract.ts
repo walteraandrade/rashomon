@@ -45,10 +45,31 @@ export const decodeEntities = (s: string) =>
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
     .replace(/&(\w+);/g, (m, n) => entities[n] ?? m)
 
-export const mentions = (text: string, person: Person) => {
-  const n = normalize(text)
-  return person.aliases.some((a) => new RegExp(`(^|[^a-z0-9])${escapeRe(normalize(a))}([^a-z0-9]|$)`).test(n))
+const aliasRe = (alias: string) => new RegExp(`(?<![a-z0-9])${escapeRe(normalize(alias))}(?![a-z0-9])`, 'g')
+
+// Longer aliases claim their span first, so "Flávio Bolsonaro" cannot also feed
+// the bare "Bolsonaro" alias of another person. Matched text is blanked out.
+// A person's `exclude` entries are aliases owned by nobody: "Ciro Nogueira" is
+// blanked before the bare "Ciro" of Ciro Gomes gets a look.
+export const personsMentioned = (text: string, persons: Person[]): Person[] => {
+  const aliases = persons
+    .flatMap((person) => [
+      ...person.aliases.map((alias) => ({ id: person.id, alias })),
+      ...(person.exclude ?? []).map((alias) => ({ id: undefined, alias })),
+    ])
+    .map(({ id, alias }) => ({ id, re: aliasRe(alias), length: normalize(alias).length }))
+    .sort((a, b) => b.length - a.length)
+  const { found } = aliases.reduce(
+    ({ rest, found }, { id, re }) => {
+      const blanked = rest.replace(re, (m) => ' '.repeat(m.length))
+      return blanked === rest || !id ? { rest: blanked, found } : { rest: blanked, found: new Set([...found, id]) }
+    },
+    { rest: normalize(text), found: new Set<string>() },
+  )
+  return persons.filter((p) => found.has(p.id))
 }
+
+export const mentions = (text: string, person: Person) => personsMentioned(text, [person]).length > 0
 
 const domainAliases: Record<string, string> = { 'redir.folha.com.br': 'folha.uol.com.br', 'www1.folha.uol.com.br': 'folha.uol.com.br' }
 

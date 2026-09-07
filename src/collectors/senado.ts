@@ -31,21 +31,26 @@ const fetchPronunciamentos = async (senadoId: string): Promise<Pronunciamento[]>
   return Array.isArray(raw) ? raw : [raw]
 }
 
+// Anchored at both ends: rejects an absent date and a future 'YYYY-MM-DD HH:MM:SS' variant alike,
+// so toIso never runs on an unparseable value and PGlite never sees a bare 'T00:00:00Z'.
+export const hasUsableDate = (p: Pronunciamento): boolean =>
+  Boolean(p.UrlTexto) && /^\d{4}-\d{2}-\d{2}$/.test(p.DataPronunciamento ?? '')
+
+export const toRawDoc = (person: Person, p: Pronunciamento): RawDoc => ({
+  source: 'senado',
+  uri: p.UrlTexto!,
+  text: `${person.name}: ${p.TextoResumo ?? ''}`,
+  publishedAt: toIso(p.DataPronunciamento!),
+  domain: 'senado.leg.br',
+})
+
 const collectPerson = async (person: Person): Promise<RawDoc[]> => {
   const pronunciamentos = await fetchPronunciamentos(person.senadoId!).catch(
     (e: Error) => (console.error(`[senado] ${person.id}: ${e.message}`), []),
   )
   log(`${person.id}: ${pronunciamentos.length} pronunciamentos`)
   await sleep(pauseMs)
-  return pronunciamentos
-    .filter((p) => p.UrlTexto)
-    .map((p) => ({
-      source: 'senado' as const,
-      uri: p.UrlTexto!,
-      text: `${person.name}: ${p.TextoResumo ?? ''}`,
-      publishedAt: toIso(p.DataPronunciamento ?? ''),
-      domain: 'senado.leg.br',
-    }))
+  return pronunciamentos.filter(hasUsableDate).map((p) => toRawDoc(person, p))
 }
 
 export const senado: Collector = async (persons) => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db, migrate } from '../src/db.js'
-import { docsFor, type DocsQuery } from '../src/graph.js'
+import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import { insertDoc, upsertPersons } from '../src/store.js'
 import { collidingUri, persons, seed } from './fixture.js'
 
@@ -21,6 +21,30 @@ describe('insertDoc persons', () => {
     const uri = 'https://example.org/flavio'
     await insertDoc({ source: 'rss', uri, text: 'Flávio Bolsonaro critica o governo', publishedAt: new Date().toISOString() }, family)
     assert.deepEqual(await tagged(uri), ['flavio-bolsonaro'])
+  })
+})
+
+describe('insertDoc camara', () => {
+  before(seed)
+  const uri = 'https://www.camara.leg.br/discursos/74847/2018-01-01T10:00'
+  const [, , bolsonaro] = persons
+  const tagged = async (u: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [u])).rows.map((r) => r.person_id)
+
+  it('tags the camara doc with exactly its own person', async () => {
+    assert.deepEqual(await tagged(uri), ['bolsonaro'])
+  })
+
+  it('stores tone as null for a camara doc', async () => {
+    assert.deepEqual(await stored(uri), { source: 'camara', tone: null })
+  })
+
+  it('surfaces in /sources with domain camara.leg.br and null tone', async () => {
+    const wideGraph: GraphQuery = { days: 3100, source: 'all', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+    const rows = await sourcesFor(bolsonaro, wideGraph)
+    const row = rows.find((r) => r.domain === 'camara.leg.br')
+    assert.equal(row?.source, 'camara')
+    assert.equal(row?.tone, null)
   })
 })
 

@@ -1,5 +1,5 @@
-export type Person = { id: string; name: string; aliases: string[]; exclude?: string[] }
-export type Source = 'bluesky' | 'gdelt' | 'rss' | 'gnews' | 'gkg'
+export type Person = { id: string; name: string; aliases: string[]; exclude?: string[]; camaraId?: string }
+export type Source = 'bluesky' | 'gdelt' | 'rss' | 'gnews' | 'gkg' | 'camara'
 export type RawDoc = {
   source: Source
   uri: string

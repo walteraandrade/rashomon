@@ -1,4 +1,4 @@
-export type Person = { id: string; name: string; aliases: string[] }
+export type Person = { id: string; name: string; aliases: string[]; exclude?: string[] }
 export type Source = 'bluesky' | 'gdelt' | 'rss' | 'gnews' | 'gkg'
 export type RawDoc = {
   source: Source

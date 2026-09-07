@@ -2,13 +2,27 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db, migrate } from '../src/db.js'
 import { docsFor, type DocsQuery } from '../src/graph.js'
-import { insertDoc } from '../src/store.js'
+import { insertDoc, upsertPersons } from '../src/store.js'
 import { collidingUri, persons, seed } from './fixture.js'
 
 const [, tarcisio] = persons
 const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', limit: 50, offset: 0 }
 const stored = async (uri: string) =>
   (await db.query<{ source: string; tone: number | null }>(`select source, tone from docs where uri = $1`, [uri])).rows[0]
+
+describe('insertDoc persons', () => {
+  const flavio = { id: 'flavio-bolsonaro', name: 'Flávio Bolsonaro', aliases: ['Flávio Bolsonaro'] }
+  const family = [...persons, flavio]
+  before(async () => (await seed(), upsertPersons([flavio])))
+  const tagged = async (uri: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
+
+  it('tags a Flávio Bolsonaro doc with Flávio only', async () => {
+    const uri = 'https://example.org/flavio'
+    await insertDoc({ source: 'rss', uri, text: 'Flávio Bolsonaro critica o governo', publishedAt: new Date().toISOString() }, family)
+    assert.deepEqual(await tagged(uri), ['flavio-bolsonaro'])
+  })
+})
 
 describe('insertDoc tone', () => {
   before(seed)

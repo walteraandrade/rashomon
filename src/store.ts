@@ -1,5 +1,5 @@
 import { db } from './db.js'
-import { mentions, terms } from './extract.js'
+import { personsMentioned, terms } from './extract.js'
 import type { Person, RawDoc, Source } from './types.js'
 
 // Tone is a GDELT measure. A doc keeps the source that first delivered it, so a
@@ -37,7 +37,7 @@ export const insertDoc = async (doc: RawDoc, ps: Person[]): Promise<boolean> => 
   const row = inserted.rows[0]
   if (!row?.inserted) return false
   const id = row.id
-  const matched = ps.filter((p) => mentions(doc.text, p))
+  const matched = personsMentioned(doc.text, ps)
   const ts = terms(doc.text, doc.extraTerms)
   await Promise.all([
     ...matched.map((p) => db.query(`insert into doc_persons values ($1, $2)`, [id, p.id])),

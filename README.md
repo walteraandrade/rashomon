@@ -8,6 +8,7 @@ Rashomon: which words a Brazilian political figure is associated with, across Bl
 pnpm install
 pnpm ingest          # default sources: bluesky, rss, gnews, gkg, senado; or: pnpm ingest gkg
 pnpm ingest gdelt    # GDELT DOC API, slow and rate limited, off by default
+pnpm ingest camara   # Câmara dos Deputados floor speeches, off by default
 pnpm dev             # http://localhost:3210
 pnpm reindex         # recompute terms and person matches after changing extract.ts or seed.json
 pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
@@ -26,13 +27,15 @@ Bluesky without login returns one page (100 posts) per person. To paginate, set 
 
 `gdelt` (DOC API) enforces ~1 request / 5s per IP and returns 429 aggressively. Off by default.
 
+- `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `camaraId` (federal deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
+
 `senado` pulls plenary speech summaries (`discursos`/`pronunciamentos`, last 30 days) for tracked senators from `dadosabertos.senado.leg.br`, keyed by each person's `senadoId` in `seed.json`; people without one are skipped, no request made. Unlike `gdelt`/`gkg`, the Senado Federal's open-data API has no published rate limit, so the collector only pauses briefly (~500ms) between senators for politeness, not to dodge a 429.
 
 ## API
 
 `GET /api/people`
 
-`GET /api/people/:id/graph?days=30&source=all|bluesky|gdelt|rss|gnews|gkg|senado&kind=all|hashtag|word|theme&sort=count|pmi&limit=40&min=2`
+`GET /api/people/:id/graph?days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado&kind=all|hashtag|word|theme&sort=count|pmi&limit=40&min=2`
 
 Add `domain=<host>` to restrict the graph to one outlet (or one Bluesky handle).
 
@@ -44,11 +47,11 @@ Returns `{ person, stats, nodes, links, signature }`. Each node also carries `to
 
 `signature` holds at most 5 rows of `{ term, kind, count, pmi }` (no `tone`): the terms whose count clears `max(3, 5% of stats.about)`, ordered by `pmi` desc then `term` asc, computed over the same `days`/`source`/`domain` scope as the graph but ignoring `kind`, `min`, `limit` and `sort`, so it is not guaranteed to be a subset of `nodes`.
 
-`GET /api/people/:id/docs?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|senado&domain=all&limit=50&offset=0` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings.
+`GET /api/people/:id/docs?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado&domain=all&limit=50&offset=0` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings.
 
-`GET /api/people/:id/rising?days=7&baseline=30&kind=all|hashtag|word|theme&source=all|bluesky|gdelt|rss|gnews|gkg|senado&domain=all&limit=20&min=3` returns `{ days, baseline, terms }`, each term `{ term, kind, count_recent, count_baseline, lift }` (no `tone`). `count_recent`/`count_baseline` are raw doc counts turned into per-day rates rounded to 2 decimals; the baseline window is the `baseline` days immediately preceding the recent window, never overlapping it. `lift` is `(count_recent_raw / days) / ((count_baseline_raw + 1) / baseline)`, a pinned formula, not to be changed without a test.
+`GET /api/people/:id/rising?days=7&baseline=30&kind=all|hashtag|word|theme&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado&domain=all&limit=20&min=3` returns `{ days, baseline, terms }`, each term `{ term, kind, count_recent, count_baseline, lift }` (no `tone`). `count_recent`/`count_baseline` are raw doc counts turned into per-day rates rounded to 2 decimals; the baseline window is the `baseline` days immediately preceding the recent window, never overlapping it. `lift` is `(count_recent_raw / days) / ((count_baseline_raw + 1) / baseline)`, a pinned formula, not to be changed without a test.
 
-`GET /api/people/:id/timeline?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|senado&domain=all&bucket=week|day` returns a bare JSON array of `{ bucket_start, count }` (no `tone`), oldest bucket first, `ceil(days / bucket_days)` items. Buckets are rolling windows counted backward from query time, not calendar/ISO weeks; the oldest bucket is clamped to the window edge so counts sum exactly to `/docs`'s `total` for the same `term`/`kind`/`days`/`source`/`domain`.
+`GET /api/people/:id/timeline?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado&domain=all&bucket=week|day` returns a bare JSON array of `{ bucket_start, count }` (no `tone`), oldest bucket first, `ceil(days / bucket_days)` items. Buckets are rolling windows counted backward from query time, not calendar/ISO weeks; the oldest bucket is clamped to the window edge so counts sum exactly to `/docs`'s `total` for the same `term`/`kind`/`days`/`source`/`domain`.
 
 `GET /api/tone?days=30&min=3` returns `{ persons, domains, cells }` across every tracked person (not nested under `/people/:id`). `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted distinct set of domains that appear in `cells` (a domain that never clears `min` never appears). `cells` holds one `{ person_id, domain, tone, n }` row per `(person, domain)` pair with at least `min` toned docs in the window; `tone` is the average, rounded to 2 decimals, `n` is the toned-doc count. Tone is a GDELT-only signal (see below), so non-GDELT docs never contribute to `tone` or `n` here.
 
@@ -74,5 +77,5 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 - `src/server.ts` Hono API + static UI
 - `public/design-5.html` current UI (radial atlas), served at `/`; `public/index.html` legacy UI; other `design-*.html` kept for reference
 - `test/` node:test suites; `test/fixture.ts` seeds the in-memory database
-- `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `senadoId` is that person's Senado Federal senator code, used only by the `senado` collector; people without one are skipped by it. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
+- `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `camaraId` (federal deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person, and an optional `senadoId` (senator code from `dadosabertos.senado.leg.br`) enables `senado`; a person may carry either, both, or neither, and is skipped by a collector whose id it lacks. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
 - `data/` PGlite database (gitignored)

@@ -32,18 +32,27 @@ describe('parseSourceList', () => {
     assert.equal(parseSourceList(' gnews , rss '), 'gnews,rss')
   })
 
-  it('issue #25: accepts "senado" like any other source token', () => {
+  it('accepts camara, alone or in a comma list', () => {
+    assert.equal(parseSourceList('camara'), 'camara')
+    assert.equal(parseSourceList('camara,gdelt'), 'camara,gdelt')
+  })
+
+  it('accepts senado, alone or in a comma list', () => {
     assert.equal(parseSourceList('senado'), 'senado')
     assert.equal(parseSourceList('senado,gnews'), 'senado,gnews')
   })
 })
 
-describe('issue #25: senado as a rising/timeline source token', () => {
-  it('parseRisingQuery accepts "senado" instead of falling back to "all"', () => {
-    assert.equal(parseRisingQuery({ source: 'senado' }).source, 'senado')
+// issues #24/#25: the two independent inline literals in parseRisingQuery/parseTimelineQuery
+// must accept 'camara' and 'senado' too, so they cannot silently drift from SOURCES again.
+describe('parseRisingQuery/parseTimelineQuery source', () => {
+  it('resolves source: camara to camara, not all', () => {
+    assert.equal(parseRisingQuery({ source: 'camara' }).source, 'camara')
+    assert.equal(parseTimelineQuery({ source: 'camara' }).source, 'camara')
   })
 
-  it('parseTimelineQuery accepts "senado" instead of falling back to "all"', () => {
+  it('resolves source: senado to senado, not all', () => {
+    assert.equal(parseRisingQuery({ source: 'senado' }).source, 'senado')
     assert.equal(parseTimelineQuery({ source: 'senado' }).source, 'senado')
   })
 })

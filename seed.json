@@ -19,11 +19,11 @@
   { "id": "nunes-marques", "name": "Nunes Marques", "aliases": ["Nunes Marques", "Kassio", "Kassio Nunes Marques"] },
   { "id": "andre-mendonca", "name": "André Mendonça", "aliases": ["André Mendonça"] },
   { "id": "fux", "name": "Luiz Fux", "aliases": ["Fux", "Luiz Fux"] },
-  { "id": "bolsonaro", "name": "Jair Bolsonaro", "aliases": ["Jair Bolsonaro", "Bolsonaro", "Jair Messias Bolsonaro"] },
-  { "id": "hugo-motta", "name": "Hugo Motta", "aliases": ["Hugo Motta"] },
+  { "id": "bolsonaro", "name": "Jair Bolsonaro", "aliases": ["Jair Bolsonaro", "Bolsonaro", "Jair Messias Bolsonaro"], "camaraId": "74847" },
+  { "id": "hugo-motta", "name": "Hugo Motta", "aliases": ["Hugo Motta"], "camaraId": "160674" },
   { "id": "alcolumbre", "name": "Davi Alcolumbre", "aliases": ["Alcolumbre", "Davi Alcolumbre"], "senadoId": "3830" },
   { "id": "haddad", "name": "Fernando Haddad", "aliases": ["Haddad", "Fernando Haddad"] },
   { "id": "alckmin", "name": "Geraldo Alckmin", "aliases": ["Alckmin", "Geraldo Alckmin"] },
-  { "id": "nikolas", "name": "Nikolas Ferreira", "aliases": ["Nikolas Ferreira", "Nikolas"] },
-  { "id": "eduardo-bolsonaro", "name": "Eduardo Bolsonaro", "aliases": ["Eduardo Bolsonaro"] }
+  { "id": "nikolas", "name": "Nikolas Ferreira", "aliases": ["Nikolas Ferreira", "Nikolas"], "camaraId": "209787" },
+  { "id": "eduardo-bolsonaro", "name": "Eduardo Bolsonaro", "aliases": ["Eduardo Bolsonaro"], "camaraId": "92346" }
 ]

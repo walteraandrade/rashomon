@@ -105,7 +105,12 @@ export const docs: RawDoc[] = [
   // the rss row wins and must never pick up the gkg tone.
   { source: 'rss', uri: collidingUri, text: 'Tarcísio anuncia obra em Santos', publishedAt: daysAgo(3000), domain: 'example.org' },
   { source: 'gkg', uri: collidingUri, text: 'Tarcísio anuncia obra em Santos', publishedAt: daysAgo(3000), domain: 'example.org', tone: -3.2 },
-  // doc 39: a senado pronouncement (issue #25), dated well past every window any pinned literal
+  // doc 39: camara doc about bolsonaro, dated daysAgo(3000) like collidingUri — outside every
+  // window any existing suite opens, so no pinned pmi/stats/tone/timeline literal needs
+  // recomputing. Text follows the collector's own "{name}: {sumario}" convention (issue #24),
+  // vocabulary unused elsewhere in the fixture.
+  { source: 'camara', uri: 'https://www.camara.leg.br/discursos/74847/2018-01-01T10:00', text: 'Jair Bolsonaro: discute segurança pública e cooperação federativa em pronunciamento na tribuna', publishedAt: daysAgo(3000), domain: 'camara.leg.br' },
+  // doc 40: a senado pronouncement (issue #25), dated well past every window any pinned literal
   // in this suite reaches (the widest is timeline.test.ts's days:2151), and with vocabulary
   // ("soberania", "infraestrutura", "portuaria") unique across the fixture, so no pinned
   // pmi/count/tone/stats literal shifts. Untoned by construction (senado is not in

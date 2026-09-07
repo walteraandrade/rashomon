@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
-import { docsFor, graphFor, sourcesFor, timelineFor, type DocsQuery, type GraphQuery, type TimelineQuery } from '../src/graph.js'
+import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, type DocsQuery, type GraphQuery, type RisingQuery, type TimelineQuery } from '../src/graph.js'
+import { readFileSync } from 'node:fs'
 import { parseDomainList, parseLeanList } from '../src/query.js'
 import { OUTLETS } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'
@@ -145,6 +146,33 @@ describe('lean filtering (issue #26)', () => {
     const exampleRow = unfiltered.find((r) => r.domain === 'example.org')
     assert.equal(exampleRow?.lean, null)
     assert.equal(exampleRow?.basis, null)
+  })
+
+  // risingSql is the one place the domain clause is duplicated, in recent_scope and again in
+  // baseline_scope. Every other lean test only exercises the recent half; this one watches the
+  // baseline half move. days:2250/baseline:100 puts "golpe" in the recent window via doc 21
+  // (oantagonista.com.br, right) and in the baseline window via doc 42 (cartacapital.com.br,
+  // left), so lean=right must drop the baseline hit while keeping the recent one.
+  it('risingFor narrows count_baseline by lean, not only count_recent', async () => {
+    const q: RisingQuery = { days: 2250, baseline: 100, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 100, min: 1 }
+
+    const all = await risingFor(bolsonaro, q)
+    const golpeAll = all.terms.find((t) => t.term === 'golpe')
+    assert.equal(golpeAll?.count_baseline, 0.01, 'doc 42 must reach the baseline window when lean is unset')
+
+    const right = await risingFor(bolsonaro, { ...q, lean: 'right' })
+    const golpeRight = right.terms.find((t) => t.term === 'golpe')
+    assert.ok(golpeRight, 'doc 21 keeps golpe in the recent window under lean=right')
+    assert.equal(golpeRight?.count_baseline, 0, 'doc 42 is left-labeled, so lean=right must empty the baseline half')
+  })
+
+  // Amendment A1 on the spec: sourcesFor now honours q.domain, so the outlet sidebar — the
+  // control that *picks* domain — must stop sending it, or clicking one outlet hides the rest.
+  it('the outlet sidebar drops domain before fetching /sources (spec amendment A1)', () => {
+    const ui = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
+    const loadSources = ui.slice(ui.indexOf('const loadSources'), ui.indexOf('const loadSources') + 400)
+    assert.match(loadSources, /\.delete\('domain'\)/)
+    assert.doesNotMatch(loadSources, /sources\?` \+ query\(\)/)
   })
 
   it('timelineFor stays a bare array and still narrows by lean', async () => {

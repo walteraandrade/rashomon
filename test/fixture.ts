@@ -129,6 +129,13 @@ export const docs: RawDoc[] = [
   // example.org docs (absent from outlets.json), this gives three differently-labeled/unlabeled
   // domains about bolsonaro reachable in one wide window for issue #26's lean tests.
   { source: 'gnews', uri: 'https://cartacapital.com.br/41', text: 'Bolsonaro concede entrevista a veículo de esquerda sobre pauta econômica', publishedAt: daysAgo(2200), domain: 'cartacapital.com.br' },
+  // doc 42: same left-labeled outlet as doc 41 but at day 2300, past every window any other
+  // test opens (widest reaching it would be lean.test.ts's own days:2250 rising case; the
+  // days:3100/3300 windows elsewhere are scoped to alcolumbre or source='senado'). It reuses
+  // "golpe", which docs 20-23 already put in the recent window, so a rising query can watch the
+  // *baseline* half of risingSql honour a lean filter — the one clause the spec warns is
+  // duplicated across recent_scope and baseline_scope.
+  { source: 'gnews', uri: 'https://cartacapital.com.br/42', text: 'Bolsonaro rebate acusações de golpe em artigo de opinião', publishedAt: daysAgo(2300), domain: 'cartacapital.com.br' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

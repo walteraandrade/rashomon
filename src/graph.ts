@@ -1,6 +1,6 @@
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
-import { labelFor, resolveScope, type OutletLabel } from './outlets.js'
+import { labelFor, resolveScope } from './outlets.js'
 import type { Person } from './types.js'
 
 export type GraphQuery = {
@@ -72,8 +72,9 @@ type ToneListRow = { id: string; name: string }
 // $3 must already be normalized by parseSourceList; unlike kind, an unknown or empty
 // source is not rescued here and would scope to zero docs. $4 must already be the
 // effective domain scope from resolveScope (a comma-joined list, 'all', or '' for an
-// empty domain+lean intersection) — an empty string never equality-matches a real
-// docs.domain, so any(string_to_array('', ',')) correctly yields zero rows.
+// empty domain+lean intersection). string_to_array('', ',') yields an *empty* array
+// (verified against PGlite), so d.domain = any(...) matches nothing and the empty
+// intersection correctly scopes to zero rows.
 const scopeCte = `
   scope as (
     select d.id from docs d

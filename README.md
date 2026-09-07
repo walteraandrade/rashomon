@@ -8,6 +8,7 @@ Rashomon: which words a Brazilian political figure is associated with, across Bl
 pnpm install
 pnpm ingest          # default sources: bluesky, rss, gnews, gkg; or: pnpm ingest gkg
 pnpm ingest gdelt    # GDELT DOC API, slow and rate limited, off by default
+pnpm ingest camara   # Câmara dos Deputados floor speeches, off by default
 pnpm dev             # http://localhost:3210
 pnpm reindex         # recompute terms and person matches after changing extract.ts or seed.json
 pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
@@ -25,6 +26,8 @@ Bluesky without login returns one page (100 posts) per person. To paginate, set 
 `gkg` downloads GDELT's 15-minute translation GKG files (`*.translation.gkg.csv.zip`), keeps Portuguese rows, uses the original page title as text and GDELT themes as `theme` terms. Processed slots are recorded in `gkg_files`, so each run only fetches new ones. `GKG_SLOTS` sets how many recent slots to look back (default 24 = 6h, ~3.5MB each). A slot is marked done before its docs are inserted; if the insert fails you must delete the row from `gkg_files` to retry it.
 
 `gdelt` (DOC API) enforces ~1 request / 5s per IP and returns 429 aggressively. Off by default.
+
+`camara` reads a tracked deputy's own plenary floor-speech summaries from `dadosabertos.camara.leg.br` (no API key), last 30 days per person, keyed by the person's `camaraId` in `seed.json`. Text is `"{name}: {sumario}"` so the existing alias matcher tags the doc; domain is fixed at `camara.leg.br`. Persons without a `camaraId` are skipped. Off by default.
 
 ## API
 
@@ -72,5 +75,5 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 - `src/server.ts` Hono API + static UI
 - `public/design-5.html` current UI (radial atlas), served at `/`; `public/index.html` legacy UI; other `design-*.html` kept for reference
 - `test/` node:test suites; `test/fixture.ts` seeds the in-memory database
-- `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
+- `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `camaraId` (federal deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
 - `data/` PGlite database (gitignored)

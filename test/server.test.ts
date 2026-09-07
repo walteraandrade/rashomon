@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { parseSourceList } from '../src/query.js'
+import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/query.js'
 
 // parseSourceList actually lives in src/query.ts (the choke point every other parseXQuery
 // helper already uses in this codebase), not src/server.ts as issue #8's spec sketched it.
@@ -30,5 +30,29 @@ describe('parseSourceList', () => {
   it('trims whitespace around tokens', () => {
     assert.equal(parseSourceList('gnews, rss'), 'gnews,rss')
     assert.equal(parseSourceList(' gnews , rss '), 'gnews,rss')
+  })
+
+  it('accepts camara, alone or in a comma list', () => {
+    assert.equal(parseSourceList('camara'), 'camara')
+    assert.equal(parseSourceList('camara,gdelt'), 'camara,gdelt')
+  })
+
+  it('accepts senado, alone or in a comma list', () => {
+    assert.equal(parseSourceList('senado'), 'senado')
+    assert.equal(parseSourceList('senado,gnews'), 'senado,gnews')
+  })
+})
+
+// issues #24/#25: the two independent inline literals in parseRisingQuery/parseTimelineQuery
+// must accept 'camara' and 'senado' too, so they cannot silently drift from SOURCES again.
+describe('parseRisingQuery/parseTimelineQuery source', () => {
+  it('resolves source: camara to camara, not all', () => {
+    assert.equal(parseRisingQuery({ source: 'camara' }).source, 'camara')
+    assert.equal(parseTimelineQuery({ source: 'camara' }).source, 'camara')
+  })
+
+  it('resolves source: senado to senado, not all', () => {
+    assert.equal(parseRisingQuery({ source: 'senado' }).source, 'senado')
+    assert.equal(parseTimelineQuery({ source: 'senado' }).source, 'senado')
   })
 })

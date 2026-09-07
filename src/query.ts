@@ -10,7 +10,7 @@ export const int = (v: string | undefined, d: number, lo: number, hi: number) =>
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
 }
 
-export const SOURCES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg']
+export const SOURCES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado']
 
 // Accepts a comma-separated list, drops unknown tokens silently, dedupes, and falls
 // back to 'all' when nothing valid survives — a superset of the old single-token check,
@@ -43,7 +43,7 @@ export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery
 export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery => ({
   days: int(q.days, 7, 1, 365),
   baseline: int(q.baseline, 30, 1, 365),
-  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg'].includes(q.source ?? '') ? q.source! : 'all',
+  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado'].includes(q.source ?? '') ? q.source! : 'all',
   domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   limit: int(q.limit, 20, 1, 100),
@@ -54,7 +54,7 @@ export const parseTimelineQuery = (q: Record<string, string | undefined>): Timel
   term: normalize((q.term ?? '').trim()),
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   days: int(q.days, 30, 1, 365),
-  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg'].includes(q.source ?? '') ? q.source! : 'all',
+  source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado'].includes(q.source ?? '') ? q.source! : 'all',
   domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
   bucket: q.bucket === 'day' ? 'day' : 'week',
 })

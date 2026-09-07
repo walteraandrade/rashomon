@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db, migrate } from '../src/db.js'
-import { docsFor, type DocsQuery } from '../src/graph.js'
+import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import { insertDoc, upsertPersons } from '../src/store.js'
 import { collidingUri, persons, seed } from './fixture.js'
 
@@ -21,6 +21,51 @@ describe('insertDoc persons', () => {
     const uri = 'https://example.org/flavio'
     await insertDoc({ source: 'rss', uri, text: 'Flávio Bolsonaro critica o governo', publishedAt: new Date().toISOString() }, family)
     assert.deepEqual(await tagged(uri), ['flavio-bolsonaro'])
+  })
+})
+
+describe('insertDoc camara', () => {
+  before(seed)
+  const uri = 'https://www.camara.leg.br/discursos/74847/2018-01-01T10:00'
+  const [, , bolsonaro] = persons
+  const tagged = async (u: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [u])).rows.map((r) => r.person_id)
+
+  it('tags the camara doc with exactly its own person', async () => {
+    assert.deepEqual(await tagged(uri), ['bolsonaro'])
+  })
+
+  it('stores tone as null for a camara doc', async () => {
+    assert.deepEqual(await stored(uri), { source: 'camara', tone: null })
+  })
+
+  it('surfaces in /sources with domain camara.leg.br and null tone', async () => {
+    const wideGraph: GraphQuery = { days: 3100, source: 'all', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+    const rows = await sourcesFor(bolsonaro, wideGraph)
+    const row = rows.find((r) => r.domain === 'camara.leg.br')
+    assert.equal(row?.source, 'camara')
+    assert.equal(row?.tone, null)
+  })
+})
+
+describe('insertDoc senado (issue #25)', () => {
+  const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
+  const family = [...persons, alcolumbre]
+  before(async () => (await seed(), upsertPersons([alcolumbre])))
+  const tagged = async (uri: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
+  const termsOf = async (uri: string) =>
+    (await db.query<{ term: string }>(`select t.term from doc_terms t join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
+
+  it('tags the speaking senator via the name-prefix, stores terms, and leaves tone null', async () => {
+    const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/111111'
+    await insertDoc(
+      { source: 'senado', uri, text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: new Date().toISOString(), domain: 'senado.leg.br' },
+      family,
+    )
+    assert.deepEqual(await tagged(uri), ['alcolumbre'])
+    assert.ok((await termsOf(uri)).includes('soberania'))
+    assert.deepEqual(await stored(uri), { source: 'senado', tone: null })
   })
 })
 

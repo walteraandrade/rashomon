@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { parseSourceList } from '../src/query.js'
+import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/query.js'
 
 // parseSourceList actually lives in src/query.ts (the choke point every other parseXQuery
 // helper already uses in this codebase), not src/server.ts as issue #8's spec sketched it.
@@ -30,5 +30,20 @@ describe('parseSourceList', () => {
   it('trims whitespace around tokens', () => {
     assert.equal(parseSourceList('gnews, rss'), 'gnews,rss')
     assert.equal(parseSourceList(' gnews , rss '), 'gnews,rss')
+  })
+
+  it('issue #25: accepts "senado" like any other source token', () => {
+    assert.equal(parseSourceList('senado'), 'senado')
+    assert.equal(parseSourceList('senado,gnews'), 'senado,gnews')
+  })
+})
+
+describe('issue #25: senado as a rising/timeline source token', () => {
+  it('parseRisingQuery accepts "senado" instead of falling back to "all"', () => {
+    assert.equal(parseRisingQuery({ source: 'senado' }).source, 'senado')
+  })
+
+  it('parseTimelineQuery accepts "senado" instead of falling back to "all"', () => {
+    assert.equal(parseTimelineQuery({ source: 'senado' }).source, 'senado')
   })
 })

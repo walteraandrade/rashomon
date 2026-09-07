@@ -67,6 +67,15 @@ describe('personsMentioned', () => {
     assert.deepEqual(ids('Ciro Nogueira comenta o orçamento'), [])
     assert.deepEqual(ids('Ciro critica Lula'), ['lula', 'ciro'])
   })
+
+  it('issue #25: tags the speaking senator on a senado doc via its bare name-prefix, with no source-specific branch involved', () => {
+    // mirrors src/collectors/senado.ts's `${person.name}: ${TextoResumo}` convention; the
+    // resumo body itself never names Alcolumbre, so the tag only lands via the prefix
+    assert.deepEqual(
+      ids('Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária'),
+      ['alcolumbre'],
+    )
+  })
 })
 
 describe('nameTokens', () => {

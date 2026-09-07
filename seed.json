@@ -1,6 +1,6 @@
 [
   { "id": "lula", "name": "Lula", "aliases": ["Lula", "Luiz Inácio", "Luiz Inácio Lula da Silva"] },
-  { "id": "flavio-bolsonaro", "name": "Flávio Bolsonaro", "aliases": ["Flávio Bolsonaro"] },
+  { "id": "flavio-bolsonaro", "name": "Flávio Bolsonaro", "aliases": ["Flávio Bolsonaro"], "senadoId": "5894" },
   { "id": "tarcisio", "name": "Tarcísio", "aliases": ["Tarcísio", "Tarcísio de Freitas"] },
   { "id": "ratinho-junior", "name": "Ratinho Junior", "aliases": ["Ratinho Junior", "Ratinho Jr", "Carlos Massa Ratinho Junior"] },
   { "id": "caiado", "name": "Ronaldo Caiado", "aliases": ["Caiado", "Ronaldo Caiado"] },
@@ -21,7 +21,7 @@
   { "id": "fux", "name": "Luiz Fux", "aliases": ["Fux", "Luiz Fux"] },
   { "id": "bolsonaro", "name": "Jair Bolsonaro", "aliases": ["Jair Bolsonaro", "Bolsonaro", "Jair Messias Bolsonaro"] },
   { "id": "hugo-motta", "name": "Hugo Motta", "aliases": ["Hugo Motta"] },
-  { "id": "alcolumbre", "name": "Davi Alcolumbre", "aliases": ["Alcolumbre", "Davi Alcolumbre"] },
+  { "id": "alcolumbre", "name": "Davi Alcolumbre", "aliases": ["Alcolumbre", "Davi Alcolumbre"], "senadoId": "3830" },
   { "id": "haddad", "name": "Fernando Haddad", "aliases": ["Haddad", "Fernando Haddad"] },
   { "id": "alckmin", "name": "Geraldo Alckmin", "aliases": ["Alckmin", "Geraldo Alckmin"] },
   { "id": "nikolas", "name": "Nikolas Ferreira", "aliases": ["Nikolas Ferreira", "Nikolas"] },

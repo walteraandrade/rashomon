@@ -10,7 +10,7 @@ import { persons, seed } from './fixture.js'
 // limit:15 (was 10): doc /38 (gkg, issue #8's press-vs-network fixture) adds six
 // single-mention terms to the recent window, pushing "defende"/"fiscal"/"estabilidade"
 // past a limit of 10.
-const base: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', kind: 'all', limit: 15, min: 1 }
+const base: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 15, min: 1 }
 const [lula] = persons
 const nobody = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 
@@ -110,7 +110,7 @@ describe('rising acceptance criteria (issue #3)', () => {
 
   it('AC10: returns an empty terms array for a person without docs', async () => {
     const r = await risingFor(nobody, base)
-    assert.deepEqual(r, { days: 7, baseline: 30, terms: [] })
+    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], outlets: [] })
   })
 
   it('AC10: returns an empty terms array for an empty recent window', async () => {

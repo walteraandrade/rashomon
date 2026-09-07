@@ -3,7 +3,7 @@ import { describe, it, before } from 'node:test'
 import { docsFor, type DocsQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
 
-const base: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', limit: 50, offset: 0 }
+const base: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
 const [lula] = persons
 
 describe('docsFor', () => {

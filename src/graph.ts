@@ -1,11 +1,13 @@
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
+import { labelFor, resolveScope } from './outlets.js'
 import type { Person } from './types.js'
 
 export type GraphQuery = {
   days: number
   source: string
   domain: string
+  lean: string
   kind: string
   limit: number
   min: number
@@ -18,6 +20,7 @@ export type DocsQuery = {
   days: number
   source: string
   domain: string
+  lean: string
   limit: number
   offset: number
 }
@@ -27,6 +30,7 @@ export type RisingQuery = {
   baseline: number
   source: string
   domain: string
+  lean: string
   kind: string
   limit: number
   min: number
@@ -38,6 +42,7 @@ export type TimelineQuery = {
   days: number
   source: string
   domain: string
+  lean: string
   bucket: 'day' | 'week'
 }
 
@@ -65,13 +70,17 @@ type ToneCellRow = { person_id: string; domain: string; tone: number; n: number 
 type ToneListRow = { id: string; name: string }
 
 // $3 must already be normalized by parseSourceList; unlike kind, an unknown or empty
-// source is not rescued here and would scope to zero docs.
+// source is not rescued here and would scope to zero docs. $4 must already be the
+// effective domain scope from resolveScope (a comma-joined list, 'all', or '' for an
+// empty domain+lean intersection). string_to_array('', ',') yields an *empty* array
+// (verified against PGlite), so d.domain = any(...) matches nothing and the empty
+// intersection correctly scopes to zero rows.
 const scopeCte = `
   scope as (
     select d.id from docs d
     where d.published_at >= now() - make_interval(days => $2)
       and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
-      and ($4 = 'all' or d.domain = $4)
+      and ($4 = 'all' or d.domain = any(string_to_array($4, ',')))
   ),
   about as (
     select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $1
@@ -148,8 +157,15 @@ const sourcesSql = `
   from docs d join about a on a.doc_id = d.id
   group by 1, 2 order by docs desc, domain limit 80`
 
-export const sourcesFor = async (person: Person, q: GraphQuery) =>
-  (await db.query<SourceRow>(sourcesSql, [person.id, q.days, q.source, 'all'])).rows
+// Previously hardcoded 'all' here regardless of q.domain, silently ignoring a caller's
+// domain filter — fixed as a prerequisite for lean to have any effect on this route.
+// lean/basis are annotated per row from outlets.json regardless of whether q.lean
+// narrowed the scope: cheap, static, always-available metadata.
+export const sourcesFor = async (person: Person, q: GraphQuery) => {
+  const { domain } = resolveScope(q.domain, q.lean)
+  const { rows } = await db.query<SourceRow>(sourcesSql, [person.id, q.days, q.source, domain])
+  return rows.map((r) => ({ ...r, ...labelFor(r.domain) }))
+}
 
 // term/kind reuse the doc_terms (kind, term) index via exists, so a doc carrying the term
 // under two kinds (only possible with kind = 'all' or an unknown kind) is still counted/returned once.
@@ -176,12 +192,13 @@ const docsCountSql = `
   where ${docsWhereSql}`
 
 export const docsFor = async (person: Person, q: DocsQuery) => {
-  const params = [person.id, q.days, q.source, q.domain, q.term, q.kind]
+  const { domain, outlets } = resolveScope(q.domain, q.lean)
+  const params = [person.id, q.days, q.source, domain, q.term, q.kind]
   const [docs, count] = await Promise.all([
     db.query<DocRow>(docsSql, [...params, q.limit, q.offset]),
     db.query<{ total: number }>(docsCountSql, params),
   ])
-  return { total: count.rows[0].total, docs: docs.rows }
+  return { total: count.rows[0].total, docs: docs.rows, outlets }
 }
 
 // Buckets count backward from now() in fixed bucket_days steps (i = 0 is the most
@@ -216,9 +233,13 @@ const timelineSql = `
   group by b.bucket_start
   order by b.bucket_start asc`
 
+// Stays a bare array on purpose: lean narrows which docs count toward each bucket
+// (via the same resolveScope as every other route), but outlets/basis are not
+// surfaced here, since that would require wrapping this array in an object.
 export const timelineFor = async (person: Person, q: TimelineQuery) => {
   const bucketDays = q.bucket === 'day' ? 1 : 7
-  const params = [person.id, q.days, q.source, q.domain, q.term, q.kind, bucketDays]
+  const { domain } = resolveScope(q.domain, q.lean)
+  const params = [person.id, q.days, q.source, domain, q.term, q.kind, bucketDays]
   return (await db.query<TimelineRow>(timelineSql, params)).rows
 }
 
@@ -315,7 +336,7 @@ const risingSql = `
     select d.id from docs d
     where d.published_at >= now() - make_interval(days => $2)
       and ($4 = 'all' or d.source = $4)
-      and ($5 = 'all' or d.domain = $5)
+      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
   ),
   recent_about as (
     select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = $1
@@ -325,7 +346,7 @@ const risingSql = `
     where d.published_at < now() - make_interval(days => $2)
       and d.published_at >= now() - make_interval(days => $2 + $3)
       and ($4 = 'all' or d.source = $4)
-      and ($5 = 'all' or d.domain = $5)
+      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
   ),
   baseline_about as (
     select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = $1
@@ -353,29 +374,31 @@ const risingSql = `
 
 export const risingFor = async (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
+  const { domain, outlets } = resolveScope(q.domain, q.lean)
   const { rows } = await db.query<RisingRow>(risingSql, [
     person.id,
     q.days,
     q.baseline,
     q.source,
-    q.domain,
+    domain,
     q.kind,
     exclude,
     q.min,
     q.limit,
   ])
-  return { days: q.days, baseline: q.baseline, terms: rows }
+  return { days: q.days, baseline: q.baseline, terms: rows, outlets }
 }
 
 export const graphFor = async (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
+  const { domain, outlets } = resolveScope(q.domain, q.lean)
   const [terms, stats, signature] = await Promise.all([
-    db.query<TermRow>(termsSql, [person.id, q.days, q.source, q.domain, q.kind, exclude, q.min, q.sort, q.limit]),
-    db.query<Stats>(statsSql, [person.id, q.days, q.source, q.domain]),
-    db.query<SignatureRow>(signatureSql, [person.id, q.days, q.source, q.domain, exclude]),
+    db.query<TermRow>(termsSql, [person.id, q.days, q.source, domain, q.kind, exclude, q.min, q.sort, q.limit]),
+    db.query<Stats>(statsSql, [person.id, q.days, q.source, domain]),
+    db.query<SignatureRow>(signatureSql, [person.id, q.days, q.source, domain, exclude]),
   ])
   const ids = terms.rows.map((t) => `${t.kind}:${t.term}`)
-  const links = ids.length ? await db.query<LinkRow>(linksSql, [person.id, q.days, q.source, q.domain, ids]) : { rows: [] }
+  const links = ids.length ? await db.query<LinkRow>(linksSql, [person.id, q.days, q.source, domain, ids]) : { rows: [] }
   return {
     person,
     stats: stats.rows[0],
@@ -385,5 +408,6 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
       ...links.rows.map((l) => ({ source: l.s, target: l.t, count: l.count })),
     ],
     signature: signature.rows,
+    outlets,
   }
 }

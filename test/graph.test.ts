@@ -8,7 +8,7 @@ import { persons, seed } from './fixture.js'
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
 
-const base: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+const base: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
 const [lula, tarcisio] = persons
 const node = (g: Awaited<ReturnType<typeof graphFor>>, id: string) => g.nodes.find((n) => n.id === id)
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
@@ -140,7 +140,7 @@ describe('multi-source filtering (issue #8)', () => {
   it('AC1: sourcesFor and docsFor agree with the same hand-counted scope', async () => {
     const rows = await sourcesFor(lula, { ...base, source: 'gnews,rss,gkg' })
     assert.equal(rows.reduce((acc, r) => acc + r.docs, 0), 4)
-    const { total } = await docsFor(lula, { term: '', kind: 'all', days: 30, source: 'gnews,rss,gkg', domain: 'all', limit: 50, offset: 0 })
+    const { total } = await docsFor(lula, { term: '', kind: 'all', days: 30, source: 'gnews,rss,gkg', domain: 'all', lean: 'all', limit: 50, offset: 0 })
     assert.equal(total, 4)
   })
 
@@ -229,7 +229,7 @@ describe('risingFor', () => {
   // last-7-days recent window against the 8-37-day-ago baseline (default days:7, baseline:30);
   // "estabilidade fiscal" (docs /17-/19, day31/day35/day50) instead lands entirely in the baseline,
   // which is why it never appears at these default windows (see AC5 below).
-  const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', kind: 'all', limit: 20, min: 1 }
+  const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 20, min: 1 }
   const rnode = (r: Awaited<ReturnType<typeof risingFor>>, id: string) => r.terms.find((t) => `${t.kind}:${t.term}` === id)
   const rate = (raw: number, span: number) => Math.round((raw / span) * 100) / 100
   const lift = (cRecent: number, days: number, cBaseline: number, baseline: number) =>
@@ -308,7 +308,7 @@ describe('risingFor', () => {
 
   it('AC10: returns an empty terms array for a person without docs', async () => {
     const r = await risingFor({ id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }, risingBase)
-    assert.deepEqual(r, { days: 7, baseline: 30, terms: [] })
+    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], outlets: [] })
   })
 
   it('AC10: returns an empty terms array for an empty recent window', async () => {

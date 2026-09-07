@@ -678,7 +678,9 @@
 
   const loadSources = async (id) => {
     try {
-      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + query())).json()
+      const p = query()
+      p.delete('domain')
+      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + p)).json()
       if (id === requestId) renderSources(srcs)
     } catch (e) {
       if (id === requestId) $('sourceList').innerHTML = '<div class="rising-msg">erro ao carregar fontes</div>'

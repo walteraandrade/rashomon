@@ -1,4 +1,5 @@
 import { normalize } from './extract.js'
+import { LEANS } from './outlets.js'
 import type { DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
 
 // Independent of TESTIMONY_SCORER's own default in src/score.ts: a client can request
@@ -20,10 +21,29 @@ export const parseSourceList = (v: string | undefined): string => {
   return tokens.length ? tokens.join(',') : 'all'
 }
 
+const DOMAIN_TOKEN = /^[a-z0-9.:-]{1,120}$/
+
+// Accepts a comma-separated list of hosts, drops tokens that fail the existing
+// single-domain shape check, dedupes, and falls back to 'all' when nothing valid
+// survives — a superset of the old single-token check, so `domain=<host>` alone
+// keeps behaving exactly as it does today.
+export const parseDomainList = (v: string | undefined): string => {
+  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => DOMAIN_TOKEN.test(s)))]
+  return tokens.length ? tokens.join(',') : 'all'
+}
+
+// Mirrors parseSourceList/parseDomainList's convention: comma-separated, unknown
+// tokens dropped silently, falls back to 'all' (no filter) when nothing survives.
+export const parseLeanList = (v: string | undefined): string => {
+  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => (LEANS as string[]).includes(s)))]
+  return tokens.length ? tokens.join(',') : 'all'
+}
+
 export const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({
   days: int(q.days, 30, 1, 365),
   source: parseSourceList(q.source),
-  domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
+  domain: parseDomainList(q.domain),
+  lean: parseLeanList(q.lean),
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   limit: int(q.limit, 40, 1, 200),
   min: int(q.min, 2, 1, 1000),
@@ -35,7 +55,8 @@ export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   days: int(q.days, 30, 1, 365),
   source: parseSourceList(q.source),
-  domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
+  domain: parseDomainList(q.domain),
+  lean: parseLeanList(q.lean),
   limit: int(q.limit, 50, 1, 200),
   offset: int(q.offset, 0, 0, 1_000_000),
 })
@@ -44,7 +65,8 @@ export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQ
   days: int(q.days, 7, 1, 365),
   baseline: int(q.baseline, 30, 1, 365),
   source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado'].includes(q.source ?? '') ? q.source! : 'all',
-  domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
+  domain: parseDomainList(q.domain),
+  lean: parseLeanList(q.lean),
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   limit: int(q.limit, 20, 1, 100),
   min: int(q.min, 3, 1, 1000),
@@ -55,7 +77,8 @@ export const parseTimelineQuery = (q: Record<string, string | undefined>): Timel
   kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
   days: int(q.days, 30, 1, 365),
   source: ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado'].includes(q.source ?? '') ? q.source! : 'all',
-  domain: /^[a-z0-9.:-]{1,120}$/.test(q.domain ?? '') ? q.domain! : 'all',
+  domain: parseDomainList(q.domain),
+  lean: parseLeanList(q.lean),
   bucket: q.bucket === 'day' ? 'day' : 'week',
 })
 

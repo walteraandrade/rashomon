@@ -10,8 +10,8 @@ import { persons, seed } from './fixture.js'
 // query shapes (limit/min) deliberately differ from graph.test.ts's `base` so a passing
 // check here exercises real behaviour.
 const [lula] = persons
-const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'all', limit: 25, min: 1, sort: 'pmi' }
-const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', limit: 20, offset: 0 }
+const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 25, min: 1, sort: 'pmi' }
+const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 20, offset: 0 }
 
 describe('press vs network acceptance criteria (issue #8)', () => {
   before(seed)

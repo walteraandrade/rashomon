@@ -8,7 +8,7 @@ import { persons, seed, futureDoc } from './fixture.js'
 // extra future-dated doc here on top of the normal fixture cannot shift the
 // person-agnostic `scope` totals that graph.test.ts/signature*.test.ts hardcode
 // against in their own, separate processes.
-const base: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', bucket: 'week' }
+const base: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
 const [, , bolsonaro] = persons
 
 describe('timelineFor: future-dated doc', () => {
@@ -24,7 +24,7 @@ describe('timelineFor: future-dated doc', () => {
   })
 
   it('keeps the bucket-sum invariant against docsFor total when a doc is future-dated', async () => {
-    const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all' } as const
+    const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all' } as const
     const rows = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
     const sum = rows.reduce((acc, r) => acc + r.count, 0)
     const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0 })

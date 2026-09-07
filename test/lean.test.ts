@@ -1,0 +1,160 @@
+import assert from 'node:assert/strict'
+import { describe, it, before } from 'node:test'
+import { docsFor, graphFor, sourcesFor, timelineFor, type DocsQuery, type GraphQuery, type TimelineQuery } from '../src/graph.js'
+import { parseDomainList, parseLeanList } from '../src/query.js'
+import { OUTLETS } from '../src/outlets.js'
+import { persons, seed } from './fixture.js'
+import outletsJson from '../outlets.json' with { type: 'json' }
+
+const [, , bolsonaro] = persons
+
+// Widest window that reaches doc /41 (cartacapital.com.br, left, day 2200) without
+// touching anything past it (senado doc /40 sits at day 3200).
+const wideBase: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+const wideDocs: DocsQuery = { term: '', kind: 'all', days: 2210, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
+
+describe('outlets.json content matches the issue specification exactly', () => {
+  it('deep-equals a literal copy of the five entries', () => {
+    assert.deepEqual(outletsJson, [
+      {
+        domain: 'oantagonista.com.br',
+        lean: 'right',
+        basis: 'third_party_consensus',
+        note: "Anti-PT editorial line since founding; owners came from Veja's Sabino-era anti-Petista shift; acted as a Lava Jato press partner.",
+        sources: ['https://diplomatique.org.br/midia-antipetista-por-tras-do-portal-o-antagonista-2/'],
+      },
+      {
+        domain: 'crusoe.com.br',
+        lean: 'right',
+        basis: 'third_party_consensus',
+        note: 'Founded 2018 by the same two owners as oantagonista.com.br (Mainardi, Sabino); explicitly the same editorial line.',
+        sources: ['https://pt.wikipedia.org/wiki/Revista_Crusoé'],
+      },
+      {
+        domain: 'cartacapital.com.br',
+        lean: 'left',
+        basis: 'third_party_consensus',
+        note: 'Founded 1994 by Mino Carta; widely described as progressive, with explicit editorial support for Lula.',
+        sources: ['https://red.org.br/noticias/mino-carta-morre-aos-91-anos-icone-do-jornalismo-independente-no-brasil/'],
+      },
+      {
+        domain: 'poder360.com.br',
+        lean: 'center',
+        basis: 'self_declared',
+        note: "Outlet's own editorial principles claim non-partisanship and impartiality. No independent third-party audit found; treat as a claim, not a verified consensus.",
+        sources: ['https://www.poder360.com.br/politica-editorial/'],
+      },
+      {
+        domain: 'congressoemfoco.com.br',
+        lean: 'center',
+        basis: 'self_declared',
+        note: 'Described as independent/non-partisan since its 2004 founding. Ownership changed in Nov 2024 (sold to the Migalhas group) with no confirmed editorial shift since.',
+        sources: ['https://pt.wikipedia.org/wiki/Congresso_em_Foco'],
+      },
+    ])
+    assert.deepEqual(OUTLETS, outletsJson)
+  })
+})
+
+describe('parseLeanList', () => {
+  it('parses a comma-separated lean list, drops unknown tokens, falls back to all', () => {
+    assert.equal(parseLeanList('left,right'), 'left,right')
+    assert.equal(parseLeanList('left,bogus'), 'left')
+    assert.equal(parseLeanList('bogus1,bogus2'), 'all')
+    assert.equal(parseLeanList(''), 'all')
+    assert.equal(parseLeanList(undefined), 'all')
+    assert.equal(parseLeanList('left,left'), 'left')
+  })
+})
+
+describe('parseDomainList', () => {
+  it('parses a comma-separated domain list, dedupes, falls back to all', () => {
+    // single-token case: identical to the pre-existing single-domain behaviour
+    assert.equal(parseDomainList('a.com'), 'a.com')
+    assert.equal(parseDomainList('a.com,b.com'), 'a.com,b.com')
+    assert.equal(parseDomainList('a.com,a.com'), 'a.com')
+    assert.equal(parseDomainList(''), 'all')
+    assert.equal(parseDomainList(undefined), 'all')
+    assert.equal(parseDomainList('BAD SPACE!'), 'all')
+    assert.equal(parseDomainList('a.com,BAD SPACE!'), 'a.com')
+  })
+})
+
+describe('lean filtering (issue #26)', () => {
+  before(seed)
+
+  it('domain=cartacapital.com.br,poder360.com.br behaves as an OR across both domains', async () => {
+    const { total, docs } = await docsFor(bolsonaro, { ...wideDocs, domain: 'cartacapital.com.br,poder360.com.br' })
+    assert.equal(total, 2)
+    assert.deepEqual(docs.map((d) => d.domain).sort(), ['cartacapital.com.br', 'poder360.com.br'])
+  })
+
+  it('lean=right scopes to outlets.json right-labeled domains and excludes an unlabeled domain', async () => {
+    const g = await graphFor(bolsonaro, { ...wideBase, lean: 'right' })
+    assert.equal(g.stats.docs, 1)
+    assert.equal(g.stats.about, 1)
+    const { total, docs } = await docsFor(bolsonaro, { ...wideDocs, lean: 'right' })
+    assert.equal(total, 1)
+    assert.equal(docs[0].domain, 'oantagonista.com.br')
+    // doc /20/22/23/24 (example.org, absent from outlets.json) never surface under any lean
+    assert.ok(!docs.some((d) => d.domain === 'example.org'))
+  })
+
+  it('lean=left,right unions both labels and still excludes center and unlabeled', async () => {
+    const { total, docs } = await docsFor(bolsonaro, { ...wideDocs, lean: 'left,right' })
+    assert.equal(total, 2)
+    assert.deepEqual(docs.map((d) => d.domain).sort(), ['cartacapital.com.br', 'oantagonista.com.br'])
+    assert.ok(!docs.some((d) => d.domain === 'poder360.com.br'), 'poder360.com.br is center, must be excluded')
+    assert.ok(!docs.some((d) => d.domain === 'example.org'), 'example.org is unlabeled, must be excluded')
+  })
+
+  it('domain and lean intersect; an empty intersection returns zero docs, not all', async () => {
+    const { total, docs } = await docsFor(bolsonaro, { ...wideDocs, domain: 'example.org', lean: 'right' })
+    assert.deepEqual({ total, docs }, { total: 0, docs: [] })
+    const g = await graphFor(bolsonaro, { ...wideBase, domain: 'example.org', lean: 'right' })
+    assert.equal(g.stats.docs, 0)
+    assert.equal(g.stats.about, 0)
+    assert.deepEqual(g.nodes, [])
+  })
+
+  it('outlets is empty when lean is unset and populated with basis when lean narrows the scope', async () => {
+    const plain = await graphFor(bolsonaro, wideBase)
+    assert.deepEqual(plain.outlets, [])
+
+    // lean=right resolves to every outlets.json domain labeled right, not only the ones
+    // that happen to have a doc in this window's corpus (crusoe.com.br has none here).
+    const scoped = await graphFor(bolsonaro, { ...wideBase, lean: 'right' })
+    assert.deepEqual(
+      scoped.outlets.slice().sort((a, b) => a.domain.localeCompare(b.domain)),
+      [
+        { domain: 'crusoe.com.br', lean: 'right', basis: 'third_party_consensus' },
+        { domain: 'oantagonista.com.br', lean: 'right', basis: 'third_party_consensus' },
+      ],
+    )
+    assert.ok(scoped.outlets.some((o) => o.domain === 'oantagonista.com.br' && o.basis === 'third_party_consensus'))
+  })
+
+  it('sourcesFor now filters by domain (regression) and annotates rows with lean/basis', async () => {
+    const filtered = await sourcesFor(bolsonaro, { ...wideBase, domain: 'oantagonista.com.br' })
+    assert.equal(filtered.length, 1)
+    assert.equal(filtered[0].domain, 'oantagonista.com.br')
+    assert.equal(filtered[0].lean, 'right')
+    assert.equal(filtered[0].basis, 'third_party_consensus')
+
+    const unfiltered = await sourcesFor(bolsonaro, wideBase)
+    const exampleRow = unfiltered.find((r) => r.domain === 'example.org')
+    assert.equal(exampleRow?.lean, null)
+    assert.equal(exampleRow?.basis, null)
+  })
+
+  it('timelineFor stays a bare array and still narrows by lean', async () => {
+    const q: TimelineQuery = { term: '', kind: 'all', days: 2210, source: 'all', domain: 'all', lean: 'right', bucket: 'week' }
+    const rows = await timelineFor(bolsonaro, q)
+    assert.ok(Array.isArray(rows))
+    assert.ok(!('outlets' in rows))
+    assert.equal(rows.reduce((a, r) => a + r.count, 0), 1)
+
+    const allLean = await timelineFor(bolsonaro, { ...q, lean: 'all' })
+    assert.equal(allLean.reduce((a, r) => a + r.count, 0), 7)
+  })
+})

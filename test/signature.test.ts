@@ -4,7 +4,7 @@ import { graphFor, type GraphQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
 import { nameTokens } from '../src/extract.js'
 
-const base: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+const base: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
 const [lula] = persons
 const nobody = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100

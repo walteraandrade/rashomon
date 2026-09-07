@@ -8,7 +8,7 @@ import { persons, seed } from './fixture.js'
 // a query shape (kind/min/limit/sort) that differs from graph.test.ts's `base`, so a
 // passing AC3 here means real variance was exercised, not an accidental match on shared
 // defaults.
-const scope: GraphQuery = { days: 30, source: 'all', domain: 'all', kind: 'word', limit: 5, min: 5, sort: 'pmi' }
+const scope: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'word', limit: 5, min: 5, sort: 'pmi' }
 const [lula] = persons
 const nobody = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 

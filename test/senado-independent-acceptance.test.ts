@@ -103,7 +103,7 @@ describe('senado collector acceptance criteria, independently verified (issue #2
     // must stay narrower than the fixture's senado doc (dated ~3200 days ago, per AC6) or
     // scope itself would stop being empty regardless of who is asked about; the default
     // 30-day window (and the 365-day ceiling parseQuery ever allows over HTTP) both qualify
-    const base: GraphQuery = { days: 30, source: 'senado', domain: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+    const base: GraphQuery = { days: 30, source: 'senado', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
     const direct = await graphFor(lula, base)
     assert.deepEqual(direct.nodes, [])
     assert.deepEqual(direct.links, [])
@@ -195,7 +195,7 @@ describe('senado collector acceptance criteria, independently verified (issue #2
       { source: 'senado', uri, text: `${alcolumbre.name}: fala sobre soberania nacional`, publishedAt: daysAgo(3202), domain: 'senado.leg.br' },
       [...persons, alcolumbre],
     )
-    const wide: DocsQuery = { term: '', kind: 'all', days: 3300, source: 'senado', domain: 'all', limit: 50, offset: 0 }
+    const wide: DocsQuery = { term: '', kind: 'all', days: 3300, source: 'senado', domain: 'all', lean: 'all', limit: 50, offset: 0 }
     const { docs: found } = await docsFor(alcolumbre, wide)
     // asserts presence rather than an exact total, since an earlier test in this file
     // (AC12) may have already tagged alcolumbre with another senado doc in this shared

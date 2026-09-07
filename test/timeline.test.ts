@@ -3,7 +3,7 @@ import { describe, it, before } from 'node:test'
 import { docsFor, timelineFor, type TimelineQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
 
-const base: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', bucket: 'week' }
+const base: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
 const [lula, , bolsonaro] = persons
 
 describe('timelineFor', () => {
@@ -21,7 +21,7 @@ describe('timelineFor', () => {
     const q = { ...base, term: 'golpe', kind: 'word', days: 2140 }
     const rows = await timelineFor(bolsonaro, q)
     const sum = rows.reduce((a, r) => a + r.count, 0)
-    const { total } = await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, limit: 50, offset: 0 })
+    const { total } = await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, limit: 50, offset: 0 })
     assert.equal(total, 4)
     assert.equal(sum, total)
   })
@@ -39,7 +39,7 @@ describe('timelineFor', () => {
   })
 
   it('AC4: day buckets split what a week bucket merges', async () => {
-    const q = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all' } as const
+    const q = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all', lean: 'all' } as const
     const day = await timelineFor(bolsonaro, { ...q, bucket: 'day' })
     const week = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
     assert.deepEqual(day.filter((r) => r.count > 0).map((r) => r.count).sort(), [1, 1, 1, 1])
@@ -47,7 +47,7 @@ describe('timelineFor', () => {
   })
 
   it('AC5: without a term, kind has no effect and every doc about the person counts', async () => {
-    const q = { term: '', days: 2151, source: 'all', domain: 'all', bucket: 'week' } as const
+    const q = { term: '', days: 2151, source: 'all', domain: 'all', lean: 'all', bucket: 'week' } as const
     const withHashtagKind = await timelineFor(bolsonaro, { ...q, kind: 'hashtag' })
     const withAllKind = await timelineFor(bolsonaro, { ...q, kind: 'all' })
     const sumHashtag = withHashtagKind.reduce((a, r) => a + r.count, 0)

@@ -121,6 +121,14 @@ export const docs: RawDoc[] = [
   // test/store.test.ts and test/graph.test.ts, without perturbing this fixture's pinned
   // `/api/tone` persons.length===3 assertions.
   { source: 'senado', uri: 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999', text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: daysAgo(3200), domain: 'senado.leg.br' },
+  // doc 41: bolsonaro doc on a left-labeled outlet (outlets.json), dated past every window any
+  // existing pinned test opens (widest is days:2151 in timeline.test.ts AC5), so it only surfaces
+  // in new lean-filtering tests that deliberately open a wider window (e.g. days:2210) and never
+  // shifts n.total or any existing pmi/count/tone literal elsewhere. Together with doc 21
+  // (oantagonista.com.br, right, day 2105), doc 37 (poder360.com.br, center, day 35) and the
+  // example.org docs (absent from outlets.json), this gives three differently-labeled/unlabeled
+  // domains about bolsonaro reachable in one wide window for issue #26's lean tests.
+  { source: 'gnews', uri: 'https://cartacapital.com.br/41', text: 'Bolsonaro concede entrevista a veículo de esquerda sobre pauta econômica', publishedAt: daysAgo(2200), domain: 'cartacapital.com.br' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

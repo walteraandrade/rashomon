@@ -6,9 +6,9 @@ import { persons, seed } from './fixture.js'
 // Independent verification of issue #4's numbered acceptance criteria, written against
 // the spec rather than against test/timeline.test.ts. Values below are derived from the
 // fixture's own dated offsets (docs 20-24), not copied from the builder's assertions.
-const base: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', bucket: 'week' }
+const base: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
 const [lula, , bolsonaro] = persons
-const golpe = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all' } as const
+const golpe = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all', lean: 'all' } as const
 
 describe('timeline acceptance criteria (issue #4)', () => {
   before(seed)
@@ -25,7 +25,7 @@ describe('timeline acceptance criteria (issue #4)', () => {
   it('AC2: bucket counts sum to docsFor total for the same term/kind/days/source/domain', async () => {
     const rows = await timelineFor(lula, base)
     const sum = rows.reduce((acc, r) => acc + r.count, 0)
-    const { total } = await docsFor(lula, { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', limit: 200, offset: 0 })
+    const { total } = await docsFor(lula, { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 200, offset: 0 })
     assert.equal(total, 5, 'sanity: known fixture total for lula in the default window')
     assert.equal(sum, total)
   })
@@ -33,7 +33,7 @@ describe('timeline acceptance criteria (issue #4)', () => {
   it('AC2: also holds for a scoped term/kind/days window with multiple non-empty buckets', async () => {
     const rows = await timelineFor(bolsonaro, { ...base, ...golpe })
     const sum = rows.reduce((acc, r) => acc + r.count, 0)
-    const { total } = await docsFor(bolsonaro, { term: golpe.term, kind: golpe.kind, days: golpe.days, source: golpe.source, domain: golpe.domain, limit: 200, offset: 0 })
+    const { total } = await docsFor(bolsonaro, { term: golpe.term, kind: golpe.kind, days: golpe.days, source: golpe.source, domain: golpe.domain, lean: golpe.lean, limit: 200, offset: 0 })
     assert.equal(sum, total)
   })
 

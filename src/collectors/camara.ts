@@ -35,7 +35,11 @@ const fetchSpeeches = async (camaraId: string, attempt = 1): Promise<any[]> => {
 
 const toDoc = (person: Person, item: any): RawDoc | null => {
   if (!item.dataHoraInicio) return null
-  const parsed = new Date(item.dataHoraInicio)
+  const raw = String(item.dataHoraInicio)
+  // dataHoraInicio is an offset-less Brasilia wall-clock; pin -03:00 so
+  // publishedAt does not drift with the host's local timezone
+  const stamped = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : `${raw}-03:00`
+  const parsed = new Date(stamped)
   if (Number.isNaN(parsed.getTime())) return null
   const publishedAt = parsed.toISOString()
   const uri = item.urlTexto || `https://www.camara.leg.br/discursos/${person.camaraId}/${item.dataHoraInicio}`

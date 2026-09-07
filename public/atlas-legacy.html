@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rashomon · atlas radial</title>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05060c; --bg2: #0a0c17; --panel: #0d0f1c; --line: rgba(255,255,255,.09); --line-strong: rgba(255,255,255,.16);
+    --fg: #e9ebf5; --muted: #7d84a3; --muted-dim: #565c78;
+    --person: #ffd35c; --hashtag: #45ffc4; --word: #7fb0ff; --theme: #ff8fd8;
+    --tone-neg: #ff6b7d; --tone-pos: #7ee787; --tone-mid: #626a8c;
+    --spoke: rgba(255,255,255,.16); --chord: rgba(140,150,190,.16);
+    --radius: 9px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { grid-template-columns: minmax(0, 1fr);
+    background: var(--bg); color: var(--fg); font: 13.5px/1.4 Inter, system-ui, sans-serif;
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden;
+  }
+  ::selection { background: rgba(255,211,92,.25); }
+  button { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; min-width: 0; align-items: center; gap: 22px; padding: 10px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); min-height: 58px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
+  .brand .wordmark { font: 800 20px/1 'League Spartan', sans-serif; letter-spacing: .01em; }
+  .brand .tagline { font: 500 10.5px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .14em; color: var(--muted-dim); }
+  .person-pick { position: relative; display: inline-flex; align-items: center; }
+  .person-pick select {
+    appearance: none; background: none; border: 0; cursor: pointer; padding: 6px 26px 8px 8px;
+    font: 600 20px/1 'League Spartan', sans-serif; letter-spacing: .01em; color: var(--person); max-width: 420px;
+    border-bottom: 2px solid var(--person); box-shadow: 0 2px 8px -2px rgba(255,211,92,.6);
+  }
+  .person-pick select:focus-visible { outline: 2px solid var(--person); outline-offset: 2px; }
+  .person-pick select option { font: 14px Inter, system-ui, sans-serif; background: var(--panel); color: var(--fg); }
+  .person-pick::after {
+    content: ''; position: absolute; right: 10px; top: 45%; width: 7px; height: 7px; pointer-events: none;
+    border-right: 2px solid var(--person); border-bottom: 2px solid var(--person); transform: translateY(-50%) rotate(45deg);
+  }
+  .compare-link { color: var(--muted); text-decoration: none; font: 500 12px Inter, sans-serif; flex-shrink: 0; }
+  .compare-link:hover { color: var(--person); }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 18px; flex-shrink: 1; min-width: 0; }
+  #stats { text-align: right; color: var(--muted); font-size: 11.5px; line-height: 1.35; flex-shrink: 0; }
+  #stats b { color: var(--fg); font-weight: 600; }
+
+  #signature { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  #signature::-webkit-scrollbar { display: none; }
+  .sig-label { font: 600 10px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim); flex-shrink: 0; }
+  .sig-chip {
+    display: flex; align-items: center; gap: 5px; cursor: pointer; flex-shrink: 0;
+    padding: 3px 9px; border-radius: 20px; background: rgba(255,211,92,.08); border: 1px solid rgba(255,211,92,.25);
+    transition: border-color .12s ease, background .12s ease;
+  }
+  .sig-chip:hover { border-color: rgba(255,211,92,.6); background: rgba(255,211,92,.14); }
+  .sig-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .sig-chip .sig-term { color: var(--person); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+  .sig-chip .sig-pmi { color: var(--muted); font-size: 10.5px; }
+
+  /* ---------- layout ---------- */
+  .layout { display: grid; grid-template-columns: 218px minmax(0, 1fr) 272px; overflow: hidden; position: relative; }
+
+  /* ---------- header view switch ---------- */
+  .header-seg { width: 190px; flex-shrink: 0; }
+
+  /* ---------- toolbar ---------- */
+  #toolbar {
+    background: var(--bg2); border-right: 1px solid var(--line); overflow-y: auto; overflow-x: hidden;
+    padding: 16px 13px 24px; display: flex; flex-direction: column; gap: 20px;
+  }
+  .group { display: flex; flex-direction: column; gap: 7px; flex-shrink: 0; }
+  .group-label {
+    display: flex; align-items: center; gap: 6px; font: 600 10px/1 Inter, sans-serif;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim);
+  }
+  .group-label svg { width: 13px; height: 13px; opacity: .8; flex-shrink: 0; }
+  .seg { display: grid; gap: 4px; }
+  .seg.cols2 { grid-template-columns: 1fr 1fr; }
+  .seg.cols4 { grid-template-columns: repeat(4, 1fr); }
+  .segbtn {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 7px; cursor: pointer;
+    padding: 6px 6px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 5px;
+    transition: background .12s ease, color .12s ease, border-color .12s ease;
+  }
+  .segbtn:hover { color: var(--fg); border-color: var(--line-strong); }
+  .segbtn.active { background: rgba(255,211,92,.1); border-color: rgba(255,211,92,.5); color: var(--person); }
+  .segbtn .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .segbtn.active .dot { box-shadow: 0 0 5px currentColor; }
+
+  .stepper { display: grid; grid-template-columns: 26px 1fr 26px; align-items: center; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
+  .stepper button { background: none; border: none; cursor: pointer; padding: 7px 0; color: var(--muted); font-size: 14px; line-height: 1; }
+  .stepper button:hover { color: var(--person); background: rgba(255,255,255,.04); }
+  .stepper .val { text-align: center; font-size: 12.5px; padding: 6px 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+
+  .switchrow { display: flex; align-items: center; gap: 8px; cursor: pointer; position: relative; }
+  .switchrow input { position: absolute; left: 0; top: 0; width: 30px; height: 17px; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+  .switch-track { width: 30px; height: 17px; border-radius: 20px; background: var(--panel); border: 1px solid var(--line); position: relative; flex-shrink: 0; transition: background .15s ease, border-color .15s ease; }
+  .switch-track::after { content: ''; position: absolute; top: 1px; left: 1px; width: 13px; height: 13px; border-radius: 50%; background: var(--muted); transition: transform .15s ease, background .15s ease; }
+  .switchrow input:checked + .switch-track { background: rgba(255,211,92,.14); border-color: rgba(255,211,92,.55); }
+  .switchrow input:checked + .switch-track::after { transform: translateX(13px); background: var(--person); box-shadow: 0 0 5px rgba(255,211,92,.8); }
+  .switch-txt { font-size: 12px; color: var(--fg); }
+
+  /* ---------- graph ---------- */
+  #graph {
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(ellipse 60% 55% at 50% 48%, rgba(90,100,150,.14), transparent 70%),
+      var(--bg);
+  }
+  #chart { width: 100%; height: 100%; display: block; }
+  .ring-deco { fill: none; stroke: rgba(255,255,255,.035); }
+  .spoke { fill: none; }
+  .chord { fill: none; }
+  .node circle { cursor: pointer; }
+  .node.person circle { cursor: default; }
+  .label { fill: var(--fg); font: 500 11.5px Inter, sans-serif; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
+  .label.person { font: 700 17px 'League Spartan', sans-serif; fill: var(--person); stroke: var(--bg); }
+  .node, .spoke, .chord, .label { transition: opacity .12s ease; }
+
+  #tip {
+    position: absolute; display: none; background: var(--panel); border: 1px solid var(--line-strong);
+    border-radius: 8px; padding: 9px 11px; font-size: 12px; pointer-events: none; max-width: 240px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 5;
+  }
+  #tip b { color: var(--fg); font-weight: 600; }
+  #tip .muted { color: var(--muted); }
+  #tip .row { margin-top: 2px; }
+
+  #legend {
+    position: absolute; left: 16px; bottom: 14px; display: flex; gap: 14px; font-size: 11px; color: var(--muted);
+    background: rgba(10,12,23,.55); backdrop-filter: blur(4px); padding: 7px 12px; border-radius: 20px; border: 1px solid var(--line);
+  }
+  #legend span { display: flex; align-items: center; gap: 5px; }
+  #legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .tl-open #legend { display: none; }
+  #tonelegend { display: flex; gap: 14px; }
+
+  #empty {
+    position: absolute; inset: 0; display: none; place-items: center; text-align: center; color: var(--muted); padding: 20px;
+  }
+  #empty code { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--fg); }
+
+  /* ---------- split view: imprensa x rede ---------- */
+  #segSource.seg-disabled { opacity: .4; pointer-events: none; }
+  #splitView {
+    display: none; grid-column: 2; grid-template-columns: 1fr 1fr;
+    gap: 1px; background: var(--line); overflow: hidden;
+  }
+  .split-col { background: var(--bg); display: flex; flex-direction: column; min-width: 0; overflow-y: auto; }
+  .split-col-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 14px 10px;
+    position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line); z-index: 1;
+  }
+  .split-col-title { font: 600 10.5px Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-dim); flex-shrink: 0; }
+  .split-col-stats { color: var(--muted); font-size: 11px; line-height: 1.35; text-align: right; }
+  .split-col-stats b { color: var(--fg); font-weight: 600; }
+  .split-row {
+    display: grid; grid-template-columns: 10px auto 1fr auto auto; align-items: center; gap: 8px;
+    padding: 7px 14px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.03);
+  }
+  .split-row:hover { background: rgba(255,255,255,.03); }
+  .split-shared { width: 6px; height: 6px; border-radius: 50%; background: var(--person); box-shadow: 0 0 4px rgba(255,211,92,.8); }
+  .split-row .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .split-row .term { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .split-row .count { color: var(--muted); font-size: 11.5px; }
+  .split-row .tonechip { width: 32px; text-align: center; border-radius: 5px; padding: 2px 0; font-size: 10.5px; }
+  .split-row .tonechip:empty { visibility: hidden; }
+  .split-msg { padding: 24px 16px; color: var(--muted); font-size: 12.5px; text-align: center; }
+  .split-msg code { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--fg); }
+
+  /* ---------- tone by outlet ---------- */
+  #toneView { grid-column: 1 / -1; overflow: auto; padding: 22px 26px; background: var(--bg); }
+  .tone-controls { display: flex; gap: 26px; align-items: flex-end; margin-bottom: 12px; }
+  .tone-controls .group { flex-shrink: 0; }
+  .tone-controls .seg.cols4 { grid-template-columns: repeat(4, 52px); }
+  .tone-note { color: var(--muted); font-size: 11.5px; margin-bottom: 18px; }
+  #toneTableWrap { min-height: 160px; overflow-x: auto; }
+  #toneTableWrap .doc-msg { padding: 46px 0; }
+  table#toneTable { border-collapse: collapse; font-size: 12px; }
+  table#toneTable th, table#toneTable td { padding: 7px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table#toneTable th.domain-col { color: var(--muted); font-weight: 500; font-size: 11px; text-align: left; }
+  table#toneTable th.person-row-label { font: 700 15px 'League Spartan', sans-serif; color: var(--person); text-align: left; padding-right: 20px; }
+  td.tone-cell { text-align: center; border-radius: 4px; min-width: 64px; }
+  td.tone-cell.empty { color: var(--muted-dim); background: none; }
+
+  /* ---------- doc panel ---------- */
+  aside#docPanel {
+    position: fixed; top: 58px; right: 272px; bottom: 0; width: 360px;
+    background: var(--panel); border-left: 1px solid var(--line-strong);
+    box-shadow: -24px 0 48px -24px rgba(0,0,0,.6);
+    display: flex; flex-direction: column; z-index: 20;
+    transform: translateX(100%); opacity: 0; pointer-events: none; visibility: hidden;
+    transition: transform .16s ease, opacity .16s ease, visibility 0s linear .16s;
+  }
+  aside#docPanel.open { transform: translateX(0); opacity: 1; pointer-events: auto; visibility: visible; transition-delay: 0s; }
+  .docpanel-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 4px; flex-shrink: 0; }
+  .docpanel-head .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .docpanel-term { font: 600 15px Inter, sans-serif; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .docpanel-close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+  .docpanel-close:hover { color: var(--fg); background: rgba(255,255,255,.06); }
+  .docpanel-sub { padding: 0 14px 10px; color: var(--muted); font-size: 11.5px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .docpanel-body { flex: 1; overflow-y: auto; }
+  .doc-msg { padding: 22px 14px; color: var(--muted); font-size: 12.5px; text-align: center; }
+  .doc-row { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.03); }
+  .doc-meta { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .doc-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; flex-shrink: 0; }
+  .doc-domain { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .doc-date { font-size: 11px; color: var(--muted-dim); flex-shrink: 0; }
+  .doc-text { margin: 0 0 5px; font-size: 12.5px; line-height: 1.45; color: var(--fg); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .doc-link { font-size: 11.5px; color: var(--person); text-decoration: none; }
+  .doc-link:hover { text-decoration: underline; }
+  .docpanel-footer { padding: 10px 14px; border-top: 1px solid var(--line); flex-shrink: 0; }
+  .docpanel-footer button { width: 100%; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--fg); padding: 8px 0; cursor: pointer; font-size: 12px; }
+  .docpanel-footer button:hover { border-color: var(--line-strong); }
+  .docpanel-footer button + button { margin-top: 6px; }
+
+  /* ---------- timeline panel ---------- */
+  #timelinePanel {
+    position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 6;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 14px 8px; display: none; overflow: hidden;
+  }
+  #timelinePanel.open { display: block; }
+  @media (min-width: 901px) {
+    #timelinePanel.doc-open { right: 376px; }
+  }
+  .tl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .tl-title { font: 600 15px Inter, sans-serif; color: var(--fg); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-close { background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .tl-close:hover { color: var(--fg); background: rgba(255,255,255,.06); }
+  #tlBody .doc-msg { padding: 8px 0; text-align: left; }
+  .tl-axis { fill: var(--muted); font: 400 10px Inter, sans-serif; }
+
+  /* ---------- sources ---------- */
+  aside#sources { background: var(--bg2); border-left: 1px solid var(--line); overflow-y: auto; }
+  aside#sources h2 {
+    margin: 0; padding: 12px 14px 10px; font: 600 10.5px Inter, sans-serif; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted-dim); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--bg2); display: flex; align-items: center; gap: 6px;
+  }
+  #domainlabel { color: var(--person); text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .src {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 9px; padding: 7px 14px; cursor: pointer; align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+  }
+  .src:hover { background: rgba(255,255,255,.03); }
+  .src.active { background: rgba(255,211,92,.07); box-shadow: inset 3px 0 0 var(--person); }
+  .src .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .src .n { color: var(--muted); font-size: 11.5px; }
+  .src .t { width: 36px; text-align: center; border-radius: 5px; padding: 2px 0; font-size: 10.5px; }
+  .src .t:empty { visibility: hidden; }
+  #risingBox h2 { position: static; }
+  #risingList .rising-msg { padding: 10px 14px; color: var(--muted); font-size: 12px; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+    #toolbar { flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--line); padding: 12px; align-items: flex-start; }
+    .group { min-width: 132px; }
+    aside#sources { border-left: 0; border-top: 1px solid var(--line); max-height: 32vh; }
+    #stats { display: none; }
+    .person-pick select { font-size: 16px; max-width: 60vw; }
+    .header-seg { width: auto; }
+    #toneView { padding: 16px; }
+    .tone-controls { flex-wrap: wrap; gap: 14px; }
+    aside#docPanel { left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 60vh; border-left: 0; border-top: 1px solid var(--line-strong); transform: translateY(100%); }
+    aside#docPanel.open { transform: translateY(0); }
+    #timelinePanel.doc-open { position: fixed; left: 16px; right: 16px; bottom: calc(60vh + 10px); z-index: 21; }
+    #splitView { grid-template-columns: 1fr; grid-column: 1; }
+    .split-col { max-height: 50vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="wordmark">rashomon</span><span class="tagline">atlas radial</span></div>
+  <div class="person-pick"><select id="personTabs" aria-label="Pessoa"></select></div>
+  <a class="compare-link" href="compare.html">comparar pessoas</a>
+  <div class="seg cols2 header-seg" id="segView"></div>
+  <div class="header-right">
+    <div id="signature"></div>
+    <div id="stats"></div>
+  </div>
+</header>
+<div class="layout">
+  <aside id="toolbar">
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6V8l2.6 1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>janela</div>
+      <div class="seg cols4" id="segDays"></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 5.2 8 2l6 3.2v5.6L8 14 2 10.8Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 5.2 8 8.4l6-3.2M8 8.4v5.6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>fonte</div>
+      <div class="seg cols2" id="segSource"></div>
+    </div>
+    <div class="group">
+      <label class="switchrow"><input type="checkbox" id="splitMode"><span class="switch-track"></span><span class="switch-txt">imprensa × rede</span></label>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 8.4 8.4 2h3.4a2 2 0 0 1 2 2v3.4L7.6 14a1.4 1.4 0 0 1-2 0L2 10.4a1.4 1.4 0 0 1 0-2Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="11" cy="5" r="1" fill="currentColor"/></svg>tipo</div>
+      <div class="seg cols2" id="segKind"></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M3 12V6M8 12V3M13 12V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>ordem</div>
+      <div class="seg cols2" id="segSort"></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><circle cx="5" cy="5.5" r="1.6" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="11" cy="5.5" r="1.6" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="11" r="1.6" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>nós</div>
+      <div class="stepper" id="stepLimit"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+    </div>
+    <div class="group">
+      <div class="group-label"><svg viewBox="0 0 16 16"><path d="M2 3h12L9.5 8.4V13l-3-1.6V8.4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>mín. docs</div>
+      <div class="stepper" id="stepMin"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+    </div>
+    <div class="group">
+      <label class="switchrow"><input type="checkbox" id="tone"><span class="switch-track"></span><span class="switch-txt">cor por tom</span></label>
+    </div>
+    <div class="group">
+      <label class="switchrow"><input type="checkbox" id="rising"><span class="switch-track"></span><span class="switch-txt">em alta (7d)</span></label>
+    </div>
+  </aside>
+  <div id="graph">
+    <svg id="chart" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="empty">nada nessa janela.<br>roda <code>pnpm ingest</code></div>
+    <div id="legend">
+      <span><i style="background:var(--person)"></i>pessoa</span>
+      <span><i style="background:var(--hashtag)"></i>hashtag</span>
+      <span><i style="background:var(--word)"></i>palavra</span>
+      <span><i style="background:var(--theme)"></i>tema</span>
+      <span id="tonelegend" hidden><i style="background:var(--tone-neg)"></i>tom −<i style="background:var(--tone-pos)"></i>tom +</span>
+    </div>
+    <section id="timelinePanel">
+      <div class="tl-head">
+        <span class="tl-title" id="tlTitle"></span>
+        <button class="tl-close" id="tlClose" aria-label="fechar linha do tempo" title="fechar">×</button>
+      </div>
+      <div id="tlBody"></div>
+    </section>
+  </div>
+  <div id="splitView">
+    <div class="split-col" data-col="press">
+      <div class="split-col-head">
+        <span class="split-col-title">imprensa</span>
+        <span class="split-col-stats"></span>
+      </div>
+      <div class="split-col-body"></div>
+    </div>
+    <div class="split-col" data-col="network">
+      <div class="split-col-head">
+        <span class="split-col-title">rede</span>
+        <span class="split-col-stats"></span>
+      </div>
+      <div class="split-col-body"></div>
+    </div>
+  </div>
+  <aside id="sources">
+    <h2>fontes <span id="domainlabel"></span></h2>
+    <div id="sourceList"></div>
+    <div id="risingBox" hidden>
+      <h2>em alta</h2>
+      <div id="risingList"></div>
+    </div>
+  </aside>
+  <section id="toneView" hidden>
+    <div class="tone-controls">
+      <div class="group">
+        <div class="group-label">janela</div>
+        <div class="seg cols4" id="toneSegDays"></div>
+      </div>
+      <div class="group">
+        <div class="group-label">mín. docs</div>
+        <div class="stepper" id="toneStepMin"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
+      </div>
+    </div>
+    <div class="tone-note">tom só existe em textos do GDELT.</div>
+    <div id="toneTableWrap"></div>
+  </section>
+  <div id="tip"></div>
+</div>
+<aside id="docPanel">
+  <div class="docpanel-head">
+    <span class="dot" id="docTermDot"></span>
+    <span class="docpanel-term" id="docTermLabel"></span>
+    <button class="docpanel-close" id="docClose" aria-label="fechar" title="fechar">×</button>
+  </div>
+  <div class="docpanel-sub" id="docSub"></div>
+  <div class="docpanel-body" id="docBody"></div>
+  <div class="docpanel-footer" id="docFooter">
+    <button id="docMore" hidden>carregar mais</button>
+    <button id="docTimeline">linha do tempo</button>
+  </div>
+</aside>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const kindColor = { person: 'var(--person)', hashtag: 'var(--hashtag)', word: 'var(--word)', theme: 'var(--theme)' }
+  const kindColorHex = { hashtag: '#45ffc4', word: '#7fb0ff', theme: '#ff8fd8' }
+  const toneScale = d3.scaleLinear().domain([-3, 0, 3]).range(['#ff6b7d', '#626a8c', '#7ee787']).clamp(true)
+  const toneColor = (t) => (t === null || t === undefined ? 'var(--line)' : toneScale(t))
+  const nodeFill = (n) => (state.tone && n.kind !== 'person' && n.tone !== null && n.tone !== undefined ? toneScale(n.tone) : kindColor[n.kind])
+
+  const state = { person: null, days: '30', source: 'all', kind: 'all', sort: 'count', limit: 40, min: 2, domain: 'all', tone: false, rising: false, view: 'atlas' }
+  const toneState = { days: '30', min: 3 }
+  let requestId = 0
+  let sim = null
+  let people = []
+  let currentGraph = null
+  let refreshTimelineChart = () => {}
+  let risingIds = new Set()
+
+  // ---------- split mode: imprensa x rede ----------
+  let splitMode = false
+  let sharedSplitIds = new Set()
+  const SPLIT_COLUMNS = [
+    { id: 'press', label: 'imprensa', source: 'gnews,rss,gkg' },
+    { id: 'network', label: 'rede', source: 'bluesky' },
+  ]
+  const splitState = {
+    press: { requestId: 0, loading: false, error: null, graph: null },
+    network: { requestId: 0, loading: false, error: null, graph: null },
+  }
+
+  const svg = d3.select('#chart')
+  const root = svg.append('g').attr('class', 'root')
+  const layerRingsDeco = root.append('g')
+  const layerChords = root.append('g')
+  const layerSpokes = root.append('g')
+  const layerNodes = root.append('g')
+  const layerLabels = root.append('g')
+  const tip = $('tip')
+
+  svg.call(d3.zoom().scaleExtent([0.25, 5]).on('zoom', (e) => root.attr('transform', e.transform)))
+
+  // ---------- toolbar: static option groups ----------
+  const buildSeg = (containerId, options, key, colored) => {
+    const el = $(containerId)
+    el.innerHTML = options.map(([value, label]) => `
+      <button class="segbtn" data-value="${value}">${colored && kindColorHex[value] ? `<span class="dot" style="background:${kindColorHex[value]};color:${kindColorHex[value]}"></span>` : ''}${label}</button>
+    `).join('')
+    el.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => {
+      state[key] = btn.dataset.value
+      if (key === 'kind') paintSeg('segKind', state.kind)
+      refreshSegActive()
+      load()
+    }))
+  }
+
+  const refreshSegActive = () => {
+    paintSeg('segDays', state.days)
+    paintSeg('segSource', state.source)
+    paintSeg('segKind', state.kind)
+    paintSeg('segSort', state.sort)
+  }
+  const paintSeg = (id, value) => {
+    $(id).querySelectorAll('.segbtn').forEach((b) => b.classList.toggle('active', b.dataset.value === value))
+  }
+
+  buildSeg('segDays', [['7', '7d'], ['30', '30d'], ['90', '90d'], ['365', '1a']], 'days')
+  buildSeg('segSource', [['all', 'todas'], ['bluesky', 'bluesky'], ['gdelt', 'gdelt'], ['rss', 'rss'], ['gnews', 'g.news'], ['gkg', 'gkg']], 'source')
+  buildSeg('segKind', [['all', 'todos'], ['hashtag', 'hashtag'], ['word', 'palavra'], ['theme', 'tema']], 'kind', true)
+  buildSeg('segSort', [['count', 'contagem'], ['pmi', 'pmi']], 'sort')
+  refreshSegActive()
+
+  // ---------- view switch (atlas vs tom por veículo) ----------
+  const updateVisibility = () => {
+    const isTone = state.view === 'tone'
+    document.querySelector('.person-pick').style.display = isTone ? 'none' : ''
+    $('toolbar').style.display = isTone ? 'none' : ''
+    $('toneView').style.display = isTone ? 'block' : 'none'
+    $('segSource').classList.toggle('seg-disabled', splitMode)
+    const showSplit = !isTone && splitMode
+    $('graph').style.display = !isTone && !splitMode ? '' : 'none'
+    $('splitView').style.display = showSplit ? 'grid' : 'none'
+    $('sources').style.display = !isTone ? '' : 'none'
+    $('signature').style.display = !isTone && !splitMode ? '' : 'none'
+    $('stats').style.display = !isTone && !splitMode ? '' : 'none'
+    // /timeline only accepts a single source and would silently answer with source=all in split mode, so hide it
+    $('docTimeline').hidden = showSplit
+  }
+
+  const setView = (view) => {
+    state.view = view
+    paintSeg('segView', view)
+    if (view === 'tone') closeDocPanel()
+    updateVisibility()
+    if (view === 'tone') loadTone()
+  }
+
+  const setSplitMode = (on) => {
+    ++requestId
+    splitMode = on
+    updateVisibility()
+    if (on) { closeTimelinePanel(); loadSplit() }
+    else load()
+  }
+
+  const buildViewSeg = () => {
+    const el = $('segView')
+    el.innerHTML = `<button class="segbtn" data-value="atlas">atlas</button><button class="segbtn" data-value="tone">tom por veículo</button>`
+    el.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.value)))
+    paintSeg('segView', state.view)
+  }
+  buildViewSeg()
+
+  $('splitMode').addEventListener('change', () => setSplitMode($('splitMode').checked))
+
+  // ---------- steppers ----------
+  const buildStepper = (id, key, min, max, step) => {
+    const el = $(id)
+    const valEl = el.querySelector('.val')
+    const render = () => { valEl.textContent = state[key] }
+    el.querySelector('.dec').addEventListener('click', () => { state[key] = Math.max(min, state[key] - step); render(); load() })
+    el.querySelector('.inc').addEventListener('click', () => { state[key] = Math.min(max, state[key] + step); render(); load() })
+    render()
+  }
+  buildStepper('stepLimit', 'limit', 5, 200, 5)
+  buildStepper('stepMin', 'min', 1, 999, 1)
+
+  // ---------- tone by outlet ----------
+  let toneRequestId = 0
+
+  const mountToneControls = () => {
+    const daysEl = $('toneSegDays')
+    daysEl.innerHTML = [['7', '7d'], ['30', '30d'], ['90', '90d'], ['365', '1a']]
+      .map(([v, l]) => `<button class="segbtn" data-value="${v}">${l}</button>`).join('')
+    daysEl.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => {
+      toneState.days = btn.dataset.value
+      paintSeg('toneSegDays', toneState.days)
+      loadTone()
+    }))
+    paintSeg('toneSegDays', toneState.days)
+
+    const minEl = $('toneStepMin')
+    const valEl = minEl.querySelector('.val')
+    const renderMin = () => { valEl.textContent = toneState.min }
+    minEl.querySelector('.dec').addEventListener('click', () => { toneState.min = Math.max(1, toneState.min - 1); renderMin(); loadTone() })
+    minEl.querySelector('.inc').addEventListener('click', () => { toneState.min = Math.min(20, toneState.min + 1); renderMin(); loadTone() })
+    renderMin()
+  }
+  mountToneControls()
+
+  const renderToneCell = (personName, domain, cell) => {
+    if (!cell) return `<td class="tone-cell empty">–</td>`
+    return `<td class="tone-cell num" style="background:${toneScale(cell.tone)}" data-person="${escapeHtml(personName)}" data-domain="${escapeHtml(domain)}" data-tone="${cell.tone}" data-n="${cell.n}">${cell.tone}</td>`
+  }
+
+  const renderToneTable = (data) => {
+    const wrap = $('toneTableWrap')
+    if (data.cells.length === 0) {
+      wrap.innerHTML = '<div class="doc-msg">nenhum tom nessa janela.</div>'
+      return
+    }
+    const byKey = new Map(data.cells.map((c) => [`${c.person_id}|${c.domain}`, c]))
+    const head = `<tr><th></th>${data.domains.map((d) => `<th class="domain-col" title="${escapeHtml(d)}">${escapeHtml(d)}</th>`).join('')}</tr>`
+    const body = data.persons.map((p) => {
+      const cells = data.domains.map((d) => renderToneCell(p.name, d, byKey.get(`${p.id}|${d}`))).join('')
+      return `<tr><th class="person-row-label">${escapeHtml(p.name)}</th>${cells}</tr>`
+    }).join('')
+    wrap.innerHTML = `<table id="toneTable"><thead>${head}</thead><tbody>${body}</tbody></table>`
+    wrap.querySelectorAll('.tone-cell:not(.empty)').forEach((el) => {
+      el.addEventListener('mousemove', (e) => {
+        tip.style.display = 'block'
+        const box = tip.parentElement.getBoundingClientRect()
+        tip.style.left = e.clientX - box.left + 14 + 'px'; tip.style.top = e.clientY - box.top + 14 + 'px'
+        tip.innerHTML = `<b>${escapeHtml(el.dataset.person)}</b><div class="row muted">${escapeHtml(el.dataset.domain)}</div>` +
+          `<div class="row muted">tom <b class="num">${el.dataset.tone}</b> &nbsp; <b class="num">${el.dataset.n}</b> docs</div>`
+      })
+      el.addEventListener('mouseleave', () => { tip.style.display = 'none' })
+    })
+  }
+
+  const loadTone = async () => {
+    const id = ++toneRequestId
+    $('toneTableWrap').innerHTML = '<div class="doc-msg">carregando…</div>'
+    try {
+      const params = new URLSearchParams({ days: toneState.days, min: toneState.min })
+      const res = await fetch('/api/tone?' + params)
+      if (!res.ok) throw new Error('falha ao carregar')
+      const data = await res.json()
+      if (id !== toneRequestId) return
+      renderToneTable(data)
+    } catch (e) {
+      if (id !== toneRequestId) return
+      $('toneTableWrap').innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
+    }
+  }
+
+  $('tone').addEventListener('change', () => {
+    state.tone = $('tone').checked
+    $('tonelegend').hidden = !state.tone
+    layerNodes.selectAll('.node circle').attr('fill', nodeFill)
+  })
+
+  // ---------- rising terms ----------
+  const applyRisingRing = () => {
+    layerNodes.selectAll('.node circle')
+      .attr('stroke', (d) => risingIds.has(d.id) ? 'var(--person)' : (d.kind === 'person' ? 'rgba(255,211,92,.35)' : 'rgba(0,0,0,.4)'))
+      .attr('stroke-width', (d) => risingIds.has(d.id) ? 2.5 : (d.kind === 'person' ? 2 : 1))
+  }
+
+  const renderRising = (terms) => {
+    if (terms.length === 0) {
+      $('risingList').innerHTML = '<div class="rising-msg">nada em alta agora</div>'
+      return
+    }
+    $('risingList').innerHTML = terms.slice(0, 10).map((t) => `
+      <div class="src" data-kind="${t.kind}" data-term="${escapeHtml(t.term)}">
+        <span class="d">${t.kind === 'hashtag' ? '#' + t.term : t.term}</span>
+        <span class="n num" style="color:var(--person)">${t.lift}×</span>
+      </div>`).join('')
+    $('risingList').querySelectorAll('.src').forEach((el) => el.addEventListener('click', () => {
+      openDocPanel({ term: el.dataset.term, kind: el.dataset.kind })
+    }))
+  }
+
+  const loadRising = async (id = requestId) => {
+    if (!state.person) return
+    $('risingList').innerHTML = '<div class="rising-msg">carregando…</div>'
+    try {
+      const params = new URLSearchParams({ source: state.source, domain: state.domain, kind: state.kind })
+      const res = await fetch(`/api/people/${state.person}/rising?` + params)
+      if (!res.ok) throw new Error('falha ao carregar')
+      const data = await res.json()
+      if (id !== requestId) return
+      risingIds = new Set(data.terms.map((t) => `${t.kind}:${t.term}`))
+      applyRisingRing()
+      renderRising(data.terms)
+    } catch (e) {
+      if (id !== requestId) return
+      risingIds = new Set()
+      applyRisingRing()
+      $('risingList').innerHTML = '<div class="rising-msg">erro ao carregar</div>'
+    }
+  }
+
+  $('rising').addEventListener('change', () => {
+    state.rising = $('rising').checked
+    $('risingBox').hidden = !state.rising
+    if (!state.rising) {
+      risingIds = new Set()
+      applyRisingRing()
+      $('risingList').innerHTML = ''
+      return
+    }
+    loadRising()
+  })
+
+  // ---------- fetch / load ----------
+  const query = () => queryFor(state.source)
+  const queryFor = (source) => new URLSearchParams({
+    days: state.days, source, kind: state.kind, sort: state.sort,
+    limit: state.limit, min: state.min, domain: state.domain,
+  })
+
+  const load = async () => {
+    if (!state.person) return
+    closeDocPanel()
+    closeTimelinePanel()
+    const id = ++requestId
+    loadSources(id)
+    if (splitMode) { loadSplit(); return }
+    try {
+      const res = await fetch(`/api/people/${state.person}/graph?` + query())
+      const g = await res.json()
+      if (id !== requestId) return
+      currentGraph = g
+      render(g)
+      if (id === requestId && state.rising) loadRising(id)
+    } catch (e) {
+      $('stats').innerHTML = `erro: ${e.message}`
+    }
+  }
+
+  const loadSources = async (id) => {
+    try {
+      const srcs = await (await fetch(`/api/people/${state.person}/sources?` + query())).json()
+      if (id === requestId) renderSources(srcs)
+    } catch (e) {
+      if (id === requestId) $('sourceList').innerHTML = '<div class="rising-msg">erro ao carregar fontes</div>'
+    }
+  }
+
+  const renderSources = (rows) => {
+    $('domainlabel').textContent = state.domain === 'all' ? '' : `· ${state.domain}`
+    const all = [{ domain: 'all', label: 'todas', docs: rows.reduce((a, r) => a + r.docs, 0), tone: null }, ...rows]
+    const box = $('sourceList')
+    box.innerHTML = all.map((r) => `
+      <div class="src ${r.domain === state.domain ? 'active' : ''}" data-domain="${r.domain ?? ''}" title="${r.source ?? ''}">
+        <span class="d">${r.label ?? r.domain ?? r.source ?? 'desconhecido'}</span>
+        <span class="n num">${r.docs}</span>
+        <span class="t num" style="background:${toneColor(r.tone)}">${r.tone === null || r.tone === undefined ? '' : r.tone}</span>
+      </div>`).join('')
+    box.querySelectorAll('.src').forEach((el) => el.addEventListener('click', () => {
+      const d = el.dataset.domain
+      state.domain = !d || d === state.domain ? 'all' : d
+      load()
+    }))
+  }
+
+  // ---------- rank rings + golden-angle seeding ----------
+  // Ring radius encodes rank by the active sort: closer to the center = stronger association.
+  // Angle follows the golden angle so consecutive ranks land far apart and the layout is deterministic.
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+  const RING_RANGE = [120, 310]
+  const RING_RANGE_DECO = [120, 215, 310]
+
+  // ---------- render ----------
+  const render = (g) => {
+    if (sim) sim.stop()
+    layerNodes.selectAll('*').remove()
+    layerLabels.selectAll('*').remove()
+    layerSpokes.selectAll('*').remove()
+    layerChords.selectAll('*').remove()
+    layerRingsDeco.selectAll('*').remove()
+
+    $('stats').innerHTML = `<b>${g.stats.about}</b> docs sobre <b>${g.person.name}</b> de <b>${g.stats.docs}</b> na janela`
+
+    const sigEl = $('signature')
+    if (!g.signature || g.signature.length === 0) {
+      sigEl.style.display = 'none'
+      sigEl.innerHTML = ''
+    } else {
+      sigEl.style.display = 'flex'
+      sigEl.innerHTML = `<span class="sig-label">assinatura</span>` + g.signature.map((s) => `
+        <span class="sig-chip" data-id="${s.kind}:${s.term}">
+          <span class="dot" style="background:${kindColorHex[s.kind]}"></span>
+          <span class="sig-term">${s.kind === 'hashtag' ? '#' + s.term : s.term}</span>
+          <span class="sig-pmi num">${s.pmi}</span>
+        </span>`).join('')
+    }
+
+    let highlightFn = () => {}
+    sigEl.querySelectorAll('.sig-chip').forEach((el) => {
+      el.addEventListener('mouseenter', () => highlightFn(el.dataset.id))
+      el.addEventListener('mouseleave', () => highlightFn(null))
+    })
+
+    const hasNodes = g.nodes.length > 0
+    $('empty').style.display = hasNodes ? 'none' : 'grid'
+    if (!hasNodes) { svg.attr('viewBox', '-300 -300 600 600'); return }
+
+    const half = RING_RANGE[1] + 170
+    svg.attr('viewBox', `${-half} ${-half} ${half * 2} ${half * 2}`)
+
+    const maxCount = d3.max(g.nodes, (n) => n.count) || 1
+    const r = d3.scaleSqrt().domain([1, maxCount]).range([4, 18])
+    const personR = 28
+    const nodeR = (n) => (n.kind === 'person' ? personR : r(n.count))
+
+    const ring = d3.scaleLinear().domain([0, Math.max(1, g.nodes.length - 1)]).range(RING_RANGE)
+    const personNode = { id: `person:${g.person.id}`, kind: 'person', term: g.person.name, fx: 0, fy: 0, x: 0, y: 0, count: 0 }
+    const terms = g.nodes.map((n, i) => ({ ...n, rank: i, x: ring(i) * Math.cos(i * GOLDEN_ANGLE), y: ring(i) * Math.sin(i * GOLDEN_ANGLE) }))
+    const nodes = [personNode, ...terms]
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+
+    // links resolved to node objects up front so both spokes and term-term links carry live coordinates
+    const links = g.links.map((l) => ({ ...l, source: byId.get(l.source), target: byId.get(l.target) })).filter((l) => l.source && l.target)
+    const isSpoke = (l) => l.source.kind === 'person'
+    const chordLinks = links.filter((l) => !isSpoke(l))
+    const linkIsTouching = (l, id) => l.source.id === id || l.target.id === id
+    const maxLinkCount = d3.max(chordLinks, (l) => l.count) || 1
+    const lw = (l) => 1 + 3 * Math.sqrt(l.count / maxLinkCount)
+
+    // faint hairline rings as a quiet visual cue only: closer = stronger, no per-kind meaning anymore
+    RING_RANGE_DECO.forEach((rr) => layerRingsDeco.append('circle').attr('class', 'ring-deco').attr('r', rr))
+
+    const spokeSel = layerSpokes.selectAll('path').data(links.filter(isSpoke)).join('path')
+      .attr('class', 'spoke')
+      .attr('stroke', 'var(--spoke)')
+      .attr('stroke-width', 1)
+      .style('opacity', 0.45)
+
+    const chordSel = layerChords.selectAll('path').data(chordLinks).join('path')
+      .attr('class', 'chord')
+      .attr('stroke', 'var(--chord)')
+      .attr('stroke-width', lw)
+      .style('opacity', 0)
+
+    const node = layerNodes.selectAll('g').data(nodes, (n) => n.id).join('g')
+      .attr('class', (n) => `node ${n.kind}`)
+
+    node.append('circle')
+      .attr('r', nodeR)
+      .attr('fill', nodeFill)
+      .attr('stroke', (n) => n.kind === 'person' ? 'rgba(255,211,92,.35)' : 'rgba(0,0,0,.4)')
+      .attr('stroke-width', (n) => n.kind === 'person' ? 2 : 1)
+
+    // label the person plus the top MIN_LABELS terms by rank (closest to the center), upright, offset outward
+    const MIN_LABELS = 25
+    const labelIds = new Set([personNode.id, ...terms.slice(0, MIN_LABELS).map((n) => n.id)])
+    const labelNodes = nodes.filter((n) => labelIds.has(n.id))
+
+    const label = layerLabels.selectAll('text').data(labelNodes, (n) => n.id).join('text')
+      .attr('class', (n) => `label ${n.kind}`)
+      .attr('dy', '.32em')
+      .text((n) => (n.kind === 'person' ? n.term : n.kind === 'hashtag' ? `#${n.term}` : n.term))
+
+    const placeLabel = (sel) => sel.each(function (n) {
+      const t = d3.select(this)
+      if (n.kind === 'person') {
+        t.attr('text-anchor', 'middle').attr('x', n.x).attr('y', n.y + personR + 22)
+        return
+      }
+      t.attr('text-anchor', n.x >= 0 ? 'start' : 'end').attr('x', n.x + (n.x >= 0 ? 1 : -1) * (nodeR(n) + 5)).attr('y', n.y + 4)
+    })
+
+    const setHighlight = (id) => {
+      id = byId.has(id) ? id : null
+      const neighbors = new Set()
+      if (id) chordLinks.forEach((l) => { if (linkIsTouching(l, id)) { neighbors.add(l.source.id); neighbors.add(l.target.id) } })
+      node.style('opacity', (n) => (!id || n.kind === 'person' || n.id === id || neighbors.has(n.id) ? 1 : 0.15))
+      label.style('opacity', (n) => (!id || n.kind === 'person' || n.id === id || neighbors.has(n.id) ? 1 : 0.15))
+      spokeSel.style('opacity', (l) => (!id ? 0.45 : linkIsTouching(l, id) ? 0.7 : 0.06))
+      chordSel
+        .style('opacity', (l) => (!id ? 0 : linkIsTouching(l, id) ? 0.9 : 0))
+        .attr('stroke', (l) => (id && linkIsTouching(l, id) ? 'var(--person)' : 'var(--chord)'))
+    }
+    highlightFn = setHighlight
+
+    node.on('mousemove', (e, n) => {
+      if (n.kind === 'person') return
+      tip.style.display = 'block'
+      const box = tip.parentElement.getBoundingClientRect()
+      tip.style.left = e.clientX - box.left + 14 + 'px'; tip.style.top = e.clientY - box.top + 14 + 'px'
+      const co = chordLinks.filter((l) => linkIsTouching(l, n.id)).length
+      tip.innerHTML = `<b>${n.kind === 'hashtag' ? '#' : ''}${n.term}</b>` +
+        `<div class="row muted">docs <b class="num">${n.count}</b> &nbsp; pmi <b class="num">${n.pmi}</b>${n.tone === null || n.tone === undefined ? '' : ` &nbsp; tom <b class="num">${n.tone}</b>`}</div>` +
+        `<div class="row muted">aparece junto com <b class="num">${co}</b> ${co === 1 ? 'termo' : 'termos'} da lista</div>` +
+        hoverSparkSvg
+    }).on('mouseenter', (e, n) => {
+      if (n.kind === 'person') return
+      setHighlight(n.id)
+      const key = timelineCacheKey(n)
+      hoverKey = key
+      const cached = timelineCache.get(key)
+      if (cached instanceof Promise) {
+        hoverSparkSvg = ''
+        cached.then((buckets) => { if (hoverKey === key && buckets) hoverSparkSvg = sparklineSvg(buckets) })
+      } else if (cached) {
+        hoverSparkSvg = sparklineSvg(cached)
+      } else {
+        hoverSparkSvg = ''
+        fetchSpark(n, key)
+      }
+    })
+      .on('mouseleave', () => { tip.style.display = 'none'; setHighlight(null); hoverKey = null; hoverSparkSvg = '' })
+      .on('click', (e, n) => { if (n.kind !== 'person') openDocPanel(n) })
+
+    node.call(d3.drag()
+      .on('start', (e, n) => { if (!e.active) sim.alphaTarget(0.3).restart(); n.fx = n.x; n.fy = n.y })
+      .on('drag', (e, n) => { n.fx = e.x; n.fy = e.y })
+      .on('end', (e, n) => { if (!e.active) sim.alphaTarget(0); if (n.kind !== 'person') { n.fx = null; n.fy = null } }))
+
+    const spokePath = (l) => `M${l.source.x},${l.source.y} L${l.target.x},${l.target.y}`
+    const chordPath = (l) => `M${l.source.x},${l.source.y} L${l.target.x},${l.target.y}`
+
+    const tick = () => {
+      node.attr('transform', (n) => `translate(${n.x},${n.y})`)
+      placeLabel(label)
+      spokeSel.attr('d', spokePath)
+      chordSel.attr('d', chordPath)
+    }
+
+    sim = d3.forceSimulation(nodes)
+      .force('ring', d3.forceRadial((n) => (n.kind === 'person' ? 0 : ring(n.rank)), 0, 0).strength((n) => (n.kind === 'person' ? 0 : 0.9)))
+      .force('together', d3.forceLink(chordLinks).id((n) => n.id).strength(0.015).distance(90))
+      .force('collide', d3.forceCollide((n) => (n.kind === 'person' ? personR + 30 : nodeR(n) + 20)).iterations(4))
+      .on('tick', tick)
+      .stop()
+    sim.tick(300)
+    tick()
+    sim.alpha(0)
+
+    d3.select('#legend').selectAll('.hint').data([0]).join('span').attr('class', 'hint')
+      .text('perto do centro = associação mais forte · passe o mouse num termo para ver com quais ele aparece junto')
+  }
+
+  // ---------- doc panel ----------
+  const docPanel = { term: '', kind: 'all', source: 'all', offset: 0, limit: 50, total: 0, docs: [] }
+  const dp = $('docPanel')
+  const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+  const fmtDocDate = (iso) => {
+    const d = new Date(iso)
+    const days = Math.floor((Date.now() - d.getTime()) / 86_400_000)
+    if (days <= 0) return 'hoje'
+    if (days === 1) return 'ontem'
+    if (days < 7) return `há ${days} dias`
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  const closeDocPanel = () => { dp.classList.remove('open'); $('timelinePanel').classList.remove('doc-open'); refreshTimelineChart() }
+
+  const bskyUrl = (d) => {
+    try {
+      if (d.source !== 'bluesky') return null
+      if (typeof d.domain !== 'string' || d.domain === '') return null
+      if (typeof d.uri !== 'string' || !d.uri.startsWith('at://')) return null
+      const rkey = d.uri.slice(d.uri.lastIndexOf('/') + 1)
+      if (rkey === '') return null
+      return `https://bsky.app/profile/${d.domain}/post/${rkey}`
+    } catch {
+      return null
+    }
+  }
+
+  const renderDocBody = () => {
+    const personName = currentGraph?.person?.name ?? ''
+    $('docSub').textContent = `${docPanel.total} ${docPanel.total === 1 ? 'doc' : 'docs'} sobre ${personName}`
+    if (docPanel.docs.length === 0) {
+      $('docBody').innerHTML = '<div class="doc-msg">nenhum documento encontrado nessa janela.</div>'
+      $('docMore').hidden = true
+      return
+    }
+    $('docBody').innerHTML = docPanel.docs.map((d) => {
+      let safeHref = d.source === 'bluesky' ? bskyUrl(d) : null
+      if (!safeHref) { try { if (['http:', 'https:'].includes(new URL(d.uri).protocol)) safeHref = d.uri } catch {} }
+      return `
+      <div class="doc-row">
+        <div class="doc-meta">
+          <span class="doc-badge">${escapeHtml(d.source)}</span>
+          <span class="doc-domain">${escapeHtml(d.domain ?? '')}</span>
+          <span class="doc-date num">${fmtDocDate(d.published_at)}</span>
+        </div>
+        <p class="doc-text">${escapeHtml(d.text)}</p>
+        ${safeHref ? `<a class="doc-link" href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">abrir ↗</a>` : ''}
+      </div>`
+    }).join('')
+    $('docMore').hidden = docPanel.docs.length >= docPanel.total
+  }
+
+  const loadDocs = async (append) => {
+    const { term, kind } = docPanel
+    try {
+      const params = new URLSearchParams({
+        term: docPanel.term, kind: docPanel.kind, days: state.days, source: docPanel.source,
+        domain: state.domain, limit: docPanel.limit, offset: docPanel.offset,
+      })
+      const res = await fetch(`/api/people/${state.person}/docs?` + params)
+      if (!res.ok) throw new Error('não foi possível carregar os documentos')
+      const data = await res.json()
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      docPanel.total = data.total
+      docPanel.docs = append ? [...docPanel.docs, ...data.docs] : data.docs
+      renderDocBody()
+    } catch (e) {
+      $('docBody').innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
+      $('docMore').hidden = true
+    }
+  }
+
+  const openDocPanel = (n, source = state.source) => {
+    docPanel.term = n.term
+    docPanel.kind = n.kind
+    docPanel.source = source
+    docPanel.offset = 0
+    docPanel.docs = []
+    docPanel.total = 0
+    $('docTermDot').style.background = kindColorHex[n.kind] ?? 'var(--muted)'
+    $('docTermLabel').textContent = n.kind === 'hashtag' ? `#${n.term}` : n.term
+    $('docSub').textContent = ''
+    $('docBody').innerHTML = '<div class="doc-msg">carregando…</div>'
+    $('docMore').hidden = true
+    dp.classList.add('open')
+    $('timelinePanel').classList.add('doc-open')
+    if (tlSection.classList.contains('open') && (timelinePanel.term !== n.term || timelinePanel.kind !== n.kind)) {
+      loadTimelinePanel()
+    } else {
+      refreshTimelineChart()
+    }
+    loadDocs(false)
+  }
+
+  $('docClose').addEventListener('click', closeDocPanel)
+  $('docMore').addEventListener('click', () => { docPanel.offset += docPanel.limit; loadDocs(true) })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dp.classList.contains('open')) closeDocPanel() })
+
+  // ---------- split view: imprensa x rede ----------
+  const splitColEl = (col) => document.querySelector(`.split-col[data-col="${col.id}"]`)
+
+  const recomputeSharedIds = () => {
+    const [a, b] = SPLIT_COLUMNS.map((c) => splitState[c.id].graph)
+    sharedSplitIds = a && b
+      ? new Set(a.nodes.map((n) => n.id).filter((id) => b.nodes.some((n) => n.id === id)))
+      : new Set()
+    SPLIT_COLUMNS.forEach(renderSplitColumn)
+  }
+
+  const renderSplitColumn = (col) => {
+    const st = splitState[col.id]
+    const el = splitColEl(col)
+    const statsEl = el.querySelector('.split-col-stats')
+    const bodyEl = el.querySelector('.split-col-body')
+    if (st.loading) {
+      statsEl.innerHTML = ''
+      bodyEl.innerHTML = '<div class="split-msg">carregando…</div>'
+      return
+    }
+    if (st.error) {
+      statsEl.innerHTML = ''
+      bodyEl.innerHTML = `<div class="split-msg">erro: ${escapeHtml(st.error)}</div>`
+      return
+    }
+    const g = st.graph
+    if (!g) { statsEl.innerHTML = ''; bodyEl.innerHTML = '' ; return }
+    statsEl.innerHTML = `<b>${g.stats.about}</b> docs sobre <b>${escapeHtml(g.person.name)}</b> de <b>${g.stats.docs}</b> na janela`
+    if (g.nodes.length === 0) {
+      bodyEl.innerHTML = '<div class="split-msg">nada nessa janela.<br>roda <code>pnpm ingest</code></div>'
+      return
+    }
+    bodyEl.innerHTML = g.nodes.map((n) => `
+      <div class="split-row" data-id="${escapeHtml(n.id)}">
+        ${sharedSplitIds.has(n.id) ? `<span class="split-shared" title="também aparece do outro lado"></span>` : '<span></span>'}
+        <span class="dot" style="background:${kindColorHex[n.kind]}"></span>
+        <span class="term">${escapeHtml(n.kind === 'hashtag' ? '#' + n.term : n.term)}</span>
+        <span class="count num">${n.count}</span>
+        <span class="tonechip num" style="${n.tone === null || n.tone === undefined ? '' : `background:${toneColor(n.tone)}`}">${n.tone === null || n.tone === undefined ? '' : n.tone}</span>
+      </div>`).join('')
+    bodyEl.querySelectorAll('.split-row').forEach((rowEl) => {
+      rowEl.addEventListener('click', () => {
+        const n = g.nodes.find((x) => x.id === rowEl.dataset.id)
+        if (n) openDocPanel(n, col.source)
+      })
+    })
+  }
+
+  const loadSplitColumn = async (col) => {
+    const st = splitState[col.id]
+    const id = ++st.requestId
+    st.loading = true
+    st.error = null
+    renderSplitColumn(col)
+    try {
+      const res = await fetch(`/api/people/${state.person}/graph?` + queryFor(col.source))
+      if (!res.ok) throw new Error('falha ao carregar')
+      const g = await res.json()
+      if (id !== st.requestId) return
+      st.loading = false
+      st.graph = g
+      recomputeSharedIds()
+    } catch (e) {
+      if (id !== st.requestId) return
+      st.loading = false
+      st.graph = null
+      st.error = e.message
+      recomputeSharedIds()
+    }
+  }
+
+  const loadSplit = () => {
+    if (!state.person) return
+    SPLIT_COLUMNS.forEach(loadSplitColumn)
+  }
+
+  // ---------- timeline: sparkline (hover tooltip) ----------
+  const timelineCache = new Map()
+  let hoverKey = null
+  let hoverSparkSvg = ''
+
+  const timelineCacheKey = (n) => `${state.person}|${n.kind}:${n.term}|${state.days}|${state.source}|${state.domain}`
+
+  const sparklineSvg = (buckets) => {
+    if (!buckets || buckets.length === 0) return ''
+    const counts = buckets.map((b) => b.count)
+    const max = Math.max(1, ...counts)
+    const w = 90, h = 24
+    const stepX = counts.length > 1 ? w / (counts.length - 1) : 0
+    const points = counts.map((c, i) => `${(i * stepX).toFixed(1)},${(h - (c / max) * h).toFixed(1)}`).join(' ')
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;margin-top:6px"><polyline points="${points}" fill="none" stroke="var(--person)" stroke-width="1.5"/></svg>`
+  }
+
+  const fetchSpark = (n, key) => {
+    const pending = (async () => {
+      try {
+        const params = new URLSearchParams({ term: n.term, kind: n.kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
+        const res = await fetch(`/api/people/${state.person}/timeline?` + params)
+        if (!res.ok) throw new Error('falha ao carregar')
+        const buckets = await res.json()
+        timelineCache.set(key, buckets)
+        if (hoverKey === key) {
+          hoverSparkSvg = sparklineSvg(buckets)
+          tip.innerHTML += hoverSparkSvg
+        }
+        return buckets
+      } catch {
+        // sparkline stays text-only on failure, no error UI in the hover tooltip
+        timelineCache.delete(key)
+        return null
+      }
+    })()
+    timelineCache.set(key, pending)
+    return pending
+  }
+
+  // ---------- timeline: full chart under the atlas ----------
+  const timelinePanel = { term: '', kind: 'all' }
+  const tlSection = $('timelinePanel')
+  const tlBody = $('tlBody')
+  let tlBuckets = null
+  let tlEmpty = false
+
+  const BUCKET_DAYS_MS = 7 * 86_400_000
+
+  const bucketSpanMs = (buckets, i) => {
+    if (i !== 0 || buckets.length < 2) return BUCKET_DAYS_MS
+    const diff = new Date(buckets[1].bucket_start) - new Date(buckets[0].bucket_start)
+    return diff > 0 ? diff : BUCKET_DAYS_MS
+  }
+
+  const renderTimelineChart = (buckets) => {
+    const w = tlBody.clientWidth || 560
+    const h = 110, padBottom = 18
+    const max = Math.max(1, ...buckets.map((b) => b.count))
+    const barW = w / buckets.length
+    const bars = buckets.map((b, i) => {
+      const barH = Math.max(1, (b.count / max) * (h - padBottom))
+      const spanFactor = Math.min(1, bucketSpanMs(buckets, i) / BUCKET_DAYS_MS)
+      const fullBarW = barW * 0.7
+      const visW = fullBarW * spanFactor
+      const x = i * barW + barW * 0.15
+      const y = (h - padBottom) - barH
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${visW.toFixed(1)}" height="${barH.toFixed(1)}" fill="var(--person)" />`
+    }).join('')
+    const step = Math.max(1, Math.ceil(buckets.length / 8))
+    const labels = buckets.map((b, i) => {
+      if (i % step !== 0 && i !== buckets.length - 1) return ''
+      const x = i * barW + barW / 2
+      return `<text class="tl-axis" x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle">${escapeHtml(d3.timeFormat('%d/%m')(new Date(b.bucket_start)))}</text>`
+    }).join('')
+    return `<svg width="${w}" height="${h}">${bars}${labels}</svg>`
+  }
+
+  const paintTimelineBody = () => {
+    if (!tlBuckets) return
+    tlBody.innerHTML = renderTimelineChart(tlBuckets) +
+      (tlEmpty ? '<div class="doc-msg">nenhuma menção nessa janela.</div>' : '')
+  }
+
+  refreshTimelineChart = () => {
+    if (tlSection.classList.contains('open')) paintTimelineBody()
+  }
+
+  const closeTimelinePanel = () => {
+    tlSection.classList.remove('open')
+    $('graph').classList.remove('tl-open')
+    tlBuckets = null
+  }
+
+  const loadTimelinePanel = async () => {
+    const { term, kind } = docPanel
+    timelinePanel.term = term
+    timelinePanel.kind = kind
+    $('tlTitle').textContent = kind === 'hashtag' ? `#${term}` : term
+    tlBuckets = null
+    tlBody.innerHTML = '<div class="doc-msg">carregando linha do tempo…</div>'
+    tlSection.classList.add('open')
+    $('graph').classList.add('tl-open')
+    try {
+      const params = new URLSearchParams({ term, kind, days: state.days, source: state.source, domain: state.domain, bucket: 'week' })
+      const res = await fetch(`/api/people/${state.person}/timeline?` + params)
+      if (!res.ok) throw new Error('não foi possível carregar a linha do tempo')
+      const buckets = await res.json()
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      tlEmpty = buckets.length === 0 || buckets.every((b) => b.count === 0)
+      tlBuckets = buckets.length ? buckets : [{ bucket_start: new Date().toISOString(), count: 0 }]
+      paintTimelineBody()
+    } catch (e) {
+      if (term !== docPanel.term || kind !== docPanel.kind) return
+      tlBuckets = null
+      tlBody.innerHTML = `<div class="doc-msg">erro: ${escapeHtml(e.message)}</div>`
+    }
+  }
+
+  $('docTimeline').addEventListener('click', loadTimelinePanel)
+  $('tlClose').addEventListener('click', closeTimelinePanel)
+
+  let resizeTimer = null
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(refreshTimelineChart, 120)
+  })
+
+  // ---------- init ----------
+  const selectPerson = (id) => {
+    state.person = id
+    state.domain = 'all'
+    $('personTabs').value = id
+    load()
+  }
+
+  const init = async () => {
+    people = await (await fetch('/api/people')).json()
+    $('personTabs').innerHTML = people.map((p) => `<option value="${p.id}">${p.name}</option>`).join('')
+    $('personTabs').addEventListener('change', (e) => selectPerson(e.target.value))
+    if (people.length) selectPerson(people[0].id)
+  }
+  init()
+</script>
+</body>
+</html>

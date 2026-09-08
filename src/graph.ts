@@ -316,45 +316,55 @@ const testimonyScopeCte = `
       and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
   )`
 
-const testimonyOverallSql = `
-  with ${testimonyScopeCte}
-  select round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n from scope`
-
-// No $5 (min) here on purpose: by_source has an implicit floor of 1 (having count(score) >= 1),
-// never gated by the caller's min, per the spec.
-const testimonyBySourceSql = `
-  with ${testimonyScopeCte}
-  select source, round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n
-  from scope
-  group by source
-  having count(score) >= 1
-  order by source`
-
-const testimonyByDomainSql = `
-  with ${testimonyScopeCte}
-  select domain, source, round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n
-  from scope
-  where domain is not null
-  group by domain, source
-  having count(score) >= $5
-  order by domain, source`
+// One statement for what overall, by_source and by_domain used to take three. All three
+// rebuilt the same scope join (doc_persons -> docs -> doc_testimony) and aggregated it at a
+// different level; GROUPING SETS walks that scope once and emits all three levels from a
+// single aggregate node. `materialized` is spelled out because the outer select reads the
+// result three times and computing it exactly once is the point.
+//
+// grouping(source)/grouping(domain) are what keep a subtotal apart from a genuine null: the
+// by_source subtotal carries domain = null, and so does a real (domain is null, source) group
+// -- the fixture has one. Selecting by `domain is null` alone would merge the two.
+//
+// The three level filters are deliberately asymmetric and stay exactly as they were: overall
+// has no count floor, by_source floors at 1 (a group whose scores are all null contributes no
+// row), and only by_domain sees the caller's $5 and drops null domains.
+//
+// json_agg carries its own order by, so the arrays come back in the order the split
+// statements' `order by` produced; the driver parses the json into the same row objects.
+const testimonySummarySql = `
+  with ${testimonyScopeCte},
+  summary as materialized (
+    select grouping(source) as g_source, grouping(domain) as g_domain, source, domain,
+      round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n
+    from scope
+    group by grouping sets ((), (source), (domain, source))
+  )
+  select
+    (select json_build_object('score', score, 'n', n) from summary where g_source = 1 and g_domain = 1) as overall,
+    coalesce((
+      select json_agg(json_build_object('source', source, 'score', score, 'n', n) order by source)
+      from summary where g_source = 0 and g_domain = 1 and n >= 1
+    ), '[]'::json) as by_source,
+    coalesce((
+      select json_agg(json_build_object('domain', domain, 'source', source, 'score', score, 'n', n) order by domain, source)
+      from summary where g_domain = 0 and domain is not null and n >= $5
+    ), '[]'::json) as by_domain`
 
 type TestimonyOverallRow = { score: number | null; n: number }
 type TestimonyBySourceRow = { source: string; score: number; n: number }
 type TestimonyByDomainRow = { domain: string; source: string; score: number; n: number }
+// One row: overall as a json object, the two lists as json the driver already parses.
+type TestimonySummary = { overall: TestimonyOverallRow | null; by_source: TestimonyBySourceRow[]; by_domain: TestimonyByDomainRow[] }
 
 export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
-  const params = [person.id, q.days, q.source, q.method]
-  const [overall, bySource, byDomain] = await Promise.all([
-    db.query<TestimonyOverallRow>(testimonyOverallSql, params),
-    db.query<TestimonyBySourceRow>(testimonyBySourceSql, params),
-    db.query<TestimonyByDomainRow>(testimonyByDomainSql, [...params, q.min]),
-  ])
+  const { rows } = await db.query<TestimonySummary>(testimonySummarySql, [person.id, q.days, q.source, q.method, q.min])
+  const { overall, by_source, by_domain } = rows[0]
   return {
     method: q.method,
-    overall: overall.rows[0] ?? { score: null, n: 0 },
-    by_source: bySource.rows,
-    by_domain: byDomain.rows,
+    overall: overall ?? { score: null, n: 0 },
+    by_source,
+    by_domain,
   }
 }
 
@@ -501,8 +511,6 @@ export const statements = {
   timeline: timelineSql,
   rising: risingSql,
   tone: toneSql,
-  testimonyOverall: testimonyOverallSql,
-  testimonyBySource: testimonyBySourceSql,
-  testimonyByDomain: testimonyByDomainSql,
+  testimonySummary: testimonySummarySql,
   candidates: candidatesSql,
 } as const

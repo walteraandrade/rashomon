@@ -166,7 +166,7 @@ const measurePhase = async () => {
     ['timeline', statements.timeline, [PERSON, 90, 'all', 'all', TERM, 'word', 1]],
     ['rising', statements.rising, [PERSON, 7, 30, 'all', 'all', 'all', exclude, 3, 20]],
     ['tone', statements.tone, [30, 3]],
-    ['testimonyByDomain', statements.testimonyByDomain, [PERSON, 30, 'all', 'stub', 3]],
+    ['testimonySummary', statements.testimonySummary, [PERSON, 30, 'all', 'stub', 3]],
     ['candidates', statements.candidates, [7, 5, 50]],
   ]
 

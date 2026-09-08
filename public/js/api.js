@@ -11,13 +11,19 @@ export const params = ({ days, sort, limit, source, domain, kind = 'all', min = 
 
 // The outlet sidebar picks `domain`, so its own /sources fetch must never send one back —
 // spec amendment A1 (issue #26): sending domain here would hide every outlet but the
-// selected one, right after the click that selected it.
-/** @param {Parameters<typeof params>[0]} opts */
-export const sourcesParams = (opts) => {
-  const p = params(opts)
-  p.delete('domain')
+// selected one, right after the click that selected it. `sort` and `limit` leave with it
+// (issue #43): src/graph.ts's sourcesFor reads only person, days, source and domain, so
+// echoing the term ordering and the term count made every sort or limit change look like a
+// different query to the front-end memo and to any HTTP cache in front of it.
+/** @param {URLSearchParams} graphParams */
+export const narrowToSources = (graphParams) => {
+  const p = new URLSearchParams(graphParams)
+  for (const ignored of ['domain', 'sort', 'limit']) p.delete(ignored)
   return p
 }
+
+/** @param {Parameters<typeof params>[0]} opts */
+export const sourcesParams = (opts) => narrowToSources(params(opts))
 
 /** @param {string} url @param {AbortSignal} [signal] */
 export const json = async (url, signal) => {

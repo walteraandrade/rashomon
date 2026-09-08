@@ -298,18 +298,38 @@ const STRIP_PAD = 28
 /** @param {number} n @param {number} [width] */
 export const stripRadius = (n, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
 
+// The strip never grows past this: a person with many outlets on similar scores (Lula: 148
+// outlets in under half the axis) stacked a 1262px tower at full size. Past the cap the dots
+// shrink together until the swarm fits, so every outlet stays, none overlap, and only the
+// absolute size gives -- which is fine, the strip compares outlets of one person, never two
+// people. STRIP_MIN_R is where shrinking stops and the height is allowed to grow again.
+export const STRIP_MAX_HEIGHT = 320
+export const STRIP_MIN_R = 3
+
 // The geometry of the strip at a given pixel width: one circle per outlet on the -10..+10
 // axis, stacked by `swarm` where they would overlap. Exported so a test can assert the
-// placement without a document.
+// placement without a document. `scale` is the shrink factor the cap forced (1 = none).
 /** @param {import('./format.js').TestimonyDomainRow[]} rows @param {number} width */
 export const stripLayout = (rows, width) => {
   const inner = Math.max(80, width - 2 * STRIP_PAD)
   /** @param {number} score */
   const x = (score) => STRIP_PAD + (testimonyPosition(score) / 100) * inner
-  const dots = swarm(foldTestimonyDomains(rows).map((d) => ({ ...d, x: x(d.score), r: stripRadius(d.n, width) })))
-  const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
-  const half = Math.max(44, Math.ceil(reach) + 6)
-  return { dots, x, half, height: half * 2, width }
+  const folded = foldTestimonyDomains(rows).map((d) => ({ ...d, x: x(d.score), r: stripRadius(d.n, width) }))
+  const smallest = folded.reduce((m, d) => Math.min(m, d.r), Infinity)
+  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
+  let scale = 1
+  /** @param {number} k */
+  const attempt = (k) => {
+    const dots = swarm(folded.map((d) => ({ ...d, r: d.r * k })))
+    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
+    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
+  }
+  let fit = attempt(scale)
+  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
+    scale = Math.max(floor, scale * 0.92)
+    fit = attempt(scale)
+  }
+  return { dots: fit.dots, x, half: fit.half, height: fit.half * 2, width, scale }
 }
 
 // The strip under the map: the same outlets as the panel's "Por veículo" block, drawn on the

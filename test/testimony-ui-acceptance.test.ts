@@ -277,6 +277,35 @@ describe('testimony strip: the outlets on the axis under the map', () => {
     assert.equal(layout.height, layout.half * 2)
   })
 
+  it('caps the strip at STRIP_MAX_HEIGHT by shrinking every dot together, never by dropping one', async () => {
+    const { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripLayout } = await import('../public/js/render.js')
+    // 150 outlets inside a quarter of the axis, like Lula's, each with plenty of texts.
+    const crowded = Array.from({ length: 150 }, (_, i) => ({ domain: `o${i}.example`, source: 'gnews', score: -5 + (i % 50) * 0.1, n: 5 + (i % 40) * 3 }))
+    const full = stripLayout(crowded.slice(0, 5), 957)
+    assert.equal(full.scale, 1, 'a handful of outlets never shrinks')
+    const capped = stripLayout(crowded, 957)
+    assert.equal(capped.dots.length, 150)
+    assert.ok(capped.height <= STRIP_MAX_HEIGHT, `height ${capped.height}`)
+    assert.ok(capped.scale < 1 && capped.scale > 0)
+    const ratio = capped.dots.find((d) => d.domain === 'o0.example')!.r / full.dots.find((d) => d.domain === 'o0.example')!.r
+    for (const d of capped.dots) {
+      const base = Math.min(30, 4 + 2.8 * Math.sqrt(d.n))
+      assert.ok(Math.abs(d.r / base - ratio) < 1e-9, 'every dot shrinks by the same factor, so sizes stay comparable within the strip')
+      assert.ok(d.r >= STRIP_MIN_R - 1e-9, 'never under the minimum radius')
+    }
+    for (let i = 0; i < capped.dots.length; i++)
+      for (let j = i + 1; j < capped.dots.length; j++) {
+        const a = capped.dots[i], b = capped.dots[j]
+        assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r + 1.5 - 1e-6, 'still no overlap')
+      }
+    // Past the minimum radius the height is allowed to grow again rather than dots vanish.
+    const absurd = Array.from({ length: 1200 }, (_, i) => ({ domain: `z${i}.example`, source: 'gnews', score: -2 + (i % 10) * 0.01, n: 3 }))
+    const grown = stripLayout(absurd, 957)
+    assert.equal(grown.dots.length, 1200)
+    assert.ok(grown.height > STRIP_MAX_HEIGHT)
+    assert.ok(grown.dots.every((d) => Math.abs(d.r - STRIP_MIN_R) < 1e-9))
+  })
+
   it('paintStrip draws one dot per outlet, marks the active one, and hides itself with nothing to draw', () => {
     withFakeDocument(['strip'], (els) => {
       paintStrip({ data: sample, domain: 'bbc.com', onPick: () => {} })

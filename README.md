@@ -101,6 +101,63 @@ Terms are only stored for docs that mention at least one tracked person. A doc n
 
 `pnpm purge orphan-terms` deletes the term rows a database collected before this rule and runs `vacuum full doc_terms` to return the pages to disk (plain `vacuum` only marks them reusable and leaves the file the same size). It takes an exclusive lock on `doc_terms`, so run it with the server stopped; it is a one-off per database, and `pnpm reindex` produces the same result from scratch.
 
+## Read cache
+
+`GET /api/*` reads are cached in process: the person lookup behind `/api/people/:id/*`, and the
+serialized body of every successful read (`people`, `graph`, `sources`, `docs`, `timeline`,
+`rising`, `testimony`, `tone`, `candidates`). A warm identical request runs no statement at all
+(`x-perf-sql-count: 0` under `PERF=1`), and identical requests that arrive while one is still
+running are coalesced onto that single execution instead of each starting their own.
+
+The key is built from the **parsed** query (`cacheKey` in `src/query.ts`), never from the raw
+one: the route, the person id, and every field of the object the route's parser returned, sorted
+by name. Three consequences, all deliberate:
+
+- Two urls that clamp to the same effective filters share one entry (`days=9999` and `days=365`),
+  and an unknown parameter cannot fork one (`?nocache=1` changes nothing).
+- `source`, `domain` and `lean` are sorted inside the key, so `source=rss,gnews` and
+  `source=gnews,rss` are one entry.
+- A parameter a parser drops cannot reach that route's key, and a parameter added to a parsed
+  query type joins the key on its own. Different people, routes and effective filters therefore
+  cannot read each other's entries; `test/cache-isolation.test.ts` asserts it over every
+  person x filter x route combination.
+
+Bounds and knobs, each with a default, a floor and a ceiling, read once at startup:
+
+| variable | default | range | meaning |
+|---|---|---|---|
+| `CACHE` | on | `0`/`false` disable | when off, every read goes to the database |
+| `CACHE_TTL_MS` | 30000 | 0 – 3600000 | time to live of a cached response |
+| `CACHE_PERSON_TTL_MS` | 300000 | 0 – 3600000 | time to live of a person lookup |
+| `CACHE_MAX_ENTRIES` | 500 | 1 – 100000 | cached responses held at once |
+| `CACHE_MAX_BYTES` | 33554432 | 65536 – 536870912 | total size of the cached bodies |
+| `CACHE_MAX_PERSONS` | 200 | 1 – 10000 | cached person lookups |
+
+Both bounds are enforced on every insert, evicting least-recently-used first, so the cache cannot
+grow past `CACHE_MAX_BYTES` of bodies however much traffic it sees. A rejected load is never
+retained: the entry is dropped and the next caller re-runs it. Nothing survives the process, so a
+restart or a redeploy is a full invalidation; `resetCaches()` in `src/cache.ts` is the explicit
+one, called by the tests and by every write in `src/store.ts` (`insertDoc`, `upsertPersons`,
+`pruneRemoved`), which drop the whole cache rather than guess which entries a new doc moved.
+
+**Staleness.** Every window is `now() - days`, so a cached body freezes a window that keeps
+sliding: with the default TTL a user can see counts, terms, PMI, tone, the rising list, the
+candidate queue and the timeline that are **up to 30 seconds out of date**, and a doc ingested in
+that gap appears up to 30 seconds late. Timeline bucket edges are frozen with them, so a bucket
+boundary can sit up to 30 seconds in the past. Nothing else is affected: this is a read cache,
+never a write path, and ingest runs in another process anyway.
+
+The policy for the panels a user sees together (graph, sources, docs, timeline, candidates on one
+atlas load) is *one TTL for all of them, absolute, never sliding*. Every read entry uses the same
+`CACHE_TTL_MS`, so no panel is systematically staler than another; expiry is measured from when
+the entry was created, not from its last hit, so a popular entry cannot outlive its TTL. Two
+panels are still filled from entries created at different moments, so the worst-case skew between
+them is one TTL: within a single atlas load, two panels can be up to 30 seconds apart in how much
+of the newest data they include. They are never *inconsistent* in a stronger sense, since each is
+a correct answer over the same database at a point in time at most one TTL ago. A deployment that
+wants no skew at all sets `CACHE_TTL_MS=0`, which keeps the in-flight coalescing and drops the
+reuse.
+
 ## Performance baseline
 
 Two separate things: opt-in instrumentation on the running API, and a benchmark that builds its own database and reports numbers. Both are local, free and offline. Browser rendering time is out of scope here; this measures API latency and database work only.
@@ -135,6 +192,7 @@ PERF=0 pnpm bench                           # same scenarios with the instrument
 - `src/graph.ts` scoring SQL (counts, PMI, term-term links, testimony aggregation)
 - `src/scorers/*` one scorer per method, same signature; `src/score.ts` scores unscored `(doc, person)` pairs; `src/export-docs.ts` dumps docs for kikori's training set
 - `src/server.ts` Hono API + static UI
+- `src/cache.ts` the bounded, coalescing in-process read cache; keys built by `cacheKey` in `src/query.ts`
 - `src/perf.ts` opt-in request/statement instrumentation; `src/bench.ts` the benchmark runner, `src/bench-corpus.ts` its synthetic corpus, `src/bench-scenarios.ts` its request set
 - `public/design-5.html` current UI (radial atlas), served at `/`; `public/index.html` legacy UI; other `design-*.html` kept for reference
 - `test/` node:test suites; `test/fixture.ts` seeds the in-memory database

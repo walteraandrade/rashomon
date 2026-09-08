@@ -38,7 +38,9 @@ export const insertDoc = async (doc: RawDoc, ps: Person[]): Promise<boolean> => 
   if (!row?.inserted) return false
   const id = row.id
   const matched = personsMentioned(doc.text, ps)
-  const ts = terms(doc.text, doc.extraTerms)
+  // Terms of a doc naming nobody tracked only ever fed the PMI denominator, at 68% of the
+  // largest table; the denominator now counts the same docs the numerator does (see graph.ts).
+  const ts = matched.length ? terms(doc.text, doc.extraTerms) : []
   const names = discoverNames(doc, ps)
   await Promise.all([
     ...matched.map((p) => db.query(`insert into doc_persons values ($1, $2)`, [id, p.id])),

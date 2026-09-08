@@ -61,4 +61,35 @@ export const migrate = () =>
       primary key (doc_id, name)
     );
     create index if not exists doc_candidates_name_idx on doc_candidates (name);
+    create index if not exists doc_persons_person_idx on doc_persons (person_id, doc_id);
   `)
+
+// Table names cannot be bound as statement parameters, so the maintenance surface is this
+// fixed list and nothing a caller passes can widen it.
+export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony'] as const
+export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
+
+// Same shape as query.ts's `int` (default, floor, ceiling) without importing it: db.ts sits
+// below the query layer and must not depend on it.
+const clampEnv = (v: string | undefined, d: number, lo: number, hi: number) => {
+  const n = Number.parseInt(v ?? '', 10)
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
+}
+
+// How many new docs an ingest must write before its statistics refresh is worth the pause.
+export const analyzeMinDocs = () => clampEnv(process.env.ANALYZE_MIN_DOCS, 200, 1, 1_000_000)
+
+// Targeted `analyze`, never a database-wide one, and never from a request: it is called only
+// by `pnpm ingest` and `pnpm reindex`, the processes that already own DATA_DIR. PGlite allows
+// a single process per directory, so a second maintenance process cannot exist while the
+// server is up; the policy is structural, not a lock.
+export const analyzeTables = async (tables: readonly AnalyzedTable[] = ANALYZED_TABLES) => {
+  const targets = tables.filter((t) => ANALYZED_TABLES.includes(t))
+  await targets.reduce<Promise<void>>(async (acc, t) => (await acc, void (await db.exec(`analyze ${t}`))), Promise.resolve())
+  return targets
+}
+
+// Gate for the ingest path: a handful of new docs does not move the planner's estimates, so
+// only a large write pays for the refresh. Returns what it analyzed, so callers can log it.
+export const analyzeAfterWrite = async (written: number): Promise<readonly AnalyzedTable[]> =>
+  written >= analyzeMinDocs() ? analyzeTables() : []

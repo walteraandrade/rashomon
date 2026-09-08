@@ -18,7 +18,7 @@ pnpm typecheck       # tsc
 pnpm test            # node:test against an in-memory database
 ```
 
-`PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`.
+`PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`. `ANALYZE_MIN_DOCS` (default 200) is the ingest size from which planner statistics are refreshed, see "Indexes and planner statistics".
 
 Bluesky without login returns one page (100 posts) per person. To paginate, set `BSKY_HANDLE` and `BSKY_APP_PASSWORD` (app password, not the account password).
 
@@ -102,6 +102,48 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 Terms are only stored for docs that mention at least one tracked person. A doc naming nobody tracked keeps its `docs` row (it still feeds `/api/candidates` and the source counts) but gets no `doc_terms` rows: they used to serve only as the PMI denominator, at two thirds of the largest table. PMI therefore compares a person's terms against the docs about tracked people in the window, not against everything collected; `stats.docs` keeps its old meaning (every doc in scope).
 
 `pnpm purge orphan-terms` deletes the term rows a database collected before this rule and runs `vacuum full doc_terms` to return the pages to disk (plain `vacuum` only marks them reusable and leaves the file the same size). It takes an exclusive lock on `doc_terms`, so run it with the server stopped; it is a one-off per database, and `pnpm reindex` produces the same result from scratch.
+
+## Indexes and planner statistics
+
+`migrate()` is the whole schema: `create table if not exists` / `create index if not exists`, so it is
+idempotent and runs the same against `memory://` in tests as against a directory with data in it.
+
+One index exists because it was measured, not because it looked plausible: `doc_persons (person_id, doc_id)`.
+The table's primary key is `(doc_id, person_id)`, but every person-scoped route filters on `person_id`
+first, so the key could not serve them and each request scanned the whole table. Adding the reversed pair
+makes the scope an index-only lookup (the second column is `doc_id` precisely so nothing has to visit the
+heap), and on the 20k-doc benchmark corpus it cuts `/sources` by 25%, `/docs` by 22%, its count query by
+34%, `/testimony` by 21-26% and `/rising` by 13%, for 0.27 MB, under 1% of the database. `/graph`'s
+`terms` and `signature` do not move: they are dominated by `doc_terms`, not by the person scope.
+
+Three further candidates were benchmarked and **rejected**, each for its own reason:
+
+| candidate | verdict |
+| --- | --- |
+| `docs (source, published_at)` | only two plans reference it and neither timing moves outside noise; 0.62 MB for nothing |
+| `docs (domain, published_at)` | one plan references it, 0% change; 0.88 MB on top of the `docs (domain)` it does not replace |
+| `docs (published_at desc, id desc)` | no plan uses it at all: the window filter already selects half the table, where a sequential scan is correct, and `docs`'s `order by` sorts a few hundred joined rows |
+
+The numbers, the plans and the method are in `docs/perf-baseline.md` and in the PR for issue #44. Re-run
+them with `pnpm bench` after any schema change; a candidate index that no plan references is a candidate
+that does not ship.
+
+**Statistics.** Postgres estimates row counts from statistics that a bulk write leaves stale, and PGlite
+has no autovacuum daemon to refresh them, so `analyze` is explicit here — targeted at the five tables the
+queries touch, never database-wide, and never from a request:
+
+- `pnpm reindex` always analyzes: it empties and refills `doc_terms`, `doc_persons` and `doc_candidates`,
+  so every estimate about them is wrong by the time it returns.
+- `pnpm ingest` analyzes only after a *large* ingest: at least `ANALYZE_MIN_DOCS` new docs (default 200,
+  clamped to 1..1000000). A run that adds a handful of documents does not move an estimate and skips it,
+  printing why.
+- Nothing else ever calls it. There is no cron job and no maintenance script, and a test asserts that no
+  module outside `src/db.ts`, `src/ingest.ts`, `src/reindex.ts` and `src/bench.ts` runs `analyze`.
+
+That is what keeps maintenance inside the process that owns `DATA_DIR`. PGlite allows one process per
+directory, so a second one cannot analyze a database the server is holding — it could not even open it.
+Adding the index to a database that predates it is the same one-off: `pnpm reindex` (or any other command
+that calls `migrate()`) builds it, in about 100 ms per 8k rows, with the server stopped as usual.
 
 ## Performance baseline
 

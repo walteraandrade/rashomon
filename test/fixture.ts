@@ -248,3 +248,21 @@ export const seed = () =>
     for (const d of docs) await insertDoc(d, persons)
     await seedTestimony()
   })())
+
+// Schema introspection, shared by the index/maintenance suites: pg_indexes is the only place
+// the shape migrate() actually produced can be read back, rather than re-asserting its source.
+export const indexDefs = async (table: string) =>
+  (
+    await db.query<{ indexname: string; indexdef: string }>(
+      `select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename = $1 order by indexname`,
+      [table],
+    )
+  ).rows
+
+// reltuples is -1 until a table is analyzed and the planner's row estimate after, so it is the
+// cheapest observable proof that a targeted `analyze` actually ran on that table.
+export const planRowEstimate = async (table: string) =>
+  (await db.query<{ reltuples: number }>(`select reltuples from pg_class where relname = $1`, [table])).rows[0].reltuples
+
+export const lastAnalyzed = async (table: string) =>
+  (await db.query<{ at: Date | null }>(`select last_analyze as at from pg_stat_user_tables where relname = $1`, [table])).rows[0]?.at ?? null

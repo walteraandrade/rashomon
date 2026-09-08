@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
 import { reindexAll } from '../src/reindex.js'
-import { orphanTermCount, termsOf, persons, seed } from './fixture.js'
+import { ANALYZED_TABLES } from '../src/db.js'
+import { lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
 // so it lives in its own file: node:test runs one process per file, hence its own database.
@@ -39,5 +40,21 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
     await db.query(`delete from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id)`)
     assert.equal(await orphanTermCount(), 0)
     assert.ok((await termsOf('https://g1.globo.com/1')).includes('reforma'))
+  })
+})
+
+// A reindex empties and refills every derived table, so the planner's estimates are stale by
+// construction when it returns; refreshing them there is the only maintenance the app runs
+// besides a large ingest, and it happens in the process that already owns DATA_DIR.
+describe('reindex refreshes planner statistics (issue #44)', () => {
+  before(seed)
+
+  it('analyzes every derived table once the rebuild is done', async () => {
+    const { analyzed } = await reindexAll(persons)
+    assert.deepEqual([...analyzed], [...ANALYZED_TABLES])
+    for (const t of ANALYZED_TABLES) {
+      assert.ok((await lastAnalyzed(t)) !== null, `${t} was never analyzed`)
+      assert.ok((await planRowEstimate(t)) >= 0, `${t} still has no row estimate`)
+    }
   })
 })

@@ -1,5 +1,5 @@
 import seedPersons from '../seed.json' with { type: 'json' }
-import { db, migrate } from './db.js'
+import { analyzeTables, db, migrate } from './db.js'
 import { discoverNames, domainOf, personsMentioned, terms } from './extract.js'
 import { upsertPersons } from './store.js'
 import type { Person, Source, Term } from './types.js'
@@ -28,14 +28,19 @@ export const reindexAll = async (persons: Person[]) => {
   )
   const { rows } = await db.query<Row>(`select id, source, text, extra_terms, extra_names from docs`)
   await rows.reduce<Promise<void>>(async (acc, r) => (await acc, reindexDoc(persons, r)), Promise.resolve())
-  return { docs: rows.length, backfilled: missing.rows.length }
+  // A reindex rewrites every derived table from empty, so the planner's row counts and
+  // most-common-value lists are stale by construction when it ends: refresh them here,
+  // unconditionally, in the process that owns DATA_DIR.
+  const analyzed = await analyzeTables()
+  return { docs: rows.length, backfilled: missing.rows.length, analyzed }
 }
 
 const main = async () => {
   await migrate()
-  const { docs, backfilled } = await reindexAll(seedPersons)
+  const { docs, backfilled, analyzed } = await reindexAll(seedPersons)
   if (backfilled) console.log(`backfilled domain for ${backfilled} docs`)
   console.log(`reindexed ${docs} docs`)
+  console.log(`analyzed ${analyzed.join(', ')}`)
   await db.close()
 }
 

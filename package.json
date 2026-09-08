@@ -10,6 +10,7 @@
     "score": "tsx src/score.ts",
     "export-docs": "tsx src/export-docs.ts",
     "bench": "tsx src/bench.ts",
+    "bench:writes": "tsx src/bench-writes.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts"
   },

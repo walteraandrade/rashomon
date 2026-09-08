@@ -63,6 +63,8 @@ type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
 type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
+// One row: the two counts as columns, the two lists as json the driver already parses.
+type GraphAggregates = Stats & { nodes: TermRow[]; signature: SignatureRow[] }
 type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
 type RisingRow = { term: string; kind: string; count_recent: number; count_baseline: number; lift: number }
 type TimelineRow = { bucket_start: Date; count: number }
@@ -94,56 +96,80 @@ const trackedCte = `
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )`
 
-const termsSql = `
+// One statement for what nodes, signature and stats used to take three. All three rebuilt the
+// same scope, about and tracked sets, and both term statements rebuilt the same global term
+// frequencies -- which docs/perf-baseline.md shows is the whole cost of the route, paid twice.
+// `materialized` is spelled out instead of left to the planner's single-reference inlining,
+// since computing each of these exactly once is the point of merging them.
+//
+// term_p is deliberately not kind-filtered: signature ignores kind by construction, and the
+// nodes filter is on a group key, so applying it after the aggregate selects the same rows.
+// The tone average is computed once and simply not projected into signature, which never had it.
+//
+// term_all stays unrestricted even though it only ever feeds an inner join on (term, kind)
+// against term_p: narrowing it to those candidates was measured and is slower here (issue #45).
+// It cuts the rows to aggregate from 70642 to 58519 on the benchmark corpus, but the planner
+// then reaches doc_terms through doc_terms_term_idx and merge-joins, trading an 883-buffer seq
+// scan for a 113524-buffer index scan, and the CTE goes from 247 ms to 379 ms. The person's
+// terms are the head of the distribution, so there is little to skip.
+//
+// sort_key carries the ordering expression as a column so json_agg reproduces exactly the order
+// the limit selected. Inside it, `pmi` is the unrounded value, as before: an output column name
+// stands alone in an order by, never inside an expression -- which is also why signature, whose
+// order by names `pmi` bare, still ranks on the rounded value.
+const graphSql = `
   with ${scopeCte}, ${trackedCte},
-  n as (select count(*)::float8 as total from tracked),
-  np as (select count(*)::float8 as total from about),
-  term_all as (
+  n as materialized (select count(*)::float8 as total from tracked),
+  np as materialized (select count(*)::float8 as total from about),
+  term_p as materialized (
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
+    from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
+    where not (t.term = any($6::text[]))
+    group by 1, 2
+  ),
+  term_all as materialized (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
     from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
   ),
-  term_p as (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where ($5 = 'all' or t.kind = $5) and not (t.term = any($6::text[]))
-    group by 1, 2
-  ),
-  scored as (
+  nodes_scored as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
-    where p.c_pt >= $7
-  )
-  select term, kind, count, round(pmi::numeric, 2)::float8 as pmi, round(tone::numeric, 2)::float8 as tone from scored
-  order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term
-  limit $9`
-
-// signature: same scope as termsSql but ignores kind/min/limit/sort and applies its own
-// floor (count >= max(3, 5% of about)), so it stays a stable "what sticks" facet rather
-// than a projection of the toolbar's current filters.
-const signatureSql = `
-  with ${scopeCte}, ${trackedCte},
-  n as (select count(*)::float8 as total from tracked),
-  np as (select count(*)::float8 as total from about),
-  term_all as (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
-    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
+    where p.c_pt >= $7 and ($5 = 'all' or p.kind = $5)
   ),
-  term_p as (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt
-    from doc_terms t join about a on a.doc_id = t.doc_id
-    where not (t.term = any($5::text[]))
-    group by 1, 2
+  nodes_top as (
+    select term, kind, count,
+      round(pmi::numeric, 2)::float8 as pmi_rounded,
+      round(tone::numeric, 2)::float8 as tone_rounded,
+      (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) as sort_key
+    from nodes_scored
+    order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term
+    limit $9
   ),
-  scored as (
+  signature_scored as (
     select p.term, p.kind, p.c_pt::int as count,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
     where p.c_pt >= greatest(3, np.total * 0.05)
+  ),
+  signature_top as (
+    select term, kind, count, round(pmi::numeric, 2)::float8 as pmi
+    from signature_scored
+    order by pmi desc, term
+    limit 5
   )
-  select term, kind, count, round(pmi::numeric, 2)::float8 as pmi from scored
-  order by pmi desc, term
-  limit 5`
+  select
+    (select count(*) from scope)::int as docs,
+    (select count(*) from about)::int as about,
+    coalesce((
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)
+        order by sort_key desc, term)
+      from nodes_top
+    ), '[]'::json) as nodes,
+    coalesce((
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi) order by pmi desc, term)
+      from signature_top
+    ), '[]'::json) as signature`
 
 const linksSql = `
   with ${scopeCte}
@@ -153,10 +179,6 @@ const linksSql = `
   join about x on x.doc_id = a.doc_id
   where (a.kind || ':' || a.term) = any($5::text[]) and (b.kind || ':' || b.term) = any($5::text[])
   group by 1, 2 having count(distinct a.doc_id) >= 2`
-
-const statsSql = `
-  with ${scopeCte}
-  select (select count(*) from scope)::int as docs, (select count(*) from about)::int as about`
 
 const sourcesSql = `
   with ${scopeCte}
@@ -443,25 +465,26 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
   return { days: q.days, baseline: q.baseline, terms: rows, outlets }
 }
 
+// links stays a second statement on purpose: its `any($5)` term list is the output of the
+// first one, so folding it in would mean recomputing the ranking to feed itself. It is also
+// the cheap half of the route (see docs/perf-baseline.md) and is skipped entirely when the
+// graph has no nodes.
 export const graphFor = async (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
   const { domain, outlets } = resolveScope(q.domain, q.lean)
-  const [terms, stats, signature] = await Promise.all([
-    db.query<TermRow>(termsSql, [person.id, q.days, q.source, domain, q.kind, exclude, q.min, q.sort, q.limit]),
-    db.query<Stats>(statsSql, [person.id, q.days, q.source, domain]),
-    db.query<SignatureRow>(signatureSql, [person.id, q.days, q.source, domain, exclude]),
-  ])
-  const ids = terms.rows.map((t) => `${t.kind}:${t.term}`)
+  const { rows } = await db.query<GraphAggregates>(graphSql, [person.id, q.days, q.source, domain, q.kind, exclude, q.min, q.sort, q.limit])
+  const { docs, about, nodes, signature } = rows[0]
+  const ids = nodes.map((t) => `${t.kind}:${t.term}`)
   const links = ids.length ? await db.query<LinkRow>(linksSql, [person.id, q.days, q.source, domain, ids]) : { rows: [] }
   return {
     person,
-    stats: stats.rows[0],
-    nodes: terms.rows.map((t) => ({ id: `${t.kind}:${t.term}`, ...t })),
+    stats: { docs, about },
+    nodes: nodes.map((t) => ({ id: `${t.kind}:${t.term}`, ...t })),
     links: [
-      ...terms.rows.map((t) => ({ source: `person:${person.id}`, target: `${t.kind}:${t.term}`, count: t.count })),
+      ...nodes.map((t) => ({ source: `person:${person.id}`, target: `${t.kind}:${t.term}`, count: t.count })),
       ...links.rows.map((l) => ({ source: l.s, target: l.t, count: l.count })),
     ],
-    signature: signature.rows,
+    signature,
     outlets,
   }
 }
@@ -470,10 +493,8 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
 // through EXPLAIN (ANALYZE, BUFFERS) with representative parameters. Nothing here changes
 // what a route executes; it is the same string object the handlers above use.
 export const statements = {
-  terms: termsSql,
-  signature: signatureSql,
+  graph: graphSql,
   links: linksSql,
-  stats: statsSql,
   sources: sourcesSql,
   docs: docsSql,
   docsCount: docsCountSql,

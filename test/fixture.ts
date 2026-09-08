@@ -51,7 +51,7 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/19', text: 'Lula lembra a estabilidade fiscal conquistada', publishedAt: daysAgo(50), domain: 'example.org' },
   // docs 20-24: bolsonaro-only docs, all dated 2100+ days ago — well past the widest
   // window any existing test opens (graph.test.ts/signature.test.ts go up to days:2000
-  // to reach termsSql/signatureSql's global `scope`, which counts every doc in the
+  // to reach the graph statement's global `scope`, which counts every doc in the
   // window regardless of person). Used by test/timeline.test.ts. Docs 20/21 sit in the
   // same 7-day span but on different calendar days (day-vs-week split); doc 22 is
   // isolated, leaving an empty week bucket between it and the 20/21 cluster; doc 23
@@ -68,7 +68,7 @@ export const docs: RawDoc[] = [
   // issue #5's tone-by-outlet matrix. "geopolitica" is used nowhere else in the fixture
   // so it cannot shift any pinned term-level pmi/count/tone assertion; adding these docs
   // to the days:30/365/1000/2000 scope does shift the person-agnostic n.total used by
-  // termsSql/signatureSql's pmi formula, so every pinned pmi literal at those windows in
+  // the graph statement's pmi formula, so every pinned pmi literal at those windows in
   // graph.test.ts/signature.test.ts/signature-acceptance.test.ts was recomputed to match.
   { source: 'gdelt', uri: 'https://estadao.com.br/30', text: 'Tarcísio discute geopolítica durante evento internacional', publishedAt: daysAgo(6), domain: 'estadao.com.br', tone: -2 },
   { source: 'gdelt', uri: 'https://estadao.com.br/31', text: 'Tarcísio comenta geopolítica em entrevista à imprensa', publishedAt: daysAgo(7), domain: 'estadao.com.br', tone: -1 },

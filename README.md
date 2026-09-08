@@ -45,7 +45,7 @@ Add `domain=<host>` to restrict the graph to one outlet (or one Bluesky handle).
 
 `GET /api/people/:id/sources?days=30&source=all&lean=all` lists outlets that mention the person: `domain`, `source`, `docs`, `tone` (average GDELT tone, null when unknown), `tone_n`, `lean` and `basis` (see "Editorial lean" below; both `null` when the domain is absent from `outlets.json`). Also honours `domain`, previously silently ignored on this route.
 
-Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also carries `tone`: average GDELT tone of the docs where the term co-occurs with the person, null when no GDELT doc contributed. `pmi` is log2 of how much more often the term co-occurs with the person than chance, measured against every collected doc in the window. `outlets` is `{ domain, lean, basis }[]`, empty when `lean` is unset/`all`, otherwise every `outlets.json` entry matching the resolved `domain`+`lean` scope.
+Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also carries `tone`: average GDELT tone of the docs where the term co-occurs with the person, null when no GDELT doc contributed. `pmi` is log2 of how much more often the term co-occurs with the person than chance, measured against the docs in the window that mention at least one tracked person (see "Terms and the PMI universe"). `outlets` is `{ domain, lean, basis }[]`, empty when `lean` is unset/`all`, otherwise every `outlets.json` entry matching the resolved `domain`+`lean` scope.
 
 `signature` holds at most 5 rows of `{ term, kind, count, pmi }` (no `tone`): the terms whose count clears `max(3, 5% of stats.about)`, ordered by `pmi` desc then `term` asc, computed over the same `days`/`source`/`domain` scope as the graph but ignoring `kind`, `min`, `limit` and `sort`, so it is not guaranteed to be a subset of `nodes`.
 
@@ -93,6 +93,12 @@ This is metadata about a *source*, resolved fresh from the static file on every 
 Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` element, not the Google redirect link), author handle for Bluesky. `tone` comes only from GDELT GKG (V2Tone, first field, roughly -10..+10; political news sits around -1). Other sources have `tone = null`. A doc keeps the source that first stored it, so a later GKG row sharing the URL never adds tone to an rss/gnews doc. Outlet names are stripped from Google News text so they do not become terms.
 
 `pnpm purge <source>` deletes that source's docs (and resets `gkg_files` for `gkg`), for a clean re-fetch.
+
+## Terms and the PMI universe
+
+Terms are only stored for docs that mention at least one tracked person. A doc naming nobody tracked keeps its `docs` row (it still feeds `/api/candidates` and the source counts) but gets no `doc_terms` rows: they used to serve only as the PMI denominator, at two thirds of the largest table. PMI therefore compares a person's terms against the docs about tracked people in the window, not against everything collected; `stats.docs` keeps its old meaning (every doc in scope).
+
+`pnpm purge orphan-terms` deletes the term rows a database collected before this rule and runs `vacuum full doc_terms` to return the pages to disk (plain `vacuum` only marks them reusable and leaves the file the same size). It takes an exclusive lock on `doc_terms`, so run it with the server stopped; it is a one-off per database, and `pnpm reindex` produces the same result from scratch.
 
 ## Layout
 

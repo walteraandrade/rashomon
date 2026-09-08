@@ -10,6 +10,7 @@ import { signed, testimonyClass, testimonyColor, testimonyFocus, testimonyPositi
 import { paintColumns, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { seed } from './fixture.js'
+import './close.js'
 
 // The kikori avaliação on the reading page: GET /api/people/:id/testimony painted into the
 // side column (overall, per source, per outlet) and explained in the "Como ler" chapter.
@@ -299,9 +300,12 @@ describe('testimony strip: the outlets on the axis under the map', () => {
         assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r + 1.5 - 1e-6, 'still no overlap')
       }
     // Past the minimum radius the height is allowed to grow again rather than dots vanish.
-    const absurd = Array.from({ length: 1200 }, (_, i) => ({ domain: `z${i}.example`, source: 'gnews', score: -2 + (i % 10) * 0.01, n: 3 }))
+    // 150 outlets stacked on a tenth of the axis already pins every dot at STRIP_MIN_R and
+    // pushes the height to 1144px, well past the cap. swarm is cubic in the number of dots
+    // sharing an x, so a larger crowd only buys a slower test: 1200 of them cost 169s.
+    const absurd = Array.from({ length: 150 }, (_, i) => ({ domain: `z${i}.example`, source: 'gnews', score: -2 + (i % 10) * 0.01, n: 3 }))
     const grown = stripLayout(absurd, 957)
-    assert.equal(grown.dots.length, 1200)
+    assert.equal(grown.dots.length, 150)
     assert.ok(grown.height > STRIP_MAX_HEIGHT)
     assert.ok(grown.dots.every((d) => Math.abs(d.r - STRIP_MIN_R) < 1e-9))
   })

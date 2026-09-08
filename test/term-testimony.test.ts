@@ -3,6 +3,7 @@ import { before, describe, it } from 'node:test'
 import { app } from '../src/server.js'
 import { parseQuery } from '../src/query.js'
 import { seed } from './fixture.js'
+import './close.js'
 
 // `testimony=1` on GET /api/people/:id/graph: the per-term kikori mean (docs in `about` that
 // carry the term) plus the person's own mean over the same scope, both under the same label

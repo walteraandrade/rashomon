@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite'
 import pg from 'pg'
-import { poolConfig } from './db.js'
+import { poolConfig, schema } from './db.js'
 
 // One-way copy of an embedded PGlite database (DATA_DIR) into a managed Postgres. Prefers
 // the direct, unpooled URL because a transaction pooler chokes on large batches.
@@ -11,13 +11,14 @@ const tables: Table[] = [
   { name: 'persons', columns: ['id', 'name', 'aliases'] },
   {
     name: 'docs',
-    columns: ['id', 'source', 'uri', 'text', 'published_at', 'collected_at', 'extra_terms', 'domain', 'tone'],
-    json: ['extra_terms'],
+    columns: ['id', 'source', 'uri', 'text', 'published_at', 'collected_at', 'extra_terms', 'domain', 'tone', 'extra_names'],
+    json: ['extra_terms', 'extra_names'],
   },
   { name: 'doc_persons', columns: ['doc_id', 'person_id'] },
   { name: 'doc_terms', columns: ['doc_id', 'term', 'kind'] },
   { name: 'gkg_files', columns: ['slot', 'rows', 'processed_at'] },
   { name: 'doc_testimony', columns: ['doc_id', 'person_id', 'method', 'score'] },
+  { name: 'doc_candidates', columns: ['doc_id', 'name'] },
 ]
 
 const batchSize = Number(process.env.PUSH_BATCH ?? 500)
@@ -48,6 +49,7 @@ const main = async () => {
   const url = process.env.POSTGRES_URL_NON_POOLING ?? process.env.DATABASE_URL ?? process.env.POSTGRES_URL
   if (!url) throw new Error('POSTGRES_URL_NON_POOLING, DATABASE_URL or POSTGRES_URL is required')
   const source = new PGlite(process.env.DATA_DIR ?? './data/pg')
+  await source.exec(schema)
   const target = new pg.Pool({ ...poolConfig(url), max: 1 })
   await tables.reduce<Promise<void>>(async (acc, t) => (await acc, copy(source, target, t)), Promise.resolve())
   await target.query(`select setval(pg_get_serial_sequence('docs', 'id'), coalesce(max(id), 1)) from docs`)

@@ -9,6 +9,13 @@
     "noEmit": true,
     "types": [
       "node"
+    ],
+    "allowJs": true,
+    "checkJs": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
     ]
   },
   "include": [

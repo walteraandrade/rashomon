@@ -8,6 +8,11 @@ import { parseCandidatesQuery } from '../src/query.js'
 import { app } from '../src/server.js'
 import { insertDoc } from '../src/store.js'
 import { persons, seedCandidates } from './fixture.js'
+import { candidatesQuery } from '../public/js/api.js'
+import { boot, createHandlers } from '../public/js/app.js'
+import { trendOf } from '../public/js/format.js'
+import { paintCandidates } from '../public/js/render.js'
+import { withFakeDocument } from './fake-dom.js'
 
 // Acceptance tests for issue #32 (candidate queue), written from the issue text.
 
@@ -173,21 +178,66 @@ describe('candidatesFor direct call', () => {
   })
 })
 
-describe('AC7: "candidatos" list in the atlas (public/design-5.html)', () => {
+describe('AC7: "candidatos" list in the atlas', () => {
   const html = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
 
   it('has a candidates panel in the side column, before the inspector', () => {
+    // Static markup, and the only thing still read out of design-5.html: issue #37 moved every
+    // line of behaviour into public/js/*.js, which the criteria below import and call.
     assert.match(html, /<details class="outlets candidates" id="candidateQueue">/)
     assert.ok(html.indexOf('id="candidateQueue"') < html.indexOf('id="inspector"'))
+    assert.match(html, /<summary class="eyebrow">Candidatos <b id="candidateLabel"><\/b><\/summary>/)
   })
 
-  it('calls the route with the period select, min=3, and refreshes at boot and on days change', () => {
-    assert.match(html, /\/api\/candidates\?days=\$\{\$\('days'\)\.value\}&min=3&limit=30/)
-    assert.match(html, /if\(id==='days'\) loadCandidates\(\)/)
-    assert.match(html, /loadCandidates\(\)\nload\(\)\s*\n<\/script>/)
+  it('calls the route with the period select, min=3 and limit=30, and refreshes on a days change', () => {
+    assert.equal(candidatesQuery({ days: '7' }).toString(), new URLSearchParams({ days: '7', min: '3', limit: '30' }).toString())
+    const calls: string[] = []
+    const handlers = createHandlers({
+      loadCandidates: () => calls.push('loadCandidates'),
+      resetDomain: () => calls.push('resetDomain'),
+      updateHeader: () => calls.push('updateHeader'),
+      load: () => calls.push('load'),
+    })
+    handlers.control('days')()
+    assert.ok(calls.includes('loadCandidates'), 'changing the period must refetch the queue')
+    calls.length = 0
+    handlers.control('sort')()
+    assert.ok(!calls.includes('loadCandidates'), 'no other control refetches it')
+  })
+
+  it('boot() is the single entry point the page loads, so the queue is fetched once at startup', () => {
+    assert.equal(typeof boot, 'function')
+    assert.match(html, /<script type="module" src="\.\/js\/app\.js"><\/script>/)
   })
 
   it('renders name, docs, sources, trend and the sample docs on click, in pt-BR', () => {
-    for (const s of ['Candidatos', "c.sources===1?'fonte':'fontes'", 'novo', 'Nenhum nome novo', 'data-candidate', 'aria-expanded', 'class="samples"']) assert.ok(html.includes(s), s)
+    const markup = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
+      paintCandidates({
+        candidates: [
+          { name: 'Hugo Motta', count: 5, sources: 1, previous: 0, samples: [{ id: '7', source: 'gnews', text: 'texto de exemplo' }] },
+          { name: 'Davi Alcolumbre', count: 4, sources: 2, previous: 9, samples: [] },
+        ],
+      })
+      return { label: els.candidateLabel.textContent, list: els.candidateList.innerHTML }
+    })
+    assert.equal(markup.label, '2')
+    for (const fragment of ['Hugo Motta', '5 docs', '1 fonte', 'novo', '2 fontes', '↓ era 9', 'data-candidate="0"', 'aria-expanded="false"', 'class="samples"', 'texto de exemplo', 'Sem exemplos neste período.'])
+      assert.ok(markup.list.includes(fragment), fragment)
+  })
+
+  it('says so in pt-BR when no name clears the bar, instead of rendering an empty list', () => {
+    const markup = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
+      paintCandidates({ candidates: [] })
+      return { label: els.candidateLabel.textContent, list: els.candidateList.innerHTML }
+    })
+    assert.equal(markup.label, '')
+    assert.match(markup.list, /Nenhum nome novo com 3 ou mais documentos neste período\./)
+  })
+
+  it('trendOf reads the previous window without ever dividing by it', () => {
+    assert.deepEqual(trendOf({ count: 5, previous: 0 }), { cls: 'up', text: 'novo' })
+    assert.deepEqual(trendOf({ count: 5, previous: 2 }), { cls: 'up', text: '↑ era 2' })
+    assert.deepEqual(trendOf({ count: 1, previous: 2 }), { cls: '', text: '↓ era 2' })
+    assert.deepEqual(trendOf({ count: 2, previous: 2 }), { cls: '', text: '= 2' })
   })
 })

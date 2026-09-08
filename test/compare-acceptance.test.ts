@@ -40,6 +40,10 @@ describe('compare people acceptance criteria (issue #7)', () => {
     assert.doesNotMatch(html, /\.tone\s*(\?\?|\|\|)\s*0/, 'tone must never be coerced to 0')
   })
 
+  // Kept, not deleted, through issue #37's split. AC3 of #37 bans tests that read
+  // design-5.html to get at its JavaScript; this criterion is purely about the order of three
+  // static elements in the header, which no module emits and no import can answer. It reads
+  // markup, never script.
   it('AC9 (header placement): design-5.html places the compare-link immediately after .person-pick, before #stats', () => {
     const html = readFileSync(design5Path, 'utf8')
     const personPickIdx = html.indexOf('<div class="person-pick">')

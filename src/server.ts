@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
+import { cacheControl } from './cache.js'
 import { db, migrate } from './db.js'
 import { candidatesFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round } from './perf.js'
@@ -30,6 +31,14 @@ if (perfEnabled)
     c.header('x-perf-sql-count', String(sql))
     if (perfLogEnabled) console.log(perfLine({ method: c.req.method, path: c.req.path, query: new URL(c.req.url).search.slice(1), status: c.res.status, ms, sql, dbMs }))
   })
+
+// The whole API is public, read-only and changes only when `pnpm push` copies a new local
+// database up, so a shared cache in front of it serves most reads without running a function
+// or touching Postgres. Registered before every /api route so it also covers the 404s.
+app.use('/api/*', async (c, next) => {
+  await next()
+  c.header('cache-control', cacheControl({ method: c.req.method, path: c.req.path, status: c.res.status }))
+})
 
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)

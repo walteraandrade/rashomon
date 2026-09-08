@@ -40,7 +40,7 @@ describe('issue #37 AC1: the split page still serves the same atlas over the sam
     const { candidatesQuery, endpoint, params, sourcesParams } = await import('../public/js/api.js')
     assert.equal(endpoint('lula'), '/api/people/lula')
     const p = params({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'all' })
-    assert.equal(p.toString(), new URLSearchParams({ days: '30', sort: 'count', limit: '18', min: '2', source: 'all', kind: 'all', domain: 'all' }).toString())
+    assert.equal(p.toString(), new URLSearchParams({ days: '30', sort: 'count', limit: '18', min: '2', source: 'all', kind: 'all', domain: 'all', testimony: '1' }).toString())
     // The outlet sidebar's own /sources call is the one that must not echo the domain back.
     assert.equal(sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'g1.globo.com' }).has('domain'), false)
     assert.equal(candidatesQuery({ days: '7' }).toString(), new URLSearchParams({ days: '7', min: '3', limit: '30' }).toString())

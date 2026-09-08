@@ -21,6 +21,10 @@ import {
   paintOutlets,
   paintOutletsError,
   paintSelection,
+  paintStrip,
+  paintTestimony,
+  paintTestimonyError,
+  paintTestimonyLoading,
 } from './render.js'
 import {
   cancelDocs,
@@ -28,6 +32,7 @@ import {
   currentRequestId,
   getCandidateController,
   getController,
+  getMask,
   getSelected,
   getZoom,
   layoutCache,
@@ -36,6 +41,7 @@ import {
   setCandidateController,
   setController,
   setDocsController,
+  setMask,
   setSelected,
   setZoomLevel,
   state,
@@ -79,6 +85,7 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
  *   resetDomain?: () => void,
  *   updateHeader?: () => void,
  *   setSource?: (source: string) => void,
+ *   toggleMask?: () => void,
  * }} actions every action is optional so a test can inject only the ones a criterion is about
  */
 export const createHandlers = ({
@@ -94,6 +101,7 @@ export const createHandlers = ({
   resetDomain = () => {},
   updateHeader = () => {},
   setSource = () => {},
+  toggleMask = () => {},
 }) => ({
   search: () => {
     paintCurrentSelection()
@@ -111,6 +119,8 @@ export const createHandlers = ({
   },
   modeMap: () => setMode('map'),
   modeColumns: () => setMode('columns'),
+  // Paint only: the per-term testimony always travels with the graph (api.js's testimony=1).
+  mask: () => toggleMask(),
   // One handler per control id, so the person control is the only one that drops the outlet
   // filter and the period control is the only one that refetches the candidate queue.
   /** @param {string} id */
@@ -154,6 +164,7 @@ export const docsQuery = (base, n) => {
   const q = new URLSearchParams(base)
   q.delete('sort')
   q.delete('min')
+  q.delete('testimony')
   q.set('term', n ? n.term : '')
   q.set('kind', n ? n.kind : 'all')
   q.set('limit', '5')
@@ -173,6 +184,7 @@ export const scopeKeys = (personId, graphParams, term = null) => ({
   graph: personId + '?' + graphParams,
   sources: personId + '?' + api.narrowToSources(graphParams),
   docs: personId + '?' + docsQuery(graphParams, term),
+  testimony: personId + '?' + api.narrowToTestimony(graphParams),
 })
 
 // Reuses a fresh entry instead of fetching, and only memoizes a value the fetch actually
@@ -221,6 +233,9 @@ let mode = 'map'
 /** @type {Layout | null} */
 let currentLayout = null
 let lastMapWidth = 0
+let lastStripWidth = 0
+/** @type {import('./format.js').Testimony | null} */
+let testimony = null
 /** @type {import('./format.js').Measure | null} */
 let measure = null
 
@@ -247,6 +262,12 @@ const resizeMap = () => {
       $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - width) / 2)
     }
   }
+  // The strip is drawn in pixels, so a width change redraws it from the data in hand.
+  const stripWidth = $('strip').clientWidth
+  if (testimony && stripWidth && stripWidth !== lastStripWidth) {
+    lastStripWidth = stripWidth
+    paintStrip({ data: testimony, domain: state.domain, onPick: pickDomain, width: stripWidth })
+  }
   $('zoomReset').textContent = Math.round(getZoom() * 100) + '%'
   $('zoomOut').disabled = getZoom() <= 1
   $('zoomIn').disabled = getZoom() >= 2
@@ -263,7 +284,7 @@ const setZoom = (value) => {
 }
 
 const paintCurrentSelection = () =>
-  paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: choose })
+  paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: choose, mask: getMask(), personTestimony: graph?.stats?.testimony })
 
 const paintCurrentInspector = () =>
   inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: choose, onShowDocs: loadDocs })
@@ -271,7 +292,7 @@ const paintCurrentInspector = () =>
 const drawCurrentMap = () => {
   const current = /** @type {Graph} */ (graph)
   currentLayout = getLayout()
-  drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: choose })
+  drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: choose, personTestimony: current.stats?.testimony })
   resizeMap()
   paintCurrentSelection()
   $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - $('viewport').clientWidth) / 2)
@@ -334,6 +355,32 @@ const loadSourcesFlow = async (id, signal) => {
   }
 }
 
+// Same shape as the outlet list: keyed by what the route reads, so a sort, limit or outlet
+// change repaints from the memo (with the new active outlet) instead of refetching. A miss
+// blanks the panel first, so one person's numbers never sit under the next person's name.
+/** @param {number} id @param {AbortSignal} signal */
+const loadTestimonyFlow = async (id, signal) => {
+  const person = $('person').value
+  const key = scopeKeys(person, graphQuery()).testimony
+  if (!readScope('testimony', key)) {
+    testimony = null
+    paintTestimonyLoading()
+  }
+  try {
+    const data = await fromScope('testimony', key, () => api.loadTestimony(person, api.testimonyParams(controlValues()), signal))
+    if (id !== currentRequestId()) return
+    testimony = data
+    paintTestimony({ data, domain: state.domain, onPick: pickDomain })
+    lastStripWidth = $('strip').clientWidth || 0
+    paintStrip({ data, domain: state.domain, onPick: pickDomain, width: lastStripWidth || undefined })
+  } catch (e) {
+    if (id === currentRequestId() && !aborted(e)) {
+      testimony = null
+      paintTestimonyError()
+    }
+  }
+}
+
 const loadCandidatesFlow = async () => {
   getCandidateController()?.abort()
   const controller = new AbortController()
@@ -366,12 +413,13 @@ const render = () => {
   if (previouslySelected === null || !ids.has(previouslySelected)) setSelected(null)
   $('modeMap').setAttribute('aria-pressed', String(mode === 'map'))
   $('modeColumns').setAttribute('aria-pressed', String(mode === 'columns'))
+  $('mask').setAttribute('aria-pressed', String(getMask()))
   $('viewport').hidden = mode !== 'map'
   $('columns').hidden = mode !== 'columns'
   if (nodes.length) {
     if (!currentLayout || mode === 'map') drawCurrentMap()
     $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
-    paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: choose })
+    paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: choose, personTestimony: current.stats?.testimony })
   } else {
     $('viewport').innerHTML = '<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'
     $('columns').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
@@ -389,6 +437,9 @@ const setMode = (next) => {
   render()
 }
 
+// Resets the reader's state, not the painted surfaces: the old map, columns and overflow list
+// stay on screen until render() replaces them, so nothing under them moves while a load is in
+// flight (see load()).
 const resetGraph = () => {
   layoutCache.clear()
   currentLayout = null
@@ -397,8 +448,6 @@ const resetGraph = () => {
   $('search').value = ''
   $('searchNote').textContent = ''
   $('selectionNote').textContent = ''
-  $('overflow').hidden = true
-  $('columns').innerHTML = ''
 }
 
 const updateHeader = () => {
@@ -411,24 +460,31 @@ const updateHeader = () => {
 // is never read before it is set.
 const signal = () => /** @type {AbortController} */ (getController()).signal
 
+// A reload keeps the previous map, columns, legend and inspector on screen, dimmed by the
+// `is-loading` class, and swaps them in one go when the data lands. Blanking them first made
+// the map column collapse from its drawn height to the empty-state minimum for the length of
+// the request, which threw the testimony strip and everything under it hundreds of pixels up
+// and back down on every outlet click. Only the very first load, with nothing to keep, shows
+// the loading copy in place of a map.
 const load = async () => {
   const id = nextRequestId()
   getController()?.abort()
   setController(new AbortController())
   cancelDocs()
   resetGraph()
+  const first = !graph
   busy = true
   graph = null
   nodes = []
   links = []
   $('status').classList.remove('error')
   $('status').textContent = 'Carregando a base local…'
-  $('viewport').hidden = false
-  $('columns').hidden = true
   $('viewport').setAttribute('aria-busy', 'true')
-  $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
-  $('inspector').textContent = 'Aguardando dados.'
-  $('legend').textContent = ''
+  $('workspace').classList.add('is-loading')
+  if (first) {
+    $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
+    $('inspector').textContent = 'Aguardando dados.'
+  }
   try {
     if (!people.length) {
       const loaded = await loadPeopleFlow(signal())
@@ -443,6 +499,7 @@ const load = async () => {
       }
     }
     loadSourcesFlow(id, signal())
+    loadTestimonyFlow(id, signal())
     const person = $('person').value
     const query = graphQuery()
     const data = await fromScope('graph', scopeKeys(person, query).graph, () => api.loadGraph(person, query, signal()))
@@ -457,12 +514,19 @@ const load = async () => {
     busy = false
     $('status').classList.add('error')
     $('status').textContent = 'Não foi possível carregar dados reais.'
+    $('viewport').hidden = false
+    $('columns').hidden = true
+    $('overflow').hidden = true
+    $('legend').textContent = ''
     $('viewport').innerHTML =
       '<div class="empty">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
     $('retry').addEventListener('click', load)
     $('inspector').textContent = 'Use tentar novamente quando a API estiver disponível.'
   } finally {
-    if (id === currentRequestId()) $('viewport').setAttribute('aria-busy', 'false')
+    if (id === currentRequestId()) {
+      $('viewport').setAttribute('aria-busy', 'false')
+      $('workspace').classList.remove('is-loading')
+    }
   }
 }
 
@@ -491,6 +555,11 @@ const handlers = createHandlers({
     state.source = value
     $('source').value = value
   },
+  toggleMask: () => {
+    setMask(!getMask())
+    $('mask').setAttribute('aria-pressed', String(getMask()))
+    if (graph && !busy) paintCurrentSelection()
+  },
 })
 
 export const boot = () => {
@@ -499,6 +568,7 @@ export const boot = () => {
   $('source').addEventListener('change', () => handlers.source(String($('source').value))())
   $('modeMap').addEventListener('click', handlers.modeMap)
   $('modeColumns').addEventListener('click', handlers.modeColumns)
+  $('mask').addEventListener('click', handlers.mask)
   for (const id of ['person', 'days', 'sort', 'limit']) $(id).addEventListener('change', handlers.control(id))
   $('search').addEventListener('input', handlers.search)
   $('clear').addEventListener('click', handlers.clear)

@@ -61,6 +61,9 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   limit: int(q.limit, 40, 1, 200),
   min: int(q.min, 2, 1, 1000),
   sort: q.sort === 'pmi' ? 'pmi' : 'count',
+  // Opt-in, so the default /graph response (and docs/perf-baseline.md) is untouched; the
+  // label resolves exactly like /testimony's, so the two never disagree about the default.
+  method: q.testimony === '1' ? (METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod()) : null,
 })
 
 export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => ({

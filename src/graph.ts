@@ -12,6 +12,10 @@ export type GraphQuery = {
   limit: number
   min: number
   sort: 'count' | 'pmi'
+  // The doc_testimony label to average per term, or null when the caller did not ask
+  // (`testimony=1`): the default response shape carries no testimony at all. Optional so the
+  // literals the tests and benchmarks build stay valid.
+  method?: string | null
 }
 
 export type DocsQuery = {
@@ -206,6 +210,33 @@ const linksSql = `
   where (a.kind || ':' || a.term) = any($5::text[]) and (b.kind || ':' || b.term) = any($5::text[])
   group by 1, 2 having count(*) >= 2
   order by 1, 2`
+
+// Testimony per term, for the mask that colours the map (option a of the avaliação work): the
+// mean kikori score of the docs in `about` that carry this term, next to the person's own
+// mean over the same `about`, so the client can colour each word by its distance from the
+// person rather than from zero -- the name bias moves every text of one person the same
+// way, and centring on the person's mean cancels it. Its own statement, like linksSql, and
+// for the same reason: the term list is the output of graphSql, and it only runs when asked.
+// count(*) is one row per doc per term by doc_terms' PK, same argument as term_p's.
+const termTestimonySql = `
+  with ${scopeCte},
+  scored as (
+    select a.doc_id, dt.score
+    from about a join doc_testimony dt on dt.doc_id = a.doc_id and dt.person_id = $1 and dt.method = $5
+    where dt.score is not null
+  )
+  select
+    (select json_build_object('score', round(avg(score)::numeric, 2)::float8, 'n', count(*)::int) from scored) as overall,
+    coalesce((
+      select json_agg(json_build_object('id', id, 'score', score, 'n', n) order by id) from (
+        select t.kind || ':' || t.term as id, round(avg(s.score)::numeric, 2)::float8 as score, count(*)::int as n
+        from doc_terms t join scored s on s.doc_id = t.doc_id
+        where (t.kind || ':' || t.term) = any($6::text[])
+        group by 1
+      ) x
+    ), '[]'::json) as terms`
+
+type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: { id: string; score: number; n: number }[] }
 
 const sourcesSql = `
   with ${scopeCte}
@@ -549,10 +580,12 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
   const { docs, about, nodes, signature } = rows[0]
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
   const links = ids.length ? await db.query<LinkRow>(linksSql, [person.id, q.days, q.source, domain, ids]) : { rows: [] }
+  const testimony = q.method ? (await db.query<TermTestimonyRow>(termTestimonySql, [person.id, q.days, q.source, domain, q.method, ids])).rows[0] : null
+  const perTerm = new Map(testimony?.terms.map((t) => [t.id, { score: t.score, n: t.n }]) ?? [])
   return {
     person,
-    stats: { docs, about },
-    nodes: nodes.map((t) => ({ id: `${t.kind}:${t.term}`, ...t })),
+    stats: testimony ? { docs, about, testimony: { method: q.method, ...testimony.overall } } : { docs, about },
+    nodes: nodes.map((t) => ({ id: `${t.kind}:${t.term}`, ...t, ...(testimony ? { testimony: perTerm.get(`${t.kind}:${t.term}`) ?? null } : {}) })),
     links: [
       ...nodes.map((t) => ({ source: `person:${person.id}`, target: `${t.kind}:${t.term}`, count: t.count })),
       ...links.rows.map((l) => ({ source: l.s, target: l.t, count: l.count })),
@@ -575,5 +608,6 @@ export const statements = {
   rising: risingSql,
   tone: toneSql,
   testimonySummary: testimonySummarySql,
+  termTestimony: termTestimonySql,
   candidates: candidatesSql,
 } as const

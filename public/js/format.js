@@ -6,13 +6,19 @@
 // public/js the same way it checks src/ (tsconfig.json sets checkJs).
 
 /**
- * @typedef {{ id: string, term: string, kind: string, count: number, pmi: number }} Term
+ * @typedef {{ score: number, n: number }} TermTestimony
+ * @typedef {{ id: string, term: string, kind: string, count: number, pmi: number, testimony?: TermTestimony | null }} Term
  * @typedef {{ source: string, target: string, count: number }} Link
- * @typedef {{ person: { id: string, name: string }, stats?: { about?: number }, nodes: Term[], links: Link[] }} Graph
+ * @typedef {{ method: string, score: number | null, n: number }} PersonTestimony
+ * @typedef {{ person: { id: string, name: string }, stats?: { about?: number, testimony?: PersonTestimony }, nodes: Term[], links: Link[] }} Graph
  * @typedef {{ source?: string, uri?: unknown, domain?: string | null, text?: string }} Doc
  * @typedef {{ domain?: string | null, source?: string | null, label?: string | null, docs: number, tone?: number | null }} OutletRow
  * @typedef {{ id: string, source: string, text: string }} Sample
  * @typedef {{ name: string, count: number, sources: number, previous: number, samples: Sample[] }} Candidate
+ * @typedef {{ score: number | null, n: number }} TestimonyOverall
+ * @typedef {{ source: string, score: number | null, n: number }} TestimonySourceRow
+ * @typedef {{ domain: string, source: string, score: number | null, n: number }} TestimonyDomainRow
+ * @typedef {{ method: string, overall: TestimonyOverall, by_source: TestimonySourceRow[], by_domain: TestimonyDomainRow[] }} Testimony
  * @typedef {(text: string, size: number, family?: string, weight?: number) => number} Measure
  * @typedef {{ x: number, y: number, w: number, h: number }} Box
  * @typedef {Box & { lines: string[], size: number, lineHeight: number, id?: string }} CenterBox
@@ -113,14 +119,87 @@ export const trendOf = (c) => {
 /** @param {string} c */
 const hex = (c) => [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16))
 
-// Tone is a GDELT-only signal (see CLAUDE.md); a null/NaN tone renders transparent rather
-// than a fake neutral color, so a doc with no tone never looks like it scored zero.
-/** @param {number | null | undefined} t */
-export const toneColor = (t) => {
-  if (t === null || t === undefined || Number.isNaN(Number(t))) return 'transparent'
-  const x = Math.max(-3, Math.min(3, Number(t)))
-  const [from, to, k] = x < 0 ? [hex('#ff6b7d'), hex('#626a8c'), (x + 3) / 3] : [hex('#626a8c'), hex('#7ee787'), x / 3]
+// A signed value on the red/grey/green ramp, clamped to ±span. A null/NaN value renders
+// transparent rather than a fake neutral color, so a doc with no signal never looks like it
+// scored zero.
+/** @param {number | null | undefined} value @param {number} span */
+const scaleColor = (value, span) => {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return 'transparent'
+  const x = Math.max(-span, Math.min(span, Number(value)))
+  const [from, to, k] = x < 0 ? [hex('#ff6b7d'), hex('#626a8c'), (x + span) / span] : [hex('#626a8c'), hex('#7ee787'), x / span]
   return `rgb(${from.map((v, i) => Math.round(v + (to[i] - v) * k)).join(',')})`
+}
+
+// Tone is a GDELT-only signal (see CLAUDE.md); political news sits around -1, so ±3 is the
+// visible range.
+/** @param {number | null | undefined} t */
+export const toneColor = (t) => scaleColor(t, 3)
+
+// Testimony is kikori's -10..+10 score per (doc, person), from GET /api/people/:id/testimony.
+// The model's own class cut is neg <= -2.5 / pos >= 2.5 (README, "The kikori contract"); the
+// color saturates at twice that, where a row is unambiguously on one side.
+export const TESTIMONY_CUT = 2.5
+
+/** @param {number | null | undefined} s */
+export const testimonyColor = (s) => scaleColor(s, 2 * TESTIMONY_CUT)
+
+/** @param {number | null | undefined} s @returns {'negativo' | 'neutro' | 'positivo' | null} */
+export const testimonyClass = (s) => {
+  if (s === null || s === undefined || Number.isNaN(Number(s))) return null
+  return Number(s) <= -TESTIMONY_CUT ? 'negativo' : Number(s) >= TESTIMONY_CUT ? 'positivo' : 'neutro'
+}
+
+// The map's colour mask: a term's colour is the distance between the mean score of the texts
+// that carry it and the person's own mean over the same recorte, not the raw score. Every
+// text about one person is shifted the same way by the name prior, so centring on the person
+// cancels it and what remains is "the texts with this word are harsher/kinder than usual for
+// this person". Saturates at MASK_SPAN either way: tighter than the class cut on purpose,
+// because one person's terms sit within a point or so of that person's mean and a ±2.5 ramp
+// painted them all the same grey. A term seen in fewer than MASK_MIN scored texts gets no
+// colour rather than a noisy one.
+export const MASK_MIN = 3
+export const MASK_SPAN = 1.5
+
+/** @param {number} delta */
+export const maskColor = (delta) => scaleColor(delta, MASK_SPAN)
+
+/** @param {{ testimony?: TermTestimony | null }} term @param {number | null | undefined} personScore @returns {string | null} */
+export const termMask = (term, personScore) => {
+  const t = term.testimony
+  if (!t || t.n < MASK_MIN || personScore === null || personScore === undefined) return null
+  return maskColor(t.score - personScore)
+}
+
+// Where a -10..+10 score sits on the panel's axis, as a percentage from the left edge.
+/** @param {number} s */
+export const testimonyPosition = (s) => ((Math.max(-10, Math.min(10, Number(s))) + 10) / 20) * 100
+
+/** @param {unknown} value */
+export const signed = (value) => (Number(value) > 0 ? '+' : '') + fmt(value)
+
+// by_domain is one row per (domain, source); the strip and the focus line want one entry per
+// outlet, so the rows of one domain fold into a text-weighted mean. Most texts first.
+/** @param {TestimonyDomainRow[]} rows @returns {{ domain: string, sources: string[], score: number, n: number }[]} */
+export const foldTestimonyDomains = (rows) => {
+  /** @type {Map<string, { domain: string, sources: string[], sum: number, n: number }>} */
+  const byDomain = new Map()
+  for (const r of rows) {
+    if (r.score === null || r.score === undefined || !r.n) continue
+    const entry = byDomain.get(r.domain) ?? { domain: r.domain, sources: [], sum: 0, n: 0 }
+    entry.sources.push(r.source)
+    entry.sum += Number(r.score) * r.n
+    entry.n += r.n
+    byDomain.set(r.domain, entry)
+  }
+  return [...byDomain.values()].map(({ sum, ...e }) => ({ ...e, score: sum / e.n })).sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
+}
+
+// The picked outlet's own testimony. Null when no outlet is picked or the outlet never clears
+// the route's `min` floor.
+/** @param {TestimonyDomainRow[]} rows @param {string} domain @returns {{ score: number, n: number } | null} */
+export const testimonyFocus = (rows, domain) => {
+  const own = domain === 'all' ? undefined : foldTestimonyDomains(rows).find((d) => d.domain === domain)
+  return own ? { score: own.score, n: own.n } : null
 }
 
 // Only the bsky.app profile/post URL a bluesky doc's `uri` (at://did/collection/rkey)

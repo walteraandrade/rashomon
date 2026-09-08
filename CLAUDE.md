@@ -26,12 +26,12 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
 - `src/server.ts` Hono routes + static files.
 - `src/query.ts` query parsers for every route; each parameter is clamped there.
-- `public/design-5.html` is the current UI (radial atlas), served at `/`. It is markup only: the Google Fonts link, one `<link rel="stylesheet" href="atlas.css">` and one `<script type="module" src="./js/app.js">`. No `<style>` block, no inline script, no inline `style=` except a `--var` override for a genuinely dynamic value. The controls are one sentence (`.sentence-line`, five `<select>`s), the map is the figure, and the `#como-ler` chapter at the bottom is where frequência, PMI, PMI × ln(1 + documentos), lines and tone are explained in plain pt-BR. Keep that chapter in sync with `src/graph.ts` when scoring changes.
+- `public/design-5.html` is the current UI (radial atlas), served at `/`. It is markup only: the Google Fonts link, one `<link rel="stylesheet" href="atlas.css">` and one `<script type="module" src="./js/app.js">`. No `<style>` block, no inline script, no inline `style=` except a `--var` override for a genuinely dynamic value. The controls are one sentence (`.sentence-line`, five `<select>`s), the map is the figure, and the `#como-ler` chapter at the bottom is where frequência, PMI, PMI × ln(1 + documentos), lines, tone and the kikori avaliação (testimony) are explained in plain pt-BR. Keep that chapter in sync with `src/graph.ts` when scoring changes.
 - `public/atlas.css` holds every rule for every page: `:root` tokens (League Spartan for display, Instrument Sans for text, nothing under 11px), layout, components, and the compare page's section. `public/compare.html` links it too and keeps only its inline script; do not give it a `<style>` block.
 - `public/js/format.js` pure formatting, labels and URL helpers, plus the shared JSDoc typedefs (`Term`, `Link`, `Graph`, `Layout`, `Measure`, …) the other modules reference.
-- `public/js/api.js` URL building and fetching for the documented routes. No DOM.
+- `public/js/api.js` URL building and fetching for the documented routes (`/graph`, `/sources`, `/docs`, `/testimony`, `/candidates`). No DOM.
 - `public/js/layout.js` pure geometry: `wrapLines`, `centerLabel`, `packPass`, `pack`, `routeGraph`, `routesFrom`. No DOM — text metrics arrive as an injected `measure(text, size, family, weight)`, which `render.js`'s `createCanvasMeasure()` supplies in the browser and a stub supplies in tests.
-- `public/js/render.js` the DOM layer: `drawMap`, `paintSelection`, `inspect`, `paintColumns`, `wordMarkup`, `paintOutlets`, `paintCandidates`, `paintDocs`. Paints; never fetches.
+- `public/js/render.js` the DOM layer: `drawMap`, `paintSelection`, `inspect`, `paintColumns`, `wordMarkup`, `paintOutlets`, `paintTestimony`, `paintCandidates`, `paintDocs`. Paints; never fetches.
 - `public/js/state.js` the mutable UI state: source/domain filters, selection, zoom, layout cache, request/abort bookkeeping.
 - `public/js/app.js` the page's wiring: reads the controls, drives `api.js`, hands data to `render.js`, and exports `createHandlers` (the event table), `layoutKey`, `docsQuery` and `boot`. Importing it is side-effect free outside a browser; `boot()` runs only when a `document` exists, which is what lets tests import the wiring.
 - Import direction is one way and acyclic: `format.js` ← `layout.js` ← `render.js` ← `app.js`, with `api.js` and `state.js` at the bottom. `test/atlas-modules-acceptance.test.ts` enforces it.
@@ -46,7 +46,7 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - Code, comments, commits, branches, PR titles in English. UI copy in pt-BR.
 - Functional style, small pure functions, no classes. Comments only when the why is not obvious.
 - Commit messages short and imperative. Branch names `feat/ | fix/ | chore/ | refactor/ | docs/ | test/` + short kebab slug.
-- Keep the API contract stable: `GET /api/people`, `GET /api/people/:id/graph`, `GET /api/people/:id/sources`. New capabilities are new routes or new optional query parameters, never breaking changes to existing fields.
+- Keep the API contract stable: `GET /api/people`, `GET /api/people/:id/graph`, `GET /api/people/:id/sources`. New capabilities are new routes or new optional query parameters, never breaking changes to existing fields. `testimony=1` on `/graph` is one such parameter: off, the response is unchanged.
 
 ## Factory
 

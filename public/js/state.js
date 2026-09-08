@@ -16,6 +16,15 @@ export const setSelected = (id) => {
   selected = id
 }
 
+// The colour mask over the map's words (testimony per term against the person's mean). A
+// paint-only flag: the data it reads always travels with the graph.
+let mask = false
+export const getMask = () => mask
+/** @param {boolean} on */
+export const setMask = (on) => {
+  mask = on
+}
+
 let zoom = 1
 export const getZoom = () => zoom
 /** @param {number} z */

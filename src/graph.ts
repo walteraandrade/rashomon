@@ -240,27 +240,49 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
 // here too, or the sum-of-buckets invariant breaks. The oldest bucket is clamped to
 // the window edge, so buckets exactly partition the same window docsFor uses for
 // the same params.
+//
+// The matching docs are counted once and then joined to the bucket series, instead of
+// joining the series to `about` and testing each doc against every bucket's range: that
+// cross join is |about| x |buckets| rows before the range filter cuts them, up to 365
+// buckets wide (issue #46).
+//
+// Each doc's bucket is therefore computed arithmetically, and the expression has to
+// reproduce the ranges above exactly. Bucket i is [now() - (i+1)*bucket_days,
+// now() - i*bucket_days), so a doc of age `a` days belongs to ceil(a / bucket_days) - 1:
+// a timestamp landing exactly on a boundary falls in the newer bucket, as the half-open
+// interval did. greatest(0, ...) puts future-dated docs (age <= 0) in the newest bucket,
+// which is what the open upper bound did. least(last_i, ...) is the oldest-edge clamp:
+// scopeCte already bounds age at `days`, so it only matters at the last bucket's exact
+// edge, where it keeps the doc inside the series rather than off the end of it.
 const timelineSql = `
   with ${scopeCte},
-  bounds as (select $2::int as days, $7::int as bucket_days),
+  bounds as (
+    select $2::int as days, $7::int as bucket_days,
+      ceil($2::float8 / $7::float8)::int - 1 as last_i
+  ),
   buckets as (
     select i,
       greatest(
         now() - make_interval(days => b.days),
         now() - make_interval(days => (i + 1) * b.bucket_days)
-      ) as bucket_start,
-      case when i = 0 then 'infinity'::timestamptz
-        else now() - make_interval(days => i * b.bucket_days) end as bucket_end
-    from bounds b, generate_series(0, ceil(b.days::float8 / b.bucket_days::float8)::int - 1) as i
+      ) as bucket_start
+    from bounds b, generate_series(0, b.last_i) as i
+  ),
+  hits as (
+    select least(
+        b.last_i,
+        greatest(0, ceil(extract(epoch from now() - d.published_at) / (b.bucket_days * 86400))::int - 1)
+      ) as i,
+      count(*)::int as count
+    from about a
+    join docs d on d.id = a.doc_id
+    cross join bounds b
+    where ${docsWhereSql}
+    group by 1
   )
-  select b.bucket_start,
-    count(d.id)::int as count
+  select b.bucket_start, coalesce(h.count, 0)::int as count
   from buckets b
-  left join about a on true
-  left join docs d on d.id = a.doc_id
-    and d.published_at >= b.bucket_start and d.published_at < b.bucket_end
-    and ${docsWhereSql}
-  group by b.bucket_start
+  left join hits h on h.i = b.i
   order by b.bucket_start asc`
 
 // Stays a bare array on purpose: lean narrows which docs count toward each bucket

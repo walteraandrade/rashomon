@@ -10,7 +10,7 @@ pnpm ingest          # default sources: bluesky, rss, gnews, gkg, senado; or: pn
 pnpm ingest gdelt    # GDELT DOC API, slow and rate limited, off by default
 pnpm ingest camara   # Câmara dos Deputados floor speeches, off by default
 pnpm dev             # http://localhost:3210
-pnpm reindex         # recompute terms and person matches after changing extract.ts or seed.json
+pnpm reindex         # recompute terms, person matches and candidates after changing extract.ts or seed.json
 pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
 pnpm export-docs     # dumps every doc as one JSON line to stdout, for kikori's training set
 pnpm typecheck       # tsc
@@ -58,6 +58,12 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also ca
 `GET /api/tone?days=30&min=3` returns `{ persons, domains, cells }` across every tracked person (not nested under `/people/:id`). `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted distinct set of domains that appear in `cells` (a domain that never clears `min` never appears). `cells` holds one `{ person_id, domain, tone, n }` row per `(person, domain)` pair with at least `min` toned docs in the window; `tone` is the average, rounded to 2 decimals, `n` is the toned-doc count. Tone is a GDELT-only signal (see below), so non-GDELT docs never contribute to `tone` or `n` here.
 
 `GET /api/people/:id/testimony?days=30&source=all&method=onnx&min=3` returns `{ method, overall, by_source, by_domain }`, a second, source-agnostic signal scored -10..+10 per `(doc, person)` by a pluggable scorer (see below), stored separately from and never merged with GDELT's `tone`. `overall` is `{ score, n }` averaged over every doc scored under `method` in the window, no floor. `by_source` lists one `{ source, score, n }` row per source with at least one non-null score (no `min` floor). `by_domain` lists one `{ domain, source, score, n }` row per `(domain, source)` pair with `n >= min`; a doc with no resolvable `domain` never appears here, though it still counts in `overall`/`by_source`. `method` reads whatever rows exist in `doc_testimony` for that label, including a retired scorer's; an unscored `method` returns `{ score: null, n: 0 }` everywhere, not a 404.
+
+`GET /api/candidates?days=7&min=5&limit=50` returns `{ days, candidates }`: person names nobody tracks yet, ranked by doc count in the window. Each candidate is `{ name, count, sources, previous, samples }`: `count` is distinct docs in the window, `sources` distinct sources, `previous` the count in the window of the same length immediately before (so a caller sees what is rising), `samples` up to 3 `{ id, source, text }` docs, newest first. Cross-person by construction, not nested under `/people/:id`. Promotion stays human: add the name to `seed.json` and run `pnpm reindex`.
+
+## Candidate discovery
+
+Names are discovered when a doc is inserted (`insertDoc`) and stored in `doc_candidates (doc_id, name)`, normalized like aliases (lowercase, no accents). `gkg` docs take the V1Persons column of the GKG CSV (index 11), kept in `docs.extra_names`; every other source uses a cheap, noisy heuristic: runs of two or more capitalized words (`de/da/do/das/dos` allowed inside) that do not open a sentence, where only `.`, `!`, `?` and a line break end a sentence and a colon, comma, quote or dash merely ends the run. A name equal to a tracked alias or `exclude` entry is not a candidate (exact match, so "Michelle Bolsonaro" still surfaces while only a bare "Bolsonaro" is tracked). `pnpm reindex` recomputes the table from stored docs with the current `seed.json`; gkg rows inserted before this table existed have an empty `extra_names` and contribute no candidates until re-ingested.
 
 ## Testimony and scoring
 

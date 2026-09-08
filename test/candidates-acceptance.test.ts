@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
+import { readFileSync } from 'node:fs'
 import { db } from '../src/db.js'
 import { capitalizedRuns, discoverNames } from '../src/extract.js'
 import { candidatesFor } from '../src/graph.js'
@@ -22,6 +23,11 @@ describe('AC1: capitalized runs that do not open a sentence', () => {
 
   it('drops single capitalized words, hashtags, handles and urls', () => {
     assert.deepEqual(capitalizedRuns('Encontro com Lula e #HugoMotta @renan https://x.co/Renan Calheiros'), [])
+  })
+
+  it('a colon, quote or dash breaks a run but does not open a sentence', () => {
+    assert.deepEqual(capitalizedRuns('STF: Alexandre de Moraes manda prender Jair Bolsonaro'), ['alexandre de moraes', 'jair bolsonaro'])
+    assert.deepEqual(capitalizedRuns('Boa noite! Hoje no Jornal Nacional: Tarcísio de Freitas fala de São Paulo'), ['jornal nacional', 'tarcisio de freitas', 'sao paulo'])
   })
 
   it('breaks a run on commas and on "e"', () => {
@@ -164,5 +170,24 @@ describe('candidatesFor direct call', () => {
   it('returns the same shape as the route', async () => {
     const r = await candidatesFor({ days: 7, min: 2, limit: 10 })
     assert.equal(r.candidates[0].name, 'hugo motta')
+  })
+})
+
+describe('AC7: "candidatos" list in the atlas (public/design-5.html)', () => {
+  const html = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
+
+  it('has a candidates panel in the side column, before the inspector', () => {
+    assert.match(html, /<details class="outlets candidates" id="candidateQueue">/)
+    assert.ok(html.indexOf('id="candidateQueue"') < html.indexOf('id="inspector"'))
+  })
+
+  it('calls the route with the period select, min=3, and refreshes at boot and on days change', () => {
+    assert.match(html, /\/api\/candidates\?days=\$\{\$\('days'\)\.value\}&min=3&limit=30/)
+    assert.match(html, /if\(id==='days'\) loadCandidates\(\)/)
+    assert.match(html, /loadCandidates\(\)\nload\(\)\s*\n<\/script>/)
+  })
+
+  it('renders name, docs, sources, trend and the sample docs on click, in pt-BR', () => {
+    for (const s of ['Candidatos', "c.sources===1?'fonte':'fontes'", 'novo', 'Nenhum nome novo', 'data-candidate', 'aria-expanded', 'class="samples"']) assert.ok(html.includes(s), s)
   })
 })

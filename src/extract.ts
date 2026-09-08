@@ -86,9 +86,12 @@ export const domainOf = (uri: string | undefined): string | undefined => {
 // Candidate discovery (issue #32). Cheap and noisy on purpose: a run of two or more
 // capitalized words, particles allowed in between ("Alexandre de Moraes"), that does
 // not open a sentence, since the first word of a sentence is capitalized for grammar,
-// not because it is a name. gkg docs skip the heuristic and use the V1Persons column.
+// not because it is a name. Only . ! ? end a sentence: a colon, quote or dash breaks
+// a run but does not start a sentence, so "STF: Alexandre de Moraes manda" keeps Moraes.
+// gkg docs skip the heuristic and use the V1Persons column.
 const particles = new Set(['de', 'da', 'do', 'das', 'dos'])
-const sentenceSplit = /[.!?:;|\n\r—–"“”«»()\[\]]+/
+const sentenceSplit = /[.!?\n\r]+/
+const runBreakers = /[,:;|—–"“”«»()\[\]]/g
 const capitalized = /^\p{Lu}[\p{L}'’-]*$/u
 
 export const capitalizedRuns = (text: string): string[] =>
@@ -97,7 +100,7 @@ export const capitalizedRuns = (text: string): string[] =>
     .replace(/[#@]\S+/g, ' ')
     .split(sentenceSplit)
     .flatMap((sentence) => {
-      const tokens = sentence.replace(/,/g, ' , ').split(/\s+/).filter(Boolean)
+      const tokens = sentence.replace(runBreakers, ' $& ').split(/\s+/).filter(Boolean)
       const runs: string[][] = []
       let run: string[] = []
       let opening = true

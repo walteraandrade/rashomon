@@ -27,12 +27,12 @@ export const upsertPersons = (ps: Person[]) =>
 
 export const insertDoc = async (doc: RawDoc, ps: Person[]): Promise<boolean> => {
   const inserted = await db.query<{ id: number; inserted: boolean }>(
-    `insert into docs (source, uri, text, published_at, extra_terms, domain, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $9)
+    `insert into docs (source, uri, text, published_at, extra_terms, domain, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (uri) do update set
        domain = coalesce(docs.domain, excluded.domain),
-       tone = case when docs.source = any($8::text[]) then coalesce(docs.tone, excluded.tone) else null end
+       tone = case when docs.source = any($9::text[]) then coalesce(docs.tone, excluded.tone) else null end
      returning id, (xmax = 0) as inserted`,
-    [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, toneFor(doc), tonedSources, JSON.stringify(doc.extraNames ?? [])],
+    [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, toneFor(doc), JSON.stringify(doc.extraNames ?? []), tonedSources],
   )
   const row = inserted.rows[0]
   if (!row?.inserted) return false

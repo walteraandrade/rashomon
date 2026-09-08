@@ -153,6 +153,36 @@ export const futureDoc: RawDoc = {
   domain: 'example.org',
 }
 
+// Candidate-queue docs (issue #32). Kept out of `docs`/`seed()` like futureDoc: they must sit
+// inside the default 7-day window and its previous window (days 8-14), which is also inside
+// every pinned pmi/stats window in graph.test.ts and signature*.test.ts, so seeding them in
+// the shared fixture would shift n.total there. test/candidates-acceptance.test.ts layers
+// them on top of the normal fixture in its own isolated database via seedCandidates().
+// "Hugo Motta" appears in 4 docs across 4 sources (rss, gnews, bluesky, gkg) in the recent
+// window and 0 in the previous one; "Renan Calheiros" in 2 recent docs (bluesky, rss) and 2
+// previous (rss). The gkg doc carries a persons column (extraNames) whose "Luiz Inacio" is
+// an alias of the tracked lula, and whose text names Renan Calheiros, which must NOT be
+// discovered from a gkg doc (gkg uses the column, not the heuristic).
+export const candidateDocs: RawDoc[] = [
+  { source: 'rss', uri: 'https://example.org/c1', text: 'O Senado ouve Hugo Motta sobre a reforma', publishedAt: daysAgo(1), domain: 'example.org' },
+  { source: 'gnews', uri: 'https://g1.globo.com/c2', text: 'Deputados apoiam Hugo Motta na votação', publishedAt: daysAgo(2), domain: 'g1.globo.com' },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/c3', text: 'Encontro reúne Hugo Motta e Renan Calheiros', publishedAt: daysAgo(3), domain: 'ana.bsky.social' },
+  { source: 'gkg', uri: 'https://folha.uol.com.br/c4', text: 'Presidente da Câmara recebe Renan Calheiros', publishedAt: daysAgo(2.5), domain: 'folha.uol.com.br', tone: 0.2, extraNames: ['Hugo Motta', 'Luiz Inacio'] },
+  { source: 'rss', uri: 'https://example.org/c5', text: 'Análise cita Renan Calheiros e a reforma', publishedAt: daysAgo(4), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/c6', text: 'Bastidores mostram Renan Calheiros na articulação', publishedAt: daysAgo(10), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/c7', text: 'Entrevista com Renan Calheiros sobre o Senado', publishedAt: daysAgo(12), domain: 'example.org' },
+  // alias overlay: "Luiz Inácio" is lula's alias, so only Michelle surfaces (count 1).
+  { source: 'rss', uri: 'https://example.org/c8', text: 'Sessão com Luiz Inácio e Michelle Bolsonaro', publishedAt: daysAgo(1), domain: 'example.org' },
+  // "Davi Alcolumbre" opens the sentence (dropped); "Rodrigo Pacheco" is found once, from the
+  // first sentence only, since it opens the second one.
+  { source: 'rss', uri: 'https://example.org/c9', text: 'Davi Alcolumbre fala com Rodrigo Pacheco. Rodrigo Pacheco responde', publishedAt: daysAgo(1), domain: 'example.org' },
+]
+
+export const seedCandidates = async () => {
+  await seed()
+  for (const d of candidateDocs) await insertDoc(d, persons)
+}
+
 // doc_id is not known ahead of time (docs get a serial id on insert), so this resolves
 // uri -> doc_id at seed time rather than hardcoding it.
 export const insertTestimony = async (uri: string, personId: string, method: string, score: number | null) => {

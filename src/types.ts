@@ -8,6 +8,7 @@ export type RawDoc = {
   domain?: string
   tone?: number
   extraTerms?: Term[]
+  extraNames?: string[]
 }
 export type Collector = (persons: Person[]) => Promise<RawDoc[]>
 export type Term = { term: string; kind: 'hashtag' | 'word' | 'theme' }

@@ -1,4 +1,4 @@
-import type { Person, Term } from './types.js'
+import type { Person, RawDoc, Term } from './types.js'
 
 const stopwords = new Set(
   `a o e os as um uma uns umas de do da dos das em no na nos nas por para com sem sob sobre entre ate apos ante contra desde perante
@@ -81,6 +81,50 @@ export const domainOf = (uri: string | undefined): string | undefined => {
   } catch {
     return undefined
   }
+}
+
+// Candidate discovery (issue #32). Cheap and noisy on purpose: a run of two or more
+// capitalized words, particles allowed in between ("Alexandre de Moraes"), that does
+// not open a sentence, since the first word of a sentence is capitalized for grammar,
+// not because it is a name. gkg docs skip the heuristic and use the V1Persons column.
+const particles = new Set(['de', 'da', 'do', 'das', 'dos'])
+const sentenceSplit = /[.!?:;|\n\r—–"“”«»()\[\]]+/
+const capitalized = /^\p{Lu}[\p{L}'’-]*$/u
+
+export const capitalizedRuns = (text: string): string[] =>
+  decodeEntities(text)
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[#@]\S+/g, ' ')
+    .split(sentenceSplit)
+    .flatMap((sentence) => {
+      const tokens = sentence.replace(/,/g, ' , ').split(/\s+/).filter(Boolean)
+      const runs: string[][] = []
+      let run: string[] = []
+      let opening = true
+      const flush = () => {
+        while (run.length && particles.has(run[run.length - 1].toLowerCase())) run.pop()
+        if (run.filter((w) => !particles.has(w.toLowerCase())).length >= 2 && !opening) runs.push(run)
+        run = []
+      }
+      tokens.forEach((token, i) => {
+        if (capitalized.test(token)) {
+          if (!run.length) opening = i === 0
+          run.push(token)
+        } else if (run.length && particles.has(token)) run.push(token)
+        else flush()
+      })
+      flush()
+      return runs.map((r) => r.join(' '))
+    })
+    .map((name) => normalize(name).replace(/\s+/g, ' ').trim())
+
+// Names that already match an alias (or an `exclude` entry) exactly are not candidates:
+// seed.json stays the curated layer on top of discovery. Exact, not containment, so
+// "Michelle Bolsonaro" still surfaces while only a bare "Bolsonaro" is tracked.
+export const discoverNames = (doc: Pick<RawDoc, 'source' | 'text' | 'extraNames'>, persons: Person[]): string[] => {
+  const known = new Set(persons.flatMap((p) => [...p.aliases, ...(p.exclude ?? [])]).map((a) => normalize(a).replace(/\s+/g, ' ').trim()))
+  const raw = doc.source === 'gkg' ? (doc.extraNames ?? []).map((n) => normalize(n).replace(/\s+/g, ' ').trim()) : capitalizedRuns(doc.text)
+  return uniq(raw.filter((n) => n && !known.has(n)), (n) => n)
 }
 
 export const nameTokens = (person: Person) =>

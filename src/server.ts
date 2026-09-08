@@ -2,9 +2,10 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { db, migrate } from './db.js'
-import { docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
+import { candidatesFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
 import type { Person } from './types.js'
 import {
+  parseCandidatesQuery,
   parseDocsQuery,
   parseQuery,
   parseRisingQuery,
@@ -59,6 +60,9 @@ app.get('/api/people/:id/testimony', async (c) => {
 
 // Not nested under /people/:id: it spans every tracked person at once.
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))
+
+// Names nobody tracks yet, ranked by document count; the human promotes them via seed.json.
+app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
 
 // The radial atlas is the current UI; index.html stays reachable as the legacy one.
 app.get('/', serveStatic({ path: './public/design-5.html' }))

@@ -8,7 +8,7 @@ const base = 'https://data.gdeltproject.org/gdeltv2'
 const slotMs = 15 * 60 * 1000
 const slots = Number(process.env.GKG_SLOTS ?? 24)
 
-const col = { domain: 3, url: 4, themes: 7, tone: 15, translation: 25, extras: 26 } as const
+const col = { domain: 3, url: 4, themes: 7, persons: 11, tone: 15, translation: 25, extras: 26 } as const
 
 const log = (msg: string) => console.log(`[gkg] ${msg}`)
 
@@ -54,6 +54,7 @@ const rowToDoc = (slot: string) => (cols: string[]): RawDoc | null => {
     domain: cols[col.domain]?.toLowerCase().replace(/^www\./, '') || undefined,
     tone: Number.isFinite(parseFloat(cols[col.tone] ?? '')) ? parseFloat(cols[col.tone]) : undefined,
     extraTerms: themes.map(themeTerm),
+    extraNames: [...new Set((cols[col.persons] ?? '').split(';').map((n) => n.trim()).filter(Boolean))],
   }
 }
 

@@ -49,4 +49,11 @@ export const migrate = () =>
       primary key (doc_id, person_id, method)
     );
     create index if not exists doc_testimony_person_idx on doc_testimony (person_id, method);
+    alter table docs add column if not exists extra_names jsonb not null default '[]';
+    create table if not exists doc_candidates (
+      doc_id int references docs(id) on delete cascade,
+      name text not null,
+      primary key (doc_id, name)
+    );
+    create index if not exists doc_candidates_name_idx on doc_candidates (name);
   `)

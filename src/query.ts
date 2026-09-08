@@ -1,6 +1,6 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
-import type { DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
+import type { CandidatesQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
 
 // Independent of TESTIMONY_SCORER's own default in src/score.ts: a client can request
 // method=stub in tests/debugging regardless of what `pnpm score` last ran.
@@ -101,4 +101,11 @@ export const parseTestimonyQuery = (q: Record<string, string | undefined>): Test
   source: parseSourceList(q.source),
   method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : DEFAULT_TESTIMONY_METHOD,
   min: int(q.min, 3, 1, 1000),
+})
+
+// Own literals (7 / 5 / 50), per issue #32: distinct from every other route's defaults.
+export const parseCandidatesQuery = (q: Record<string, string | undefined>): CandidatesQuery => ({
+  days: int(q.days, 7, 1, 365),
+  min: int(q.min, 5, 1, 1000),
+  limit: int(q.limit, 50, 1, 200),
 })

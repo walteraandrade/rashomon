@@ -3,55 +3,122 @@ import { describe, it } from 'node:test'
 import { readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { app } from '../src/server.js'
+import { createHandlers } from '../public/js/app.js'
+import { sourceLabels } from '../public/js/format.js'
+
+// Issue #28's acceptance criteria, re-derived after issue #37 split design-5.html into
+// public/js/*.js + public/atlas.css. The old version grepped the page's inline <script> as
+// text for function bodies; every criterion below now runs against the real module instead:
+// packing/overflow in test/layout.test.ts, pt-BR source labels in test/format.test.ts, and
+// the search-highlighting rule here, against app.js's own event table.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5Path = join(root, 'public', 'design-5.html')
 const legacyPath = join(root, 'public', 'atlas-legacy.html')
-const html = () => readFileSync(design5Path, 'utf8')
 
-describe('unified atlas acceptance criteria (issue #28)', () => {
-  it('starts in clean live mode without fake data or external script dependencies', () => {
-    const source = html()
-    assert.match(source, /^<!doctype html>/i)
-    assert.doesNotMatch(source, /<script[^>]*\bsrc=/i, 'design-5 must stay self-contained')
-    assert.match(source, /load\(\)\s*\n<\/script>/, 'page should boot by loading the real API')
-    assert.match(source, /Nenhum grafo fictício será exibido\./)
-    assert.doesNotMatch(source, /mock|fixture|fake graph/i)
+// Records which injected action each handler calls, so a criterion can assert both what was
+// called and what was deliberately not.
+const spies = () => {
+  const calls: string[] = []
+  const spy = (name: string) => () => {
+    calls.push(name)
+  }
+  const actions = {
+    paintCurrentSelection: spy('paintCurrentSelection'),
+    choose: spy('choose'),
+    load: spy('load'),
+    loadCandidates: spy('loadCandidates'),
+    setMode: spy('setMode'),
+    setZoom: spy('setZoom'),
+    getZoomLevel: () => 1,
+    clearSearch: spy('clearSearch'),
+    canClear: () => true,
+    resetDomain: spy('resetDomain'),
+    updateHeader: spy('updateHeader'),
+    setSource: spy('setSource'),
+  }
+  return { calls, handlers: createHandlers(actions) }
+}
+
+describe('unified atlas acceptance criteria (issue #28), re-verified after the issue #37 module split', () => {
+  it('GET / serves the atlas as HTML, not a build artifact', async () => {
+    const res = await app.request('/')
+    assert.equal(res.status, 200)
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/)
   })
 
-  it('packing accounts for every term by placing it or exposing it in the overflow selector', () => {
-    const source = html()
-    assert.match(source, /const packPass = .*placed=\[\], overflow=\[\]/)
-    assert.match(source, /if\(best\) placed\.push\(\{\.\.\.n/)
-    assert.match(source, /else overflow\.push\(n\)/)
-    assert.match(source, /overflow\.map\(n=>`<button class="quiet-button" data-node="\$\{esc\(n\.id\)\}"/)
+  it('the extracted stylesheet and every JS module are served with the right mime type', async () => {
+    const css = await app.request('/atlas.css')
+    assert.equal(css.status, 200)
+    assert.match(css.headers.get('content-type') ?? '', /text\/css/)
+    for (const file of ['api.js', 'app.js', 'format.js', 'layout.js', 'render.js', 'state.js']) {
+      const res = await app.request(`/js/${file}`)
+      assert.equal(res.status, 200, `/js/${file} must be served`)
+      assert.match(res.headers.get('content-type') ?? '', /javascript/, `/js/${file} must be served with a JavaScript content type`)
+    }
   })
 
-  it('legacy atlas remains reachable from the new atlas and links back to root', () => {
+  it('legacy atlas remains reachable and links back to root', async () => {
     assert.ok(existsSync(legacyPath), 'public/atlas-legacy.html must exist')
-    assert.match(html(), /href="atlas-legacy\.html"/)
-    const legacy = readFileSync(legacyPath, 'utf8')
-    assert.match(legacy, /class="brand" href="\/"/, 'legacy brand must link back to the new atlas')
+    const legacyRes = await app.request('/atlas-legacy.html')
+    assert.equal(legacyRes.status, 200)
+    assert.match(legacyRes.headers.get('content-type') ?? '', /text\/html/)
+    // atlas-legacy.html is intentionally kept as one reference file with no module surface
+    // (CLAUDE.md), so this text match is on that file, not on design-5.html.
+    assert.match(readFileSync(legacyPath, 'utf8'), /class="brand" href="\/"/, 'legacy brand must link back to the new atlas')
+  })
+
+  it('archived design alternatives moved out of public/ are no longer served', async () => {
+    for (const path of ['/design-1.html', '/design-2.html', '/design-3.html', '/design-4.html', '/design-6.html', '/designs.html', '/graph-lab.html', '/graph-circle-lab.html']) {
+      const res = await app.request(path)
+      assert.equal(res.status, 404, `${path} must 404 now that it lives in docs/designs/, not public/`)
+    }
   })
 
   it('search highlighting does not rebuild the inspector or wipe loaded documents', () => {
-    const source = html()
-    assert.match(source, /\$\('search'\)\.addEventListener\('input',\(\)=>\{ paintSelection\(\) \}\)/)
-    assert.doesNotMatch(source, /\$\('search'\)\.addEventListener\('input',[\s\S]{0,80}inspect\(/)
+    const { calls, handlers } = spies()
+    handlers.search()
+    assert.deepEqual(calls, ['paintCurrentSelection'], 'typing in the search box may only repaint the selection: rebuilding the inspector re-renders #docs and wipes the documents already loaded')
   })
 
-  it('source segment fits mobile widths and its label is not clickable as a button proxy', () => {
-    const source = html()
-    assert.match(source, /\.source-field \{ max-width:100%; \}/)
-    assert.match(source, /\.segment \{[^}]*max-width:100%;[^}]*overflow-x:auto;/)
-    assert.match(source, /<div class="field source-field"><span id="sourceLabel">Fonte<\/span><div class="segment" id="segSource"/)
-    assert.doesNotMatch(source, /<label>Fonte<div class="segment" id="segSource"/)
+  it('clearing the selection resets the search box and deselects, without reloading the graph', () => {
+    const { calls, handlers } = spies()
+    handlers.clear()
+    assert.deepEqual(calls, ['clearSearch', 'choose'])
   })
 
-  it('source labels shown in pt-BR avoid raw English tokens like fonte all', () => {
-    const source = html()
-    assert.match(source, /const sourceLabels = \{all:'todas as fontes'/)
-    assert.match(source, /`Base local · \$\{source\} · mínimo de 2 documentos`/)
-    assert.doesNotMatch(source, /fonte \$\{state\.source\}|fonte all/)
+  it('Escape clears the same way, and any other key does nothing at all', () => {
+    const escape = spies()
+    escape.handlers.keydown({ key: 'Escape' })
+    assert.deepEqual(escape.calls, ['clearSearch', 'choose'])
+    const other = spies()
+    other.handlers.keydown({ key: 'a' })
+    assert.deepEqual(other.calls, [])
+  })
+
+  it('only the person control drops the outlet filter, and only the period control refetches candidates', () => {
+    const person = spies()
+    person.handlers.control('person')()
+    assert.deepEqual(person.calls, ['resetDomain', 'updateHeader', 'load'])
+    const days = spies()
+    days.handlers.control('days')()
+    assert.deepEqual(days.calls, ['loadCandidates', 'updateHeader', 'load'])
+    const sort = spies()
+    sort.handlers.control('sort')()
+    assert.deepEqual(sort.calls, ['updateHeader', 'load'])
+  })
+
+  it('every source segment goes through the same handler: set the source, then reload the recorte', () => {
+    for (const source of Object.keys(sourceLabels)) {
+      const { calls, handlers } = spies()
+      handlers.source(source)()
+      assert.deepEqual(calls, ['setSource', 'load', 'updateHeader'], `${source} must reuse the shared segment handler`)
+    }
+  })
+
+  it('atlas.css keeps the source segment usable on mobile widths (issue #28)', () => {
+    const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+    assert.match(css, /\.source-field\s*\{\s*max-width:\s*100%;\s*\}/)
+    assert.match(css, /\.segment\s*\{[^}]*max-width:\s*100%;[^}]*overflow-x:\s*auto;/)
   })
 })

@@ -102,7 +102,9 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 - `src/graph.ts` scoring SQL (counts, PMI, term-term links, testimony aggregation)
 - `src/scorers/*` one scorer per method, same signature; `src/score.ts` scores unscored `(doc, person)` pairs; `src/export-docs.ts` dumps docs for kikori's training set
 - `src/server.ts` Hono API + static UI
-- `public/design-5.html` current UI (radial atlas), served at `/`; `public/index.html` legacy UI; other `design-*.html` kept for reference
+- `public/design-5.html` current UI (radial atlas), served at `/`; markup only, plus `public/atlas.css` and one `<script type="module" src="./js/app.js">`. `public/index.html` legacy UI
+- `public/js/` the front-end ES modules, no build step: `format.js` (pure helpers and the shared JSDoc types), `api.js` (URLs and fetching), `layout.js` (pure packing/routing geometry), `render.js` (the DOM layer), `state.js` (mutable UI state), `app.js` (wiring, and the `createHandlers` event table the tests import)
+- `docs/designs/` archived design alternatives (`design-1..4`, `design-6`, `graph-lab`, `graph-circle-lab`, `designs.html`), kept for reference and not served
 - `test/` node:test suites; `test/fixture.ts` seeds the in-memory database
 - `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `camaraId` (federal deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person, and an optional `senadoId` (senator code from `dadosabertos.senado.leg.br`) enables `senado`; a person may carry either, both, or neither, and is skipped by a collector whose id it lacks. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
 - `data/` PGlite database (gitignored)

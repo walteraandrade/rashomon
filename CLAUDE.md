@@ -1,6 +1,6 @@
 # rashomon
 
-Which words stick to a Brazilian political figure, across Bluesky, Google News, GDELT and RSS. Node + TypeScript, Hono API, PGlite database, single-file d3 front-ends in `public/`.
+Which words stick to a Brazilian political figure, across Bluesky, Google News, GDELT and RSS. Node + TypeScript, Hono API, PGlite database, native ES-module front-end in `public/` with no build step.
 
 ## Commands
 
@@ -25,8 +25,20 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
 - `src/server.ts` Hono routes + static files.
 - `src/query.ts` query parsers for every route; each parameter is clamped there.
-- `public/design-5.html` is the current UI (radial atlas), served at `/`. `public/index.html` is the legacy UI, reachable only by name. Other `design-*.html` files are alternatives kept for reference; do not extend them.
-- `test/` node:test suites. `test/fixture.ts` seeds two people and six docs; extend it rather than creating ad-hoc data.
+- `public/design-5.html` is the current UI (radial atlas), served at `/`. It is markup only: one `<link rel="stylesheet" href="atlas.css">` and one `<script type="module" src="./js/app.js">`. No `<style>` block, no inline script, no inline `style=` except a `--var` override for a genuinely dynamic value.
+- `public/atlas.css` holds every rule: `:root` tokens, layout, components.
+- `public/js/format.js` pure formatting, labels and URL helpers, plus the shared JSDoc typedefs (`Term`, `Link`, `Graph`, `Layout`, `Measure`, …) the other modules reference.
+- `public/js/api.js` URL building and fetching for the documented routes. No DOM.
+- `public/js/layout.js` pure geometry: `wrapLines`, `centerLabel`, `packPass`, `pack`, `routeGraph`, `routesFrom`. No DOM — text metrics arrive as an injected `measure(text, size, family, weight)`, which `render.js`'s `createCanvasMeasure()` supplies in the browser and a stub supplies in tests.
+- `public/js/render.js` the DOM layer: `drawMap`, `paintSelection`, `inspect`, `paintColumns`, `wordMarkup`, `paintOutlets`, `paintCandidates`, `paintDocs`. Paints; never fetches.
+- `public/js/state.js` the mutable UI state: source/domain filters, selection, zoom, layout cache, request/abort bookkeeping.
+- `public/js/app.js` the page's wiring: reads the controls, drives `api.js`, hands data to `render.js`, and exports `createHandlers` (the event table), `layoutKey`, `docsQuery` and `boot`. Importing it is side-effect free outside a browser; `boot()` runs only when a `document` exists, which is what lets tests import the wiring.
+- Import direction is one way and acyclic: `format.js` ← `layout.js` ← `render.js` ← `app.js`, with `api.js` and `state.js` at the bottom. `test/atlas-modules-acceptance.test.ts` enforces it.
+- `docs/designs/` holds the archived design alternatives (`design-1..4`, `design-6`, `graph-lab`, `graph-circle-lab`, `designs.html`). They are not under `public/`, so the static handler never serves them. Do not extend them.
+- `public/index.html` is the legacy UI, reachable only by name; `public/atlas-legacy.html` stays a single reference file with no module surface.
+- `tsconfig.json` sets `allowJs` and `checkJs`, so `pnpm typecheck` really does type-check `public/js` through its JSDoc annotations. A new module or parameter needs its types, or `tsc` fails.
+- `test/` node:test suites. `test/fixture.ts` seeds two people and six docs; extend it rather than creating ad-hoc data. `test/fake-dom.ts` is a minimal `document` stand-in for asserting the markup `render.js` emits.
+- Front-end behaviour is tested by importing the modules, never by grepping `design-5.html` for JavaScript. A criterion about a click or keystroke goes through `createHandlers`; a criterion about markup goes through the painter that emits it.
 
 ## Style
 

@@ -6,6 +6,7 @@ import { parseDomainList, parseLeanList } from '../src/query.js'
 import { OUTLETS } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'
 import outletsJson from '../outlets.json' with { type: 'json' }
+import { params, sourcesParams } from '../public/js/api.js'
 
 const [, , bolsonaro] = persons
 
@@ -169,10 +170,11 @@ describe('lean filtering (issue #26)', () => {
   // Amendment A1 on the spec: sourcesFor now honours q.domain, so the outlet sidebar — the
   // control that *picks* domain — must stop sending it, or clicking one outlet hides the rest.
   it('the outlet sidebar drops domain before fetching /sources (spec amendment A1)', () => {
-    const ui = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
-    const loadSources = ui.slice(ui.indexOf('const loadSources'), ui.indexOf('const loadSources') + 400)
-    assert.match(loadSources, /\.delete\('domain'\)/)
-    assert.doesNotMatch(loadSources, /sources\?` \+ query\(\)/)
+    // Issue #37 gave this its own function in public/js/api.js, so the rule is now checked by
+    // calling it rather than by slicing design-5.html's inline script.
+    const opts = { days: '30', sort: 'count', limit: '18', source: 'all', domain: 'cartacapital.com.br' }
+    assert.equal(sourcesParams(opts).has('domain'), false, '/sources must not echo back the domain the sidebar itself picks')
+    assert.equal(params(opts).get('domain'), 'cartacapital.com.br', 'every other route still receives it')
   })
 
   it('timelineFor stays a bare array and still narrows by lean', async () => {

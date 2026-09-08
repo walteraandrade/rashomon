@@ -11,6 +11,8 @@ import { collectors, defaultSources } from '../src/collectors/index.js'
 import { senado } from '../src/collectors/senado.js'
 import type { Person, RawDoc, Source } from '../src/types.js'
 import { persons, seed, docs } from './fixture.js'
+import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
+import { createHandlers } from '../public/js/app.js'
 
 // Independent re-derivation of issue #25's numbered acceptance criteria, written from the
 // spec text and checked against test/fixture.ts's doc 39 -- deliberately not copied from
@@ -150,14 +152,22 @@ describe('senado collector acceptance criteria, independently verified (issue #2
     assert.match(readme, /dadosabertos\.senado\.leg\.br/)
   })
 
-  it('AC11: design-5.html\'s segSource control includes a senado button wired to the shared buildSeg handler', () => {
-    const html = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
-    const segSourceCall = html.split('\n').find((l) => l.includes("buildSeg('segSource'"))
-    assert.ok(segSourceCall, 'expected a buildSeg(\'segSource\', ...) call')
-    assert.match(segSourceCall!, /\['senado',\s*'senado'\]/)
-    // same call site as every other source option, so it inherits the existing click
-    // handler (state.source = value; paintSeg; load()) rather than needing bespoke wiring
-    assert.match(segSourceCall!, /'source'\)\s*$/, 'senado must be registered as a source-kind segment like its siblings')
+  it('AC11: the segSource control includes a senado button wired to the shared segment handler', () => {
+    // After issue #37 the option list lives in public/js/format.js and the handler in
+    // public/js/app.js, so this imports them rather than reading design-5.html as text.
+    assert.deepEqual(
+      SOURCE_SEGMENTS.find(([value]) => value === 'senado'),
+      ['senado', 'senado'],
+    )
+    const calls: string[] = []
+    const handlers = createHandlers({
+      setSource: (value: string) => calls.push(`setSource:${value}`),
+      load: () => calls.push('load'),
+      updateHeader: () => calls.push('updateHeader'),
+    })
+    handlers.source('senado')()
+    assert.deepEqual(calls, ['setSource:senado', 'load', 'updateHeader'], 'senado must inherit the shared handler, not bespoke wiring')
+    assert.ok(sourceLabels.senado, 'senado needs a pt-BR label like its siblings')
   })
 
   it('AC12: a senado doc whose body never names the speaking senator is still tagged via the name-prefix, with no source-specific extraction branch', async () => {

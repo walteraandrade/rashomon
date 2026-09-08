@@ -9,6 +9,8 @@ import { insertDoc, tonedSources } from '../src/store.js'
 import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/query.js'
 import type { Person } from '../src/types.js'
 import { persons, seed } from './fixture.js'
+import { SOURCE_SEGMENTS } from '../public/js/format.js'
+import { createHandlers } from '../public/js/app.js'
 
 const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${relPath}`, import.meta.url)), 'utf8')
 
@@ -150,16 +152,21 @@ describe('camara collector — AC12', () => {
 })
 
 describe('camara collector — AC14', () => {
-  const html = readRepoFile('public/design-5.html')
-
-  it('AC14: segSource control has a camara button wired through the generic buildSeg click handler', () => {
-    const segSourceLine = html.split('\n').find((l) => l.includes("buildSeg('segSource'"))
-    assert.ok(segSourceLine, 'expected a buildSeg(\'segSource\', ...) call in design-5.html')
-    assert.match(segSourceLine!, /\['camara',\s*'câmara'\]/)
-    assert.match(segSourceLine!, /'source'\)\s*$/)
-    // Every buildSeg button shares one handler: state[key] = btn.dataset.value; ...; load().
-    // Confirmed generic (not camara-specific) by inspecting the shared handler body.
-    assert.match(html, /state\[key\] = btn\.dataset\.value/)
-    assert.match(html, /refreshSegActive\(\)\s*\n\s*load\(\)/)
+  // Issue #37 moved the segmented control out of design-5.html's inline script: the option
+  // list is SOURCE_SEGMENTS in public/js/format.js and the click handler is app.js's shared
+  // `source` entry, so this criterion now imports both instead of grepping markup.
+  it('AC14: segSource control has a camara button wired through the shared segment handler', () => {
+    assert.deepEqual(
+      SOURCE_SEGMENTS.find(([value]) => value === 'camara'),
+      ['camara', 'câmara'],
+    )
+    const calls: string[] = []
+    const handlers = createHandlers({
+      setSource: (value: string) => calls.push(`setSource:${value}`),
+      load: () => calls.push('load'),
+      updateHeader: () => calls.push('updateHeader'),
+    })
+    handlers.source('camara')()
+    assert.deepEqual(calls, ['setSource:camara', 'load', 'updateHeader'], 'camara must reuse the same handler every other source uses')
   })
 })

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
-import { insertDoc } from '../src/store.js'
+import { inTransaction, insertDoc } from '../src/store.js'
 import { docsFor, timelineFor, type TimelineQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
 import type { Source } from '../src/types.js'
@@ -23,9 +23,13 @@ type Placed = { offset: string; text?: string; source?: Source; domain?: string 
 
 // offset is subtracted from the frozen now(), so '7 days' is exactly one week old and
 // '-1 days' is a day in the future.
-const withDocs = async (placed: Placed[], run: () => Promise<void>) => {
-  await db.exec('begin')
-  try {
+// The rollback travels as a thrown sentinel because `inTransaction` commits on success. Going
+// through it rather than a raw `begin` is what keeps now() frozen: the store tracks whether a
+// transaction is open, and an unseen one makes insertDoc open and commit its own.
+const rollback = new Error('rollback')
+
+const withDocs = (placed: Placed[], run: () => Promise<void>) =>
+  inTransaction(async () => {
     for (const [i, p] of placed.entries()) {
       const uri = `https://example.org/boundary/${i}`
       await insertDoc(
@@ -35,10 +39,10 @@ const withDocs = async (placed: Placed[], run: () => Promise<void>) => {
       await db.query(`update docs set published_at = now() - ($1)::interval where uri = $2`, [p.offset, uri])
     }
     await run()
-  } finally {
-    await db.exec('rollback')
-  }
-}
+    throw rollback
+  }).catch((e) => {
+    if (e !== rollback) throw e
+  })
 
 const sumOf = (rows: { count: number }[]) => rows.reduce((a, r) => a + r.count, 0)
 const totalFor = async (q: TimelineQuery) =>

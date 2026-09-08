@@ -7,6 +7,8 @@ import { collectors, defaultSources } from '../src/collectors/index.js'
 import { insertDoc, tonedSources } from '../src/store.js'
 import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/query.js'
 import { persons, seed } from './fixture.js'
+import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
+import { createHandlers } from '../public/js/app.js'
 
 const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${relPath}`, import.meta.url)), 'utf8')
 
@@ -94,13 +96,34 @@ describe('press collectors — AC7', () => {
   })
 })
 
-// AC8 (SOURCE_SEGMENTS gains ['juridico', 'jurídico'] / ['oficial', 'oficial'] /
-// ['nicho', 'nicho'], and each drives createHandlers's shared source handler) and AC9
-// (sourceLabels gains juridico/oficial/nicho pt-BR labels) both require editing
-// public/js/format.js. This builder's mandate is the API/SQL/store surface only — public/ is
-// left untouched per the task's own instructions — so these two criteria are NOT implemented
-// or asserted here. They need a follow-up UI change to public/js/format.js (spec section 4)
-// before AC8/AC9 can be verified. See report.
+describe('press collectors — AC8', () => {
+  const expected: Record<(typeof FAMILIES)[number], string> = { juridico: 'jurídico', oficial: 'oficial', nicho: 'nicho' }
+
+  for (const family of FAMILIES) {
+    it(`AC8: SOURCE_SEGMENTS has ['${family}', '${expected[family]}'] wired through the shared source handler`, () => {
+      assert.deepEqual(
+        SOURCE_SEGMENTS.find(([value]) => value === family),
+        [family, expected[family]],
+      )
+      const calls: string[] = []
+      const handlers = createHandlers({
+        setSource: (value: string) => calls.push(`setSource:${value}`),
+        load: () => calls.push('load'),
+        updateHeader: () => calls.push('updateHeader'),
+      })
+      handlers.source(family)()
+      assert.deepEqual(calls, [`setSource:${family}`, 'load', 'updateHeader'], `${family} must reuse the same handler every other source uses`)
+    })
+  }
+})
+
+describe('press collectors — AC9', () => {
+  it('AC9: sourceLabels has the three pt-BR labels', () => {
+    assert.equal(sourceLabels.juridico, 'Jurídico')
+    assert.equal(sourceLabels.oficial, 'Oficial')
+    assert.equal(sourceLabels.nicho, 'Nicho')
+  })
+})
 
 // AC10 (adding the three fixture docs requires zero changes to any pre-existing pinned
 // literal elsewhere) is a diff-shape criterion, not a runtime assertion: verified by running

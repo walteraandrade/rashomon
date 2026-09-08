@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { insertDoc } from '../src/store.js'
 import { docsFor, timelineFor, type TimelineQuery } from '../src/graph.js'
 import { persons, seed, futureDoc } from './fixture.js'
+import './close.js'
 
 // Runs in its own process (node:test isolates one process per file), so seeding an
 // extra future-dated doc here on top of the normal fixture cannot shift the

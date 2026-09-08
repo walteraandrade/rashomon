@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { docsFor, timelineFor, type TimelineQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 const base: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
 const [lula, , bolsonaro] = persons

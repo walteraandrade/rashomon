@@ -5,6 +5,7 @@ import { scoreAll } from '../src/score.js'
 import { scorers } from '../src/scorers/index.js'
 import { insertDoc } from '../src/store.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 const countRows = async (method: string) =>
   (await db.query<{ n: string }>(`select count(*) as n from doc_testimony where method = $1`, [method])).rows[0].n

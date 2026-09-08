@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { testimonyFor, type TestimonyQuery } from '../src/graph.js'
 import { parseTestimonyQuery } from '../src/query.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 const tarcisio = persons.find((p) => p.id === 'tarcisio')!
 const bolsonaro = persons.find((p) => p.id === 'bolsonaro')!

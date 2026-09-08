@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { graphFor, type GraphQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
 import { nameTokens } from '../src/extract.js'
+import './close.js'
 
 const base: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
 const [lula] = persons

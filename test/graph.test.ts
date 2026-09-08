@@ -5,6 +5,7 @@ import { nameTokens } from '../src/extract.js'
 import { parseSourceList } from '../src/query.js'
 import { insertDoc, upsertPersons } from '../src/store.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
 

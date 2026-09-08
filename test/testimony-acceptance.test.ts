@@ -14,6 +14,7 @@ import {
 } from '../src/graph.js'
 import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery } from '../src/query.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 // Independent verification of issue #21's numbered acceptance criteria, written against
 // the spec rather than against test/testimony.test.ts. Fixture values are recomputed by

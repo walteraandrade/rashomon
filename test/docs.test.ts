@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { docsFor, type DocsQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 const base: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
 const [lula] = persons

@@ -4,6 +4,7 @@ import { db, migrate } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import { batches, insertDoc, insertDocs, upsertPersons, writeBatchDocs, writeBatchRows } from '../src/store.js'
 import { collidingUri, derivedCounts, enrichmentDocs, orphanTermCount, persons, rowVersion, seed, termsOf, untrackedPerson } from './fixture.js'
+import './close.js'
 
 const [, tarcisio] = persons
 const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }

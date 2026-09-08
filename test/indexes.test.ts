@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, it, before, after } from 'node:test'
 import { ANALYZED_TABLES, analyzeAfterWrite, analyzeMinDocs, analyzeTables, db, migrate } from '../src/db.js'
 import { indexDefs, lastAnalyzed, planRowEstimate, seed } from './fixture.js'
+import './close.js'
 
 describe('read indexes and planner statistics (issue #44)', () => {
   before(seed)

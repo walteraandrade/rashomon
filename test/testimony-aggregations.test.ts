@@ -4,6 +4,7 @@ import { db } from '../src/db.js'
 import { statements, testimonyFor, type TestimonyQuery } from '../src/graph.js'
 import { insertTestimony, persons, seed } from './fixture.js'
 import type { Person } from '../src/types.js'
+import './close.js'
 
 // Issue #48 merged the three statements that produced overall, by_source and by_domain into
 // one GROUPING SETS pass. The three originals are kept here verbatim as a reference

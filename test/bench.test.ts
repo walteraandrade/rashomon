@@ -6,6 +6,7 @@ import { personsMentioned } from '../src/extract.js'
 import { SOURCES } from '../src/query.js'
 import { app } from '../src/server.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 // The benchmark itself is not run by `pnpm test` (it builds its own database and reports
 // timings). What is asserted here is that its request set stays valid against the shared

@@ -3,6 +3,7 @@ import { before, describe, it } from 'node:test'
 import { NO_STORE, cacheControl, cacheWindows } from '../src/cache.js'
 import { app } from '../src/server.js'
 import { seed } from './fixture.js'
+import './close.js'
 
 const HOUR = 3600
 const SWR = `, stale-while-revalidate=${24 * HOUR}`

@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { docsFor, graphFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import { parseSourceList } from '../src/query.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 // Independent verification of issue #8's numbered acceptance criteria, written against
 // the spec rather than against test/graph.test.ts or test/docs.test.ts. Counts below are

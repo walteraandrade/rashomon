@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
 import { exportLines } from '../src/export-docs.js'
 import { collidingUri, persons, seed } from './fixture.js'
+import './close.js'
 
 describe('exportLines', () => {
   before(seed)

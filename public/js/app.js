@@ -21,6 +21,7 @@ import {
   paintOutlets,
   paintOutletsError,
   paintSelection,
+  paintStrip,
   paintTestimony,
   paintTestimonyError,
   paintTestimonyLoading,
@@ -225,6 +226,9 @@ let mode = 'map'
 /** @type {Layout | null} */
 let currentLayout = null
 let lastMapWidth = 0
+let lastStripWidth = 0
+/** @type {import('./format.js').Testimony | null} */
+let testimony = null
 /** @type {import('./format.js').Measure | null} */
 let measure = null
 
@@ -250,6 +254,12 @@ const resizeMap = () => {
       lastMapWidth = width
       $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - width) / 2)
     }
+  }
+  // The strip is drawn in pixels, so a width change redraws it from the data in hand.
+  const stripWidth = $('strip').clientWidth
+  if (testimony && stripWidth && stripWidth !== lastStripWidth) {
+    lastStripWidth = stripWidth
+    paintStrip({ data: testimony, domain: state.domain, onPick: pickDomain, width: stripWidth })
   }
   $('zoomReset').textContent = Math.round(getZoom() * 100) + '%'
   $('zoomOut').disabled = getZoom() <= 1
@@ -345,13 +355,22 @@ const loadSourcesFlow = async (id, signal) => {
 const loadTestimonyFlow = async (id, signal) => {
   const person = $('person').value
   const key = scopeKeys(person, graphQuery()).testimony
-  if (!readScope('testimony', key)) paintTestimonyLoading()
+  if (!readScope('testimony', key)) {
+    testimony = null
+    paintTestimonyLoading()
+  }
   try {
     const data = await fromScope('testimony', key, () => api.loadTestimony(person, api.testimonyParams(controlValues()), signal))
     if (id !== currentRequestId()) return
+    testimony = data
     paintTestimony({ data, domain: state.domain, onPick: pickDomain })
+    lastStripWidth = $('strip').clientWidth || 0
+    paintStrip({ data, domain: state.domain, onPick: pickDomain, width: lastStripWidth || undefined })
   } catch (e) {
-    if (id === currentRequestId() && !aborted(e)) paintTestimonyError()
+    if (id === currentRequestId() && !aborted(e)) {
+      testimony = null
+      paintTestimonyError()
+    }
   }
 }
 

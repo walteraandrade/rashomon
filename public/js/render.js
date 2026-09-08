@@ -3,8 +3,8 @@
 // and the callbacks it wires (onChoose, onShowDocs, onPick) all come in as parameters, so
 // this module never reaches into public/js/state.js on its own.
 
-import { domainSuffix, esc, fmt, kinds, label, matching, normalize, relatedTo, safeDocUrl, score, scoreName, signed, sourceLabels, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor, trendOf } from './format.js'
-import { FONT_SANS, routesFrom } from './layout.js'
+import { domainSuffix, esc, fmt, kinds, label, matching, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, signed, sourceLabels, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor, trendOf } from './format.js'
+import { FONT_SANS, routesFrom, swarm } from './layout.js'
 
 /** @typedef {import('./format.js').Candidate} Candidate */
 /** @typedef {import('./format.js').Doc} Doc */
@@ -249,10 +249,81 @@ export const paintTestimony = ({ data, domain, onPick }) => {
 export const paintTestimonyLoading = () => {
   $('testimonyLabel').textContent = ''
   $('testimonyList').textContent = 'Carregando…'
+  $('strip').hidden = true
 }
 
 export const paintTestimonyError = () => {
   $('testimonyList').innerHTML = '<p class="note">Não foi possível carregar a avaliação.</p>'
+  $('strip').hidden = true
+}
+
+const STRIP_PAD = 28
+
+// Dot radius from the number of scored texts: area grows with n, so 100 texts read as
+// noticeably more than 10 without a single outlet swallowing the axis. On a narrow strip the
+// dots shrink with it (down to 55%), or a phone would get a stack three times taller than
+// the axis is wide.
+/** @param {number} n @param {number} [width] */
+export const stripRadius = (n, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(22, 3 + 2 * Math.sqrt(n))
+
+// The geometry of the strip at a given pixel width: one circle per outlet on the -10..+10
+// axis, stacked by `swarm` where they would overlap. Exported so a test can assert the
+// placement without a document.
+/** @param {import('./format.js').TestimonyDomainRow[]} rows @param {number} width */
+export const stripLayout = (rows, width) => {
+  const inner = Math.max(80, width - 2 * STRIP_PAD)
+  /** @param {number} score */
+  const x = (score) => STRIP_PAD + (testimonyPosition(score) / 100) * inner
+  const dots = swarm(foldTestimonyDomains(rows).map((d) => ({ ...d, x: x(d.score), r: stripRadius(d.n, width) })))
+  const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
+  const half = Math.max(28, Math.ceil(reach) + 4)
+  return { dots, x, half, height: half * 2, width }
+}
+
+// The strip under the map: the same outlets as the panel's "Por veículo" block, drawn on the
+// axis so the distance between two outlets is visible, which a list cannot show. Clicking a
+// dot narrows the recorte exactly like the panel and the outlet list do. Text stays in HTML
+// (the SVG only holds shapes), so labels never scale down with the axis on a narrow screen.
+/** @param {{ data: Testimony, domain: string, onPick: (domain: string) => void, width?: number }} args */
+export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
+  const strip = $('strip')
+  const { dots, x, half, height } = stripLayout(data.by_domain, width)
+  const overall = data.overall.score
+  if (!dots.length || overall === null || overall === undefined) {
+    strip.hidden = true
+    strip.innerHTML = ''
+    return
+  }
+  strip.hidden = false
+  const tick = (/** @type {number} */ s) => `<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
+  strip.innerHTML =
+    `<div class="eyebrow">Veículos na régua</div><div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>` +
+    `<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Veículos na régua da avaliação, de −10 a +10">` +
+    `<line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(tick).join('')}` +
+    `<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>` +
+    dots
+      .map(
+        (d) =>
+          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle cx="${d.x}" cy="${half + d.y}" r="${d.r}" style="--tone:${testimonyColor(d.score)}"/></g>`,
+      )
+      .join('') +
+    '</svg>' +
+    '<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div>' +
+    `<p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para restringir o recorte a ela${domain === 'all' ? '' : '; toque de novo para soltar'}.</p>`
+  for (const el of queryAll('[data-strip-domain]', strip)) {
+    const pick = () => {
+      const d = el.dataset.stripDomain
+      onPick(!d || d === domain ? 'all' : d)
+    }
+    el.addEventListener('click', pick)
+    el.addEventListener('keydown', (event) => {
+      const e = /** @type {KeyboardEvent} */ (event)
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        pick()
+      }
+    })
+  }
 }
 
 export const paintDocsLoading = () => {

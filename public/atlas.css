@@ -96,6 +96,19 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .type-scale span:first-child { font-size: 12px; }
 .type-scale span:last-child { font-size: 22px; }
 .legend i { display: inline-block; width: 22px; height: 1px; background: var(--accent); vertical-align: middle; margin-right: 8px; }
+.strip { margin: 0; padding: 14px 0 6px; border-top: 1px solid var(--line); }
+.strip-mean-row { position: relative; height: 20px; margin-top: 8px; }
+.strip-mean { position: absolute; left: clamp(0px, var(--pos, 50%), 100%); transform: translateX(clamp(-100%, -50%, 0%)); font-size: 12px; color: var(--accent); white-space: nowrap; }
+.strip-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.strip-axis { stroke: var(--line); stroke-width: 2; }
+.strip-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+.strip-overall { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: .8; }
+.strip-dot { cursor: pointer; outline: none; }
+.strip-dot circle { fill: var(--tone, var(--muted)); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: stroke .12s; }
+.strip-dot:hover circle, .strip-dot:focus-visible circle { stroke: var(--ink); stroke-width: 2; fill-opacity: 1; }
+.strip-dot.is-active circle { stroke: var(--accent); stroke-width: 3; fill-opacity: 1; }
+.strip-axis-labels { display: flex; justify-content: space-between; padding: 6px 0 0; font-size: 12px; color: var(--muted); }
+.strip .note { font-size: 14px; color: var(--muted); margin-top: 10px; }
 .overflow { padding: 0 0 20px; }
 .overflow p { font-size: 15px; color: var(--muted); margin-bottom: 8px; }
 .overflow button { margin: 4px 6px 0 0; }

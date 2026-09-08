@@ -7,7 +7,7 @@ import { app } from '../src/server.js'
 import { loadTestimony, narrowToTestimony, params, testimonyParams } from '../public/js/api.js'
 import { scopeKeys } from '../public/js/app.js'
 import { signed, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor } from '../public/js/format.js'
-import { paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
+import { paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { seed } from './fixture.js'
 
@@ -18,7 +18,7 @@ import { seed } from './fixture.js'
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
 const controls = (over: Partial<Parameters<typeof params>[0]> = {}) => params({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'all', ...over })
-const ids = ['testimonyLabel', 'testimonyList']
+const ids = ['testimonyLabel', 'testimonyList', 'strip']
 
 const sample = {
   method: 'kikori:q8',
@@ -214,5 +214,105 @@ describe('testimony UI: the page holds the panel and explains it', () => {
     const sizes = [...css.matchAll(/\.testimony[^{]*\{[^}]*font(?:-size)?:\s*(?:\d+\s+)?(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
     assert.ok(sizes.length >= 3)
     assert.deepEqual(sizes.filter((s) => s < 11), [])
+  })
+})
+
+describe('testimony strip: the outlets on the axis under the map', () => {
+  it('swarm keeps every x, never overlaps two dots and puts the biggest on the axis', async () => {
+    const { swarm } = await import('../public/js/layout.js')
+    const items = [
+      { id: 'a', x: 100, r: 10 },
+      { id: 'b', x: 104, r: 6 },
+      { id: 'c', x: 108, r: 6 },
+      { id: 'd', x: 300, r: 8 },
+      { id: 'e', x: 101, r: 14 },
+    ]
+    const placed = swarm(items)
+    assert.equal(placed.length, items.length)
+    for (const p of placed) assert.equal(p.x, items.find((i) => i.id === p.id)?.x, 'x is the score; the swarm may only move y')
+    assert.equal(placed.find((p) => p.id === 'e')?.y, 0, 'the biggest dot sits on the axis')
+    assert.equal(placed.find((p) => p.id === 'd')?.y, 0, 'a dot with no neighbour sits on the axis')
+    for (let i = 0; i < placed.length; i++)
+      for (let j = i + 1; j < placed.length; j++) {
+        const a = placed[i], b = placed[j]
+        assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r + 1.5 - 1e-6, `${a.id} and ${b.id} overlap`)
+      }
+    assert.deepEqual(swarm(items), placed, 'deterministic')
+  })
+
+  it('foldTestimonyDomains merges one outlet across sources, weighted by texts, most texts first', async () => {
+    const { foldTestimonyDomains } = await import('../public/js/format.js')
+    const folded = foldTestimonyDomains([
+      { domain: 'g1.globo.com', source: 'gnews', score: -4, n: 3 },
+      { domain: 'bbc.com', source: 'gnews', score: 2, n: 5 },
+      { domain: 'g1.globo.com', source: 'rss', score: -1, n: 1 },
+      { domain: 'nil.example', source: 'rss', score: null, n: 0 },
+    ])
+    assert.deepEqual(folded, [
+      { domain: 'bbc.com', sources: ['gnews'], score: 2, n: 5 },
+      { domain: 'g1.globo.com', sources: ['gnews', 'rss'], score: -3.25, n: 4 },
+    ])
+  })
+
+  it('stripLayout puts -10 at the left pad, +10 at the right pad and sizes dots by texts', async () => {
+    const { stripLayout, stripRadius } = await import('../public/js/render.js')
+    const layout = stripLayout(
+      [
+        { domain: 'left.example', source: 'gnews', score: -10, n: 3 },
+        { domain: 'right.example', source: 'gnews', score: 10, n: 100 },
+        { domain: 'mid.example', source: 'gnews', score: 0, n: 10 },
+      ],
+      860,
+    )
+    const by = (d: string) => layout.dots.find((x) => x.domain === d)!
+    assert.equal(by('left.example').x, 28)
+    assert.equal(by('right.example').x, 860 - 28)
+    assert.equal(by('mid.example').x, 430)
+    assert.ok(by('right.example').r > by('mid.example').r && by('mid.example').r > by('left.example').r)
+    assert.equal(stripRadius(3), 3 + 2 * Math.sqrt(3))
+    assert.equal(stripRadius(10_000), 22, 'capped')
+    assert.equal(stripRadius(10_000, 328), 22 * 0.55, 'a phone-wide strip shrinks the dots, floor 55%')
+    assert.equal(stripRadius(3, 2000), 3 + 2 * Math.sqrt(3), 'a wide strip never grows them')
+    assert.ok(stripLayout([{ domain: 'a.example', source: 'gnews', score: 0, n: 10 }], 328).dots[0].r < by('mid.example').r, 'same texts, narrower strip, smaller dot')
+    assert.equal(layout.height, layout.half * 2)
+  })
+
+  it('paintStrip draws one dot per outlet, marks the active one, and hides itself with nothing to draw', () => {
+    withFakeDocument(['strip'], (els) => {
+      paintStrip({ data: sample, domain: 'bbc.com', onPick: () => {} })
+      assert.equal(els.strip.hidden, false)
+      const html = els.strip.innerHTML
+      const dots = [...html.matchAll(/data-strip-domain="([^"]+)"/g)].map((m) => m[1])
+      assert.deepEqual(dots, ['g1.globo.com', 'bbc.com', 'fdusp.bsky.social'])
+      assert.match(html, /class="strip-dot is-active" data-strip-domain="bbc\.com" role="button" tabindex="0" aria-pressed="true"/)
+      assert.match(html, /<title>g1\.globo\.com · Google News · -3,62 em 13 textos<\/title>/)
+      assert.match(html, /class="strip-mean" style="--pos:39\.2%">média da pessoa -2,16/)
+      assert.match(html, /<line class="strip-overall"/)
+      assert.match(html, /−10 contra<\/span><span>0<\/span><span>\+10 a favor/)
+      assert.match(html, /toque de novo para soltar/)
+      for (const value of inlineStyles(html)) assert.ok(value.startsWith('--'), `paintStrip emitted style="${value}"`)
+      const g1 = Number(html.match(/data-strip-domain="g1\.globo\.com".*?<circle cx="([\d.]+)"/)?.[1])
+      const fdusp = Number(html.match(/data-strip-domain="fdusp\.bsky\.social".*?<circle cx="([\d.]+)"/)?.[1])
+      assert.ok(g1 < fdusp, 'a more hostile outlet sits further left')
+    })
+    withFakeDocument(['strip'], (els) => {
+      paintStrip({ data: { ...sample, by_domain: [] }, domain: 'all', onPick: () => {} })
+      assert.equal(els.strip.hidden, true)
+      assert.equal(els.strip.innerHTML, '')
+    })
+    withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
+      els.strip.hidden = false
+      paintTestimonyLoading()
+      assert.equal(els.strip.hidden, true, 'a load in flight blanks the strip too')
+    })
+  })
+
+  it('design-5.html holds the strip under the legend, inside the canvas, and the chapter explains it', () => {
+    const html = read('design-5.html')
+    const canvas = html.match(/<div class="canvas">([\s\S]*?)<div class="side">/)?.[1] ?? ''
+    assert.match(canvas, /<div class="legend" id="legend"><\/div>\s*<figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden><\/figure>/)
+    const chapter = html.match(/<section class="chapter" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.match(chapter, /<b>A régua embaixo do mapa<\/b>/)
+    assert.match(chapter, /a linha vertical é a média da pessoa/)
   })
 })

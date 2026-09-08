@@ -256,3 +256,32 @@ export const routesFrom = (layout, id) => {
   }
   return routes
 }
+
+// A one-dimensional beeswarm for the testimony strip: every item keeps its x (its score on the
+// axis) and gets the y closest to the axis where it touches nothing already placed. Bigger
+// items go first so the heavy outlets sit on the line and the small ones stack around them.
+// Deterministic: same input, same picture, so a test can assert the geometry.
+/**
+ * @template {{ x: number, r: number }} T
+ * @param {T[]} items
+ * @param {number} [gap]
+ * @returns {(T & { y: number })[]}
+ */
+export const swarm = (items, gap = 1.5) => {
+  /** @type {(T & { y: number })[]} */
+  const placed = []
+  for (const item of [...items].sort((a, b) => b.r - a.r || a.x - b.x)) {
+    const near = placed.filter((p) => Math.abs(p.x - item.x) < p.r + item.r + gap)
+    const candidates = [0]
+    for (const p of near) {
+      const need = p.r + item.r + gap
+      const dy = Math.sqrt(Math.max(0, need * need - (p.x - item.x) ** 2))
+      candidates.push(p.y + dy, p.y - dy)
+    }
+    const free = candidates
+      .filter((c) => near.every((p) => Math.hypot(p.x - item.x, p.y - c) >= p.r + item.r + gap - 1e-6))
+      .sort((a, b) => Math.abs(a) - Math.abs(b) || a - b)
+    placed.push({ ...item, y: free.length ? free[0] : Math.max(...candidates.map(Math.abs)) + item.r + gap })
+  }
+  return placed
+}

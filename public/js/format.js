@@ -154,15 +154,29 @@ export const testimonyPosition = (s) => ((Math.max(-10, Math.min(10, Number(s)))
 /** @param {unknown} value */
 export const signed = (value) => (Number(value) > 0 ? '+' : '') + fmt(value)
 
-// The picked outlet's own testimony, folded across the sources it appears under (by_domain
-// is one row per (domain, source)), weighted by how many texts each row scored. Null when
-// no outlet is picked or the outlet never clears the route's `min` floor.
+// by_domain is one row per (domain, source); the strip and the focus line want one entry per
+// outlet, so the rows of one domain fold into a text-weighted mean. Most texts first.
+/** @param {TestimonyDomainRow[]} rows @returns {{ domain: string, sources: string[], score: number, n: number }[]} */
+export const foldTestimonyDomains = (rows) => {
+  /** @type {Map<string, { domain: string, sources: string[], sum: number, n: number }>} */
+  const byDomain = new Map()
+  for (const r of rows) {
+    if (r.score === null || r.score === undefined || !r.n) continue
+    const entry = byDomain.get(r.domain) ?? { domain: r.domain, sources: [], sum: 0, n: 0 }
+    entry.sources.push(r.source)
+    entry.sum += Number(r.score) * r.n
+    entry.n += r.n
+    byDomain.set(r.domain, entry)
+  }
+  return [...byDomain.values()].map(({ sum, ...e }) => ({ ...e, score: sum / e.n })).sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
+}
+
+// The picked outlet's own testimony. Null when no outlet is picked or the outlet never clears
+// the route's `min` floor.
 /** @param {TestimonyDomainRow[]} rows @param {string} domain @returns {{ score: number, n: number } | null} */
 export const testimonyFocus = (rows, domain) => {
-  const own = rows.filter((r) => r.domain === domain && r.score !== null && r.score !== undefined)
-  const n = own.reduce((a, r) => a + r.n, 0)
-  if (domain === 'all' || !n) return null
-  return { score: own.reduce((a, r) => a + Number(r.score) * r.n, 0) / n, n }
+  const own = domain === 'all' ? undefined : foldTestimonyDomains(rows).find((d) => d.domain === domain)
+  return own ? { score: own.score, n: own.n } : null
 }
 
 // Only the bsky.app profile/post URL a bluesky doc's `uri` (at://did/collection/rkey)

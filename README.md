@@ -13,6 +13,7 @@ pnpm dev             # http://localhost:3210
 pnpm reindex         # recompute terms, person matches and candidates after changing extract.ts or seed.json
 pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
 pnpm export-docs     # dumps every doc as one JSON line to stdout, for kikori's training set
+pnpm bench           # API latency baseline against a synthetic database of its own
 pnpm typecheck       # tsc
 pnpm test            # node:test against an in-memory database
 ```
@@ -100,6 +101,32 @@ Terms are only stored for docs that mention at least one tracked person. A doc n
 
 `pnpm purge orphan-terms` deletes the term rows a database collected before this rule and runs `vacuum full doc_terms` to return the pages to disk (plain `vacuum` only marks them reusable and leaves the file the same size). It takes an exclusive lock on `doc_terms`, so run it with the server stopped; it is a one-off per database, and `pnpm reindex` produces the same result from scratch.
 
+## Performance baseline
+
+Two separate things: opt-in instrumentation on the running API, and a benchmark that builds its own database and reports numbers. Both are local, free and offline. Browser rendering time is out of scope here; this measures API latency and database work only.
+
+**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms` and `x-perf-sql-count`, plus one JSON line on stdout:
+
+```json
+{"perf":"request","method":"GET","path":"/api/people/lula/graph","query":"days=30","status":200,"ms":227.6,"db_ms":446.2,"sql":5}
+```
+
+`sql` counts statements sent to PGlite during the request and `db_ms` sums the time awaited on them, so a route that fans out with `Promise.all` reports more `db_ms` than `ms`; the difference is the concurrency. The line carries the request line and timings only — never a row, a response body or an environment value — so no document text and no credential can reach a log. `PERF_LOG=0` keeps the counters and headers and silences the line. Headers are additive: response bodies are byte-identical with and without `PERF`.
+
+**Benchmark.** `pnpm bench` generates a deterministic synthetic corpus (`src/bench-corpus.ts`, fixed seed) into its own `DATA_DIR`, replays every scenario in `src/bench-scenarios.ts` (graph, sources, docs, timeline, tone, testimony, rising, candidates, people) and writes `docs/perf-baseline.md`: environment, table sizes, cold and warm p50/p95 per scenario, statements per request, and `EXPLAIN (ANALYZE, BUFFERS)` for each statement the routes run. No network, no external API, no paid tooling.
+
+The dataset is synthetic on purpose. It resembles production in shape — source mix, recency skew, roughly a third of docs naming a tracked person, a Zipf vocabulary — not in content. **The benchmark never opens `./data/pg`**: PGlite allows one process per directory, so a second opener corrupts it. Generation runs in a child process and the measuring process then opens the database cold, which is what makes the cold column meaningful. Copying a real database is possible but only with the owning process stopped, and it is not what the committed baseline used.
+
+```bash
+pnpm bench                                  # 20k docs into ./data/bench, 30 iterations, writes docs/perf-baseline.md
+BENCH_DOCS=100000 BENCH_RESET=1 pnpm bench  # bigger corpus, rebuilt from scratch
+PERF=0 pnpm bench                           # same scenarios with the instrumentation off, to price it
+```
+
+`BENCH_DATA_DIR` (default `./data/bench`, gitignored, refuses `./data/pg`), `BENCH_DOCS` (20000), `BENCH_DAYS` (120), `BENCH_SEED`, `BENCH_ITERATIONS` (30), `BENCH_PERSON` (`lula`), `BENCH_TERM` (`reforma`), `BENCH_RESET=1` (rebuild instead of reusing an existing corpus of the same size) and `BENCH_OUT` (default `docs/perf-baseline.md`). The dataset is reused between runs when its doc count already matches, so only the first run pays for generation.
+
+`pnpm test` never runs the benchmark: it asserts that every scenario is still a request the API answers and that the corpus is deterministic, against the shared in-memory fixture, and never asserts a timing.
+
 ## Layout
 
 - `src/collectors/*` one collector per source, same signature (Strategy)
@@ -108,7 +135,9 @@ Terms are only stored for docs that mention at least one tracked person. A doc n
 - `src/graph.ts` scoring SQL (counts, PMI, term-term links, testimony aggregation)
 - `src/scorers/*` one scorer per method, same signature; `src/score.ts` scores unscored `(doc, person)` pairs; `src/export-docs.ts` dumps docs for kikori's training set
 - `src/server.ts` Hono API + static UI
+- `src/perf.ts` opt-in request/statement instrumentation; `src/bench.ts` the benchmark runner, `src/bench-corpus.ts` its synthetic corpus, `src/bench-scenarios.ts` its request set
 - `public/design-5.html` current UI (radial atlas), served at `/`; `public/index.html` legacy UI; other `design-*.html` kept for reference
 - `test/` node:test suites; `test/fixture.ts` seeds the in-memory database
 - `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `camaraId` (federal deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person, and an optional `senadoId` (senator code from `dadosabertos.senado.leg.br`) enables `senado`; a person may carry either, both, or neither, and is skipped by a collector whose id it lacks. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
-- `data/` PGlite database (gitignored)
+- `docs/perf-baseline.md` the committed output of `pnpm bench`, the reference the performance work compares against
+- `data/` PGlite database (gitignored), including `data/bench/` the benchmark's own throwaway database

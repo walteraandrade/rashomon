@@ -32,12 +32,14 @@ import {
   getZoom,
   layoutCache,
   nextRequestId,
+  readScope,
   setCandidateController,
   setController,
   setDocsController,
   setSelected,
   setZoomLevel,
   state,
+  writeScope,
 } from './state.js'
 
 /** @typedef {import('./format.js').Graph} Graph */
@@ -141,17 +143,69 @@ export const layoutKey = (person, terms, sort, limit) =>
   JSON.stringify(person ? [person.id, person.name, sort, limit, terms.map((n) => [n.id, n.term, n.kind, n.count, n.pmi])] : [])
 
 // The docs panel reuses the graph querystring, narrowed to one term and five rows. A null
-// term means "documents about the person", which is `term=''` plus `kind=all`.
+// term means "documents about the person", which is `term=''` plus `kind=all`. `sort` and
+// `min` are dropped (issue #43): src/query.ts's parseDocsQuery reads neither, so leaving
+// them in made the same five rows look like a new query on every sort change.
 /**
  * @param {URLSearchParams} base
  * @param {Term | null} n
  */
 export const docsQuery = (base, n) => {
   const q = new URLSearchParams(base)
+  q.delete('sort')
+  q.delete('min')
   q.set('term', n ? n.term : '')
   q.set('kind', n ? n.kind : 'all')
   q.set('limit', '5')
   return q
+}
+
+// Issue #43: one cache key per scope, built from the filters that scope's route actually
+// reads, so a change to a control the route ignores cannot evict it. The keys are the
+// querystrings themselves, which is what makes them honest: whatever ends up in the URL ends
+// up in the key, and a parameter added to a route later cannot silently share a stale entry.
+/**
+ * @param {string} personId
+ * @param {URLSearchParams} graphParams the full params() querystring
+ * @param {Term | null} [term] the docs panel's term, null for the person's own documents
+ */
+export const scopeKeys = (personId, graphParams, term = null) => ({
+  graph: personId + '?' + graphParams,
+  sources: personId + '?' + api.narrowToSources(graphParams),
+  docs: personId + '?' + docsQuery(graphParams, term),
+})
+
+// Reuses a fresh entry instead of fetching, and only memoizes a value the fetch actually
+// resolved: a rejection (network error, or the browser aborting the request) leaves the
+// bucket untouched, so the next attempt is a real attempt. An abort here says the browser
+// stopped listening, never that the server stopped running the SQL.
+/**
+ * @template T
+ * @param {string} scope
+ * @param {string} key
+ * @param {() => Promise<T>} fetcher
+ * @returns {Promise<T>}
+ */
+export const fromScope = async (scope, key, fetcher) => {
+  const hit = readScope(scope, key)
+  if (hit) return /** @type {T} */ (hit.value)
+  return /** @type {T} */ (writeScope(scope, key, await fetcher()))
+}
+
+// Coalesces a burst of control changes into one load. The trailing edge is the one that
+// matters: a reader dragging through the period options should pay for the option they stop
+// on, not for every option they pass through.
+/**
+ * @param {() => void} fn
+ * @param {number} [ms]
+ */
+export const debounce = (fn, ms = 140) => {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer
+  return () => {
+    clearTimeout(timer)
+    timer = setTimeout(fn, ms)
+  }
 }
 
 /** @type {Person[]} */
@@ -244,10 +298,18 @@ const loadDocs = async (n) => {
   const docsController = new AbortController()
   setDocsController(docsController)
   if (!$('docs') || !graph || !$('person').value) return
-  paintDocsLoading()
+  const person = $('person').value
+  const base = graphQuery()
+  const query = docsQuery(base, n)
+  const key = scopeKeys(person, base, n).docs
+  // A hit paints straight from the memo, so re-entering the unselected inspector after a
+  // sort change, a view-mode switch or an outlet re-click shows the same five documents
+  // without a second request. A miss still shows the loading copy first.
+  const cached = readScope('docs', key)
+  if (!cached) paintDocsLoading()
   if ($('showDocs')) $('showDocs').disabled = true
   try {
-    const data = await api.loadDocs($('person').value, docsQuery(graphQuery(), n), docsController.signal)
+    const data = await fromScope('docs', key, () => api.loadDocs(person, query, docsController.signal))
     if (id !== currentDocsId()) return
     paintDocs(data)
   } catch (e) {
@@ -257,20 +319,24 @@ const loadDocs = async (n) => {
   }
 }
 
+// Picking an outlet only narrows the graph and the documents: the outlet list itself is the
+// same list, so it is repainted from the memo with the new active row rather than refetched.
+/** @param {string} d */
+const pickDomain = (d) => {
+  if (d === state.domain) return
+  state.domain = d
+  updateHeader()
+  debouncedLoad()
+}
+
 /** @param {number} id @param {AbortSignal} signal */
 const loadSourcesFlow = async (id, signal) => {
+  const person = $('person').value
+  const key = scopeKeys(person, graphQuery()).sources
   try {
-    const rows = await api.loadSources($('person').value, api.sourcesParams(controlValues()), signal)
+    const rows = await fromScope('sources', key, () => api.loadSources(person, api.sourcesParams(controlValues()), signal))
     if (id !== currentRequestId()) return
-    paintOutlets({
-      rows,
-      domain: state.domain,
-      onPick: (d) => {
-        state.domain = d
-        updateHeader()
-        load()
-      },
-    })
+    paintOutlets({ rows, domain: state.domain, onPick: pickDomain })
   } catch (e) {
     if (id === currentRequestId() && !aborted(e)) paintOutletsError()
   }
@@ -389,7 +455,9 @@ const load = async () => {
       }
     }
     loadSourcesFlow(id, signal())
-    const data = await api.loadGraph($('person').value, graphQuery(), signal())
+    const person = $('person').value
+    const query = graphQuery()
+    const data = await fromScope('graph', scopeKeys(person, query).graph, () => api.loadGraph(person, query, signal()))
     if (id !== currentRequestId()) return
     graph = data
     busy = false
@@ -410,10 +478,15 @@ const load = async () => {
   }
 }
 
+// The controls debounce; boot() and the retry button do not. createHandlers keeps calling
+// whatever `load` it is handed synchronously, so its own contract (and the tests written
+// against it) is untouched — the coalescing lives here, at the wiring site.
+const debouncedLoad = debounce(load)
+
 const handlers = createHandlers({
   paintCurrentSelection,
   choose,
-  load,
+  load: debouncedLoad,
   loadCandidates: loadCandidatesFlow,
   setMode,
   setZoom,

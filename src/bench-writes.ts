@@ -25,7 +25,7 @@ process.env.PERF_LOG = '0'
 const persons = seedJson as Person[]
 const here = fileURLToPath(import.meta.url)
 
-type Result = { phase: string; docs: number; sql: number; ms: number; peakRss: number; peakHeap: number }
+type Result = { phase: string; docs: number; sql: number; ms: number; peakRss: number; peakHeap: number; bytes: number }
 
 // Each phase runs in its own process so maxRSS is that phase's peak and not the whole run's,
 // and so the reindex opens a database the inserting process already closed.
@@ -48,31 +48,31 @@ const sampleHeap = () => {
 
 const report = async (name: string, docs: number, fn: () => Promise<void>) => {
   const { measure } = await import('./perf.js')
+  const { db } = await import('./db.js')
   const stopHeap = sampleHeap()
   const { ms, sql } = await measure(fn)
   const peakHeap = stopHeap()
-  const out: Result = { phase: name, docs, sql, ms, peakRss: process.resourceUsage().maxRSS * 1024, peakHeap }
+  const { rows } = await db.query<{ bytes: number }>(`select pg_database_size(current_database())::int as bytes`)
+  const out: Result = { phase: name, docs, sql, ms, peakRss: process.resourceUsage().maxRSS * 1024, peakHeap, bytes: rows[0].bytes }
   console.log(JSON.stringify(out))
 }
 
 const ingestPhase = async () => {
   await mkdir(resolve(DATA_DIR), { recursive: true })
   const { db, migrate } = await import('./db.js')
-  const { insertDoc, upsertPersons } = await import('./store.js')
+  const { insertDocs, upsertPersons } = await import('./store.js')
   await migrate()
   await upsertPersons(persons)
   const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: NOW })
-  await report('ingest', docs.length, async () => {
-    for (const doc of docs) await insertDoc(doc, persons)
-  })
+  await report('ingest', docs.length, async () => void (await insertDocs(docs, persons)))
   await db.close()
 }
 
-const reindexPhase = async () => {
+const reindexPhase = async (name: string) => {
   const { db, migrate } = await import('./db.js')
   const { reindexAll } = await import('./reindex.js')
   await migrate()
-  await report('reindex', DOCS, async () => void (await reindexAll(persons)))
+  await report(name, DOCS, async () => void (await reindexAll(persons)))
   await db.close()
 }
 
@@ -80,8 +80,10 @@ const mb = (b: number) => `${(b / 1048576).toFixed(1)} MB`
 
 const all = async () => {
   await rm(resolve(DATA_DIR), { recursive: true, force: true })
-  const results = [runPhase('ingest'), runPhase('reindex')]
-  const header = ['phase', 'docs', 'sql statements', 'seconds', 'docs/s', 'peak rss', 'peak heap']
+  // The reindex runs twice on purpose: the second run is what shows whether rebuilding the
+  // derived tables leaves the database bigger than it found it.
+  const results = [runPhase('ingest'), runPhase('reindex'), runPhase('reindex-again')]
+  const header = ['phase', 'docs', 'sql statements', 'seconds', 'docs/s', 'peak rss', 'peak heap', 'db size']
   const rows = results.map((r) => [
     r.phase,
     String(r.docs),
@@ -90,6 +92,7 @@ const all = async () => {
     Math.round(r.docs / (r.ms / 1000)).toString(),
     mb(r.peakRss),
     mb(r.peakHeap),
+    mb(r.bytes),
   ])
   console.log(`| ${header.join(' | ')} |`)
   console.log(`| ${header.map(() => '---').join(' | ')} |`)
@@ -97,5 +100,5 @@ const all = async () => {
 }
 
 if (phase === 'ingest') await ingestPhase()
-else if (phase === 'reindex') await reindexPhase()
+else if (phase === 'reindex' || phase === 'reindex-again') await reindexPhase(phase)
 else await all()

@@ -14,11 +14,12 @@ pnpm reindex         # recompute terms, person matches and candidates after chan
 pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
 pnpm export-docs     # dumps every doc as one JSON line to stdout, for kikori's training set
 pnpm bench           # API latency baseline against a synthetic database of its own
+pnpm bench:writes    # ingest/reindex write-path baseline: statements, throughput, peak memory
 pnpm typecheck       # tsc
 pnpm test            # node:test against an in-memory database
 ```
 
-`PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`. `ANALYZE_MIN_DOCS` (default 200) is the ingest size from which planner statistics are refreshed, see "Indexes and planner statistics".
+`PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`. `ANALYZE_MIN_DOCS` (default 200) is the ingest size from which planner statistics are refreshed, see "Indexes and planner statistics". `WRITE_BATCH_ROWS` (default 500, clamped to 1..10000) and `WRITE_BATCH_DOCS` (default 200, clamped to 1..5000) bound what one insert statement carries and what one transaction holds, see "Writes, batches and recovery".
 
 Bluesky without login returns one page (100 posts) per person. To paginate, set `BSKY_HANDLE` and `BSKY_APP_PASSWORD` (app password, not the account password).
 
@@ -99,7 +100,54 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 
 Terms are only stored for docs that mention at least one tracked person. A doc naming nobody tracked keeps its `docs` row (it still feeds `/api/candidates` and the source counts) but gets no `doc_terms` rows: they used to serve only as the PMI denominator, at two thirds of the largest table. PMI therefore compares a person's terms against the docs about tracked people in the window, not against everything collected; `stats.docs` keeps its old meaning (every doc in scope).
 
-`pnpm purge orphan-terms` deletes the term rows a database collected before this rule and runs `vacuum full doc_terms` to return the pages to disk (plain `vacuum` only marks them reusable and leaves the file the same size). It takes an exclusive lock on `doc_terms`, so run it with the server stopped; it is a one-off per database, and `pnpm reindex` produces the same result from scratch.
+`pnpm purge orphan-terms` deletes the term rows a database collected before this rule and runs `vacuum full doc_terms` to return the pages to disk (plain `vacuum` only marks them reusable and leaves the file the same size). It takes an exclusive lock on `doc_terms`, so run it with the server stopped; it is a one-off per database, and `pnpm reindex` produces the same result from scratch. `pnpm purge <source>` does the same for the tables its cascade empties.
+
+## Writes, batches and recovery
+
+Ingest and reindex are the only write paths, and both are bounded in the same two ways: `WRITE_BATCH_ROWS`
+rows per insert statement, `WRITE_BATCH_DOCS` documents per transaction. Neither bound grows with the size
+of the corpus, so a run over 20k or 200k documents holds the same amount of memory and never keeps a
+transaction open across an arbitrary amount of work.
+
+- **Batches.** Person, term and candidate rows go in through `unnest`, one statement per batch instead of
+  one per row, with `on conflict do nothing` so replaying a batch is a no-op rather than a duplicate-key
+  failure. The person seed is upserted the same way, from json, because `unnest` on a `text[][]` would
+  flatten one person's aliases into the next.
+- **Transactions.** `insertDoc` writes a document and everything derived from it in one transaction: a
+  document can never end up in `docs` without the person, term and candidate rows it implies. `pnpm ingest`
+  uses the bulk form, which commits a group of documents at a time; a group that fails rolls back whole and
+  is then replayed document by document, so one unwritable document costs only itself and the rest of the
+  group still lands. The failure count is printed per source.
+- **No pointless updates.** The `on conflict` on `docs` carries a `where`: a re-collected document that
+  would change neither `domain` nor `tone` writes no new row version at all. The two rules it has to keep
+  survive it — the first source still owns the row (`coalesce(docs.domain, excluded.domain)`), and a
+  non-GDELT source still resolves to a null tone.
+- **Reindex.** It reads documents by keyset pagination on the primary key (`where id > $1 order by id
+  limit $2`), never materializing more than one page of text, and commits one transaction per page.
+
+**Recovery from an interrupted reindex.** Run `pnpm reindex` again. It starts by truncating
+`doc_terms`, `doc_persons` and `doc_candidates` and rebuilds from `docs`, so it depends on no previous
+state and is idempotent: interrupting it can leave the derived tables holding fewer documents than `docs`,
+but never a document with only part of its rows, because each page is a transaction. There is deliberately
+no resume watermark: a document that names nobody and yields no candidate writes no derived row at all, so
+the highest `doc_id` present in the derived tables is not evidence of where a run stopped, and resuming
+from it would silently skip documents. A full rebuild is cheap enough (about 7 s per 20k documents here)
+that guessing is not worth it. The same command repairs a database whose derived rows were damaged any
+other way, and `pnpm ingest` is safe to run before it: its writes are per document and complete.
+
+**Vacuum.** `pnpm reindex` empties its three derived tables with `truncate`, not `delete`. PGlite has no
+autovacuum, so deleting every row would leave the pages dead and the rebuild would append past them: on the
+20k-document benchmark the database grew from 32.1 MB to 41.0 MB after one reindex and 49.4 MB after two,
+while truncate holds it at 32.1 MB across any number of runs. That is why no vacuum follows a reindex. A
+`pnpm purge` is the opposite case — a permanent deletion whose pages are never refilled — so it runs
+`vacuum full` on the tables it emptied, as `purge orphan-terms` already did. Neither ever runs from a
+request: like `analyze`, both belong to the process that owns `DATA_DIR`, with the server stopped.
+
+**Measuring it.** `pnpm bench:writes` builds a deterministic synthetic corpus (the same
+`src/bench-corpus.ts` as `pnpm bench`) in its own `DATA_DIR`, then reports statements sent to PGlite,
+throughput, peak RSS, peak heap and database size for an ingest and for two consecutive reindexes. Like
+`pnpm bench` it refuses to open `./data/pg`. Knobs: `BENCH_WRITES_DOCS` (20000), `BENCH_WRITES_DATA_DIR`
+(`./data/bench-writes`), `BENCH_WRITES_DAYS`, `BENCH_WRITES_SEED`, `BENCH_WRITES_NOW`.
 
 ## Indexes and planner statistics
 
@@ -177,9 +225,9 @@ PERF=0 pnpm bench                           # same scenarios with the instrument
 - `src/graph.ts` scoring SQL (counts, PMI, term-term links, testimony aggregation)
 - `src/scorers/*` one scorer per method, same signature; `src/score.ts` scores unscored `(doc, person)` pairs; `src/export-docs.ts` dumps docs for kikori's training set
 - `src/server.ts` Hono API + static UI
-- `src/perf.ts` opt-in request/statement instrumentation; `src/bench.ts` the benchmark runner, `src/bench-corpus.ts` its synthetic corpus, `src/bench-scenarios.ts` its request set
+- `src/perf.ts` opt-in request/statement instrumentation; `src/bench.ts` the read benchmark runner, `src/bench-writes.ts` the write-path one, `src/bench-corpus.ts` the synthetic corpus both share, `src/bench-scenarios.ts` the read benchmark's request set
 - `public/design-5.html` current UI (radial atlas), served at `/`; `public/index.html` legacy UI; other `design-*.html` kept for reference
 - `test/` node:test suites; `test/fixture.ts` seeds the in-memory database
 - `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `camaraId` (federal deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person, and an optional `senadoId` (senator code from `dadosabertos.senado.leg.br`) enables `senado`; a person may carry either, both, or neither, and is skipped by a collector whose id it lacks. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
 - `docs/perf-baseline.md` the committed output of `pnpm bench`, the reference the performance work compares against
-- `data/` PGlite database (gitignored), including `data/bench/` the benchmark's own throwaway database
+- `data/` PGlite database (gitignored), including `data/bench/` and `data/bench-writes/`, the benchmarks' own throwaway databases

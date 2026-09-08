@@ -1,5 +1,5 @@
 import { db, migrate } from './db.js'
-import { scorers } from './scorers/index.js'
+import { methods, scorers } from './scorers/index.js'
 import type { Person, Scorer } from './types.js'
 
 type Pair = { doc_id: number; person_id: string; text: string; id: string; name: string; aliases: string[] }
@@ -35,11 +35,12 @@ export const scoreAll = async (method: string, scorer: Scorer): Promise<number> 
 
 const main = async () => {
   await migrate()
-  const method = process.env.TESTIMONY_SCORER ?? 'onnx'
-  const scorer = (scorers as Record<string, Scorer>)[method]
-  if (!scorer) throw new Error(`unknown scorer: ${method}`)
+  const name = process.env.TESTIMONY_SCORER ?? 'onnx'
+  const scorer = (scorers as Record<string, Scorer>)[name]
+  if (!scorer) throw new Error(`unknown scorer: ${name}`)
+  const method = (methods as Record<string, () => string>)[name]()
   const n = await scoreAll(method, scorer)
-  console.log(`scored ${n} pairs`)
+  console.log(`scored ${n} pairs as ${method}`)
   await db.close()
 }
 

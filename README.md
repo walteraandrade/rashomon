@@ -10,7 +10,7 @@ pnpm ingest          # default sources: bluesky, rss, gnews, gkg, senado; or: pn
 pnpm ingest gdelt    # GDELT DOC API, slow and rate limited, off by default
 pnpm ingest camara   # Câmara dos Deputados floor speeches, off by default
 pnpm dev             # http://localhost:3210
-pnpm reindex         # recompute terms and person matches after changing extract.ts or seed.json
+pnpm reindex         # recompute terms, person matches and candidates after changing extract.ts or seed.json
 pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
 pnpm export-docs     # dumps every doc as one JSON line to stdout, for kikori's training set
 pnpm typecheck       # tsc
@@ -59,9 +59,26 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also ca
 
 `GET /api/people/:id/testimony?days=30&source=all&method=onnx&min=3` returns `{ method, overall, by_source, by_domain }`, a second, source-agnostic signal scored -10..+10 per `(doc, person)` by a pluggable scorer (see below), stored separately from and never merged with GDELT's `tone`. `overall` is `{ score, n }` averaged over every doc scored under `method` in the window, no floor. `by_source` lists one `{ source, score, n }` row per source with at least one non-null score (no `min` floor). `by_domain` lists one `{ domain, source, score, n }` row per `(domain, source)` pair with `n >= min`; a doc with no resolvable `domain` never appears here, though it still counts in `overall`/`by_source`. `method` reads whatever rows exist in `doc_testimony` for that label, including a retired scorer's; an unscored `method` returns `{ score: null, n: 0 }` everywhere, not a 404.
 
+`GET /api/candidates?days=7&min=5&limit=50` returns `{ days, candidates }`: person names nobody tracks yet, ranked by doc count in the window. Each candidate is `{ name, count, sources, previous, samples }`: `count` is distinct docs in the window, `sources` distinct sources, `previous` the count in the window of the same length immediately before (so a caller sees what is rising), `samples` up to 3 `{ id, source, text }` docs, newest first. Cross-person by construction, not nested under `/people/:id`. Promotion stays human: add the name to `seed.json` and run `pnpm reindex`.
+
+## Candidate discovery
+
+Names are discovered when a doc is inserted (`insertDoc`) and stored in `doc_candidates (doc_id, name)`, normalized like aliases (lowercase, no accents). `gkg` docs take the V1Persons column of the GKG CSV (index 11), kept in `docs.extra_names`; every other source uses a cheap, noisy heuristic: runs of two or more capitalized words (`de/da/do/das/dos` allowed inside) that do not open a sentence, where only `.`, `!`, `?` and a line break end a sentence and a colon, comma, quote or dash merely ends the run. A name equal to a tracked alias or `exclude` entry is not a candidate (exact match, so "Michelle Bolsonaro" still surfaces while only a bare "Bolsonaro" is tracked). `pnpm reindex` recomputes the table from stored docs with the current `seed.json`; gkg rows inserted before this table existed have an empty `extra_names` and contribute no candidates until re-ingested.
+
 ## Testimony and scoring
 
-`doc_testimony` holds one `{ doc_id, person_id, method, score }` row per attempt: `score` is `null` when the scorer could not form an opinion (e.g. empty text), inserted anyway so the pair is not retried. `pnpm score` (env `TESTIMONY_SCORER`, default `onnx`) scores every `(doc, person)` pair in `doc_persons` that lacks a row for that method yet; re-running under a different `TESTIMONY_SCORER` value adds a second, independent row set rather than overwriting the first. Scorers live in `src/scorers/`: `stub` is deterministic and hermetic (tests only), `onnx` loads `TESTIMONY_MODEL` via `@huggingface/transformers` (cache dir `MODEL_DIR`, default `./data/models`) and is never exercised by `pnpm test`.
+`doc_testimony` holds one `{ doc_id, person_id, method, score }` row per attempt: `score` is `null` when the scorer could not form an opinion (e.g. empty text), inserted anyway so the pair is not retried. `pnpm score` (env `TESTIMONY_SCORER`, default `onnx`) scores every `(doc, person)` pair in `doc_persons` that lacks a row for that method yet; re-running under a different `TESTIMONY_SCORER` value adds a second, independent row set rather than overwriting the first. Scorers live in `src/scorers/`: `stub` is deterministic and hermetic (tests only); `onnx` loads `TESTIMONY_MODEL` ([drifting-walter/kikori](https://huggingface.co/drifting-walter/kikori)) via `@huggingface/transformers` (cache dir `MODEL_DIR`, default `./data/models`; `TESTIMONY_DTYPE` picks `q8`, the default, 110 MB / ~6 ms per short text, or `fp32`, 436 MB / ~12 ms) and is never exercised by a plain `pnpm test`. The scorer name and the row label differ: `TESTIMONY_SCORER=onnx` writes rows as `method = kikori:<dtype>` (`kikori:q8`, `kikori:fp32`), so rows from the earlier placeholder (`onnx`, single label, person ignored) are never mixed with kikori's, and `pnpm score` re-scores every pair whose only row is from another method. Clients reading testimony pass `method=kikori:q8` explicitly; the route's default is still `onnx`.
+
+### The kikori contract
+
+The model carries its own contract in `config.json["kikori"]`, and the scorer reads it from there rather than hard-coding it:
+
+- **Input** is the pair `[CLS] person.name [SEP] text [SEP]`, `token_type_ids` 0 for the person segment and 1 for the text. The person is part of the input: the same doc scores differently for each person it mentions.
+- **Labels** are `neg, neu, pos` in that order (`config.json["kikori"].labels`). **Score** is `(p_pos - p_neg) * 10` over `softmax(logits)`, range -10..+10; the model's class cut is `neg <= -2.5`, `pos >= 2.5`.
+- **Truncation** is done by hand: only the text is cut, to `max_length - len(person tokens) - 3` (`max_length` 256), so the closing `[SEP]` always survives. `tokenizer(person, { text_pair, truncation: true })` in transformers.js drops the last `[SEP]` on long texts and moves the score; the scorer never uses it.
+- **Known bias**: the person's name acts as a prior. The same hostile sentence scores about +1.9 with Lula as target and about -4 with Tarcísio or Bolsonaro. Read testimony as "this outlet vs other outlets on the same person", never as "person A vs person B".
+
+`test/kikori-fixtures.json` is the model's own fixture set (24 pool pairs, 16 short and 8 long, no holdout text) with `score_fp32` and `score_int8`. `KIKORI_CHECK=1 pnpm test` downloads the model and runs the real scorer over it, asserting `fp32` within 0.01 of `score_fp32` and `q8` within 1.5 of `score_int8` (dynamic int8 picks activation scales at run time; Node and Python differ by 0.30 mean, 1.29 max on these fixtures). `KIKORI_CHECK=q8` or `=fp32` runs one dtype.
 
 ## Editorial lean
 

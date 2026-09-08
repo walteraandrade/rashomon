@@ -1,23 +1,24 @@
-import persons from '../seed.json' with { type: 'json' }
+import seedPersons from '../seed.json' with { type: 'json' }
 import { db, migrate } from './db.js'
 import { discoverNames, domainOf, personsMentioned, terms } from './extract.js'
 import { upsertPersons } from './store.js'
-import type { Source, Term } from './types.js'
+import type { Person, Source, Term } from './types.js'
 
 type Row = { id: number; source: Source; text: string; extra_terms: Term[]; extra_names: string[] }
 
-const reindexDoc = async ({ id, source, text, extra_terms, extra_names }: Row) => {
+const reindexDoc = async (persons: Person[], { id, source, text, extra_terms, extra_names }: Row) => {
   const matched = personsMentioned(text, persons)
   const names = discoverNames({ source, text, extraNames: extra_names }, persons)
+  const ts = matched.length ? terms(text, extra_terms) : []
   await Promise.all([
     ...matched.map((p) => db.query(`insert into doc_persons values ($1, $2)`, [id, p.id])),
-    ...terms(text, extra_terms).map((t) => db.query(`insert into doc_terms values ($1, $2, $3)`, [id, t.term, t.kind])),
+    ...ts.map((t) => db.query(`insert into doc_terms values ($1, $2, $3)`, [id, t.term, t.kind])),
     ...names.map((n) => db.query(`insert into doc_candidates values ($1, $2)`, [id, n])),
   ])
 }
 
-const main = async () => {
-  await migrate()
+// Separate from main()'s stdout/db wiring, so tests can reindex the fixture in-process.
+export const reindexAll = async (persons: Person[]) => {
   await db.exec(`delete from doc_terms; delete from doc_persons; delete from doc_candidates;`)
   await upsertPersons(persons)
   const missing = await db.query<{ id: number; uri: string }>(`select id, uri from docs where domain is null and source <> 'bluesky'`)
@@ -25,11 +26,17 @@ const main = async () => {
     async (acc, r) => (await acc, void (await db.query(`update docs set domain = $2 where id = $1`, [r.id, domainOf(r.uri) ?? null]))),
     Promise.resolve(),
   )
-  if (missing.rows.length) console.log(`backfilled domain for ${missing.rows.length} docs`)
   const { rows } = await db.query<Row>(`select id, source, text, extra_terms, extra_names from docs`)
-  await rows.reduce<Promise<void>>(async (acc, r) => (await acc, reindexDoc(r)), Promise.resolve())
-  console.log(`reindexed ${rows.length} docs`)
+  await rows.reduce<Promise<void>>(async (acc, r) => (await acc, reindexDoc(persons, r)), Promise.resolve())
+  return { docs: rows.length, backfilled: missing.rows.length }
+}
+
+const main = async () => {
+  await migrate()
+  const { docs, backfilled } = await reindexAll(seedPersons)
+  if (backfilled) console.log(`backfilled domain for ${backfilled} docs`)
+  console.log(`reindexed ${docs} docs`)
   await db.close()
 }
 
-main()
+if (import.meta.url === `file://${process.argv[1]}`) await main()

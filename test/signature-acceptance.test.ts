@@ -20,11 +20,10 @@ describe('signature acceptance criteria (issue #6)', () => {
 
   it('AC1: default 30-day scope for lula returns exactly the spec-pinned reforma row', async () => {
     const g = await graphFor(lula, scope)
-    // issue #6's spec-pinned 0.58 becomes 1.49: doc /36 (issue #5's untoned tone fixture; doc /37
-    // sits at day 35, just outside this window) widens the person-agnostic n.total to 13, and doc
-    // /38 (gkg, about lula, issue #8's press-vs-network fixture) widens it further to 14 and np to
-    // 5, shifting pmi = log2(3*14/(5*3)).
-    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: 1.49 }])
+    // issue #6's spec-pinned 0.58 became 1.49 when docs /36 and /38 widened n.total to 14 and np
+    // to 5; issue #52 then removed doc /4 (names nobody tracked, so it carries no terms) from
+    // pmi's universe, leaving n = 13 and pmi = log2(3*13/(5*3)) = 1.38.
+    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: 1.38 }])
   })
 
   it('AC2: signature never contains one of the person own name tokens', async () => {

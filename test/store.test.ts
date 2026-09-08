@@ -3,7 +3,7 @@ import { describe, it, before } from 'node:test'
 import { db, migrate } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import { insertDoc, upsertPersons } from '../src/store.js'
-import { collidingUri, persons, seed } from './fixture.js'
+import { collidingUri, orphanTermCount, persons, seed, termsOf } from './fixture.js'
 
 const [, tarcisio] = persons
 const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
@@ -48,14 +48,40 @@ describe('insertDoc camara', () => {
   })
 })
 
+describe('insertDoc term storage (issue #52)', () => {
+  before(seed)
+
+  it('stores no doc_terms row for any fixture doc naming nobody tracked', async () => {
+    assert.equal(await orphanTermCount(), 0)
+    // doc /4 is the fixture's untagged doc: it has a docs row but no terms
+    assert.deepEqual(await termsOf('https://example.org/4'), [])
+  })
+
+  it('keeps storing the terms of a doc that names a tracked person', async () => {
+    assert.ok((await termsOf('https://g1.globo.com/1')).includes('reforma'))
+  })
+
+  it('stores docs and doc_candidates for an untagged doc while skipping its terms', async () => {
+    const uri = 'https://example.org/untagged'
+    await insertDoc({ source: 'rss', uri, text: 'Reunião ouve Hugo Motta sobre a pauta', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
+    const { rows } = await db.query<{ persons: number; terms: number; candidates: number }>(
+      `select
+         (select count(*) from doc_persons p where p.doc_id = d.id)::int as persons,
+         (select count(*) from doc_terms t where t.doc_id = d.id)::int as terms,
+         (select count(*) from doc_candidates c where c.doc_id = d.id)::int as candidates
+       from docs d where d.uri = $1`,
+      [uri],
+    )
+    assert.deepEqual(rows[0], { persons: 0, terms: 0, candidates: 1 })
+  })
+})
+
 describe('insertDoc senado (issue #25)', () => {
   const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
   const family = [...persons, alcolumbre]
   before(async () => (await seed(), upsertPersons([alcolumbre])))
   const tagged = async (uri: string) =>
     (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
-  const termsOf = async (uri: string) =>
-    (await db.query<{ term: string }>(`select t.term from doc_terms t join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
 
   it('tags the speaking senator via the name-prefix, stores terms, and leaves tone null', async () => {
     const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/111111'

@@ -86,13 +86,21 @@ const scopeCte = `
     select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $1
   )`
 
+// PMI's universe. doc_terms only exists for docs naming at least one tracked person, so the
+// numerator's universe is that set; n.total and term_all must be restricted to it too, or the
+// denominator would count docs that can never contribute a term.
+const trackedCte = `
+  tracked as (
+    select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
+  )`
+
 const termsSql = `
-  with ${scopeCte},
-  n as (select count(*)::float8 as total from scope),
+  with ${scopeCte}, ${trackedCte},
+  n as (select count(*)::float8 as total from tracked),
   np as (select count(*)::float8 as total from about),
   term_all as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
-    from doc_terms t join scope s on s.id = t.doc_id group by 1, 2
+    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   term_p as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
@@ -114,12 +122,12 @@ const termsSql = `
 // floor (count >= max(3, 5% of about)), so it stays a stable "what sticks" facet rather
 // than a projection of the toolbar's current filters.
 const signatureSql = `
-  with ${scopeCte},
-  n as (select count(*)::float8 as total from scope),
+  with ${scopeCte}, ${trackedCte},
+  n as (select count(*)::float8 as total from tracked),
   np as (select count(*)::float8 as total from about),
   term_all as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
-    from doc_terms t join scope s on s.id = t.doc_id group by 1, 2
+    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   term_p as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt

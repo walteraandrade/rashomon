@@ -36,9 +36,17 @@ describe('GET /api/people/:id/testimony with a kikori method label', () => {
     assert.deepEqual(body.overall, { score: -9, n: 1 })
   })
 
-  it('falls back to onnx for a method outside the charset', async () => {
+  it('falls back to the kikori default for a method outside the charset', async () => {
     const res = await app.request('/api/people/tarcisio/testimony?method=kikori%20q8!')
-    const body = (await res.json()) as { method: string }
-    assert.equal(body.method, 'onnx')
+    const body = (await res.json()) as { method: string; overall: { score: number | null; n: number } }
+    assert.equal(body.method, 'kikori:q8')
+    assert.deepEqual(body.overall, { score: 2, n: 2 })
+  })
+
+  it('with no ?method at all, answers under kikori:q8 by default, not the placeholder onnx rows', async () => {
+    const res = await app.request('/api/people/tarcisio/testimony')
+    const body = (await res.json()) as { method: string; overall: { score: number | null; n: number } }
+    assert.equal(body.method, 'kikori:q8')
+    assert.deepEqual(body.overall, { score: 2, n: 2 })
   })
 })

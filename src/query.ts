@@ -1,10 +1,16 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
+import { methods } from './scorers/index.js'
 import type { CandidatesQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
 
-// Independent of TESTIMONY_SCORER's own default in src/score.ts: a client can request
-// method=stub in tests/debugging regardless of what `pnpm score` last ran.
-const DEFAULT_TESTIMONY_METHOD = 'onnx'
+// Resolved lazily, per request, through the same `methods` map `pnpm score` uses (never a
+// literal): the default label is whatever `pnpm score`'s own default scorer would currently
+// write, `kikori:q8` unless TESTIMONY_DTYPE picks another dtype. This only matches what is
+// actually in doc_testimony if TESTIMONY_DTYPE is set the same way in the process that ran
+// `pnpm score` and the process serving this route — see README's testimony section for the
+// failure mode when it isn't. Still independent of TESTIMONY_SCORER (src/score.ts): a client
+// can request method=stub in tests/debugging regardless of what `pnpm score` last ran.
+const defaultTestimonyMethod = () => methods.onnx()
 
 // `:` is part of the charset because the kikori scorer labels its rows `kikori:<dtype>`;
 // without it the parser silently fell back to 'onnx' and returned the placeholder rows.
@@ -99,7 +105,7 @@ export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery
 export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => ({
   days: int(q.days, 30, 1, 365),
   source: parseSourceList(q.source),
-  method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : DEFAULT_TESTIMONY_METHOD,
+  method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod(),
   min: int(q.min, 3, 1, 1000),
 })
 

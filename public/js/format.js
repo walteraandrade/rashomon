@@ -61,6 +61,9 @@ export const sourceLabels = {
   gkg: 'GKG',
   camara: 'Câmara',
   senado: 'Senado',
+  juridico: 'Jurídico',
+  oficial: 'Oficial',
+  nicho: 'Nicho',
 }
 
 // The options of the source <select> in the sentence, [value, compact pt-BR label]. One shared list
@@ -75,6 +78,9 @@ export const SOURCE_SEGMENTS = [
   ['gkg', 'gkg'],
   ['camara', 'câmara'],
   ['senado', 'senado'],
+  ['juridico', 'jurídico'],
+  ['oficial', 'oficial'],
+  ['nicho', 'nicho'],
 ]
 
 // sort='pmi' orders by pmi * ln(1 + count), matching src/graph.ts's sort=pmi contract on

@@ -5,9 +5,12 @@
 /** @param {string} personId */
 export const endpoint = (personId) => '/api/people/' + encodeURIComponent(personId)
 
+// `testimony=1` asks /graph for the per-term kikori mean (and the person's own, in the same
+// scope) that the map's colour mask reads; the mask is a paint toggle on the client, so the
+// data always comes along and flipping it never refetches.
 /** @param {{ days: string, sort: string, limit: string, source: string, domain: string, kind?: string, min?: string }} opts */
 export const params = ({ days, sort, limit, source, domain, kind = 'all', min = '2' }) =>
-  new URLSearchParams({ days, sort, limit, min, source, kind, domain })
+  new URLSearchParams({ days, sort, limit, min, source, kind, domain, testimony: '1' })
 
 // The outlet sidebar picks `domain`, so its own /sources fetch must never send one back —
 // spec amendment A1 (issue #26): sending domain here would hide every outlet but the
@@ -18,7 +21,7 @@ export const params = ({ days, sort, limit, source, domain, kind = 'all', min = 
 /** @param {URLSearchParams} graphParams */
 export const narrowToSources = (graphParams) => {
   const p = new URLSearchParams(graphParams)
-  for (const ignored of ['domain', 'sort', 'limit']) p.delete(ignored)
+  for (const ignored of ['domain', 'sort', 'limit', 'testimony']) p.delete(ignored)
   return p
 }
 

@@ -69,6 +69,7 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .zoom #zoomReset { width: 56px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .quiet-button { border: 1px solid var(--line); background: none; padding: 7px 12px; border-radius: 6px; color: var(--muted); font-size: 14px; white-space: nowrap; }
 .quiet-button:hover { color: var(--ink); border-color: var(--muted); }
+.quiet-button.toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 600; }
 .mobile-hint { display: none; margin: 8px 0; color: var(--muted); font-size: 14px; }
 .search-note { color: var(--accent); font-size: 14px; padding-top: 8px; min-height: 24px; }
 
@@ -83,6 +84,12 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .word-button.is-dim { opacity: .22; }
 .word-button.is-neighbor .word { fill: var(--green); }
 .word-button.is-match .word { fill: var(--accent); }
+/* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
+   mask and gain the underline, so the relation stays visible without the green competing. */
+.map-svg.is-masked .word-button .word, .map-svg.is-masked .word-button.is-neighbor .word { fill: var(--mask, var(--muted)); }
+.map-svg.is-masked .word-button:hover .word, .map-svg.is-masked .word-button:focus-visible .word, .map-svg.is-masked .word-button.is-selected .word, .map-svg.is-masked .word-button.is-match .word { fill: var(--accent); }
+.map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
+.mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: 8px; vertical-align: middle; background: linear-gradient(90deg, #ff6b7d, #626a8c, #7ee787); }
 .underline { stroke: var(--accent); stroke-width: 1.5; opacity: 0; }
 .word-button.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); }
@@ -121,6 +128,8 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .column-card span { color: var(--muted); font-size: 14px; }
 .column-card.is-selected strong, .column-card:hover strong { color: var(--accent); }
 .column-card.is-dim { opacity: .35; }
+.columns.is-masked .column-card strong { color: var(--mask, var(--muted)); }
+.columns.is-masked .column-card.is-selected strong, .columns.is-masked .column-card:hover strong { color: var(--accent); }
 
 /* ---------- side column ---------- */
 .side { display: flex; flex-direction: column; min-width: 0; }

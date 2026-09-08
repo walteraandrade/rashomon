@@ -32,6 +32,7 @@ import {
   currentRequestId,
   getCandidateController,
   getController,
+  getMask,
   getSelected,
   getZoom,
   layoutCache,
@@ -40,6 +41,7 @@ import {
   setCandidateController,
   setController,
   setDocsController,
+  setMask,
   setSelected,
   setZoomLevel,
   state,
@@ -83,6 +85,7 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
  *   resetDomain?: () => void,
  *   updateHeader?: () => void,
  *   setSource?: (source: string) => void,
+ *   toggleMask?: () => void,
  * }} actions every action is optional so a test can inject only the ones a criterion is about
  */
 export const createHandlers = ({
@@ -98,6 +101,7 @@ export const createHandlers = ({
   resetDomain = () => {},
   updateHeader = () => {},
   setSource = () => {},
+  toggleMask = () => {},
 }) => ({
   search: () => {
     paintCurrentSelection()
@@ -115,6 +119,8 @@ export const createHandlers = ({
   },
   modeMap: () => setMode('map'),
   modeColumns: () => setMode('columns'),
+  // Paint only: the per-term testimony always travels with the graph (api.js's testimony=1).
+  mask: () => toggleMask(),
   // One handler per control id, so the person control is the only one that drops the outlet
   // filter and the period control is the only one that refetches the candidate queue.
   /** @param {string} id */
@@ -158,6 +164,7 @@ export const docsQuery = (base, n) => {
   const q = new URLSearchParams(base)
   q.delete('sort')
   q.delete('min')
+  q.delete('testimony')
   q.set('term', n ? n.term : '')
   q.set('kind', n ? n.kind : 'all')
   q.set('limit', '5')
@@ -277,7 +284,7 @@ const setZoom = (value) => {
 }
 
 const paintCurrentSelection = () =>
-  paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: choose })
+  paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: choose, mask: getMask(), personTestimony: graph?.stats?.testimony })
 
 const paintCurrentInspector = () =>
   inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: choose, onShowDocs: loadDocs })
@@ -285,7 +292,7 @@ const paintCurrentInspector = () =>
 const drawCurrentMap = () => {
   const current = /** @type {Graph} */ (graph)
   currentLayout = getLayout()
-  drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: choose })
+  drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: choose, personTestimony: current.stats?.testimony })
   resizeMap()
   paintCurrentSelection()
   $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - $('viewport').clientWidth) / 2)
@@ -406,12 +413,13 @@ const render = () => {
   if (previouslySelected === null || !ids.has(previouslySelected)) setSelected(null)
   $('modeMap').setAttribute('aria-pressed', String(mode === 'map'))
   $('modeColumns').setAttribute('aria-pressed', String(mode === 'columns'))
+  $('mask').setAttribute('aria-pressed', String(getMask()))
   $('viewport').hidden = mode !== 'map'
   $('columns').hidden = mode !== 'columns'
   if (nodes.length) {
     if (!currentLayout || mode === 'map') drawCurrentMap()
     $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
-    paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: choose })
+    paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: choose, personTestimony: current.stats?.testimony })
   } else {
     $('viewport').innerHTML = '<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'
     $('columns').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
@@ -532,6 +540,11 @@ const handlers = createHandlers({
     state.source = value
     $('source').value = value
   },
+  toggleMask: () => {
+    setMask(!getMask())
+    $('mask').setAttribute('aria-pressed', String(getMask()))
+    if (graph && !busy) paintCurrentSelection()
+  },
 })
 
 export const boot = () => {
@@ -540,6 +553,7 @@ export const boot = () => {
   $('source').addEventListener('change', () => handlers.source(String($('source').value))())
   $('modeMap').addEventListener('click', handlers.modeMap)
   $('modeColumns').addEventListener('click', handlers.modeColumns)
+  $('mask').addEventListener('click', handlers.mask)
   for (const id of ['person', 'days', 'sort', 'limit']) $(id).addEventListener('change', handlers.control(id))
   $('search').addEventListener('input', handlers.search)
   $('clear').addEventListener('click', handlers.clear)

@@ -46,7 +46,7 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - Code, comments, commits, branches, PR titles in English. UI copy in pt-BR.
 - Functional style, small pure functions, no classes. Comments only when the why is not obvious.
 - Commit messages short and imperative. Branch names `feat/ | fix/ | chore/ | refactor/ | docs/ | test/` + short kebab slug.
-- Keep the API contract stable: `GET /api/people`, `GET /api/people/:id/graph`, `GET /api/people/:id/sources`. New capabilities are new routes or new optional query parameters, never breaking changes to existing fields.
+- Keep the API contract stable: `GET /api/people`, `GET /api/people/:id/graph`, `GET /api/people/:id/sources`. New capabilities are new routes or new optional query parameters, never breaking changes to existing fields. `testimony=1` on `/graph` is one such parameter: off, the response is unchanged.
 
 ## Factory
 

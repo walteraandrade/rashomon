@@ -7,7 +7,7 @@ import { app } from '../src/server.js'
 import { loadTestimony, narrowToTestimony, params, testimonyParams } from '../public/js/api.js'
 import { scopeKeys } from '../public/js/app.js'
 import { signed, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor } from '../public/js/format.js'
-import { paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
+import { paintColumns, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { seed } from './fixture.js'
 
@@ -314,5 +314,90 @@ describe('testimony strip: the outlets on the axis under the map', () => {
     const chapter = html.match(/<section class="chapter" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.match(chapter, /<b>A régua embaixo do mapa<\/b>/)
     assert.match(chapter, /a linha vertical é a média da pessoa/)
+  })
+})
+
+describe('testimony mask: words coloured against the person mean', () => {
+  const person = { method: 'kikori:q8', score: -2.4, n: 500 }
+  const placed = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9, ...over })
+
+  it('termMask centres on the person, is null under MASK_MIN texts or without a person mean', async () => {
+    const { MASK_MIN, maskColor, termMask, toneColor } = await import('../public/js/format.js')
+    assert.equal(MASK_MIN, 3)
+    assert.equal(termMask({ testimony: { score: -2.4, n: 10 } }, -2.4), maskColor(0), 'on the mean: the neutral middle')
+    assert.equal(termMask({ testimony: { score: -3.9, n: 10 } }, -2.4), maskColor(-1.5), 'MASK_SPAN below the person: full red')
+    assert.equal(termMask({ testimony: { score: -3.9, n: 10 } }, -2.4), termMask({ testimony: { score: -9, n: 10 } }, -2.4), 'clamped past the span')
+    assert.equal(termMask({ testimony: { score: -4.9, n: 10 } }, -2.4), toneColor(-3), 'the red end is the same red as tone')
+    assert.equal(termMask({ testimony: { score: 3, n: 2 } }, -2.4), null, 'two texts is noise')
+    assert.equal(termMask({ testimony: null }, -2.4), null)
+    assert.equal(termMask({ testimony: { score: 3, n: 9 } }, null), null)
+    assert.equal(termMask({ testimony: { score: -2.4, n: 10 } }, -2.4), termMask({ testimony: { score: 1, n: 10 } }, 1), 'same distance, same colour, whoever the person is')
+  })
+
+  it('wordMarkup carries the --mask colour and the testimony in its title only when it has one', async () => {
+    const { wordMarkup } = await import('../public/js/render.js')
+    const masked = wordMarkup(placed({ testimony: { score: -4.9, n: 12 } }), 'count', person.score)
+    assert.match(masked, /style="--size:20px;--mask:rgb\(255,107,125\)"/)
+    assert.match(masked, /· avaliação -4,9 em 12 textos<\/title>/)
+    for (const value of inlineStyles(masked)) assert.ok(value.startsWith('--'))
+    const bare = wordMarkup(placed({}), 'count', person.score)
+    assert.doesNotMatch(bare, /--mask/)
+    assert.doesNotMatch(bare, /avaliação/)
+    assert.doesNotMatch(wordMarkup(placed({ testimony: { score: -4.9, n: 2 } }), 'count', person.score), /--mask/, 'under the floor: title yes, colour no')
+  })
+
+  it('paintColumns colours cards the same way and spells the score out', () => {
+    withFakeDocument(['columns'], (els) => {
+      const nodes = [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: 0.1, n: 20 } },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, testimony: null },
+      ]
+      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, personTestimony: person })
+      assert.match(els.columns.innerHTML, /data-col="word:a" style="--mask:rgb\(126,231,135\)">/, '+2.5 over the person: full green')
+      assert.match(els.columns.innerHTML, /· avaliação \+0,1<\/span>/)
+      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/, 'no testimony, no style attribute')
+    })
+  })
+
+  it('testimonyLine reads the two numbers out for the selected term', async () => {
+    const { testimonyLine } = await import('../public/js/render.js')
+    const n = { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: -3.1, n: 12 } }
+    assert.match(testimonyLine(n, person), /<strong class="score-highlight">-3,1<\/strong> de avaliação em 12 textos, contra -2,4 da pessoa no recorte\. mais hostis que a média da pessoa\./)
+    assert.match(testimonyLine({ ...n, testimony: { score: -2.2, n: 12 } }, person), /na média da pessoa/)
+    assert.match(testimonyLine({ ...n, testimony: { score: 5, n: 2 } }, person), /poucos textos para comparar/)
+    assert.equal(testimonyLine({ ...n, testimony: null }, person), '')
+    assert.equal(testimonyLine(n, undefined), '')
+    assert.equal(testimonyLine(n, { ...person, score: null }), '')
+  })
+
+  it('the mask is a paint toggle: createHandlers.mask flips it and nothing refetches', async () => {
+    const { createHandlers } = await import('../public/js/app.js')
+    let flips = 0
+    let loads = 0
+    const h = createHandlers({ toggleMask: () => flips++, load: () => loads++ })
+    h.mask()
+    h.mask()
+    assert.equal(flips, 2)
+    assert.equal(loads, 0)
+  })
+
+  it('the graph query asks for testimony and the sources/docs queries do not echo it', async () => {
+    const { docsQuery } = await import('../public/js/app.js')
+    const p = controls()
+    assert.equal(p.get('testimony'), '1')
+    assert.equal(narrowToTestimony(p).has('testimony'), false)
+    assert.equal(testimonyParams({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'all' }).has('testimony'), false)
+    const { narrowToSources } = await import('../public/js/api.js')
+    assert.equal(narrowToSources(p).has('testimony'), false)
+    assert.equal(docsQuery(p, null).has('testimony'), false)
+  })
+
+  it('design-5.html has the toggle next to the view switch and the chapter explains the centring', () => {
+    const html = read('design-5.html')
+    assert.match(html, /<button id="modeColumns" aria-pressed="false">Lista<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="false">Colorir por avaliação<\/button>/)
+    const chapter = html.match(/<section class="chapter" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.match(chapter, /<b>Colorir por avaliação<\/b>/)
+    assert.match(chapter, /com a média da pessoa no recorte, e não com o zero/)
+    assert.match(chapter, /menos de 3 textos avaliados/)
   })
 })

@@ -3,7 +3,7 @@
 // and the callbacks it wires (onChoose, onShowDocs, onPick) all come in as parameters, so
 // this module never reaches into public/js/state.js on its own.
 
-import { domainSuffix, esc, fmt, kinds, label, matching, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, signed, sourceLabels, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor, trendOf } from './format.js'
+import { domainSuffix, esc, fmt, kinds, label, matching, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor, trendOf } from './format.js'
 import { FONT_SANS, routesFrom, swarm } from './layout.js'
 
 /** @typedef {import('./format.js').Candidate} Candidate */
@@ -41,21 +41,35 @@ export const createCanvasMeasure = () => {
   }
 }
 
-/** @param {PlacedTerm} p @param {string} sort */
-export const wordMarkup = (p, sort) =>
-  `<g class="word-button" transform="translate(${p.x},${p.y})" data-node="${esc(p.id)}" role="button" tabindex="0" aria-pressed="false" aria-label="${esc(label(p))}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${esc(label(p))} · ${esc(kinds[p.kind] || p.kind || 'Tipo desconhecido')} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}</title><rect class="word-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}" rx="5"/><text class="word" text-anchor="middle" dominant-baseline="central" style="--size:${p.size}px">${p.lines.map((line, i) => `<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${esc(line)}</tspan>`).join('')}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
+// `personScore` is the person's own testimony mean in this recorte; with it, the word carries
+// a `--mask` colour (its texts' mean against the person's) that atlas.css only uses while the
+// map is masked, so flipping the mask is a class toggle and never a redraw.
+/** @param {PlacedTerm} p @param {string} sort @param {number | null} [personScore] */
+export const wordMarkup = (p, sort, personScore = null) => {
+  const mask = termMask(p, personScore)
+  const t = p.testimony
+  const testimonyNote = t ? ` · avaliação ${signed(t.score)} em ${fmt(t.n)} textos` : ''
+  return `<g class="word-button" transform="translate(${p.x},${p.y})" data-node="${esc(p.id)}" role="button" tabindex="0" aria-pressed="false" aria-label="${esc(label(p))}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${esc(label(p))} · ${esc(kinds[p.kind] || p.kind || 'Tipo desconhecido')} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="word-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}" rx="5"/><text class="word" text-anchor="middle" dominant-baseline="central" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}">${p.lines.map((line, i) => `<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${esc(line)}</tspan>`).join('')}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
+}
+
+// The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
+/** @param {import('./format.js').PersonTestimony | undefined} person */
+export const maskLegend = (person) =>
+  person && person.score !== null
+    ? `<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
+    : `<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
 
 // Draws the SVG map plus the overflow list and legend; wires each word's click/keydown to
 // `onChoose`. Does not resize, scroll or paint the selection state — the caller sequences
 // those right after, same order as before the split.
-/** @param {{ layout: Layout, personName: string, about: number | undefined, mode: string, sort: string, onChoose: (id: string) => void }} args */
-export const drawMap = ({ layout, personName, about, mode, sort, onChoose }) => {
+/** @param {{ layout: Layout, personName: string, about: number | undefined, mode: string, sort: string, onChoose: (id: string) => void, personTestimony?: import('./format.js').PersonTestimony }} args */
+export const drawMap = ({ layout, personName, about, mode, sort, onChoose, personTestimony }) => {
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
   $('viewport').innerHTML =
     `<div class="map-stage"><svg class="map-svg" viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a ${esc(personName)}"><defs><radialGradient id="halo"><stop offset="0" stop-color="#e2c47c" stop-opacity=".045"/><stop offset="1" stop-color="#e2c47c" stop-opacity="0"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g>` +
     `<g class="center-label" aria-label="Pessoa central: ${esc(personName)}"><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => `<tspan x="0" y="${textY + i * c.lineHeight}">${esc(line)}</tspan>`).join('')}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g>` +
-    `<g id="words">${placed.map((p) => wordMarkup(p, sort)).join('')}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>`
+    `<g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null)).join('')}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>`
   $('overflow').hidden = mode !== 'map' || !overflow.length
   $('overflow').innerHTML = overflow.length
     ? `<p>${overflow.length} ${overflow.length === 1 ? 'termo não coube' : 'termos não couberam'} sem reduzir a legibilidade. Todos continuam selecionáveis aqui:</p>${overflow.map((n) => `<button class="quiet-button" data-node="${esc(n.id)}">${esc(label(n))}</button>`).join('')}`
@@ -73,16 +87,21 @@ export const drawMap = ({ layout, personName, about, mode, sort, onChoose }) => 
   }
   $('legend').innerHTML =
     `<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span>` +
-    `<span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>`
+    `<span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>` +
+    maskLegend(personTestimony)
 }
 
 // Repaints selection classes on every word/column, the search note, the edge routes for the
 // selected term, and (by calling paintColumns at the end) the columns view — mirrors the
 // original single paintSelection, split only across two exported functions.
-/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, layout: Layout | null, mode: string, sort: string, onChoose: (id: string) => void }} args */
-export const paintSelection = ({ nodes, links, selected, search, layout, mode, sort, onChoose }) => {
+/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, layout: Layout | null, mode: string, sort: string, onChoose: (id: string) => void, mask?: boolean, personTestimony?: import('./format.js').PersonTestimony }} args */
+export const paintSelection = ({ nodes, links, selected, search, layout, mode, sort, onChoose, mask = false, personTestimony }) => {
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
+  // The mask is a class on the two surfaces that draw words; the colours are already there.
+  $('viewport').querySelector('svg')?.classList.toggle('is-masked', mask)
+  $('columns').classList.toggle('is-masked', mask)
+  if ($('maskLegend')) $('maskLegend').hidden = !mask
   for (const el of queryAll('[data-node]')) {
     const n = nodes.find((n) => n.id === el.dataset.node)
     if (!n) continue
@@ -114,21 +133,34 @@ export const paintSelection = ({ nodes, links, selected, search, layout, mode, s
         $('routeNote').textContent = `${edges.childElementCount} de ${related.size} relações no mapa; lista completa no painel.`
     }
   }
-  paintColumns({ nodes, links, selected, search, sort, mode, onChoose })
+  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, personTestimony })
 }
 
-/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, sort: string, mode: string, onChoose: (id: string) => void }} args */
-export const paintColumns = ({ nodes, links, selected, search, sort, mode, onChoose }) => {
+/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, sort: string, mode: string, onChoose: (id: string) => void, personTestimony?: import('./format.js').PersonTestimony }} args */
+export const paintColumns = ({ nodes, links, selected, search, sort, mode, onChoose, personTestimony }) => {
   if (mode !== 'columns' || !nodes.length) return
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
   $('columns').innerHTML = nodes
     .map((n, i) => {
       const dim = normalizedSearch ? !matching(n, search) : selected && n.id !== selected && !related.has(n.id)
-      return `<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${esc(n.id)}"><span>${String(i + 1).padStart(2, '0')} · ${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}</span><strong>${esc(label(n))}</strong></button>`
+      const mask = termMask(n, personTestimony?.score ?? null)
+      const t = n.testimony
+      return `<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${esc(n.id)}"${mask ? ` style="--mask:${mask}"` : ''}><span>${String(i + 1).padStart(2, '0')} · ${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${esc(label(n))}</strong></button>`
     })
     .join('')
   queryAll('[data-col]', $('columns')).forEach((el) => el.addEventListener('click', () => onChoose(String(el.dataset.col))))
+}
+
+// The selected term's testimony next to the person's, spelled out, whether or not the mask is
+// on: the colour is a summary of exactly these two numbers.
+/** @param {Term} n @param {import('./format.js').PersonTestimony | undefined} person */
+export const testimonyLine = (n, person) => {
+  const t = n.testimony
+  if (!t || !person || person.score === null) return ''
+  const delta = t.score - person.score
+  const reading = t.n < MASK_MIN ? 'poucos textos para comparar' : delta <= -0.5 ? 'mais hostis que a média da pessoa' : delta >= 0.5 ? 'mais favoráveis que a média da pessoa' : 'na média da pessoa'
+  return `<p>Textos com este termo: <strong class="score-highlight">${signed(t.score)}</strong> de avaliação em ${fmt(t.n)} ${t.n === 1 ? 'texto' : 'textos'}, contra ${signed(person.score)} da pessoa no recorte. ${reading}.</p>`
 }
 
 /** @param {{ node: Term, count?: number }[]} items @param {string} sort @param {boolean} [counts] */
@@ -149,7 +181,7 @@ export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoo
   } else {
     const related = relatedTo(nodes, links, n.id)
     $('inspector').innerHTML =
-      `<div class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</div><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p><p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
+      `<div class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</div><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
       `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><details class="docs-toggle" id="termDocs"><summary>Ler documentos deste termo</summary><div id="docs" aria-live="polite"></div></details>`
     // The documents live inside the <details>, so opening them grows the panel in place
     // instead of pushing the rest of the inspector down. The fetch is deferred to the first

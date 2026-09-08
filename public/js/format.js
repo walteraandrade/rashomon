@@ -6,9 +6,11 @@
 // public/js the same way it checks src/ (tsconfig.json sets checkJs).
 
 /**
- * @typedef {{ id: string, term: string, kind: string, count: number, pmi: number }} Term
+ * @typedef {{ score: number, n: number }} TermTestimony
+ * @typedef {{ id: string, term: string, kind: string, count: number, pmi: number, testimony?: TermTestimony | null }} Term
  * @typedef {{ source: string, target: string, count: number }} Link
- * @typedef {{ person: { id: string, name: string }, stats?: { about?: number }, nodes: Term[], links: Link[] }} Graph
+ * @typedef {{ method: string, score: number | null, n: number }} PersonTestimony
+ * @typedef {{ person: { id: string, name: string }, stats?: { about?: number, testimony?: PersonTestimony }, nodes: Term[], links: Link[] }} Graph
  * @typedef {{ source?: string, uri?: unknown, domain?: string | null, text?: string }} Doc
  * @typedef {{ domain?: string | null, source?: string | null, label?: string | null, docs: number, tone?: number | null }} OutletRow
  * @typedef {{ id: string, source: string, text: string }} Sample
@@ -145,6 +147,27 @@ export const testimonyColor = (s) => scaleColor(s, 2 * TESTIMONY_CUT)
 export const testimonyClass = (s) => {
   if (s === null || s === undefined || Number.isNaN(Number(s))) return null
   return Number(s) <= -TESTIMONY_CUT ? 'negativo' : Number(s) >= TESTIMONY_CUT ? 'positivo' : 'neutro'
+}
+
+// The map's colour mask: a term's colour is the distance between the mean score of the texts
+// that carry it and the person's own mean over the same recorte, not the raw score. Every
+// text about one person is shifted the same way by the name prior, so centring on the person
+// cancels it and what remains is "the texts with this word are harsher/kinder than usual for
+// this person". Saturates at MASK_SPAN either way: tighter than the class cut on purpose,
+// because one person's terms sit within a point or so of that person's mean and a ±2.5 ramp
+// painted them all the same grey. A term seen in fewer than MASK_MIN scored texts gets no
+// colour rather than a noisy one.
+export const MASK_MIN = 3
+export const MASK_SPAN = 1.5
+
+/** @param {number} delta */
+export const maskColor = (delta) => scaleColor(delta, MASK_SPAN)
+
+/** @param {{ testimony?: TermTestimony | null }} term @param {number | null | undefined} personScore @returns {string | null} */
+export const termMask = (term, personScore) => {
+  const t = term.testimony
+  if (!t || t.n < MASK_MIN || personScore === null || personScore === undefined) return null
+  return maskColor(t.score - personScore)
 }
 
 // Where a -10..+10 score sits on the panel's axis, as a percentage from the left edge.

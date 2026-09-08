@@ -20,7 +20,7 @@
   </section>
   <section class="workspace" aria-label="Mapa e detalhes">
     <div class="canvas">
-      <div class="map-tools"><label class="search"><input id="search" type="search" placeholder="Encontrar uma palavra no recorte…" aria-label="Encontrar uma palavra no recorte"></label><div class="segment" role="group" aria-label="Modo de leitura"><button id="modeMap" aria-pressed="true">Mapa</button><button id="modeColumns" aria-pressed="false">Lista</button></div><div class="zoom" aria-label="Zoom do mapa"><button id="zoomOut" class="quiet-button" aria-label="Diminuir zoom">−</button><button id="zoomReset" class="quiet-button" aria-label="Restaurar zoom">100%</button><button id="zoomIn" class="quiet-button" aria-label="Aumentar zoom">+</button></div><button id="clear" class="quiet-button">Limpar seleção</button></div>
+      <div class="map-tools"><label class="search"><input id="search" type="search" placeholder="Encontrar uma palavra no recorte…" aria-label="Encontrar uma palavra no recorte"></label><div class="segment" role="group" aria-label="Modo de leitura"><button id="modeMap" aria-pressed="true">Mapa</button><button id="modeColumns" aria-pressed="false">Lista</button></div><button id="mask" class="quiet-button toggle" aria-pressed="false">Colorir por avaliação</button><div class="zoom" aria-label="Zoom do mapa"><button id="zoomOut" class="quiet-button" aria-label="Diminuir zoom">−</button><button id="zoomReset" class="quiet-button" aria-label="Restaurar zoom">100%</button><button id="zoomIn" class="quiet-button" aria-label="Aumentar zoom">+</button></div><button id="clear" class="quiet-button">Limpar seleção</button></div>
       <p class="mobile-hint">Arraste o mapa para os lados para ver o círculo inteiro.</p>
       <div id="searchNote" class="search-note" role="status"></div>
       <div class="viewport" id="viewport" role="region" aria-label="Mapa circular interativo. Use Tab para navegar pelas palavras; em telas pequenas, role horizontalmente." tabindex="0"></div>
@@ -61,6 +61,7 @@
         <p>Um modelo treinado para isto, o kikori, lê cada texto e dá uma nota de −10 a +10 para a pessoa citada. Até −2,5 conta como contra; de +2,5 para cima, a favor; no meio, neutro. Vale para todas as fontes, ao contrário do tom.</p>
         <p>É uma opinião de máquina, e ela tem um vício conhecido: o nome da pessoa puxa a nota. A mesma frase hostil sai mais branda para uns e mais dura para outros. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
         <p><b>A régua embaixo do mapa</b> faz essa comparação. Cada bolinha é um veículo na sua nota média; o tamanho é quantos textos ele tem; a linha vertical é a média da pessoa. Bolinhas longe uma da outra falam da mesma pessoa de jeitos diferentes.</p>
+        <p><b>Colorir por avaliação</b> pinta cada palavra do mapa. A cor compara a nota média dos textos que têm a palavra com a média da pessoa no recorte, e não com o zero: assim o vício do nome some da conta. Vermelho: os textos com essa palavra são mais hostis que o normal para essa pessoa. Verde: mais favoráveis. Cinza: igual, ou menos de 3 textos avaliados. A cor resume dois números; ao clicar na palavra, os dois aparecem por extenso.</p>
       </div>
       <div>
         <h3>PMI</h3>

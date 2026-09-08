@@ -106,10 +106,12 @@ const trackedCte = `
 // nodes filter is on a group key, so applying it after the aggregate selects the same rows.
 // The tone average is computed once and simply not projected into signature, which never had it.
 //
-// term_all only ever feeds an inner join on (term, kind) against term_p, so the global frequency
-// of a pair this person never uses is work nobody reads; joining term_p in restricts it to the
-// eligible candidates. The PMI universe is untouched: `tracked` still spans every scoped doc
-// naming a tracked person, so c_t counts the same documents as before for every surviving pair.
+// term_all stays unrestricted even though it only ever feeds an inner join on (term, kind)
+// against term_p: narrowing it to those candidates was measured and is slower here (issue #45).
+// It cuts the rows to aggregate from 70642 to 58519 on the benchmark corpus, but the planner
+// then reaches doc_terms through doc_terms_term_idx and merge-joins, trading an 883-buffer seq
+// scan for a 113524-buffer index scan, and the CTE goes from 247 ms to 379 ms. The person's
+// terms are the head of the distribution, so there is little to skip.
 //
 // sort_key carries the ordering expression as a column so json_agg reproduces exactly the order
 // the limit selected. Inside it, `pmi` is the unrounded value, as before: an output column name
@@ -127,10 +129,7 @@ const graphSql = `
   ),
   term_all as materialized (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
-    from doc_terms t
-      join tracked s on s.id = t.doc_id
-      join term_p c on c.term = t.term and c.kind = t.kind
-    group by 1, 2
+    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   nodes_scored as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,

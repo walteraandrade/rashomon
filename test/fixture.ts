@@ -152,6 +152,16 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/43', text: 'Lula e Bolsonaro discutem #coalizao e coalizao no plenário', publishedAt: daysAgo(3400), domain: 'example.org', extraTerms: [{ term: 'coalizao', kind: 'theme' }] },
   { source: 'rss', uri: 'https://example.org/44', text: 'Lula defende #coalizao e coalizao ampla no plenário', publishedAt: daysAgo(3401), domain: 'example.org', extraTerms: [{ term: 'coalizao', kind: 'theme' }] },
   { source: 'rss', uri: 'https://example.org/45', text: 'Bolsonaro rejeita #coalizao e coalizao estreita', publishedAt: daysAgo(3402), domain: 'example.org' },
+  // docs 46-48: one fixture doc per new press family (issue #72), dated 3500+ days ago — past
+  // the widest window any pinned literal elsewhere in the suite reaches (3400, docs 43-45
+  // above) — with vocabulary ("desembargador", "inelegibilidade", "auditoria", "manifestacao",
+  // "editorial") unused elsewhere in the fixture, so no pinned pmi/count/tone/stats literal
+  // shifts. Untoned by construction (juridico/oficial/nicho are not in tonedSources).
+  { source: 'juridico', uri: 'https://noticias.stf.jus.br/46', text: 'Jair Bolsonaro: desembargador nega recurso em julgamento sobre inelegibilidade', publishedAt: daysAgo(3500), domain: 'noticias.stf.jus.br' },
+  { source: 'oficial', uri: 'https://agenciabrasil.ebc.com.br/47', text: 'Lula participa de auditoria sobre concessao de rodovias federais', publishedAt: daysAgo(3501), domain: 'agenciabrasil.ebc.com.br' },
+  // cartacapital.com.br is already left-labeled in outlets.json (see doc 41), so this doubles
+  // as a lean+family combination fixture without needing new outlets.json entries.
+  { source: 'nicho', uri: 'https://cartacapital.com.br/48', text: 'Bolsonaro é alvo de manifestacao e editorial critico em veiculo de esquerda', publishedAt: daysAgo(3502), domain: 'cartacapital.com.br' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

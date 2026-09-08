@@ -6,6 +6,9 @@ import { gnews } from './gnews.js'
 import { gkg } from './gkg.js'
 import { camara } from './camara.js'
 import { senado } from './senado.js'
+import { juridico } from './juridico.js'
+import { oficial } from './oficial.js'
+import { nicho } from './nicho.js'
 
-export const collectors: Record<Source, Collector> = { bluesky, gdelt, rss, gnews, gkg, camara, senado }
-export const defaultSources: Source[] = ['bluesky', 'rss', 'gnews', 'gkg', 'senado', 'camara']
+export const collectors: Record<Source, Collector> = { bluesky, gdelt, rss, gnews, gkg, camara, senado, juridico, oficial, nicho }
+export const defaultSources: Source[] = ['bluesky', 'rss', 'gnews', 'gkg', 'senado', 'camara', 'juridico', 'oficial', 'nicho']

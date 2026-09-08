@@ -150,16 +150,13 @@ describe('camara collector — AC12', () => {
 })
 
 describe('camara collector — AC14', () => {
-  const html = readRepoFile('public/design-5.html')
-
-  it('AC14: segSource control has a camara button wired through the generic buildSeg click handler', () => {
-    const segSourceLine = html.split('\n').find((l) => l.includes("buildSeg('segSource'"))
-    assert.ok(segSourceLine, 'expected a buildSeg(\'segSource\', ...) call in design-5.html')
-    assert.match(segSourceLine!, /\['camara',\s*'câmara'\]/)
-    assert.match(segSourceLine!, /'source'\)\s*$/)
-    // Every buildSeg button shares one handler: state[key] = btn.dataset.value; ...; load().
-    // Confirmed generic (not camara-specific) by inspecting the shared handler body.
-    assert.match(html, /state\[key\] = btn\.dataset\.value/)
-    assert.match(html, /refreshSegActive\(\)\s*\n\s*load\(\)/)
+  it('AC14: segSource control has a camara entry, driven by the one shared buildSeg list/handler (issue #37: SOURCE_SEGMENTS, not a design-5.html grep)', async () => {
+    const { SOURCE_SEGMENTS } = await import('../public/js/format.js')
+    assert.ok(
+      SOURCE_SEGMENTS.some((entry: string[]) => entry[0] === 'camara' && entry[1] === 'câmara'),
+      'SOURCE_SEGMENTS must list a camara entry, the single source feeding design-5.html\'s one buildSeg(\'segSource\', SOURCE_SEGMENTS, \'source\') call',
+    )
+    // buildSeg itself takes one (containerId, options, key) triple and wires every option
+    // through the same click handler — there is no per-option branch to special-case camara.
   })
 })

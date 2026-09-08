@@ -1,6 +1,6 @@
 # rashomon
 
-Which words stick to a Brazilian political figure, across Bluesky, Google News, GDELT and RSS. Node + TypeScript, Hono API, PGlite database, single-file d3 front-ends in `public/`.
+Which words stick to a Brazilian political figure, across Bluesky, Google News, GDELT and RSS. Node + TypeScript, Hono API, PGlite database, d3 front-ends in `public/`: the current UI is native ES modules (`public/js/*.js`) plus a stylesheet, no build step; legacy pages stay single-file.
 
 ## Commands
 
@@ -25,7 +25,10 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
 - `src/server.ts` Hono routes + static files.
 - `src/query.ts` query parsers for every route; each parameter is clamped there.
-- `public/design-5.html` is the current UI (radial atlas), served at `/`. `public/index.html` is the legacy UI, reachable only by name. Other `design-*.html` files are alternatives kept for reference; do not extend them.
+- `public/design-5.html` is the current UI (radial atlas), served at `/`: markup plus one `<script type="module">` that wires DOM events to `public/js/*.js`. Styles live in `public/atlas.css` (tokens, layout, components); no `<style>` block or inline `style=` in the HTML beyond a `--var` override for a genuinely dynamic value (e.g. `--size`, `--tone`). `public/index.html` is the legacy UI, reachable only by name.
+- `public/js/api.js` (network), `public/js/layout.js` (pure word-packing/edge-routing geometry, no DOM), `public/js/render.js` (DOM painting; owns the browser canvas adapter that satisfies layout.js's injected `measure` function), `public/js/state.js` (mutable UI state), `public/js/format.js` (pure formatting/label helpers). Keep responsibilities distinct: layout.js and format.js never touch `document`; api.js never renders; render.js never fetches. No cycles between them (format.js → nothing; layout.js → format.js; render.js → format.js, layout.js; state.js → nothing; design-5.html's wiring script → all of the above).
+- Retired single-file design alternatives (`design-1..4.html`, `design-6.html`, `graph-lab.html`, `graph-circle-lab.html`, `designs.html`) live in `docs/designs/`, outside `public/`, so the static file server never serves them. Do not extend them; they are reference only.
+- Tests for the front-end import `public/js/*.js` directly (e.g. `test/layout.test.ts` imports `pack`; `test/bsky-link.test.ts` imports `bskyUrl`). Never write a test that reads `design-5.html` as text to extract or assert on JS logic.
 - `test/` node:test suites. `test/fixture.ts` seeds two people and six docs; extend it rather than creating ad-hoc data.
 
 ## Style

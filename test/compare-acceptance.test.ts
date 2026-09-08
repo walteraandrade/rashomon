@@ -13,7 +13,6 @@ import { dirname, join } from 'node:path'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const compareHtmlPath = join(root, 'public', 'compare.html')
-const design5Path = join(root, 'public', 'design-5.html')
 
 describe('compare people acceptance criteria (issue #7)', () => {
   it('AC1: public/compare.html exists and is self-contained (no build step, no external JS dependency beyond Google Fonts)', () => {
@@ -40,20 +39,10 @@ describe('compare people acceptance criteria (issue #7)', () => {
     assert.doesNotMatch(html, /\.tone\s*(\?\?|\|\|)\s*0/, 'tone must never be coerced to 0')
   })
 
-  it('AC9 (header placement): design-5.html places the compare-link immediately after .person-pick, before #stats', () => {
-    const html = readFileSync(design5Path, 'utf8')
-    const personPickIdx = html.indexOf('<div class="person-pick">')
-    const compareLinkIdx = html.indexOf('<a class="compare-link"')
-    const statsIdx = html.indexOf('id="stats"')
-    assert.ok(personPickIdx !== -1, '.person-pick must exist in design-5.html')
-    assert.ok(compareLinkIdx !== -1, '.compare-link anchor must exist in design-5.html')
-    assert.ok(statsIdx !== -1, '#stats must exist in design-5.html')
-    assert.ok(personPickIdx < compareLinkIdx, 'compare-link must come after .person-pick')
-    assert.ok(compareLinkIdx < statsIdx, 'compare-link must come before #stats')
-    assert.match(
-      html.slice(compareLinkIdx, compareLinkIdx + 200),
-      /href="compare\.html"[^<]*>comparar pessoas</,
-      'compare-link anchor must point to compare.html with the pt-BR label "comparar pessoas"',
-    )
-  })
+  // AC9 (header placement) used to read public/design-5.html as text and assert the source
+  // order of .person-pick / .compare-link / #stats. Issue #37 AC3 forbids any test that reads
+  // design-5.html as text, and the placement is now covered where it actually matters: the
+  // atlas header is verified in a real browser during UI validation, and compare.html itself
+  // is still checked here. Dropped rather than rewritten: there is no module to import for a
+  // question that is purely about markup order on a page a human already looks at.
 })

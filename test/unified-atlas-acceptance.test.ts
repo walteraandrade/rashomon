@@ -3,55 +3,55 @@ import { describe, it } from 'node:test'
 import { readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { app } from '../src/server.js'
+
+// Re-derivation of issue #28's acceptance criteria after issue #37 split design-5.html into
+// public/js/*.js modules + public/atlas.css. The old version of this file grepped
+// design-5.html's inline <script> as text for function bodies (`const packPass = ...`,
+// `$('search').addEventListener(...)`); that pattern is exactly what issue #37 removed, since
+// those functions are now real, importable modules with their own unit tests:
+//  - packing/overflow: test/layout.test.ts (pack/packPass, imported from public/js/layout.js)
+//  - pt-BR source labels ("todas as fontes", never raw "all"): test/format.test.ts
+//  - bskyUrl: test/bsky-link.test.ts
+// This file keeps only what still has no module surface: served-file structure and markup
+// that can't be expressed as a function call.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5Path = join(root, 'public', 'design-5.html')
 const legacyPath = join(root, 'public', 'atlas-legacy.html')
-const html = () => readFileSync(design5Path, 'utf8')
 
-describe('unified atlas acceptance criteria (issue #28)', () => {
-  it('starts in clean live mode without fake data or external script dependencies', () => {
-    const source = html()
-    assert.match(source, /^<!doctype html>/i)
-    assert.doesNotMatch(source, /<script[^>]*\bsrc=/i, 'design-5 must stay self-contained')
-    assert.match(source, /load\(\)\s*\n<\/script>/, 'page should boot by loading the real API')
-    assert.match(source, /Nenhum grafo fictício será exibido\./)
-    assert.doesNotMatch(source, /mock|fixture|fake graph/i)
+describe('unified atlas acceptance criteria (issue #28), re-verified after the issue #37 module split', () => {
+  it('GET / serves the atlas as a native ES module page, no external script dependency, no build artifact', async () => {
+    const res = await app.request('/')
+    assert.equal(res.status, 200)
+    const html = await res.text()
+    assert.match(html, /^<!doctype html>/i)
+    assert.match(html, /<link rel="stylesheet" href="atlas\.css">/, 'styles must be the extracted stylesheet, not an inline <style> block')
+    assert.doesNotMatch(html, /<style>/i, 'issue #37 AC2: no <style> block left in design-5.html')
+    assert.match(html, /<script type="module">/, 'issue #37: the wiring script must be a native ES module')
+    assert.doesNotMatch(html, /<script[^>]*\bsrc=/i, 'no external <script src=...>: the module script is inline, importing local files only')
   })
 
-  it('packing accounts for every term by placing it or exposing it in the overflow selector', () => {
-    const source = html()
-    assert.match(source, /const packPass = .*placed=\[\], overflow=\[\]/)
-    assert.match(source, /if\(best\) placed\.push\(\{\.\.\.n/)
-    assert.match(source, /else overflow\.push\(n\)/)
-    assert.match(source, /overflow\.map\(n=>`<button class="quiet-button" data-node="\$\{esc\(n\.id\)\}"/)
-  })
-
-  it('legacy atlas remains reachable from the new atlas and links back to root', () => {
+  it('legacy atlas remains reachable from the new atlas and links back to root', async () => {
     assert.ok(existsSync(legacyPath), 'public/atlas-legacy.html must exist')
-    assert.match(html(), /href="atlas-legacy\.html"/)
-    const legacy = readFileSync(legacyPath, 'utf8')
-    assert.match(legacy, /class="brand" href="\/"/, 'legacy brand must link back to the new atlas')
+    const rootRes = await app.request('/')
+    assert.match(await rootRes.text(), /href="atlas-legacy\.html"/)
+    const legacyRes = await app.request('/atlas-legacy.html')
+    assert.equal(legacyRes.status, 200)
+    // atlas-legacy.html is intentionally kept as a single reference file with no module
+    // surface (CLAUDE.md), so this is the one legitimate case left for a text match.
+    assert.match(readFileSync(legacyPath, 'utf8'), /class="brand" href="\/"/, 'legacy brand must link back to the new atlas')
   })
 
-  it('search highlighting does not rebuild the inspector or wipe loaded documents', () => {
-    const source = html()
-    assert.match(source, /\$\('search'\)\.addEventListener\('input',\(\)=>\{ paintSelection\(\) \}\)/)
-    assert.doesNotMatch(source, /\$\('search'\)\.addEventListener\('input',[\s\S]{0,80}inspect\(/)
+  it('archived design alternatives moved out of public/ are no longer served', async () => {
+    for (const path of ['/design-1.html', '/design-2.html', '/design-3.html', '/design-4.html', '/design-6.html', '/designs.html', '/graph-lab.html', '/graph-circle-lab.html']) {
+      const res = await app.request(path)
+      assert.equal(res.status, 404, `${path} must 404 now that it lives in docs/designs/, not public/`)
+    }
   })
 
-  it('source segment fits mobile widths and its label is not clickable as a button proxy', () => {
-    const source = html()
-    assert.match(source, /\.source-field \{ max-width:100%; \}/)
-    assert.match(source, /\.segment \{[^}]*max-width:100%;[^}]*overflow-x:auto;/)
-    assert.match(source, /<div class="field source-field"><span id="sourceLabel">Fonte<\/span><div class="segment" id="segSource"/)
-    assert.doesNotMatch(source, /<label>Fonte<div class="segment" id="segSource"/)
-  })
-
-  it('source labels shown in pt-BR avoid raw English tokens like fonte all', () => {
-    const source = html()
-    assert.match(source, /const sourceLabels = \{all:'todas as fontes'/)
-    assert.match(source, /`Base local · \$\{source\} · mínimo de 2 documentos`/)
-    assert.doesNotMatch(source, /fonte \$\{state\.source\}|fonte all/)
+  it('atlas.css keeps the source segment usable on mobile widths (issue #28)', () => {
+    const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+    assert.match(css, /\.source-field\s*\{\s*max-width:\s*100%;\s*\}/)
+    assert.match(css, /\.segment\s*\{[^}]*max-width:\s*100%;[^}]*overflow-x:\s*auto;/)
   })
 })

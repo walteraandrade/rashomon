@@ -1,10 +1,13 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
+import { methods } from './scorers/index.js'
 import type { DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
 
-// Independent of TESTIMONY_SCORER's own default in src/score.ts: a client can request
-// method=stub in tests/debugging regardless of what `pnpm score` last ran.
-const DEFAULT_TESTIMONY_METHOD = 'onnx'
+// Resolved lazily (not a literal) through the same `methods` map `pnpm score` uses, so the
+// HTTP default and the default scorer's row label can never drift apart: kikori:q8 unless
+// TESTIMONY_DTYPE picks another dtype. Still independent of TESTIMONY_SCORER (src/score.ts):
+// a client can request method=stub in tests/debugging regardless of what pnpm score last ran.
+const defaultTestimonyMethod = () => methods.onnx()
 
 // `:` is part of the charset because the kikori scorer labels its rows `kikori:<dtype>`;
 // without it the parser silently fell back to 'onnx' and returned the placeholder rows.
@@ -96,9 +99,11 @@ export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery
 // Own dedicated parser, not a copy of parseQuery's or parseToneQuery's min: this one
 // defaults to 3 too, but as a separate literal, so changing either of theirs cannot
 // silently change this one.
+// Charset includes `:` so an explicit label like kikori:fp32 round-trips as typed, not just
+// the lazily-resolved default.
 export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => ({
   days: int(q.days, 30, 1, 365),
   source: parseSourceList(q.source),
-  method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : DEFAULT_TESTIMONY_METHOD,
+  method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod(),
   min: int(q.min, 3, 1, 1000),
 })

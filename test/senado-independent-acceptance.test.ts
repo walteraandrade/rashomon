@@ -150,14 +150,15 @@ describe('senado collector acceptance criteria, independently verified (issue #2
     assert.match(readme, /dadosabertos\.senado\.leg\.br/)
   })
 
-  it('AC11: design-5.html\'s segSource control includes a senado button wired to the shared buildSeg handler', () => {
-    const html = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
-    const segSourceCall = html.split('\n').find((l) => l.includes("buildSeg('segSource'"))
-    assert.ok(segSourceCall, 'expected a buildSeg(\'segSource\', ...) call')
-    assert.match(segSourceCall!, /\['senado',\s*'senado'\]/)
-    // same call site as every other source option, so it inherits the existing click
-    // handler (state.source = value; paintSeg; load()) rather than needing bespoke wiring
-    assert.match(segSourceCall!, /'source'\)\s*$/, 'senado must be registered as a source-kind segment like its siblings')
+  it('AC11: the segSource control includes a senado entry (issue #37: SOURCE_SEGMENTS, imported, not a design-5.html grep)', async () => {
+    const { SOURCE_SEGMENTS } = await import('../public/js/format.js')
+    assert.ok(
+      SOURCE_SEGMENTS.some((entry: string[]) => entry[0] === 'senado' && entry[1] === 'senado'),
+      'SOURCE_SEGMENTS must list a senado entry',
+    )
+    // design-5.html has exactly one buildSeg('segSource', SOURCE_SEGMENTS, 'source') call, so
+    // every entry in the list — senado included — shares the same click handler; there is no
+    // per-source branch left to special-case.
   })
 
   it('AC12: a senado doc whose body never names the speaking senator is still tagged via the name-prefix, with no source-specific extraction branch', async () => {

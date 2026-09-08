@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, type DocsQuery, type GraphQuery, type RisingQuery, type TimelineQuery } from '../src/graph.js'
-import { readFileSync } from 'node:fs'
 import { parseDomainList, parseLeanList } from '../src/query.js'
 import { OUTLETS } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'
@@ -168,11 +167,13 @@ describe('lean filtering (issue #26)', () => {
 
   // Amendment A1 on the spec: sourcesFor now honours q.domain, so the outlet sidebar — the
   // control that *picks* domain — must stop sending it, or clicking one outlet hides the rest.
-  it('the outlet sidebar drops domain before fetching /sources (spec amendment A1)', () => {
-    const ui = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
-    const loadSources = ui.slice(ui.indexOf('const loadSources'), ui.indexOf('const loadSources') + 400)
-    assert.match(loadSources, /\.delete\('domain'\)/)
-    assert.doesNotMatch(loadSources, /sources\?` \+ query\(\)/)
+  // issue #37: design-5.html's loadSourcesFlow calls public/js/api.js's sourcesParams for
+  // this, so the contract is verified by importing and calling it, not by grepping the page.
+  it('the outlet sidebar drops domain before fetching /sources (spec amendment A1)', async () => {
+    const { sourcesParams } = await import('../public/js/api.js')
+    const p = sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'estadao.com.br' })
+    assert.equal(p.has('domain'), false)
+    assert.equal(p.get('days'), '30')
   })
 
   it('timelineFor stays a bare array and still narrows by lean', async () => {

@@ -86,6 +86,20 @@ describe('testimony acceptance criteria, independently verified (issue #21)', ()
     )
   })
 
+  it('AC2c (issue #35): the route defaults method to the kikori scorer label, driven by TESTIMONY_DTYPE, and an explicit ?method still wins', async () => {
+    const prevDtype = process.env.TESTIMONY_DTYPE
+    delete process.env.TESTIMONY_DTYPE
+    const q8 = (await app.request('/api/people/tarcisio/testimony'))
+    assert.equal((await q8.json() as { method: string }).method, 'kikori:q8')
+    process.env.TESTIMONY_DTYPE = 'fp32'
+    const fp32 = await app.request('/api/people/tarcisio/testimony')
+    assert.equal((await fp32.json() as { method: string }).method, 'kikori:fp32')
+    if (prevDtype === undefined) delete process.env.TESTIMONY_DTYPE
+    else process.env.TESTIMONY_DTYPE = prevDtype
+    const explicit = await app.request('/api/people/tarcisio/testimony?method=stub')
+    assert.equal((await explicit.json() as { method: string }).method, 'stub')
+  })
+
   it('AC3: a method with zero doc_testimony rows returns the all-empty shape, not a 404 or an error', async () => {
     const method = 'independent-check-unused-method'
     const r = await testimonyFor(lula, { ...base, method })

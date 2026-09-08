@@ -7,12 +7,14 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowJs": true,
     "types": [
       "node"
     ]
   },
   "include": [
     "src",
-    "test"
+    "test",
+    "public/js"
   ]
 }

@@ -117,8 +117,15 @@ h2 { font-weight: 500; font-size: 17px; margin: 0 0 4px; letter-spacing: -.025em
 .related button:hover { color: var(--accent); }
 .related span { flex: 1; overflow-wrap: anywhere; }
 .related b { font-weight: 400; color: var(--accent); font-variant-numeric: tabular-nums; }
-.primary { width: 100%; padding: 10px; background: var(--accent); color: #22251d; font-size: 12px; font-weight: 600; border: 0; border-radius: 4px; }
 .docs-summary { margin-top: 14px; }
+.docs-toggle { margin-top: 4px; }
+.docs-toggle summary { list-style: none; cursor: pointer; width: 100%; padding: 10px; background: var(--accent); color: #22251d; font-size: 12px; font-weight: 600; border-radius: 4px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.docs-toggle summary::-webkit-details-marker { display: none; }
+.docs-toggle summary::after { content: '\25be'; font-size: 10px; transition: transform .15s; }
+.docs-toggle[open] summary { border-radius: 4px 4px 0 0; }
+.docs-toggle[open] summary::after { transform: rotate(180deg); }
+#docs { max-height: 340px; overflow-y: auto; scrollbar-width: thin; }
+.docs-toggle[open] #docs { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 4px 4px; padding: 4px 10px; }
 .doc { border-top: 1px solid var(--line); padding: 12px 0; }
 .doc p { margin: 6px 0; }
 .doc a { font-size: 12px; }
@@ -161,7 +168,7 @@ h2 { font-weight: 500; font-size: 17px; margin: 0 0 4px; letter-spacing: -.025em
   .side { border-left: 0; border-top: 1px solid var(--line); }
   .columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .related { display: grid; grid-template-columns: 1fr 1fr; gap: 0 25px; }
-  .inspector .primary { width: auto; min-width: 200px; }
+  .inspector .docs-toggle summary { width: auto; min-width: 200px; }
 }
 
 @media (max-width: 700px) {

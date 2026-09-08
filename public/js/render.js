@@ -149,8 +149,19 @@ export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoo
     const related = relatedTo(nodes, links, n.id)
     $('inspector').innerHTML =
       `<div class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</div><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p><p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
-      `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><button class="primary" id="showDocs">Ler documentos deste termo</button><div id="docs" aria-live="polite"></div>`
-    $('showDocs')?.addEventListener('click', () => onShowDocs(n))
+      `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><details class="docs-toggle" id="termDocs"><summary>Ler documentos deste termo</summary><div id="docs" aria-live="polite"></div></details>`
+    // The documents live inside the <details>, so opening them grows the panel in place
+    // instead of pushing the rest of the inspector down. The fetch is deferred to the first
+    // open, and `loaded` keeps a close/open cycle from refetching what is already painted.
+    const termDocs = $('termDocs')
+    termDocs?.addEventListener('toggle', () => {
+      const summary = termDocs.querySelector('summary')
+      if (summary) summary.textContent = termDocs.open ? 'Ocultar documentos' : 'Ler documentos deste termo'
+      if (termDocs.open && !termDocs.dataset.loaded) {
+        termDocs.dataset.loaded = '1'
+        onShowDocs(n)
+      }
+    })
   }
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {

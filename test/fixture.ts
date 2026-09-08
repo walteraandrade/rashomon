@@ -213,6 +213,46 @@ export const seedTestimony = async () => {
   await insertTestimony('https://g1.globo.com/5', 'lula', 'stub', -2)
 }
 
+// Metadata enrichment pair (issue #50): the same uri arrives first from a collector that knows
+// no domain and then from one that does, so the second arrival must fill `domain` and nothing
+// else. Kept out of `docs`/`seed()` like futureDoc: another doc inside the windows the pinned
+// pmi/stats literals use would shift every one of them.
+export const enrichmentDocs: RawDoc[] = [
+  { source: 'gnews', uri: 'https://example.org/enrich', text: 'Lula comenta a pauta do congresso', publishedAt: daysAgo(3400) },
+  { source: 'gnews', uri: 'https://example.org/enrich', text: 'Lula comenta a pauta do congresso', publishedAt: daysAgo(3400), domain: 'example.org' },
+]
+
+// A person the persons table never received: doc_persons.person_id has a foreign key, so a doc
+// naming this one fails *after* its docs row was written, which is exactly the failure the
+// write path must not leave half applied. It takes an id because node:test runs one process
+// per file: a suite that repairs the failure by upserting the person would otherwise disarm
+// the next suite in the same file.
+export const untrackedPerson = (id = 'nao-cadastrado'): Person => ({ id, name: 'Ciro Gomes', aliases: ['Ciro Gomes'] })
+
+// The write-path suites need three readers the fixture had no equivalent for: whether an upsert
+// wrote a new row version at all, what a single doc carries in the derived tables, and the whole
+// derived state as a comparable value.
+export const rowVersion = async (uri: string) =>
+  (await db.query<{ v: string }>(`select xmin::text as v from docs where uri = $1`, [uri])).rows[0]?.v ?? null
+
+export const derivedCounts = async (uri: string) =>
+  (
+    await db.query<{ persons: number; terms: number; candidates: number }>(
+      `select
+         (select count(*) from doc_persons p where p.doc_id = d.id)::int as persons,
+         (select count(*) from doc_terms t where t.doc_id = d.id)::int as terms,
+         (select count(*) from doc_candidates c where c.doc_id = d.id)::int as candidates
+       from docs d where d.uri = $1`,
+      [uri],
+    )
+  ).rows[0] ?? null
+
+export const derivedRows = async () => ({
+  persons: (await db.query<{ k: string }>(`select doc_id || ':' || person_id as k from doc_persons order by 1`)).rows.map((r) => r.k),
+  terms: (await db.query<{ k: string }>(`select doc_id || ':' || kind || ':' || term as k from doc_terms order by 1`)).rows.map((r) => r.k),
+  candidates: (await db.query<{ k: string }>(`select doc_id || ':' || name as k from doc_candidates order by 1`)).rows.map((r) => r.k),
+})
+
 // doc_terms exists only for docs naming at least one tracked person (issue #52); these two
 // are shared by the store and reindex suites, which assert that invariant from both sides.
 export const orphanTermCount = async () =>

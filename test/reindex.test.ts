@@ -3,7 +3,7 @@ import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
 import { reindexAll } from '../src/reindex.js'
 import { ANALYZED_TABLES } from '../src/db.js'
-import { lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
+import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
 // so it lives in its own file: node:test runs one process per file, hence its own database.
@@ -56,5 +56,50 @@ describe('reindex refreshes planner statistics (issue #44)', () => {
       assert.ok((await lastAnalyzed(t)) !== null, `${t} was never analyzed`)
       assert.ok((await planRowEstimate(t)) >= 0, `${t} still has no row estimate`)
     }
+  })
+})
+
+describe('reindex reads documents in bounded pages (issue #50)', () => {
+  before(seed)
+
+  it('produces the same derived rows one document at a time as in a single page', async () => {
+    await reindexAll(persons, 1)
+    const paged = await derivedRows()
+    await reindexAll(persons, 10_000)
+    assert.deepEqual(await derivedRows(), paged)
+    assert.ok(paged.persons.length > 0, 'sanity: the fixture must produce derived rows')
+  })
+
+  it('reports the same document count whatever the page size', async () => {
+    const small = await reindexAll(persons, 2)
+    const large = await reindexAll(persons, 10_000)
+    assert.equal(small.docs, large.docs)
+    assert.ok(small.docs > 2, 'sanity: the fixture must span more than one page')
+  })
+})
+
+describe('reindex recovers from an interrupted run (issue #50)', () => {
+  before(seed)
+
+  it('rebuilds a database whose later pages never committed', async () => {
+    await reindexAll(persons)
+    const full = await derivedRows()
+    const { rows } = await db.query<{ id: number }>(`select id from docs order by id offset 2 limit 1`)
+    const cut = rows[0].id
+    // What an interruption leaves behind: whole pages committed, the rest missing. Never a
+    // document with some of its derived rows, since each page is one transaction.
+    for (const t of ['doc_terms', 'doc_persons', 'doc_candidates']) await db.query(`delete from ${t} where doc_id > $1`, [cut])
+    const partial = await derivedRows()
+    assert.ok(partial.persons.length < full.persons.length, 'sanity: the interruption must remove rows')
+    await reindexAll(persons)
+    assert.deepEqual(await derivedRows(), full)
+    assert.equal(await orphanTermCount(), 0)
+  })
+
+  it('is idempotent: running it twice more changes nothing', async () => {
+    await reindexAll(persons)
+    const once = await derivedRows()
+    await reindexAll(persons)
+    assert.deepEqual(await derivedRows(), once)
   })
 })

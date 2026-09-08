@@ -307,15 +307,12 @@ const loadDocs = async (n) => {
   // without a second request. A miss still shows the loading copy first.
   const cached = readScope('docs', key)
   if (!cached) paintDocsLoading()
-  if ($('showDocs')) $('showDocs').disabled = true
   try {
     const data = await fromScope('docs', key, () => api.loadDocs(person, query, docsController.signal))
     if (id !== currentDocsId()) return
     paintDocs(data)
   } catch (e) {
     if (id === currentDocsId() && !aborted(e)) paintDocsError(() => loadDocs(n))
-  } finally {
-    if (id === currentDocsId() && $('showDocs')) $('showDocs').disabled = false
   }
 }
 

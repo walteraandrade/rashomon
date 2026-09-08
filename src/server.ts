@@ -14,48 +14,27 @@ import {
 } from './query.js'
 
 const port = Number(process.env.PORT ?? 3210)
-export const app = new Hono()
+export const app = new Hono<{ Variables: { person: Person } }>()
 
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
   return c.json(rows)
 })
 
-app.get('/api/people/:id/graph', async (c) => {
+// Every /api/people/:id/* route needs the same lookup and the same 404 shape.
+app.use('/api/people/:id/*', async (c, next) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
   if (!rows[0]) return c.json({ error: 'person not found' }, 404)
-  return c.json(await graphFor(rows[0], parseQuery(c.req.query())))
+  c.set('person', rows[0])
+  await next()
 })
 
-app.get('/api/people/:id/sources', async (c) => {
-  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
-  if (!rows[0]) return c.json({ error: 'person not found' }, 404)
-  return c.json(await sourcesFor(rows[0], parseQuery(c.req.query())))
-})
-
-app.get('/api/people/:id/docs', async (c) => {
-  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
-  if (!rows[0]) return c.json({ error: 'person not found' }, 404)
-  return c.json(await docsFor(rows[0], parseDocsQuery(c.req.query())))
-})
-
-app.get('/api/people/:id/timeline', async (c) => {
-  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
-  if (!rows[0]) return c.json({ error: 'person not found' }, 404)
-  return c.json(await timelineFor(rows[0], parseTimelineQuery(c.req.query())))
-})
-
-app.get('/api/people/:id/rising', async (c) => {
-  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
-  if (!rows[0]) return c.json({ error: 'person not found' }, 404)
-  return c.json(await risingFor(rows[0], parseRisingQuery(c.req.query())))
-})
-
-app.get('/api/people/:id/testimony', async (c) => {
-  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = $1`, [c.req.param('id')])
-  if (!rows[0]) return c.json({ error: 'person not found' }, 404)
-  return c.json(await testimonyFor(rows[0], parseTestimonyQuery(c.req.query())))
-})
+app.get('/api/people/:id/graph', async (c) => c.json(await graphFor(c.get('person'), parseQuery(c.req.query()))))
+app.get('/api/people/:id/sources', async (c) => c.json(await sourcesFor(c.get('person'), parseQuery(c.req.query()))))
+app.get('/api/people/:id/docs', async (c) => c.json(await docsFor(c.get('person'), parseDocsQuery(c.req.query()))))
+app.get('/api/people/:id/timeline', async (c) => c.json(await timelineFor(c.get('person'), parseTimelineQuery(c.req.query()))))
+app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
+app.get('/api/people/:id/testimony', async (c) => c.json(await testimonyFor(c.get('person'), parseTestimonyQuery(c.req.query()))))
 
 // Not nested under /people/:id: it spans every tracked person at once.
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))

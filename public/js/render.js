@@ -123,8 +123,8 @@ export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoo
   } else {
     const related = relatedTo(nodes, links, n.id)
     $('inspector').innerHTML =
-      `<div class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</div><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div><p><strong style="color:var(--accent)">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p><p>${esc(graph.person.name)} · ${daysLabel}.</p>` +
-      `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p style="margin-top:12px">Nenhuma relação retornada neste recorte.</p>'}</div><button class="primary" id="showDocs">Ler documentos deste termo</button><div id="docs" aria-live="polite"></div>`
+      `<div class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</div><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p><p>${esc(graph.person.name)} · ${daysLabel}.</p>` +
+      `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><button class="primary" id="showDocs">Ler documentos deste termo</button><div id="docs" aria-live="polite"></div>`
     $('showDocs')?.addEventListener('click', () => onShowDocs(n))
   }
   $('inspector')
@@ -170,7 +170,7 @@ export const paintDocs = (data) => {
   const box = $('docs')
   if (!box) return
   box.innerHTML = data.docs.length
-    ? `<p style="margin-top:14px">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` +
+    ? `<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` +
       data.docs
         .map((d) => {
           const href = safeDocUrl(d)

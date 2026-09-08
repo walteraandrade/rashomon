@@ -13,32 +13,40 @@ import { app } from '../src/server.js'
 //  - packing/overflow: test/layout.test.ts (pack/packPass, imported from public/js/layout.js)
 //  - pt-BR source labels ("todas as fontes", never raw "all"): test/format.test.ts
 //  - bskyUrl: test/bsky-link.test.ts
-// This file keeps only what still has no module surface: served-file structure and markup
-// that can't be expressed as a function call.
+// Issue #37 AC3 also forbids any test from reading design-5.html as text, including a regex
+// against its HTTP response body -- that markup shape is asserted structurally instead, by
+// test/atlas-modules-acceptance.test.ts's style= and import-graph checks. This file keeps only
+// status/content-type checks on served routes, plus atlas.css's own content (not design-5's).
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const legacyPath = join(root, 'public', 'atlas-legacy.html')
 
 describe('unified atlas acceptance criteria (issue #28), re-verified after the issue #37 module split', () => {
-  it('GET / serves the atlas as a native ES module page, no external script dependency, no build artifact', async () => {
+  it('GET / serves the atlas as HTML, not a build artifact', async () => {
     const res = await app.request('/')
     assert.equal(res.status, 200)
-    const html = await res.text()
-    assert.match(html, /^<!doctype html>/i)
-    assert.match(html, /<link rel="stylesheet" href="atlas\.css">/, 'styles must be the extracted stylesheet, not an inline <style> block')
-    assert.doesNotMatch(html, /<style>/i, 'issue #37 AC2: no <style> block left in design-5.html')
-    assert.match(html, /<script type="module">/, 'issue #37: the wiring script must be a native ES module')
-    assert.doesNotMatch(html, /<script[^>]*\bsrc=/i, 'no external <script src=...>: the module script is inline, importing local files only')
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/)
   })
 
-  it('legacy atlas remains reachable from the new atlas and links back to root', async () => {
+  it('the extracted stylesheet and every JS module are served with the right mime type', async () => {
+    const css = await app.request('/atlas.css')
+    assert.equal(css.status, 200)
+    assert.match(css.headers.get('content-type') ?? '', /text\/css/)
+    for (const file of ['api.js', 'format.js', 'layout.js', 'render.js', 'state.js']) {
+      const res = await app.request(`/js/${file}`)
+      assert.equal(res.status, 200, `/js/${file} must be served`)
+      assert.match(res.headers.get('content-type') ?? '', /javascript/, `/js/${file} must be served with a JavaScript content type`)
+    }
+  })
+
+  it('legacy atlas remains reachable and links back to root', async () => {
     assert.ok(existsSync(legacyPath), 'public/atlas-legacy.html must exist')
-    const rootRes = await app.request('/')
-    assert.match(await rootRes.text(), /href="atlas-legacy\.html"/)
     const legacyRes = await app.request('/atlas-legacy.html')
     assert.equal(legacyRes.status, 200)
+    assert.match(legacyRes.headers.get('content-type') ?? '', /text\/html/)
     // atlas-legacy.html is intentionally kept as a single reference file with no module
-    // surface (CLAUDE.md), so this is the one legitimate case left for a text match.
+    // surface (CLAUDE.md), so this is the one legitimate case left for a text match -- it is
+    // not design-5.html, and this reads the file directly, not an HTTP response body.
     assert.match(readFileSync(legacyPath, 'utf8'), /class="brand" href="\/"/, 'legacy brand must link back to the new atlas')
   })
 

@@ -3,22 +3,16 @@ import { describe, it, before } from 'node:test'
 import { app } from '../src/server.js'
 import { parseTestimonyQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
+import { withEnv } from './env.js'
 import { insertTestimony, seed } from './fixture.js'
 
 // Issue #35: the route's default method must resolve through the same `methods` map
 // pnpm score uses, not the retired `onnx` placeholder literal.
 
-const withDtype = async (value: string | undefined, run: () => void | Promise<void>) => {
-  const previous = process.env.TESTIMONY_DTYPE
-  if (value === undefined) delete process.env.TESTIMONY_DTYPE
-  else process.env.TESTIMONY_DTYPE = value
-  try {
-    await run()
-  } finally {
-    if (previous === undefined) delete process.env.TESTIMONY_DTYPE
-    else process.env.TESTIMONY_DTYPE = previous
-  }
-}
+// TESTIMONY_REVISION is cleared too: once set it appends a third segment to the label
+// (issue #67), and every expectation here is about the unversioned one.
+const withDtype = (value: string | undefined, run: () => void | Promise<void>) =>
+  withEnv({ TESTIMONY_DTYPE: value, TESTIMONY_REVISION: undefined }, run)
 
 describe('testimony default method (issue #35)', () => {
   before(async () => {

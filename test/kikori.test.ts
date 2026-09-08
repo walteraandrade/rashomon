@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { methods, scorers } from '../src/scorers/index.js'
 import { pairIds, scoreFromLogits } from '../src/scorers/onnx.js'
 import fixtures from './kikori-fixtures.json' with { type: 'json' }
+import { withEnv } from './env.js'
 
 const CLS = 101
 const SEP = 102
@@ -50,14 +51,16 @@ describe('kikori score formula', () => {
 })
 
 describe('kikori method label', () => {
-  it('is kikori:<dtype>, q8 by default, so placeholder `onnx` rows are never reused', () => {
-    const prev = process.env.TESTIMONY_DTYPE
-    delete process.env.TESTIMONY_DTYPE
-    assert.equal(methods.onnx(), 'kikori:q8')
-    process.env.TESTIMONY_DTYPE = 'fp32'
-    assert.equal(methods.onnx(), 'kikori:fp32')
-    if (prev === undefined) delete process.env.TESTIMONY_DTYPE
-    else process.env.TESTIMONY_DTYPE = prev
+  // TESTIMONY_REVISION is cleared alongside the dtype: with one set, the label grows a third
+  // segment (issue #67) and this suite would read the developer's shell. The revision's own
+  // effect on the label is asserted in test/testimony-revision.test.ts.
+  it('is kikori:<dtype>, q8 by default, so placeholder `onnx` rows are never reused', async () => {
+    await withEnv({ TESTIMONY_DTYPE: undefined, TESTIMONY_REVISION: undefined }, () =>
+      assert.equal(methods.onnx(), 'kikori:q8'),
+    )
+    await withEnv({ TESTIMONY_DTYPE: 'fp32', TESTIMONY_REVISION: undefined }, () =>
+      assert.equal(methods.onnx(), 'kikori:fp32'),
+    )
     assert.equal(methods.stub(), 'stub')
   })
 })

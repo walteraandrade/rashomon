@@ -1,5 +1,8 @@
 import { db, migrate } from './db.js'
 import { methods, scorers } from './scorers/index.js'
+// Direct, not through scorers/index.js: importing onnx.ts is side-effect free, every network
+// call lives inside its `load` body, and the revision is a property of that scorer alone.
+import { modelRevision } from './scorers/onnx.js'
 import type { Person, Scorer } from './types.js'
 
 type Pair = { doc_id: number; person_id: string; text: string; id: string; name: string; aliases: string[] }
@@ -33,12 +36,26 @@ export const scoreAll = async (method: string, scorer: Scorer): Promise<number> 
   return rows.length
 }
 
-const main = async () => {
-  await migrate()
-  const name = process.env.TESTIMONY_SCORER ?? 'onnx'
+// Which scorer runs and under which label. The onnx scorer refuses to run unversioned: a row
+// that cannot say which model produced it is what lets a retrain republished under the same
+// name fill the gaps in another model's label (issue #67), and TESTIMONY_REVISION is only
+// un-forgettable if forgetting it stops the run. `stub` needs no revision — it is a pure
+// function of its inputs and never loads a model. Exported so a test can exercise the refusal
+// without running the script.
+export const resolveRun = (name: string) => {
   const scorer = (scorers as Record<string, Scorer>)[name]
   if (!scorer) throw new Error(`unknown scorer: ${name}`)
-  const method = (methods as Record<string, () => string>)[name]()
+  if (name === 'onnx' && !modelRevision())
+    throw new Error(
+      'TESTIMONY_REVISION is unset or malformed: set it to the Hub revision of TESTIMONY_MODEL (commit sha, tag or branch, matching /^[\\w.-]{1,64}$/) so doc_testimony records which model scored each row',
+    )
+  return { scorer, method: (methods as Record<string, () => string>)[name]() }
+}
+
+const main = async () => {
+  // Resolved before migrate(): a refused run must not have touched the database at all.
+  const { scorer, method } = resolveRun(process.env.TESTIMONY_SCORER ?? 'onnx')
+  await migrate()
   const n = await scoreAll(method, scorer)
   console.log(`scored ${n} pairs as ${method}`)
   await db.close()

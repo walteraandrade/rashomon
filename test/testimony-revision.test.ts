@@ -8,6 +8,7 @@ import { modelRevision } from '../src/scorers/onnx.js'
 import { app } from '../src/server.js'
 import { withEnv } from './env.js'
 import { insertTestimony, seed } from './fixture.js'
+import './close.js'
 
 // Issue #67: the method label carried the dtype only, so a retrain republished under the same
 // name left every existing row alone and scored only the pairs added since — two models under

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { docsFor, timelineFor, type TimelineQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 // Independent verification of issue #4's numbered acceptance criteria, written against
 // the spec rather than against test/timeline.test.ts. Values below are derived from the

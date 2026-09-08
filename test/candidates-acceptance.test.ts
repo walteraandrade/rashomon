@@ -13,6 +13,7 @@ import { boot, createHandlers } from '../public/js/app.js'
 import { trendOf } from '../public/js/format.js'
 import { paintCandidates } from '../public/js/render.js'
 import { withFakeDocument } from './fake-dom.js'
+import './close.js'
 
 // Acceptance tests for issue #32 (candidate queue), written from the issue text.
 

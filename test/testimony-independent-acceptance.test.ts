@@ -9,6 +9,7 @@ import { scoreAll } from '../src/score.js'
 import { scorers } from '../src/scorers/index.js'
 import { exportLines } from '../src/export-docs.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 // Independent re-derivation of issue #21's numbered acceptance criteria, written from the
 // spec text and hand-computed against test/fixture.ts's seedTestimony() rows -- deliberately

@@ -6,6 +6,7 @@ import { graphFor, risingFor, statements, toneFor, type GraphQuery, type RisingQ
 import { resolveScope } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'
 import type { Person } from '../src/types.js'
+import './close.js'
 
 // Issue #47 replaced count(distinct doc_id) with count(*) in the term, signature, rising and
 // link paths, and added `tone is not null` to the tone matrix. The pre-#47 statements are kept

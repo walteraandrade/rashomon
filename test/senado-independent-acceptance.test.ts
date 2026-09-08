@@ -13,6 +13,7 @@ import type { Person, RawDoc, Source } from '../src/types.js'
 import { persons, seed, docs } from './fixture.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
 import { createHandlers } from '../public/js/app.js'
+import './close.js'
 
 // Independent re-derivation of issue #25's numbered acceptance criteria, written from the
 // spec text and checked against test/fixture.ts's doc 39 -- deliberately not copied from

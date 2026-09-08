@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { risingFor, type RisingQuery } from '../src/graph.js'
 import { nameTokens } from '../src/extract.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 // Independent verification of issue #3's numbered acceptance criteria. Query shape
 // (limit/min) deliberately differs from graph.test.ts's risingBase so a passing

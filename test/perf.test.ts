@@ -4,6 +4,7 @@ import { db } from '../src/db.js'
 import { instrument, measure, percentile, perfEnabled, perfLine, perfLogEnabled, round } from '../src/perf.js'
 import { app } from '../src/server.js'
 import { seed } from './fixture.js'
+import './close.js'
 
 // Timings are never asserted here: this suite pins the instrumentation's shape and its
 // off-by-default contract. The numbers themselves come from `pnpm bench`, which is not

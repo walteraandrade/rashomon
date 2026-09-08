@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { graphFor, type GraphQuery } from '../src/graph.js'
 import { nameTokens } from '../src/extract.js'
 import { persons, seed } from './fixture.js'
+import './close.js'
 
 // Independent verification of issue #6's numbered acceptance criteria. Deliberately uses
 // a query shape (kind/min/limit/sort) that differs from graph.test.ts's `base`, so a

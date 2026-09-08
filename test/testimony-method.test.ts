@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { app } from '../src/server.js'
 import { insertTestimony, seed } from './fixture.js'
+import './close.js'
 
 // Regression for the kikori method label: `kikori:<dtype>` contains a `:`, which the
 // method parser used to reject, silently answering with the placeholder `onnx` rows.

@@ -4,6 +4,7 @@ import { db } from '../src/db.js'
 import { reindexAll } from '../src/reindex.js'
 import { ANALYZED_TABLES } from '../src/db.js'
 import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
+import './close.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
 // so it lives in its own file: node:test runs one process per file, hence its own database.

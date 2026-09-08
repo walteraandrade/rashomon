@@ -5,6 +5,7 @@ import { parseTestimonyQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { withEnv } from './env.js'
 import { insertTestimony, seed } from './fixture.js'
+import './close.js'
 
 // Issue #35: the route's default method must resolve through the same `methods` map
 // pnpm score uses, not the retired `onnx` placeholder literal.

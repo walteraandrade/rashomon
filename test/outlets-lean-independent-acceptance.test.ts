@@ -15,6 +15,7 @@ import { parseDomainList, parseLeanList, parseQuery, parseDocsQuery, parseRising
 import { resolveScope, labelFor, OUTLETS } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'
 import outletsJson from '../outlets.json' with { type: 'json' }
+import './close.js'
 
 // Independent re-derivation of issue #26's numbered acceptance criteria, written from the
 // issue text (fetched via `gh issue view 26`) and the approved spec, not copied from

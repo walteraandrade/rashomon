@@ -5,6 +5,7 @@ import { inTransaction, insertDoc } from '../src/store.js'
 import { docsFor, timelineFor, type TimelineQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
 import type { Source } from '../src/types.js'
+import './close.js'
 
 // A doc can only sit *exactly* on a bucket edge if the instant it is dated from and the
 // instant timelineFor buckets against are the same one. now() is transaction_timestamp(),

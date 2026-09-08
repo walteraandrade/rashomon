@@ -6,6 +6,7 @@ import { graphFor, statements, type GraphQuery } from '../src/graph.js'
 import { resolveScope } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'
 import type { Person } from '../src/types.js'
+import './close.js'
 
 // Issue #45 merged the three statements that produced stats, nodes and signature into one.
 // The three originals are kept here verbatim as a reference implementation, so every case

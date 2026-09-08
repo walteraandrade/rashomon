@@ -11,6 +11,7 @@ import type { Person } from '../src/types.js'
 import { persons, seed } from './fixture.js'
 import { SOURCE_SEGMENTS } from '../public/js/format.js'
 import { createHandlers } from '../public/js/app.js'
+import './close.js'
 
 const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${relPath}`, import.meta.url)), 'utf8')
 

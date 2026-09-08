@@ -5,6 +5,7 @@ import { candidatesQuery, narrowToSources, params, sourcesParams } from '../publ
 import { createHandlers, debounce, docsQuery, fromScope, scopeKeys } from '../public/js/app.js'
 import { SCOPE_LIMIT, SCOPE_TTL_MS, clearScopes, readScope, writeScope } from '../public/js/state.js'
 import { seed } from './fixture.js'
+import './close.js'
 
 // Issue #43's acceptance criteria, exercised against the real front-end modules rather than
 // against a claim about them. The atlas' request bookkeeping lives in public/js/state.js

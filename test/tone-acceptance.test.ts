@@ -3,6 +3,7 @@ import { describe, it, before } from 'node:test'
 import { toneFor, type ToneQuery } from '../src/graph.js'
 import { parseToneQuery } from '../src/query.js'
 import { seed } from './fixture.js'
+import './close.js'
 
 // Independent verification of issue #5's numbered acceptance criteria, written against
 // the spec rather than against test/tone.test.ts. Fixture values are recomputed by hand

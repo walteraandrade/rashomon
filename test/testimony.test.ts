@@ -102,15 +102,28 @@ describe('parseTestimonyQuery', () => {
     assert.equal(parseTestimonyQuery({ min: '5000' }).min, 1000)
   })
 
-  it('method defaults to "onnx" and validates its charset', () => {
-    assert.equal(parseTestimonyQuery({}).method, 'onnx')
+  it('method defaults to the kikori scorer label and validates its charset', () => {
+    assert.equal(parseTestimonyQuery({}).method, 'kikori:q8')
     assert.equal(parseTestimonyQuery({ method: 'stub' }).method, 'stub')
     assert.equal(parseTestimonyQuery({ method: 'v2.1/model-x' }).method, 'v2.1/model-x')
     assert.equal(parseTestimonyQuery({ method: 'kikori:q8' }).method, 'kikori:q8')
     assert.equal(parseTestimonyQuery({ method: 'kikori:fp32' }).method, 'kikori:fp32')
-    assert.equal(parseTestimonyQuery({ method: 'x'.repeat(129) }).method, 'onnx')
-    assert.equal(parseTestimonyQuery({ method: 'bad method!' }).method, 'onnx')
-    assert.equal(parseTestimonyQuery({ method: '' }).method, 'onnx')
+    assert.equal(parseTestimonyQuery({ method: 'onnx' }).method, 'onnx')
+    assert.equal(parseTestimonyQuery({ method: 'x'.repeat(129) }).method, 'kikori:q8')
+    assert.equal(parseTestimonyQuery({ method: 'bad method!' }).method, 'kikori:q8')
+    assert.equal(parseTestimonyQuery({ method: '' }).method, 'kikori:q8')
+  })
+
+  it('the default tracks TESTIMONY_DTYPE, the same way pnpm score picks its row label', () => {
+    const previous = process.env.TESTIMONY_DTYPE
+    try {
+      process.env.TESTIMONY_DTYPE = 'fp32'
+      assert.equal(parseTestimonyQuery({}).method, 'kikori:fp32')
+      assert.equal(parseTestimonyQuery({ method: 'bad!' }).method, 'kikori:fp32')
+    } finally {
+      if (previous === undefined) delete process.env.TESTIMONY_DTYPE
+      else process.env.TESTIMONY_DTYPE = previous
+    }
   })
 
   it('source reuses parseSourceList', () => {

@@ -465,3 +465,23 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
     outlets,
   }
 }
+
+// The exact statements the routes run, exported read-only so `pnpm bench` can put each one
+// through EXPLAIN (ANALYZE, BUFFERS) with representative parameters. Nothing here changes
+// what a route executes; it is the same string object the handlers above use.
+export const statements = {
+  terms: termsSql,
+  signature: signatureSql,
+  links: linksSql,
+  stats: statsSql,
+  sources: sourcesSql,
+  docs: docsSql,
+  docsCount: docsCountSql,
+  timeline: timelineSql,
+  rising: risingSql,
+  tone: toneSql,
+  testimonyOverall: testimonyOverallSql,
+  testimonyBySource: testimonyBySourceSql,
+  testimonyByDomain: testimonyByDomainSql,
+  candidates: candidatesSql,
+} as const

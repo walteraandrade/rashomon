@@ -213,6 +213,14 @@ export const seedTestimony = async () => {
   await insertTestimony('https://g1.globo.com/5', 'lula', 'stub', -2)
 }
 
+// doc_terms exists only for docs naming at least one tracked person (issue #52); these two
+// are shared by the store and reindex suites, which assert that invariant from both sides.
+export const orphanTermCount = async () =>
+  (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id)`)).rows[0].n
+
+export const termsOf = async (uri: string) =>
+  (await db.query<{ term: string }>(`select t.term from doc_terms t join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
+
 let ready: Promise<void> | null = null
 
 export const seed = () =>

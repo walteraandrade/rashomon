@@ -37,10 +37,13 @@ describe('graphFor', () => {
     assert.ok(!g.nodes.some((n) => n.term === 'lula'))
   })
 
-  it('computes pmi as log2 lift against the whole window', async () => {
+  it('computes pmi as log2 lift against the docs about tracked people', async () => {
     const g = await graphFor(lula, base)
-    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 14, 5))
-    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 14, 5))
+    // pmi's n is the tracked universe, not stats.docs: of the 14 docs in the window, doc /4
+    // ("Congresso avança na pauta econômica") names nobody tracked, so it carries no terms and
+    // cannot contribute to the denominator either -> n is 13
+    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 13, 5))
+    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 13, 5))
     assert.equal(node(g, 'word:congresso'), undefined)
   })
 
@@ -90,7 +93,7 @@ describe('graphFor', () => {
 
   it('signature: top terms meet the count floor of max(3, 5% of about)', async () => {
     const g = await graphFor(lula, base)
-    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 14, 5) }])
+    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 13, 5) }])
   })
 
   it('signature: never lists the person name as a term', async () => {
@@ -112,9 +115,9 @@ describe('graphFor', () => {
   it('signature: orders by pmi desc, ties by term ascending', async () => {
     const g = await graphFor(lula, { ...base, days: 1000 })
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others;
-    // n is 25 (was 24), widened by doc /38 (gkg, about lula, issue #8's press-vs-network fixture),
-    // which also names lula, so np is 15 (was 14)
-    const tie = pmi(3, 3, 25, 15)
+    // 25 docs sit in this window, of which doc /4 names nobody tracked and is outside pmi's
+    // universe, so n is 24; np is 15
+    const tie = pmi(3, 3, 24, 15)
     assert.deepEqual(g.signature, [
       { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
       { term: 'estabilidade', kind: 'word', count: 3, pmi: tie },

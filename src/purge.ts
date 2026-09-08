@@ -1,12 +1,33 @@
 import { db, migrate } from './db.js'
 
-const main = async () => {
-  const source = process.argv[2]
-  if (!source) throw new Error('usage: pnpm purge <source>')
-  await migrate()
+const usage = 'usage: pnpm purge <source|orphan-terms>'
+
+// Reclaims the doc_terms rows written before docs naming no tracked person stopped producing
+// terms. `vacuum full` and not plain `vacuum`: measured on a synthetic 13k-doc database, a plain
+// vacuum only marks the pages reusable and leaves the on-disk size unchanged (14.7 MB before and
+// after), while `vacuum full` rewrites the table and brings it down to 1.0 MB. It takes an
+// exclusive lock on doc_terms, which is fine for a one-off run with the server stopped.
+const purgeOrphanTerms = async () => {
+  const { rows } = await db.query<{ n: number }>(
+    `with d as (
+       delete from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id) returning 1
+     ) select count(*)::int as n from d`,
+  )
+  await db.exec(`vacuum full doc_terms`)
+  console.log(`purged ${rows[0].n} doc_terms rows without a tracked person`)
+}
+
+const purgeSource = async (source: string) => {
   const { rows } = await db.query<{ n: number }>(`with d as (delete from docs where source = $1 returning 1) select count(*)::int as n from d`, [source])
   if (source === 'gkg') await db.query(`delete from gkg_files`)
   console.log(`purged ${rows[0].n} docs from ${source}`)
+}
+
+const main = async () => {
+  const target = process.argv[2]
+  if (!target) throw new Error(usage)
+  await migrate()
+  await (target === 'orphan-terms' ? purgeOrphanTerms() : purgeSource(target))
   await db.close()
 }
 

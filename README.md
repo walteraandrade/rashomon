@@ -21,6 +21,19 @@ pnpm test            # node:test against an in-memory database
 
 `PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`. `ANALYZE_MIN_DOCS` (default 200) is the ingest size from which planner statistics are refreshed, see "Indexes and planner statistics". `WRITE_BATCH_ROWS` (default 500, clamped to 1..10000) and `WRITE_BATCH_DOCS` (default 200, clamped to 1..5000) bound what one insert statement carries and what one transaction holds, see "Writes, batches and recovery".
 
+## Deploy
+
+`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN.
+
+```bash
+vercel env pull .env.local                                          # POSTGRES_URL, POSTGRES_URL_NON_POOLING
+DATABASE_URL=$POSTGRES_URL_NON_POOLING pnpm migrate                 # create the schema once
+DATABASE_URL=$POSTGRES_URL_NON_POOLING DATA_DIR=./data/pg pnpm push # one-way copy of a local PGlite into it
+vercel deploy --prod
+```
+
+Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `PG_POOL_MAX` caps connections per function instance (default 3).
+
 Bluesky without login returns one page (100 posts) per person. To paginate, set `BSKY_HANDLE` and `BSKY_APP_PASSWORD` (app password, not the account password).
 
 `gnews` reads Google News RSS search per person (100 headlines each, Brazil, pt-BR).

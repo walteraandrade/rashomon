@@ -7,6 +7,7 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `pnpm typecheck` runs `tsc`. `pnpm test` runs `node --test` against an in-memory database. Both must pass before a PR.
 - `pnpm dev` serves the API and `public/` on `PORT` (default 3210). `pnpm ingest [source...]` collects. `pnpm reindex` recomputes terms and person matches from stored docs.
 - `DATA_DIR` selects the PGlite directory (default `./data/pg`). `memory://` is an in-memory database and is what tests use.
+- `DATABASE_URL` (or `POSTGRES_URL`) switches every command to a managed Postgres over `pg`; that is how Vercel runs it (`api/index.ts`, `vercel.json`). `pnpm migrate` creates the schema there, `pnpm push` copies a local PGlite into it. Tests never set it.
 
 ## Hard constraints
 

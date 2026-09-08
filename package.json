@@ -9,8 +9,10 @@
     "purge": "tsx src/purge.ts",
     "score": "tsx src/score.ts",
     "export-docs": "tsx src/export-docs.ts",
-    "typecheck": "tsc -p tsconfig.json",
-    "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts"
+    "typecheck": "tsgo -p tsconfig.json",
+    "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts",
+    "migrate": "tsx src/migrate.ts",
+    "push": "tsx src/push.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -18,12 +20,15 @@
     "@huggingface/transformers": "^4.2.0",
     "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",
-    "hono": "^4.13.7"
+    "hono": "^4.13.7",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
+    "@types/pg": "^8.23.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@11.17.0"
 }

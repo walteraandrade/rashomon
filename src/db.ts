@@ -1,7 +1,51 @@
 import { PGlite } from '@electric-sql/pglite'
+import pg from 'pg'
 
-// DATA_DIR points at the PGlite directory; 'memory://' gives a throwaway in-memory database (tests).
-export const db = new PGlite(process.env.DATA_DIR ?? './data/pg')
+type Rows<T> = { rows: T[] }
+
+export type Db = {
+  query: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<Rows<T>>
+  exec: (sql: string) => Promise<unknown>
+  close: () => Promise<void>
+}
+
+// Supabase serves a self-signed chain, and any sslmode in the URL would override the ssl
+// option, so it is stripped: the connection stays encrypted, without chain verification.
+export const poolConfig = (url: string): pg.PoolConfig => {
+  const parsed = new URL(url)
+  parsed.searchParams.delete('sslmode')
+  const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
+  return {
+    connectionString: parsed.toString(),
+    max: Number(process.env.PG_POOL_MAX ?? 3),
+    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+  }
+}
+
+const remote = (url: string): Db => {
+  const pool = new pg.Pool(poolConfig(url))
+  return {
+    query: (sql, params) => pool.query(sql, params as unknown[]) as never,
+    exec: (sql) => pool.query(sql),
+    close: () => pool.end(),
+  }
+}
+
+const embedded = (dir: string): Db => {
+  const pglite = new PGlite(dir)
+  return {
+    query: (sql, params) => pglite.query(sql, params as unknown[]) as never,
+    exec: (sql) => pglite.exec(sql),
+    close: () => pglite.close(),
+  }
+}
+
+// A managed Postgres URL wins: it is the only shape that survives a read-only, short-lived
+// serverless filesystem. POSTGRES_URL is what the Vercel/Supabase integration injects.
+// Without either, PGlite runs embedded from DATA_DIR ('memory://' is the tests' database).
+const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
+
+export const db: Db = url ? remote(url) : embedded(process.env.DATA_DIR ?? './data/pg')
 
 export const migrate = () =>
   db.exec(`

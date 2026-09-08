@@ -18,6 +18,7 @@ export const poolConfig = (url: string): pg.PoolConfig => {
   return {
     connectionString: parsed.toString(),
     max: Number(process.env.PG_POOL_MAX ?? 3),
+    connectionTimeoutMillis: 10_000,
     ssl: isLocal ? undefined : { rejectUnauthorized: false },
   }
 }
@@ -47,8 +48,7 @@ const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
 
 export const db: Db = url ? remote(url) : embedded(process.env.DATA_DIR ?? './data/pg')
 
-export const migrate = () =>
-  db.exec(`
+export const schema = `
     create table if not exists persons (
       id text primary key,
       name text not null,
@@ -100,4 +100,6 @@ export const migrate = () =>
       primary key (doc_id, name)
     );
     create index if not exists doc_candidates_name_idx on doc_candidates (name);
-  `)
+`
+
+export const migrate = () => db.exec(schema)

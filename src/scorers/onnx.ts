@@ -9,9 +9,29 @@ const modelId = () => process.env.TESTIMONY_MODEL ?? ''
 const cacheDir = () => process.env.MODEL_DIR ?? './data/models'
 const dtype = () => process.env.TESTIMONY_DTYPE ?? 'q8'
 
+// A Hub ref: commit sha, tag or branch. The charset is narrower than query.ts's METHOD_TOKEN
+// and excludes `:` and `/` on purpose, so `kikori:<dtype>:<revision>` stays a three-part label
+// the method parser accepts whole. Anything outside it reads as unset rather than throwing:
+// query.ts resolves the route's default method through here on every request and must not 500
+// on a typo. src/score.ts is where a missing revision stops a run instead.
+const REVISION_TOKEN = /^[\w.-]{1,64}$/
+export const modelRevision = () => {
+  const v = process.env.TESTIMONY_REVISION ?? ''
+  return REVISION_TOKEN.test(v) ? v : ''
+}
+
 // Row label for doc_testimony: the placeholder scorer wrote `onnx`; kikori rows carry the
-// dtype so a q8 run and an fp32 run never mix with each other nor with the old rows.
-export const kikoriMethod = () => `kikori:${dtype()}`
+// dtype so a q8 run and an fp32 run never mix with each other nor with the old rows, and the
+// model revision so a retrain republished under the same name does neither (issue #67).
+// Without it, `pnpm score` would leave every existing row alone and score only the pairs added
+// since, with the new model, under the first model's label. The revision is also what `load`
+// asks the Hub for, so the label is a claim the loader enforces, not a note an operator wrote.
+// With TESTIMONY_REVISION unset the label stays `kikori:<dtype>`, which is what every row
+// scored before this existed carries.
+export const kikoriMethod = () => {
+  const rev = modelRevision()
+  return rev ? `kikori:${dtype()}:${rev}` : `kikori:${dtype()}`
+}
 
 // [CLS] person [SEP] text [SEP], token_type_ids 0 for the person segment and 1 for the text.
 // Only the text is cut, so the closing [SEP] always survives; transformers.js's own
@@ -39,7 +59,10 @@ const loaded = new Map<string, Promise<Loaded>>()
 // keeps `pnpm typecheck`/`pnpm test` safe without ever setting TESTIMONY_SCORER=onnx.
 const load = async (): Promise<Loaded> => {
   const { AutoTokenizer, AutoModelForSequenceClassification, Tensor } = await import('@huggingface/transformers')
-  const opts = { cache_dir: cacheDir() }
+  // `revision` is omitted, not spelled 'main', when unset: transformers.js has its own default
+  // and naming it here would make an unpinned run indistinguishable from a pinned one.
+  const rev = modelRevision()
+  const opts = rev ? { cache_dir: cacheDir(), revision: rev } : { cache_dir: cacheDir() }
   const tok = await AutoTokenizer.from_pretrained(modelId(), opts)
   const model = await AutoModelForSequenceClassification.from_pretrained(modelId(), { ...opts, dtype: dtype() as Dtype })
   const contract = (model.config as unknown as { kikori?: Contract }).kikori
@@ -60,7 +83,7 @@ const load = async (): Promise<Loaded> => {
 }
 
 const model = () => {
-  const key = `${modelId()}|${dtype()}|${cacheDir()}`
+  const key = `${modelId()}|${dtype()}|${modelRevision()}|${cacheDir()}`
   const hit = loaded.get(key) ?? load()
   loaded.set(key, hit)
   return hit

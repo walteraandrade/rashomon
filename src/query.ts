@@ -5,15 +5,18 @@ import type { CandidatesQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuer
 
 // Resolved lazily, per request, through the same `methods` map `pnpm score` uses (never a
 // literal): the default label is whatever `pnpm score`'s own default scorer would currently
-// write, `kikori:q8` unless TESTIMONY_DTYPE picks another dtype. This only matches what is
-// actually in doc_testimony if TESTIMONY_DTYPE is set the same way in the process that ran
-// `pnpm score` and the process serving this route — see README's testimony section for the
-// failure mode when it isn't. Still independent of TESTIMONY_SCORER (src/score.ts): a client
-// can request method=stub in tests/debugging regardless of what `pnpm score` last ran.
+// write: `kikori:<dtype>` when TESTIMONY_REVISION is unset, `kikori:<dtype>:<revision>` when it
+// is not. This only matches what is actually in doc_testimony if TESTIMONY_DTYPE and
+// TESTIMONY_REVISION are set the same way in the process that ran `pnpm score` and the process
+// serving this route — see README's testimony section for the failure mode when they are not.
+// Still independent of TESTIMONY_SCORER (src/score.ts): a client can request method=stub in
+// tests/debugging regardless of what `pnpm score` last ran.
 const defaultTestimonyMethod = () => methods.onnx()
 
-// `:` is part of the charset because the kikori scorer labels its rows `kikori:<dtype>`;
-// without it the parser silently fell back to 'onnx' and returned the placeholder rows.
+// `:` is part of the charset because the kikori scorer labels its rows `kikori:<dtype>` and,
+// once a model revision is pinned, `kikori:<dtype>:<revision>`; without it the parser silently
+// fell back to 'onnx' and returned the placeholder rows. The revision's own charset
+// (src/scorers/onnx.ts) is narrower than this one, so a whole label always fits here.
 const METHOD_TOKEN = /^[\w.:\/-]{1,128}$/
 
 export const int = (v: string | undefined, d: number, lo: number, hi: number) => {

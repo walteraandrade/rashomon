@@ -51,3 +51,17 @@ describe('scoreAll', () => {
     assert.equal(again, 0, 'the null-scored pair must not be retried')
   })
 })
+
+describe('scoreAll across methods', () => {
+  before(seed)
+
+  it('re-scores pairs whose only row is from another method (placeholder `onnx` never satisfies `kikori:q8`)', async () => {
+    const pairsTotal = Number((await db.query<{ n: string }>(`select count(*) as n from doc_persons`)).rows[0].n)
+    await scoreAll('onnx', scorers.stub)
+    assert.equal(Number(await countRows('onnx')), pairsTotal)
+    const scored = await scoreAll('kikori:q8', scorers.stub)
+    assert.equal(scored, pairsTotal)
+    assert.equal(Number(await countRows('onnx')), pairsTotal, 'the old rows stay untouched')
+    assert.equal(Number(await countRows('kikori:q8')), pairsTotal)
+  })
+})

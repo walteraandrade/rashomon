@@ -136,6 +136,22 @@ export const docs: RawDoc[] = [
   // *baseline* half of risingSql honour a lean filter — the one clause the spec warns is
   // duplicated across recent_scope and baseline_scope.
   { source: 'gnews', uri: 'https://cartacapital.com.br/42', text: 'Bolsonaro rebate acusações de golpe em artigo de opinião', publishedAt: daysAgo(2300), domain: 'cartacapital.com.br' },
+  // docs 43-45: the cases a careless count(distinct doc_id) -> count(*) rewrite breaks (issue
+  // #47). Dated 3400+ days ago, past the widest window any other suite opens (3300, in
+  // test/senado-independent-acceptance.test.ts and test/graph.test.ts), so no pinned
+  // pmi/count/tone/stats literal anywhere shifts; the issue #47 suite opens days:3500 on
+  // purpose to reach them. "coalizao" appears nowhere else in the fixture.
+  //
+  // Doc 43 names *two* tracked persons and doc 44/45 one each, so the term_all/tracked
+  // universe must count doc 43 once: a `tracked` built by joining doc_persons instead of the
+  // current `exists` would double it under count(*) and stay right under count(distinct).
+  // All three carry "coalizao" as a hashtag, as a word and (43/44) as a theme extra term, so
+  // the same term text lives under several kinds on one doc — the case that must stay three
+  // separate nodes with their own counts, and that gives linksSql a same-text pair
+  // co-occurring in exactly two docs (43 and 44), one of them the shared one.
+  { source: 'rss', uri: 'https://example.org/43', text: 'Lula e Bolsonaro discutem #coalizao e coalizao no plenário', publishedAt: daysAgo(3400), domain: 'example.org', extraTerms: [{ term: 'coalizao', kind: 'theme' }] },
+  { source: 'rss', uri: 'https://example.org/44', text: 'Lula defende #coalizao e coalizao ampla no plenário', publishedAt: daysAgo(3401), domain: 'example.org', extraTerms: [{ term: 'coalizao', kind: 'theme' }] },
+  { source: 'rss', uri: 'https://example.org/45', text: 'Bolsonaro rejeita #coalizao e coalizao estreita', publishedAt: daysAgo(3402), domain: 'example.org' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

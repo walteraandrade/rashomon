@@ -117,18 +117,33 @@ const trackedCte = `
 // the limit selected. Inside it, `pmi` is the unrounded value, as before: an output column name
 // stands alone in an order by, never inside an expression -- which is also why signature, whose
 // order by names `pmi` bare, still ranks on the rounded value.
+//
+// `kind` closes both order by clauses (issue #47). The group key is (term, kind), so one term
+// text can appear under several kinds -- and until now nothing ranked those against each other
+// when their count/pmi tied: the order was whatever the plan emitted, and which of them the
+// limit kept was arbitrary with it. Dropping the distinct below changes the plan, so the
+// tiebreak is spelled out rather than left to it.
+//
+// c_pt and c_t are count(*), not count(distinct doc_id) (issue #47). doc_terms' primary key
+// (doc_id, term, kind) already makes doc_id unique inside each (term, kind) group, and every
+// join below it preserves that: `about` is doc_persons filtered to one person_id, whose PK
+// (doc_id, person_id) leaves doc_id unique, joined to `scope` (docs.id, a primary key);
+// `tracked` is `scope` again; `docs d` joins on its own primary key. So no row can duplicate a
+// doc inside a group, and the distinct sort/hash was pure cost -- 270 ms to 152 ms on the
+// benchmark corpus, almost all of it term_all's, which drops a 3.9 MB quicksort by turning a
+// GroupAggregate into a HashAggregate (see docs/perf-baseline.md).
 const graphSql = `
   with ${scopeCte}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
   term_p as materialized (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
+    select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
     where not (t.term = any($6::text[]))
     group by 1, 2
   ),
   term_all as materialized (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
+    select t.term, t.kind, count(*)::float8 as c_t
     from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   nodes_scored as (
@@ -143,7 +158,7 @@ const graphSql = `
       round(tone::numeric, 2)::float8 as tone_rounded,
       (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) as sort_key
     from nodes_scored
-    order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term
+    order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term, kind
     limit $9
   ),
   signature_scored as (
@@ -155,7 +170,7 @@ const graphSql = `
   signature_top as (
     select term, kind, count, round(pmi::numeric, 2)::float8 as pmi
     from signature_scored
-    order by pmi desc, term
+    order by pmi desc, term, kind
     limit 5
   )
   select
@@ -163,22 +178,34 @@ const graphSql = `
     (select count(*) from about)::int as about,
     coalesce((
       select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)
-        order by sort_key desc, term)
+        order by sort_key desc, term, kind)
       from nodes_top
     ), '[]'::json) as nodes,
     coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi) order by pmi desc, term)
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi) order by pmi desc, term, kind)
       from signature_top
     ), '[]'::json) as signature`
 
+// count(*) rather than count(distinct a.doc_id) (issue #47): a row here is a (doc_id, a, b)
+// triple, and `kind || ':' || term` is injective over the three kinds Term allows
+// (hashtag/word/theme -- none is a prefix of another up to a colon), so a group key (s, t)
+// pins exactly one doc_terms row for a and one for b per doc. doc_terms' PK makes each of
+// those unique, and `about` contributes one row per doc (doc_persons PK with person_id fixed).
+//
+// The order by is new. Nothing ever specified this statement's order: the distinct forced a
+// GroupAggregate that happened to emit (s, t) ascending, and count(*) lets the planner hash
+// instead. Spelling the sort out is what keeps the response identical rather than merely
+// equivalent, and it still wins -- 26.6 ms -> 22.0 ms on the benchmark corpus, since it now
+// sorts the 443 output rows instead of the 3744 input ones.
 const linksSql = `
   with ${scopeCte}
-  select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(distinct a.doc_id)::int as count
+  select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(*)::int as count
   from doc_terms a
   join doc_terms b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
   join about x on x.doc_id = a.doc_id
   where (a.kind || ':' || a.term) = any($5::text[]) and (b.kind || ':' || b.term) = any($5::text[])
-  group by 1, 2 having count(distinct a.doc_id) >= 2`
+  group by 1, 2 having count(*) >= 2
+  order by 1, 2`
 
 const sourcesSql = `
   with ${scopeCte}
@@ -277,6 +304,12 @@ export const timelineFor = async (person: Person, q: TimelineQuery) => {
 // does not fit a matrix spanning every tracked person, so this joins doc_persons/persons
 // directly instead. avg()/count() ignore SQL null automatically, so untoned (non-GDELT)
 // docs contribute nothing to either aggregate without a source/kind check.
+//
+// `tone is not null` is therefore free rather than a behaviour change (issue #47): it only
+// removes rows both aggregates already ignore, so avg and n are untouched, and a group can
+// only survive `count(d.tone) >= $2` when $2 >= 1 (parseToneQuery's floor) if it still holds
+// at least one toned row. It cuts the rows joined and hashed from 3847 to 1748 on the
+// benchmark corpus, 22.5 ms -> 14.3 ms, with the same buffer count.
 const toneSql = `
   select p.id as person_id, d.domain as domain,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as n
@@ -285,6 +318,7 @@ const toneSql = `
   join persons p on p.id = dp.person_id
   where d.published_at >= now() - make_interval(days => $1)
     and d.domain is not null
+    and d.tone is not null
   group by p.id, d.domain
   having count(d.tone) >= $2
   order by p.id, d.domain`
@@ -360,6 +394,13 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 
 // Two disjoint windows (recent, then baseline immediately before it), instead of
 // reusing scopeCte twice, so a doc is never double-counted into both windows.
+//
+// c_recent/c_baseline are count(*) (issue #47): same argument as graphSql's term_p, with
+// recent_about/baseline_about in place of `about` -- doc_persons' PK with person_id fixed to
+// $1, joined to a scope of docs.id, is one row per doc, and doc_terms' PK is one row per
+// (doc, term, kind). 13.5 ms -> 11.2 ms on the benchmark corpus. `kind` closes the order by
+// for the same reason it closes graphSql's: (lift, term) does not separate two kinds of one
+// term text, and count(*) lets the planner pick a different arbitrary order than distinct did.
 const risingSql = `
   with
   recent_scope as (
@@ -382,13 +423,13 @@ const risingSql = `
     select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = $1
   ),
   recent_terms as (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_recent
+    select t.term, t.kind, count(*)::float8 as c_recent
     from doc_terms t join recent_about a on a.doc_id = t.doc_id
     where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
     group by 1, 2
   ),
   baseline_terms as (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_baseline
+    select t.term, t.kind, count(*)::float8 as c_baseline
     from doc_terms t join baseline_about a on a.doc_id = t.doc_id
     where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
     group by 1, 2
@@ -399,7 +440,7 @@ const risingSql = `
     round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift
   from recent_terms r left join baseline_terms b using (term, kind)
   where r.c_recent >= $8
-  order by lift desc, term
+  order by lift desc, term, kind
   limit $9`
 
 export type CandidatesQuery = { days: number; min: number; limit: number }

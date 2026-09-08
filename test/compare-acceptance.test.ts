@@ -24,12 +24,14 @@ describe('compare people acceptance criteria (issue #7)', () => {
     const scriptSrcTags = [...html.matchAll(/<script[^>]*\bsrc=/gi)]
     assert.equal(scriptSrcTags.length, 0, 'no external <script src=...> tags allowed; JS must be inline')
 
+    // The only hosts a <link> may reach are Google Fonts; every other href must be a relative
+    // file this repo ships (the shared stylesheet, the icon), never a third-party asset.
     const linkTags = [...html.matchAll(/<link[^>]*>/gi)]
     for (const [tag] of linkTags) {
-      assert.match(
-        tag,
-        /fonts\.googleapis\.com/,
-        `only Google Fonts <link> tags are allowed as external dependencies, found: ${tag}`,
+      const href = tag.match(/href="([^"]*)"/)?.[1] ?? ''
+      assert.ok(
+        /fonts\.g(oogleapis|static)\.com/.test(href) || href.startsWith('data:') || !/^[a-z]+:/i.test(href),
+        `only Google Fonts, data: and relative hrefs are allowed in <link> tags, found: ${tag}`,
       )
     }
   })

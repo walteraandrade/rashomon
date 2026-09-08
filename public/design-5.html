@@ -5,21 +5,73 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="data:,">
-<title>rashomon · atlas tipográfico</title>
+<title>rashomon · atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800&family=Instrument+Sans:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/">rashomon<span>.</span></a><span class="eyebrow">atlas tipográfico</span><div class="person-pick"></div><nav><a class="compare-link" href="compare.html">comparar pessoas</a><a href="atlas-legacy.html">Ferramentas do atlas anterior ↗</a></nav><span id="stats" hidden></span></header>
+<header class="top"><a class="brand" href="/">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="compare-link" href="compare.html">comparar pessoas</a><a href="#como-ler">como ler</a></nav><span id="stats" hidden></span></header>
 <main>
-  <section class="intro"><div><div class="eyebrow">As palavras são o mapa.</div><h1>Uma pessoa. Um campo de associações.</h1><p>O nome no centro, as palavras ao redor. Selecione um termo para revelar somente as relações retornadas para ele, sem mover a composição.</p></div><span class="stamp" id="stamp">Base local · todas as fontes · mínimo de 2 documentos</span></section>
-  <div class="controls">
-    <label>Pessoa<select id="person"></select></label><label>Período<select id="days"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="365">Último ano</option></select></label><div class="field source-field"><span id="sourceLabel">Fonte</span><div class="segment" id="segSource" role="group" aria-labelledby="sourceLabel"></div></div><label>Tamanho por<select id="sort"><option value="count">Frequência</option><option value="pmi">PMI ponderado</option></select></label><label>Termos<select id="limit"><option>12</option><option selected>18</option><option>24</option></select></label><label class="search">Encontrar no recorte<input id="search" type="search" placeholder="Destaque uma palavra…"></label><div class="segment" role="group" aria-label="Modo de leitura"><button id="modeMap" aria-pressed="true">Mapa</button><button id="modeColumns" aria-pressed="false">Colunas</button></div>
-  </div>
-  <p class="status" id="status" role="status"></p>
-  <section class="workspace" aria-label="Visualização e detalhes"><div class="canvas"><div class="canvas-head"><div><h2 id="chartTitle">O campo limpo vira foco quando você escolhe uma palavra.</h2><p id="chartDescription">Sem seleção, não há linhas. Com seleção, aparecem apenas coocorrências retornadas que tocam o termo escolhido.</p></div><button id="clear" class="quiet-button">Limpar seleção</button></div><div class="map-tools"><div class="zoom" aria-label="Zoom do mapa"><button id="zoomOut" class="quiet-button" aria-label="Diminuir zoom">−</button><button id="zoomReset" class="quiet-button" aria-label="Restaurar zoom">100%</button><button id="zoomIn" class="quiet-button" aria-label="Aumentar zoom">+</button></div><span class="eyebrow">Mapa / Colunas preservam recorte e seleção</span></div><p class="mobile-hint">Arraste o mapa para os lados para explorar o círculo inteiro.</p><div id="searchNote" class="search-note" role="status"></div><div class="viewport" id="viewport" role="region" aria-label="Mapa circular interativo. Use Tab para navegar pelas palavras; em telas pequenas, role horizontalmente." tabindex="0"></div><div class="overflow" id="overflow" hidden></div><div id="columns" class="columns" hidden></div><div class="legend" id="legend"></div></div><div class="side"><details class="outlets" id="outlets"><summary class="eyebrow">Veículos <b id="domainLabel"></b></summary><div id="outletList">Aguardando dados.</div></details><details class="outlets candidates" id="candidateQueue"><summary class="eyebrow">Candidatos <b id="candidateLabel"></b></summary><div id="candidateList">Aguardando dados.</div></details><aside class="inspector" id="inspector" aria-label="Detalhes da pessoa ou do termo"></aside></div></section>
+  <section class="sentence" aria-label="Recorte">
+    <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa"></select></span> nos <span class="pick"><select id="days" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="source" aria-label="Fonte"></select></span>, por <span class="pick"><select id="sort" aria-label="Tamanho por"><option value="count">frequência</option><option value="pmi">PMI ponderado</option></select></span>. Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras"><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
+    <p class="status" id="status" role="status"></p>
+  </section>
+  <section class="workspace" aria-label="Mapa e detalhes">
+    <div class="canvas">
+      <div class="map-tools"><label class="search"><input id="search" type="search" placeholder="Encontrar uma palavra no recorte…" aria-label="Encontrar uma palavra no recorte"></label><div class="segment" role="group" aria-label="Modo de leitura"><button id="modeMap" aria-pressed="true">Mapa</button><button id="modeColumns" aria-pressed="false">Lista</button></div><div class="zoom" aria-label="Zoom do mapa"><button id="zoomOut" class="quiet-button" aria-label="Diminuir zoom">−</button><button id="zoomReset" class="quiet-button" aria-label="Restaurar zoom">100%</button><button id="zoomIn" class="quiet-button" aria-label="Aumentar zoom">+</button></div><button id="clear" class="quiet-button">Limpar seleção</button></div>
+      <p class="mobile-hint">Arraste o mapa para os lados para ver o círculo inteiro.</p>
+      <div id="searchNote" class="search-note" role="status"></div>
+      <div class="viewport" id="viewport" role="region" aria-label="Mapa circular interativo. Use Tab para navegar pelas palavras; em telas pequenas, role horizontalmente." tabindex="0"></div>
+      <div class="overflow" id="overflow" hidden></div>
+      <div id="columns" class="columns" hidden></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="side">
+      <details class="outlets" id="outlets"><summary class="eyebrow">Veículos <b id="domainLabel"></b></summary><div id="outletList">Aguardando dados.</div></details>
+      <details class="outlets candidates" id="candidateQueue"><summary class="eyebrow">Candidatos <b id="candidateLabel"></b></summary><div id="candidateList">Aguardando dados.</div></details>
+      <aside class="inspector" id="inspector" aria-label="Detalhes da pessoa ou da palavra"></aside>
+    </div>
+  </section>
   <div id="selectionNote" class="sr-only" role="status"></div>
-  <section class="method" aria-label="Sobre o atlas"><div><strong>A leitura vem primeiro</strong><p>Uma composição tipográfica, não um diagrama de bolinhas. As posições evitam colisões e não medem distância semântica.</p></div><div><strong>O que os dados dizem</strong><p>As palavras aparecem em documentos sobre a pessoa. Uma ligação entre palavras indica coocorrência retornada, não apoio, causalidade ou opinião.</p></div><div><strong>Escala do recorte</strong><p>O tamanho é limitado e recalculado dentro do recorte escolhido. Em PMI ponderado, usa PMI × ln(1 + documentos).</p></div></section>
-  <footer class="footer"><span>Tipos, tom por termo, linhas do tempo e termos em alta continuam no atlas anterior.</span><span>Sem dados fictícios em produção.</span></footer>
+  <section class="chapter" id="como-ler" aria-labelledby="comoLerTitle">
+    <h2 id="comoLerTitle">Como ler este atlas</h2>
+    <p class="chapter-intro">O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. As posições evitam colisões; elas não medem distância nem opinião.</p>
+    <div class="chapter-grid">
+      <div>
+        <h3>Como fazer uma análise</h3>
+        <ol>
+          <li><b>Escolha uma pessoa.</b> O site junta textos que citam ela: posts do Bluesky, notícias, discursos na Câmara e no Senado.</li>
+          <li><b>Escolha o período e a fonte.</b> Isso é o recorte. Tudo que aparece depois vale só para esse recorte.</li>
+          <li><b>Olhe as palavras maiores.</b> Elas aparecem em mais textos junto do nome.</li>
+          <li><b>Clique numa palavra.</b> As linhas mostram outras palavras que estão nos mesmos textos. Ao lado, os textos de verdade, para conferir.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>Frequência</h3>
+        <p>Em quantos textos sobre a pessoa a palavra aparece. Uma palavra em 173 de 440 textos é grande no mapa. Frequência diz o que se fala muito.</p>
+        <h3>Linha entre duas palavras</h3>
+        <p>As duas aparecem nos mesmos textos. Só isso. Não quer dizer apoio, causa ou opinião.</p>
+        <h3>Tom</h3>
+        <p>Só existe nos textos que vêm do GDELT. As outras fontes não têm tom, e o site não inventa um.</p>
+      </div>
+      <div>
+        <h3>PMI</h3>
+        <p>Frequência conta. PMI compara. Ele pergunta: essa palavra aparece com essa pessoa mais do que apareceria por acaso?</p>
+        <p>"presidente" aparece com todo político: frequência alta, PMI baixo. Uma palavra que aparece quase só com uma pessoa tem PMI alto. PMI mostra o que é típico dela.</p>
+        <div class="pmi-scale">
+          <div><b>0</b><span>igual ao acaso</span></div>
+          <div><b>1</b><span>o dobro</span></div>
+          <div><b>2</b><span>quatro vezes</span></div>
+          <div><b>3</b><span>oito vezes</span></div>
+        </div>
+        <p>Cada +1 dobra. Pode ser negativo: a palavra aparece menos com essa pessoa do que com as outras.</p>
+        <p><b>Por que "PMI ponderado"?</b> Uma palavra que apareceu em só 2 textos pode ter PMI enorme sem merecer. Então o tamanho no mapa usa PMI × ln(1 + documentos). Isso segura as palavras raras e deixa as frequentes subirem.</p>
+      </div>
+    </div>
+    <p class="chapter-foot"><span>Tipos, tom por termo, linhas do tempo e termos em alta continuam no <a href="atlas-legacy.html">atlas anterior</a>.</span><span>Sem dados fictícios em produção.</span></p>
+  </section>
 </main>
 <script type="module" src="./js/app.js"></script>
 </body>

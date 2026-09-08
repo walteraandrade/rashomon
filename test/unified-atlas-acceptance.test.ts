@@ -116,9 +116,9 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
     }
   })
 
-  it('atlas.css keeps the source segment usable on mobile widths (issue #28)', () => {
+  it('atlas.css keeps the sentence controls and the mode segment usable on mobile widths (issue #28)', () => {
     const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
-    assert.match(css, /\.source-field\s*\{\s*max-width:\s*100%;\s*\}/)
+    assert.match(css, /\.pick select\s*\{[^}]*max-width:\s*100%;/, 'every select in the sentence must shrink to the screen')
     assert.match(css, /\.segment\s*\{[^}]*max-width:\s*100%;[^}]*overflow-x:\s*auto;/)
   })
 })

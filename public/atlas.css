@@ -134,6 +134,20 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .candidates .outlet[aria-expanded="true"] { color: var(--accent); }
 .candidates .samples { padding: 0 0 10px 10px; border-bottom: 1px solid var(--line); }
 .candidates .samples .doc { border-top: 0; padding: 8px 0; }
+#testimonyList { max-height: 600px; overflow-y: auto; scrollbar-width: thin; padding-bottom: 16px; font-size: 15px; color: var(--muted); }
+.testimony .verdict { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 4px 0 6px; }
+.testimony .verdict strong { font: 700 32px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--tone, var(--ink)); }
+.testimony .verdict span { font-size: 14px; color: var(--muted); }
+.testimony .scale { position: relative; display: flex; justify-content: space-between; padding: 14px 8px 0 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+.testimony .scale::before { content: ''; position: absolute; left: 0; right: 8px; top: 5px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #ff6b7d, #626a8c, #7ee787); opacity: .8; }
+.testimony .scale i { position: absolute; top: 0; left: var(--pos, 50%); width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--ink); border: 2px solid var(--bg); }
+.testimony .sub { margin: 14px 0 2px; }
+.testimony .focus { margin: 6px 0 4px; font-size: 14px; color: var(--muted); }
+.testimony .focus b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.testimony .focus strong { color: var(--tone, var(--ink)); font-variant-numeric: tabular-nums; }
+.testimony .outlet { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.testimony div.outlet:hover { color: inherit; }
+.testimony .outlet .s { color: var(--muted); font-size: 13px; white-space: nowrap; }
 
 .inspector { padding: 12px 0 0; min-width: 0; }
 .inspector h3 { font-size: 30px; line-height: 1.1; margin: 10px 0 18px; overflow-wrap: anywhere; }

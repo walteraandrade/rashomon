@@ -21,6 +21,9 @@ import {
   paintOutlets,
   paintOutletsError,
   paintSelection,
+  paintTestimony,
+  paintTestimonyError,
+  paintTestimonyLoading,
 } from './render.js'
 import {
   cancelDocs,
@@ -173,6 +176,7 @@ export const scopeKeys = (personId, graphParams, term = null) => ({
   graph: personId + '?' + graphParams,
   sources: personId + '?' + api.narrowToSources(graphParams),
   docs: personId + '?' + docsQuery(graphParams, term),
+  testimony: personId + '?' + api.narrowToTestimony(graphParams),
 })
 
 // Reuses a fresh entry instead of fetching, and only memoizes a value the fetch actually
@@ -334,6 +338,23 @@ const loadSourcesFlow = async (id, signal) => {
   }
 }
 
+// Same shape as the outlet list: keyed by what the route reads, so a sort, limit or outlet
+// change repaints from the memo (with the new active outlet) instead of refetching. A miss
+// blanks the panel first, so one person's numbers never sit under the next person's name.
+/** @param {number} id @param {AbortSignal} signal */
+const loadTestimonyFlow = async (id, signal) => {
+  const person = $('person').value
+  const key = scopeKeys(person, graphQuery()).testimony
+  if (!readScope('testimony', key)) paintTestimonyLoading()
+  try {
+    const data = await fromScope('testimony', key, () => api.loadTestimony(person, api.testimonyParams(controlValues()), signal))
+    if (id !== currentRequestId()) return
+    paintTestimony({ data, domain: state.domain, onPick: pickDomain })
+  } catch (e) {
+    if (id === currentRequestId() && !aborted(e)) paintTestimonyError()
+  }
+}
+
 const loadCandidatesFlow = async () => {
   getCandidateController()?.abort()
   const controller = new AbortController()
@@ -443,6 +464,7 @@ const load = async () => {
       }
     }
     loadSourcesFlow(id, signal())
+    loadTestimonyFlow(id, signal())
     const person = $('person').value
     const query = graphQuery()
     const data = await fromScope('graph', scopeKeys(person, query).graph, () => api.loadGraph(person, query, signal()))

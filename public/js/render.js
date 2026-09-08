@@ -3,7 +3,7 @@
 // and the callbacks it wires (onChoose, onShowDocs, onPick) all come in as parameters, so
 // this module never reaches into public/js/state.js on its own.
 
-import { domainSuffix, esc, fmt, kinds, label, matching, normalize, relatedTo, safeDocUrl, score, scoreName, toneColor, trendOf } from './format.js'
+import { domainSuffix, esc, fmt, kinds, label, matching, normalize, relatedTo, safeDocUrl, score, scoreName, signed, sourceLabels, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor, trendOf } from './format.js'
 import { FONT_SANS, routesFrom } from './layout.js'
 
 /** @typedef {import('./format.js').Candidate} Candidate */
@@ -14,6 +14,7 @@ import { FONT_SANS, routesFrom } from './layout.js'
 /** @typedef {import('./format.js').OutletRow} OutletRow */
 /** @typedef {import('./format.js').PlacedTerm} PlacedTerm */
 /** @typedef {import('./format.js').Term} Term */
+/** @typedef {import('./format.js').Testimony} Testimony */
 
 // Elements this page owns by id. The markup in design-5.html guarantees each one exists, and
 // the values read off them (select.value, button.disabled) are per-element, so this is typed
@@ -192,6 +193,66 @@ export const paintOutlets = ({ rows, domain, onPick }) => {
 
 export const paintOutletsError = () => {
   $('outletList').innerHTML = '<p class="note">Não foi possível carregar os veículos.</p>'
+}
+
+// The testimony panel: kikori's -10..+10 score for the person in the current recorte, overall,
+// per source and per outlet, all from one response so the three blocks can never describe
+// different windows. Outlet rows narrow the recorte exactly like the outlet list does, so a
+// reader goes from "this outlet is the harshest" to its words in one click. The `3` in the
+// empty copy is api.js's narrowToTestimony `min`.
+/** @param {{ data: Testimony, domain: string, onPick: (domain: string) => void }} args */
+export const paintTestimony = ({ data, domain, onPick }) => {
+  const { overall, by_source, by_domain, method } = data
+  const score = overall.score
+  if (score === null || score === undefined || !overall.n) {
+    $('testimonyLabel').textContent = ''
+    $('testimonyList').innerHTML = `<p class="note">Nenhum texto avaliado neste recorte (método ${esc(method)}).</p>`
+    return
+  }
+  $('testimonyLabel').textContent = signed(score)
+  const domains = [...by_domain].sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
+  // The route ignores the outlet filter on purpose (the panel is "this outlet vs the others"),
+  // so while an outlet narrows the rest of the page this line keeps the big number honest.
+  const focus = testimonyFocus(by_domain, domain)
+  const focusLine =
+    domain === 'all'
+      ? ''
+      : focus
+        ? `<p class="focus"><b>${esc(domain)}</b>: <strong style="--tone:${testimonyColor(focus.score)}">${signed(focus.score)}</strong> em ${fmt(focus.n)} ${focus.n === 1 ? 'texto' : 'textos'}. O número acima é o recorte inteiro.</p>`
+        : `<p class="focus"><b>${esc(domain)}</b>: menos de 3 textos avaliados, sem média própria. O número acima é o recorte inteiro.</p>`
+  /** @param {number | null | undefined} s */
+  const chip = (s) => `<span class="t" style="--tone:${testimonyColor(s)}">${s === null || s === undefined ? '' : signed(s)}</span>`
+  $('testimonyList').innerHTML =
+    `<div class="verdict"><strong style="--tone:${testimonyColor(score)}">${signed(score)}</strong><span>${testimonyClass(score)} · média de ${fmt(overall.n)} ${overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</span></div>` +
+    `<div class="scale" aria-hidden="true"><i style="--pos:${testimonyPosition(score)}%"></i><span>−10 contra</span><span>+10 a favor</span></div>` +
+    focusLine +
+    '<div class="eyebrow sub">Por fonte</div>' +
+    by_source.map((r) => `<div class="outlet"><span class="d">${esc(sourceLabels[r.source] ?? r.source)}</span><span class="s"></span><span class="n">${fmt(r.n)}</span>${chip(r.score)}</div>`).join('') +
+    '<div class="eyebrow sub">Por veículo</div>' +
+    (domains.length
+      ? domains
+          .map(
+            (r) =>
+              `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-testimony-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" title="${esc(r.source)}"><span class="d">${esc(r.domain)}</span><span class="s">${esc(sourceLabels[r.source] ?? r.source)}</span><span class="n">${fmt(r.n)}</span>${chip(r.score)}</button>`,
+          )
+          .join('')
+      : '<p class="note">Nenhum veículo com 3 ou mais textos avaliados neste recorte.</p>') +
+    `<p class="note">Nota de −10 a +10 que o modelo kikori (${esc(method)}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
+  queryAll('[data-testimony-domain]', $('testimonyList')).forEach((el) =>
+    el.addEventListener('click', () => {
+      const d = el.dataset.testimonyDomain
+      onPick(!d || d === domain ? 'all' : d)
+    }),
+  )
+}
+
+export const paintTestimonyLoading = () => {
+  $('testimonyLabel').textContent = ''
+  $('testimonyList').textContent = 'Carregando…'
+}
+
+export const paintTestimonyError = () => {
+  $('testimonyList').innerHTML = '<p class="note">Não foi possível carregar a avaliação.</p>'
 }
 
 export const paintDocsLoading = () => {

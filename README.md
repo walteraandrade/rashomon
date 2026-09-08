@@ -61,7 +61,18 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also ca
 
 ## Testimony and scoring
 
-`doc_testimony` holds one `{ doc_id, person_id, method, score }` row per attempt: `score` is `null` when the scorer could not form an opinion (e.g. empty text), inserted anyway so the pair is not retried. `pnpm score` (env `TESTIMONY_SCORER`, default `onnx`) scores every `(doc, person)` pair in `doc_persons` that lacks a row for that method yet; re-running under a different `TESTIMONY_SCORER` value adds a second, independent row set rather than overwriting the first. Scorers live in `src/scorers/`: `stub` is deterministic and hermetic (tests only), `onnx` loads `TESTIMONY_MODEL` via `@huggingface/transformers` (cache dir `MODEL_DIR`, default `./data/models`) and is never exercised by `pnpm test`.
+`doc_testimony` holds one `{ doc_id, person_id, method, score }` row per attempt: `score` is `null` when the scorer could not form an opinion (e.g. empty text), inserted anyway so the pair is not retried. `pnpm score` (env `TESTIMONY_SCORER`, default `onnx`) scores every `(doc, person)` pair in `doc_persons` that lacks a row for that method yet; re-running under a different `TESTIMONY_SCORER` value adds a second, independent row set rather than overwriting the first. Scorers live in `src/scorers/`: `stub` is deterministic and hermetic (tests only); `onnx` loads `TESTIMONY_MODEL` ([drifting-walter/kikori](https://huggingface.co/drifting-walter/kikori)) via `@huggingface/transformers` (cache dir `MODEL_DIR`, default `./data/models`; `TESTIMONY_DTYPE` picks `q8`, the default, 110 MB / ~6 ms per short text, or `fp32`, 436 MB / ~12 ms) and is never exercised by a plain `pnpm test`. The scorer name and the row label differ: `TESTIMONY_SCORER=onnx` writes rows as `method = kikori:<dtype>` (`kikori:q8`, `kikori:fp32`), so rows from the earlier placeholder (`onnx`, single label, person ignored) are never mixed with kikori's, and `pnpm score` re-scores every pair whose only row is from another method. Clients reading testimony pass `method=kikori:q8` explicitly; the route's default is still `onnx`.
+
+### The kikori contract
+
+The model carries its own contract in `config.json["kikori"]`, and the scorer reads it from there rather than hard-coding it:
+
+- **Input** is the pair `[CLS] person.name [SEP] text [SEP]`, `token_type_ids` 0 for the person segment and 1 for the text. The person is part of the input: the same doc scores differently for each person it mentions.
+- **Labels** are `neg, neu, pos` in that order (`config.json["kikori"].labels`). **Score** is `(p_pos - p_neg) * 10` over `softmax(logits)`, range -10..+10; the model's class cut is `neg <= -2.5`, `pos >= 2.5`.
+- **Truncation** is done by hand: only the text is cut, to `max_length - len(person tokens) - 3` (`max_length` 256), so the closing `[SEP]` always survives. `tokenizer(person, { text_pair, truncation: true })` in transformers.js drops the last `[SEP]` on long texts and moves the score; the scorer never uses it.
+- **Known bias**: the person's name acts as a prior. The same hostile sentence scores about +1.9 with Lula as target and about -4 with Tarcísio or Bolsonaro. Read testimony as "this outlet vs other outlets on the same person", never as "person A vs person B".
+
+`test/kikori-fixtures.json` is the model's own fixture set (24 pool pairs, 16 short and 8 long, no holdout text) with `score_fp32` and `score_int8`. `KIKORI_CHECK=1 pnpm test` downloads the model and runs the real scorer over it, asserting `fp32` within 0.01 of `score_fp32` and `q8` within 1.5 of `score_int8` (dynamic int8 picks activation scales at run time; Node and Python differ by 0.30 mean, 1.29 max on these fixtures). `KIKORI_CHECK=q8` or `=fp32` runs one dtype.
 
 ## Editorial lean
 

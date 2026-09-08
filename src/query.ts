@@ -6,6 +6,10 @@ import type { DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery,
 // method=stub in tests/debugging regardless of what `pnpm score` last ran.
 const DEFAULT_TESTIMONY_METHOD = 'onnx'
 
+// `:` is part of the charset because the kikori scorer labels its rows `kikori:<dtype>`;
+// without it the parser silently fell back to 'onnx' and returned the placeholder rows.
+const METHOD_TOKEN = /^[\w.:\/-]{1,128}$/
+
 export const int = (v: string | undefined, d: number, lo: number, hi: number) => {
   const n = Number.parseInt(v ?? '', 10)
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
@@ -95,6 +99,6 @@ export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery
 export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => ({
   days: int(q.days, 30, 1, 365),
   source: parseSourceList(q.source),
-  method: /^[\w.\/-]{1,128}$/.test(q.method ?? '') ? q.method! : DEFAULT_TESTIMONY_METHOD,
+  method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : DEFAULT_TESTIMONY_METHOD,
   min: int(q.min, 3, 1, 1000),
 })

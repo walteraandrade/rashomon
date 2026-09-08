@@ -70,8 +70,9 @@ export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candida
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 
 // Same shape as query.ts's `int` (default, floor, ceiling) without importing it: db.ts sits
-// below the query layer and must not depend on it.
-const clampEnv = (v: string | undefined, d: number, lo: number, hi: number) => {
+// below the query layer and must not depend on it. Exported so every knob that reads the
+// environment (statistics threshold, write batch sizes) clamps the same way.
+export const clampEnv = (v: string | undefined, d: number, lo: number, hi: number) => {
   const n = Number.parseInt(v ?? '', 10)
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
 }

@@ -8,4 +8,4 @@ import { camara } from './camara.js'
 import { senado } from './senado.js'
 
 export const collectors: Record<Source, Collector> = { bluesky, gdelt, rss, gnews, gkg, camara, senado }
-export const defaultSources: Source[] = ['bluesky', 'rss', 'gnews', 'gkg', 'senado']
+export const defaultSources: Source[] = ['bluesky', 'rss', 'gnews', 'gkg', 'senado', 'camara']

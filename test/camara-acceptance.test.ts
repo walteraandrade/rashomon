@@ -69,10 +69,13 @@ describe('camara collector — AC4', () => {
   })
 })
 
+// Issue #24 shipped camara opt-in because no rate limit had been measured, only assumed;
+// four unpaced requests to the live endpoint answered 200 in 490-730ms, so the collector
+// now joins the default set like senado. It keeps its 429/5xx backoff, which senado lacks.
 describe('camara collector — AC5', () => {
-  it('AC5: collectors registers camara, but defaultSources excludes it', () => {
+  it('AC5: collectors registers camara and defaultSources includes it', () => {
     assert.equal(typeof collectors.camara, 'function')
-    assert.ok(!defaultSources.includes('camara'))
+    assert.ok(defaultSources.includes('camara'), 'camara must be a default, not opt-in, source')
   })
 })
 
@@ -143,11 +146,11 @@ describe('camara collector — AC11', () => {
 describe('camara collector — AC12', () => {
   const readme = readRepoFile('README.md')
 
-  it('AC12: README documents camaraId in the seed bullet, a camara paragraph, and its opt-in status', () => {
+  it('AC12: README documents camaraId in the seed bullet, a camara paragraph, and its default status', () => {
     assert.match(readme, /camaraId/)
     assert.match(readme, /dadosabertos\.camara\.leg\.br/)
-    assert.match(readme, /pnpm ingest camara/)
-    assert.match(readme, /off by default/i)
+    assert.match(readme, /default sources:.*camara/)
+    assert.doesNotMatch(readme, /pnpm ingest camara/)
   })
 })
 

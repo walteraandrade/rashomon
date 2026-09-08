@@ -193,7 +193,7 @@ describe('testimony UI: the page holds the panel and explains it', () => {
   it('design-5.html has the panel in the side column, between the outlets and the candidates', () => {
     const html = read('design-5.html')
     const side = html.match(/<div class="side">([\s\S]*?)<aside/)?.[1] ?? ''
-    assert.match(side, /<details class="outlets testimony" id="testimony"><summary class="eyebrow">Avaliação <b id="testimonyLabel"><\/b><\/summary><div id="testimonyList">/)
+    assert.match(side, /<details class="outlets testimony" id="testimony" open><summary class="eyebrow">Avaliação <b id="testimonyLabel"><\/b><\/summary><div id="testimonyList">/)
     assert.ok(side.indexOf('id="outlets"') < side.indexOf('id="testimony"'), 'after the outlets')
     assert.ok(side.indexOf('id="testimony"') < side.indexOf('id="candidateQueue"'), 'before the candidates')
   })

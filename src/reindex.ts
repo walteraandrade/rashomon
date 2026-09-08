@@ -1,38 +1,79 @@
 import seedPersons from '../seed.json' with { type: 'json' }
 import { analyzeTables, db, migrate } from './db.js'
-import { discoverNames, domainOf, personsMentioned, terms } from './extract.js'
-import { upsertPersons } from './store.js'
+import { domainOf } from './extract.js'
+import { derive, inBatches, inTransaction, upsertPersons, writeBatchDocs, writeDerived } from './store.js'
 import type { Person, Source, Term } from './types.js'
 
 type Row = { id: number; source: Source; text: string; extra_terms: Term[]; extra_names: string[] }
 
-const reindexDoc = async (persons: Person[], { id, source, text, extra_terms, extra_names }: Row) => {
-  const matched = personsMentioned(text, persons)
-  const names = discoverNames({ source, text, extraNames: extra_names }, persons)
-  const ts = matched.length ? terms(text, extra_terms) : []
-  await Promise.all([
-    ...matched.map((p) => db.query(`insert into doc_persons values ($1, $2)`, [id, p.id])),
-    ...ts.map((t) => db.query(`insert into doc_terms values ($1, $2, $3)`, [id, t.term, t.kind])),
-    ...names.map((n) => db.query(`insert into doc_candidates values ($1, $2)`, [id, n])),
-  ])
+// Keyset pagination on the primary key, not offset: it is stable while the rebuild writes and
+// it never holds more than one page of document text in memory, whatever the corpus size.
+const pageOf = async (after: number, size: number) =>
+  (
+    await db.query<Row>(`select id, source, text, extra_terms, extra_names from docs where id > $1 order by id limit $2`, [after, size])
+  ).rows
+
+const eachPage = async (size: number, fn: (rows: Row[]) => Promise<void>) => {
+  let after = 0
+  let seen = 0
+  for (;;) {
+    const rows = await pageOf(after, size)
+    if (!rows.length) return seen
+    await fn(rows)
+    after = rows[rows.length - 1].id
+    seen += rows.length
+  }
+}
+
+// Docs whose uri yields no domain are skipped rather than written back as null: the update
+// would change nothing and only cost a row version. They stay in the predicate, as before.
+const backfillDomains = async (size: number) => {
+  let after = 0
+  let filled = 0
+  for (;;) {
+    const { rows } = await db.query<{ id: number; uri: string }>(
+      `select id, uri from docs where domain is null and source <> 'bluesky' and id > $1 order by id limit $2`,
+      [after, size],
+    )
+    if (!rows.length) return filled
+    const found = rows.flatMap((r) => {
+      const domain = domainOf(r.uri)
+      return domain ? [{ id: r.id, domain }] : []
+    })
+    await inTransaction(() =>
+      inBatches(found, size, (b) =>
+        db.query(`update docs set domain = u.domain from unnest($1::int[], $2::text[]) as u(id, domain) where docs.id = u.id`, [
+          b.map((x) => x.id),
+          b.map((x) => x.domain),
+        ]),
+      ),
+    )
+    after = rows[rows.length - 1].id
+    filled += found.length
+  }
 }
 
 // Separate from main()'s stdout/db wiring, so tests can reindex the fixture in-process.
-export const reindexAll = async (persons: Person[]) => {
-  await db.exec(`delete from doc_terms; delete from doc_persons; delete from doc_candidates;`)
+export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => {
+  // `truncate`, not `delete`: PGlite has no autovacuum, so deleting every row would leave the
+  // pages dead and the rebuild below would append past them, growing the files on every run.
+  // Truncate returns the space immediately, which is why no vacuum follows it here — unlike
+  // `pnpm purge`, whose deletions are permanent and need `vacuum full` to shrink the file.
+  await db.exec(`truncate doc_terms, doc_persons, doc_candidates`)
   await upsertPersons(persons)
-  const missing = await db.query<{ id: number; uri: string }>(`select id, uri from docs where domain is null and source <> 'bluesky'`)
-  await missing.rows.reduce<Promise<void>>(
-    async (acc, r) => (await acc, void (await db.query(`update docs set domain = $2 where id = $1`, [r.id, domainOf(r.uri) ?? null]))),
-    Promise.resolve(),
+  const backfilled = await backfillDomains(size)
+  // One transaction per page: an interruption leaves whole pages committed and never a
+  // document with only part of its derived rows. Recovery is to run it again (see README).
+  const docs = await eachPage(size, (rows) =>
+    inTransaction(() =>
+      writeDerived(rows.map((r) => derive(r.id, { source: r.source, text: r.text, extraTerms: r.extra_terms, extraNames: r.extra_names }, persons))),
+    ),
   )
-  const { rows } = await db.query<Row>(`select id, source, text, extra_terms, extra_names from docs`)
-  await rows.reduce<Promise<void>>(async (acc, r) => (await acc, reindexDoc(persons, r)), Promise.resolve())
   // A reindex rewrites every derived table from empty, so the planner's row counts and
   // most-common-value lists are stale by construction when it ends: refresh them here,
   // unconditionally, in the process that owns DATA_DIR.
   const analyzed = await analyzeTables()
-  return { docs: rows.length, backfilled: missing.rows.length, analyzed }
+  return { docs, backfilled, analyzed }
 }
 
 const main = async () => {

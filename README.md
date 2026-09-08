@@ -1,14 +1,13 @@
 # rashomon
 
-Rashomon: which words a Brazilian political figure is associated with, across Bluesky, Google News, GDELT, RSS feeds and the Senado Federal. MVP.
+Rashomon: which words a Brazilian political figure is associated with, across Bluesky, Google News, GDELT, RSS feeds, the Senado Federal and the Câmara dos Deputados. MVP.
 
 ## Run
 
 ```bash
 pnpm install
-pnpm ingest          # default sources: bluesky, rss, gnews, gkg, senado; or: pnpm ingest gkg
+pnpm ingest          # default sources: bluesky, rss, gnews, gkg, senado, camara; or: pnpm ingest gkg
 pnpm ingest gdelt    # GDELT DOC API, slow and rate limited, off by default
-pnpm ingest camara   # Câmara dos Deputados floor speeches, off by default
 pnpm dev             # http://localhost:3210
 pnpm reindex         # recompute terms, person matches and candidates after changing extract.ts or seed.json
 pnpm score           # scores every unscored (doc, person) pair with TESTIMONY_SCORER (default onnx)
@@ -28,6 +27,8 @@ Bluesky without login returns one page (100 posts) per person. To paginate, set 
 `gkg` downloads GDELT's 15-minute translation GKG files (`*.translation.gkg.csv.zip`), keeps Portuguese rows, uses the original page title as text and GDELT themes as `theme` terms. Processed slots are recorded in `gkg_files`, so each run only fetches new ones. `GKG_SLOTS` sets how many recent slots to look back (default 24 = 6h, ~3.5MB each). A slot is marked done before its docs are inserted; if the insert fails you must delete the row from `gkg_files` to retry it.
 
 `gdelt` (DOC API) enforces ~1 request / 5s per IP and returns 429 aggressively. Off by default.
+
+`camara` and `senado` read a tracked parliamentarian's own floor-speech summaries over the last 30 days, keyed off `camaraId`/`senadoId` in `seed.json`; a person carrying neither is skipped without a request. Both are on by default: unpaced sequential requests to either endpoint answered 200 with no rate limiting (senado 150-280ms, camara 490-730ms). `camara` still retries a 429/5xx three times with backoff, `senado` does not. Neither has a window knob; 30 days is fixed in the collector, so a chamber in recess simply contributes nothing.
 
 - `seed.json` tracked people and aliases. Longer aliases win over bare ones across people; an optional `exclude` list names lookalikes that must not match ("Ciro Nogueira"). An optional `camaraId` (federal deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person. Scope: politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline
 

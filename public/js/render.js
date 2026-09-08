@@ -296,7 +296,7 @@ const STRIP_PAD = 28
 // dots shrink with it (down to 55%), or a phone would get a stack three times taller than
 // the axis is wide.
 /** @param {number} n @param {number} [width] */
-export const stripRadius = (n, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(22, 3 + 2 * Math.sqrt(n))
+export const stripRadius = (n, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
 
 // The geometry of the strip at a given pixel width: one circle per outlet on the -10..+10
 // axis, stacked by `swarm` where they would overlap. Exported so a test can assert the
@@ -308,7 +308,7 @@ export const stripLayout = (rows, width) => {
   const x = (score) => STRIP_PAD + (testimonyPosition(score) / 100) * inner
   const dots = swarm(foldTestimonyDomains(rows).map((d) => ({ ...d, x: x(d.score), r: stripRadius(d.n, width) })))
   const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
-  const half = Math.max(28, Math.ceil(reach) + 4)
+  const half = Math.max(44, Math.ceil(reach) + 6)
   return { dots, x, half, height: half * 2, width }
 }
 

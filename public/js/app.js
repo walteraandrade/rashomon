@@ -437,6 +437,9 @@ const setMode = (next) => {
   render()
 }
 
+// Resets the reader's state, not the painted surfaces: the old map, columns and overflow list
+// stay on screen until render() replaces them, so nothing under them moves while a load is in
+// flight (see load()).
 const resetGraph = () => {
   layoutCache.clear()
   currentLayout = null
@@ -445,8 +448,6 @@ const resetGraph = () => {
   $('search').value = ''
   $('searchNote').textContent = ''
   $('selectionNote').textContent = ''
-  $('overflow').hidden = true
-  $('columns').innerHTML = ''
 }
 
 const updateHeader = () => {
@@ -459,24 +460,31 @@ const updateHeader = () => {
 // is never read before it is set.
 const signal = () => /** @type {AbortController} */ (getController()).signal
 
+// A reload keeps the previous map, columns, legend and inspector on screen, dimmed by the
+// `is-loading` class, and swaps them in one go when the data lands. Blanking them first made
+// the map column collapse from its drawn height to the empty-state minimum for the length of
+// the request, which threw the testimony strip and everything under it hundreds of pixels up
+// and back down on every outlet click. Only the very first load, with nothing to keep, shows
+// the loading copy in place of a map.
 const load = async () => {
   const id = nextRequestId()
   getController()?.abort()
   setController(new AbortController())
   cancelDocs()
   resetGraph()
+  const first = !graph
   busy = true
   graph = null
   nodes = []
   links = []
   $('status').classList.remove('error')
   $('status').textContent = 'Carregando a base local…'
-  $('viewport').hidden = false
-  $('columns').hidden = true
   $('viewport').setAttribute('aria-busy', 'true')
-  $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
-  $('inspector').textContent = 'Aguardando dados.'
-  $('legend').textContent = ''
+  $('workspace').classList.add('is-loading')
+  if (first) {
+    $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
+    $('inspector').textContent = 'Aguardando dados.'
+  }
   try {
     if (!people.length) {
       const loaded = await loadPeopleFlow(signal())
@@ -506,12 +514,19 @@ const load = async () => {
     busy = false
     $('status').classList.add('error')
     $('status').textContent = 'Não foi possível carregar dados reais.'
+    $('viewport').hidden = false
+    $('columns').hidden = true
+    $('overflow').hidden = true
+    $('legend').textContent = ''
     $('viewport').innerHTML =
       '<div class="empty">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
     $('retry').addEventListener('click', load)
     $('inspector').textContent = 'Use tentar novamente quando a API estiver disponível.'
   } finally {
-    if (id === currentRequestId()) $('viewport').setAttribute('aria-busy', 'false')
+    if (id === currentRequestId()) {
+      $('viewport').setAttribute('aria-busy', 'false')
+      $('workspace').classList.remove('is-loading')
+    }
   }
 }
 

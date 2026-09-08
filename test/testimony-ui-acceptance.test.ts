@@ -269,10 +269,10 @@ describe('testimony strip: the outlets on the axis under the map', () => {
     assert.equal(by('right.example').x, 860 - 28)
     assert.equal(by('mid.example').x, 430)
     assert.ok(by('right.example').r > by('mid.example').r && by('mid.example').r > by('left.example').r)
-    assert.equal(stripRadius(3), 3 + 2 * Math.sqrt(3))
-    assert.equal(stripRadius(10_000), 22, 'capped')
-    assert.equal(stripRadius(10_000, 328), 22 * 0.55, 'a phone-wide strip shrinks the dots, floor 55%')
-    assert.equal(stripRadius(3, 2000), 3 + 2 * Math.sqrt(3), 'a wide strip never grows them')
+    assert.equal(stripRadius(3), 4 + 2.8 * Math.sqrt(3))
+    assert.equal(stripRadius(10_000), 30, 'capped')
+    assert.equal(stripRadius(10_000, 328), 30 * 0.55, 'a phone-wide strip shrinks the dots, floor 55%')
+    assert.equal(stripRadius(3, 2000), 4 + 2.8 * Math.sqrt(3), 'a wide strip never grows them')
     assert.ok(stripLayout([{ domain: 'a.example', source: 'gnews', score: 0, n: 10 }], 328).dots[0].r < by('mid.example').r, 'same texts, narrower strip, smaller dot')
     assert.equal(layout.height, layout.half * 2)
   })
@@ -390,6 +390,11 @@ describe('testimony mask: words coloured against the person mean', () => {
     const { narrowToSources } = await import('../public/js/api.js')
     assert.equal(narrowToSources(p).has('testimony'), false)
     assert.equal(docsQuery(p, null).has('testimony'), false)
+  })
+
+  it('the workspace carries an id so a reload can dim it in place instead of blanking the map', () => {
+    assert.match(read('design-5.html'), /<section class="workspace" id="workspace"/)
+    assert.match(read('atlas.css'), /\.workspace\.is-loading \.viewport[^{]*\{[^}]*opacity/)
   })
 
   it('design-5.html has the toggle next to the view switch and the chapter explains the centring', () => {

@@ -109,3 +109,25 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
   min: int(q.min, 5, 1, 1000),
   limit: int(q.limit, 50, 1, 200),
 })
+
+// Comma lists whose element order carries no meaning: `source=rss,gnews` and `source=gnews,rss`
+// scope to the same docs, so they must share one cache entry.
+const LIST_PARAMS = new Set(['source', 'domain', 'lean'])
+
+const canonical = (key: string, value: unknown) =>
+  LIST_PARAMS.has(key) && typeof value === 'string' ? value.split(',').sort().join(',') : String(value)
+
+// The cache key of a read: the route, the person (empty for the routes that span everyone) and
+// every field of the *parsed* query, sorted by name. Parsed, so two URLs that clamp to the same
+// effective filters share an entry and an unknown parameter cannot fork one. Every field, so a
+// new parameter added to a query type joins the key on its own instead of silently aliasing two
+// different requests. encodeURIComponent, so a `|` or `=` inside a user-supplied term (normalize
+// keeps punctuation) cannot forge the separators and make two different reads collide.
+export const cacheKey = (route: string, person: string, q: Record<string, unknown>): string =>
+  [route, encodeURIComponent(person)]
+    .concat(
+      Object.keys(q)
+        .sort()
+        .map((k) => `${k}=${encodeURIComponent(canonical(k, q[k]))}`),
+    )
+    .join('|')

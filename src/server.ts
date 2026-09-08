@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { db, migrate } from './db.js'
 import { candidatesFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
+import { measure, perfEnabled, perfLine, perfLogEnabled, round } from './perf.js'
 import type { Person } from './types.js'
 import {
   parseCandidatesQuery,
@@ -16,6 +17,19 @@ import {
 
 const port = Number(process.env.PORT ?? 3210)
 export const app = new Hono<{ Variables: { person: Person } }>()
+
+// Opt-in (PERF=1) and registered before every route so it wraps them all: one JSON line per
+// API request plus x-perf-* response headers with wall time, SQL statement count and time
+// awaited on PGlite. Headers only, never the body, so payloads stay byte-identical; when
+// PERF is unset this middleware does not exist.
+if (perfEnabled)
+  app.use('/api/*', async (c, next) => {
+    const { ms, sql, dbMs } = await measure(next)
+    c.header('x-perf-total-ms', String(round(ms)))
+    c.header('x-perf-db-ms', String(round(dbMs)))
+    c.header('x-perf-sql-count', String(sql))
+    if (perfLogEnabled) console.log(perfLine({ method: c.req.method, path: c.req.path, query: new URL(c.req.url).search.slice(1), status: c.res.status, ms, sql, dbMs }))
+  })
 
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)

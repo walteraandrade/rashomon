@@ -1,7 +1,12 @@
 import { PGlite } from '@electric-sql/pglite'
+import { instrument, perfEnabled } from './perf.js'
 
 // DATA_DIR points at the PGlite directory; 'memory://' gives a throwaway in-memory database (tests).
-export const db = new PGlite(process.env.DATA_DIR ?? './data/pg')
+const pg = new PGlite(process.env.DATA_DIR ?? './data/pg')
+
+// With PERF unset this is the PGlite instance itself, untouched; PERF=1 swaps in a proxy
+// that times query/exec into the current request's counters (src/perf.ts).
+export const db = perfEnabled ? instrument(pg) : pg
 
 export const migrate = () =>
   db.exec(`

@@ -158,10 +158,8 @@ const measurePhase = async () => {
   ).rows.map((r) => r.id)
 
   const plans: [string, string, unknown[]][] = [
-    ['terms', statements.terms, [PERSON, 30, 'all', 'all', 'all', exclude, 2, 'count', 40]],
-    ['signature', statements.signature, [PERSON, 30, 'all', 'all', exclude]],
+    ['graph', statements.graph, [PERSON, 30, 'all', 'all', 'all', exclude, 2, 'count', 40]],
     ['links', statements.links, [PERSON, 30, 'all', 'all', ids]],
-    ['stats', statements.stats, [PERSON, 30, 'all', 'all']],
     ['sources', statements.sources, [PERSON, 30, 'all', 'all']],
     ['docs', statements.docs, [PERSON, 30, 'all', 'all', TERM, 'word', 50, 0]],
     ['docsCount', statements.docsCount, [PERSON, 30, 'all', 'all', TERM, 'word']],

@@ -26,8 +26,8 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
 - `src/server.ts` Hono routes + static files.
 - `src/query.ts` query parsers for every route; each parameter is clamped there.
-- `public/design-5.html` is the current UI (radial atlas), served at `/`. It is markup only: one `<link rel="stylesheet" href="atlas.css">` and one `<script type="module" src="./js/app.js">`. No `<style>` block, no inline script, no inline `style=` except a `--var` override for a genuinely dynamic value.
-- `public/atlas.css` holds every rule: `:root` tokens, layout, components.
+- `public/design-5.html` is the current UI (radial atlas), served at `/`. It is markup only: the Google Fonts link, one `<link rel="stylesheet" href="atlas.css">` and one `<script type="module" src="./js/app.js">`. No `<style>` block, no inline script, no inline `style=` except a `--var` override for a genuinely dynamic value. The controls are one sentence (`.sentence-line`, five `<select>`s), the map is the figure, and the `#como-ler` chapter at the bottom is where frequência, PMI, PMI × ln(1 + documentos), lines and tone are explained in plain pt-BR. Keep that chapter in sync with `src/graph.ts` when scoring changes.
+- `public/atlas.css` holds every rule for every page: `:root` tokens (League Spartan for display, Instrument Sans for text, nothing under 11px), layout, components, and the compare page's section. `public/compare.html` links it too and keeps only its inline script; do not give it a `<style>` block.
 - `public/js/format.js` pure formatting, labels and URL helpers, plus the shared JSDoc typedefs (`Term`, `Link`, `Graph`, `Layout`, `Measure`, …) the other modules reference.
 - `public/js/api.js` URL building and fetching for the documented routes. No DOM.
 - `public/js/layout.js` pure geometry: `wrapLines`, `centerLabel`, `packPass`, `pack`, `routeGraph`, `routesFrom`. No DOM — text metrics arrive as an injected `measure(text, size, family, weight)`, which `render.js`'s `createCanvasMeasure()` supplies in the browser and a stub supplies in tests.

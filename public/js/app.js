@@ -230,11 +230,6 @@ const controlValues = () => ({ days: $('days').value, sort: $('sort').value, lim
 const graphQuery = () => api.params(controlValues())
 const daysLabel = () => $('days').selectedOptions[0].textContent.toLowerCase()
 
-const refreshSegActive = () => {
-  const buttons = /** @type {NodeListOf<HTMLElement>} */ ($('segSource').querySelectorAll('.segbtn'))
-  buttons.forEach((btn) => btn.classList.toggle('active', btn.dataset.value === state.source))
-}
-
 const getLayout = () => {
   const person = /** @type {Graph} */ (graph).person
   const key = layoutKey(person, nodes, $('sort').value, $('limit').value)
@@ -407,13 +402,9 @@ const resetGraph = () => {
 }
 
 const updateHeader = () => {
-  const person = people.find((p) => p.id === $('person').value)
   const source = sourceLabels[state.source] || state.source
-  const pick = /** @type {HTMLElement} */ (document.querySelector('.person-pick'))
-  pick.textContent = person ? `Pessoa: ${person.name}` : ''
   $('stats').hidden = !graph
   $('stats').textContent = graph ? `${fmt(graph.stats?.about)} docs · ${source}${domainSuffix(state.domain)}` : ''
-  $('stamp').textContent = `Base local · ${source} · mínimo de 2 documentos` + domainSuffix(state.domain)
 }
 
 // The controller for the request in flight; `load` replaces it before every fetch, so this
@@ -458,7 +449,7 @@ const load = async () => {
     if (id !== currentRequestId()) return
     graph = data
     busy = false
-    $('status').textContent = `Base local · ${data.person.name} · ${fmt(data.stats.about)} documentos sobre a pessoa · ${daysLabel()}${domainSuffix(state.domain)}`
+    $('status').textContent = `${fmt(data.stats.about)} documentos sobre ${data.person.name} neste recorte${domainSuffix(state.domain)}.`
     updateHeader()
     render()
   } catch (e) {
@@ -498,15 +489,14 @@ const handlers = createHandlers({
   updateHeader,
   setSource: (value) => {
     state.source = value
-    refreshSegActive()
+    $('source').value = value
   },
 })
 
 export const boot = () => {
-  $('segSource').innerHTML = SOURCE_SEGMENTS.map(([value, text]) => `<button class="segbtn" data-value="${value}">${text}</button>`).join('')
-  const segButtons = /** @type {NodeListOf<HTMLElement>} */ ($('segSource').querySelectorAll('.segbtn'))
-  segButtons.forEach((btn) => btn.addEventListener('click', handlers.source(String(btn.dataset.value))))
-  refreshSegActive()
+  $('source').innerHTML = SOURCE_SEGMENTS.map(([value, text]) => `<option value="${value}">${sourceLabels[value] ?? text}</option>`).join('')
+  $('source').value = state.source
+  $('source').addEventListener('change', () => handlers.source(String($('source').value))())
   $('modeMap').addEventListener('click', handlers.modeMap)
   $('modeColumns').addEventListener('click', handlers.modeColumns)
   for (const id of ['person', 'days', 'sort', 'limit']) $(id).addEventListener('change', handlers.control(id))

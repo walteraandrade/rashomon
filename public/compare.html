@@ -1,189 +1,58 @@
 <!doctype html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
 <title>rashomon · comparar</title>
-<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #05060c; --bg2: #0a0c17; --panel: #0d0f1c; --line: rgba(255,255,255,.09); --line-strong: rgba(255,255,255,.16);
-    --fg: #e9ebf5; --muted: #7d84a3; --muted-dim: #565c78;
-    --person: #ffd35c; --hashtag: #45ffc4; --word: #7fb0ff; --theme: #ff8fd8;
-    --radius: 9px;
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    background: var(--bg); color: var(--fg); font: 13.5px/1.4 Inter, system-ui, sans-serif;
-    display: flex; flex-direction: column; min-height: 100%;
-  }
-  ::selection { background: rgba(255,211,92,.25); }
-  button { font: inherit; color: inherit; }
-  .num { font-variant-numeric: tabular-nums; }
-
-  /* ---------- header ---------- */
-  header {
-    display: flex; min-width: 0; align-items: center; gap: 22px; padding: 10px 18px;
-    background: var(--panel); border-bottom: 1px solid var(--line); min-height: 58px; flex-wrap: wrap;
-  }
-  .brand { display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
-  .brand .wordmark { font: 800 20px/1 'League Spartan', sans-serif; letter-spacing: .01em; }
-  .brand .tagline { font: 500 10.5px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .14em; color: var(--muted-dim); }
-  .back-link { color: var(--muted); text-decoration: none; font: 500 12px Inter, sans-serif; flex-shrink: 0; }
-  .back-link:hover { color: var(--person); }
-
-  .person-picks { display: flex; align-items: center; gap: 14px; margin-left: auto; flex-shrink: 0; }
-  .person-pick-group { display: flex; flex-direction: column; gap: 2px; }
-  .person-pick-group .pp-label { font: 600 9.5px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim); }
-  .person-pick-group select {
-    appearance: none; background: none; border: 0; cursor: pointer; padding: 4px 22px 6px 2px;
-    font: 600 16px/1 'League Spartan', sans-serif; letter-spacing: .01em; color: var(--person); max-width: 220px;
-    border-bottom: 2px solid var(--person);
-  }
-  .person-pick-group select option { font: 13px Inter, system-ui, sans-serif; background: var(--panel); color: var(--fg); }
-
-  /* ---------- toolbar ---------- */
-  #toolbar {
-    background: var(--bg2); border-bottom: 1px solid var(--line);
-    padding: 12px 18px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 22px;
-  }
-  .group { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-  .group-label {
-    font: 600 10px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted-dim);
-  }
-  .seg { display: grid; gap: 4px; grid-auto-flow: column; }
-  .segbtn {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 7px; cursor: pointer;
-    padding: 6px 9px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 5px;
-    transition: background .12s ease, color .12s ease, border-color .12s ease; white-space: nowrap;
-  }
-  .segbtn:hover { color: var(--fg); border-color: var(--line-strong); }
-  .segbtn.active { background: rgba(255,211,92,.1); border-color: rgba(255,211,92,.5); color: var(--person); }
-  .segbtn .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-
-  .stepper { display: grid; grid-template-columns: 24px 34px 24px; align-items: center; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
-  .stepper button { background: none; border: none; cursor: pointer; padding: 6px 0; color: var(--muted); font-size: 13px; line-height: 1; }
-  .stepper button:hover { color: var(--person); background: rgba(255,255,255,.04); }
-  .stepper .val { text-align: center; font-size: 12px; padding: 6px 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-
-  /* ---------- notice / detail ---------- */
-  #notice {
-    padding: 8px 18px; background: rgba(255,211,92,.08); border-bottom: 1px solid rgba(255,211,92,.25);
-    color: var(--person); font-size: 12px;
-  }
-  #notice[hidden] { display: none; }
-
-  #detail {
-    padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
-    color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 18px; min-height: 38px;
-  }
-  #detail .term { color: var(--fg); font-weight: 600; }
-  #detail .side { display: flex; gap: 6px; align-items: baseline; }
-  #detail .side b { color: var(--fg); font-weight: 600; }
-  #detail .empty-hint { color: var(--muted-dim); }
-
-  /* ---------- columns ---------- */
-  .columns { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--line); overflow: hidden; min-height: 0; }
-  .col { background: var(--bg); display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-  .col-head {
-    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 12px 16px 10px;
-    border-bottom: 1px solid var(--line); flex-shrink: 0;
-  }
-  .col-title { display: block; font: 600 11px Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-dim); }
-  .col-sub {
-    display: block; margin-top: 3px; font: 400 10.5px/1.3 Inter, sans-serif; letter-spacing: normal;
-    text-transform: none; color: var(--muted-dim);
-  }
-  .col-count { color: var(--person); font-size: 11.5px; flex-shrink: 0; }
-  .chip-list { list-style: none; margin: 0; padding: 8px 12px 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
-  .chip {
-    display: grid; grid-template-columns: 8px 1fr auto auto; align-items: center; gap: 8px;
-    padding: 7px 10px; border-radius: 7px; border: 1px solid transparent; cursor: pointer;
-    background: rgba(255,255,255,.02);
-  }
-  .chip:hover { background: rgba(255,255,255,.05); }
-  .chip.selected { border-color: var(--person); background: rgba(255,211,92,.1); box-shadow: 0 0 0 1px rgba(255,211,92,.35); }
-  .chip .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .chip .term { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
-  .chip .count { color: var(--muted); font-size: 11px; }
-  .chip .pmi { color: var(--muted-dim); font-size: 10.5px; }
-  li.col-msg { padding: 22px 16px; color: var(--muted); font-size: 12.5px; text-align: center; list-style: none; }
-  .col-msg .hint { display: block; margin-top: 6px; color: var(--muted-dim); font-size: 11.5px; }
-
-  /* ---------- responsive ---------- */
-  @media (max-width: 900px) {
-    .columns { grid-template-columns: 1fr; grid-auto-rows: minmax(160px, 1fr); overflow-y: auto; }
-    header { flex-direction: column; align-items: flex-start; }
-    .person-picks { margin-left: 0; }
-    #toolbar { gap: 14px; }
-  }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header>
-  <div class="brand"><span class="wordmark">rashomon</span><span class="tagline">comparar</span></div>
-  <a class="back-link" href="design-5.html">← atlas</a>
-  <div class="person-picks">
-    <div class="person-pick-group">
-      <span class="pp-label">pessoa A</span>
-      <select id="personA" aria-label="Pessoa A"></select>
+<header class="top"><a class="brand" href="/">rashomon<span>.</span></a><nav><a href="/">atlas</a><a href="/#como-ler">como ler</a></nav></header>
+<main>
+  <section class="sentence" aria-label="Recorte">
+    <p class="sentence-line">Comparar <span class="pick"><select id="personA" aria-label="Pessoa A"></select></span> com <span class="pick"><select id="personB" aria-label="Pessoa B"></select></span> nos <span class="pick"><select id="days" aria-label="Período"></select></span>, em <span class="pick"><select id="source" aria-label="Fonte"></select></span>, por <span class="pick"><select id="sort" aria-label="Ordem"></select></span>.</p>
+    <div class="fine-controls">
+      <label>Tipo <select id="kind"></select></label>
+      <label>Palavras por pessoa <span class="stepper" id="stepLimit"><button class="dec" type="button" aria-label="Menos palavras">−</button><span class="val"></span><button class="inc" type="button" aria-label="Mais palavras">+</button></span></label>
+      <label>Mínimo de documentos <span class="stepper" id="stepMin"><button class="dec" type="button" aria-label="Mínimo menor">−</button><span class="val"></span><button class="inc" type="button" aria-label="Mínimo maior">+</button></span></label>
     </div>
-    <div class="person-pick-group">
-      <span class="pp-label">pessoa B</span>
-      <select id="personB" aria-label="Pessoa B"></select>
+    <p class="status" id="notice" role="status" hidden>Os dois lados mostram a mesma pessoa.</p>
+  </section>
+  <p class="detail" id="detail"><span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span></p>
+  <section class="compare-columns" aria-label="Comparação">
+    <section class="col" data-col="a">
+      <div class="col-head"><div><h2 id="titleA">Só de A</h2><span class="col-sub">Entre as palavras mais fortes de cada um. Não quer dizer que B nunca usa.</span></div><span class="col-count" id="countA"></span></div>
+      <ul class="chip-list" id="listA"></ul>
+    </section>
+    <section class="col" data-col="shared">
+      <div class="col-head"><div><h2>Em comum</h2><span class="col-sub">A mesma palavra nos dois lados, com os números de cada um.</span></div><span class="col-count" id="countShared"></span></div>
+      <ul class="chip-list" id="listShared"></ul>
+    </section>
+    <section class="col" data-col="b">
+      <div class="col-head"><div><h2 id="titleB">Só de B</h2><span class="col-sub">Entre as palavras mais fortes de cada um. Não quer dizer que A nunca usa.</span></div><span class="col-count" id="countB"></span></div>
+      <ul class="chip-list" id="listB"></ul>
+    </section>
+  </section>
+  <section class="chapter" aria-labelledby="comoLerTitle">
+    <h2 id="comoLerTitle">Como ler esta comparação</h2>
+    <div class="chapter-grid">
+      <div><h3>Duas listas, um recorte</h3><p>Cada lado pega as palavras mais fortes da sua pessoa, no mesmo período e na mesma fonte. "Palavras por pessoa" diz quantas entram em cada lista.</p></div>
+      <div><h3>Só de um lado</h3><p>A palavra está na lista de uma pessoa e não está na da outra. Ela pode até aparecer com a outra, só que mais fraca, fora da lista.</p></div>
+      <div><h3>Os números</h3><p>Documentos é em quantos textos a palavra aparece com aquela pessoa. PMI é quanto isso passa do acaso. A explicação completa está no <a href="/#como-ler">atlas</a>.</p></div>
     </div>
-  </div>
-</header>
-<div id="toolbar">
-  <div class="group">
-    <div class="group-label">janela</div>
-    <div class="seg" id="segDays"></div>
-  </div>
-  <div class="group">
-    <div class="group-label">fonte</div>
-    <div class="seg" id="segSource"></div>
-  </div>
-  <div class="group">
-    <div class="group-label">tipo</div>
-    <div class="seg" id="segKind"></div>
-  </div>
-  <div class="group">
-    <div class="group-label">ordem</div>
-    <div class="seg" id="segSort"></div>
-  </div>
-  <div class="group">
-    <div class="group-label">nós</div>
-    <div class="stepper" id="stepLimit"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
-  </div>
-  <div class="group">
-    <div class="group-label">mín. docs</div>
-    <div class="stepper" id="stepMin"><button class="dec">−</button><span class="val num"></span><button class="inc">+</button></div>
-  </div>
-</div>
-<div id="notice" hidden>comparando a mesma pessoa</div>
-<div id="detail"><span class="empty-hint">clica num termo para ver os detalhes.</span></div>
-<div class="columns">
-  <section class="col" data-col="a">
-    <div class="col-head"><span class="col-title">só em A<span class="col-sub">entre os termos mais fortes de cada um, não é ausência absoluta em B</span></span><span class="col-count num" id="countA"></span></div>
-    <ul class="chip-list" id="listA"></ul>
   </section>
-  <section class="col" data-col="shared">
-    <div class="col-head"><span class="col-title">em comum</span><span class="col-count num" id="countShared"></span></div>
-    <ul class="chip-list" id="listShared"></ul>
-  </section>
-  <section class="col" data-col="b">
-    <div class="col-head"><span class="col-title">só em B<span class="col-sub">entre os termos mais fortes de cada um, não é ausência absoluta em A</span></span><span class="col-count num" id="countB"></span></div>
-    <ul class="chip-list" id="listB"></ul>
-  </section>
-</div>
+</main>
 <script>
   const $ = (id) => document.getElementById(id)
-  const kindColorHex = { hashtag: '#45ffc4', word: '#7fb0ff', theme: '#ff8fd8' }
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
   const KIND_VALUES = ['hashtag', 'word', 'theme', 'all']
-  const SOURCE_VALUES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'all']
+  const SOURCE_VALUES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado', 'all']
   const sanitizeKind = (v) => (KIND_VALUES.includes(v) ? v : 'all')
   const sanitizeSource = (v) => (SOURCE_VALUES.includes(v) ? v : 'all')
 
@@ -195,30 +64,21 @@
   let people = []
   let selectedId = null
 
-  // ---------- shared filter toolbar ----------
-  const buildSeg = (containerId, options, key, colored) => {
-    const el = $(containerId)
-    el.innerHTML = options.map(([value, label]) => `
-      <button class="segbtn" data-value="${value}">${colored && kindColorHex[value] ? `<span class="dot" style="background:${kindColorHex[value]}"></span>` : ''}${label}</button>
-    `).join('')
-    el.querySelectorAll('.segbtn').forEach((btn) => btn.addEventListener('click', () => {
-      state[key] = key === 'kind' ? sanitizeKind(btn.dataset.value) : key === 'source' ? sanitizeSource(btn.dataset.value) : btn.dataset.value
-      paintSeg(containerId, state[key])
+  // ---------- the sentence controls ----------
+  const buildSelect = (id, options, key, sanitize = (v) => v) => {
+    const el = $(id)
+    el.innerHTML = options.map(([value, text]) => `<option value="${value}">${text}</option>`).join('')
+    el.value = state[key]
+    el.addEventListener('change', () => {
+      state[key] = sanitize(el.value)
+      el.value = state[key]
       loadBoth()
-    }))
+    })
   }
-  const paintSeg = (id, value) => {
-    $(id).querySelectorAll('.segbtn').forEach((b) => b.classList.toggle('active', b.dataset.value === value))
-  }
-
-  buildSeg('segDays', [['7', '7d'], ['30', '30d'], ['90', '90d'], ['365', '1a']], 'days')
-  buildSeg('segSource', [['all', 'todas'], ['bluesky', 'bluesky'], ['gdelt', 'gdelt'], ['rss', 'rss'], ['gnews', 'g.news'], ['gkg', 'gkg']], 'source')
-  buildSeg('segKind', [['all', 'todos'], ['hashtag', 'hashtag'], ['word', 'palavra'], ['theme', 'tema']], 'kind', true)
-  buildSeg('segSort', [['count', 'contagem'], ['pmi', 'pmi']], 'sort')
-  paintSeg('segDays', state.days)
-  paintSeg('segSource', state.source)
-  paintSeg('segKind', state.kind)
-  paintSeg('segSort', state.sort)
+  buildSelect('days', [['7', 'últimos 7 dias'], ['30', 'últimos 30 dias'], ['90', 'últimos 90 dias'], ['365', 'último ano']], 'days')
+  buildSelect('source', [['all', 'todas as fontes'], ['bluesky', 'Bluesky'], ['gdelt', 'GDELT'], ['rss', 'RSS'], ['gnews', 'Google News'], ['gkg', 'GDELT GKG'], ['camara', 'Câmara'], ['senado', 'Senado']], 'source', sanitizeSource)
+  buildSelect('sort', [['count', 'frequência'], ['pmi', 'PMI ponderado']], 'sort')
+  buildSelect('kind', [['all', 'todos os tipos'], ['hashtag', 'hashtags'], ['word', 'palavras'], ['theme', 'temas']], 'kind', sanitizeKind)
 
   const buildStepper = (id, key, min, max, step) => {
     const el = $(id)
@@ -250,10 +110,18 @@
     sides.b.personId = people.length > 1 ? people[1].id : people[0].id
     populateSelect($('personA'), sides.a.personId)
     populateSelect($('personB'), sides.b.personId)
+    renderTitles()
   }
 
-  $('personA').addEventListener('change', () => { sides.a.personId = $('personA').value; loadSide('a') })
-  $('personB').addEventListener('change', () => { sides.b.personId = $('personB').value; loadSide('b') })
+  $('personA').addEventListener('change', () => { sides.a.personId = $('personA').value; renderTitles(); loadSide('a') })
+  $('personB').addEventListener('change', () => { sides.b.personId = $('personB').value; renderTitles(); loadSide('b') })
+
+  const personName = (id) => people.find((p) => p.id === id)?.name ?? id
+  const firstName = (id) => personName(id).split(' ')[0]
+  const renderTitles = () => {
+    $('titleA').textContent = sides.a.personId ? `Só de ${firstName(sides.a.personId)}` : 'Só de A'
+    $('titleB').textContent = sides.b.personId ? `Só de ${firstName(sides.b.personId)}` : 'Só de B'
+  }
 
   // ---------- fetch ----------
   const query = () => new URLSearchParams({
@@ -272,7 +140,7 @@
       const res = await fetch(`/api/people/${side.personId}/graph?` + query())
       if (id !== side.requestId) return
       if (!res.ok) {
-        side.error = `erro ao carregar dados de ${personName(side.personId)}.`
+        side.error = `Não foi possível carregar ${personName(side.personId)}.`
         side.nodes = []
       } else {
         const data = await res.json()
@@ -282,7 +150,7 @@
       }
     } catch (e) {
       if (id !== side.requestId) return
-      side.error = `erro ao carregar dados de ${personName(side.personId)}.`
+      side.error = `Não foi possível carregar ${personName(side.personId)}.`
       side.nodes = []
     }
     side.loading = false
@@ -290,8 +158,6 @@
   }
 
   const loadBoth = () => { loadSide('a'); loadSide('b') }
-
-  const personName = (id) => people.find((p) => p.id === id)?.name ?? id
 
   // ---------- diff ----------
   const diff = () => {
@@ -304,22 +170,23 @@
   }
 
   // ---------- render ----------
+  const termText = (n) => (n.kind === 'hashtag' ? '#' + n.term : n.term)
   const chipHtml = (n) => `
     <li class="chip ${n.id === selectedId ? 'selected' : ''}" data-id="${escapeHtml(n.id)}">
-      <span class="dot" style="background:${kindColorHex[n.kind] ?? 'var(--muted)'}"></span>
-      <span class="term">${n.kind === 'hashtag' ? '#' + escapeHtml(n.term) : escapeHtml(n.term)}</span>
-      <span class="count num">${n.count}</span>
-      <span class="pmi num">${n.pmi}</span>
+      <span class="dot ${escapeHtml(n.kind)}"></span>
+      <span class="term">${escapeHtml(termText(n))}</span>
+      <span class="count">${n.count} docs</span>
+      <span class="pmi">PMI ${n.pmi}</span>
     </li>`
 
   // shared chips carry different counts/pmi per side (each side has its own `about` denominator),
   // so both must be labelled explicitly rather than showing an unmarked, ambiguous number
   const sharedChipHtml = (s) => `
     <li class="chip ${s.a.id === selectedId ? 'selected' : ''}" data-id="${escapeHtml(s.a.id)}">
-      <span class="dot" style="background:${kindColorHex[s.a.kind] ?? 'var(--muted)'}"></span>
-      <span class="term">${s.a.kind === 'hashtag' ? '#' + escapeHtml(s.a.term) : escapeHtml(s.a.term)}</span>
-      <span class="count num">A ${s.a.count} · B ${s.b.count}</span>
-      <span class="pmi num">A ${s.a.pmi} · B ${s.b.pmi}</span>
+      <span class="dot ${escapeHtml(s.a.kind)}"></span>
+      <span class="term">${escapeHtml(termText(s.a))}</span>
+      <span class="count">A ${s.a.count} · B ${s.b.count}</span>
+      <span class="pmi">PMI A ${s.a.pmi} · B ${s.b.pmi}</span>
     </li>`
 
   const attachChipHandlers = (listEl) => {
@@ -337,7 +204,7 @@
   const renderColumn = (listEl, countEl, items, sameSideLoading, sameSideError, otherLoading, kind, toHtml = chipHtml) => {
     if (sameSideLoading || otherLoading) {
       countEl.textContent = ''
-      listEl.innerHTML = '<li class="col-msg">carregando…</li>'
+      listEl.innerHTML = '<li class="col-msg">Carregando…</li>'
       return
     }
     if (sameSideError) {
@@ -345,15 +212,15 @@
       listEl.innerHTML = `<li class="col-msg">${escapeHtml(sameSideError)}</li>`
       return
     }
-    countEl.textContent = `(${items.length})`
+    countEl.textContent = `${items.length} ${items.length === 1 ? 'palavra' : 'palavras'}`
     if (items.length === 0) {
       const bothEmpty = sides.a.nodes.length === 0 && sides.b.nodes.length === 0
       if (bothEmpty) {
-        listEl.innerHTML = '<li class="col-msg">nada nessa janela.<span class="hint">tenta aumentar a janela ou reduzir mín. docs</span></li>'
+        listEl.innerHTML = '<li class="col-msg">Nada neste recorte.<span class="hint">Tente um período maior ou um mínimo de documentos menor.</span></li>'
       } else if (kind === 'shared') {
-        listEl.innerHTML = '<li class="col-msg">nada em comum.</li>'
+        listEl.innerHTML = '<li class="col-msg">Nada em comum.</li>'
       } else {
-        listEl.innerHTML = '<li class="col-msg">nada exclusivo aqui.</li>'
+        listEl.innerHTML = '<li class="col-msg">Nada só deste lado.</li>'
       }
       return
     }
@@ -361,10 +228,11 @@
     attachChipHandlers(listEl)
   }
 
+  const emptyDetail = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
   const renderDetail = () => {
     const el = $('detail')
     if (!selectedId) {
-      el.innerHTML = '<span class="empty-hint">clica num termo para ver os detalhes.</span>'
+      el.innerHTML = emptyDetail
       return
     }
     const { mapA, mapB } = diff()
@@ -372,15 +240,14 @@
     const nodeB = mapB.get(selectedId)
     if (!nodeA && !nodeB) {
       selectedId = null
-      el.innerHTML = '<span class="empty-hint">clica num termo para ver os detalhes.</span>'
+      el.innerHTML = emptyDetail
       return
     }
     const ref = nodeA ?? nodeB
-    const term = ref.kind === 'hashtag' ? '#' + ref.term : ref.term
     const sideHtml = (label, n) => n
-      ? `<span class="side">${label} <b class="num">${n.count}</b> docs · pmi <b class="num">${n.pmi}</b></span>`
-      : `<span class="side empty-hint">${label} ausente aqui</span>`
-    el.innerHTML = `<span class="term">${escapeHtml(term)}</span>${sideHtml('A', nodeA)}${sideHtml('B', nodeB)}`
+      ? `<span class="side">${label}: <b>${n.count}</b> documentos · PMI <b>${n.pmi}</b></span>`
+      : `<span class="side empty-hint">${label}: fora da lista</span>`
+    el.innerHTML = `<span class="term">${escapeHtml(termText(ref))}</span>${sideHtml(escapeHtml(personName(sides.a.personId)), nodeA)}${sideHtml(escapeHtml(personName(sides.b.personId)), nodeB)}`
   }
 
   const renderAll = () => {

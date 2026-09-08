@@ -15,8 +15,8 @@ import { label, score } from './format.js'
 // Must stay in sync with atlas.css's --sans / --display custom properties: canvas text
 // measurement needs literal font-family strings, and canvas cannot read a CSS custom
 // property without going through the DOM, which this module deliberately avoids.
-export const FONT_SANS = 'Inter, system-ui, sans-serif'
-export const FONT_SERIF = "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
+export const FONT_SANS = "'Instrument Sans', system-ui, sans-serif"
+export const FONT_DISPLAY = "'League Spartan', 'Instrument Sans', system-ui, sans-serif"
 
 /**
  * @param {Measure} measure
@@ -55,9 +55,9 @@ export const wrapLines = (measure, text, size, maxWidth, family = FONT_SANS, wei
  */
 export const centerLabel = (measure, name) => {
   const size = 52
-  const lines = wrapLines(measure, name, size, 286, FONT_SERIF, 400)
+  const lines = wrapLines(measure, name, size, 286, FONT_DISPLAY, 700)
   const lineHeight = 57
-  const w = Math.max(...lines.map((line) => measure(line, size, FONT_SERIF, 400))) + 28
+  const w = Math.max(...lines.map((line) => measure(line, size, FONT_DISPLAY, 700))) + 28
   return { lines, size, lineHeight, w: Math.max(240, w), h: lines.length * lineHeight + 88, x: 0, y: 0 }
 }
 

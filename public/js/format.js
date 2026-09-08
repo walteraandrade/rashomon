@@ -57,9 +57,9 @@ export const sourceLabels = {
   senado: 'Senado',
 }
 
-// The segSource segmented-control buttons, [value, compact pt-BR label]. One shared list
-// feeding one shared click handler (buildSeg in design-5.html): a new source only needs an
-// entry here, never a bespoke handler.
+// The options of the source <select> in the sentence, [value, compact pt-BR label]. One shared list
+// feeding one shared change handler (boot() in app.js): a new source only needs an entry
+// here plus its pt-BR label in sourceLabels, never a bespoke handler.
 export const SOURCE_SEGMENTS = [
   ['all', 'todas'],
   ['bluesky', 'bluesky'],

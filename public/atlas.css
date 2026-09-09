@@ -42,13 +42,18 @@ select option { background: var(--panel); color: var(--ink); font-size: 16px; }
 .top nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 20px; font-size: 15px; }
 .top nav a { color: var(--muted); text-decoration: none; }
 .top nav a:hover { color: var(--accent); }
-#stats { color: var(--muted); font-size: 14px; white-space: nowrap; }
 .eyebrow { font: 700 13px/1.2 var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 
 main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 
-/* ---------- the sentence that controls the recorte ---------- */
-.sentence { margin-bottom: 20px; }
+/* ---------- the sentence that controls each figure's own recorte ---------- */
+/* Figure 1's stats badge, next to its title -- same spot and voice as #testimonyLabel next to
+   #testimonyTitle, only muted rather than accented: it echoes the status line below it. */
+#atlasStats { color: var(--muted); font-size: 14px; font-weight: 500; white-space: nowrap; margin-left: 10px; }
+/* Each figure's sentence lives inside its own .figure-head now, which is a two-column grid
+   (title | subtitle); the sentence spans both so it reads as its own row underneath them. */
+.figure-head > .sentence, .figure-head > .sentence-line { grid-column: 1 / -1; margin-top: 4px; }
+.sentence { margin-bottom: 4px; }
 /* Each control is a chip on the line: a filled box with a chevron reads as "this changes", where
    a bare underline read as a link. A <select> ignores line-height for its own box, so the chip
    gets an explicit height; the sentence's line-height is what keeps daylight between lines. */

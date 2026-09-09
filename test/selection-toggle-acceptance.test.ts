@@ -44,7 +44,16 @@ describe('selection is a toggle, and empty space releases it', () => {
 
   it('a click on a selectable target leaves the selection alone', () => {
     const { h, chosen } = handlersOver({ id: 't1' })
-    h.background({ closest: (s: string) => (s === '[data-node], [data-col]' ? {} : null) } as unknown as Element)
+    h.background({ closest: (s: string) => (s === '[data-node], [data-col], [data-person-docs]' ? {} : null) } as unknown as Element)
+    assert.deepEqual(chosen, [])
+  })
+
+  // The person's own entry to her documents sits inside the viewport, so the click that opens
+  // her card bubbles into this handler. Were it empty space, the card would close on the way up.
+  it("the person's own entry point is not empty space", () => {
+    const { h, chosen } = handlersOver({ id: 't1' })
+    const target = { closest: (s: string) => (s.includes('[data-person-docs]') ? {} : null) } as unknown as Element
+    h.background(target)
     assert.deepEqual(chosen, [])
   })
 

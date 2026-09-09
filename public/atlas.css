@@ -236,25 +236,33 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .map-svg { display: block; width: var(--map-width, auto); height: auto; }
 /* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
    point of the graph. The family and weight are still fixed here, like everywhere else. */
-.map-svg .word { font-family: var(--sans); font-weight: 500; fill: var(--ink); font-size: var(--size); }
-.word-button { cursor: pointer; }
+.map-svg .word { font-family: var(--sans); font-weight: 500; fill: var(--wc); font-size: var(--size); }
+/* --wc is the word's own colour, resolved once per state on the group so the hit box can borrow
+   it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
+   nearly transparent, so it says "this one" without competing with what the colour means. */
+.word-button { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .word-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
-.word-button:hover .word, .word-button:focus-visible .word, .word-button.is-selected .word { fill: var(--accent); }
-.word-button:hover .word-hit, .word-button:focus-visible .word-hit, .word-button.is-selected .word-hit { fill: color-mix(in srgb, var(--accent) 5%, transparent); stroke: color-mix(in srgb, var(--accent) 45%, var(--bg)); }
+.word-button:hover, .word-button:focus-visible, .word-button.is-selected { --wc: var(--accent); }
+.word-button:hover .word-hit, .word-button:focus-visible .word-hit, .word-button.is-selected .word-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); stroke: color-mix(in srgb, var(--wc-soft) 40%, transparent); }
 .word-button.is-dim { opacity: .22; }
-.word-button.is-neighbor .word { fill: var(--green); }
-.word-button.is-match .word { fill: var(--accent); }
+.word-button.is-neighbor { --wc: var(--green); }
+.word-button.is-match { --wc: var(--accent); }
 /* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
    mask and gain the underline, so the relation stays visible without the green competing.
    Hover keeps the mask colour too: the hit box already says "this is under the cursor", and
    recolouring would hide the one thing the mask is there to show. */
-.map-svg.is-masked .word-button .word, .map-svg.is-masked .word-button.is-neighbor .word { fill: var(--mask, var(--muted)); }
-.map-svg.is-masked .word-button.is-selected .word, .map-svg.is-masked .word-button.is-match .word { fill: var(--accent); }
+.map-svg.is-masked .word-button, .map-svg.is-masked .word-button.is-neighbor { --wc: var(--mask, var(--muted)); }
+.map-svg.is-masked .word-button.is-selected, .map-svg.is-masked .word-button.is-match { --wc: var(--accent); }
 .map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
 .mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, #ff6b7d, rgba(139, 144, 156, .5), #7ee787); }
 .underline { stroke: var(--accent); stroke-width: 1.5; opacity: 0; }
 .word-button.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
+/* The centre is the person's own entry to the documents, so it answers to the cursor the way a
+   word does -- the same soft box, in the colour the name is already written in. */
+.center-label { cursor: pointer; }
+.center-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
+.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 7%, transparent); stroke: color-mix(in srgb, var(--accent) 32%, transparent); }
 .micro { fill: var(--muted); font-family: var(--display); font-size: var(--t-micro); font-weight: 600; letter-spacing: var(--tr-label); text-transform: uppercase; }
 .center-note { fill: var(--muted); font-family: var(--sans); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
@@ -301,6 +309,12 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .column-card span { display: block; color: var(--muted); font-size: var(--t-xs); }
 .column-card.is-selected strong, .column-card:hover strong { color: var(--accent); }
 .column-card.is-dim { opacity: .35; }
+/* The list is the map without its centre, so the person gets the head of it: full width, above
+   the words, saying the same two things the centre of the map says. */
+.column-person { grid-column: 1 / -1; padding: var(--space-3) var(--space-4); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--soft)); cursor: pointer; }
+.column-person span { display: block; font-family: var(--display); font-size: var(--t-2xs); font-weight: 500; text-transform: uppercase; letter-spacing: var(--tr-label); color: var(--muted); }
+.column-person strong { display: block; margin-top: var(--space-1); font-family: var(--display); font-size: var(--t-lg); font-weight: 700; color: var(--accent); letter-spacing: var(--tr-lg); overflow-wrap: anywhere; }
+.column-person:hover { background: color-mix(in srgb, var(--accent) 13%, var(--soft)); }
 .columns.is-masked .column-card strong { color: var(--mask, var(--muted)); }
 .columns.is-masked .column-card.is-selected strong { color: var(--accent); }
 /* Under the mask the list keeps its colour on hover, like the map does, so the underline has to
@@ -363,9 +377,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .related span { flex: 1; overflow-wrap: anywhere; }
 .related b { font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; font-size: var(--t-sm); }
 .docs-summary { margin: 0 0 6px; color: var(--muted); font-size: var(--t-xs); }
-.docs-open { width: 100%; margin-top: var(--space-1); padding: 11px; border: 0; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-size: var(--t-sm); font-weight: 600; }
-.docs-open:hover { filter: brightness(1.08); }
-
 /* ---------- the documents modal ---------- */
 /* Documents are fetched only when this opens (issue: the main page must never GET /docs on its
    own), and they scroll inside the dialog so a long text never grows the page. A dialog is its
@@ -374,6 +385,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .docs-dialog[open] { display: flex; }
 .docs-dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
+/* Wide screens get the card, not the sheet: it floats over the figure, leaves the map readable
+   behind it, stays open while the reader picks the next word, and is dragged by its own head.
+   `left`/`top` arrive from the drag; until then the card sits where this rule puts it. */
+.docs-dialog.is-floating { position: fixed; right: 24px; top: 96px; left: auto; margin: 0; width: min(380px, calc(100vw - 32px)); max-height: min(62vh, 560px); box-shadow: 0 18px 44px rgba(0, 0, 0, .62); }
+.docs-dialog.is-floating .docs-dialog-head { background: var(--soft); border-radius: 12px 12px 0 0; padding: var(--space-3) 18px var(--space-3) 22px; cursor: grab; touch-action: none; }
+.docs-dialog.is-floating .docs-dialog-head h2 { font-size: var(--t-md); }
+.docs-dialog.is-dragging { user-select: none; }
+.docs-dialog.is-dragging .docs-dialog-head { cursor: grabbing; }
 .docs-dialog-head h2 { font-size: var(--t-lg); margin-top: var(--space-1); overflow-wrap: anywhere; }
 #docs { overflow-y: auto; scrollbar-width: thin; padding: 6px 22px var(--space-4); min-height: 120px; }
 .doc { padding: var(--space-3) 0; }

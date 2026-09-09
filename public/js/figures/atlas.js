@@ -113,11 +113,13 @@ export const createHandlers = ({
   },
   // A click that lands on nothing selectable is the other way out. The listener sits on the
   // map viewport and the list, so the toolbar and the inspector's own buttons never reach it;
-  // inside those two, anything without a data-node/data-col is empty space.
+  // inside those two, anything without a data-node/data-col/data-person-docs is empty space.
+  // The person's own entry point has to be in that list: it sits inside the viewport, so the
+  // click that opens her card bubbles straight into this handler, which would close it again.
   /** @param {Element | null} target */
   background: (target) => {
     if (!getSelected()) return
-    if (target && target.closest('[data-node], [data-col]')) return
+    if (target && target.closest('[data-node], [data-col], [data-person-docs]')) return
     choose(null)
   },
   // Escape closes the documents modal when it is open, and only then clears the selection:
@@ -320,15 +322,15 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   }
 
   const paintCurrentSelection = () =>
-    paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), mask: getMask(), personTestimony: graph?.stats?.testimony })
+    paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: graph?.person?.name ?? '', about: graph?.stats?.about, mask: getMask(), personTestimony: graph?.stats?.testimony })
 
   const paintCurrentInspector = () =>
-    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id), onShowDocs: loadDocs })
+    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id) })
 
   const drawCurrentMap = () => {
     const current = /** @type {Graph} */ (graph)
     currentLayout = getLayout()
-    drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), personTestimony: current.stats?.testimony })
+    drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personTestimony: current.stats?.testimony })
     resizeMap()
     paintCurrentSelection()
     $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - $('viewport').clientWidth) / 2)
@@ -342,19 +344,104 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     paintCurrentInspector()
     const chosen = nodes.find((n) => n.id === id)
     $('selectionNote').textContent = chosen ? `${label(chosen)} selecionado. Detalhes atualizados.` : 'Seleção limpa.'
+    // Picking a word IS the request for its texts, so the card follows the selection: it opens
+    // on the word just chosen and goes away with the selection it belonged to.
+    if (chosen) loadDocs(chosen)
+    else closeDocs()
   }
 
-  // The only path to GET /docs: the reader pressed the button in the inspector. The modal
-  // opens first, with the loading copy or the memoized rows, and the fetch runs behind it.
+  // Below this width the card stops floating: a window the reader has to drag around a phone is
+  // worse than the centred sheet, so there the dialog goes back to showModal().
+  const FLOATING_MIN = 760
+  const floating = () => typeof window !== 'undefined' && !!window.matchMedia?.(`(min-width: ${FLOATING_MIN}px)`).matches
+
+  // Where the card sits while floating, in viewport pixels, plus what it is showing and in which
+  // of its two shapes. The spot survives a close, so a reader who parked the card out of the way
+  // finds it there again; it is clamped on every open in case the window shrank in between.
+  let cardSpot = /** @type {{ x: number, y: number } | null} */ (null)
+  let cardFloating = false
+  let cardTerm = /** @type {Term | null} */ (null)
+
+  const clampCard = () => {
+    const dialog = $('docsDialog')
+    if (!dialog || !cardSpot || !dialog.style || !dialog.getBoundingClientRect) return
+    const box = dialog.getBoundingClientRect()
+    const maxX = Math.max(8, window.innerWidth - box.width - 8)
+    const maxY = Math.max(8, window.innerHeight - box.height - 8)
+    cardSpot = { x: Math.min(Math.max(8, cardSpot.x), maxX), y: Math.min(Math.max(8, cardSpot.y), maxY) }
+    dialog.style.left = `${cardSpot.x}px`
+    dialog.style.top = `${cardSpot.y}px`
+  }
+
+  const openDocsCard = () => {
+    const dialog = $('docsDialog')
+    if (!dialog) return
+    const float = floating()
+    cardFloating = float
+    dialog.classList.toggle('is-floating', float)
+    if (!float && dialog.style) {
+      cardSpot = null
+      dialog.style.left = ''
+      dialog.style.top = ''
+    }
+    if (!dialog.open) {
+      if (float) dialog.show?.()
+      else dialog.showModal?.()
+    }
+    if (float) clampCard()
+  }
+
+  // Dragging by the head. Pointer capture keeps the moves coming when the cursor outruns the
+  // card, and the grip is the head minus its close button, so that one control still takes its
+  // own clicks.
+  /** @param {PointerEvent} e */
+  const startDrag = (e) => {
+    const dialog = $('docsDialog')
+    const target = /** @type {Element | null} */ (e.target)
+    if (!dialog || !floating() || e.button !== 0) return
+    if (target?.closest('button')) return
+    const box = dialog.getBoundingClientRect()
+    const dx = e.clientX - box.left
+    const dy = e.clientY - box.top
+    const head = /** @type {HTMLElement} */ (e.currentTarget)
+    head.setPointerCapture?.(e.pointerId)
+    dialog.classList.add('is-dragging')
+    /** @param {PointerEvent} move */
+    const onMove = (move) => {
+      cardSpot = { x: move.clientX - dx, y: move.clientY - dy }
+      clampCard()
+    }
+    const onUp = () => {
+      head.removeEventListener('pointermove', /** @type {EventListener} */ (onMove))
+      head.removeEventListener('pointerup', onUp)
+      head.removeEventListener('pointercancel', onUp)
+      dialog.classList.remove('is-dragging')
+    }
+    head.addEventListener('pointermove', /** @type {EventListener} */ (onMove))
+    head.addEventListener('pointerup', onUp)
+    head.addEventListener('pointercancel', onUp)
+    e.preventDefault()
+  }
+
+  // The person's card replaces whatever word was on screen: leaving the word is what asking for
+  // the whole person means, so the selection goes first and her documents open after it.
+  const showPersonDocs = () => {
+    if (getSelected() !== null) choose(null)
+    loadDocs(null)
+  }
+
+  // The two paths to GET /docs, both a deliberate click: a word (its own texts) or the centre of
+  // the map / head of the list (the person's). The card opens first, with the loading copy or the
+  // memoized rows, and the fetch runs behind it.
   /** @param {Term | null} n */
   const loadDocs = async (n) => {
     const id = cancelDocs()
     const controller = new AbortController()
     docsController = controller
     if (!$('docs') || !graph || !$('person').value) return
+    cardTerm = n
     paintDocsTitle({ term: n, personName: graph.person.name })
-    const dialog = $('docsDialog')
-    if (dialog && !dialog.open) dialog.showModal()
+    openDocsCard()
     const person = $('person').value
     const base = graphQuery()
     const query = docsQuery(base, n)
@@ -405,7 +492,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     if (nodes.length) {
       if (!currentLayout || mode === 'map') drawCurrentMap()
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
-      paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), personTestimony: current.stats?.testimony })
+      paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony })
     } else {
       $('viewport').innerHTML = '<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'
       $('columns').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
@@ -593,6 +680,20 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     if (e.target === $('docsDialog')) handlers.docsClose()
   })
   $('docsDialog').addEventListener('close', () => cancelDocs())
+  $('docsGrip')?.addEventListener('pointerdown', /** @type {EventListener} */ (startDrag))
+  // Crossing FLOATING_MIN with the card open swaps its shape; loadDocs repaints from the memo,
+  // so the same rows come back without a second request.
+  if (typeof window !== 'undefined')
+    window.addEventListener(
+      'resize',
+      debounce(() => {
+        const dialog = $('docsDialog')
+        if (!dialog?.open || floating() === cardFloating) return
+        cardSpot = null
+        dialog.close()
+        loadDocs(cardTerm)
+      }, 150),
+    )
   document.addEventListener('keydown', handlers.keydown)
   new ResizeObserver(resizeMap).observe($('viewport'))
   document.fonts?.ready?.then(() => {

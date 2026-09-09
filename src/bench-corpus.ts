@@ -35,10 +35,11 @@ export const DOMAINS = [
 
 const HANDLES = Array.from({ length: 40 }, (_, i) => `perfil${i}.bsky.social`)
 
-// Weights follow the production mix: gkg dominates, gdelt and the two legislative
-// collectors are rare.
+// Weights follow the production mix: gkg dominates, gdelt/legislative/press collectors are
+// rare. rss shrinks by the sum of the three new families' weights so the column still sums to 1.
 const SOURCES: [Source, number][] = [
-  ['gkg', 0.42], ['gnews', 0.2], ['rss', 0.2], ['bluesky', 0.13], ['gdelt', 0.03], ['camara', 0.01], ['senado', 0.01],
+  ['gkg', 0.42], ['gnews', 0.2], ['rss', 0.14], ['bluesky', 0.13], ['gdelt', 0.03], ['camara', 0.01], ['senado', 0.01],
+  ['juridico', 0.01], ['oficial', 0.02], ['nicho', 0.03],
 ]
 
 const THEMES = Array.from({ length: 60 }, (_, i) => `TAX_THEME_${i}`)

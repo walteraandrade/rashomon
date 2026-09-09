@@ -534,8 +534,11 @@ export const paintRuler = ({ data, personA, personB, measure, selected, onPick, 
   const ruler = $('compareRuler')
   const { items, hiddenCount } = rulerTerms(data.terms, measure)
   if (!items.length) {
-    ruler.hidden = true
-    ruler.innerHTML = ''
+    // Reachable with a non-empty `data.terms` when every term is one of the two people's own
+    // name: the caller's own empty branch keys on terms.length and would leave the slot blank
+    // with only #compareHiddenNote under it. Same note either way.
+    ruler.hidden = false
+    ruler.innerHTML = '<p class="note">Nenhuma palavra neste recorte.</p>'
     return { hiddenCount }
   }
   ruler.hidden = false

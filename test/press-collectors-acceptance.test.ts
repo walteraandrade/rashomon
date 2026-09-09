@@ -164,10 +164,30 @@ describe('press collectors — AC11', () => {
   })
 })
 
-// AC12 (README's four source=all|... enumerations and the collectors' prose) and AC13 (a real
-// `pnpm ingest juridico oficial nicho` run plus the manual before/after doc-count/pmi report)
-// are documented in the report, not asserted here, mirroring how camara-acceptance.test.ts
-// treats its own AC12.
+describe('press collectors — AC12', () => {
+  const readme = readRepoFile('README.md')
+  const enumeration = /source=all\|bluesky\|gdelt\|rss\|gnews\|gkg\|camara\|senado\|juridico\|oficial\|nicho\b/g
+
+  it('AC12: README repeats source=all|...|senado|juridico|oficial|nicho identically in all four route enumerations', () => {
+    const matches = readme.match(enumeration) ?? []
+    assert.equal(matches.length, 4, 'graph, docs, rising and timeline must each list juridico|oficial|nicho right after senado')
+  })
+
+  it('AC12: README documents the three feed lists, defaultSources membership and the RDF/Planalto exclusion', () => {
+    assert.match(readme, /noticias\.stf\.jus\.br/)
+    assert.match(readme, /conjur\.com\.br/)
+    assert.match(readme, /jota\.info/)
+    assert.match(readme, /agenciabrasil\.ebc\.com\.br/)
+    assert.match(readme, /cartacapital\.com\.br/)
+    assert.match(readme, /defaultSources/)
+    assert.match(readme, /RDF/)
+    assert.match(readme, /Planalto/)
+  })
+})
+
+// AC13 (a real `pnpm ingest juridico oficial nicho` run plus the manual before/after
+// doc-count/pmi report) is documented in the report, not asserted here — a manual,
+// human-checkable step per the spec, not a pnpm test assertion.
 
 // AC14 (pnpm typecheck and pnpm test both green, no change to src/graph.ts:163,165) is verified
 // by running those commands directly — see report.

@@ -232,7 +232,7 @@ export const paintOutlets = ({ rows, testimony, domain, onPick }) => {
       merged
         .map(
           (r) =>
-            `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" title="${esc(r.sources.map((x) => sourceLabels[x] ?? x).join(', '))}"><span class="d">${esc(r.domain)}</span><span class="n">${fmt(r.docs)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null ? '' : signed(r.score)}</span></button>`,
+            `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${esc(r.sources.map((x) => sourceLabels[x] ?? x).join(', '))}"><span class="d">${esc(r.domain)}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span></button>`,
         )
         .join('') +
       `</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o modelo kikori (${esc(testimony?.method ?? '')}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`

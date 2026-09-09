@@ -264,11 +264,13 @@ describe('AC7: atlas.css styles words, not dots, and the page keeps its no-<styl
   it('carries the ruler word rules and no longer carries the dot rules', () => {
     const css = atlasCss()
     assert.match(css, /\.ruler-text \{/)
-    // The selected word's colour is now the same --wc the word already resolves, swapped once on
-    // the group, so its hit box picks the swap up too rather than being coloured separately.
-    assert.match(css, /\.ruler-word\.is-selected \{[^}]*--wc:\s*var\(--accent\)/)
+    // Neither the cursor nor the pick repaints the word: the box behind it carries both, in the
+    // word's own side colour, at two strengths. A selected word painted --accent threw away the
+    // side it leans to, which is the only thing this figure draws.
     assert.match(css, /\.ruler-text \{[^}]*fill:\s*var\(--wc\)/)
-    assert.doesNotMatch(css, /\.ruler-word:hover \.ruler-text/, 'the cursor must not repaint the word away from the side it leans to')
+    assert.match(css, /\.ruler-word\.is-selected \.ruler-hit \{[^}]*var\(--wc\)/)
+    assert.doesNotMatch(css, /\.ruler-word:hover \.ruler-text/, 'the cursor must not repaint the word')
+    assert.doesNotMatch(css, /\.ruler-word\.is-selected \{[^}]*--wc:\s*var\(--accent\)/, 'nor must the pick')
     assert.match(css, /\.ruler-overflow \{/)
     assert.doesNotMatch(css, /\.ruler-dot/, 'nothing draws a ruler dot any more')
   })

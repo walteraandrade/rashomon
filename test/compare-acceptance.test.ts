@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { VERCEL_INSIGHTS } from './pages.js'
 
 // Independent verification of issue #7's numbered acceptance criteria, written against the
 // spec rather than against the builder's own code. Most criteria (AC2/3/4/5/6/7/8/11) are
@@ -21,8 +22,12 @@ describe('compare people acceptance criteria (issue #7)', () => {
     const html = readFileSync(compareHtmlPath, 'utf8')
     assert.match(html, /^<!doctype html>/i, 'must be a plain static HTML document')
 
-    const scriptSrcTags = [...html.matchAll(/<script[^>]*\bsrc=/gi)]
-    assert.equal(scriptSrcTags.length, 0, 'no external <script src=...> tags allowed; JS must be inline')
+    // The Vercel Web Analytics tag is the one exception: the host serves it, this repo ships
+    // no code for it, and it carries no logic the page depends on.
+    const scriptSrcTags = [...html.matchAll(/<script[^>]*\bsrc="([^"]+)"/gi)]
+      .map(([, src]) => src)
+      .filter((src) => src !== VERCEL_INSIGHTS)
+    assert.deepEqual(scriptSrcTags, [], 'no external <script src=...> tags allowed; JS must be inline')
 
     // The only hosts a <link> may reach are Google Fonts; every other href must be a relative
     // file this repo ships (the shared stylesheet, the icon), never a third-party asset.

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FONT_DISPLAY, FONT_SANS } from '../public/js/layout.js'
 import { SOURCE_SEGMENTS } from '../public/js/format.js'
+import { VERCEL_INSIGHTS_TAG } from './pages.js'
 
 // The "Leitura" redesign: one sentence of controls, the map as the figure, a "Como ler"
 // chapter that defines PMI on the page itself, and one stylesheet shared by every page. These
@@ -40,7 +41,9 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.match(chapter, /PMI × ln\(1 \+ documentos\)/, 'the weighted size must be spelled out')
     assert.match(chapter, /Só existe nos textos que vêm do GDELT/, 'tone stays a GDELT-only fact')
     assert.match(html, /<link rel="stylesheet" href="atlas\.css">/)
-    assert.doesNotMatch(html, /<style[\s>]|<script/i, 'the reading page is markup only')
+    assert.doesNotMatch(html, /<style[\s>]/i, 'the reading page is markup only')
+    // Nothing but the platform analytics tag: no inline script, no module of our own.
+    assert.doesNotMatch(html.replaceAll(VERCEL_INSIGHTS_TAG, ''), /<script/i, 'the reading page runs no JavaScript of its own')
   })
 
   it('design-5.html no longer carries the chapter and links to the page from the header and from each figure', () => {

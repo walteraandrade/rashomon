@@ -16,7 +16,7 @@
 <main>
   <section class="sentence" aria-label="Recorte">
     <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa"></select></span> nos <span class="pick"><select id="days" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="source" aria-label="Fonte"></select></span>, por <span class="pick"><select id="sort" aria-label="Tamanho por"><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option></select></span>. Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras"><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
-    <p class="status-row"><span class="status" id="status" role="status"></span><button id="domainClear" class="quiet-button domain-chip" hidden>Soltar veículo <b id="domainChip"></b> ×</button></p>
+    <p class="status-row"><span class="status" id="status" role="status"></span></p>
   </section>
 
   <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
@@ -45,10 +45,8 @@
       <p class="figure-sub">Cada bolinha é um veículo na nota média que o modelo kikori dá aos textos dele sobre a pessoa, de −10 (contra) a +10 (a favor). O tamanho é quantos textos. Compare veículos falando da mesma pessoa; nunca compare pessoas. <a href="como-ler.html#avaliacao">Como ler este gráfico</a>.</p>
     </header>
     <figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden></figure>
-    <div class="figure-body figure-lists">
-      <div class="testimony-lists" id="testimonyList">Aguardando dados.</div>
-      <details class="outlets" id="outlets"><summary class="eyebrow">Todos os veículos do recorte <b id="domainLabel"></b></summary><div id="outletList">Aguardando dados.</div></details>
-    </div>
+    <div class="testimony-lists" id="testimonyList">Aguardando dados.</div>
+    <div class="outlets" id="outlets"><p class="eyebrow">Veículos do recorte <b id="domainLabel"></b></p><div id="outletList">Aguardando dados.</div></div>
   </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">

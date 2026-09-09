@@ -54,7 +54,7 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .pick { display: inline-block; position: relative; max-width: 100%; vertical-align: baseline; margin: 0; }
 /* The chevron is drawn in CSS so it follows --accent; a data-URI SVG cannot read a token. */
 .pick::after { content: ''; position: absolute; right: .55em; top: 50%; width: .32em; height: .32em; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
-.pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 0; border-radius: .4em; padding: 0 1.25em 0 .5em; height: 1.55em; line-height: 1.55em; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s; }
+.pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 0; border-radius: .4em; padding: 0 1.25em 0 .5em; height: 1.55em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.55em; font-weight: 600; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s; }
 .pick select:hover { background-color: var(--line); color: var(--ink); }
 .pick select:focus-visible { outline-offset: 2px; }
 .status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 10px; min-height: 22px; }
@@ -71,7 +71,6 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .figure-title h2 b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .figure-sub { font-size: 15px; line-height: 1.5; color: var(--muted); max-width: 72ch; }
 .figure-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
-.figure-lists { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-top: 4px; }
 
 /* ---------- workspace: the atlas figure ---------- */
 /* A reload dims what is on screen instead of blanking it, so the column keeps its height and
@@ -107,9 +106,11 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .word-button.is-neighbor .word { fill: var(--green); }
 .word-button.is-match .word { fill: var(--accent); }
 /* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
-   mask and gain the underline, so the relation stays visible without the green competing. */
+   mask and gain the underline, so the relation stays visible without the green competing.
+   Hover keeps the mask colour too: the hit box already says "this is under the cursor", and
+   recolouring would hide the one thing the mask is there to show. */
 .map-svg.is-masked .word-button .word, .map-svg.is-masked .word-button.is-neighbor .word { fill: var(--mask, var(--muted)); }
-.map-svg.is-masked .word-button:hover .word, .map-svg.is-masked .word-button:focus-visible .word, .map-svg.is-masked .word-button.is-selected .word, .map-svg.is-masked .word-button.is-match .word { fill: var(--accent); }
+.map-svg.is-masked .word-button.is-selected .word, .map-svg.is-masked .word-button.is-match .word { fill: var(--accent); }
 .map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
 .mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: 8px; vertical-align: middle; background: linear-gradient(90deg, #ff6b7d, rgba(139, 144, 156, .5), #7ee787); }
 .underline { stroke: var(--accent); stroke-width: 1.5; opacity: 0; }
@@ -146,25 +147,32 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .overflow .is-dim { opacity: .35; }
 .overflow .is-match, .overflow .is-selected { color: var(--accent); }
 
-.columns { padding: 8px 0 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; }
-.column-card { border: 0; padding: 12px 0; background: transparent; color: inherit; text-align: left; }
+.columns { padding: 8px 0 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+/* Each card gets a ground of its own: the metadata line and the word under it are one thing,
+   and with no card behind them a reader on a three-column grid ties the line to the wrong word.
+   A very light wash rather than a border, so eighteen of these do not read as a table. */
+.column-card { border: 0; padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; }
+.column-card:hover { background: var(--soft); }
+.column-card.is-selected { background: color-mix(in srgb, var(--accent) 9%, var(--soft)); }
 .column-card strong { display: block; font-size: clamp(20px, 2vw, 32px); font-weight: 500; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
 .column-card span { color: var(--muted); font-size: 14px; }
 .column-card.is-selected strong, .column-card:hover strong { color: var(--accent); }
 .column-card.is-dim { opacity: .35; }
 .columns.is-masked .column-card strong { color: var(--mask, var(--muted)); }
-.columns.is-masked .column-card.is-selected strong, .columns.is-masked .column-card:hover strong { color: var(--accent); }
+.columns.is-masked .column-card.is-selected strong { color: var(--accent); }
+/* Under the mask the list keeps its colour on hover, like the map does, so the underline has to
+   carry the "under the cursor" signal on its own. */
+.columns.is-masked .column-card:hover strong { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 
 /* ---------- the lists under the strip ---------- */
-.outlets { min-width: 0; }
-.outlets summary { display: flex; align-items: center; gap: 8px; padding: 14px 0; cursor: pointer; list-style: none; }
-.outlets summary::-webkit-details-marker { display: none; }
-.outlets summary::before { content: '▸'; color: var(--accent); font-size: 13px; }
-.outlets[open] summary::before { content: '▾'; }
-.outlets summary:hover { color: var(--ink); }
+.outlets { min-width: 0; padding-top: 4px; }
+.outlets > .eyebrow { display: flex; align-items: center; gap: 8px; padding: 0 0 6px; }
 .outlets .eyebrow b { color: var(--accent); text-transform: none; letter-spacing: 0; font: 500 15px var(--sans); overflow-wrap: anywhere; }
+/* The one outlet list: as many columns as the figure is wide, so 80 outlets are a scrollable
+   block of a few hundred pixels rather than a screen and a half of single-file rows. */
+.outlet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 28px; max-height: 210px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 #outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: 16px; font-size: 15px; color: var(--muted); }
-.outlet { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: 9px 0; font-size: 15px; color: inherit; }
+.outlet { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: 4px 0; font-size: 14px; color: inherit; }
 .outlet:hover { color: var(--accent); }
 .outlet.is-active { color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
 .outlet .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -173,20 +181,19 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .outlet .t:empty { visibility: hidden; }
 .outlets .note { font-size: 14px; color: var(--muted); margin: 12px 0 0; }
 .testimony-lists { min-width: 0; font-size: 15px; color: var(--muted); }
-.testimony-lists .outlet-scroll { max-height: 420px; overflow-y: auto; scrollbar-width: thin; }
+/* The per-source means as one wrapping row of chips: four full-width rows cost 164px to say
+   four numbers, and the strip above already carries the shape of the distribution. */
+.source-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 4px; }
+.source-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--soft); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 14px; }
+.source-chip b { font-weight: 600; color: var(--ink); }
+.source-chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
 .testimony .verdict { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 4px 0 6px; }
 .testimony .verdict strong { font: 700 32px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--tone, var(--ink)); }
 .testimony .verdict span { font-size: 14px; color: var(--muted); }
-.testimony .scale { position: relative; display: flex; justify-content: space-between; padding: 14px 8px 0 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
-.testimony .scale::before { content: ''; position: absolute; left: 0; right: 8px; top: 5px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #ff6b7d, #8b909c, #7ee787); opacity: .8; }
-.testimony .scale i { position: absolute; top: 0; left: var(--pos, 50%); width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--ink); border: 2px solid var(--bg); }
 .testimony .sub { margin: 14px 0 2px; }
 .testimony .focus { margin: 6px 0 4px; font-size: 14px; color: var(--muted); }
 .testimony .focus b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .testimony .focus strong { color: var(--tone, var(--ink)); font-variant-numeric: tabular-nums; }
-.testimony-lists .outlet { grid-template-columns: minmax(0, 1fr) auto auto auto; }
-.testimony-lists div.outlet:hover { color: inherit; }
-.testimony-lists .outlet .s { color: var(--muted); font-size: 13px; white-space: nowrap; }
 
 .inspector { padding: 12px 0 0 28px; min-width: 0; align-self: stretch; }
 .inspector h3 { font-size: 30px; line-height: 1.1; margin: 10px 0 18px; overflow-wrap: anywhere; }

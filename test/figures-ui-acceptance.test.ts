@@ -30,12 +30,11 @@ describe('figures UI: the page is a sequence of graphs', () => {
     for (const id of ['search', 'modeMap', 'mask', 'zoomIn', 'clear', 'viewport', 'legend', 'inspector']) assert.match(atlas, new RegExp(`id="${id}"`), `${id} belongs to the atlas figure`)
   })
 
-  it('the outlet filter has a chip under the sentence and a handler that releases it', () => {
-    assert.match(read('design-5.html'), /<button id="domainClear" class="quiet-button domain-chip" hidden>Soltar veículo <b id="domainChip"><\/b> ×<\/button>/)
-    const calls: string[] = []
-    const h = createHandlers({ resetDomain: () => calls.push('resetDomain'), updateHeader: () => calls.push('updateHeader'), load: () => calls.push('load'), loadCandidates: () => calls.push('loadCandidates') })
-    h.domainClear()
-    assert.deepEqual(calls, ['resetDomain', 'updateHeader', 'load'])
+  it('there is no page-wide outlet filter: no chip under the sentence, and the sentence keeps its five controls', () => {
+    const html = read('design-5.html')
+    assert.doesNotMatch(html, /id="domainClear"/)
+    assert.doesNotMatch(html, /id="domainChip"/)
+    assert.equal(html.match(/<span class="pick">/g)?.length, 5)
   })
 
   it('closing the dialog goes through the handler table, and Escape closes it before it clears anything', () => {

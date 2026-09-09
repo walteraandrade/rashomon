@@ -26,7 +26,7 @@ describe('endpoint', () => {
 
 describe('params', () => {
   it('builds the querystring the graph/sources/docs routes expect', () => {
-    const p = params({ days: '30', sort: 'pmi', limit: '18', source: 'all', domain: 'all' })
+    const p = params({ days: '30', sort: 'pmi', limit: '18', source: 'all' })
     assert.equal(p.get('days'), '30')
     assert.equal(p.get('sort'), 'pmi')
     assert.equal(p.get('limit'), '18')
@@ -35,11 +35,12 @@ describe('params', () => {
     // theme codes out of the default recorte (see ATLAS_KINDS in api.js).
     assert.equal(p.get('kind'), 'word,hashtag,phrase')
     assert.equal(p.get('source'), 'all')
-    assert.equal(p.get('domain'), 'all')
+    // No outlet: picking one is a reading inside the second figure, so it never reaches a route.
+    assert.equal(p.has('domain'), false)
   })
 
   it('lets an explicit kind/min override the defaults', () => {
-    const p = params({ days: '7', sort: 'count', limit: '12', source: 'gdelt', domain: 'estadao.com.br', kind: 'hashtag', min: '5' })
+    const p = params({ days: '7', sort: 'count', limit: '12', source: 'gdelt', kind: 'hashtag', min: '5' })
     assert.equal(p.get('kind'), 'hashtag')
     assert.equal(p.get('min'), '5')
   })

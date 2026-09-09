@@ -207,6 +207,37 @@ export const foldTestimonyDomains = (rows) => {
   return [...byDomain.values()].map(({ sum, ...e }) => ({ ...e, score: sum / e.n })).sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
 }
 
+// One row per outlet, from the two routes that know about outlets. /sources says how many
+// documents the outlet published in the recorte (every outlet, no floor); /testimony says the
+// kikori mean over the ones that were scored (only outlets clearing the route's `min`). They
+// used to be two lists on the page, which meant reading the same outlet twice; merged, an
+// outlet under the floor keeps its documents and simply has no mean. Most documents first,
+// so the loudest outlets stay at the top the way /sources already ordered them.
+/**
+ * @param {OutletRow[]} rows
+ * @param {TestimonyDomainRow[]} testimonyRows
+ * @returns {{ domain: string, sources: string[], docs: number, score: number | null, n: number }[]}
+ */
+export const mergeOutlets = (rows, testimonyRows) => {
+  const scored = new Map(foldTestimonyDomains(testimonyRows).map((d) => [d.domain, d]))
+  /** @type {Map<string, { domain: string, sources: string[], docs: number }>} */
+  const byDomain = new Map()
+  for (const r of rows) {
+    const domain = r.domain ?? r.source ?? ''
+    if (!domain) continue
+    const entry = byDomain.get(domain) ?? { domain, sources: [], docs: 0 }
+    if (r.source && !entry.sources.includes(r.source)) entry.sources.push(r.source)
+    entry.docs += r.docs
+    byDomain.set(domain, entry)
+  }
+  return [...byDomain.values()]
+    .map((e) => {
+      const t = scored.get(e.domain)
+      return { ...e, score: t ? t.score : null, n: t ? t.n : 0 }
+    })
+    .sort((a, b) => b.docs - a.docs || a.domain.localeCompare(b.domain))
+}
+
 // The picked outlet's own testimony. Null when no outlet is picked or the outlet never clears
 // the route's `min` floor.
 /** @param {TestimonyDomainRow[]} rows @param {string} domain @returns {{ score: number, n: number } | null} */

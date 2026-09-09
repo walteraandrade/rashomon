@@ -3,7 +3,7 @@
 // and the callbacks it wires (onChoose, onShowDocs, onPick) all come in as parameters, so
 // this module never reaches into public/js/state.js on its own.
 
-import { domainSuffix, esc, fmt, kinds, label, matching, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor, trendOf } from './format.js'
+import { domainSuffix, esc, fmt, kinds, label, matching, mergeOutlets, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, trendOf } from './format.js'
 import { FONT_SANS, routesFrom, swarm } from './layout.js'
 
 /** @typedef {import('./format.js').Candidate} Candidate */
@@ -195,23 +195,32 @@ export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoo
     )
 }
 
-/** @param {{ rows: OutletRow[], domain: string, onPick: (domain: string) => void }} args */
-export const paintOutlets = ({ rows, domain, onPick }) => {
+// The one outlet list on the page: /sources' document counts merged with /testimony's means
+// (see mergeOutlets in format.js). It used to be two lists in the same figure — this one, and
+// a second "por veículo" ranking inside paintTestimony — so every outlet was read twice. It
+// lays out in as many columns as the figure is wide, which is what turns 80 outlets into a few
+// hundred pixels instead of a screen and a half. The two payloads arrive on their own
+// schedule; whichever has not landed yet simply contributes nothing.
+/** @param {{ rows: OutletRow[], testimony: Testimony | null, domain: string, onPick: (domain: string) => void }} args */
+export const paintOutlets = ({ rows, testimony, domain, onPick }) => {
   $('domainLabel').textContent = domainSuffix(domain)
-  const all = [{ domain: 'all', label: 'todas', docs: rows.reduce((a, r) => a + r.docs, 0), tone: null }, ...rows]
-  $('outletList').innerHTML =
-    all
-      .map(
-        (r) =>
-          `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${esc(r.domain ?? '')}" title="${esc(r.source ?? '')}" aria-pressed="${String(r.domain === domain)}"><span class="d">${esc(r.label ?? r.domain ?? r.source ?? 'desconhecido')}</span><span class="n">${fmt(r.docs)}</span><span class="t" style="--tone:${toneColor(r.tone)}">${r.tone === null || r.tone === undefined ? '' : fmt(r.tone)}</span></button>`,
-      )
-      .join('') + '<p class="note">Um veículo restringe o recorte inteiro. O tom só existe em fontes GDELT.</p>'
+  const merged = mergeOutlets(rows, testimony?.by_domain ?? [])
+  $('outletList').innerHTML = merged.length
+    ? '<div class="outlet-grid">' +
+      merged
+        .map(
+          (r) =>
+            `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" title="${esc(r.sources.map((x) => sourceLabels[x] ?? x).join(', '))}"><span class="d">${esc(r.domain)}</span><span class="n">${fmt(r.docs)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null ? '' : signed(r.score)}</span></button>`,
+        )
+        .join('') +
+      `</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o modelo kikori (${esc(testimony?.method ?? '')}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
+    : '<p class="note">Nenhum veículo neste recorte.</p>'
   queryAll('[data-domain]', $('outletList')).forEach((el) =>
-      el.addEventListener('click', () => {
-        const d = el.dataset.domain
-        onPick(!d || d === domain ? 'all' : d)
-      }),
-    )
+    el.addEventListener('click', () => {
+      const d = el.dataset.domain
+      onPick(!d || d === domain ? 'all' : d)
+    }),
+  )
 }
 
 export const paintOutletsError = () => {
@@ -233,9 +242,8 @@ export const paintTestimony = ({ data, domain, onPick }) => {
     return
   }
   $('testimonyLabel').textContent = signed(score)
-  const domains = [...by_domain].sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
-  // The route ignores the outlet filter on purpose (the panel is "this outlet vs the others"),
-  // so while an outlet narrows the rest of the page this line keeps the big number honest.
+  // Picking an outlet is a reading inside this figure: it moves nothing above it, so this line
+  // is where the chosen outlet's own number sits, next to the recorte's.
   const focus = testimonyFocus(by_domain, domain)
   const focusLine =
     domain === 'all'
@@ -243,32 +251,16 @@ export const paintTestimony = ({ data, domain, onPick }) => {
       : focus
         ? `<p class="focus"><b>${esc(domain)}</b>: <strong style="--tone:${testimonyColor(focus.score)}">${signed(focus.score)}</strong> em ${fmt(focus.n)} ${focus.n === 1 ? 'texto' : 'textos'}. O número acima é o recorte inteiro.</p>`
         : `<p class="focus"><b>${esc(domain)}</b>: menos de 3 textos avaliados, sem média própria. O número acima é o recorte inteiro.</p>`
-  /** @param {number | null | undefined} s */
-  const chip = (s) => `<span class="t" style="--tone:${testimonyColor(s)}">${s === null || s === undefined ? '' : signed(s)}</span>`
+  // No second scale here: the strip above is already a −10..+10 ruler with every outlet on it,
+  // and no outlet ranking either — the merged list in paintOutlets is the only one now. What is
+  // left is the recorte's own number, the focused outlet's, and the per-source means as a strip
+  // of chips rather than four full-width rows.
   $('testimonyList').innerHTML =
     `<div class="verdict"><strong style="--tone:${testimonyColor(score)}">${signed(score)}</strong><span>${testimonyClass(score)} · média de ${fmt(overall.n)} ${overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</span></div>` +
-    `<div class="scale" aria-hidden="true"><i style="--pos:${testimonyPosition(score)}%"></i><span>−10 contra</span><span>+10 a favor</span></div>` +
     focusLine +
-    '<div class="eyebrow sub">Por fonte</div>' +
-    by_source.map((r) => `<div class="outlet"><span class="d">${esc(sourceLabels[r.source] ?? r.source)}</span><span class="s"></span><span class="n">${fmt(r.n)}</span>${chip(r.score)}</div>`).join('') +
-    '<div class="eyebrow sub">Por veículo</div>' +
-    (domains.length
-      ? '<div class="outlet-scroll">' +
-        domains
-          .map(
-            (r) =>
-              `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-testimony-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" title="${esc(r.source)}"><span class="d">${esc(r.domain)}</span><span class="s">${esc(sourceLabels[r.source] ?? r.source)}</span><span class="n">${fmt(r.n)}</span>${chip(r.score)}</button>`,
-          )
-          .join('') +
-        '</div>'
-      : '<p class="note">Nenhum veículo com 3 ou mais textos avaliados neste recorte.</p>') +
-    `<p class="note">Nota de −10 a +10 que o modelo kikori (${esc(method)}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
-  queryAll('[data-testimony-domain]', $('testimonyList')).forEach((el) =>
-    el.addEventListener('click', () => {
-      const d = el.dataset.testimonyDomain
-      onPick(!d || d === domain ? 'all' : d)
-    }),
-  )
+    `<div class="source-chips">${by_source
+      .map((r) => `<span class="source-chip"><b>${esc(sourceLabels[r.source] ?? r.source)}</b><span class="n">${fmt(r.n)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null || r.score === undefined ? '' : signed(r.score)}</span></span>`)
+      .join('')}</div>`
 }
 
 export const paintTestimonyLoading = () => {
@@ -354,7 +346,7 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
       .join('') +
     '</svg>' +
     '<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div>' +
-    `<p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para restringir o recorte a ela${domain === 'all' ? '' : '; toque de novo para soltar'}.</p>`
+    `<p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui${domain === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>`
   for (const el of queryAll('[data-strip-domain]', strip)) {
     const pick = () => {
       const d = el.dataset.stripDomain

@@ -16,16 +16,17 @@ export const ATLAS_KINDS = 'word,hashtag,phrase'
 // `testimony=1` asks /graph for the per-term kikori mean (and the person's own, in the same
 // scope) that the map's colour mask reads; the mask is a paint toggle on the client, so the
 // data always comes along and flipping it never refetches.
-/** @param {{ days: string, sort: string, limit: string, source: string, domain: string, kind?: string, min?: string }} opts */
-export const params = ({ days, sort, limit, source, domain, kind = ATLAS_KINDS, min = '2' }) =>
-  new URLSearchParams({ days, sort, limit, min, source, kind, domain, testimony: '1' })
+// No `domain`: /graph and /docs accept one, but the page never narrows itself to an outlet.
+// Picking an outlet is a reading inside the second figure and stops there, so the atlas and
+// the documents always answer for the whole recorte.
+/** @param {{ days: string, sort: string, limit: string, source: string, kind?: string, min?: string }} opts */
+export const params = ({ days, sort, limit, source, kind = ATLAS_KINDS, min = '2' }) =>
+  new URLSearchParams({ days, sort, limit, min, source, kind, testimony: '1' })
 
-// The outlet sidebar picks `domain`, so its own /sources fetch must never send one back —
-// spec amendment A1 (issue #26): sending domain here would hide every outlet but the
-// selected one, right after the click that selected it. `sort` and `limit` leave with it
-// (issue #43): src/graph.ts's sourcesFor reads only person, days, source and domain, so
-// echoing the term ordering and the term count made every sort or limit change look like a
-// different query to the front-end memo and to any HTTP cache in front of it.
+// `sort` and `limit` leave the outlet list's own /sources call (issue #43): src/graph.ts's
+// sourcesFor reads only person, days, source and domain, so echoing the term ordering and the
+// term count made every sort or limit change look like a different query to the front-end memo
+// and to any HTTP cache in front of it. `domain` is dropped too, and now never arrives anyway.
 /** @param {URLSearchParams} graphParams */
 export const narrowToSources = (graphParams) => {
   const p = new URLSearchParams(graphParams)

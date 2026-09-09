@@ -1,9 +1,21 @@
 // Mutable UI state, owned here so api.js/layout.js/render.js stay stateless. `state` itself
-// is a live-mutated object (consumers write state.source/state.domain directly); everything
+// is a live-mutated object (consumers write state.source directly); everything
 // else goes through a getter/setter pair so the module that owns the value is the only one
 // that can reassign it — ES module bindings can't be reassigned from the importing side.
 
-export const state = { source: 'all', domain: 'all' }
+export const state = { source: 'all' }
+
+// The outlet in focus inside the second figure. It is paint-only and deliberately not part of
+// `state`: an outlet used to narrow the whole page — the atlas, the documents, the header —
+// which meant a click on the lower graph silently redrew the upper one. It now colours nothing
+// but its own figure, and never reaches a querystring.
+/** @type {string} */
+let outlet = 'all'
+export const getOutlet = () => outlet
+/** @param {string} d */
+export const setOutlet = (d) => {
+  outlet = d
+}
 
 /** @type {Map<string, import('./format.js').Layout>} */
 export const layoutCache = new Map()

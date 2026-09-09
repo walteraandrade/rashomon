@@ -123,7 +123,7 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
       assert.ok(button, 'the mocked /sources row must render one clickable outlet')
       button.fire('click')
       assert.equal(els.domainLabel.textContent, ' · g1.globo.com', 'picking an outlet focuses it locally, inside this figure')
-      els.testimonyDays.value = '90'
+      els.testimonyDays.value = '365'
       els.testimonyDays.fire('change')
       await flush(200)
       assert.equal(els.domainLabel.textContent, '', "changing this figure's own period control released the outlet")

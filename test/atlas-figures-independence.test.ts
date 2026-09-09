@@ -108,7 +108,7 @@ describe('issue #92 AC9: a control change never crosses figures', () => {
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.testimonyDays.value = '90'
+      els.testimonyDays.value = '365'
       els.testimonyDays.fire('change')
       await flush(220)
       const added = calls.slice(before)
@@ -124,7 +124,7 @@ describe('issue #92 AC9: a control change never crosses figures', () => {
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.days.value = '90'
+      els.days.value = '365'
       els.days.fire('change')
       await flush(220)
       const added = calls.slice(before)
@@ -190,5 +190,83 @@ describe('issue #92 AC13: the strip repaints off its own ResizeObserver, not fig
     assert.doesNotMatch(src, /\$\('strip'\)/, 'figure 1 must not touch #strip any more')
     assert.doesNotMatch(src, /\$\('testimonyList'\)/, 'figure 1 must not touch #testimonyList any more')
     assert.doesNotMatch(src, /\$\('outletList'\)/, 'figure 1 must not touch #outletList any more')
+  })
+})
+
+// A dead API and an empty seed.json are different facts, and the page must not report one as
+// the other. master's boot() reached an error branch with its own copy and a retry button;
+// after the split the shell fetches /api/people once, so the failure has to travel down into
+// every figure's mount() or both figures would silently claim nobody is tracked.
+const withLocationAndReload = async <T>(search: string, fn: (reloads: number[]) => Promise<T> | T): Promise<T> => {
+  const previous = (globalThis as { location?: unknown }).location
+  const reloads: number[] = []
+  ;(globalThis as { location?: unknown }).location = { search, reload: () => reloads.push(1) }
+  try {
+    return await fn(reloads)
+  } finally {
+    ;(globalThis as { location?: unknown }).location = previous
+  }
+}
+
+describe('issue #92: a failed GET /api/people is an outage, never an empty seed', () => {
+  it('paints the error copy and a working retry in both figures, not the empty-seed copy', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      globalThis.fetch = (async (input: unknown) => {
+        calls.push(String(input))
+        throw new Error('network down')
+      }) as typeof fetch
+      await withLocationAndReload('', async (reloads) => {
+        await appModule.boot()
+        await flush()
+
+        assert.equal(els.status.textContent, 'Não foi possível carregar dados reais.')
+        assert.equal(els.status.classes.error, true, 'the status badge must carry the .error class')
+        assert.match(els.viewport.innerHTML, /Falha de rede ou base indispon[ií]vel/)
+        assert.match(els.viewport.innerHTML, /Nenhum gr[aá]fico fict[ií]cio ser[aá] exibido|Nenhum grafo fict[ií]cio ser[aá] exibido/)
+        assert.match(els.viewport.innerHTML, /id="retry"/, 'the retry button must be emitted, not just resolvable')
+        assert.doesNotMatch(els.viewport.innerHTML, /seed\.json/, 'an outage must never claim the seed is empty')
+        assert.notEqual(els.status.textContent, 'Nenhuma pessoa cadastrada.')
+
+        assert.match(els.testimonyList.innerHTML, /Falha de rede ou base indispon[ií]vel/)
+        assert.match(els.testimonyList.innerHTML, /id="testimonyRetry"/)
+        assert.notEqual(els.testimonyList.textContent, 'Nenhuma pessoa cadastrada.')
+
+        els.retry.fire('click')
+        els.testimonyRetry.fire('click')
+        assert.equal(reloads.length, 2, 'both retry buttons must be wired to a real re-fetch')
+      })
+    })
+  })
+
+  it('an empty people list still reads as an empty seed, not as an outage', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/api/people': [] })
+      await withLocation('', () => appModule.boot())
+      await flush()
+      assert.equal(els.status.textContent, 'Nenhuma pessoa cadastrada.')
+      assert.match(els.viewport.innerHTML, /seed\.json/)
+      assert.doesNotMatch(els.viewport.innerHTML, /Falha de rede/)
+    })
+  })
+})
+
+describe('issue #92: the loading copy shows before /api/people resolves', () => {
+  it('boot() paints the loading reader synchronously, ahead of the network round trip', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      globalThis.fetch = (async (input: unknown) => {
+        calls.push(String(input))
+        return new Promise(() => {}) as unknown as Response
+      }) as typeof fetch
+      await withLocation('', async () => {
+        const booting = appModule.boot()
+        assert.equal(els.status.textContent, 'Carregando a base local…', 'a cold start must not show bare static markup')
+        assert.match(els.viewport.innerHTML, /Carregando o campo de palavras/)
+        assert.equal(els.testimonyList.textContent, 'Carregando…')
+        void booting
+      })
+    })
   })
 })

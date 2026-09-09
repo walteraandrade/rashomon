@@ -44,9 +44,10 @@ describe('public/bundle.js stays in step with public/js', () => {
     const bundle = await app.request('/bundle.js')
     assert.equal(bundle.status, 200)
     assert.match(bundle.headers.get('content-type') ?? '', /javascript/)
-    // The six modules stay in public/js as the source of truth: every front-end test imports
-    // them directly, and atlas-modules-acceptance.test.ts pins their import graph.
-    for (const file of ['api.js', 'app.js', 'format.js', 'layout.js', 'render.js', 'state.js']) {
+    // The eight modules stay in public/js as the source of truth: every front-end test imports
+    // them directly, and atlas-modules-acceptance.test.ts pins their import graph. The two under
+    // figures/ are listed too, so a static-handler regression on the subdirectory fails here.
+    for (const file of ['api.js', 'app.js', 'format.js', 'layout.js', 'render.js', 'state.js', 'figures/atlas.js', 'figures/testimony.js']) {
       const res = await app.request(`/js/${file}`)
       assert.equal(res.status, 200, `/js/${file} must still be served`)
     }

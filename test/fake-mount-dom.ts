@@ -107,11 +107,11 @@ class FakeSelect extends Listenable {
   id: string
   options: Option[]
   private current: string
-  constructor(id: string, options: { value: string; text: string }[] = []) {
+  constructor(id: string, options: { value: string; text: string; selected?: boolean }[] = []) {
     super()
     this.id = id
     this.options = options.map((o) => ({ value: o.value, textContent: o.text }))
-    this.current = this.options[0]?.value ?? ''
+    this.current = (options.find((o) => o.selected) ?? options[0])?.value ?? ''
   }
   get value() {
     return this.current
@@ -148,11 +148,13 @@ class FakeInput extends Listenable {
   }
 }
 
+// Mirrors design-5.html's #days / #testimonyDays exactly: the same three values, and the same
+// `selected` default. A harness that offered a value the page does not have (or defaulted to the
+// first option instead of the marked one) would green-light a seed bug the real page would hit.
 const DAYS_OPTIONS = [
-  { value: '7', text: '7 dias' },
-  { value: '30', text: '30 dias' },
-  { value: '90', text: '90 dias' },
-  { value: '365', text: '365 dias' },
+  { value: '7', text: 'últimos 7 dias' },
+  { value: '30', text: 'últimos 30 dias', selected: true },
+  { value: '365', text: 'último ano' },
 ]
 
 const atlasIds = () => ({
@@ -188,6 +190,11 @@ const atlasIds = () => ({
   docsDialog: new FakeBox('docsDialog'),
   atlasStats: new FakeBox('atlasStats'),
   inspector: new FakeBox('inspector'),
+  // The real page creates #retry inside #viewport's innerHTML, so it only exists once an
+  // error or empty branch has painted. The harness ships it preexisting because getElementById
+  // here is a flat lookup, not a parse; the tests that use it assert the button's markup was
+  // emitted too, so a branch that stopped emitting it would still fail.
+  retry: new FakeBox('retry'),
 })
 
 const testimonyIds = () => ({
@@ -200,6 +207,8 @@ const testimonyIds = () => ({
   outletList: new FakeBox('outletList'),
   domainLabel: new FakeBox('domainLabel'),
   strip: new FakeBox('strip'),
+  // Same reasoning as #retry above: painted into #testimonyList's innerHTML by the error branch.
+  testimonyRetry: new FakeBox('testimonyRetry'),
 })
 
 export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds>

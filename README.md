@@ -4,7 +4,7 @@ Rashomon collects what Bluesky, Google News, GDELT, the press and the two houses
 
 Live at [rashomon-five.vercel.app](https://rashomon-five.vercel.app). Node + TypeScript, Hono, PGlite, and a front-end of plain ES modules with no build step.
 
-![the atlas](docs/screenshots/leitura-desktop.png)
+![the atlas](docs/screenshots/atlas-hero.png)
 
 ## Quick start
 

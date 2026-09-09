@@ -18,7 +18,6 @@ pnpm dev       # http://localhost:3210
 
 ## Commands
 
-| Command | What it does |
 | --- | --- |
 | `pnpm ingest [source...]` | collect; no argument runs every default source, see [sources](docs/sources.md) |
 | `pnpm dev` | serve the API and `public/` on `PORT` (default 3210) |

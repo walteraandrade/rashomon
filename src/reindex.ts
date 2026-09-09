@@ -56,11 +56,6 @@ const backfillDomains = async (size: number) => {
 
 // Separate from main()'s stdout/db wiring, so tests can reindex the fixture in-process.
 export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => {
-  // `truncate`, not `delete`: PGlite has no autovacuum, so deleting every row would leave the
-  // pages dead and the rebuild below would append past them, growing the files on every run.
-  // Truncate returns the space immediately, which is why no vacuum follows it here — unlike
-  // `pnpm purge`, whose deletions are permanent and need `vacuum full` to shrink the file.
-  await db.exec(`truncate doc_terms, doc_persons, doc_candidates`)
   await upsertPersons(persons)
   const backfilled = await backfillDomains(size)
   // The corpus is read twice, and it has to be: which pairs of words stick together is a fact
@@ -68,13 +63,24 @@ export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => 
   // and no document can be tagged with a phrase until it does. The alternative -- deriving
   // phrase rows in SQL from the staging table -- would put a second extraction path next to
   // `derive`, which is exactly the drift `derive`'s own comment exists to prevent.
-  // No transaction around the staging pass, unlike the derive pass below: phrase_stage is
-  // scratch that only buildPhrases reads, and it is truncated at both ends of that read, so a
-  // half-written pass costs nothing and rolling one back would buy nothing either.
+  //
+  // This pass runs *before* the truncate below, and the order matters on a live database. A
+  // reindex serves nothing while its derived tables are empty, and neither `phrase_stage` nor
+  // `phrases` is read by any route, so the whole staging pass belongs outside that window.
+  // Putting it after the truncate would roughly double the time the site answers with no terms.
+  //
+  // No transaction around it, unlike the derive pass: phrase_stage is scratch that only
+  // buildPhrases reads, and it is truncated at both ends of that read, so a half-written pass
+  // costs nothing and rolling one back would buy nothing either.
   await resetPhraseStage()
   await eachPage(size, (rows) => stagePhrases(rows.map((r) => r.text)))
   const phrases = await buildPhrases(persons.flatMap(nameTokens))
   const lexicon = await loadPhrases()
+  // `truncate`, not `delete`: PGlite has no autovacuum, so deleting every row would leave the
+  // pages dead and the rebuild below would append past them, growing the files on every run.
+  // Truncate returns the space immediately, which is why no vacuum follows it here — unlike
+  // `pnpm purge`, whose deletions are permanent and need `vacuum full` to shrink the file.
+  await db.exec(`truncate doc_terms, doc_persons, doc_candidates`)
   // One transaction per page: an interruption leaves whole pages committed and never a
   // document with only part of its derived rows. Recovery is to run it again (see README).
   const docs = await eachPage(size, (rows) =>

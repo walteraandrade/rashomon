@@ -274,10 +274,18 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .ruler-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .ruler-axis { stroke: var(--line); stroke-width: 2; }
 .ruler-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
-.ruler-dot { cursor: pointer; outline: none; }
-.ruler-dot circle { fill: var(--cmp, var(--muted)); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: stroke .12s; }
-.ruler-dot:hover circle, .ruler-dot:focus-visible circle { stroke: var(--ink); stroke-width: 2; fill-opacity: 1; }
-.ruler-dot.is-selected circle { stroke: var(--accent); stroke-width: 3; fill-opacity: 1; }
+.ruler-word { cursor: pointer; outline: none; }
+.ruler-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
+.ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--cmp, var(--muted)); }
+.ruler-word:hover .ruler-text, .ruler-word:focus-visible .ruler-text { fill: var(--ink); }
+.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--cmp, var(--muted)) 12%, transparent); stroke: color-mix(in srgb, var(--cmp, var(--muted)) 45%, var(--bg)); }
+.ruler-word.is-selected .ruler-text { fill: var(--accent); }
+.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: var(--accent); stroke-width: 2; }
+.ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.ruler-overflow p { flex: 1 0 100%; margin: 0; font-size: 14px; color: var(--muted); }
+.ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }
+.ruler-overflow .quiet-button:hover { color: var(--ink); }
+.ruler-overflow .quiet-button.is-selected { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
 .ruler-axis-labels { display: flex; justify-content: space-between; padding: 8px 0 0; font-size: 14px; color: var(--muted); }
 .ruler .note { font-size: 14px; color: var(--muted); margin-top: 10px; }
 /* The detail line and its two-state wording carry over from the deleted compare.html: the term

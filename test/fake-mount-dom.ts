@@ -26,11 +26,13 @@ const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain') =>
     return stub
   })
 
-// paintRuler's dots (issue #91) carry two data-* attributes on the same tag (data-term and
+// paintRuler's marks (issue #91) carry two data-* attributes on the same tag (data-term and
 // data-kind), unlike the single-attribute stubs above, so onPick(term, kind) reads both off
-// one click.
+// one click. Since issue #99 a mark is either a <g> holding the word or, for a word the strip
+// could not fit, a <button> in the overflow list; both are wired by the same painter loop and
+// both must be reachable here, or a criterion about the list would pass vacuously.
 const dataTermStubs = (html: string) =>
-  [...html.matchAll(/<g[^>]*\bdata-term="([^"]*)"[^>]*\bdata-kind="([^"]*)"[^>]*>/g)].map(([, term, kind]) => {
+  [...html.matchAll(/<(?:g|button)[^>]*\bdata-term="([^"]*)"[^>]*\bdata-kind="([^"]*)"[^>]*>/g)].map(([, term, kind]) => {
     const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
     stub.dataset = { term, kind }
     return stub
@@ -234,9 +236,11 @@ const compareIds = () => ({
     { value: 'count', text: 'documentos' },
     { value: 'pmi', text: 'PMI × ln(1 + docs)' },
   ]),
+  // Mirrors the options figures/compare.js writes into #compareLimit, default 20 since issue
+  // #99: the figure draws words now, and 40 per person is ~130 of them on the wire.
   compareLimit: new FakeSelect('compareLimit', [
-    { value: '20', text: '20' },
-    { value: '40', text: '40', selected: true },
+    { value: '20', text: '20', selected: true },
+    { value: '40', text: '40' },
     { value: '60', text: '60' },
     { value: '100', text: '100' },
   ]),
@@ -266,6 +270,24 @@ export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]
     removeEventListener: () => {},
     querySelector: () => null,
     querySelectorAll: () => [],
+    // render.js's createCanvasMeasure builds the injected `measure` layout.js's packers need;
+    // figures/compare.js calls it on the first paint of the ruler (issue #99, words instead of
+    // dots). It writes ctx.font, then reads measureText, so the stub has to remember the font
+    // to answer with a size-dependent width. A deterministic 0.6em per character is enough:
+    // no criterion in this suite asserts a pixel, only which words are drawn and clickable.
+    createElement: () => ({
+      getContext: () => {
+        const ctx = {
+          font: '',
+          measureText: (text: string) => {
+            const size = Number(/(\d+(?:\.\d+)?)px/.exec(ctx.font)?.[1] ?? 16)
+            const width = text.length * size * 0.6
+            return { width, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width }
+          },
+        }
+        return ctx
+      },
+    }),
   }
   const previous = {
     document: (globalThis as { document?: unknown }).document,

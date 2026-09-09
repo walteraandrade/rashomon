@@ -257,31 +257,121 @@ export const routesFrom = (layout, id) => {
   return routes
 }
 
-// A one-dimensional beeswarm for the testimony strip: every item keeps its x (its score on the
-// axis) and gets the y closest to the axis where it touches nothing already placed. Bigger
-// items go first so the heavy outlets sit on the line and the small ones stack around them.
-// Deterministic: same input, same picture, so a test can assert the geometry.
+// The beeswarm skeleton both strips share: every item keeps its x (its score on the axis) and
+// takes the y closest to the axis where it touches nothing already placed. Bigger items go
+// first, so the heavy marks sit on the line and the small ones stack around them. The two
+// strips differ only in the shape of a mark, and that difference is the injected `reach(placed,
+// item)`: the vertical distance `item` must keep from `placed` at their horizontal distance, or
+// null when the two never interfere at that distance. `fits` rejects a placement that would
+// leave the figure, sending the item to `overflow` instead of letting it push the height up,
+// and `escape` is the last resort when no candidate is free at all. Deterministic: same input,
+// same picture, so a test can assert the geometry.
+/**
+ * @template {{ x: number }} T
+ * @param {T[]} items
+ * @param {{ size: (item: T) => number, reach: (placed: T & { y: number }, item: T) => number | null, fits?: (item: T, y: number) => boolean, escape?: (item: T, candidates: number[]) => number | null }} rules
+ * @returns {{ placed: (T & { y: number })[], overflow: T[] }}
+ */
+export const swarmBy = (items, { size, reach, fits = () => true, escape = () => null }) => {
+  /** @type {(T & { y: number })[]} */
+  const placed = []
+  /** @type {T[]} */
+  const overflow = []
+  for (const item of [...items].sort((a, b) => size(b) - size(a) || a.x - b.x)) {
+    /** @type {{ p: T & { y: number }, dy: number }[]} */
+    const near = []
+    for (const p of placed) {
+      const dy = reach(p, item)
+      if (dy !== null) near.push({ p, dy })
+    }
+    const candidates = [0, ...near.flatMap(({ p, dy }) => [p.y + dy, p.y - dy])]
+    const free = candidates
+      .filter((c) => near.every(({ p, dy }) => Math.abs(p.y - c) + 1e-6 >= dy))
+      .sort((a, b) => Math.abs(a) - Math.abs(b) || a - b)
+    const y = free.find((c) => fits(item, c)) ?? escape(item, candidates)
+    if (y === null || y === undefined) overflow.push(item)
+    else placed.push({ ...item, y })
+  }
+  return { placed, overflow }
+}
+
+// The testimony strip's own shape: circles, so the clearance between two of them shrinks as
+// they drift apart horizontally, and nothing is ever dropped (the strip shrinks its radii
+// instead, in render.js). Kept as its own name because every caller and test speaks of a swarm
+// of dots, not of the skeleton above.
 /**
  * @template {{ x: number, r: number }} T
  * @param {T[]} items
  * @param {number} [gap]
  * @returns {(T & { y: number })[]}
  */
-export const swarm = (items, gap = 1.5) => {
-  /** @type {(T & { y: number })[]} */
-  const placed = []
-  for (const item of [...items].sort((a, b) => b.r - a.r || a.x - b.x)) {
-    const near = placed.filter((p) => Math.abs(p.x - item.x) < p.r + item.r + gap)
-    const candidates = [0]
-    for (const p of near) {
+export const swarm = (items, gap = 1.5) =>
+  swarmBy(items, {
+    size: (d) => d.r,
+    reach: (p, item) => {
       const need = p.r + item.r + gap
-      const dy = Math.sqrt(Math.max(0, need * need - (p.x - item.x) ** 2))
-      candidates.push(p.y + dy, p.y - dy)
-    }
-    const free = candidates
-      .filter((c) => near.every((p) => Math.hypot(p.x - item.x, p.y - c) >= p.r + item.r + gap - 1e-6))
-      .sort((a, b) => Math.abs(a) - Math.abs(b) || a - b)
-    placed.push({ ...item, y: free.length ? free[0] : Math.max(...candidates.map(Math.abs)) + item.r + gap })
-  }
-  return placed
+      const dx = p.x - item.x
+      return Math.abs(dx) < need ? Math.sqrt(Math.max(0, need * need - dx * dx)) : null
+    },
+    escape: (item, candidates) => Math.max(...candidates.map(Math.abs)) + item.r + gap,
+  }).placed
+
+// ---------- figure 3: the ruler (compare two people, issues #91 and #99) ----------
+
+export const RULER_PAD = 28
+// How tall the strip may grow before a word is sent to the overflow list instead of drawn.
+// Words, unlike dots, cannot shrink past the 11px floor atlas.css sets for the whole site, so
+// the ruler trades height for legibility first and only then drops a word -- visibly.
+export const RULER_MAX_HEIGHT = 520
+export const RULER_SIZE_MIN = 11
+export const RULER_SIZE_MAX = 30
+const RULER_GAP_X = 8
+const RULER_GAP_Y = 3
+
+/** @typedef {{ term: string, kind: string, balance: number, combined: number }} RulerItem */
+
+// Figure 3's geometry: the word itself on the -1..+1 balance axis, in the same language figure
+// 1 speaks, instead of an anonymous dot. x is the balance, the type size is `combined`
+// (documents on both sides, never measure-dependent) on a sqrt ramp so one loud word cannot
+// dwarf the rest, and y comes from swarmBy, which stacks the boxes that would collide. Pure:
+// text widths arrive through the same injected `measure` the atlas packer uses.
+/**
+ * @template {RulerItem} T
+ * @param {Measure} measure
+ * @param {T[]} items
+ * @param {number} [width]
+ * @returns {{ words: (T & { text: string, x: number, y: number, size: number, w: number, h: number })[], overflow: (T & { text: string, size: number })[], x: (balance: number) => number, half: number, height: number, width: number }}
+ */
+export const rulerLayout = (measure, items, width = 860) => {
+  const inner = Math.max(80, width - 2 * RULER_PAD)
+  /** @param {number} balance */
+  const x = (balance) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
+  if (!items.length) return { words: [], overflow: [], x, half: 40, height: 80, width }
+  const roots = items.map((it) => Math.sqrt(Math.max(0, it.combined)))
+  const lo = Math.min(...roots)
+  const hi = Math.max(...roots)
+  // Narrow viewports get a shorter type ramp, never a smaller floor: the smallest word on a
+  // phone is the same 11px it is on a desktop, and only the biggest one gives ground.
+  const top = Math.max(RULER_SIZE_MIN + 2, RULER_SIZE_MAX * Math.min(1, Math.max(0.62, width / 860)))
+  const sized = items.map((it, i) => {
+    const t = hi === lo ? 0.5 : (roots[i] - lo) / (hi - lo)
+    const size = Math.round(RULER_SIZE_MIN + (top - RULER_SIZE_MIN) * t)
+    const text = label(it)
+    const w = measure(text, size) + 10
+    // A word is wide where a dot was a point, so a word sitting on either end would hang off
+    // the frame and get clipped. Its box is nudged just far enough inward to stay whole; the
+    // shift is at most half a word and never reorders anything, since every word at the same
+    // balance is nudged the same way.
+    const centre = Math.min(Math.max(x(it.balance), w / 2), Math.max(w / 2, width - w / 2))
+    return { ...it, text, x: centre, size, w, h: Math.round(size * 1.24) }
+  })
+  const half = RULER_MAX_HEIGHT / 2
+  const { placed, overflow } = swarmBy(sized, {
+    size: (d) => d.size,
+    reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + RULER_GAP_X ? (p.h + item.h) / 2 + RULER_GAP_Y : null),
+    fits: (item, y) => Math.abs(y) + item.h / 2 <= half,
+  })
+  const reach = placed.reduce((m, p) => Math.max(m, Math.abs(p.y) + p.h / 2), 0)
+  const used = Math.max(40, Math.ceil(reach) + 6)
+  return { words: placed, overflow, x, half: used, height: used * 2, width }
 }

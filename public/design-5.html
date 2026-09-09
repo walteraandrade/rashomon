@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="40" height="40">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="compare-link" href="compare.html">comparar pessoas</a><a href="como-ler.html">como ler</a></nav></header>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="40" height="40">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="compare-link" href="#compare">comparar pessoas</a><a href="como-ler.html">como ler</a></nav></header>
 <main>
   <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
     <header class="figure-head">
@@ -47,6 +47,18 @@
     <figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden></figure>
     <div class="testimony-lists" id="testimonyList">Aguardando dados.</div>
     <div class="outlets" id="outlets"><p class="eyebrow">Veículos do recorte <b id="domainLabel"></b></p><div id="outletList">Aguardando dados.</div></div>
+  </section>
+
+  <section class="figure compare" id="compare" aria-labelledby="compareTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 3</span><h2 id="compareTitle">Régua entre duas pessoas</h2></div>
+      <p class="figure-sub">Uma palavra de cada lado, na mesma régua. A posição diz de quem ela é mais; o tamanho é quantos documentos ela tem com as duas pessoas, somados. <a href="como-ler.html#comparar">Como ler este gráfico</a>.</p>
+      <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A"></select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B"></select></span> nos <span class="pick"><select id="compareDays" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="compareSource" aria-label="Fonte"></select></span>, por <span class="pick"><select id="compareMeasure" aria-label="Medida"></select></span>. Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras"></select></span> palavras por pessoa.</p></div>
+    </header>
+    <p class="status" id="compareStatus" role="status" hidden>Os dois lados mostram a mesma pessoa.</p>
+    <figure class="ruler" id="compareRuler" aria-label="Régua comparando as duas pessoas" hidden></figure>
+    <p class="detail" id="compareDetail"><span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span></p>
+    <p class="note" id="compareHiddenNote" hidden></p>
   </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">

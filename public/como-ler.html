@@ -12,12 +12,12 @@
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="40" height="40">rashomon<span>.</span></a><nav><a href="/">atlas</a><a class="compare-link" href="compare.html">comparar pessoas</a></nav></header>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="40" height="40">rashomon<span>.</span></a><nav><a href="/">atlas</a><a class="compare-link" href="/#compare">comparar pessoas</a></nav></header>
 <main class="reading">
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
     <h2 id="comoLerTitle">Como ler o rashomon</h2>
-    <p class="chapter-intro">O site junta textos que citam uma pessoa pública e mostra dois gráficos sobre eles: o atlas de palavras e a avaliação por veículo. Tudo vale só para o recorte escolhido na frase do topo: pessoa, período e fonte.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Como fazer uma análise</a><a href="#atlas">Gráfico 1 · Atlas</a><a href="#avaliacao">Gráfico 2 · Avaliação</a><a href="#pmi">PMI</a></nav>
+    <p class="chapter-intro">O site junta textos que citam uma pessoa pública e mostra três gráficos sobre eles: o atlas de palavras, a avaliação por veículo e a régua que compara duas pessoas. Tudo vale só para o recorte escolhido na frase de cada gráfico: pessoa, período e fonte.</p>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Como fazer uma análise</a><a href="#atlas">Gráfico 1 · Atlas</a><a href="#avaliacao">Gráfico 2 · Avaliação</a><a href="#comparar">Gráfico 3 · Comparar</a><a href="#pmi">PMI</a></nav>
     <div class="chapter-grid">
       <div id="analise">
         <h3>Como fazer uma análise</h3>
@@ -67,6 +67,12 @@
         </div>
         <p>Cada +1 dobra. Pode ser negativo: a palavra aparece menos com essa pessoa do que com as outras.</p>
         <p><b>Por que "PMI ponderado"?</b> Uma palavra que apareceu em só 2 textos pode ter PMI enorme sem merecer. Então o tamanho no mapa usa PMI × ln(1 + documentos). Isso segura as palavras raras e deixa as frequentes subirem.</p>
+      </div>
+      <div id="comparar">
+        <h3>Gráfico 3 · Régua entre duas pessoas</h3>
+        <p>Cada bolinha é uma palavra, não um veículo. A posição na régua diz de quem ela é: numa ponta, ela só aparece com uma das duas pessoas; na outra ponta, só com a outra. No meio, a palavra é dividida: as duas usam mais ou menos igual.</p>
+        <p>O tamanho é quantos documentos a palavra tem com as duas pessoas, somados. "Documentos" ou "PMI ponderado" na frase mudam só a posição, nunca o tamanho.</p>
+        <p>O nome de uma das duas pessoas nunca vira palavra na régua dela mesma: contar "Lula" na régua do Lula não diria nada. Quantas palavras saíram por isso vem escrito embaixo da régua.</p>
       </div>
     </div>
     <p class="chapter-foot"><span>Tipos, tom por termo, linhas do tempo e termos em alta continuam no <a href="atlas-legacy.html">atlas anterior</a>.</span><span>Sem dados fictícios em produção.</span></p>

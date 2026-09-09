@@ -8,7 +8,7 @@ A small software factory: agents do the research, spec, build, test and validati
 |---|---|---|
 | `researcher` | nothing | maps the code an issue touches; also checks the approval gate |
 | `spec-writer` | nothing (posts an issue comment) | turns the issue into numbered acceptance criteria |
-| `builder-api` | `src/`, `test/`, `README.md` | routes, SQL, store, with tests |
+| `builder-api` | `src/`, `test/`, `README.md`, `docs/*.md` | routes, SQL, store, with tests |
 | `builder-ui` | `public/` | the interface, verified in a real browser |
 | `test-verifier` | `test/` | tests written from the spec, not from the code |
 | `validator` | nothing | judges the branch against the spec; returns gaps |

@@ -9,7 +9,7 @@ import './close.js'
 
 // Issue #43's acceptance criteria, exercised against the real front-end modules rather than
 // against a claim about them. The atlas' request bookkeeping lives in public/js/state.js
-// (the memo) and public/js/app.js (the keys, the memo wrapper and the debounce), all of which
+// (the memo wrapper and the debounce) and public/js/figures/atlas.js (the keys), all of which
 // import cleanly under node:test, so "no sources request on a sort change" is a counted fact
 // here and not only a screenshot.
 

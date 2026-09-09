@@ -151,6 +151,37 @@ PERF=0 pnpm bench                           # same scenarios with the instrument
 
 `pnpm test` never runs the benchmark: it asserts that every scenario is still a request the API answers and that the corpus is deterministic, against the shared in-memory fixture, and never asserts a timing.
 
+## Front-end bootstrapping
+
+The page at `/` is a sequence of independent figures (`public/js/figures/*.js`), each with its
+own sentence of `<select>`s and its own fetches. `public/js/app.js` reads the querystring once,
+at mount, to seed them. Nothing is ever written back to `location` or `history`: the controls
+change what a figure shows, never the URL.
+
+Two key forms, read in this order:
+
+| Form | Example | Effect |
+|---|---|---|
+| bare | `?days=7` | seeds every figure that has that control |
+| prefixed with the figure id | `?atlas.days=7` | seeds that figure only, and wins over the bare key |
+
+The figure ids are `atlas` (figure 1, `#workspace`) and `testimony` (figure 2, `#testimony`).
+Figure 1 reads `person`, `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days`
+and `source` — it has no sort or limit control, matching what `narrowToTestimony` and
+`narrowToSources` already drop.
+
+`/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
+on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the
+figure's own default stand, exactly as if no querystring were there. An unknown person id falls
+back to the first person in `GET /api/people`. These keys are client-side only — each figure
+still narrows its own request through `public/js/api.js`, so nothing here reaches the server
+verbatim.
+
+`GET /api/people` is fetched exactly once, by the shell, however many figures mount. If it
+fails, the failure travels down into every `mount()` as `peopleError` and each figure paints
+its own network-failure copy with a retry button. An outage is never reported as an empty
+`seed.json`.
+
 ## HTTP caching
 
 Every `/api/*` GET is public, read-only and depends on data that only changes when `pnpm push` copies a local PGlite into the managed Postgres. So each 200 carries `Cache-Control: public, s-maxage=<window>, stale-while-revalidate=86400`, and on Vercel a CDN hit answers without running a function or touching Supabase — the cheapest read there is on both free plans. The CDN keys on the full URL, query string included, so two different filter sets never share an entry.

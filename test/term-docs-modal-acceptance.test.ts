@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { drawMap, inspect, paintColumns, paintDocsTitle } from '../public/js/render.js'
+import { drawMap, inspect, paintColumns, paintDocs, paintDocsHead } from '../public/js/render.js'
 import { withFakeDocument } from './fake-dom.js'
 
 // The documents panel used to live inside the inspector: first as a button plus a sibling
@@ -83,14 +83,38 @@ describe('the card that holds the documents', () => {
     assert.equal(html.match(/id="docs"/g)?.length, 1, 'one docs container on the page')
   })
 
-  it('paintDocsTitle names the term or the person in the card head', () => {
+  it('paintDocsHead writes whatever the figure that asked calls its own reading', () => {
     withFakeDocument(['docsKicker', 'docsTitle'], (els) => {
-      paintDocsTitle({ term, personName: 'Alguém' })
+      paintDocsHead({ kicker: 'Documentos com palavra', title: 'reforma' })
       assert.equal(els.docsKicker.textContent, 'Documentos com palavra')
       assert.equal(els.docsTitle.textContent, 'reforma')
-      paintDocsTitle({ term: null, personName: 'Alguém' })
-      assert.equal(els.docsKicker.textContent, 'Documentos sobre')
-      assert.equal(els.docsTitle.textContent, 'Alguém')
+      paintDocsHead({ kicker: 'Documentos de', title: 'g1.globo.com' })
+      assert.equal(els.docsKicker.textContent, 'Documentos de')
+      assert.equal(els.docsTitle.textContent, 'g1.globo.com')
+    })
+  })
+
+  // The ruler asks the same word of both people at once, so the card has to answer in two
+  // labelled columns; every other figure asks one side and must keep the plain single list.
+  it('paintDocs writes one plain list for one side and two labelled columns for two', () => {
+    const side = (name: string | null) => ({ label: name, data: { docs: [{ source: 'rss', domain: 'example.org', text: 'um texto', url: 'https://example.org/a' }], total: 3 } })
+    withFakeDocument(['docs'], (els) => {
+      paintDocs([side(null)])
+      assert.doesNotMatch(els.docs.innerHTML, /docs-columns/)
+      assert.match(els.docs.innerHTML, /Mostrando 1 de 3 documentos\./)
+    })
+    withFakeDocument(['docs'], (els) => {
+      paintDocs([side('Lula'), side('Bolsonaro')])
+      assert.match(els.docs.innerHTML, /<div class="docs-columns">/)
+      assert.match(els.docs.innerHTML, /<p class="eyebrow docs-side-name">Lula<\/p>/)
+      assert.match(els.docs.innerHTML, /<p class="eyebrow docs-side-name">Bolsonaro<\/p>/)
+    })
+  })
+
+  it('an empty side says so instead of leaving a blank column', () => {
+    withFakeDocument(['docs'], (els) => {
+      paintDocs([{ label: 'Lula', data: { docs: [], total: 0 } }, { label: 'Bolsonaro', data: { docs: [], total: 0 } }])
+      assert.equal(els.docs.innerHTML.match(/Nenhum documento encontrado\./g)?.length, 2)
     })
   })
 

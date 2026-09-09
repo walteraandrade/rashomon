@@ -283,10 +283,17 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-axis { stroke: var(--line); stroke-width: 2; }
 .strip-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
 .strip-overall { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: .8; }
-.strip-dot { cursor: pointer; outline: none; }
-.strip-dot circle { fill: var(--tone, var(--muted)); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: stroke .12s; }
-.strip-dot:hover circle, .strip-dot:focus-visible circle { stroke: var(--ink); stroke-width: 2; fill-opacity: 1; }
-.strip-dot.is-active circle { stroke: var(--accent); stroke-width: 3; fill-opacity: 1; }
+/* Same rule as the atlas's words: what answers to the cursor is a soft shape in the mark's own
+   colour, desaturated toward --muted and nearly transparent. A dot has no box to draw, so it
+   gets a halo behind it -- an ink ring would have said "hovered" while hiding what the colour
+   of the dot is there to say. */
+.strip-dot { cursor: pointer; outline: none; --wc: var(--tone, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.strip-dot .dot-face { fill: var(--wc); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: fill-opacity .12s; }
+.strip-dot .dot-halo { fill: transparent; stroke: transparent; stroke-width: 1; }
+.strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 20%, transparent); stroke: color-mix(in srgb, var(--wc-soft) 45%, transparent); }
+.strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
+.strip-dot.is-active .dot-face { stroke: var(--accent); stroke-width: 3; fill-opacity: 1; }
+.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 20%, transparent); }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 
@@ -395,6 +402,13 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .docs-dialog.is-dragging .docs-dialog-head { cursor: grabbing; }
 .docs-dialog-head h2 { font-size: var(--t-lg); margin-top: var(--space-1); overflow-wrap: anywhere; }
 #docs { overflow-y: auto; scrollbar-width: thin; padding: 6px 22px var(--space-4); min-height: 120px; }
+/* The ruler asks the same word of both people, so its card answers in two columns -- one per
+   person, each under its own name. Below the card's own width they stack. */
+.docs-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-5); }
+/* The column's own header, not the domain line each document carries. */
+.docs-side-name { margin-bottom: var(--space-2); color: var(--ink); }
+.docs-dialog.is-floating.is-wide { width: min(660px, calc(100vw - 32px)); }
+@media (max-width: 560px) { .docs-columns { grid-template-columns: 1fr; } }
 .doc { padding: var(--space-3) 0; }
 .doc p { margin: 6px 0; color: var(--ink); font-size: var(--t-sm); }
 .doc a { font-size: var(--t-xs); }
@@ -446,12 +460,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ruler-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .ruler-axis { stroke: var(--line); stroke-width: 2; }
 .ruler-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
-.ruler-word { cursor: pointer; outline: none; }
+/* The atlas's --wc/--wc-soft pair again: the word's colour is which side it leans to, and the
+   box under the cursor is that same colour, desaturated and nearly transparent. Recolouring the
+   word to --ink on hover would have hidden the one thing this figure draws. */
+.ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .ruler-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
-.ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--cmp, var(--muted)); }
-.ruler-word:hover .ruler-text, .ruler-word:focus-visible .ruler-text { fill: var(--ink); }
-.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--cmp, var(--muted)) 12%, transparent); stroke: color-mix(in srgb, var(--cmp, var(--muted)) 45%, var(--bg)); }
-.ruler-word.is-selected .ruler-text { fill: var(--accent); }
+.ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--wc); }
+.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); stroke: color-mix(in srgb, var(--wc-soft) 40%, transparent); }
+.ruler-word.is-selected { --wc: var(--accent); }
 .ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: var(--accent); stroke-width: 2; }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }

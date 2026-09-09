@@ -316,7 +316,7 @@ describe('testimony strip: the outlets on the axis under the map', () => {
       const html = els.strip.innerHTML
       const dots = [...html.matchAll(/data-strip-domain="([^"]+)"/g)].map((m) => m[1])
       assert.deepEqual(dots, ['g1.globo.com', 'bbc.com', 'fdusp.bsky.social'])
-      assert.match(html, /class="strip-dot is-active" data-strip-domain="bbc\.com" role="button" tabindex="0" aria-pressed="true"/)
+      assert.match(html, /class="strip-dot is-active" style="--tone:rgb\(\d+,\d+,\d+\)" data-strip-domain="bbc\.com" role="button" tabindex="0" aria-pressed="true"/)
       assert.match(html, /<title>g1\.globo\.com · Google News · -3,62 em 13 textos<\/title>/)
       assert.match(html, /class="strip-mean" style="--pos:39\.2%">média da pessoa -2,16/)
       assert.match(html, /<line class="strip-overall"/)
@@ -324,8 +324,8 @@ describe('testimony strip: the outlets on the axis under the map', () => {
       assert.match(html, /toque de novo, ou fora das bolinhas, para soltar/)
       assert.match(html, /O atlas acima não muda\./)
       for (const value of inlineStyles(html)) assert.ok(value.startsWith('--'), `paintStrip emitted style="${value}"`)
-      const g1 = Number(html.match(/data-strip-domain="g1\.globo\.com".*?<circle cx="([\d.]+)"/)?.[1])
-      const fdusp = Number(html.match(/data-strip-domain="fdusp\.bsky\.social".*?<circle cx="([\d.]+)"/)?.[1])
+      const g1 = Number(html.match(/data-strip-domain="g1\.globo\.com".*?<circle class="dot-face" cx="([\d.]+)"/)?.[1])
+      const fdusp = Number(html.match(/data-strip-domain="fdusp\.bsky\.social".*?<circle class="dot-face" cx="([\d.]+)"/)?.[1])
       assert.ok(g1 < fdusp, 'a more hostile outlet sits further left')
     })
     withFakeDocument(['strip'], (els) => {

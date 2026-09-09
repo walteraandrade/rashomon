@@ -368,7 +368,7 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
     dots
       .map(
         (d) =>
-          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle cx="${d.x}" cy="${half + d.y}" r="${d.r}" style="--tone:${testimonyColor(d.score)}"/></g>`,
+          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 7}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
       )
       .join('') +
     '</svg>' +
@@ -395,27 +395,35 @@ export const paintDocsLoading = () => {
   if (box) box.textContent = 'Carregando documentos…'
 }
 
-// The modal's own heading: which documents these are. Kicker and title are the two elements
-// the markup gives the dialog, so this is the only painter that touches them.
-/** @param {{ term: Term | null, personName: string }} args */
-export const paintDocsTitle = ({ term, personName }) => {
-  if ($('docsKicker')) $('docsKicker').textContent = term ? `Documentos com ${kinds[term.kind] ? kinds[term.kind].toLowerCase() : 'o termo'}` : 'Documentos sobre'
-  if ($('docsTitle')) $('docsTitle').textContent = term ? label(term) : personName
+// The card's own heading: which documents these are. Kicker and title are the two elements the
+// markup gives the dialog, so this is the only painter that touches them. The caller writes the
+// words -- each figure names its own reading ("Documentos com palavra", "Documentos de", "As
+// duas pessoas") and this file never guesses which figure asked.
+/** @param {{ kicker: string, title: string }} args */
+export const paintDocsHead = ({ kicker, title }) => {
+  if ($('docsKicker')) $('docsKicker').textContent = kicker
+  if ($('docsTitle')) $('docsTitle').textContent = title
 }
 
-/** @param {{ docs: Doc[], total: number }} data */
-export const paintDocs = (data) => {
+// One document, as the card writes it.
+/** @param {Doc} d */
+const docMarkup = (d) => {
+  const href = safeDocUrl(d)
+  return `<article class="doc"><p class="eyebrow">${esc(d.domain || d.source)}</p><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
+}
+
+/** @param {{ label: string | null, data: { docs: Doc[], total: number } }} side */
+const sideMarkup = ({ label: name, data }) =>
+  (name ? `<p class="eyebrow docs-side-name">${esc(name)}</p>` : '') +
+  (data.docs.length ? `<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` + data.docs.map(docMarkup).join('') : '<p>Nenhum documento encontrado.</p>')
+
+// One side is the card as it always was; two are the ruler asking the same word of both people,
+// side by side, because a word on that figure belongs to neither person alone.
+/** @param {{ label: string | null, data: { docs: Doc[], total: number } }[]} sides */
+export const paintDocs = (sides) => {
   const box = $('docs')
   if (!box) return
-  box.innerHTML = data.docs.length
-    ? `<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` +
-      data.docs
-        .map((d) => {
-          const href = safeDocUrl(d)
-          return `<article class="doc"><p class="eyebrow">${esc(d.domain || d.source)}</p><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
-        })
-        .join('')
-    : '<p>Nenhum documento encontrado.</p>'
+  box.innerHTML = sides.length > 1 ? `<div class="docs-columns">${sides.map((side) => `<div>${sideMarkup(side)}</div>`).join('')}</div>` : (sides[0] ? sideMarkup(sides[0]) : '<p>Nenhum documento encontrado.</p>')
 }
 
 /** @param {() => void} onRetry */
@@ -423,7 +431,7 @@ export const paintDocsError = (onRetry) => {
   const box = $('docs')
   if (!box) return
   box.innerHTML = '<p>Não foi possível carregar documentos. <button class="quiet-button" id="retryDocs">Tentar novamente</button></p>'
-  $('retryDocs').addEventListener('click', onRetry)
+  $('retryDocs')?.addEventListener('click', onRetry)
 }
 
 // The candidate queue: names nobody tracks yet. Each row toggles its own sample documents,
@@ -523,7 +531,7 @@ export const rulerTerms = (terms, measure) => {
  * @param {boolean} isSelected
  */
 const rulerWordMarkup = (d, half, isSelected) =>
-  `<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(d.text)}, ${fmt(d.combined)} documentos"><title>${esc(d.text)} · ${esc(kinds[d.kind] || d.kind || 'Tipo desconhecido')} · ${fmt(d.combined)} documentos</title><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="4"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}">${esc(d.text)}</text></g>`
+  `<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(d.text)}, ${fmt(d.combined)} documentos"><title>${esc(d.text)} · ${esc(kinds[d.kind] || d.kind || 'Tipo desconhecido')} · ${fmt(d.combined)} documentos</title><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="4"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central">${esc(d.text)}</text></g>`
 
 // The words that the strip could not hold without overlapping. Never dropped in silence: the
 // count is stated and every one of them is still a button carrying the same data-term/data-kind

@@ -8,6 +8,7 @@
 
 import * as api from '../api.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../format.js'
+import * as docsCard from '../docs-card.js'
 import { paintOutlets, paintOutletsError, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../render.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
@@ -67,16 +68,36 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     if (outletRows) paintOutlets({ rows: outletRows, testimony, domain: outlet, onPick: pickOutlet })
   }
 
-  // Picking an outlet is a reading inside this figure and nothing else: it repaints from the
-  // data already in hand, no fetch, no new querystring, and no change to figure 1 above it.
+  // Picking an outlet does two things, and neither of them touches figure 1: it repaints this
+  // figure from the data already in hand, and it asks the shared card for that outlet's own
+  // texts. A number you cannot read the texts behind is exactly where a reader stops trusting
+  // it, so the mean and its evidence answer to the same click. Releasing puts the card away.
   /** @param {string} d */
   const pickOutlet = (d) => {
     if (d === outlet) return
     outlet = d
     repaint()
+    if (d === 'all') docsCard.close()
+    else showOutletDocs(d)
   }
 
   const releaseOutlet = () => pickOutlet('all')
+
+  // This figure's own reading, handed to the shared card: every text this outlet wrote about
+  // this figure's person, in this figure's period and source -- no term at all, which is what
+  // makes it a different question from the atlas's "textos com esta palavra".
+  /** @param {string} d */
+  const showOutletDocs = (d) => {
+    const personId = $('testimonyPerson').value
+    if (!personId) return
+    const person = people.find((p) => p.id === personId)
+    const values = controlValues()
+    docsCard.open({
+      kicker: 'Documentos de',
+      title: d,
+      sides: [{ personId, personName: person?.name ?? personId, query: api.docsParams({ days: values.days, source: values.source, domain: d }) }],
+    })
+  }
 
   /** @param {number} id @param {AbortSignal} signal */
   const loadSourcesFlow = async (id, signal) => {

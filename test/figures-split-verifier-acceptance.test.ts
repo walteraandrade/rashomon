@@ -81,12 +81,15 @@ describe('AC2: the import graph walks public/js/figures/ and matches the spec ex
       'api.js': [],
       'layout.js': ['./format.js'],
       'render.js': ['./format.js', './layout.js'],
-      'figures/atlas.js': ['./api.js', './format.js', './layout.js', './render.js', './state.js'],
-      'figures/testimony.js': ['./api.js', './format.js', './render.js', './state.js'],
+      // The documents card belongs to no figure since all three open it, so it sits one layer
+      // above render.js and below figures/: it fetches, paints and owns #docsDialog.
+      'docs-card.js': ['./api.js', './render.js', './state.js'],
+      'figures/atlas.js': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
+      'figures/testimony.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
       // Issue #91 adds the third figure, the ruler; it follows figures/testimony.js's own
       // shape (no direct layout.js import — the swarm packing lives inside render.js).
-      'figures/compare.js': ['./api.js', './format.js', './render.js', './state.js'],
-      'app.js': ['./figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
+      'figures/compare.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'app.js': ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort())
     for (const [file, allowed] of Object.entries(expected)) {

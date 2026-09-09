@@ -130,10 +130,13 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'api.js': [],
       'layout.js': ['./format.js'],
       'render.js': ['./format.js', './layout.js'],
-      'figures/atlas.js': ['./api.js', './format.js', './layout.js', './render.js', './state.js'],
-      'figures/testimony.js': ['./api.js', './format.js', './render.js', './state.js'],
-      'figures/compare.js': ['./api.js', './format.js', './render.js', './state.js'],
-      'app.js': ['./figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
+      // The documents card belongs to no figure since all three open it, so it sits one layer
+      // above render.js and below figures/: it fetches, paints and owns #docsDialog.
+      'docs-card.js': ['./api.js', './render.js', './state.js'],
+      'figures/atlas.js': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
+      'figures/testimony.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'figures/compare.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'app.js': ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in public/js must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected)) {

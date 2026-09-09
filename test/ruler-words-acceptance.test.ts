@@ -264,7 +264,11 @@ describe('AC7: atlas.css styles words, not dots, and the page keeps its no-<styl
   it('carries the ruler word rules and no longer carries the dot rules', () => {
     const css = atlasCss()
     assert.match(css, /\.ruler-text \{/)
-    assert.match(css, /\.ruler-word\.is-selected \.ruler-text/)
+    // The selected word's colour is now the same --wc the word already resolves, swapped once on
+    // the group, so its hit box picks the swap up too rather than being coloured separately.
+    assert.match(css, /\.ruler-word\.is-selected \{[^}]*--wc:\s*var\(--accent\)/)
+    assert.match(css, /\.ruler-text \{[^}]*fill:\s*var\(--wc\)/)
+    assert.doesNotMatch(css, /\.ruler-word:hover \.ruler-text/, 'the cursor must not repaint the word away from the side it leans to')
     assert.match(css, /\.ruler-overflow \{/)
     assert.doesNotMatch(css, /\.ruler-dot/, 'nothing draws a ruler dot any more')
   })

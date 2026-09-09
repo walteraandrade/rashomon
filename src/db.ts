@@ -106,6 +106,15 @@ export const schema = `
     );
     create index if not exists doc_candidates_name_idx on doc_candidates (name);
     create index if not exists doc_persons_person_idx on doc_persons (person_id, doc_id);
+    create table if not exists phrases (
+      term text primary key,
+      count int not null,
+      score float8 not null
+    );
+    create table if not exists phrase_stage (
+      w1 text not null,
+      w2 text
+    );
 `
 
 export const migrate = () => db.exec(schema)

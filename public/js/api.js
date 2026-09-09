@@ -5,11 +5,19 @@
 /** @param {string} personId */
 export const endpoint = (personId) => '/api/people/' + encodeURIComponent(personId)
 
+// The kinds the atlas asks for, and the one it leaves out. GDELT's themes (kind 'theme') are
+// its own topic codes -- econ_freetrade, env_oil -- machine labels nobody wrote in a sentence,
+// so they read as noise next to real words on a map whose whole claim is "this is what people
+// say". They stay in the API, and atlas-legacy.html still shows them; only the default recorte
+// drops them. Spelled here rather than imported because api.js imports nothing (CLAUDE.md's
+// module direction), and shipped as a list because /graph takes kind as a comma-separated one.
+export const ATLAS_KINDS = 'word,hashtag,phrase'
+
 // `testimony=1` asks /graph for the per-term kikori mean (and the person's own, in the same
 // scope) that the map's colour mask reads; the mask is a paint toggle on the client, so the
 // data always comes along and flipping it never refetches.
 /** @param {{ days: string, sort: string, limit: string, source: string, domain: string, kind?: string, min?: string }} opts */
-export const params = ({ days, sort, limit, source, domain, kind = 'all', min = '2' }) =>
+export const params = ({ days, sort, limit, source, domain, kind = ATLAS_KINDS, min = '2' }) =>
   new URLSearchParams({ days, sort, limit, min, source, kind, domain, testimony: '1' })
 
 // The outlet sidebar picks `domain`, so its own /sources fetch must never send one back —

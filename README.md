@@ -18,7 +18,7 @@ pnpm typecheck       # tsc
 pnpm test            # node:test against an in-memory database
 ```
 
-`PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`. `ANALYZE_MIN_DOCS` (default 200) is the ingest size from which planner statistics are refreshed, see "Indexes and planner statistics". `WRITE_BATCH_ROWS` (default 500, clamped to 1..10000) and `WRITE_BATCH_DOCS` (default 200, clamped to 1..5000) bound what one insert statement carries and what one transaction holds, see "Writes, batches and recovery".
+`PORT` sets the server port (default 3210). `DATA_DIR` sets the PGlite directory (default `./data/pg`); `memory://` is in-memory and is what tests use. PGlite allows one process per directory: stop the server before `ingest` or `reindex`. `ANALYZE_MIN_DOCS` (default 200) is the ingest size from which planner statistics are refreshed, see "Indexes and planner statistics". `WRITE_BATCH_ROWS` (default 500, clamped to 1..10000) and `WRITE_BATCH_DOCS` (default 200, clamped to 1..5000) bound what one insert statement carries and what one transaction holds, see "Writes, batches and recovery". `MIN_PHRASE_COUNT` (default 5, clamped to 2..1000000) and `MIN_PHRASE_PERCENT` (default 35, clamped to 1..100) are the two floors a word pair clears to enter the phrase lexicon, see "Phrases".
 
 ## Deploy
 
@@ -57,7 +57,7 @@ Bluesky without login returns one page (100 posts) per person. To paginate, set 
 
 `GET /api/people`
 
-`GET /api/people/:id/graph?days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&kind=all|hashtag|word|theme&sort=count|pmi&limit=40&min=2`
+`GET /api/people/:id/graph?days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&kind=all|hashtag|word|theme|phrase&sort=count|pmi&limit=40&min=2`
 
 Add `domain=<host>` to restrict the graph to one outlet (or one Bluesky handle). Like `source`, `domain` also accepts a comma-separated list (e.g. `domain=cartacapital.com.br,poder360.com.br`), matching any listed host; a single `domain=<host>` behaves exactly as before.
 
@@ -67,15 +67,17 @@ Add `domain=<host>` to restrict the graph to one outlet (or one Bluesky handle).
 
 `GET /api/people/:id/sources?days=30&source=all&lean=all` lists outlets that mention the person: `domain`, `source`, `docs`, `tone` (average GDELT tone, null when unknown), `tone_n`, `lean` and `basis` (see "Editorial lean" below; both `null` when the domain is absent from `outlets.json`). Also honours `domain`, previously silently ignored on this route.
 
+`kind` also takes a comma-separated list (`kind=word,hashtag,phrase`), following the same convention as `source`, `domain` and `lean`: unknown tokens are dropped, and `all` is the fallback when none survives. A lone token behaves exactly as it always did. The atlas at `/` sends `word,hashtag,phrase`, so GDELT's own theme codes stay out of the map by default; they remain in the API and in `atlas-legacy.html`.
+
 Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also carries `tone`: average GDELT tone of the docs where the term co-occurs with the person, null when no GDELT doc contributed. `pmi` is log2 of how much more often the term co-occurs with the person than chance, measured against the docs in the window that mention at least one tracked person (see "Terms and the PMI universe"). `outlets` is `{ domain, lean, basis }[]`, empty when `lean` is unset/`all`, otherwise every `outlets.json` entry matching the resolved `domain`+`lean` scope. `nodes` is ordered by `sort` desc, then `term` asc, then `kind` asc: a term is a `(term, kind)` pair, so the same text can appear under two kinds, and `kind` is what ranks those against each other when everything else ties. `links` carries the person spokes in `nodes` order, then the term-term pairs ordered by `source` then `target`.
 
 `signature` holds at most 5 rows of `{ term, kind, count, pmi }` (no `tone`): the terms whose count clears `max(3, 5% of stats.about)`, ordered by `pmi` desc then `term` asc then `kind` asc, computed over the same `days`/`source`/`domain` scope as the graph but ignoring `kind`, `min`, `limit` and `sort`, so it is not guaranteed to be a subset of `nodes`.
 
-`GET /api/people/:id/docs?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&domain=all&lean=all&limit=50&offset=0` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs, outlets }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings. `outlets` follows the same rule as `graph`'s.
+`GET /api/people/:id/docs?term=&kind=all|hashtag|word|theme|phrase&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&domain=all&lean=all&limit=50&offset=0` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs, outlets }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings. `outlets` follows the same rule as `graph`'s.
 
-`GET /api/people/:id/rising?days=7&baseline=30&kind=all|hashtag|word|theme&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&domain=all&lean=all&limit=20&min=3` returns `{ days, baseline, terms, outlets }`, each term `{ term, kind, count_recent, count_baseline, lift }` (no `tone`). `count_recent`/`count_baseline` are raw doc counts turned into per-day rates rounded to 2 decimals; the baseline window is the `baseline` days immediately preceding the recent window, never overlapping it. `lift` is `(count_recent_raw / days) / ((count_baseline_raw + 1) / baseline)`, a pinned formula, not to be changed without a test. Rows are ordered by `lift` desc, then `term` asc, then `kind` asc.
+`GET /api/people/:id/rising?days=7&baseline=30&kind=all|hashtag|word|theme|phrase&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&domain=all&lean=all&limit=20&min=3` returns `{ days, baseline, terms, outlets }`, each term `{ term, kind, count_recent, count_baseline, lift }` (no `tone`). `count_recent`/`count_baseline` are raw doc counts turned into per-day rates rounded to 2 decimals; the baseline window is the `baseline` days immediately preceding the recent window, never overlapping it. `lift` is `(count_recent_raw / days) / ((count_baseline_raw + 1) / baseline)`, a pinned formula, not to be changed without a test. Rows are ordered by `lift` desc, then `term` asc, then `kind` asc.
 
-`GET /api/people/:id/timeline?term=&kind=all|hashtag|word|theme&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&domain=all&lean=all&bucket=week|day` returns a bare JSON array of `{ bucket_start, count }` (no `tone`, no `outlets` — this route's contract stays a bare array), oldest bucket first, `ceil(days / bucket_days)` items. Buckets are rolling windows counted backward from query time, not calendar/ISO weeks; the oldest bucket is clamped to the window edge so counts sum exactly to `/docs`'s `total` for the same `term`/`kind`/`days`/`source`/`domain`/`lean`.
+`GET /api/people/:id/timeline?term=&kind=all|hashtag|word|theme|phrase&days=30&source=all|bluesky|gdelt|rss|gnews|gkg|camara|senado|juridico|oficial|nicho&domain=all&lean=all&bucket=week|day` returns a bare JSON array of `{ bucket_start, count }` (no `tone`, no `outlets` — this route's contract stays a bare array), oldest bucket first, `ceil(days / bucket_days)` items. Buckets are rolling windows counted backward from query time, not calendar/ISO weeks; the oldest bucket is clamped to the window edge so counts sum exactly to `/docs`'s `total` for the same `term`/`kind`/`days`/`source`/`domain`/`lean`.
 
 `GET /api/tone?days=30&min=3` returns `{ persons, domains, cells }` across every tracked person (not nested under `/people/:id`). `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted distinct set of domains that appear in `cells` (a domain that never clears `min` never appears). `cells` holds one `{ person_id, domain, tone, n }` row per `(person, domain)` pair with at least `min` toned docs in the window; `tone` is the average, rounded to 2 decimals, `n` is the toned-doc count. Tone is a GDELT-only signal (see below), so non-GDELT docs never contribute to `tone` or `n` here.
 
@@ -131,6 +133,58 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 `pnpm purge <source>` deletes that source's docs (and resets `gkg_files` for `gkg`), for a clean re-fetch.
 
 ## Terms and the PMI universe
+
+## Phrases
+
+A `phrase` term is several words read as one unit, and there are two kinds of them.
+
+**Proper nouns** need nothing but the text. `capitalizedRuns` in `src/extract.ts` — the same
+heuristic `/api/candidates` uses — reads a run of two or more capitalized words, particles
+allowed inside, that does not open a sentence. "Alexandre de Moraes" is one term whether or not
+anyone ever adds him to `seed.json`.
+
+**Collocations** need the corpus. `pnpm reindex` counts every adjacent pair of content words
+into `phrase_stage` (one row per word occurrence; the row whose `w2` is null is the last word of
+a text, and exists so the unigram counts are exact), then keeps the pairs that clear two floors:
+
+- `MIN_PHRASE_COUNT` occurrences, default 5. PMI-shaped measures are wildest where counts are
+  smallest, which is the same reason `sort=pmi` multiplies by `ln(1 + count)`.
+- `MIN_PHRASE_PERCENT` stickiness, default 35. Stickiness is `c(a b) / min(c(a), c(b))`: of every
+  time the rarer of the two words appears, how often is it inside this pair? "turno" has almost
+  nowhere else to be, so "primeiro turno" is kept; "dias" is everywhere, so "faltam dias" is not.
+  Deliberately not PMI, whose denominator rewards two rare words that co-occur once.
+
+Adjacency is measured after stopwords are dropped, so "primeiro do turno" feeds the same pair as
+"primeiro turno". Only pairs — longer units come from the proper-noun path.
+
+The phrase replaces its words. Letting "primeiro", "turno" and "primeiro turno" compete for the
+same map spends three slots on one idea, so a word occurrence a phrase covers yields no `word`
+row. It is positional, not by word: "a reforma avança; a reforma tributária passa" still yields
+"reforma", because one of its two occurrences is outside the phrase. `doc_terms` records
+presence, so a word only leaves a document when *every* occurrence of it there is inside a
+phrase. The cost is that a word's document count now means "documents where it appears at least
+once outside every phrase", which is why a reindex has to run whole: half a corpus on the old
+rule and half on the new one would make both counts incomparable.
+
+A pair touching a tracked person's own name never enters the lexicon. `graph.ts` would hide it
+from that person's own graph, and since the phrase replaces its words, "lula defende" as a
+phrase would delete "defende" from Lula's map and put nothing in its place. Multi-word names
+still reach the map through the proper-noun path, which spells them whole.
+
+A database that predates this needs one `pnpm reindex` to gain phrases at all, and the same run is what rewrites the word rows under the substitution rule. Until it runs, the corpus carries no `phrase` row and every word still counts as it always did.
+
+`pnpm reindex` reads the corpus twice, and has to: which pairs stick is a fact about the whole
+corpus, so no document can be tagged until every document has been counted. Deriving the phrase
+rows in SQL from the staging table instead would put a second extraction path beside `derive`,
+which is the drift `derive` exists to prevent. `pnpm ingest` does not rebuild the lexicon; it
+loads whatever the last reindex left and tags new documents with it, so a pair that only becomes
+a phrase because of today's collection is tagged by the next reindex.
+
+A phrase carrying one of a person's own name words is dropped from that person's own graph, the
+way `nameTokens` already dropped the bare words: "lula defende" and "jair bolsonaro" are not
+things said *about* the person, they are the person. `src/graph.ts` does it with an array-overlap
+test on the phrase's words, guarded by a `position(' ' in term)` check so the single-word rows
+that dominate `doc_terms` never pay for it.
 
 Terms are only stored for docs that mention at least one tracked person. A doc naming nobody tracked keeps its `docs` row (it still feeds `/api/candidates` and the source counts) but gets no `doc_terms` rows: they used to serve only as the PMI denominator, at two thirds of the largest table. PMI therefore compares a person's terms against the docs about tracked people in the window, not against everything collected; `stats.docs` keeps its old meaning (every doc in scope).
 
@@ -283,7 +337,8 @@ Each is read as whole hours, floor 1 (0 for the stale window), ceiling 168 (a we
 ## Layout
 
 - `src/collectors/*` one collector per source, same signature (Strategy)
-- `src/extract.ts` hashtags, words, stopwords, person matching
+- `src/extract.ts` hashtags, words, phrases, stopwords, person matching
+- `src/phrases.ts` the collocation lexicon: staging, the two floors, load
 - `src/store.ts` doc and person inserts, shared by ingest and reindex
 - `src/graph.ts` scoring SQL (counts, PMI, term-term links, testimony aggregation)
 - `src/scorers/*` one scorer per method, same signature; `src/score.ts` scores unscored `(doc, person)` pairs; `src/export-docs.ts` dumps docs for kikori's training set

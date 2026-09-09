@@ -1,6 +1,7 @@
 import seedPersons from '../seed.json' with { type: 'json' }
 import { analyzeTables, db, migrate } from './db.js'
-import { domainOf } from './extract.js'
+import { domainOf, nameTokens } from './extract.js'
+import { buildPhrases, loadPhrases, resetPhraseStage, stagePhrases } from './phrases.js'
 import { derive, inBatches, inTransaction, upsertPersons, writeBatchDocs, writeDerived } from './store.js'
 import type { Person, Source, Term } from './types.js'
 
@@ -62,25 +63,38 @@ export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => 
   await db.exec(`truncate doc_terms, doc_persons, doc_candidates`)
   await upsertPersons(persons)
   const backfilled = await backfillDomains(size)
+  // The corpus is read twice, and it has to be: which pairs of words stick together is a fact
+  // about the whole corpus, so the lexicon cannot exist until every document has been counted,
+  // and no document can be tagged with a phrase until it does. The alternative -- deriving
+  // phrase rows in SQL from the staging table -- would put a second extraction path next to
+  // `derive`, which is exactly the drift `derive`'s own comment exists to prevent.
+  // No transaction around the staging pass, unlike the derive pass below: phrase_stage is
+  // scratch that only buildPhrases reads, and it is truncated at both ends of that read, so a
+  // half-written pass costs nothing and rolling one back would buy nothing either.
+  await resetPhraseStage()
+  await eachPage(size, (rows) => stagePhrases(rows.map((r) => r.text)))
+  const phrases = await buildPhrases(persons.flatMap(nameTokens))
+  const lexicon = await loadPhrases()
   // One transaction per page: an interruption leaves whole pages committed and never a
   // document with only part of its derived rows. Recovery is to run it again (see README).
   const docs = await eachPage(size, (rows) =>
     inTransaction(() =>
-      writeDerived(rows.map((r) => derive(r.id, { source: r.source, text: r.text, extraTerms: r.extra_terms, extraNames: r.extra_names }, persons))),
+      writeDerived(rows.map((r) => derive(r.id, { source: r.source, text: r.text, extraTerms: r.extra_terms, extraNames: r.extra_names }, persons, lexicon))),
     ),
   )
   // A reindex rewrites every derived table from empty, so the planner's row counts and
   // most-common-value lists are stale by construction when it ends: refresh them here,
   // unconditionally, in the process that owns DATA_DIR.
   const analyzed = await analyzeTables()
-  return { docs, backfilled, analyzed }
+  return { docs, backfilled, analyzed, phrases }
 }
 
 const main = async () => {
   await migrate()
-  const { docs, backfilled, analyzed } = await reindexAll(seedPersons)
+  const { docs, backfilled, analyzed, phrases } = await reindexAll(seedPersons)
   if (backfilled) console.log(`backfilled domain for ${backfilled} docs`)
   console.log(`reindexed ${docs} docs`)
+  console.log(`kept ${phrases} phrases`)
   console.log(`analyzed ${analyzed.join(', ')}`)
   await db.close()
 }

@@ -1,6 +1,6 @@
 import { clampEnv, db } from './db.js'
 import { discoverNames, personsMentioned, terms } from './extract.js'
-import type { Person, RawDoc, Source, Term } from './types.js'
+import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
 
 // Tone is a GDELT measure. A doc keeps the source that first delivered it, so a
 // later gkg row sharing the uri must not leak its tone into an rss/gnews doc.
@@ -74,14 +74,14 @@ type Extractable = Pick<RawDoc, 'source' | 'text' | 'extraTerms' | 'extraNames'>
 
 // The only place extraction happens on the write path, so ingest and reindex cannot drift:
 // the same document yields the same person, term and candidate rows through either.
-export const derive = (docId: number, doc: Extractable, ps: Person[]): Derived => {
+export const derive = (docId: number, doc: Extractable, ps: Person[], lexicon: Phrases = new Set<string>()): Derived => {
   const matched = personsMentioned(doc.text, ps)
   return {
     docId,
     persons: matched.map((p) => p.id),
     // Terms of a doc naming nobody tracked only ever fed the PMI denominator, at 68% of the
     // largest table; the denominator now counts the same docs the numerator does (see graph.ts).
-    terms: matched.length ? terms(doc.text, doc.extraTerms) : [],
+    terms: matched.length ? terms(doc.text, doc.extraTerms, lexicon) : [],
     names: discoverNames(doc, ps),
   }
 }
@@ -135,20 +135,20 @@ const upsertDoc = async (doc: RawDoc) => {
 
 // One transaction per document: it can commit with its derived rows or not at all, so no
 // document is ever left in `docs` without the person, term and candidate rows it implies.
-export const insertDoc = (doc: RawDoc, ps: Person[]): Promise<boolean> =>
+export const insertDoc = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<string>()): Promise<boolean> =>
   inTransaction(async () => {
     const row = await upsertDoc(doc)
     if (!row?.inserted) return false
-    await writeDerived([derive(row.id, doc, ps)])
+    await writeDerived([derive(row.id, doc, ps, lexicon)])
     return true
   })
 
-const insertGroup = (docs: readonly RawDoc[], ps: Person[]) =>
+const insertGroup = (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases) =>
   inTransaction(async () => {
     const derived = await docs.reduce<Promise<Derived[]>>(async (acc, doc) => {
       const rows = await acc
       const row = await upsertDoc(doc)
-      return row?.inserted ? [...rows, derive(row.id, doc, ps)] : rows
+      return row?.inserted ? [...rows, derive(row.id, doc, ps, lexicon)] : rows
     }, Promise.resolve([]))
     await writeDerived(derived)
     return derived.length
@@ -157,14 +157,17 @@ const insertGroup = (docs: readonly RawDoc[], ps: Person[]) =>
 // The bulk path. A group commits as one transaction; when it fails it rolls back whole and is
 // replayed document by document, so one unwritable document costs only itself and everything
 // else in the group still lands with its derived rows.
-export const insertDocs = (docs: readonly RawDoc[], ps: Person[], size = writeBatchDocs()) =>
+// `lexicon` trails `size` rather than following `ps`: every existing caller passes the batch
+// size positionally, and an empty lexicon is the honest default anyway -- a database that has
+// never been reindexed has no phrases to tag.
+export const insertDocs = (docs: readonly RawDoc[], ps: Person[], size = writeBatchDocs(), lexicon: Phrases = new Set<string>()) =>
   batches(docs, size).reduce<Promise<{ written: number; failed: number }>>(async (acc, group) => {
     const totals = await acc
-    const written = await insertGroup(group, ps).catch(() => null)
+    const written = await insertGroup(group, ps, lexicon).catch(() => null)
     if (written !== null) return { written: totals.written + written, failed: totals.failed }
     return group.reduce<Promise<{ written: number; failed: number }>>(async (inner, doc) => {
       const t = await inner
-      const ok = await insertDoc(doc, ps).catch((e: Error) => (console.error(`[store] ${doc.uri}: ${e.message}`), null))
+      const ok = await insertDoc(doc, ps, lexicon).catch((e: Error) => (console.error(`[store] ${doc.uri}: ${e.message}`), null))
       return ok === null ? { written: t.written, failed: t.failed + 1 } : { written: t.written + (ok ? 1 : 0), failed: t.failed }
     }, Promise.resolve(totals))
   }, Promise.resolve({ written: 0, failed: 0 }))

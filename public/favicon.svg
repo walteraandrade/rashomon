@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="rashomon">
+  <style>
+    /* One quotation mark per source, each turned its own way: four witnesses, one event.
+       The tail is a hairline, so it only survives above 40px. Below that the mark drops a
+       tier: solid drops at 24-40px, a single drop under 24px. The tierless base case is the
+       smallest one on purpose - a browser that ignores these queries gets the legible mark,
+       never the blurred one. */
+    svg { --plate: #202020; --a: #e9e4d8; --w: #a9c3ec; --h: #9fd9c2; --t: #e8a9cf; }
+    @media (prefers-color-scheme: dark) { svg { --plate: #2e2e2e; } }
+    #tier-mid, #tier-full { display: none; }
+    @media (min-width: 24px) { #tier-min { display: none; } #tier-mid { display: inline; } }
+    @media (min-width: 40px) { #tier-mid { display: none; } #tier-full { display: inline; } }
+  </style>
+
+  <g id="tier-full">
+    <g fill="var(--plate)">
+      <rect x="6" y="6" width="52" height="52" rx="7"/>
+      <rect x="62" y="6" width="52" height="52" rx="7"/>
+      <rect x="6" y="62" width="52" height="52" rx="7"/>
+      <rect x="62" y="62" width="52" height="52" rx="7"/>
+    </g>
+    <g transform="translate(32 32) rotate(-15) scale(1.15) translate(0 -6.5)" fill="var(--a)">
+      <path d="M9 0 C9 11 3 19 -7 22 C-4.5 17.5 -3.5 11 -6.36 6.36 A9 9 0 1 1 9 0 Z"/>
+    </g>
+    <g transform="translate(88 32) rotate(6) scale(1.15) translate(0 -6.5)" fill="var(--w)">
+      <path d="M9 0 C9 11 3 19 -7 22 C-4.5 17.5 -3.5 11 -6.36 6.36 A9 9 0 1 1 9 0 Z"/>
+    </g>
+    <g transform="translate(32 88) rotate(14) scale(1.15) translate(0 -6.5)" fill="var(--h)">
+      <path d="M9 0 C9 11 3 19 -7 22 C-4.5 17.5 -3.5 11 -6.36 6.36 A9 9 0 1 1 9 0 Z"/>
+    </g>
+    <g transform="translate(88 88) rotate(-6) scale(1.15) translate(0 -6.5)" fill="var(--t)">
+      <path d="M9 0 C9 11 3 19 -7 22 C-4.5 17.5 -3.5 11 -6.36 6.36 A9 9 0 1 1 9 0 Z"/>
+    </g>
+  </g>
+
+  <g id="tier-mid">
+    <g fill="var(--plate)">
+      <rect x="2" y="2" width="55" height="55" rx="8"/>
+      <rect x="63" y="2" width="55" height="55" rx="8"/>
+      <rect x="2" y="63" width="55" height="55" rx="8"/>
+      <rect x="63" y="63" width="55" height="55" rx="8"/>
+    </g>
+    <g transform="translate(29.5 29.5) rotate(-15) scale(1.2) translate(0 -4.5)" fill="var(--a)">
+      <path d="M7.79 4.5 L0 18 L-7.79 4.5 A9 9 0 1 1 7.79 4.5 Z"/>
+    </g>
+    <g transform="translate(90.5 29.5) rotate(6) scale(1.2) translate(0 -4.5)" fill="var(--w)">
+      <path d="M7.79 4.5 L0 18 L-7.79 4.5 A9 9 0 1 1 7.79 4.5 Z"/>
+    </g>
+    <g transform="translate(29.5 90.5) rotate(14) scale(1.2) translate(0 -4.5)" fill="var(--h)">
+      <path d="M7.79 4.5 L0 18 L-7.79 4.5 A9 9 0 1 1 7.79 4.5 Z"/>
+    </g>
+    <g transform="translate(90.5 90.5) rotate(-6) scale(1.2) translate(0 -4.5)" fill="var(--t)">
+      <path d="M7.79 4.5 L0 18 L-7.79 4.5 A9 9 0 1 1 7.79 4.5 Z"/>
+    </g>
+  </g>
+
+  <g id="tier-min">
+    <rect x="2" y="2" width="116" height="116" rx="22" fill="var(--plate)"/>
+    <g transform="translate(60 60) rotate(-15) scale(2.9) translate(0 -4.5)" fill="var(--a)">
+      <path d="M7.79 4.5 L0 18 L-7.79 4.5 A9 9 0 1 1 7.79 4.5 Z"/>
+    </g>
+  </g>
+</svg>

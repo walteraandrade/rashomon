@@ -34,7 +34,9 @@ select option { background: var(--panel); color: var(--ink); font-size: 16px; }
 
 /* ---------- header ---------- */
 .top { display: flex; align-items: center; gap: 24px; padding: 18px var(--gutter); }
-.brand { font: 800 26px/1 var(--display); color: var(--ink); text-decoration: none; flex: 0 0 auto; }
+/* Margin, not gap: gap would also push the accent dot away from the word. */
+.brand { display: inline-flex; align-items: center; font: 800 26px/1 var(--display); color: var(--ink); text-decoration: none; flex: 0 0 auto; }
+.brand img { width: 40px; height: 40px; margin-right: 12px; flex: 0 0 auto; }
 .brand span { color: var(--accent); }
 .person-pick:empty { display: none; }
 .top nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 20px; font-size: 15px; }

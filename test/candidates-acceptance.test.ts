@@ -207,7 +207,7 @@ describe('AC7: "candidatos" list in the atlas', () => {
 
   it('boot() is the single entry point the page loads, so the queue is fetched once at startup', () => {
     assert.equal(typeof boot, 'function')
-    assert.match(html, /<script type="module" src="\.\/js\/app\.js"><\/script>/)
+    assert.match(html, /<script type="module" src="\.\/bundle\.js"><\/script>/)
   })
 
   it('renders name, docs, sources, trend and the sample docs on click, in pt-BR', () => {

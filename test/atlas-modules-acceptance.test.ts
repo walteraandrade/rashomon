@@ -75,7 +75,7 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
       assert.match(attrs, /\bsrc=/, `design-5.html must not carry an inline script body: ${body.slice(0, 80)}`)
       assert.equal(body.trim(), '')
     }
-    assert.match(html, /<script type="module" src="\.\/js\/app\.js"><\/script>/)
+    assert.match(html, /<script type="module" src="\.\/bundle\.js"><\/script>/)
   })
 
   it('every style="..." the modules write is a CSS custom property, not a hardcoded declaration', () => {

@@ -4,7 +4,7 @@
 // this module never reaches into public/js/state.js on its own.
 
 import { balanceColor, domainSuffix, esc, fmt, kinds, label, matching, mergeOutlets, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, trendOf } from './format.js'
-import { FONT_SANS, routesFrom, swarm } from './layout.js'
+import { FONT_SANS, RULER_PAD, rulerLayout, routesFrom, swarm } from './layout.js'
 
 /** @typedef {import('./format.js').Candidate} Candidate */
 /** @typedef {import('./format.js').Compare} Compare */
@@ -490,47 +490,47 @@ export const rulerTerms = (terms, measure) => {
   return { items, hiddenCount }
 }
 
-const RULER_PAD = 28
-
-// The geometry of the ruler at a given pixel width, same shape as stripLayout: one circle per
-// word on the -1..+1 balance axis, stacked by `swarm` where they would overlap and shrunk
-// together (reusing stripRadius/STRIP_MIN_R/STRIP_MAX_HEIGHT, the same area-encodes-count and
-// height-cap rules the strip already uses) past a height cap. A self-contained function on
-// purpose (issue #91 §4): it mirrors paintStrip's shape without importing it.
+// A word on the ruler: the term itself, not a dot, in the same language figure 1 speaks. The
+// transparent rect behind it is the hit area, so a 11px word is still comfortably clickable,
+// and `--cmp` carries the side colour the way `--size` carries the type size (the only inline
+// style this page allows, per CLAUDE.md).
 /**
- * @param {(CompareTerm & { balance: number, combined: number })[]} items
- * @param {number} width
+ * @param {{ term: string, kind: string, text: string, balance: number, combined: number, x: number, y: number, size: number, w: number, h: number }} d
+ * @param {number} half
+ * @param {boolean} isSelected
  */
-export const rulerLayout = (items, width = 860) => {
-  const inner = Math.max(80, width - 2 * RULER_PAD)
-  /** @param {number} balance */
-  const x = (balance) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
-  const sized = items.map((it) => ({ ...it, x: x(it.balance), r: stripRadius(it.combined, width) }))
-  const smallest = sized.reduce((m, d) => Math.min(m, d.r), Infinity)
-  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
-  let scale = 1
-  /** @param {number} k */
-  const attempt = (k) => {
-    const dots = swarm(sized.map((d) => ({ ...d, r: d.r * k })))
-    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
-    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
-  }
-  let fit = attempt(scale)
-  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
-    scale = Math.max(floor, scale * 0.92)
-    fit = attempt(scale)
-  }
-  return { dots: fit.dots, x, half: fit.half, height: fit.half * 2, width }
-}
+const rulerWordMarkup = (d, half, isSelected) =>
+  `<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(d.text)}, ${fmt(d.combined)} documentos"><title>${esc(d.text)} · ${esc(kinds[d.kind] || d.kind || 'Tipo desconhecido')} · ${fmt(d.combined)} documentos</title><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="4"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}">${esc(d.text)}</text></g>`
 
-// The ruler itself: one dot per shared or exclusive word between two people, positioned by who
-// it leans toward and sized by how many documents it has with both, combined. Text stays in
-// HTML like the strip's axis labels; only the shapes are SVG. Returns the hidden-name count so
-// the caller can paint #compareHiddenNote without recomputing rulerTerms itself.
+// The words that the strip could not hold without overlapping. Never dropped in silence: the
+// count is stated and every one of them is still a button carrying the same data-term/data-kind
+// the drawn words carry, so clicking one selects it exactly like clicking it on the ruler.
 /**
- * @param {{ data: Compare, personA: PersonRef, personB: PersonRef, measure: string, selected: { term: string, kind: string } | null, onPick: (term: string, kind: string) => void, width?: number }} args
+ * @param {{ term: string, kind: string, text: string, balance: number }[]} overflow
+ * @param {{ term: string, kind: string } | null} selected
  */
-export const paintRuler = ({ data, personA, personB, measure, selected, onPick, width = 860 }) => {
+const rulerOverflowMarkup = (overflow, selected) =>
+  overflow.length
+    ? `<div class="ruler-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:</p>` +
+      overflow
+        .map((d) => {
+          const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
+          return `<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${esc(d.text)}</button>`
+        })
+        .join('') +
+      '</div>'
+    : ''
+
+// The ruler itself: one word per shared or exclusive term between two people, written where it
+// leans and set in the type size its combined document count earns. `metrics` is the injected
+// text measurer layout.js needs (createCanvasMeasure in the browser, a stub in tests), the same
+// contract figures/atlas.js already honours; `measure` next to it is the chosen medida
+// (documentos or PMI) and only moves the words sideways. Returns the hidden-name count and how
+// many words were drawn versus listed, so the caller can paint its notes without recomputing.
+/**
+ * @param {{ data: Compare, personA: PersonRef, personB: PersonRef, measure: string, metrics: import('./format.js').Measure, selected: { term: string, kind: string } | null, onPick: (term: string, kind: string) => void, width?: number }} args
+ */
+export const paintRuler = ({ data, personA, personB, measure, metrics, selected, onPick, width = 860 }) => {
   const ruler = $('compareRuler')
   const { items, hiddenCount } = rulerTerms(data.terms, measure)
   if (!items.length) {
@@ -539,36 +539,36 @@ export const paintRuler = ({ data, personA, personB, measure, selected, onPick, 
     // with only #compareHiddenNote under it. Same note either way.
     ruler.hidden = false
     ruler.innerHTML = '<p class="note">Nenhuma palavra neste recorte.</p>'
-    return { hiddenCount }
+    return { hiddenCount, shown: 0, overflowCount: 0 }
   }
   ruler.hidden = false
-  const { dots, x, half, height } = rulerLayout(items, width)
+  const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
   const tick = (/** @type {number} */ b) => `<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
   ruler.innerHTML =
     `<div class="ruler-end-row"><span class="ruler-end cmp-a">${esc(personA.name)}</span><span class="ruler-end cmp-b">${esc(personB.name)}</span></div>` +
     `<svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Régua comparando ${esc(personA.name)} e ${esc(personB.name)}">` +
     `<line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick).join('')}` +
-    dots
-      .map((d) => {
-        const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
-        return `<g class="ruler-dot ${isSelected ? 'is-selected' : ''}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(label(d))}, ${fmt(d.combined)} documentos"><title>${esc(label(d))} · ${fmt(d.combined)} documentos</title><circle cx="${d.x}" cy="${half + d.y}" r="${d.r}" style="--cmp:${balanceColor(d.balance)}"/></g>`
-      })
-      .join('') +
+    words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind)).join('') +
     '</svg>' +
     `<div class="ruler-axis-labels"><span>Só de ${esc(personA.name)}</span><span>dividida</span><span>Só de ${esc(personB.name)}</span></div>` +
-    '<p class="note">Uma bolinha por palavra; a posição mostra de quem ela é mais, o tamanho é quantos documentos ao todo dos dois lados somados. Toque numa bolinha para ver os números dos dois lados.</p>'
+    `<p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.</p>` +
+    rulerOverflowMarkup(overflow, selected)
   for (const el of queryAll('[data-term]', ruler)) {
     const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
     el.addEventListener('click', pick)
-    el.addEventListener('keydown', (event) => {
-      const e = /** @type {KeyboardEvent} */ (event)
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault()
-        pick()
-      }
-    })
+    // A <g> is not focusable-and-activatable on its own, so it needs the key handler; the
+    // overflow list's real <button>s already turn Enter and Space into a click, and adding
+    // one here would pick twice and cancel itself out.
+    if (String(el.tagName || '').toLowerCase() !== 'button')
+      el.addEventListener('keydown', (event) => {
+        const e = /** @type {KeyboardEvent} */ (event)
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          pick()
+        }
+      })
   }
-  return { hiddenCount }
+  return { hiddenCount, shown: words.length, overflowCount: overflow.length }
 }
 
 export const paintRulerError = () => {

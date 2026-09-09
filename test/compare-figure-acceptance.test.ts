@@ -15,6 +15,11 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Compare, CompareTerm } from '../public/js/format.js'
 
+// The injected text measurer paintRuler hands to layout.js, the same contract public/js/layout.js
+// documents: deterministic here, a real canvas in the browser. 0.6em per character is close
+// enough to Instrument Sans that a word's box is the right order of magnitude.
+const metrics = (text: string, size: number) => text.length * size * 0.6
+
 // Independent verification of issue #91's numbered acceptance criteria, written from the
 // approved spec rather than from public/js/figures/compare.js's own implementation. Follows
 // the pattern of test/atlas-figures-independence.test.ts (#92's own test plan): a fake
@@ -181,7 +186,7 @@ describe('AC7: a term where either side is the string "name" is absent from the 
         { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
       ]
       const data = compareData(terms)
-      const { hiddenCount } = paintRuler({ data, personA, personB, measure: 'count', selected: null, onPick: () => {} })
+      const { hiddenCount } = paintRuler({ data, personA, personB, measure: 'count', metrics, selected: null, onPick: () => {} })
       assert.equal(hiddenCount, 1)
       assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="lula"/)
       assert.match(els.compareRuler.innerHTML, /data-term="reforma"/)
@@ -506,7 +511,7 @@ describe('AC12: no word rendered by the ruler ever opens #docsDialog', () => {
   it('a rendered dot carries no data-docs-open-style attribute and no reference to the dialog', () => {
     withFakeDocument(['compareRuler'], (els) => {
       const data = compareData([{ term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }])
-      paintRuler({ data, personA, personB, measure: 'count', selected: null, onPick: () => {} })
+      paintRuler({ data, personA, personB, measure: 'count', metrics, selected: null, onPick: () => {} })
       assert.doesNotMatch(els.compareRuler.innerHTML, /data-docs-open/)
       assert.doesNotMatch(els.compareRuler.innerHTML, /docsDialog/)
     })

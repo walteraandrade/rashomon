@@ -8,7 +8,7 @@
 
 import * as api from '../api.js'
 import { SOURCE_SEGMENTS, scoreName, sourceLabels } from '../format.js'
-import { paintCompareDetail, paintCompareLoading, paintRuler, paintRulerError } from '../render.js'
+import { createCanvasMeasure, paintCompareDetail, paintCompareLoading, paintRuler, paintRulerError } from '../render.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
 /** @typedef {{ id: string, name: string }} Person */
@@ -57,6 +57,12 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   let requestId = 0
   /** @type {AbortController | null} */
   let controller = null
+  // The injected text measurer layout.js's rulerLayout needs, built on first paint and kept:
+  // the same lazy idiom figures/atlas.js uses, so importing this module still touches no
+  // document.
+  /** @type {import('../format.js').Measure | null} */
+  let metrics = null
+  const measured = () => (metrics ??= createCanvasMeasure())
 
   const controlValues = () => ({
     a: $('compareA').value,
@@ -90,6 +96,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
       personA: data.a.person,
       personB: data.b.person,
       measure: measure(),
+      metrics: measured(),
       selected,
       onPick: pick,
       width: lastWidth || undefined,
@@ -100,8 +107,9 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     paintCompareDetail({ term, personA: data.a.person, personB: data.b.person })
   }
 
-  // Selecting a dot is a toggle, same idiom as the strip's outlet dots and the atlas's own
-  // words: clicking the selected dot again lets it go.
+  // Selecting a word is a toggle, same idiom as the strip's outlet dots and the atlas's own
+  // words: clicking the selected word again lets it go. The overflow list's buttons carry the
+  // same data-term/data-kind, so a word that did not fit selects exactly like a drawn one.
   /** @param {string} term @param {string} kind */
   const pick = (term, kind) => {
     selected = selected && selected.term === term && selected.kind === kind ? null : { term, kind }
@@ -179,7 +187,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   // response already carries both numbers for every term and only the position has to move.
   // Reloading here would resolve from state.js's memo inside its TTL and pay a real round trip
   // outside it, for a payload identical to the one on screen. Zero fetches, one repaint, and
-  // the selected dot survives — the reader is looking at the same word through another lens.
+  // the selected word survives — the reader is looking at the same word through another lens.
   const onMeasureChange = () => repaint()
 
   // The sentence's controls: source, measure and limit are built here (they have no static
@@ -188,7 +196,10 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   // second distinct person.
   $('compareSource').innerHTML = SOURCE_SEGMENTS.map(([value, text]) => `<option value="${value}">${sourceLabels[value] ?? text}</option>`).join('')
   $('compareMeasure').innerHTML = `<option value="count">documentos</option><option value="pmi">${scoreName('pmi')}</option>`
-  $('compareLimit').innerHTML = ['20', '40', '60', '100'].map((v) => `<option value="${v}"${v === '40' ? ' selected' : ''}>${v}</option>`).join('')
+  // Default 20, not 40: /api/compare unions four top-lists (each side's most frequent and each
+  // side's stickiest), so "40 por pessoa" is ~130 words on the wire. A dot that small still
+  // reads; a word does not, and 20 lands near 65, which fits the strip whole at both widths.
+  $('compareLimit').innerHTML = ['20', '40', '60', '100'].map((v) => `<option value="${v}"${v === '20' ? ' selected' : ''}>${v}</option>`).join('')
   $('compareA').innerHTML = ''
   $('compareB').innerHTML = ''
   for (const p of people) {

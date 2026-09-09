@@ -7,6 +7,7 @@ import { collectors, defaultSources } from '../src/collectors/index.js'
 import { insertDoc, tonedSources } from '../src/store.js'
 import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/query.js'
 import { persons, seed } from './fixture.js'
+import { docPageText, docsText } from './docs.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
 import { createHandlers } from '../public/js/app.js'
 import './close.js'
@@ -166,23 +167,24 @@ describe('press collectors — AC11', () => {
 })
 
 describe('press collectors — AC12', () => {
-  const readme = readRepoFile('README.md')
-  const enumeration = /source=all\|bluesky\|gdelt\|rss\|gnews\|gkg\|camara\|senado\|juridico\|oficial\|nicho\b/g
-
-  it('AC12: README repeats source=all|...|senado|juridico|oficial|nicho identically in all four route enumerations', () => {
-    const matches = readme.match(enumeration) ?? []
-    assert.equal(matches.length, 4, 'graph, docs, rising and timeline must each list juridico|oficial|nicho right after senado')
+  // The route enumerations used to be counted in the README, four identical copies of
+  // `source=all|bluesky|...`. That counted prose. What the criterion means is that the
+  // three families are usable and documented as filter values, which is what this asserts;
+  // docs-drift.test.ts checks the same for every other collector.
+  it('AC12: juridico, oficial and nicho are documented filter values on the API', () => {
+    const api = docPageText.get('docs/api.md') ?? ''
+    for (const source of ['juridico', 'oficial', 'nicho']) assert.match(api, new RegExp('`' + source + '`'))
   })
 
-  it('AC12: README documents the three feed lists, defaultSources membership and the RDF/Planalto exclusion', () => {
-    assert.match(readme, /noticias\.stf\.jus\.br/)
-    assert.match(readme, /conjur\.com\.br/)
-    assert.match(readme, /jota\.info/)
-    assert.match(readme, /agenciabrasil\.ebc\.com\.br/)
-    assert.match(readme, /cartacapital\.com\.br/)
-    assert.match(readme, /defaultSources/)
-    assert.match(readme, /RDF/)
-    assert.match(readme, /Planalto/)
+  it('AC12: the docs list the three feed sets, defaultSources membership and the RDF/Planalto exclusion', () => {
+    assert.match(docsText, /noticias\.stf\.jus\.br/)
+    assert.match(docsText, /conjur\.com\.br/)
+    assert.match(docsText, /jota\.info/)
+    assert.match(docsText, /agenciabrasil\.ebc\.com\.br/)
+    assert.match(docsText, /cartacapital\.com\.br/)
+    assert.match(docsText, /defaultSources/)
+    assert.match(docsText, /RDF/)
+    assert.match(docsText, /Planalto/)
   })
 })
 

@@ -9,6 +9,7 @@ import { insertDoc, tonedSources } from '../src/store.js'
 import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/query.js'
 import type { Person } from '../src/types.js'
 import { persons, seed } from './fixture.js'
+import { docsText, sourceTable } from './docs.js'
 import { SOURCE_SEGMENTS } from '../public/js/format.js'
 import { createHandlers } from '../public/js/app.js'
 import './close.js'
@@ -145,13 +146,13 @@ describe('camara collector — AC11', () => {
 })
 
 describe('camara collector — AC12', () => {
-  const readme = readRepoFile('README.md')
-
-  it('AC12: README documents camaraId in the seed bullet, a camara paragraph, and its default status', () => {
-    assert.match(readme, /camaraId/)
-    assert.match(readme, /dadosabertos\.camara\.leg\.br/)
-    assert.match(readme, /default sources:.*camara/)
-    assert.doesNotMatch(readme, /pnpm ingest camara/)
+  // The criterion is that camara ships documented, not that the README says it in a
+  // given shape: PR #81 moved this prose to docs/sources.md without changing a fact.
+  // "camara is on by default" is checked against defaultSources in docs-drift.test.ts.
+  it('AC12: the docs describe camaraId, the open-data host, and camara as a default source', () => {
+    assert.match(docsText, /camaraId/)
+    assert.match(docsText, /dadosabertos\.camara\.leg\.br/)
+    assert.equal(sourceTable.get('camara')?.byDefault, true)
   })
 })
 

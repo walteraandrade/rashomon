@@ -442,8 +442,16 @@ export const paintCandidatesError = (onRetry) => {
 
 // ---------- figure 3: the ruler (compare two people, issue #91) ----------
 
-/** @param {CompareSide | 'name' | null} v @param {string} measure */
-const scoreOf = (v, measure) => (v && v !== 'name' ? score(v, measure) : 0)
+// A side with no docs at all (`null`) is structurally absent, not merely "weak": presence alone
+// decides -1/+1 when only one side has any relationship to the term, regardless of that side's
+// own score sign — a present-but-negative-PMI side must still read as "this word is A's," never
+// flip toward a B that has literally nothing (spec §3's "found only on one side" case). When
+// both sides are present, position comes from each side's clamped-positive pull against the
+// *raw* combined magnitude, so a term with a real, opposite-signed relationship on both sides
+// settles short of the ends instead of pinning to them the way an unclamped ratio would whenever
+// the two raw scores merely differ in sign.
+/** @param {CompareSide | 'name' | null} v @returns {v is CompareSide} */
+const isPresent = (v) => v !== null && v !== 'name'
 
 /** @param {CompareSide | 'name' | null} v */
 const docsOf = (v) => (v && v !== 'name' ? v.count : 0)
@@ -466,10 +474,17 @@ export const rulerTerms = (terms, measure) => {
       hiddenCount++
       continue
     }
-    const sa = scoreOf(t.a, measure)
-    const sb = scoreOf(t.b, measure)
-    const mag = Math.abs(sa) + Math.abs(sb)
-    const balance = mag === 0 ? 0 : Math.max(-1, Math.min(1, (sb - sa) / mag))
+    const aPresent = isPresent(t.a)
+    const bPresent = isPresent(t.b)
+    let balance = 0
+    if (aPresent !== bPresent) {
+      balance = aPresent ? -1 : 1
+    } else if (aPresent && bPresent) {
+      const rawA = score(/** @type {CompareSide} */ (t.a), measure)
+      const rawB = score(/** @type {CompareSide} */ (t.b), measure)
+      const mag = Math.abs(rawA) + Math.abs(rawB)
+      balance = mag === 0 ? 0 : Math.max(-1, Math.min(1, (Math.max(0, rawB) - Math.max(0, rawA)) / mag))
+    }
     items.push({ ...t, balance, combined: docsOf(t.a) + docsOf(t.b) })
   }
   return { items, hiddenCount }

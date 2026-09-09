@@ -149,6 +149,19 @@ describe('AC6: measure changes position but never the combined document count', 
   })
 })
 
+describe('regression: an opposite-signed-but-real term on both sides never pins to a literal end, and a null side never wins on the other\'s negative score', () => {
+  it('alcolumbre (real docs and a negative PMI on the b side) settles short of -1', () => {
+    const terms = [{ term: 'alcolumbre', kind: 'word', a: { count: 233, pmi: 0.61, tone: null }, b: { count: 8, pmi: -2.93, tone: null } }]
+    const balance = rulerTerms(terms, 'pmi').items[0].balance
+    assert.ok(Math.abs(balance) < 1, `balance must not pin to a literal end when both sides have documents, got ${balance}`)
+  })
+
+  it('an a-only term (b truly absent) with a negative PMI is still -1, not +1', () => {
+    const terms = [{ term: 'onlyANegative', kind: 'word', a: { count: 5, pmi: -1, tone: null }, b: null }]
+    assert.equal(rulerTerms(terms, 'pmi').items[0].balance, -1)
+  })
+})
+
 describe('AC7: a term where either side is the string "name" is absent from the rendered set', () => {
   it('rulerTerms drops it and counts it as hidden', () => {
     const terms: CompareTerm[] = [
@@ -307,20 +320,112 @@ const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promis
 // document, keeps that guard false for this whole file.
 const appModule = await import('../public/js/app.js')
 
-describe('AC11: changing a compare control refetches only compare, and vice versa', () => {
-  it("changing figure 3's own control (compareDays) refetches only compare, never figure 1 or figure 2", async () => {
+describe("AC9 bootstrap: a === b's resolution contract, from the querystring down to /api/compare", () => {
+  it('initial: { a: "lula", b: "lula" } sends a=lula&b=lula to /api/compare', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/compare': compareData([], personA, personA) })
+      const { mount } = await import('../public/js/figures/compare.js')
+      mount(els.compare, { people, initial: { a: 'lula', b: 'lula' } })
+      await flush()
+      const url = calls.find((u) => u.includes('/api/compare'))
+      assert.ok(url, 'must have requested /api/compare')
+      const qs = new URL(url!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'lula')
+      assert.equal(qs.get('b'), 'lula')
+    })
+  })
+
+  it("bare ?person= seeds compareA, the same fallback figures 1 and 2's own person control reads", async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony, '/compare': compareData([]) })
+      await withLocation('?person=bolsonaro', () => appModule.boot())
+      await flush()
+      assert.equal(els.compareA.value, 'bolsonaro')
+    })
+  })
+
+  it('with no seed at all, compareB resolves to the second distinct tracked person', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/compare': compareData([], personA, personB) })
+      const { mount } = await import('../public/js/figures/compare.js')
+      mount(els.compare, { people, initial: {} })
+      await flush()
+      assert.equal(els.compareB.value, personB.id)
+    })
+  })
+
+  it("a single-person tracked list resolves compareB to compareA's own id", async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/compare': compareData([], personA, personA) })
+      const { mount } = await import('../public/js/figures/compare.js')
+      mount(els.compare, { people: [personA], initial: {} })
+      await flush()
+      assert.equal(els.compareB.value, els.compareA.value)
+    })
+  })
+
+  it('?compare.measure=pmi seeds compareMeasure, one of the two keys with no bare equivalent', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony, '/compare': compareData([]) })
+      await withLocation('?compare.measure=pmi', () => appModule.boot())
+      await flush()
+      assert.equal(els.compareMeasure.value, 'pmi')
+    })
+  })
+})
+
+describe('AC11: changing a compare control refetches only compare, and vice versa', () => {
+  const controlCases: [string, string][] = [
+    ['compareA', 'bolsonaro'],
+    ['compareB', 'lula'],
+    ['compareDays', '365'],
+    ['compareSource', 'bluesky'],
+    ['compareLimit', '100'],
+  ]
+  for (const [id, value] of controlCases) {
+    it(`changing ${id} triggers exactly one new /api/compare call, and no /graph, /sources or /testimony calls`, async () => {
+      await withFiguresDom(async (els, calls) => {
+        clearScopes()
+        routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony, '/compare': compareData([]) })
+        await withLocation('', () => appModule.boot())
+        await flush()
+        const before = calls.length
+        ;(els as unknown as Record<string, { value: string; fire: (t: string) => void }>)[id].value = value
+        ;(els as unknown as Record<string, { value: string; fire: (t: string) => void }>)[id].fire('change')
+        await flush(220)
+        const added = calls.slice(before)
+        assert.equal(added.filter((u) => u.includes('/api/compare')).length, 1, `expected exactly one /api/compare call for ${id}: ${JSON.stringify(added)}`)
+        assert.ok(!added.some((u) => u.includes('/graph') || u.includes('/sources') || u.includes('/testimony')), `figures 1 and 2 must not reload for ${id}: ${JSON.stringify(added)}`)
+      })
+    })
+  }
+
+  // compareMeasure deviates from the "exactly one" rule above, on purpose: api.compareParams's
+  // ({a, b, days, source, limit}) signature never carries measure (issue #91 §3, "the measure
+  // selector drives position only"), so state.js's fromScope memoizes on a key that measure
+  // never touches -- changing it alone resolves from the existing cache entry, not a fresh
+  // request. Zero new /api/compare calls is therefore the correct, desired outcome here, not a
+  // gap in the "exactly one" rule; the repaint still happens, driven from the cached data.
+  it('changing compareMeasure alone triggers zero new /api/compare calls (a cache hit) but still repaints the ruler', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const terms = [{ term: 'mixed', kind: 'word', a: { count: 10, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } }]
+      routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony, '/compare': compareData(terms) })
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.compareDays.value = '365'
-      els.compareDays.fire('change')
+      const beforeMarkup = els.compareRuler.innerHTML
+      els.compareMeasure.value = 'pmi'
+      els.compareMeasure.fire('change')
       await flush(220)
       const added = calls.slice(before)
-      assert.ok(added.some((u) => u.includes('/api/compare')), `figure 3 must reload: ${JSON.stringify(added)}`)
-      assert.ok(!added.some((u) => u.includes('/graph') || u.includes('/sources') || u.includes('/testimony')), `figures 1 and 2 must not reload: ${JSON.stringify(added)}`)
+      assert.equal(added.filter((u) => u.includes('/api/compare')).length, 0, `measure alone must not refetch: ${JSON.stringify(added)}`)
+      assert.notEqual(els.compareRuler.innerHTML, beforeMarkup, 'the ruler must still repaint from cached data when measure changes')
     })
   })
 

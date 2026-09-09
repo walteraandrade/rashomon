@@ -39,19 +39,19 @@ describe('issue #37 AC1: the split page still serves the same atlas over the sam
   it('api.js builds exactly the documented endpoints, with the same defaults the page used before the split', async () => {
     const { candidatesQuery, endpoint, params, sourcesParams } = await import('../public/js/api.js')
     assert.equal(endpoint('lula'), '/api/people/lula')
-    const p = params({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'all' })
+    const p = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     // `kind` is the one default that moved since the split: the atlas now names the kinds it
     // wants instead of asking for all of them, so GDELT's theme codes stay out of the map.
-    assert.equal(p.toString(), new URLSearchParams({ days: '30', sort: 'count', limit: '18', min: '2', source: 'all', kind: 'word,hashtag,phrase', domain: 'all', testimony: '1' }).toString())
-    // The outlet sidebar's own /sources call is the one that must not echo the domain back.
-    assert.equal(sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'g1.globo.com' }).has('domain'), false)
+    assert.equal(p.toString(), new URLSearchParams({ days: '30', sort: 'count', limit: '18', min: '2', source: 'all', kind: 'word,hashtag,phrase', testimony: '1' }).toString())
+    // No route ever hears about an outlet any more, the /sources call least of all.
+    assert.equal(sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all' }).has('domain'), false)
     assert.equal(candidatesQuery({ days: '7' }).toString(), new URLSearchParams({ days: '7', min: '3', limit: '30' }).toString())
   })
 
   it('the docs panel narrows the graph querystring to one term and five rows', async () => {
     const { docsQuery } = await import('../public/js/app.js')
     const { params } = await import('../public/js/api.js')
-    const base = params({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'all' })
+    const base = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     const forTerm = docsQuery(base, { id: 'reforma', term: 'reforma', kind: 'word', count: 4, pmi: 1 })
     assert.equal(forTerm.get('term'), 'reforma')
     assert.equal(forTerm.get('kind'), 'word')
@@ -92,7 +92,12 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
     for (const value of inlineStyles(word)) assert.ok(value.startsWith('--'), `wordMarkup emitted style="${value}"`)
 
     const emitted = withFakeDocument(['domainLabel', 'outletList', 'candidateLabel', 'candidateList'], (els) => {
-      paintOutlets({ rows: [{ domain: 'g1.globo.com', source: 'gnews', label: 'g1', docs: 4, tone: 1.5 }], domain: 'all', onPick: () => {} })
+      paintOutlets({
+        rows: [{ domain: 'g1.globo.com', source: 'gnews', label: 'g1', docs: 4, tone: 1.5 }],
+        testimony: { method: 'stub', overall: { score: -1, n: 4 }, by_source: [], by_domain: [{ domain: 'g1.globo.com', source: 'gnews', score: -1.5, n: 4 }] },
+        domain: 'all',
+        onPick: () => {},
+      })
       paintCandidates({ candidates: [{ name: 'Hugo Motta', count: 5, sources: 2, previous: 0, samples: [{ id: '1', source: 'gnews', text: 'texto' }] }] })
       return els.outletList.innerHTML + els.candidateList.innerHTML
     })

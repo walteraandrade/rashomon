@@ -168,14 +168,13 @@ describe('lean filtering (issue #26)', () => {
     assert.equal(golpeRight?.count_baseline, 0, 'doc 42 is left-labeled, so lean=right must empty the baseline half')
   })
 
-  // Amendment A1 on the spec: sourcesFor now honours q.domain, so the outlet sidebar — the
-  // control that *picks* domain — must stop sending it, or clicking one outlet hides the rest.
-  it('the outlet sidebar drops domain before fetching /sources (spec amendment A1)', () => {
-    // Issue #37 gave this its own function in public/js/api.js, so the rule is now checked by
-    // calling it rather than by slicing design-5.html's inline script.
-    const opts = { days: '30', sort: 'count', limit: '18', source: 'all', domain: 'cartacapital.com.br' }
-    assert.equal(sourcesParams(opts).has('domain'), false, '/sources must not echo back the domain the sidebar itself picks')
-    assert.equal(params(opts).get('domain'), 'cartacapital.com.br', 'every other route still receives it')
+  // sourcesFor honours q.domain, and the API keeps accepting one; the page simply never sends
+  // one any more, because picking an outlet is a reading inside the second figure and no
+  // longer narrows the recorte. Amendment A1 on the issue #26 spec is subsumed by that.
+  it('no querystring the page builds carries an outlet', () => {
+    const opts = { days: '30', sort: 'count', limit: '18', source: 'all' }
+    assert.equal(sourcesParams(opts).has('domain'), false, '/sources must keep listing every outlet')
+    assert.equal(params(opts).has('domain'), false, 'the atlas and the documents answer for the whole recorte')
   })
 
   it('timelineFor stays a bare array and still narrows by lean', async () => {

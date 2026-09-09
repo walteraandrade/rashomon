@@ -14,7 +14,7 @@ import './close.js'
 // here and not only a screenshot.
 
 const controls = (over: Partial<Parameters<typeof params>[0]> = {}) =>
-  params({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'all', ...over })
+  params({ days: '30', sort: 'count', limit: '18', source: 'all', ...over })
 
 const term = { id: 'reforma', term: 'reforma', kind: 'word', count: 4, pmi: 1 }
 
@@ -31,12 +31,8 @@ describe('issue #43 AC1: each scope is keyed by the filters its own route actual
     assert.equal(wider.docs, base.docs, 'the five general documents do not depend on how many terms are drawn')
   })
 
-  it('a domain selection moves the graph and docs keys but not the sources key', () => {
-    const base = scopeKeys('lula', controls())
-    const narrowed = scopeKeys('lula', controls({ domain: 'g1.globo.com' }))
-    assert.notEqual(narrowed.graph, base.graph)
-    assert.notEqual(narrowed.docs, base.docs)
-    assert.equal(narrowed.sources, base.sources, 'the sidebar must keep listing every outlet after one is picked')
+  it('no key carries an outlet: picking one is a reading inside the second figure', () => {
+    for (const key of Object.values(scopeKeys('lula', controls()))) assert.doesNotMatch(key, /domain=/, `${key} must not carry an outlet`)
   })
 
   it('person, period and source move all three keys', () => {
@@ -148,10 +144,6 @@ describe('issue #43 AC3: a representative interaction sequence, counted per scop
     })
     // Re-entering the unselected inspector, which is what a view-mode switch does.
     await step('view mode', () => fromScope('docs', scopeKeys(personId, filters, null).docs, async () => ++counts.docs).then(() => {}))
-    await step('domain', () => {
-      filters = controls({ sort: 'pmi', limit: '24', domain: 'g1.globo.com' })
-      return loadAll()
-    })
     await step('person', () => {
       personId = 'tarcisio'
       filters = controls({ sort: 'pmi', limit: '24' })
@@ -167,12 +159,11 @@ describe('issue #43 AC3: a representative interaction sequence, counted per scop
       { step: 'sort', requests: 1 },
       { step: 'limit', requests: 1 },
       { step: 'view mode', requests: 0 },
-      { step: 'domain', requests: 2 },
       { step: 'person', requests: 3 },
     ])
     assert.equal(counts.sources, 2, 'the outlet list is fetched once per person, not once per control change')
-    assert.equal(counts.docs, 3, 'the five general documents survive sort, limit and the view-mode switch')
-    assert.equal(counts.graph + counts.sources + counts.docs, 10)
+    assert.equal(counts.docs, 2, 'the five general documents survive sort, limit and the view-mode switch')
+    assert.equal(counts.graph + counts.sources + counts.docs, 8)
   })
 })
 
@@ -180,9 +171,9 @@ describe('issue #43 AC4: the narrowed querystrings still ask the API the same qu
   before(seed)
 
   it('sourcesParams drops domain, sort and limit, and the route answers identically without them', async () => {
-    const wide = sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'g1.globo.com' })
+    const wide = sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all' })
     for (const dropped of ['domain', 'sort', 'limit']) assert.equal(wide.has(dropped), false, `${dropped} is ignored by sourcesFor and must not reach the URL`)
-    assert.deepEqual(narrowToSources(controls()).toString(), sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all', domain: 'all' }).toString())
+    assert.deepEqual(narrowToSources(controls()).toString(), sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all' }).toString())
 
     const before = await (await app.request('/api/people/lula/sources?' + controls())).json()
     const after = await (await app.request('/api/people/lula/sources?' + narrowToSources(controls()))).json()
@@ -239,7 +230,7 @@ describe('issue #43 AC5: local-only interactions still reach no network, and the
         getZoomLevel: () => 1,
         clearSearch: spy('clearSearch'),
         canClear: () => true,
-        resetDomain: spy('resetDomain'),
+        resetOutlet: spy('resetOutlet'),
         updateHeader: spy('updateHeader'),
         setSource: spy('setSource'),
       }),

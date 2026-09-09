@@ -5,7 +5,7 @@
 // when a `document` exists, which is what lets node:test import the pieces below.
 
 import * as api from './api.js'
-import { domainSuffix, fmt, label, SOURCE_SEGMENTS, sourceLabels } from './format.js'
+import { fmt, label, SOURCE_SEGMENTS, sourceLabels } from './format.js'
 import { centerLabel, pack } from './layout.js'
 import {
   createCanvasMeasure,
@@ -34,6 +34,7 @@ import {
   getCandidateController,
   getController,
   getMask,
+  getOutlet,
   getSelected,
   getZoom,
   layoutCache,
@@ -43,6 +44,7 @@ import {
   setController,
   setDocsController,
   setMask,
+  setOutlet,
   setSelected,
   setZoomLevel,
   state,
@@ -76,6 +78,7 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
  * @param {{
  *   paintCurrentSelection?: () => void,
  *   choose?: (id: string | null) => void,
+ *   getSelected?: () => string | null,
  *   load?: () => void,
  *   loadCandidates?: () => void,
  *   setMode?: (mode: string) => void,
@@ -83,7 +86,8 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
  *   getZoomLevel?: () => number,
  *   clearSearch?: () => void,
  *   canClear?: () => boolean,
- *   resetDomain?: () => void,
+ *   resetOutlet?: () => void,
+ *   releaseOutlet?: () => void,
  *   updateHeader?: () => void,
  *   setSource?: (source: string) => void,
  *   toggleMask?: () => void,
@@ -94,6 +98,7 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
 export const createHandlers = ({
   paintCurrentSelection = () => {},
   choose = () => {},
+  getSelected = () => null,
   load = () => {},
   loadCandidates = () => {},
   setMode = () => {},
@@ -101,7 +106,8 @@ export const createHandlers = ({
   getZoomLevel = () => 1,
   clearSearch = () => {},
   canClear = () => true,
-  resetDomain = () => {},
+  resetOutlet = () => {},
+  releaseOutlet = () => {},
   updateHeader = () => {},
   setSource = () => {},
   toggleMask = () => {},
@@ -114,6 +120,22 @@ export const createHandlers = ({
   clear: () => {
     if (!canClear()) return
     clearSearch()
+    choose(null)
+  },
+  // Selecting is a toggle: clicking the selected term again lets it go. Without it the only
+  // way back to the clean map was the clear button, which is off in the toolbar, far from the
+  // word the reader is looking at.
+  /** @param {string | null} id */
+  pick: (id) => {
+    choose(id !== null && id === getSelected() ? null : id)
+  },
+  // A click that lands on nothing selectable is the other way out. The listener sits on the
+  // map viewport and the list, so the toolbar and the inspector's own buttons never reach it;
+  // inside those two, anything without a data-node/data-col is empty space.
+  /** @param {Element | null} target */
+  background: (target) => {
+    if (!getSelected()) return
+    if (target && target.closest('[data-node], [data-col]')) return
     choose(null)
   },
   // Escape closes the documents modal when it is open, and only then clears the selection:
@@ -137,7 +159,7 @@ export const createHandlers = ({
   // filter and the period control is the only one that refetches the candidate queue.
   /** @param {string} id */
   control: (id) => () => {
-    if (id === 'person') resetDomain()
+    if (id === 'person') resetOutlet()
     if (id === 'days') loadCandidates()
     updateHeader()
     load()
@@ -151,13 +173,12 @@ export const createHandlers = ({
   zoomIn: () => setZoom(getZoomLevel() + 0.25),
   zoomOut: () => setZoom(getZoomLevel() - 0.25),
   zoomReset: () => setZoom(1),
-  // The chip under the sentence: the outlet lists live in the second figure, so releasing the
-  // outlet filter must not need a scroll. Same steps as the person control minus the reload
-  // of the candidate queue.
-  domainClear: () => {
-    resetDomain()
-    updateHeader()
-    load()
+  // A click on empty space inside the second figure releases the outlet in focus, the way a
+  // click on the empty map releases the selected term.
+  /** @param {Element | null} target */
+  outletBackground: (target) => {
+    if (target && target.closest('[data-domain], [data-testimony-domain], [data-strip-domain]')) return
+    releaseOutlet()
   },
   // Closing the modal aborts whatever /docs request is still in flight.
   docsClose: () => closeDocs(),
@@ -258,12 +279,14 @@ let lastMapWidth = 0
 let lastStripWidth = 0
 /** @type {import('./format.js').Testimony | null} */
 let testimony = null
+/** @type {import('./format.js').OutletRow[] | null} */
+let outletRows = null
 /** @type {import('./format.js').Measure | null} */
 let measure = null
 
 const measured = () => (measure ??= createCanvasMeasure())
 
-const controlValues = () => ({ days: $('days').value, sort: $('sort').value, limit: $('limit').value, source: state.source, domain: state.domain })
+const controlValues = () => ({ days: $('days').value, sort: $('sort').value, limit: $('limit').value, source: state.source })
 const graphQuery = () => api.params(controlValues())
 const daysLabel = () => $('days').selectedOptions[0].textContent.toLowerCase()
 
@@ -288,7 +311,7 @@ const resizeMap = () => {
   const stripWidth = $('strip').clientWidth
   if (testimony && stripWidth && stripWidth !== lastStripWidth) {
     lastStripWidth = stripWidth
-    paintStrip({ data: testimony, domain: state.domain, onPick: pickDomain, width: stripWidth })
+    paintStrip({ data: testimony, domain: getOutlet(), onPick: pickOutlet, width: stripWidth })
   }
   $('zoomReset').textContent = Math.round(getZoom() * 100) + '%'
   $('zoomOut').disabled = getZoom() <= 1
@@ -306,15 +329,15 @@ const setZoom = (value) => {
 }
 
 const paintCurrentSelection = () =>
-  paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: choose, mask: getMask(), personTestimony: graph?.stats?.testimony })
+  paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), mask: getMask(), personTestimony: graph?.stats?.testimony })
 
 const paintCurrentInspector = () =>
-  inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: choose, onShowDocs: loadDocs })
+  inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id), onShowDocs: loadDocs })
 
 const drawCurrentMap = () => {
   const current = /** @type {Graph} */ (graph)
   currentLayout = getLayout()
-  drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: choose, personTestimony: current.stats?.testimony })
+  drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), personTestimony: current.stats?.testimony })
   resizeMap()
   paintCurrentSelection()
   $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - $('viewport').clientWidth) / 2)
@@ -359,14 +382,24 @@ const loadDocs = async (n) => {
   }
 }
 
-// Picking an outlet only narrows the graph and the documents: the outlet list itself is the
-// same list, so it is repainted from the memo with the new active row rather than refetched.
+// Picking an outlet is a reading inside the second figure and nothing else. It repaints that
+// figure from the data already in hand — no fetch, no new querystring, and above all no change
+// to the atlas above it, which is what a click down here used to do.
 /** @param {string} d */
-const pickDomain = (d) => {
-  if (d === state.domain) return
-  state.domain = d
-  updateHeader()
-  debouncedLoad()
+const pickOutlet = (d) => {
+  if (d === getOutlet()) return
+  setOutlet(d)
+  repaintTestimonyFigure()
+}
+
+// Every painter of the second figure, over the data the flows already resolved. Each one is a
+// no-op without its data, so this is safe before the first load answers.
+const repaintTestimonyFigure = () => {
+  if (testimony) {
+    paintTestimony({ data: testimony, domain: getOutlet(), onPick: pickOutlet })
+    paintStrip({ data: testimony, domain: getOutlet(), onPick: pickOutlet, width: lastStripWidth || undefined })
+  }
+  if (outletRows) paintOutlets({ rows: outletRows, testimony, domain: getOutlet(), onPick: pickOutlet })
 }
 
 /** @param {number} id @param {AbortSignal} signal */
@@ -376,7 +409,8 @@ const loadSourcesFlow = async (id, signal) => {
   try {
     const rows = await fromScope('sources', key, () => api.loadSources(person, api.sourcesParams(controlValues()), signal))
     if (id !== currentRequestId()) return
-    paintOutlets({ rows, domain: state.domain, onPick: pickDomain })
+    outletRows = rows
+    repaintTestimonyFigure()
   } catch (e) {
     if (id === currentRequestId() && !aborted(e)) paintOutletsError()
   }
@@ -397,9 +431,10 @@ const loadTestimonyFlow = async (id, signal) => {
     const data = await fromScope('testimony', key, () => api.loadTestimony(person, api.testimonyParams(controlValues()), signal))
     if (id !== currentRequestId()) return
     testimony = data
-    paintTestimony({ data, domain: state.domain, onPick: pickDomain })
     lastStripWidth = $('strip').clientWidth || 0
-    paintStrip({ data, domain: state.domain, onPick: pickDomain, width: lastStripWidth || undefined })
+    // The outlet list needs this payload too (it carries the means), so it repaints here even
+    // though its own /sources call may have answered long before.
+    repaintTestimonyFigure()
   } catch (e) {
     if (id === currentRequestId() && !aborted(e)) {
       testimony = null
@@ -449,7 +484,7 @@ const render = () => {
   if (nodes.length) {
     if (!currentLayout || mode === 'map') drawCurrentMap()
     $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
-    paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: choose, personTestimony: current.stats?.testimony })
+    paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), personTestimony: current.stats?.testimony })
   } else {
     $('viewport').innerHTML = '<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'
     $('columns').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
@@ -483,9 +518,7 @@ const resetGraph = () => {
 const updateHeader = () => {
   const source = sourceLabels[state.source] || state.source
   $('stats').hidden = !graph
-  $('stats').textContent = graph ? `${fmt(graph.stats?.about)} docs · ${source}${domainSuffix(state.domain)}` : ''
-  $('domainClear').hidden = state.domain === 'all'
-  $('domainChip').textContent = state.domain === 'all' ? '' : state.domain
+  $('stats').textContent = graph ? `${fmt(graph.stats?.about)} docs · ${source}` : ''
 }
 
 const closeDocs = () => {
@@ -544,7 +577,7 @@ const load = async () => {
     if (id !== currentRequestId()) return
     graph = data
     busy = false
-    $('status').textContent = `${fmt(data.stats.about)} documentos sobre ${data.person.name} neste recorte${domainSuffix(state.domain)}.`
+    $('status').textContent = `${fmt(data.stats.about)} documentos sobre ${data.person.name} neste recorte.`
     updateHeader()
     render()
   } catch (e) {
@@ -576,6 +609,7 @@ const debouncedLoad = debounce(load)
 const handlers = createHandlers({
   paintCurrentSelection,
   choose,
+  getSelected,
   load: debouncedLoad,
   loadCandidates: loadCandidatesFlow,
   setMode,
@@ -585,9 +619,10 @@ const handlers = createHandlers({
     $('search').value = ''
   },
   canClear: () => !busy && !!graph,
-  resetDomain: () => {
-    state.domain = 'all'
+  resetOutlet: () => {
+    setOutlet('all')
   },
+  releaseOutlet: () => pickOutlet('all'),
   updateHeader,
   setSource: (value) => {
     state.source = value
@@ -615,7 +650,10 @@ export const boot = () => {
   $('zoomIn').addEventListener('click', handlers.zoomIn)
   $('zoomOut').addEventListener('click', handlers.zoomOut)
   $('zoomReset').addEventListener('click', handlers.zoomReset)
-  $('domainClear').addEventListener('click', handlers.domainClear)
+  for (const id of ['strip', 'testimonyList', 'outletList'])
+    $(id).addEventListener('click', (/** @type {MouseEvent} */ e) => handlers.outletBackground(/** @type {Element | null} */ (e.target)))
+  for (const id of ['viewport', 'columns'])
+    $(id).addEventListener('click', (/** @type {MouseEvent} */ e) => handlers.background(/** @type {Element | null} */ (e.target)))
   $('docsClose').addEventListener('click', handlers.docsClose)
   // A click on the backdrop lands on the dialog element itself, never on its children.
   $('docsDialog').addEventListener('click', (/** @type {MouseEvent} */ e) => {

@@ -31,7 +31,7 @@ DATABASE_URL=$POSTGRES_URL_NON_POOLING DATA_DIR=./data/pg pnpm push # one-way co
 vercel deploy --prod
 ```
 
-Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see "Model revision". `PG_POOL_MAX` caps connections per function instance (default 3).
+Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky; trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see "Model revision". `PG_POOL_MAX` caps connections per function instance (default 3).
 
 Bluesky without login returns one page (100 posts) per person. To paginate, set `BSKY_HANDLE` and `BSKY_APP_PASSWORD` (app password, not the account password).
 

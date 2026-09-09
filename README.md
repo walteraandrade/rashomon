@@ -173,6 +173,8 @@ still reach the map through the proper-noun path, which spells them whole.
 
 A database that predates this needs one `pnpm reindex` to gain phrases at all, and the same run is what rewrites the word rows under the substitution rule. Until it runs, the corpus carries no `phrase` row and every word still counts as it always did.
 
+The staging pass runs before the truncate, which matters on a live database: a reindex serves nothing while its derived tables are empty, and no route reads `phrase_stage` or `phrases`, so the whole first pass belongs outside that window.
+
 `pnpm reindex` reads the corpus twice, and has to: which pairs stick is a fact about the whole
 corpus, so no document can be tagged until every document has been counted. Deriving the phrase
 rows in SQL from the staging table instead would put a second extraction path beside `derive`,

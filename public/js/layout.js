@@ -75,6 +75,19 @@ const inCircle = (box, radius = 346) =>
 const candidates = []
 for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.push({ x: r * Math.cos((a * Math.PI) / 180), y: r * Math.sin((a * Math.PI) / 180), r })
 
+// Type size is relative to how full the ring is, not absolute: the more terms a layout asks
+// for, the lower both the ceiling and the floor, so a crowded atlas shrinks to fit the circle
+// instead of spilling half its words into the overflow list. SIZE_CEILING is the cap no term
+// passes however few of them there are.
+export const SIZE_CEILING = 38
+export const SIZE_FLOOR = 13
+
+/** @param {number} count @returns {{ minSize: number, maxSize: number }} */
+export const sizeRange = (count) => {
+  const density = Math.max(0, Math.min(1, (count - 8) / 14))
+  return { minSize: 20 - (20 - SIZE_FLOOR) * density, maxSize: SIZE_CEILING - 16 * density }
+}
+
 /**
  * @param {Measure} measure
  * @param {Term[]} terms
@@ -91,10 +104,10 @@ export const packPass = (measure, terms, center, sort, phase = 0) => {
   const placed = []
   /** @type {Term[]} */
   const overflow = []
-  const maxSize = terms.length > 18 ? 38 : 44
+  const { minSize, maxSize } = sizeRange(terms.length)
   for (const [rank, n] of terms.entries()) {
     const t = max === min ? 0.5 : (values[rank] - min) / (max - min)
-    const size = 22 + (maxSize - 22) * Math.max(0, Math.min(1, t)) ** 0.7
+    const size = minSize + (maxSize - minSize) * Math.max(0, Math.min(1, t)) ** 0.7
     const lines = wrapLines(measure, label(n), size, 250)
     const lineHeight = size * 1.18
     const w = Math.max(...lines.map((line) => measure(line, size))) + 18

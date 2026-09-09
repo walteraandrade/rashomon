@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { centerLabel, pack, packPass, routeGraph, routesFrom, wrapLines } from '../public/js/layout.js'
+import { SIZE_CEILING, SIZE_FLOOR, centerLabel, pack, packPass, routeGraph, routesFrom, sizeRange, wrapLines } from '../public/js/layout.js'
 
 // Deterministic stand-in for the browser canvas adapter (public/js/render.js's
 // createCanvasMeasure): width scales linearly with character count and font size, so wrapping
@@ -42,11 +42,47 @@ describe('centerLabel', () => {
 
 const term = (id: string, count: number, pmi = 1) => ({ id, term: id, kind: 'word', count, pmi })
 
+describe('sizeRange', () => {
+  it('never passes the ceiling, however few terms there are', () => {
+    for (const count of [1, 3, 8, 10]) assert.ok(sizeRange(count).maxSize <= SIZE_CEILING, `${count} terms exceeded the ceiling`)
+  })
+
+  it('shrinks both the ceiling and the floor as the term count grows', () => {
+    const few = sizeRange(12)
+    const many = sizeRange(24)
+    assert.ok(many.maxSize < few.maxSize, 'a fuller atlas must lower its largest type')
+    assert.ok(many.minSize < few.minSize, 'a fuller atlas must lower its smallest type')
+    assert.ok(many.minSize >= SIZE_FLOOR, 'no term goes under the floor')
+  })
+
+  it('keeps the largest term larger than the smallest at every count', () => {
+    for (const count of [1, 12, 18, 24, 60]) {
+      const { minSize, maxSize } = sizeRange(count)
+      assert.ok(maxSize > minSize, `${count} terms collapsed the ramp`)
+    }
+  })
+})
+
+describe('packing at the atlas term limits', () => {
+  // The three options the sentence in design-5.html offers, with realistically long terms.
+  const words = ['investigacao', 'impeachment', 'revelacoes', 'mensagens', 'relatorio', 'inquerito', 'indicios', 'relatorios', 'anotem', 'acusa', 'fake', 'laranja podre', 'fake news', 'processo', 'ministro', 'decisao', 'tribunal', 'censura', 'impedido votar', 'declara impedido', 'acabar elegendo', 'bandido confiar', 'liminar', 'audiencia']
+
+  for (const limit of [12, 18, 24]) {
+    it(`leaves at most one term of ${limit} in the overflow list`, () => {
+      const terms = words.slice(0, limit).map((w, i) => ({ id: w, term: w, kind: 'word', count: 100 - i * 3, pmi: 1 }))
+      const center = centerLabel(measure, 'Alexandre de Moraes')
+      const result = pack(measure, terms, center, 'count')
+      assert.ok(result.overflow.length <= 1, `${result.overflow.length} terms overflowed: ${result.overflow.map((o) => o.term).join(', ')}`)
+      assert.ok(result.placed.every((p) => p.size <= SIZE_CEILING), 'a placed term passed the ceiling')
+    })
+  }
+})
+
 describe('packPass / pack', () => {
   it('accounts for every term exactly once, split between placed and overflow', () => {
-    // 40 same-length equal-score terms in a fixed-size circle: guaranteed to overflow, since
-    // the candidate grid and center box cannot fit unlimited boxes without collision.
-    const terms = Array.from({ length: 40 }, (_, i) => term(`t${i}`, 10))
+    // 40 long equal-score terms in a fixed-size circle: guaranteed to overflow even at the
+    // ramp's floor, since the candidate grid and center box cannot fit unlimited boxes.
+    const terms = Array.from({ length: 40 }, (_, i) => term(`termo bem comprido numero ${i}`, 10))
     const center = centerLabel(measure, 'Pessoa Central')
     const result = pack(measure, terms, center, 'count')
     const seen = new Set([...result.placed.map((p) => p.id), ...result.overflow.map((p) => p.id)])

@@ -416,21 +416,47 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
   // Routing it through onControlChange would resolve from state.js's memo inside the 20s TTL
   // and pay a real round trip outside it, for an identical payload. onMeasureChange repaints
   // and nothing else, so zero new /api/compare calls is the contract here, at any TTL.
-  it('changing compareMeasure alone triggers zero new /api/compare calls (a cache hit) but still repaints the ruler', async () => {
+  it('changing compareMeasure alone triggers zero new /api/compare calls but still repaints the ruler', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const terms = [{ term: 'mixed', kind: 'word', a: { count: 10, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } }]
       routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony, '/compare': compareData(terms) })
       await withLocation('', () => appModule.boot())
       await flush()
+      // Emptied AFTER the boot fetch, so the memo cannot answer for this change. Clearing it
+      // before boot (the obvious spelling) makes the assertion vacuous: the key would already
+      // be cached at fire time and an implementation routing measure through onControlChange
+      // would also record zero calls. With the memo empty, only a repaint-only listener can.
+      clearScopes()
       const before = calls.length
       const beforeMarkup = els.compareRuler.innerHTML
       els.compareMeasure.value = 'pmi'
       els.compareMeasure.fire('change')
       await flush(220)
       const added = calls.slice(before)
-      assert.equal(added.filter((u) => u.includes('/api/compare')).length, 0, `measure alone must not refetch: ${JSON.stringify(added)}`)
+      assert.equal(added.filter((u) => u.includes('/api/compare')).length, 0, `measure alone must not refetch, at any TTL: ${JSON.stringify(added)}`)
       assert.notEqual(els.compareRuler.innerHTML, beforeMarkup, 'the ruler must still repaint when measure changes')
+    })
+  })
+
+  // A measure switch is the same word seen through another lens, so the dot the reader picked
+  // has to still be picked afterwards. Every other control releases it (onControlChange), which
+  // is why this one gets its own assertion rather than riding along above.
+  it('changing compareMeasure keeps the selected word on the detail line', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const terms = [{ term: 'mixed', kind: 'word', a: { count: 10, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } }]
+      routeFetch(calls, { '/compare': compareData(terms) })
+      const { mount } = await import('../public/js/figures/compare.js')
+      mount(els.compare, { people, initial: {} })
+      await flush()
+      els.compareRuler.querySelectorAll('[data-term]')[0].fire('click')
+      assert.match(els.compareDetail.innerHTML, /mixed/, 'the dot must be selected before the switch')
+      clearScopes()
+      els.compareMeasure.value = 'pmi'
+      els.compareMeasure.fire('change')
+      await flush(220)
+      assert.match(els.compareDetail.innerHTML, /mixed/, 'the selected word must survive a measure switch')
     })
   })
 

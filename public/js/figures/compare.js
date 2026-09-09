@@ -79,9 +79,9 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   const repaint = () => {
     if (!data) return
     if (!data.terms.length) {
-      $('compareRuler').hidden = true
-      $('compareRuler').innerHTML = ''
-      $('compareDetail').innerHTML = '<span class="empty-hint">Nenhuma palavra neste recorte.</span>'
+      $('compareRuler').hidden = false
+      $('compareRuler').innerHTML = '<p class="note">Nenhuma palavra neste recorte.</p>'
+      $('compareDetail').innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
       setHiddenNote(0)
       return
     }
@@ -175,6 +175,13 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     debouncedLoad()
   }
 
+  // `measure` is the exception, and deliberately so: it is not part of compareParams, so the
+  // response already carries both numbers for every term and only the position has to move.
+  // Reloading here would resolve from state.js's memo inside its TTL and pay a real round trip
+  // outside it, for a payload identical to the one on screen. Zero fetches, one repaint, and
+  // the selected dot survives — the reader is looking at the same word through another lens.
+  const onMeasureChange = () => repaint()
+
   // The sentence's controls: source, measure and limit are built here (they have no static
   // markup); days keeps its design-5.html options. Both people selects share the tracked list;
   // `a` takes a seeded value (or the bare `person=`, resolved by app.js), `b` falls back to the
@@ -196,7 +203,8 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   applySeed($('compareLimit'), initial.limit)
   applySeed($('compareMeasure'), initial.measure)
 
-  for (const id of ['compareA', 'compareB', 'compareDays', 'compareSource', 'compareMeasure', 'compareLimit']) $(id).addEventListener('change', onControlChange)
+  for (const id of ['compareA', 'compareB', 'compareDays', 'compareSource', 'compareLimit']) $(id).addEventListener('change', onControlChange)
+  $('compareMeasure').addEventListener('change', onMeasureChange)
   $('compareRuler').addEventListener('click', (/** @type {MouseEvent} */ e) => background(/** @type {Element | null} */ (e.target)))
   new ResizeObserver(() => {
     const width = $('compareRuler').clientWidth

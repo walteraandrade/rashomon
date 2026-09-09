@@ -8,7 +8,8 @@ import './close.js'
 // Independent verification of issue #93's numbered acceptance criteria, written against the
 // spec rather than against test/compare.test.ts. HTTP-level, pattern of
 // test/testimony-acceptance.test.ts. Named compare-api-acceptance (not compare-acceptance):
-// test/compare-acceptance.test.ts already belongs to issue #7's public/compare.html page.
+// Issue #91 deletes public/compare.html and its test/compare-acceptance.test.ts along with it,
+// so this file is the only acceptance suite for the compare surface.
 
 const lula = persons.find((p) => p.id === 'lula')!
 const bolsonaro = persons.find((p) => p.id === 'bolsonaro')!

@@ -153,27 +153,38 @@ describe('AC5: balance is exactly -1/+1 for a one-sided term and 0 for an identi
     assert.equal(rulerTerms(terms, 'pmi').items[0].balance, 0)
   })
 
-  // Spec §3, verbatim: "mag = |scoreOf(a)| + |scoreOf(b)|; balance = mag === 0 ? 0 :
-  // (scoreOf(b) − scoreOf(a)) / mag". No clamp-to-positive step appears anywhere in the spec.
-  // The shipped rulerTerms instead computes (max(0, rawB) - max(0, rawA)) / mag for a term
-  // present on both sides (see the "isPresent" comment in render.js, and the builder's own
-  // "regression" test asserting the opposite: "balance must not pin to a literal end"). That is
-  // a deliberate, undocumented departure from the approved formula, not merely a rounding
-  // difference: for an opposite-signed score pair the literal formula always resolves to
-  // exactly +/-1 (rawB - rawA telescopes to |rawA| + |rawB| = mag whenever the two signs
-  // differ), while the clamped variant lands strictly inside (-1, 1). This test computes the
-  // spec's own formula from first principles and compares it to rulerTerms's actual output.
-  it('formula fidelity: balance follows (scoreOf(b) - scoreOf(a)) / mag literally, even when the two sides carry opposite-signed pmi', () => {
+  // Spec §3 as amended on issue #91 after this branch's first validation round. The formula
+  // originally written there — balance = (scoreOf(b) − scoreOf(a)) / mag, unclamped — sends a
+  // term whose two sides carry opposite-signed pmi to exactly ±1, because rawB − rawA
+  // telescopes to |rawA| + |rawB| = mag whenever the signs differ. Measured against the real
+  // corpus (lula × bolsonaro, days=365, limit=100): 141 of the 232 terms with documents on
+  // BOTH sides landed on a literal end, under an axis labelled "Só de <Nome>". A word the
+  // other person has 14 documents of is not that person's exclusive word, so the amended rule
+  // clamps each side's score at zero before differencing. The cost, stated: a side that
+  // actively repels a term (negative pmi) and a side merely indifferent to it now share a
+  // position. Both exact numbers stay on the detail line, where the reader can still tell them
+  // apart.
+  it('a term present on both sides never reaches a literal end, even with opposite-signed pmi', () => {
     const a = { count: 40, pmi: 0.3, tone: null }
     const b = { count: 5, pmi: -2.1, tone: null }
     const terms: CompareTerm[] = [{ term: 'divergente', kind: 'word', a, b }]
     const score = (n: { count: number; pmi: number }) => n.pmi * Math.log1p(n.count)
-    const rawA = score(a)
-    const rawB = score(b)
-    const mag = Math.abs(rawA) + Math.abs(rawB)
-    const expected = (rawB - rawA) / mag
+    const mag = Math.abs(score(a)) + Math.abs(score(b))
+    const expected = (Math.max(0, score(b)) - Math.max(0, score(a))) / mag
     const actual = rulerTerms(terms, 'pmi').items[0].balance
-    assert.equal(actual, expected, `spec §3 defines balance = (scoreOf(b) - scoreOf(a)) / mag with no positive clamp; expected ${expected}, got ${actual}`)
+    assert.equal(actual, expected, 'each side is clamped at zero before differencing')
+    assert.ok(actual > -1 && actual < 1, `a term with documents on both sides must stay off the ends, got ${actual}`)
+    assert.ok(actual < 0, 'it still leans toward the side with the positive relationship')
+  })
+
+  it('an end is reachable only when one side has no documents at all', () => {
+    const onlyA: CompareTerm[] = [{ term: 'exclusiva', kind: 'word', a: { count: 3, pmi: -0.9, tone: null }, b: null }]
+    assert.equal(rulerTerms(onlyA, 'pmi').items[0].balance, -1, "a one-sided term pins to that side's end whatever its pmi sign")
+    const bothSides: CompareTerm[] = [
+      { term: 'compartilhada', kind: 'word', a: { count: 300, pmi: 4, tone: null }, b: { count: 1, pmi: -5, tone: null } },
+    ]
+    const balance = rulerTerms(bothSides, 'pmi').items[0].balance
+    assert.ok(balance > -1, `a term with one document on the other side must not read as exclusive, got ${balance}`)
   })
 })
 

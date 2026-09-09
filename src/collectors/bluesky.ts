@@ -5,6 +5,8 @@ const publicHost = 'https://api.bsky.app'
 const authHost = 'https://bsky.social'
 const maxPages = 5
 const pauseMs = 1500
+// Same ceiling as slowGet in http.ts: a silent connection costs one page, not the whole run.
+const requestTimeoutMs = 45_000
 
 type Page = { posts: any[]; cursor?: string }
 type Session = { host: string; headers: Record<string, string>; pages: number; mode: string }
@@ -17,6 +19,7 @@ const login = async (): Promise<Session> => {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({ identifier, password }),
+    signal: AbortSignal.timeout(requestTimeoutMs),
   })
   if (!res.ok) throw new Error(`bluesky login ${res.status}: ${(await res.text()).slice(0, 200)}`)
   const { accessJwt } = (await res.json()) as { accessJwt: string }
@@ -29,7 +32,7 @@ const fetchPage = async (s: Session, q: string, cursor?: string): Promise<Page> 
   url.searchParams.set('lang', 'pt')
   url.searchParams.set('limit', '100')
   if (cursor) url.searchParams.set('cursor', cursor)
-  const res = await fetch(url, { headers: s.headers })
+  const res = await fetch(url, { headers: s.headers, signal: AbortSignal.timeout(requestTimeoutMs) })
   if (!res.ok) throw new Error(`bluesky ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`)
   return res.json() as Promise<Page>
 }

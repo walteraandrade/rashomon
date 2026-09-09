@@ -14,6 +14,8 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 - PGlite allows one process per data directory. Never run the server and an ingest/reindex on the same `DATA_DIR` at once. Agents working in parallel must each use their own `DATA_DIR`.
 - Do not hit external APIs from tests. Collectors are integration code; test extraction and SQL against the fixture in `test/fixture.ts`.
 - `seed.json` is the list of tracked people. Aliases match as whole words, case- and accent-insensitive. A one-word alias like "Leite" matches the beverage; prefer full names for common words. Alias words are excluded from the person's own terms. Longer aliases win: "Flávio Bolsonaro" tags Flávio only, never Jair's bare "Bolsonaro". A person's optional `exclude` list holds names that must not feed a bare alias ("Ciro Nogueira" for Ciro Gomes). Run `pnpm reindex` after editing it.
+- A `phrase` term is several words as one: a capitalized run (`Alexandre de Moraes`) or a collocation the corpus shows sticking together (`primeiro turno`). The collocation lexicon lives in `phrases` and is rebuilt only by `pnpm reindex`, which therefore reads the corpus twice; `pnpm ingest` loads that lexicon and never adds to it. Phrases are added, never substituted for their words. A phrase carrying one of a person's own name words is dropped from that person's graph.
+- `kind` on `/graph`, `/docs`, `/rising` and `/timeline` takes a comma-separated list, like `source`. `public/design-5.html` sends `word,hashtag,phrase` (`ATLAS_KINDS` in `api.js`): GDELT's theme codes stay out of the atlas but stay in the API.
 - Tone exists only on GDELT (`gkg`, `gdelt`) docs. Every other source has `tone = null`. Never invent tone for them.
 - `sort=pmi` orders by `pmi * ln(1 + count)`, on purpose, so rare terms do not dominate. Do not change without a test.
 - Bluesky blocks unauthenticated bursts. Keep the pacing in `src/collectors/bluesky.ts`; login via `BSKY_HANDLE` and `BSKY_APP_PASSWORD` is the sanctioned path. Never write credentials to the repo.
@@ -21,7 +23,8 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 ## Layout
 
 - `src/collectors/*` one collector per source, same `Collector` signature.
-- `src/extract.ts` normalization, hashtags, words, stopwords, person matching.
+- `src/extract.ts` normalization, hashtags, words, phrases, stopwords, person matching.
+- `src/phrases.ts` the collocation lexicon: staging every adjacent word pair, the count/stickiness floors, loading it back.
 - `src/store.ts` inserts docs and persons (shared by ingest and reindex).
 - `src/graph.ts` scoring SQL: counts, PMI, term-term links, sources.
 - `src/server.ts` Hono routes + static files.

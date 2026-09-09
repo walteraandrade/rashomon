@@ -34,6 +34,17 @@ export const parseSourceList = (v: string | undefined): string => {
   return tokens.length ? tokens.join(',') : 'all'
 }
 
+export const KINDS = ['hashtag', 'word', 'theme', 'phrase']
+
+// Same convention as parseSourceList: comma-separated, unknown tokens dropped, 'all' when
+// nothing valid survives. A lone valid token behaves exactly as the old single-token check
+// did, which is what lets `kind=word` keep working unchanged; the list exists so the atlas
+// can ask for everything except GDELT's machine themes without a new parameter.
+export const parseKindList = (v: string | undefined): string => {
+  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => KINDS.includes(s)))]
+  return tokens.length ? tokens.join(',') : 'all'
+}
+
 const DOMAIN_TOKEN = /^[a-z0-9.:-]{1,120}$/
 
 // Accepts a comma-separated list of hosts, drops tokens that fail the existing
@@ -57,7 +68,7 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
-  kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
+  kind: parseKindList(q.kind),
   limit: int(q.limit, 40, 1, 200),
   min: int(q.min, 2, 1, 1000),
   sort: q.sort === 'pmi' ? 'pmi' : 'count',
@@ -68,7 +79,7 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
 
 export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => ({
   term: normalize((q.term ?? '').trim()),
-  kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
+  kind: parseKindList(q.kind),
   days: int(q.days, 30, 1, 365),
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
@@ -83,14 +94,14 @@ export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQ
   source: SOURCES.includes(q.source ?? '') ? q.source! : 'all',
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
-  kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
+  kind: parseKindList(q.kind),
   limit: int(q.limit, 20, 1, 100),
   min: int(q.min, 3, 1, 1000),
 })
 
 export const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuery => ({
   term: normalize((q.term ?? '').trim()),
-  kind: ['hashtag', 'word', 'theme'].includes(q.kind ?? '') ? q.kind! : 'all',
+  kind: parseKindList(q.kind),
   days: int(q.days, 30, 1, 365),
   source: SOURCES.includes(q.source ?? '') ? q.source! : 'all',
   domain: parseDomainList(q.domain),

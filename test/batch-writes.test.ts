@@ -69,13 +69,19 @@ describe('bounded write batches (issue #50)', () => {
   it('reindexes in a fixed number of statements per page, whatever the corpus size', async () => {
     await insertDocs(docs(40, 'reindex'), persons)
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
-    const perPage = 4 // begin + doc_persons + doc_terms + commit; no candidates in this corpus
+    // Two passes over the corpus since phrases (issue: tokenization noise): the first stages
+    // every adjacent word pair, the second derives. Per page that is one staging insert plus
+    // begin + doc_persons + doc_terms + commit; no candidates in this corpus.
+    const perPage = 6
     const pages = Math.ceil(rows[0].n / 10)
     const overhead = await statements(() => reindexAll(persons, 10))
     // truncate, the persons upsert, its transaction, the domain backfill probes, the page
-    // reads and the five `analyze` statements are the rest; the point is that the per-page
-    // cost is constant, so this stays proportional to pages and never to rows[0].n.
+    // reads of both passes, the phrase lexicon build and the five `analyze` statements are the
+    // rest; the point is that the per-page cost is constant, so this stays proportional to
+    // pages and never to rows[0].n.
     assert.ok(overhead <= pages * perPage + 3 * pages + 20, `reindex spent ${overhead} statements over ${pages} pages`)
-    assert.ok(overhead < rows[0].n, `reindex spent ${overhead} statements for ${rows[0].n} docs`)
+    // The ceiling a reindex that touched one document at a time would hit: one statement per
+    // document per pass. Batching has to stay strictly under it, which is the whole claim.
+    assert.ok(overhead < rows[0].n * 2, `reindex spent ${overhead} statements for ${rows[0].n} docs`)
   })
 })

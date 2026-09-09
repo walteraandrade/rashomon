@@ -1,4 +1,4 @@
-import type { Person, RawDoc, Term } from './types.js'
+import type { Person, Phrases, RawDoc, Term } from './types.js'
 
 const stopwords = new Set(
   `a o e os as um uma uns umas de do da dos das em no na nos nas por para com sem sob sobre entre ate apos ante contra desde perante
@@ -29,14 +29,54 @@ const uniq = <T>(xs: T[], key: (x: T) => string) => [...new Map(xs.map((x) => [k
 export const hashtags = (text: string): Term[] =>
   [...text.matchAll(/#([\p{L}\p{N}_]+)/gu)].map((m) => ({ term: normalize(m[1]), kind: 'hashtag' }))
 
-export const words = (text: string): Term[] =>
+const keepWord = (w: string) =>
+  w.length >= 4 && !/^\d+$/.test(w) && !/(.)\1\1/.test(w) && !/^(ha|he|hu|hi|rs|ks)+$/.test(w) && !stopwords.has(w)
+
+// The kept tokens in reading order, with their repeats: `words` throws the order away, but
+// collocations are exactly what the order says, so both are built from this one tokenizer and
+// cannot disagree about what counts as a word.
+export const contentWords = (text: string): string[] =>
   normalize(decodeEntities(text).replace(/https?:\/\/\S+/g, ' ').replace(/[#@]\S+/g, ' '))
     .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !/(.)\1\1/.test(w) && !/^(ha|he|hu|hi|rs|ks)+$/.test(w) && !stopwords.has(w))
-    .map((term) => ({ term, kind: 'word' }))
+    .filter(keepWord)
 
-export const terms = (text: string, extra: Term[] = []): Term[] =>
-  uniq([...hashtags(text), ...words(text), ...extra], (t) => `${t.kind}:${t.term}`)
+export const words = (text: string): Term[] => contentWords(text).map((term) => ({ term, kind: 'word' }))
+
+// The pairs a capitalized run already claims. Without this the two phrase paths would spell one
+// entity two ways -- "alexandre de moraes" from the run, "alexandre moraes" from the pair, since
+// "de" is a stopword -- and the map would carry both as separate terms. The run wins: it keeps
+// the particles, which is how anyone would write the name.
+const namePairs = (text: string): Set<string> =>
+  new Set(
+    properNouns(text).flatMap(({ term }) => {
+      const ws = term.split(' ').filter(keepWord)
+      return ws.slice(0, -1).map((w, i) => `${w} ${ws[i + 1]}`)
+    }),
+  )
+
+// Adjacency is measured *after* stopwords are dropped, so "primeiro do turno" feeds the same
+// pair as "primeiro turno". A word pairs with null when it is the text's last, or when the pair
+// belongs to a name: either way the row still stands for that word's own occurrence, which is
+// the only reason the null row exists -- src/phrases.ts counts unigrams from the w1 column, so
+// suppressing a pair must never suppress the word.
+export const wordPairs = (text: string): { w1: string; w2: string | null }[] => {
+  const ws = contentWords(text)
+  const named = namePairs(text)
+  return ws.map((w1, i) => {
+    const w2 = ws[i + 1]
+    return { w1, w2: w2 && !named.has(`${w1} ${w2}`) ? w2 : null }
+  })
+}
+
+// The lexicon decides which pairs are phrases; this only reports which of a text's pairs are in
+// it. Pairs a capitalized run already claims never reach here: wordPairs has nulled them.
+export const collocations = (text: string, lexicon: Phrases): Term[] =>
+  wordPairs(text).flatMap(({ w1, w2 }) => (w2 && lexicon.has(`${w1} ${w2}`) ? [{ term: `${w1} ${w2}`, kind: 'phrase' as const }] : []))
+
+// Proper nouns need no lexicon: capitalization is the writer's own mark that the run is one
+// name. Collocations need one, so a text yields none until `pnpm reindex` has built it.
+export const terms = (text: string, extra: Term[] = [], lexicon: Phrases = new Set<string>()): Term[] =>
+  uniq([...hashtags(text), ...words(text), ...properNouns(text), ...collocations(text, lexicon), ...extra], (t) => `${t.kind}:${t.term}`)
 
 const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
 export const decodeEntities = (s: string) =>
@@ -120,6 +160,12 @@ export const capitalizedRuns = (text: string): string[] =>
       return runs.map((r) => r.join(' '))
     })
     .map((name) => normalize(name).replace(/\s+/g, ' ').trim())
+
+// Same runs /candidates discovers, read as terms instead of as people to track. Untracked
+// names are the point: "Alexandre de Moraes" is a phrase in the map whether or not anyone
+// ever adds him to seed.json. A person's own name is dropped per person, at query time, by
+// graph.ts's name-token filter -- not here, since one text can name several people.
+export const properNouns = (text: string): Term[] => capitalizedRuns(text).map((term) => ({ term, kind: 'phrase' as const }))
 
 // Names that already match an alias (or an `exclude` entry) exactly are not candidates:
 // seed.json stays the curated layer on top of discovery. Exact, not containment, so

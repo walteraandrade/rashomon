@@ -136,6 +136,18 @@ const trackedCte = `
 // doc inside a group, and the distinct sort/hash was pure cost -- 270 ms to 152 ms on the
 // benchmark corpus, almost all of it term_all's, which drops a 3.9 MB quicksort by turning a
 // GroupAggregate into a HashAggregate (see docs/perf-baseline.md).
+// A person's own name words are already dropped as single terms by `t.term = any($6)`, whose
+// array is nameTokens(person). A phrase carrying one of them has to go for the same reason:
+// "lula da silva" and "jair bolsonaro" are not things said *about* the person, they are the
+// person. The overlap operator asks it of the phrase's words, so "flavio bolsonaro" leaves
+// Jair's map without ever being spelled out anywhere.
+//
+// `position(' ' in ...)` guards the split: the overwhelming majority of doc_terms rows are
+// single words, and they are already handled by the equality above, so they never pay for a
+// string_to_array. It is not merely an optimization -- without it this expression would
+// duplicate the equality check on every row of the largest table in the database.
+const namePhraseSql = (names: string) => `(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
+
 const graphSql = `
   with ${scopeCte}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
@@ -143,7 +155,7 @@ const graphSql = `
   term_p as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any($6::text[]))
+    where not (t.term = any($6::text[])) and not ${namePhraseSql('$6')}
     group by 1, 2
   ),
   term_all as materialized (
@@ -154,7 +166,7 @@ const graphSql = `
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
-    where p.c_pt >= $7 and ($5 = 'all' or p.kind = $5)
+    where p.c_pt >= $7 and ($5 = 'all' or p.kind = any(string_to_array($5, ',')))
   ),
   nodes_top as (
     select term, kind, count,
@@ -261,7 +273,7 @@ export const sourcesFor = async (person: Person, q: GraphQuery) => {
 const docsWhereSql = `(
     $5 = '' or exists (
       select 1 from doc_terms t where t.doc_id = d.id and t.term = $5
-        and (t.kind = $6 or $6 not in ('hashtag', 'word', 'theme'))
+        and ($6 = 'all' or t.kind = any(string_to_array($6, ',')) or not (string_to_array($6, ',') <@ array['hashtag', 'word', 'theme', 'phrase']))
     )
   )`
 
@@ -488,13 +500,13 @@ const risingSql = `
   recent_terms as (
     select t.term, t.kind, count(*)::float8 as c_recent
     from doc_terms t join recent_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
+    where ($6 = 'all' or t.kind = any(string_to_array($6, ','))) and not (t.term = any($7::text[])) and not ${namePhraseSql('$7')}
     group by 1, 2
   ),
   baseline_terms as (
     select t.term, t.kind, count(*)::float8 as c_baseline
     from doc_terms t join baseline_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
+    where ($6 = 'all' or t.kind = any(string_to_array($6, ','))) and not (t.term = any($7::text[])) and not ${namePhraseSql('$7')}
     group by 1, 2
   )
   select r.term, r.kind,

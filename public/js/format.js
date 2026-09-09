@@ -49,7 +49,7 @@ export const normalize = (s) =>
     .trim()
 
 /** @type {Record<string, string>} */
-export const kinds = { word: 'Palavra', hashtag: 'Hashtag', theme: 'Tema' }
+export const kinds = { word: 'Palavra', hashtag: 'Hashtag', theme: 'Tema', phrase: 'Expressão' }
 
 /** @type {Record<string, string>} */
 export const sourceLabels = {

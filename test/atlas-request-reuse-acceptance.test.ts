@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
 import { app } from '../src/server.js'
 import { candidatesQuery, narrowToSources, params, sourcesParams } from '../public/js/api.js'
-import { createHandlers, debounce, docsQuery, fromScope, scopeKeys } from '../public/js/app.js'
-import { SCOPE_LIMIT, SCOPE_TTL_MS, clearScopes, readScope, writeScope } from '../public/js/state.js'
+import { createHandlers, docsQuery, scopeKeys } from '../public/js/figures/atlas.js'
+import { SCOPE_LIMIT, SCOPE_TTL_MS, clearScopes, debounce, fromScope, readScope, writeScope } from '../public/js/state.js'
 import { seed } from './fixture.js'
 import './close.js'
 
@@ -230,7 +230,6 @@ describe('issue #43 AC5: local-only interactions still reach no network, and the
         getZoomLevel: () => 1,
         clearSearch: spy('clearSearch'),
         canClear: () => true,
-        resetOutlet: spy('resetOutlet'),
         updateHeader: spy('updateHeader'),
         setSource: spy('setSource'),
       }),

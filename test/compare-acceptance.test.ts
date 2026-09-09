@@ -48,19 +48,19 @@ describe('compare people acceptance criteria (issue #7)', () => {
   })
 
   // Kept, not deleted, through issue #37's split. AC3 of #37 bans tests that read
-  // design-5.html to get at its JavaScript; this criterion is purely about the order of three
+  // design-5.html to get at its JavaScript; this criterion is purely about the order of
   // static elements in the header, which no module emits and no import can answer. It reads
-  // markup, never script.
-  it('AC9 (header placement): design-5.html places the compare-link immediately after .person-pick, before #stats', () => {
+  // markup, never script. Issue #92 removed #stats from header.top entirely (that number was
+  // always figure 1's, and now lives in #atlasStats inside #workspace instead — see
+  // atlas-figures-independence.test.ts's AC10 test), so the ordering this criterion actually
+  // cares about — the compare-link sits right after .person-pick — is checked without it.
+  it('AC9 (header placement): design-5.html places the compare-link immediately after .person-pick', () => {
     const html = readFileSync(design5Path, 'utf8')
     const personPickIdx = html.indexOf('<div class="person-pick">')
     const compareLinkIdx = html.indexOf('<a class="compare-link"')
-    const statsIdx = html.indexOf('id="stats"')
     assert.ok(personPickIdx !== -1, '.person-pick must exist in design-5.html')
     assert.ok(compareLinkIdx !== -1, '.compare-link anchor must exist in design-5.html')
-    assert.ok(statsIdx !== -1, '#stats must exist in design-5.html')
     assert.ok(personPickIdx < compareLinkIdx, 'compare-link must come after .person-pick')
-    assert.ok(compareLinkIdx < statsIdx, 'compare-link must come before #stats')
     assert.match(
       html.slice(compareLinkIdx, compareLinkIdx + 200),
       /href="compare\.html"[^<]*>comparar pessoas</,

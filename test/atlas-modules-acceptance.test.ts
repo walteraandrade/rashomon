@@ -15,7 +15,13 @@ import { inlineStyles, withFakeDocument } from './fake-dom.js'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const jsDir = join(root, 'public', 'js')
-const jsFiles = () => readdirSync(jsDir).filter((f) => f.endsWith('.js'))
+// Issue #92 adds public/js/figures/*.js: the walk must see that subdirectory too, so a new
+// figure module is never invisible to the import-graph test or the "every module is served"
+// check below.
+const jsFiles = (dir = jsDir, prefix = ''): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.js') ? [`${prefix}${entry.name}`] : [],
+  )
 const moduleSource = (name: string) => readFileSync(join(jsDir, name), 'utf8')
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
 
@@ -49,7 +55,7 @@ describe('issue #37 AC1: the split page still serves the same atlas over the sam
   })
 
   it('the docs panel narrows the graph querystring to one term and five rows', async () => {
-    const { docsQuery } = await import('../public/js/app.js')
+    const { docsQuery } = await import('../public/js/figures/atlas.js')
     const { params } = await import('../public/js/api.js')
     const base = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     const forTerm = docsQuery(base, { id: 'reforma', term: 'reforma', kind: 'word', count: 4, pmi: 1 })
@@ -117,18 +123,25 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     assert.ok(!/\bdocument\b/.test(moduleSource('api.js')), 'api.js fetches; it must not render')
   })
 
-  it('the import graph is acyclic and matches the documented direction', () => {
+  it('AC2: the import graph is acyclic and matches the documented direction, including public/js/figures/', () => {
     const expected: Record<string, string[]> = {
       'format.js': [],
       'state.js': [],
       'api.js': [],
       'layout.js': ['./format.js'],
       'render.js': ['./format.js', './layout.js'],
-      'app.js': ['./api.js', './format.js', './layout.js', './render.js', './state.js'],
+      'figures/atlas.js': ['./api.js', './format.js', './layout.js', './render.js', './state.js'],
+      'figures/testimony.js': ['./api.js', './format.js', './render.js', './state.js'],
+      'app.js': ['./figures/atlas.js', './figures/testimony.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in public/js must have a declared place in the import graph')
-    for (const [file, allowed] of Object.entries(expected))
-      assert.deepEqual(importsOf(moduleSource(file)).sort(), [...allowed].sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
+    for (const [file, allowed] of Object.entries(expected)) {
+      // A module under figures/ imports its siblings (../api.js, not ./api.js); importsOf
+      // returns the literal specifier, so this resolves each one relative to its own file
+      // before comparing, the same way the loader would.
+      const resolved = importsOf(moduleSource(file)).map((spec) => (file.includes('/') && spec.startsWith('../') ? `.${spec.slice(2)}` : spec))
+      assert.deepEqual(resolved.sort(), [...allowed].sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
+    }
   })
 
   it('the import scan really does see double-quoted and multi-line imports', () => {
@@ -136,12 +149,32 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     assert.deepEqual(importsOf(`import {\n  a,\n  b,\n} from "./state.js"`), ['./state.js'])
   })
 
-  it('app.js is importable outside a browser: it wires nothing until boot() is called', async () => {
+  it('AC3: app.js is importable outside a browser and exposes exactly one export, boot', async () => {
     const previous = (globalThis as { document?: unknown }).document
     assert.equal(previous, undefined, 'this suite must run with no document, or the import guard proves nothing')
     const module = await import('../public/js/app.js')
+    assert.deepEqual(Object.keys(module), ['boot'], 'app.js is a shell now: every other export moved into the figure that owns it')
     assert.equal(typeof module.boot, 'function')
-    assert.equal(typeof module.createHandlers, 'function')
+  })
+
+  it('AC1: public/js/figures/atlas.js and figures/testimony.js are importable outside a browser too', async () => {
+    assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
+    const atlas = await import('../public/js/figures/atlas.js')
+    assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/atlas.js must not touch document at import time')
+    assert.equal(typeof atlas.mount, 'function')
+    const testimony = await import('../public/js/figures/testimony.js')
+    assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/testimony.js must not touch document at import time')
+    assert.equal(typeof testimony.mount, 'function')
+  })
+
+  it('AC4: figures/atlas.js and state.js export exactly what the split promises, no more', async () => {
+    const atlas = await import('../public/js/figures/atlas.js')
+    assert.deepEqual(Object.keys(atlas).sort(), ['createHandlers', 'docsQuery', 'layoutKey', 'mount', 'scopeKeys'].sort())
+    const state = await import('../public/js/state.js')
+    for (const name of ['fromScope', 'debounce', 'readScope', 'writeScope', 'clearScopes', 'SCOPE_TTL_MS', 'SCOPE_LIMIT']) assert.equal(typeof (state as Record<string, unknown>)[name] !== 'undefined', true, `state.js must still export ${name}`)
+    for (const name of ['outlet', 'zoom', 'layoutCache', 'mask', 'getController', 'setController', 'getMask', 'setMask']) assert.equal(name in state, false, `state.js must not export ${name}: it is figure-private now`)
+    const testimony = await import('../public/js/figures/testimony.js')
+    assert.deepEqual(Object.keys(testimony), ['mount'], 'figures/testimony.js exposes only mount; outlet/zoom/layoutCache/mask/request-id bookkeeping stay local')
   })
 })
 

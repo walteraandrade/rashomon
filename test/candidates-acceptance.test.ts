@@ -9,7 +9,8 @@ import { app } from '../src/server.js'
 import { insertDoc } from '../src/store.js'
 import { persons, seedCandidates } from './fixture.js'
 import { candidatesQuery } from '../public/js/api.js'
-import { boot, createHandlers } from '../public/js/app.js'
+import { boot } from '../public/js/app.js'
+import { createHandlers } from '../public/js/figures/atlas.js'
 import { trendOf } from '../public/js/format.js'
 import { paintCandidates } from '../public/js/render.js'
 import { withFakeDocument } from './fake-dom.js'
@@ -194,7 +195,6 @@ describe('AC7: "candidatos" list in the atlas', () => {
     const calls: string[] = []
     const handlers = createHandlers({
       loadCandidates: () => calls.push('loadCandidates'),
-      resetOutlet: () => calls.push('resetOutlet'),
       updateHeader: () => calls.push('updateHeader'),
       load: () => calls.push('load'),
     })

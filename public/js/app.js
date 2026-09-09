@@ -14,9 +14,11 @@ import { mount as mountTestimony } from './figures/testimony.js'
 // One entry per figure: the section it mounts into, the client-side querystring keys it reads
 // (bare, or prefixed with its own id) and the mount function it owns end to end. Order is the
 // mount order, which is also the order app.js's shell runs in — first figure 1, then figure 2.
+// `noticeId` is the element each figure's own loading copy lands on, so the shell can replace
+// that copy when the figure never gets far enough to repaint it itself.
 const FIGURES = [
-  { id: 'atlas', sectionId: 'workspace', keys: ['person', 'days', 'source', 'sort', 'limit'], mount: mountAtlas },
-  { id: 'testimony', sectionId: 'testimony', keys: ['person', 'days', 'source'], mount: mountTestimony },
+  { id: 'atlas', sectionId: 'workspace', keys: ['person', 'days', 'source', 'sort', 'limit'], noticeId: 'status', mount: mountAtlas },
+  { id: 'testimony', sectionId: 'testimony', keys: ['person', 'days', 'source'], noticeId: 'testimonyList', mount: mountTestimony },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only; a
@@ -77,6 +79,10 @@ export const boot = async () => {
       figure.mount(root, { people, initial: seedFor(figure.id, figure.keys, location.search), peopleError })
     } catch (err) {
       console.error(`figure "${figure.id}" failed to mount`, err)
+      // Without this the figure sits on paintBootLoading()'s "Carregando…" forever, which
+      // reads as a slow network rather than as the failure it is.
+      const notice = document.getElementById(figure.noticeId)
+      if (notice) notice.textContent = 'Esta figura falhou ao carregar.'
     }
   }
 }

@@ -128,7 +128,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
       testimony = null
       outletRows = null
       $('testimonyList').innerHTML =
-        '<p class="note">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="testimonyRetry">Tentar novamente</button></p>'
+        '<p class="note">Falha de rede ou base indisponível.<br>Nenhuma avaliação fictícia será exibida.<br><br><button class="quiet-button" id="testimonyRetry">Tentar novamente</button></p>'
       $('outletList').textContent = ''
       $('strip').hidden = true
       $('testimonyRetry')?.addEventListener('click', () => location.reload())

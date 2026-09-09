@@ -55,6 +55,10 @@ export const json = async (url, signal) => {
   return response.json()
 }
 
+// app.js fetches /api/people by hand instead of calling this: the shell's import graph is
+// pinned to the two figure modules (test/atlas-modules-acceptance.test.ts), and importing
+// api.js there would widen it. Kept as the documented wrapper for the route, and used by
+// public/compare.html and test/api.test.ts.
 /** @param {AbortSignal} [signal] */
 export const loadPeople = (signal) => json('/api/people', signal)
 

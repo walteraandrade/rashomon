@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="rashomon">
   <style>
     /* One quotation mark per source, each turned its own way: four witnesses, one event.
-       The tail is a hairline, so it only survives above 48px. Below that the mark drops a
-       tier: solid drops at 24-48px, a single drop under 24px. The tierless base case is the
+       The tail is a hairline, so it only survives above 40px. Below that the mark drops a
+       tier: solid drops at 24-40px, a single drop under 24px. The tierless base case is the
        smallest one on purpose - a browser that ignores these queries gets the legible mark,
        never the blurred one. */
     svg { --plate: #202020; --a: #e9e4d8; --w: #a9c3ec; --h: #9fd9c2; --t: #e8a9cf; }
     @media (prefers-color-scheme: dark) { svg { --plate: #2e2e2e; } }
     #tier-mid, #tier-full { display: none; }
     @media (min-width: 24px) { #tier-min { display: none; } #tier-mid { display: inline; } }
-    @media (min-width: 48px) { #tier-mid { display: none; } #tier-full { display: inline; } }
+    @media (min-width: 40px) { #tier-mid { display: none; } #tier-full { display: inline; } }
   </style>
 
   <g id="tier-full">

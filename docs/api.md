@@ -13,6 +13,7 @@ Every route is a public, read-only `GET` under `/api`. Query parameters are pars
 | `/api/people/:id/testimony` | kikori scores, overall and per outlet |
 | `/api/tone` | GDELT tone per (person, outlet), across everybody |
 | `/api/candidates` | untracked names worth adding to `seed.json` |
+| `/api/compare` | exact count/PMI/tone for two people, over the union of their strongest terms |
 
 The contract is stable: `/api/people`, `/api/people/:id/graph` and `/api/people/:id/sources` never lose a field. A new capability is a new route or a new optional parameter, never a breaking change to an existing one.
 
@@ -70,3 +71,11 @@ When `?method` is omitted or fails its charset check it resolves through the sam
 ## candidates
 
 `GET /api/candidates?days=7&min=5&limit=50` returns `{ days, candidates }`: person names nobody tracks yet, ranked by doc count in the window. Each candidate is `{ name, count, sources, previous, samples }`: `count` is distinct docs in the window, `sources` distinct sources, `previous` the count in the window of the same length immediately before (so a caller sees what is rising), `samples` up to 3 `{ id, source, text }` docs, newest first. Cross-person by construction, not nested under `/people/:id`. Promotion stays human: add the name to `seed.json` and run `pnpm reindex`. See [how names are discovered](terms.md#candidate-discovery).
+
+## compare
+
+`GET /api/compare?a=<personId>&b=<personId>&days=30&source=all&domain=all&lean=all&kind=all&limit=40` returns exact figures for two tracked people over the union of their strongest terms — never a zero standing in for "not in that person's top list". Not nested under `/people/:id`, like `/tone` and `/candidates`: it spans two specific people, neither of which is "the" resource. `a` is resolved before `b`; a missing or unknown id on either side returns 404 with `{ "error": "person not found" }`, the same shape the `/people/:id/*` middleware uses — with both invalid, the body cannot say which. `a === b` is legal: both sides are computed independently and come back identical.
+
+Returns `{ days, a, b, terms }`. `a`/`b` are each `{ person, about }`: `person` is `{ id, name, aliases }`, `about` is that side's `stats.about` under the same meaning `/graph` uses (docs in scope naming that person, unfiltered by term or kind). `terms` holds one row per unioned `(term, kind)` key, `{ term, kind, a, b }`, ordered by `term` asc then `kind` asc. Each side's value is one of: `{ count, pmi, tone }` (an exact figure, computed the same way `/graph`'s node figures are), `null` (measured: zero documents on that side carry the term in scope), or the string `"name"` (hidden because the term is, or contains, that side's own name word, per `nameTokens` — never computed for that side, exactly like `/graph` drops a person's own name from its `nodes`). A term can read `"name"` for one side and a real figure for the other.
+
+There is no `min`: a term present for one side and absent for the other is exactly what this route must keep as a measured `null`, so a floor tied to one side's count cannot apply symmetrically. `limit` caps how many `(term, kind)` keys enter the union, not the figures themselves: per side, the top `limit` terms by count desc and the top `limit` terms by `pmi * ln(1 + count)` desc (the pinned `sort=pmi` formula) are unioned across both sides — up to four lists' worth of keys — and every key in that union gets its exact, uncapped figure looked up on each side. No `links`, `signature` or `outlets`: this route answers one question and nothing else.

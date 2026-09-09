@@ -62,6 +62,19 @@ export type TestimonyQuery = {
   min: number
 }
 
+// No `min`, unlike GraphQuery/RisingQuery: a term present for one side and absent for the
+// other is exactly what /compare must keep as a measured null, so a floor tied to one side's
+// count cannot apply symmetrically (issue #93). No `sort` either -- both selection criteria
+// always run, see compareSql.
+export type CompareQuery = {
+  days: number
+  source: string
+  domain: string
+  lean: string
+  kind: string
+  limit: number
+}
+
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
@@ -74,6 +87,20 @@ type RisingRow = { term: string; kind: string; count_recent: number; count_basel
 type TimelineRow = { bucket_start: Date; count: number }
 type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
 type ToneListRow = { id: string; name: string }
+type CompareTermRow = {
+  term: string
+  kind: string
+  is_name_a: boolean
+  is_name_b: boolean
+  a_count: number | null
+  a_pmi: number | null
+  a_tone: number | null
+  b_count: number | null
+  b_pmi: number | null
+  b_tone: number | null
+}
+// One row: the two `about` counts as columns, the unioned term list as json the driver already parses.
+type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermRow[] }
 
 // $3 must already be normalized by parseSourceList; unlike kind, an unknown or empty
 // source is not rescued here and would scope to zero docs. $4 must already be the
@@ -147,6 +174,12 @@ const trackedCte = `
 // string_to_array. It is not merely an optimization -- without it this expression would
 // duplicate the equality check on every row of the largest table in the database.
 const namePhraseSql = (names: string) => `(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
+
+// compareSql's flag for "this (term, kind) key is (or contains) that side's own name word":
+// the equality half namePhraseSql leaves to its caller's own where clause, plus the phrase
+// half, both against an arbitrary column (compareSql evaluates this on the unioned key, not
+// on doc_terms.term), so it cannot reuse namePhraseSql's hardcoded `t.term`.
+const isNameSql = (col: string, names: string) => `(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
 const graphSql = `
   with ${scopeCte}, ${trackedCte},
@@ -607,6 +640,129 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
   }
 }
 
+// Cross-person by construction, like toneSql: unlike scopeCte, `scope`/`tracked` here carry no
+// single person_id, since both sides share them (issue #93's cost-saving rationale -- the shared
+// PMI universe n/term_all is computed once, not once per side).
+const compareScopeCte = `
+  scope as (
+    select d.id from docs d
+    where d.published_at >= now() - make_interval(days => $3)
+      and ($4 = 'all' or d.source = any(string_to_array($4, ',')))
+      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+  ),
+  tracked as (
+    select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
+  )`
+
+// One side's about/term_p/scored/top-N CTEs, parameterized by the person id param ($1 or $2)
+// and that person's own nameTokens array param ($8 or $9) -- inherently per-person, since a
+// term can be A's own name and legitimate vocabulary for B (spec §3), so these cannot be
+// shared the way scope/tracked/n/term_all are.
+//
+// Deliberately not capped by $7 (limit) here: every term the person's docs carry in scope
+// gets an exact count/pmi/tone, with only the name-word exclusion applied, same as graphSql's
+// term_p. `limit` only governs top_count/top_pmi, i.e. which keys enter the union below --
+// the exact figure for a unioned key is always looked up uncapped, in `scored_<side>`.
+//
+// Both top_count and top_pmi are computed for every call, per spec: dropping either would
+// silently exclude "loud but not sticky" or "rare but sticky" words from one side. pmi *
+// ln(1 + count) is sort=pmi's pinned formula (graphSql), reused unchanged.
+const compareSideCte = (side: 'a' | 'b', personParam: string, namesParam: string) => `
+  about_${side} as (
+    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${personParam}
+  ),
+  np_${side} as materialized (select count(*)::float8 as total from about_${side}),
+  term_p_${side} as materialized (
+    select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
+    from doc_terms t join about_${side} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+    where not (t.term = any(${namesParam}::text[])) and not ${namePhraseSql(namesParam)}
+    group by 1, 2
+  ),
+  scored_${side} as (
+    select p.term, p.kind, p.c_pt::int as count, p.tone,
+      ln((p.c_pt * n.total) / (np_${side}.total * a.c_t)) / ln(2) as pmi
+    from term_p_${side} p join term_all a using (term, kind), n, np_${side}
+    where $6 = 'all' or p.kind = any(string_to_array($6, ','))
+  ),
+  ${side}_top_count as (
+    select term, kind from scored_${side} order by count desc, term, kind limit $7
+  ),
+  ${side}_top_pmi as (
+    select term, kind from scored_${side} order by pmi * ln(1 + count) desc, term, kind limit $7
+  )`
+
+// $1 a's person id, $2 b's, $3 days, $4 source, $5 domain (already resolved via resolveScope),
+// $6 kind, $7 limit, $8 a's nameTokens, $9 b's nameTokens.
+//
+// `keys` is the union of up to four (term, kind) lists across both sides -- UNION (not UNION
+// ALL) dedupes on its own. `unioned` then looks up the exact, uncapped figure for every key on
+// each side via a left join, so a key selected only from the other side's lists comes back
+// null on this one, not a dropped row -- the whole point of the union (spec §3): a null must
+// be measured, never "outside the top list".
+//
+// is_name_a/is_name_b are computed against the key text directly (isNameSql), not against
+// scored_a/scored_b: a term can be one side's own name word and therefore entirely absent
+// from that side's term_p (excluded there by construction), yet still need to read "name"
+// rather than null on this response.
+const compareSql = `
+  with ${compareScopeCte},
+  n as materialized (select count(*)::float8 as total from tracked),
+  term_all as materialized (
+    select t.term, t.kind, count(*)::float8 as c_t
+    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
+  ),
+  ${compareSideCte('a', '$1', '$8')},
+  ${compareSideCte('b', '$2', '$9')},
+  keys as (
+    select term, kind from a_top_count
+    union select term, kind from a_top_pmi
+    union select term, kind from b_top_count
+    union select term, kind from b_top_pmi
+  ),
+  unioned as (
+    select k.term, k.kind,
+      ${isNameSql('k.term', '$8')} as is_name_a,
+      ${isNameSql('k.term', '$9')} as is_name_b,
+      sa.count as a_count, round(sa.pmi::numeric, 2)::float8 as a_pmi, round(sa.tone::numeric, 2)::float8 as a_tone,
+      sb.count as b_count, round(sb.pmi::numeric, 2)::float8 as b_pmi, round(sb.tone::numeric, 2)::float8 as b_tone
+    from keys k
+    left join scored_a sa using (term, kind)
+    left join scored_b sb using (term, kind)
+  )
+  select
+    (select count(*) from about_a)::int as about_a,
+    (select count(*) from about_b)::int as about_b,
+    coalesce((
+      select json_agg(json_build_object(
+        'term', term, 'kind', kind, 'is_name_a', is_name_a, 'is_name_b', is_name_b,
+        'a_count', a_count, 'a_pmi', a_pmi, 'a_tone', a_tone,
+        'b_count', b_count, 'b_pmi', b_pmi, 'b_tone', b_tone
+      ) order by term, kind)
+      from unioned
+    ), '[]'::json) as terms`
+
+// Not nested under /people/:id, like toneFor: it spans two specific people, neither of which
+// is "the" resource. Own function, not two graphFor calls: the shared PMI universe (n,
+// term_all) would otherwise be recomputed once per side, exactly the cost issue #93 avoids.
+export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
+  const namesA = nameTokens(a)
+  const namesB = nameTokens(b)
+  const { domain } = resolveScope(q.domain, q.lean)
+  const { rows } = await db.query<CompareAggregates>(compareSql, [a.id, b.id, q.days, q.source, domain, q.kind, q.limit, namesA, namesB])
+  const { about_a, about_b, terms } = rows[0]
+  return {
+    days: q.days,
+    a: { person: a, about: about_a },
+    b: { person: b, about: about_b },
+    terms: terms.map((t) => ({
+      term: t.term,
+      kind: t.kind,
+      a: t.is_name_a ? ('name' as const) : t.a_count !== null ? { count: t.a_count, pmi: t.a_pmi!, tone: t.a_tone } : null,
+      b: t.is_name_b ? ('name' as const) : t.b_count !== null ? { count: t.b_count, pmi: t.b_pmi!, tone: t.b_tone } : null,
+    })),
+  }
+}
+
 // The exact statements the routes run, exported read-only so `pnpm bench` can put each one
 // through EXPLAIN (ANALYZE, BUFFERS) with representative parameters. Nothing here changes
 // what a route executes; it is the same string object the handlers above use.
@@ -622,4 +778,5 @@ export const statements = {
   testimonySummary: testimonySummarySql,
   termTestimony: termTestimonySql,
   candidates: candidatesSql,
+  compare: compareSql,
 } as const

@@ -190,7 +190,11 @@ describe('AC7: a term where either side is the string "name" is absent from the 
 })
 
 describe('AC8: the hidden-name note is absent when the count is zero, present with the exact count otherwise', () => {
-  it('#compareHiddenNote stays hidden when nothing was dropped', async () => {
+  // AC8 says the note is "absent from the DOM when the hidden-name count is 0 (or the
+  // equivalent painted note)". design-5.html ships the element and figures/compare.js toggles
+  // `hidden` and empties its text, which is the second reading: nothing is announced, and a
+  // screen reader skips a `hidden` node exactly as it skips an absent one.
+  it('#compareHiddenNote stays hidden and empty when nothing was dropped', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }]) })
@@ -405,12 +409,13 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
     })
   }
 
-  // compareMeasure deviates from the "exactly one" rule above, on purpose: api.compareParams's
-  // ({a, b, days, source, limit}) signature never carries measure (issue #91 §3, "the measure
-  // selector drives position only"), so state.js's fromScope memoizes on a key that measure
-  // never touches -- changing it alone resolves from the existing cache entry, not a fresh
-  // request. Zero new /api/compare calls is therefore the correct, desired outcome here, not a
-  // gap in the "exactly one" rule; the repaint still happens, driven from the cached data.
+  // compareMeasure deviates from the "exactly one" rule above, on purpose, and by its own
+  // listener rather than by luck: api.compareParams's ({a, b, days, source, limit}) signature
+  // never carries measure (issue #91 §3, "the measure selector drives position only"), so the
+  // response on screen already holds both numbers for every term and only the position moves.
+  // Routing it through onControlChange would resolve from state.js's memo inside the 20s TTL
+  // and pay a real round trip outside it, for an identical payload. onMeasureChange repaints
+  // and nothing else, so zero new /api/compare calls is the contract here, at any TTL.
   it('changing compareMeasure alone triggers zero new /api/compare calls (a cache hit) but still repaints the ruler', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -425,7 +430,7 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
       await flush(220)
       const added = calls.slice(before)
       assert.equal(added.filter((u) => u.includes('/api/compare')).length, 0, `measure alone must not refetch: ${JSON.stringify(added)}`)
-      assert.notEqual(els.compareRuler.innerHTML, beforeMarkup, 'the ruler must still repaint from cached data when measure changes')
+      assert.notEqual(els.compareRuler.innerHTML, beforeMarkup, 'the ruler must still repaint when measure changes')
     })
   })
 

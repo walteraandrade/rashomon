@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, describe, it } from 'node:test'
 import { app } from '../src/server.js'
+import { VERCEL_INSIGHTS } from './pages.js'
 
 // public/bundle.js is a build artifact committed to the repository, because vercel.json keeps
 // `buildCommand: null` and Vercel therefore serves public/ as files. That is the whole reason
@@ -31,7 +32,11 @@ describe('public/bundle.js stays in step with public/js', () => {
 
   it('is what design-5.html loads, and the only script it loads', () => {
     const html = readFileSync('public/design-5.html', 'utf8')
-    const srcs = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gi)].map(([, src]) => src)
+    // Vercel Web Analytics is a platform tag, not a module of this repo: it ships no code we
+    // author and is served by the host, so it is excluded from the bundle's single-script rule.
+    const srcs = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gi)]
+      .map(([, src]) => src)
+      .filter((src) => src !== VERCEL_INSIGHTS)
     assert.deepEqual(srcs, ['./bundle.js'])
   })
 

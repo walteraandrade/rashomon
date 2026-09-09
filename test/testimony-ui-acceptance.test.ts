@@ -105,10 +105,12 @@ describe('testimony UI: the painter', () => {
       paintTestimony({ data: sample, domain: 'all', onPick: () => {} })
       assert.equal(els.testimonyLabel.textContent, '-2,16')
       const html = els.testimonyList.innerHTML
-      assert.match(html, /<strong[^>]*>-2,16<\/strong>/)
-      assert.match(html, /neutro · média de 784 textos avaliados/)
-      assert.match(html, /<span class="source-chip"><b>Bluesky<\/b><span class="n">621<\/span>/, 'sources are labelled in pt-BR')
-      assert.match(html, /<b>GKG<\/b>/)
+      // Label and measurement, so <dt> names it and <dd> carries it; the reading in words drops
+      // to its own caption line instead of sharing the number's line.
+      assert.match(html, /<dt>Média do recorte<\/dt><dd[^>]*>-2,16<\/dd>/)
+      assert.match(html, /<p class="verdict-class">neutro · média de 784 textos avaliados<\/p>/)
+      assert.match(html, /<div class="source-chip"><dt>Bluesky<\/dt><dd><span class="n">621<\/span>/, 'sources are labelled in pt-BR')
+      assert.match(html, /<dt>GKG<\/dt>/)
       // The outlet ranking lives in paintOutlets now: the strip above is already the ruler, and
       // a second ranking here was the same outlets read twice.
       assert.doesNotMatch(html, /data-testimony-domain/)
@@ -197,21 +199,21 @@ describe('testimony UI: the page holds the panel and explains it', () => {
 
   it('the "Como ler" page defines the scale, the cut and the name bias', () => {
     const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
-    assert.match(chapter, /<h3>Gráfico 2 · Avaliação por veículo<\/h3>/)
+    assert.match(chapter, /<h2>Gráfico 2 · Avaliação por veículo<\/h2>/)
     assert.match(chapter, /nota de −10 a \+10/)
     assert.match(chapter, /Até −2,5 conta como contra; de \+2,5 para cima, a favor/)
     assert.match(chapter, /nunca compare a nota de uma pessoa com a de outra/)
     assert.match(chapter, /Vale para todas as fontes, ao contrário do tom/)
   })
 
-  it('atlas.css styles the panel with nothing under 11px', () => {
+  it('atlas.css styles the panel from the type ramp, never from a loose px', () => {
     const css = read('atlas.css')
-    assert.match(css, /\.testimony \.verdict strong \{[^}]*var\(--tone, var\(--ink\)\)/)
+    assert.match(css, /\.testimony \.verdict dd \{[^}]*var\(--tone, var\(--ink\)\)/)
     assert.match(css, /\.strip-mean \{[^}]*var\(--pos/, 'the strip is the one ruler left, and it still places the mean')
     assert.doesNotMatch(css, /\.testimony \.scale/, 'the second ruler under the strip is gone')
-    const sizes = [...css.matchAll(/\.testimony[^{]*\{[^}]*font(?:-size)?:\s*(?:\d+\s+)?(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
-    assert.ok(sizes.length >= 3)
-    assert.deepEqual(sizes.filter((s) => s < 11), [])
+    const sizes = [...css.matchAll(/\.testimony[^{]*\{[^}]*font-size:\s*var\((--t-[a-z0-9]+)\)/g)].map((m) => m[1])
+    assert.ok(sizes.length >= 3, 'the panel sizes itself from the ramp')
+    assert.deepEqual(sizes.filter((s) => s === '--t-micro'), [], 'the 11px floor is for SVG labels only')
   })
 })
 

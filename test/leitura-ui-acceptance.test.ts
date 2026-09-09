@@ -34,9 +34,14 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     const html = read('como-ler.html')
     const chapter = html.match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.ok(chapter, 'the chapter must exist with id="como-ler"')
-    assert.match(chapter, /<h2[^>]*>Como ler o rashomon<\/h2>/)
-    for (const heading of ['Como fazer uma análise', 'Frequência', 'Linha entre duas palavras', 'Tom']) assert.match(chapter, new RegExp(`<h3>${heading}<\\/h3>`), heading)
-    assert.match(chapter, /<h3 id="pmi">PMI<\/h3>/)
+    // The page title is the page's one <h1>, in the masthead above the chapter; inside it a
+    // chapter is an <h2> and a topic of that chapter an <h3>. Before this, chapter and topic
+    // were both <h3> and the outline said they were the same rank.
+    assert.match(html, /<h1 id="comoLerTitle">Como ler o rashomon<\/h1>/)
+    assert.equal(html.match(/<h1[\s>]/g)?.length, 1, 'exactly one h1 per page')
+    for (const chapterTitle of ['Como fazer uma análise', 'Gráfico 1 · Atlas de palavras', 'PMI']) assert.match(chapter, new RegExp(`<h2>${chapterTitle}<\\/h2>`), chapterTitle)
+    for (const topic of ['Frequência', 'Linha entre duas palavras', 'Tom']) assert.match(chapter, new RegExp(`<h3>${topic}<\\/h3>`), topic)
+    assert.match(chapter, /<div id="pmi">\s*<h2>PMI<\/h2>/, 'PMI is a chapter of its own, not a topic inside avaliação')
     assert.match(chapter, /mais do que apareceria por acaso/, 'PMI must be defined in plain words')
     assert.match(chapter, /PMI × ln\(1 \+ documentos\)/, 'the weighted size must be spelled out')
     assert.match(chapter, /Só existe nos textos que vêm do GDELT/, 'tone stays a GDELT-only fact')
@@ -69,11 +74,17 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     for (const page of ['design-5.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=League\+Spartan[^"]*Instrument\+Sans/, `${page} loads both faces`)
   })
 
-  it('atlas.css has no type smaller than 12px and no 10px uppercase labels', () => {
+  it('atlas.css sizes type from one --t-* ramp, and its floor is 11px', () => {
     const css = read('atlas.css')
-    const sizes = [...css.matchAll(/font(?:-size)?:\s*(?:\d+\s+)?(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
-    assert.ok(sizes.length > 20, 'the scan must see the stylesheet')
-    assert.deepEqual(sizes.filter((s) => s < 11), [], 'nothing below 11px')
-    assert.doesNotMatch(css, /font-size:\s*10(\.\d+)?px/, 'no 10px text')
+    const ramp = [...css.matchAll(/--t-[a-z0-9]+:\s*([^;]+);/g)].map((m) => m[1])
+    assert.ok(ramp.length >= 7, 'the ramp must exist and have real steps')
+    // Every px in the ramp, fluid steps included: clamp(38px, 5.6vw, 68px) contributes 38 and 68.
+    const rampPx = ramp.flatMap((v) => [...v.matchAll(/(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1])))
+    assert.deepEqual(rampPx.filter((s) => s < 11), [], 'no step of the ramp goes under 11px')
+    // A component sizes itself from the ramp. The only literals left are the ones that are not
+    // type at all -- icon boxes and the like -- so a stray font-size in px is the thing to catch.
+    const literals = [...css.matchAll(/font(?:-size)?:\s*(?:\d+\s+)?(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
+    assert.deepEqual(literals, [], 'every font-size comes from the ramp')
+    assert.ok(css.match(/font-size:\s*var\(--t-/g)!.length > 40, 'the ramp is what the components read')
   })
 })

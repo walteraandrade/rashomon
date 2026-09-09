@@ -182,13 +182,13 @@ export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoo
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML =
-      `<div class="eyebrow">A pessoa no centro</div><h3>${esc(graph?.person?.name || '')}</h3><div class="metric"><div><strong>${fmt(graph?.stats?.about)}</strong><span>documentos sobre a pessoa</span></div><div><strong>${nodes.length}</strong><span>termos no recorte</span></div></div><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p>` +
-      `<div class="eyebrow">Comece por · ${scoreName(sort)}</div><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div><button class="docs-open" id="docsOpen">Ler documentos sobre a pessoa</button>`
+      `<p class="eyebrow">A pessoa no centro</p><h3>${esc(graph?.person?.name || '')}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p>` +
+      `<p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div><button class="docs-open" id="docsOpen">Ler documentos sobre a pessoa</button>`
   } else {
     const related = relatedTo(nodes, links, n.id)
     $('inspector').innerHTML =
-      `<div class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</div><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
-      `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><button class="docs-open" id="docsOpen">Ler documentos deste termo</button>`
+      `<p class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</p><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
+      `<p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><button class="docs-open" id="docsOpen">Ler documentos deste termo</button>`
   }
   $('docsOpen')?.addEventListener('click', () => onShowDocs(n ?? null))
   queryAll('[data-related]', $('inspector')).forEach((el) =>
@@ -260,11 +260,12 @@ export const paintTestimony = ({ data, domain, onPick }) => {
   // left is the recorte's own number, the focused outlet's, and the per-source means as a strip
   // of chips rather than four full-width rows.
   $('testimonyList').innerHTML =
-    `<div class="verdict"><strong style="--tone:${testimonyColor(score)}">${signed(score)}</strong><span>${testimonyClass(score)} · média de ${fmt(overall.n)} ${overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</span></div>` +
+    `<dl class="verdict stat"><div><dt>Média do recorte</dt><dd style="--tone:${testimonyColor(score)}">${signed(score)}</dd></div></dl>` +
+    `<p class="verdict-class">${testimonyClass(score)} · média de ${fmt(overall.n)} ${overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>` +
     focusLine +
-    `<div class="source-chips">${by_source
-      .map((r) => `<span class="source-chip"><b>${esc(sourceLabels[r.source] ?? r.source)}</b><span class="n">${fmt(r.n)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null || r.score === undefined ? '' : signed(r.score)}</span></span>`)
-      .join('')}</div>`
+    `<dl class="source-chips">${by_source
+      .map((r) => `<div class="source-chip"><dt>${esc(sourceLabels[r.source] ?? r.source)}</dt><dd><span class="n">${fmt(r.n)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null || r.score === undefined ? '' : signed(r.score)}</span></dd></div>`)
+      .join('')}</dl>`
 }
 
 export const paintTestimonyLoading = () => {
@@ -389,7 +390,7 @@ export const paintDocs = (data) => {
       data.docs
         .map((d) => {
           const href = safeDocUrl(d)
-          return `<article class="doc"><div class="eyebrow">${esc(d.domain || d.source)}</div><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
+          return `<article class="doc"><p class="eyebrow">${esc(d.domain || d.source)}</p><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
         })
         .join('')
     : '<p>Nenhum documento encontrado.</p>'
@@ -417,7 +418,7 @@ export const paintCandidates = (data) => {
     list
       .map((c, i) => {
         const t = trendOf(c)
-        return `<div class="candidate"><button class="outlet" data-candidate="${i}" aria-expanded="false" aria-controls="candidateSamples${i}" title="Ver documentos de exemplo"><span class="d">${esc(c.name)}</span><span class="n">${fmt(c.count)} docs</span><span class="s">${fmt(c.sources)} ${c.sources === 1 ? 'fonte' : 'fontes'}</span><span class="t ${t.cls}">${esc(t.text)}</span></button><div class="samples" id="candidateSamples${i}" hidden>${c.samples.map((d) => `<article class="doc"><div class="eyebrow">${esc(d.source)} · doc ${esc(d.id)}</div><p>${esc(d.text)}</p></article>`).join('') || '<p class="note">Sem exemplos neste período.</p>'}</div></div>`
+        return `<div class="candidate"><button class="outlet" data-candidate="${i}" aria-expanded="false" aria-controls="candidateSamples${i}" title="Ver documentos de exemplo"><span class="d">${esc(c.name)}</span><span class="n">${fmt(c.count)} docs</span><span class="s">${fmt(c.sources)} ${c.sources === 1 ? 'fonte' : 'fontes'}</span><span class="t ${t.cls}">${esc(t.text)}</span></button><div class="samples" id="candidateSamples${i}" hidden>${c.samples.map((d) => `<article class="doc"><p class="eyebrow">${esc(d.source)} · doc ${esc(d.id)}</p><p>${esc(d.text)}</p></article>`).join('') || '<p class="note">Sem exemplos neste período.</p>'}</div></div>`
       })
       .join('') +
     '<p class="note">Nomes que ainda não estão em seed.json, comparados com o período anterior de mesmo tamanho. Para acompanhar um nome, adicione-o ao arquivo e rode o índice.</p>'
@@ -595,7 +596,7 @@ export const paintCompareDetail = ({ term, personA, personB }) => {
   /** @param {PersonRef} person @param {CompareSide | 'name' | null} v */
   const sideHtml = (person, v) =>
     v && v !== 'name'
-      ? `<span class="side">${esc(person.name)}: <b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></span>`
-      : `<span class="side empty-hint">${esc(person.name)}: nenhum documento</span>`
-  el.innerHTML = `<span class="term">${esc(label(term))}</span>${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}`
+      ? `<div><dt>${esc(person.name)}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
+      : `<div><dt>${esc(person.name)}</dt><dd class="empty-hint">nenhum documento</dd></div>`
+  el.innerHTML = `<span class="term">${esc(label(term))}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>`
 }

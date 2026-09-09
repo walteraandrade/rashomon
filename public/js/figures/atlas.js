@@ -487,7 +487,9 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     if (!people.length) {
       busy = false
       $('status').textContent = 'Nenhuma pessoa cadastrada.'
-      $('viewport').innerHTML = '<div class="empty">A lista de pessoas está vazia.<br>Cadastre pessoas em seed.json e rode o índice.</div>'
+      $('viewport').innerHTML =
+        '<div class="empty">A lista de pessoas está vazia.<br>Cadastre pessoas em seed.json e rode o índice.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
+      $('retry').addEventListener('click', () => location.reload())
       $('inspector').textContent = 'Cadastre pessoas em seed.json e rode o índice.'
       $('viewport').setAttribute('aria-busy', 'false')
       root.classList.remove('is-loading')

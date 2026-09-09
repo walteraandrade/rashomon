@@ -164,11 +164,11 @@ const atlasIds = () => ({
   days: new FakeSelect('days', DAYS_OPTIONS),
   sort: new FakeSelect('sort', [
     { value: 'count', text: 'frequência' },
-    { value: 'pmi', text: 'pmi' },
+    { value: 'pmi', text: 'PMI ponderado', selected: true },
   ]),
   limit: new FakeSelect('limit', [
     { value: '12', text: '12' },
-    { value: '18', text: '18' },
+    { value: '18', text: '18', selected: true },
     { value: '24', text: '24' },
   ]),
   search: new FakeInput('search'),

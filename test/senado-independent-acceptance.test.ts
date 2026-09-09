@@ -13,7 +13,7 @@ import type { Person, RawDoc, Source } from '../src/types.js'
 import { persons, seed, docs } from './fixture.js'
 import { docPageText, docsText, sourceTable } from './docs.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
-import { createHandlers } from '../public/js/app.js'
+import { createHandlers } from '../public/js/figures/atlas.js'
 import './close.js'
 
 // Independent re-derivation of issue #25's numbered acceptance criteria, written from the

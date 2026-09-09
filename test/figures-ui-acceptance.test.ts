@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { createHandlers } from '../public/js/app.js'
+import { createHandlers } from '../public/js/figures/atlas.js'
 import { paintSelection } from '../public/js/render.js'
-import { getMask } from '../public/js/state.js'
 import { withFakeDocument } from './fake-dom.js'
+import { persons } from './fixture.js'
+import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 // The figures redesign: the reading page is a sequence of graphs, each in its own card with
 // a title, a subtitle and its own controls, no side column. The mask is on by default, the
@@ -21,7 +22,9 @@ describe('figures UI: the page is a sequence of graphs', () => {
     const html = read('design-5.html')
     const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
     assert.deepEqual(figures, ['workspace', 'testimony'])
-    assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras<\/h2>/)
+    // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
+    // <b id="testimonyLabel"> in figure 2's own heading below.
+    assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
     assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
     assert.equal(html.match(/<p class="figure-sub">/g)?.length, 2)
     assert.doesNotMatch(html, /class="side"/)
@@ -30,11 +33,17 @@ describe('figures UI: the page is a sequence of graphs', () => {
     for (const id of ['search', 'modeMap', 'mask', 'zoomIn', 'clear', 'viewport', 'legend', 'inspector']) assert.match(atlas, new RegExp(`id="${id}"`), `${id} belongs to the atlas figure`)
   })
 
-  it('there is no page-wide outlet filter: no chip under the sentence, and the sentence keeps its five controls', () => {
+  it('there is no page-wide outlet filter: no chip under the sentence, and each figure keeps its own controls', () => {
     const html = read('design-5.html')
     assert.doesNotMatch(html, /id="domainClear"/)
     assert.doesNotMatch(html, /id="domainChip"/)
-    assert.equal(html.match(/<span class="pick">/g)?.length, 5)
+    // Issue #92 gave figure 2 its own sentence (person/days/source, 3 controls) alongside
+    // figure 1's original five, so the shared count is 8 now, not 5 — split per figure below.
+    assert.equal(html.match(/<span class="pick">/g)?.length, 8)
+    const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.equal(workspace.match(/<span class="pick">/g)?.length, 5, "figure 1's sentence keeps its five controls")
+    assert.equal(testimony.match(/<span class="pick">/g)?.length, 3, "figure 2's own sentence has person/days/source, no sort/limit")
   })
 
   it('closing the dialog goes through the handler table, and Escape closes it before it clears anything', () => {
@@ -58,8 +67,18 @@ describe('figures UI: the page is a sequence of graphs', () => {
 })
 
 describe('figures UI: colour by avaliação is the default', () => {
-  it('state.js starts with the mask on', () => {
-    assert.equal(getMask(), true)
+  // Issue #92 moved the mask flag out of state.js into figures/atlas.js's own mount()
+  // closure (no exported getMask any more), so "on by default" is now read off the control
+  // mount() itself renders, the same way a reader would see it.
+  it('the mask starts on, read off the control mount() renders', async () => {
+    await withFiguresDom(async (els, calls) => {
+      const { mount } = await import('../public/js/figures/atlas.js')
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': { person: people[0], nodes: [], links: [], stats: { about: 0, testimony: { method: 'kikori', score: null, n: 0 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.equal(els.mask.getAttribute('aria-pressed'), 'true')
+    })
   })
 
   it('paintSelection masks only when the person has a mean to compare against', () => {

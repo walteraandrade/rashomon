@@ -3,7 +3,9 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createHandlers } from '../public/js/app.js'
+import { createHandlers } from '../public/js/figures/atlas.js'
+import { persons } from './fixture.js'
+import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 // Selecting a term used to be one way: once a word was picked, the only path back to the clean
 // map was the clear button in the toolbar. Two gestures now let the selection go — clicking the
@@ -75,32 +77,29 @@ describe('the outlet in focus is local to the second figure', () => {
       assert.equal(q.has('domain'), false, `${name} must answer for the whole recorte`)
   })
 
-  it('a click on an outlet dot or row leaves the focus alone', () => {
-    const calls: string[] = []
-    const h = createHandlers({ releaseOutlet: () => calls.push('releaseOutlet') })
-    for (const selector of ['[data-domain]', '[data-testimony-domain]', '[data-strip-domain]'])
-      h.outletBackground({ closest: (s: string) => (s.includes(selector.slice(1, -1)) ? {} : null) } as unknown as Element)
-    assert.deepEqual(calls, [])
-  })
-
-  it('a click on empty space in the figure releases the outlet', () => {
-    const calls: string[] = []
-    const h = createHandlers({ releaseOutlet: () => calls.push('releaseOutlet') })
-    h.outletBackground({ closest: () => null } as unknown as Element)
-    assert.deepEqual(calls, ['releaseOutlet'])
-  })
-
-  it('switching person releases the outlet, and no other control does', () => {
-    for (const [id, expected] of [
-      ['person', ['resetOutlet']],
-      ['days', []],
-      ['sort', []],
-      ['limit', []],
-    ] as const) {
-      const calls: string[] = []
-      createHandlers({ resetOutlet: () => calls.push('resetOutlet') }).control(id)()
-      assert.deepEqual(calls, expected, `control(${id})`)
-    }
+  // Issue #92: the outlet in focus belongs entirely to figures/testimony.js now — atlas's
+  // createHandlers has no outletBackground/resetOutlet action any more (see
+  // unified-atlas-acceptance.test.ts's AC6 tests), so this is driven against the real
+  // testimony figure instead of a proxy handler atlas used to carry for it.
+  it('a click on an outlet dot or row leaves the focus alone, and a click on empty space in the figure releases it', async () => {
+    await withFiguresDom(async (els, calls) => {
+      const { mount } = await import('../public/js/figures/testimony.js')
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, {
+        '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 5 }],
+        '/testimony': { method: 'kikori', overall: { score: null, n: 0 }, by_source: [], by_domain: [] },
+      })
+      mount(els.testimony, { people, initial: { person: people[0].id } })
+      await flush()
+      const [button] = els.outletList.querySelectorAll('[data-domain]')
+      assert.ok(button, 'the mocked /sources row must render one clickable outlet')
+      button.fire('click')
+      assert.equal(els.domainLabel.textContent, ' · g1.globo.com')
+      els.outletList.fire('click', { target: { closest: (s: string) => (s.includes('data-domain') ? {} : null) } })
+      assert.equal(els.domainLabel.textContent, ' · g1.globo.com', 'a click that lands on a selectable outlet must not release the focus')
+      els.outletList.fire('click', { target: { closest: () => null } })
+      assert.equal(els.domainLabel.textContent, '', 'a click on empty space inside the figure releases it')
+    })
   })
 })
 

@@ -4,8 +4,10 @@ import { readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { createHandlers } from '../public/js/app.js'
+import { createHandlers } from '../public/js/figures/atlas.js'
 import { sourceLabels } from '../public/js/format.js'
+import { persons } from './fixture.js'
+import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 // Issue #28's acceptance criteria, re-derived after issue #37 split design-5.html into
 // public/js/*.js + public/atlas.css. The old version grepped the page's inline <script> as
@@ -33,7 +35,6 @@ const spies = () => {
     getZoomLevel: () => 1,
     clearSearch: spy('clearSearch'),
     canClear: () => true,
-    resetOutlet: spy('resetOutlet'),
     updateHeader: spy('updateHeader'),
     setSource: spy('setSource'),
   }
@@ -96,16 +97,37 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
     assert.deepEqual(other.calls, [])
   })
 
-  it('only the person control releases the outlet in focus, and only the period control refetches candidates', () => {
+  it("issue #92 AC6: figures/atlas.js's control('person') never references an outlet any more; only the period control refetches candidates", () => {
     const person = spies()
     person.handlers.control('person')()
-    assert.deepEqual(person.calls, ['resetOutlet', 'updateHeader', 'load'])
+    assert.deepEqual(person.calls, ['updateHeader', 'load'], 'the outlet in focus belongs to figure 2 now; resetOutlet is gone from the action interface')
     const days = spies()
     days.handlers.control('days')()
     assert.deepEqual(days.calls, ['loadCandidates', 'updateHeader', 'load'])
     const sort = spies()
     sort.handlers.control('sort')()
     assert.deepEqual(sort.calls, ['updateHeader', 'load'])
+  })
+
+  it("issue #92 AC6: changing testimony's own person, days or source control releases testimony's own focused outlet", async () => {
+    await withFiguresDom(async (els, calls) => {
+      const { mount } = await import('../public/js/figures/testimony.js')
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, {
+        '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 5 }],
+        '/testimony': { method: 'kikori', overall: { score: null, n: 0 }, by_source: [], by_domain: [] },
+      })
+      mount(els.testimony, { people, initial: { person: people[0].id } })
+      await flush()
+      const [button] = els.outletList.querySelectorAll('[data-domain]')
+      assert.ok(button, 'the mocked /sources row must render one clickable outlet')
+      button.fire('click')
+      assert.equal(els.domainLabel.textContent, ' · g1.globo.com', 'picking an outlet focuses it locally, inside this figure')
+      els.testimonyDays.value = '90'
+      els.testimonyDays.fire('change')
+      await flush(200)
+      assert.equal(els.domainLabel.textContent, '', "changing this figure's own period control released the outlet")
+    })
   })
 
   it('every source segment goes through the same handler: set the source, then reload the recorte', () => {

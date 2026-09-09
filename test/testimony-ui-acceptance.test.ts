@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { loadTestimony, narrowToTestimony, params, testimonyParams } from '../public/js/api.js'
-import { scopeKeys } from '../public/js/app.js'
+import { scopeKeys } from '../public/js/figures/atlas.js'
 import { signed, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor } from '../public/js/format.js'
 import { paintColumns, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
@@ -402,7 +402,7 @@ describe('testimony mask: words coloured against the person mean', () => {
   })
 
   it('the mask is a paint toggle: createHandlers.mask flips it and nothing refetches', async () => {
-    const { createHandlers } = await import('../public/js/app.js')
+    const { createHandlers } = await import('../public/js/figures/atlas.js')
     let flips = 0
     let loads = 0
     const h = createHandlers({ toggleMask: () => flips++, load: () => loads++ })
@@ -413,7 +413,7 @@ describe('testimony mask: words coloured against the person mean', () => {
   })
 
   it('the graph query asks for testimony and the sources/docs queries do not echo it', async () => {
-    const { docsQuery } = await import('../public/js/app.js')
+    const { docsQuery } = await import('../public/js/figures/atlas.js')
     const p = controls()
     assert.equal(p.get('testimony'), '1')
     assert.equal(narrowToTestimony(p).has('testimony'), false)

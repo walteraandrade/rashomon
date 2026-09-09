@@ -68,6 +68,27 @@ describe('personsMentioned', () => {
     assert.deepEqual(ids('Ciro critica Lula'), ['lula', 'ciro'])
   })
 
+  it('tags the four bare surnames the short headlines use', () => {
+    assert.deepEqual(ids('Moraes se declara impedido'), ['moraes'])
+    assert.deepEqual(ids('Mendonça afasta o diretor da PF'), ['andre-mendonca'])
+    assert.deepEqual(ids('Dino autoriza a PF'), ['dino'])
+    assert.deepEqual(ids('Motta pauta a PEC'), ['hugo-motta'])
+  })
+
+  it('does not tag the four bare surnames on their homonyms', () => {
+    assert.deepEqual(ids('Mendonça Filho disputa vaga no Senado'), [])
+    assert.deepEqual(ids('Marília Mendonça, cantora'), [])
+    assert.deepEqual(ids('Vinicius de Moraes e Jobim'), [])
+    assert.deepEqual(ids('Drica Moraes volta à televisão'), [])
+    assert.deepEqual(ids('Ivan Moraes disputa o Recife'), [])
+    assert.deepEqual(ids('Ed Motta lança disco'), [])
+  })
+
+  it('keeps the tracked person when a homonym shares the doc', () => {
+    assert.deepEqual(ids('Hugo Motta aponta Mendonça Filho para a relatoria'), ['hugo-motta'])
+    assert.deepEqual(ids('Alexandre de Moraes ouve Vinicius de Moraes'), ['moraes'])
+  })
+
   it('issue #25: tags the speaking senator on a senado doc via its bare name-prefix, with no source-specific branch involved', () => {
     // mirrors src/collectors/senado.ts's `${person.name}: ${TextoResumo}` convention; the
     // resumo body itself never names Alcolumbre, so the tag only lands via the prefix

@@ -162,6 +162,26 @@ export const docs: RawDoc[] = [
   // cartacapital.com.br is already left-labeled in outlets.json (see doc 41), so this doubles
   // as a lean+family combination fixture without needing new outlets.json entries.
   { source: 'nicho', uri: 'https://cartacapital.com.br/48', text: 'Bolsonaro é alvo de manifestacao e editorial critico em veiculo de esquerda', publishedAt: daysAgo(3502), domain: 'cartacapital.com.br' },
+  // docs 49-55: issue #93's /api/compare AC11 fixture (limit=1 must union both the count-ranked
+  // and pmi-ranked top-1 per side, not just one). No existing doc gives one side a within-side
+  // top-count term that differs from its own top-pmi term at limit=1: every fixture term is
+  // exclusive to the person who uses it, so pmi = log2(n/np) ties across all of a side's own
+  // terms and the higher-count one always also wins pmi * ln(1 + count). "termdiluido" breaks
+  // that: bolsonaro uses it 3 times (docs 49/50/51) but lula also uses it twice (docs 53/54),
+  // so its global doc_terms count is inflated and its pmi comes out lower than "cita"
+  // (bolsonaro, doc 52), which is exclusive and count 1 — cita's pmi * ln(2) outranks
+  // termdiluido's pmi * ln(4), so top-count (termdiluido) and top-pmi (cita) genuinely diverge
+  // for bolsonaro. All seven sit on a domain used nowhere else in the fixture
+  // ("testcorp.example"), so a compare query scoped to that domain is a self-contained universe
+  // unaffected by "golpe" or any other pinned term, and dated 3600+ days ago — past every window
+  // any other suite opens (3502, doc 48) — so no pinned pmi/count/tone/stats literal shifts.
+  { source: 'rss', uri: 'https://testcorp.example/49', text: 'Bolsonaro discute termdiluido em entrevista', publishedAt: daysAgo(3601), domain: 'testcorp.example' },
+  { source: 'rss', uri: 'https://testcorp.example/50', text: 'Bolsonaro cita termdiluido em comunicado', publishedAt: daysAgo(3602), domain: 'testcorp.example' },
+  { source: 'rss', uri: 'https://testcorp.example/51', text: 'Bolsonaro repete termdiluido em discurso', publishedAt: daysAgo(3603), domain: 'testcorp.example' },
+  { source: 'rss', uri: 'https://testcorp.example/52', text: 'Bolsonaro comenta o termexclusivo em nota', publishedAt: daysAgo(3604), domain: 'testcorp.example' },
+  { source: 'rss', uri: 'https://testcorp.example/53', text: 'Lula tambem fala sobre termdiluido no plano', publishedAt: daysAgo(3601), domain: 'testcorp.example' },
+  { source: 'rss', uri: 'https://testcorp.example/54', text: 'Lula reitera termdiluido no debate', publishedAt: daysAgo(3602), domain: 'testcorp.example' },
+  { source: 'rss', uri: 'https://testcorp.example/55', text: 'Lula insiste em termdiluido na entrevista', publishedAt: daysAgo(3603), domain: 'testcorp.example' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

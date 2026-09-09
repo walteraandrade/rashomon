@@ -3,13 +3,14 @@
 // a browser canvas adapter at the call site (see public/design-5.html). That is what lets this
 // module run, and be tested, outside a browser: pass any deterministic stand-in measure.
 
-import { label, score } from './format.js'
+import { foldTestimonyDomains, label, score, testimonyPosition } from './format.js'
 
 /** @typedef {import('./format.js').Box} Box */
 /** @typedef {import('./format.js').CenterBox} CenterBox */
 /** @typedef {import('./format.js').Layout} Layout */
 /** @typedef {import('./format.js').Measure} Measure */
 /** @typedef {import('./format.js').PlacedTerm} PlacedTerm */
+/** @typedef {import('./format.js').TestimonyDomainRow} TestimonyDomainRow */
 /** @typedef {import('./format.js').Term} Term */
 
 // Must stay in sync with atlas.css's --sans / --display custom properties: canvas text
@@ -285,3 +286,51 @@ export const swarm = (items, gap = 1.5) => {
   }
   return placed
 }
+
+export const STRIP_PAD = 28
+
+// Dot radius from the number of scored texts: area grows with n, so 100 texts read as
+// noticeably more than 10 without a single outlet swallowing the axis. On a narrow strip the
+// dots shrink with it (down to 55%), or a phone would get a stack three times taller than
+// the axis is wide.
+/** @param {number} n @param {number} [width] */
+export const stripRadius = (n, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
+
+// The strip never grows past this: a person with many outlets on similar scores (Lula: 148
+// outlets in under half the axis) stacked a 1262px tower at full size. Past the cap the dots
+// shrink together until the swarm fits, so every outlet stays, none overlap, and only the
+// absolute size gives -- which is fine, the strip compares outlets of one person, never two
+// people. STRIP_MIN_R is where shrinking stops and the height is allowed to grow again.
+export const STRIP_MAX_HEIGHT = 320
+export const STRIP_MIN_R = 3
+
+// The geometry of the strip at a given pixel width: one circle per outlet on the -10..+10
+// axis, stacked by `swarm` where they would overlap. Exported so a test can assert the
+// placement without a browser. `scale` is the shrink factor the cap forced (1 = none).
+/** @param {import('./format.js').TestimonyDomainRow[]} rows @param {number} width */
+export const stripLayout = (rows, width) => {
+  const inner = Math.max(80, width - 2 * STRIP_PAD)
+  /** @param {number} score */
+  const x = (score) => STRIP_PAD + (testimonyPosition(score) / 100) * inner
+  const folded = foldTestimonyDomains(rows).map((d) => ({ ...d, x: x(d.score), r: stripRadius(d.n, width) }))
+  const smallest = folded.reduce((m, d) => Math.min(m, d.r), Infinity)
+  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
+  let scale = 1
+  /** @param {number} k */
+  const attempt = (k) => {
+    const dots = swarm(folded.map((d) => ({ ...d, r: d.r * k })))
+    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
+    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
+  }
+  let fit = attempt(scale)
+  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
+    scale = Math.max(floor, scale * 0.92)
+    fit = attempt(scale)
+  }
+  return { dots: fit.dots, x, half: fit.half, height: fit.half * 2, width, scale }
+}
+
+// The strip under the map: the same outlets as the panel's "Por veículo" block, drawn on the
+// axis so the distance between two outlets is visible, which a list cannot show. Clicking a
+// dot narrows the recorte exactly like the panel and the outlet list do. Text stays in HTML
+// (the SVG only holds shapes), so labels never scale down with the axis on a narrow screen.

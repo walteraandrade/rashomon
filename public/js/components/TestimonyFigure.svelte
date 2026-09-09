@@ -7,16 +7,18 @@
 
   // Both payloads arrive on their own schedule and either may still be missing; `person` is
   // here only so a new person drops the outlet in focus.
-  /** @type {{ testimony?: Testimony | null, outletRows?: OutletRow[] | null, status?: 'loading' | 'ready' | 'error', person?: string, width?: number }} */
-  let { testimony = null, outletRows = null, status = 'loading', person = '', width = 860 } = $props()
+  /** @type {{ testimony?: Testimony | null, outletRows?: OutletRow[] | null, status?: 'loading' | 'ready' | 'error', person?: string, width?: number, initialOutlet?: string }} */
+  let { testimony = null, outletRows = null, status = 'loading', person = '', width = 860, initialOutlet = 'all' } = $props()
 
   // The outlet in focus. It never leaves this component, so it cannot reach api.js's
   // querystring builder: picking an outlet is a reading inside this figure and stops here.
-  let outlet = $state('all')
+  // `initialOutlet` only seeds it, so a test can render a focused figure without a click.
+  // svelte-ignore state_referenced_locally
+  let outlet = $state(initialOutlet)
 
   $effect(() => {
     person
-    outlet = 'all'
+    outlet = initialOutlet
   })
 
   // Carries "the fetch finished" and "there is something to draw" at once, with the score

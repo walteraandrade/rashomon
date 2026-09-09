@@ -1,38 +1,13 @@
 <script>
-  import { fmt, signed, sourceLabels, testimonyColor, testimonyPosition, foldTestimonyDomains } from '../format.js'
-  import { swarm } from '../layout.js'
+  import { fmt, signed, sourceLabels, testimonyColor, testimonyPosition } from '../format.js'
+  import { STRIP_PAD, stripLayout } from '../layout.js'
 
   /** @typedef {import('../format.js').TestimonyDomainRow} TestimonyDomainRow */
   /** @type {{ rows: TestimonyDomainRow[], overall: number, outlet?: string, onPick: (domain: string) => void, width?: number }} */
   let { rows, overall, outlet = 'all', onPick, width = 860 } = $props()
 
-  const PAD = 28
-  const MAX_HEIGHT = 320
-  const MIN_R = 3
-  /** @param {number} n @param {number} w */
-  const radius = (n, w) => Math.min(1, Math.max(0.55, w / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
+  const layout = $derived(stripLayout(rows, width))
 
-  const layout = $derived.by(() => {
-    const inner = Math.max(80, width - 2 * PAD)
-    /** @param {number} score */
-    const x = (score) => PAD + (testimonyPosition(score) / 100) * inner
-    const folded = foldTestimonyDomains(rows).map((d) => ({ ...d, x: x(d.score), r: radius(d.n, width) }))
-    const smallest = folded.reduce((m, d) => Math.min(m, d.r), Infinity)
-    const floor = smallest === Infinity ? 1 : Math.min(1, MIN_R / smallest)
-    /** @param {number} k */
-    const attempt = (k) => {
-      const dots = swarm(folded.map((d) => ({ ...d, r: d.r * k })))
-      const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
-      return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
-    }
-    let scale = 1
-    let fit = attempt(scale)
-    while (fit.half * 2 > MAX_HEIGHT && scale > floor) {
-      scale = Math.max(floor, scale * 0.92)
-      fit = attempt(scale)
-    }
-    return { dots: fit.dots, x, half: fit.half, height: fit.half * 2 }
-  })
 </script>
 
 {#if layout.dots.length && overall !== null && overall !== undefined}
@@ -43,7 +18,7 @@
     </div>
     <svg class="strip-svg" viewBox="0 0 {width} {layout.height}" {width} height={layout.height}
          role="group" aria-label="Veículos na régua da avaliação, de −10 a +10">
-      <line class="strip-axis" x1={PAD} x2={width - PAD} y1={layout.half} y2={layout.half} />
+      <line class="strip-axis" x1={STRIP_PAD} x2={width - STRIP_PAD} y1={layout.half} y2={layout.half} />
       {#each [-10, -5, 0, 5, 10] as s}
         <line class="strip-tick" x1={layout.x(s)} x2={layout.x(s)} y1={layout.half - 5} y2={layout.half + 5} />
       {/each}

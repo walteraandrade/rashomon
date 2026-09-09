@@ -7,7 +7,7 @@ import { app } from '../src/server.js'
 import { loadTestimony, narrowToTestimony, params, testimonyParams } from '../public/js/api.js'
 import { scopeKeys } from '../public/js/app.js'
 import { signed, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor } from '../public/js/format.js'
-import { paintColumns, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
+import { paintColumns } from '../public/js/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { seed } from './fixture.js'
 import './close.js'
@@ -97,41 +97,6 @@ describe('testimony UI: pure helpers', () => {
     assert.equal(signed(-2.16), '-2,16')
     assert.equal(signed(0), '0')
   })
-})
-
-describe('testimony UI: the painter', () => {
-  it('paints the overall score and the per-source means as chips, and leaves the outlet ranking to the merged list', () => {
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'all', onPick: () => {} })
-      assert.equal(els.testimonyLabel.textContent, '-2,16')
-      const html = els.testimonyList.innerHTML
-      assert.match(html, /<strong[^>]*>-2,16<\/strong>/)
-      assert.match(html, /neutro · média de 784 textos avaliados/)
-      assert.match(html, /<span class="source-chip"><b>Bluesky<\/b><span class="n">621<\/span>/, 'sources are labelled in pt-BR')
-      assert.match(html, /<b>GKG<\/b>/)
-      // The outlet ranking lives in paintOutlets now: the strip above is already the ruler, and
-      // a second ranking here was the same outlets read twice.
-      assert.doesNotMatch(html, /data-testimony-domain/)
-      assert.doesNotMatch(html, /class="scale"/, 'the strip above is the only −10..+10 ruler')
-      for (const value of inlineStyles(html)) assert.ok(value.startsWith('--'), `paintTestimony emitted style="${value}"`)
-    })
-  })
-
-  it('says the focused outlet\'s own score next to the overall one', () => {
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'bbc.com', onPick: () => {} })
-      assert.match(els.testimonyList.innerHTML, /<p class="focus"><b>bbc\.com<\/b>: <strong[^>]*>-2<\/strong> em 6 textos\. O número acima é o recorte inteiro\.<\/p>/)
-      assert.equal(els.testimonyLabel.textContent, '-2,16', 'the summary keeps the whole recorte')
-    })
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'tiny.example', onPick: () => {} })
-      assert.match(els.testimonyList.innerHTML, /<b>tiny\.example<\/b>: menos de 3 textos avaliados/)
-    })
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'all', onPick: () => {} })
-      assert.doesNotMatch(els.testimonyList.innerHTML, /class="focus"/)
-    })
-  })
 
   it('testimonyFocus folds one outlet across its sources, weighted by texts', () => {
     const rows = [
@@ -145,41 +110,6 @@ describe('testimony UI: the painter', () => {
     assert.equal(testimonyFocus(rows, 'nobody.example'), null)
   })
 
-  it('says when nothing was scored instead of showing a zero', () => {
-    withFakeDocument(ids, (els) => {
-      els.testimonyLabel.textContent = 'stale'
-      paintTestimony({ data: { method: 'kikori:q8:abc', overall: { score: null, n: 0 }, by_source: [], by_domain: [] }, domain: 'all', onPick: () => {} })
-      assert.equal(els.testimonyLabel.textContent, '')
-      assert.match(els.testimonyList.innerHTML, /Nenhum texto avaliado neste recorte \(método kikori:q8:abc\)/)
-      assert.doesNotMatch(els.testimonyList.innerHTML, /<strong/)
-    })
-  })
-
-  it('has loading and error states', () => {
-    withFakeDocument(ids, (els) => {
-      paintTestimonyLoading()
-      assert.equal(els.testimonyList.textContent, 'Carregando…')
-      assert.equal(els.testimonyLabel.textContent, '')
-      paintTestimonyError()
-      assert.match(els.testimonyList.innerHTML, /Não foi possível carregar a avaliação/)
-    })
-  })
-})
-
-describe('testimony UI: the route and the painter agree on the shape', () => {
-  before(() => seed())
-
-  it('what GET /api/people/:id/testimony returns paints without adaptation', async () => {
-    const res = await app.request('/api/people/tarcisio/testimony?' + testimonyParams({ days: '30', sort: 'count', limit: '18', source: 'all' }) + '&method=stub')
-    assert.equal(res.status, 200)
-    const data = await res.json()
-    assert.ok(data.overall.n > 0, 'the fixture must have scored rows in the window, or this proves nothing')
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data, domain: 'estadao.com.br', onPick: () => {} })
-      assert.equal(els.testimonyLabel.textContent, signed(data.overall.score))
-      assert.match(els.testimonyList.innerHTML, /<p class="focus"><b>estadao\.com\.br<\/b>/)
-    })
-  })
 })
 
 describe('testimony UI: the page holds the panel and explains it', () => {
@@ -250,7 +180,7 @@ describe('testimony strip: the outlets on the axis under the map', () => {
   })
 
   it('stripLayout puts -10 at the left pad, +10 at the right pad and sizes dots by texts', async () => {
-    const { stripLayout, stripRadius } = await import('../public/js/render.js')
+    const { stripLayout, stripRadius } = await import('../public/js/layout.js')
     const layout = stripLayout(
       [
         { domain: 'left.example', source: 'gnews', score: -10, n: 3 },
@@ -273,7 +203,7 @@ describe('testimony strip: the outlets on the axis under the map', () => {
   })
 
   it('caps the strip at STRIP_MAX_HEIGHT by shrinking every dot together, never by dropping one', async () => {
-    const { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripLayout } = await import('../public/js/render.js')
+    const { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripLayout } = await import('../public/js/layout.js')
     // 150 outlets inside a quarter of the axis, like Lula's, each with plenty of texts.
     const crowded = Array.from({ length: 150 }, (_, i) => ({ domain: `o${i}.example`, source: 'gnews', score: -5 + (i % 50) * 0.1, n: 5 + (i % 40) * 3 }))
     const full = stripLayout(crowded.slice(0, 5), 957)
@@ -302,37 +232,6 @@ describe('testimony strip: the outlets on the axis under the map', () => {
     assert.equal(grown.dots.length, 150)
     assert.ok(grown.height > STRIP_MAX_HEIGHT)
     assert.ok(grown.dots.every((d) => Math.abs(d.r - STRIP_MIN_R) < 1e-9))
-  })
-
-  it('paintStrip draws one dot per outlet, marks the active one, and hides itself with nothing to draw', () => {
-    withFakeDocument(['strip'], (els) => {
-      paintStrip({ data: sample, domain: 'bbc.com', onPick: () => {} })
-      assert.equal(els.strip.hidden, false)
-      const html = els.strip.innerHTML
-      const dots = [...html.matchAll(/data-strip-domain="([^"]+)"/g)].map((m) => m[1])
-      assert.deepEqual(dots, ['g1.globo.com', 'bbc.com', 'fdusp.bsky.social'])
-      assert.match(html, /class="strip-dot is-active" data-strip-domain="bbc\.com" role="button" tabindex="0" aria-pressed="true"/)
-      assert.match(html, /<title>g1\.globo\.com · Google News · -3,62 em 13 textos<\/title>/)
-      assert.match(html, /class="strip-mean" style="--pos:39\.2%">média da pessoa -2,16/)
-      assert.match(html, /<line class="strip-overall"/)
-      assert.match(html, /−10 contra<\/span><span>0<\/span><span>\+10 a favor/)
-      assert.match(html, /toque de novo, ou fora das bolinhas, para soltar/)
-      assert.match(html, /O atlas acima não muda\./)
-      for (const value of inlineStyles(html)) assert.ok(value.startsWith('--'), `paintStrip emitted style="${value}"`)
-      const g1 = Number(html.match(/data-strip-domain="g1\.globo\.com".*?<circle cx="([\d.]+)"/)?.[1])
-      const fdusp = Number(html.match(/data-strip-domain="fdusp\.bsky\.social".*?<circle cx="([\d.]+)"/)?.[1])
-      assert.ok(g1 < fdusp, 'a more hostile outlet sits further left')
-    })
-    withFakeDocument(['strip'], (els) => {
-      paintStrip({ data: { ...sample, by_domain: [] }, domain: 'all', onPick: () => {} })
-      assert.equal(els.strip.hidden, true)
-      assert.equal(els.strip.innerHTML, '')
-    })
-    withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      els.strip.hidden = false
-      paintTestimonyLoading()
-      assert.equal(els.strip.hidden, true, 'a load in flight blanks the strip too')
-    })
   })
 
   it('design-5.html makes the strip the chart of the second figure, and the como-ler page explains it', () => {

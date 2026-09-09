@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { paintCandidates, paintOutlets, wordMarkup } from '../public/js/render.js'
+import { paintCandidates, wordMarkup } from '../public/js/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 
 // Independent verification of issue #37's acceptance criteria, written from the issue text
@@ -91,18 +91,13 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
     const word = wordMarkup({ id: 'a', term: 'reforma', kind: 'word', pmi: 1, rank: 0, x: 1, y: 2, w: 90, h: 30, size: 28, lineHeight: 33, lines: ['reforma'], count: 4, score: 4 }, 'count')
     for (const value of inlineStyles(word)) assert.ok(value.startsWith('--'), `wordMarkup emitted style="${value}"`)
 
-    const emitted = withFakeDocument(['domainLabel', 'outletList', 'candidateLabel', 'candidateList'], (els) => {
-      paintOutlets({
-        rows: [{ domain: 'g1.globo.com', source: 'gnews', label: 'g1', docs: 4, tone: 1.5 }],
-        testimony: { method: 'stub', overall: { score: -1, n: 4 }, by_source: [], by_domain: [{ domain: 'g1.globo.com', source: 'gnews', score: -1.5, n: 4 }] },
-        domain: 'all',
-        onPick: () => {},
-      })
+    const emitted = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
       paintCandidates({ candidates: [{ name: 'Hugo Motta', count: 5, sources: 2, previous: 0, samples: [{ id: '1', source: 'gnews', text: 'texto' }] }] })
-      return els.outletList.innerHTML + els.candidateList.innerHTML
+      return els.candidateList.innerHTML
     })
     for (const value of inlineStyles(emitted)) assert.ok(value.startsWith('--'), `a painter emitted style="${value}"`)
-    assert.match(emitted, /style="--tone:/, 'tone is the one genuinely dynamic value and stays a --var override')
+    // --tone, the one genuinely dynamic value, is emitted by the testimony figure now; the
+    // same rule is asserted against its markup in test/testimony-svelte-acceptance.test.ts.
   })
 })
 

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { before, describe, it } from 'node:test'
 import { render } from 'svelte/server'
+import { app } from '../src/server.js'
+import { testimonyParams } from '../public/js/api.js'
+import { signed } from '../public/js/format.js'
+import { seed } from './fixture.js'
+import './close.js'
 import { TestimonyFigure } from '../.svelte-ssr/ssr.js'
 
 // The second figure as a Svelte component. What used to be paintTestimony + paintStrip +
@@ -56,6 +61,13 @@ describe('testimony figure (svelte)', () => {
     assert.doesNotMatch(paint({ status: 'ready', testimony: sample, outletRows }), /class="focus"/)
   })
 
+  it('every inline style it emits is a --var override, never a hardcoded declaration', () => {
+    const html = paint({ status: 'ready', testimony: sample, outletRows })
+    for (const [, value] of html.matchAll(/style="([^"]*)"/g))
+      assert.ok(value.trimStart().startsWith('--'), `the figure emitted style="${value}"`)
+    assert.match(html, /style="--tone:/, 'tone is the one genuinely dynamic value and stays a --var override')
+  })
+
   it('escapes an outlet name without an esc() call anywhere in the component', () => {
     const html = paint({
       status: 'ready',
@@ -76,5 +88,34 @@ describe('testimony figure (svelte)', () => {
     const html = paint({ status: 'ready', testimony: sample, outletRows })
     assert.equal(html.match(/class="strip-dot[^"]*"/g)?.length, 2)
     assert.match(html, /toque de novo para soltar|Toque numa bolinha/)
+  })
+
+  it("says the focused outlet's own score next to the recorte's, and marks its row and dot", () => {
+    const html = paint({ status: 'ready', testimony: sample, outletRows, initialOutlet: 'bbc.com' })
+    assert.match(html, /<p class="focus"><b>bbc\.com<\/b>/)
+    assert.match(html, /em 6 textos\./)
+    assert.match(html, /O número acima é o recorte inteiro\./)
+    assert.match(html, /class="outlet is-active"/)
+    assert.match(html, /class="strip-dot is-active"/)
+  })
+
+  it('an outlet with too few scored texts says so instead of inventing a mean', () => {
+    const html = paint({ status: 'ready', testimony: sample, outletRows, initialOutlet: 'tiny.example' })
+    assert.match(html, /<b>tiny\.example<\/b>/)
+    assert.match(html, /menos de 3 textos avaliados, sem média própria/)
+  })
+})
+
+describe('testimony figure (svelte): the route and the component agree on the shape', () => {
+  before(() => seed())
+
+  it('what GET /api/people/:id/testimony returns renders without adaptation', async () => {
+    const res = await app.request('/api/people/tarcisio/testimony?' + testimonyParams({ days: '30', sort: 'count', limit: '18', source: 'all' }) + '&method=stub')
+    assert.equal(res.status, 200)
+    const data = await res.json()
+    assert.ok(data.overall.n > 0, 'the fixture must have scored rows in the window, or this proves nothing')
+    const html = paint({ status: 'ready', testimony: data, initialOutlet: 'estadao.com.br' })
+    assert.match(html, new RegExp(signed(data.overall.score).replace('+', '\\+')))
+    assert.match(html, /<p class="focus"><b>estadao\.com\.br<\/b>/)
   })
 })

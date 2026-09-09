@@ -182,12 +182,11 @@ describe('candidatesFor direct call', () => {
 describe('AC7: "candidatos" list in the atlas', () => {
   const html = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
 
-  it('has a candidates panel in the side column, before the inspector', () => {
-    // Static markup, and the only thing still read out of design-5.html: issue #37 moved every
-    // line of behaviour into public/js/*.js, which the criteria below import and call.
-    assert.match(html, /<details class="outlets candidates" id="candidateQueue">/)
-    assert.ok(html.indexOf('id="candidateQueue"') < html.indexOf('id="inspector"'))
-    assert.match(html, /<summary class="eyebrow">Candidatos <b id="candidateLabel"><\/b><\/summary>/)
+  it('the atlas page no longer carries the candidates panel: it is a maintenance list, not a reading', () => {
+    // The UI redesign moved every side panel into the two figures; the queue kept its route
+    // and its painter (asserted below) but has no place on the reading page.
+    assert.doesNotMatch(html, /id="candidateQueue"/)
+    assert.doesNotMatch(html, /id="candidateList"/)
   })
 
   it('calls the route with the period select, min=3 and limit=30, and refreshes on a days change', () => {

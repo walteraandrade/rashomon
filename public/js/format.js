@@ -125,15 +125,22 @@ export const trendOf = (c) => {
 /** @param {string} c */
 const hex = (c) => [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16))
 
+// The middle of the ramp: a quiet grey, so "on the mean" reads as absence of signal next to
+// the red and the green, not as a third colour.
+export const SCALE_MID = '#8b909c'
+
 // A signed value on the red/grey/green ramp, clamped to ±span. A null/NaN value renders
 // transparent rather than a fake neutral color, so a doc with no signal never looks like it
-// scored zero.
-/** @param {number | null | undefined} value @param {number} span */
-const scaleColor = (value, span) => {
+// scored zero. With `fade`, the colour also thins out towards the middle (alpha .5 on the
+// mean, opaque at the ends), so a map's neutral words recede and the coloured ones carry it.
+/** @param {number | null | undefined} value @param {number} span @param {boolean} [fade] */
+const scaleColor = (value, span, fade = false) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return 'transparent'
   const x = Math.max(-span, Math.min(span, Number(value)))
-  const [from, to, k] = x < 0 ? [hex('#ff6b7d'), hex('#626a8c'), (x + span) / span] : [hex('#626a8c'), hex('#7ee787'), x / span]
-  return `rgb(${from.map((v, i) => Math.round(v + (to[i] - v) * k)).join(',')})`
+  const [from, to, k] = x < 0 ? [hex('#ff6b7d'), hex(SCALE_MID), (x + span) / span] : [hex(SCALE_MID), hex('#7ee787'), x / span]
+  const rgb = from.map((v, i) => Math.round(v + (to[i] - v) * k)).join(',')
+  const strength = Math.abs(x) / span
+  return fade && strength < 1 ? `rgba(${rgb},${(0.5 + 0.5 * strength).toFixed(2)})` : `rgb(${rgb})`
 }
 
 // Tone is a GDELT-only signal (see CLAUDE.md); political news sits around -1, so ±3 is the
@@ -167,7 +174,7 @@ export const MASK_MIN = 3
 export const MASK_SPAN = 1.5
 
 /** @param {number} delta */
-export const maskColor = (delta) => scaleColor(delta, MASK_SPAN)
+export const maskColor = (delta) => scaleColor(delta, MASK_SPAN, true)
 
 /** @param {{ testimony?: TermTestimony | null }} term @param {number | null | undefined} personScore @returns {string | null} */
 export const termMask = (term, personScore) => {

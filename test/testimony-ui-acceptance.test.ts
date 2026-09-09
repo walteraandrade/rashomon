@@ -85,7 +85,7 @@ describe('testimony UI: pure helpers', () => {
     assert.notEqual(testimonyColor(-2), testimonyColor(2))
     assert.equal(toneColor(-3), 'rgb(255,107,125)', 'the tone ramp is unchanged by the refactor')
     assert.equal(toneColor(3), 'rgb(126,231,135)')
-    assert.equal(toneColor(0), 'rgb(98,106,140)')
+    assert.equal(toneColor(0), 'rgb(139,144,156)')
     assert.equal(toneColor(null), 'transparent')
   })
 
@@ -191,17 +191,21 @@ describe('testimony UI: the route and the painter agree on the shape', () => {
 })
 
 describe('testimony UI: the page holds the panel and explains it', () => {
-  it('design-5.html has the panel in the side column, between the outlets and the candidates', () => {
+  it('design-5.html gives the avaliação its own figure: title with the score, the strip, then the lists', () => {
     const html = read('design-5.html')
-    const side = html.match(/<div class="side">([\s\S]*?)<aside/)?.[1] ?? ''
-    assert.match(side, /<details class="outlets testimony" id="testimony" open><summary class="eyebrow">Avaliação <b id="testimonyLabel"><\/b><\/summary><div id="testimonyList">/)
-    assert.ok(side.indexOf('id="outlets"') < side.indexOf('id="testimony"'), 'after the outlets')
-    assert.ok(side.indexOf('id="testimony"') < side.indexOf('id="candidateQueue"'), 'before the candidates')
+    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
+    assert.ok(figure, 'the second figure must exist')
+    assert.match(figure, /<h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"><\/b><\/h2>/)
+    assert.match(figure, /<figure class="strip" id="strip"[^>]*hidden><\/figure>/)
+    assert.match(figure, /<div class="testimony-lists" id="testimonyList">/)
+    assert.ok(figure.indexOf('id="strip"') < figure.indexOf('id="testimonyList"'), 'the chart comes before its lists')
+    assert.ok(figure.indexOf('id="testimonyList"') < figure.indexOf('id="outlets"'), 'the outlet list closes the figure')
+    assert.ok(html.indexOf('id="workspace"') < html.indexOf('id="testimony"'), 'after the atlas figure')
   })
 
-  it('the "Como ler" chapter defines the scale, the cut and the name bias', () => {
-    const chapter = read('design-5.html').match(/<section class="chapter" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
-    assert.match(chapter, /<h3>Avaliação<\/h3>/)
+  it('the "Como ler" page defines the scale, the cut and the name bias', () => {
+    const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.match(chapter, /<h3>Gráfico 2 · Avaliação por veículo<\/h3>/)
     assert.match(chapter, /nota de −10 a \+10/)
     assert.match(chapter, /Até −2,5 conta como contra; de \+2,5 para cima, a favor/)
     assert.match(chapter, /nunca compare a nota de uma pessoa com a de outra/)
@@ -340,12 +344,12 @@ describe('testimony strip: the outlets on the axis under the map', () => {
     })
   })
 
-  it('design-5.html holds the strip under the legend, inside the canvas, and the chapter explains it', () => {
+  it('design-5.html makes the strip the chart of the second figure, and the como-ler page explains it', () => {
     const html = read('design-5.html')
-    const canvas = html.match(/<div class="canvas">([\s\S]*?)<div class="side">/)?.[1] ?? ''
-    assert.match(canvas, /<div class="legend" id="legend"><\/div>\s*<figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden><\/figure>/)
-    const chapter = html.match(/<section class="chapter" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
-    assert.match(chapter, /<b>A régua embaixo do mapa<\/b>/)
+    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
+    assert.match(figure, /<\/header>\s*<figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden><\/figure>/)
+    const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.match(chapter, /<b>A régua<\/b>/)
     assert.match(chapter, /a linha vertical é a média da pessoa/)
   })
 })
@@ -426,14 +430,14 @@ describe('testimony mask: words coloured against the person mean', () => {
   })
 
   it('the workspace carries an id so a reload can dim it in place instead of blanking the map', () => {
-    assert.match(read('design-5.html'), /<section class="workspace" id="workspace"/)
+    assert.match(read('design-5.html'), /<section class="figure workspace" id="workspace"/)
     assert.match(read('atlas.css'), /\.workspace\.is-loading \.viewport[^{]*\{[^}]*opacity/)
   })
 
-  it('design-5.html has the toggle next to the view switch and the chapter explains the centring', () => {
+  it('design-5.html has the toggle next to the view switch, pressed by default, and the como-ler page explains the centring', () => {
     const html = read('design-5.html')
-    assert.match(html, /<button id="modeColumns" aria-pressed="false">Lista<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="false">Colorir por avaliação<\/button>/)
-    const chapter = html.match(/<section class="chapter" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.match(html, /<button id="modeColumns" aria-pressed="false">Lista<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação<\/button>/)
+    const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.match(chapter, /<b>Colorir por avaliação<\/b>/)
     assert.match(chapter, /com a média da pessoa no recorte, e não com o zero/)
     assert.match(chapter, /menos de 3 textos avaliados/)

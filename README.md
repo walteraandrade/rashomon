@@ -72,7 +72,7 @@ src/query.ts      query parsers; every parameter is clamped here
 src/scorers/*     one scorer per method, same signature
 src/server.ts     the Hono API and the static files
 src/perf.ts       opt-in request instrumentation; src/bench*.ts the baselines
-public/           design-5.html (the atlas), atlas.css, js/ (format, api,
+public/           design-5.html (the atlas), como-ler.html, atlas.css, js/ (format, api,
                   layout, render, state, app — imported one way, acyclic)
 test/             node:test suites; fixture.ts seeds the in-memory database
 seed.json         tracked people and aliases

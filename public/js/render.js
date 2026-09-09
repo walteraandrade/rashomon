@@ -67,7 +67,7 @@ export const drawMap = ({ layout, personName, about, mode, sort, onChoose, perso
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
   $('viewport').innerHTML =
-    `<div class="map-stage"><svg class="map-svg" viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a ${esc(personName)}"><defs><radialGradient id="halo"><stop offset="0" stop-color="#e2c47c" stop-opacity=".045"/><stop offset="1" stop-color="#e2c47c" stop-opacity="0"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g>` +
+    `<div class="map-stage"><svg class="map-svg" viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a ${esc(personName)}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g>` +
     `<g class="center-label" aria-label="Pessoa central: ${esc(personName)}"><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => `<tspan x="0" y="${textY + i * c.lineHeight}">${esc(line)}</tspan>`).join('')}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g>` +
     `<g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null)).join('')}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>`
   $('overflow').hidden = mode !== 'map' || !overflow.length
@@ -99,8 +99,11 @@ export const paintSelection = ({ nodes, links, selected, search, layout, mode, s
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
   // The mask is a class on the two surfaces that draw words; the colours are already there.
-  $('viewport').querySelector('svg')?.classList.toggle('is-masked', mask)
-  $('columns').classList.toggle('is-masked', mask)
+  // With no person mean in the recorte there is nothing to compare against, so the class
+  // stays off and the words keep their ink instead of all going grey.
+  const masked = mask && personTestimony?.score !== null && personTestimony?.score !== undefined
+  $('viewport').querySelector('svg')?.classList.toggle('is-masked', masked)
+  $('columns').classList.toggle('is-masked', masked)
   if ($('maskLegend')) $('maskLegend').hidden = !mask
   for (const el of queryAll('[data-node]')) {
     const n = nodes.find((n) => n.id === el.dataset.node)
@@ -168,34 +171,22 @@ const relatedButtons = (items, sort, counts = true) =>
   items.map(({ node: n, count }) => `<button data-related="${esc(n.id)}"><span>${esc(label(n))}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`).join('')
 
 // Paints the inspector for the current selection (or the person summary when nothing is
-// selected) and triggers the docs panel via `onShowDocs`, matching the original's own call
-// to loadDocs from inside inspect().
+// selected). Documents are never fetched from here: the one button hands the term (or null,
+// for the person) to `onShowDocs`, and the caller opens the modal and loads on that click only.
 /** @param {{ graph: Graph | null, nodes: Term[], links: Link[], selected: string | null, sort: string, daysLabel: string, onChoose: (id: string) => void, onShowDocs: (n: Term | null) => void }} args */
 export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoose, onShowDocs }) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML =
       `<div class="eyebrow">A pessoa no centro</div><h3>${esc(graph?.person?.name || '')}</h3><div class="metric"><div><strong>${fmt(graph?.stats?.about)}</strong><span>documentos sobre a pessoa</span></div><div><strong>${nodes.length}</strong><span>termos no recorte</span></div></div><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p>` +
-      `<div class="eyebrow">Comece por · ${scoreName(sort)}</div><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div><div id="docs" aria-live="polite"></div>`
-    onShowDocs(null)
+      `<div class="eyebrow">Comece por · ${scoreName(sort)}</div><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div><button class="docs-open" id="docsOpen">Ler documentos sobre a pessoa</button>`
   } else {
     const related = relatedTo(nodes, links, n.id)
     $('inspector').innerHTML =
       `<div class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</div><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><div class="metric"><div><strong>${fmt(n.count)}</strong><span>documentos</span></div><div><strong>${fmt(n.pmi)}</strong><span>PMI bruto</span></div></div><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
-      `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><details class="docs-toggle" id="termDocs"><summary>Ler documentos deste termo</summary><div id="docs" aria-live="polite"></div></details>`
-    // The documents live inside the <details>, so opening them grows the panel in place
-    // instead of pushing the rest of the inspector down. The fetch is deferred to the first
-    // open, and `loaded` keeps a close/open cycle from refetching what is already painted.
-    const termDocs = $('termDocs')
-    termDocs?.addEventListener('toggle', () => {
-      const summary = termDocs.querySelector('summary')
-      if (summary) summary.textContent = termDocs.open ? 'Ocultar documentos' : 'Ler documentos deste termo'
-      if (termDocs.open && !termDocs.dataset.loaded) {
-        termDocs.dataset.loaded = '1'
-        onShowDocs(n)
-      }
-    })
+      `<div class="eyebrow">Aparece junto com · docs</div><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><button class="docs-open" id="docsOpen">Ler documentos deste termo</button>`
   }
+  $('docsOpen')?.addEventListener('click', () => onShowDocs(n ?? null))
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {
         onChoose(String(el.dataset.related))
@@ -262,12 +253,14 @@ export const paintTestimony = ({ data, domain, onPick }) => {
     by_source.map((r) => `<div class="outlet"><span class="d">${esc(sourceLabels[r.source] ?? r.source)}</span><span class="s"></span><span class="n">${fmt(r.n)}</span>${chip(r.score)}</div>`).join('') +
     '<div class="eyebrow sub">Por veículo</div>' +
     (domains.length
-      ? domains
+      ? '<div class="outlet-scroll">' +
+        domains
           .map(
             (r) =>
               `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-testimony-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" title="${esc(r.source)}"><span class="d">${esc(r.domain)}</span><span class="s">${esc(sourceLabels[r.source] ?? r.source)}</span><span class="n">${fmt(r.n)}</span>${chip(r.score)}</button>`,
           )
-          .join('')
+          .join('') +
+        '</div>'
       : '<p class="note">Nenhum veículo com 3 ou mais textos avaliados neste recorte.</p>') +
     `<p class="note">Nota de −10 a +10 que o modelo kikori (${esc(method)}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
   queryAll('[data-testimony-domain]', $('testimonyList')).forEach((el) =>
@@ -349,7 +342,7 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
   strip.hidden = false
   const tick = (/** @type {number} */ s) => `<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
   strip.innerHTML =
-    `<div class="eyebrow">Veículos na régua</div><div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>` +
+    `<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>` +
     `<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Veículos na régua da avaliação, de −10 a +10">` +
     `<line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(tick).join('')}` +
     `<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>` +
@@ -381,6 +374,14 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
 export const paintDocsLoading = () => {
   const box = $('docs')
   if (box) box.textContent = 'Carregando documentos…'
+}
+
+// The modal's own heading: which documents these are. Kicker and title are the two elements
+// the markup gives the dialog, so this is the only painter that touches them.
+/** @param {{ term: Term | null, personName: string }} args */
+export const paintDocsTitle = ({ term, personName }) => {
+  if ($('docsKicker')) $('docsKicker').textContent = term ? `Documentos com ${kinds[term.kind] ? kinds[term.kind].toLowerCase() : 'o termo'}` : 'Documentos sobre'
+  if ($('docsTitle')) $('docsTitle').textContent = term ? label(term) : personName
 }
 
 /** @param {{ docs: Doc[], total: number }} data */

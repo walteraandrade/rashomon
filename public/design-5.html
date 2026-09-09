@@ -12,8 +12,13 @@
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="40" height="40">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="compare-link" href="#compare">comparar pessoas</a><a href="como-ler.html">como ler</a></nav></header>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="32" height="32">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="compare-link" href="#compare">comparar pessoas</a><a href="como-ler.html">como ler</a></nav></header>
 <main>
+  <header class="masthead">
+    <p class="eyebrow">Rashomon · atlas</p>
+    <h1>Quais palavras grudam num nome</h1>
+    <p class="lede">Posts, notícias e discursos que citam a mesma pessoa, lidos juntos. Escolha o recorte na frase de cada gráfico.</p>
+  </header>
   <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 1</span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"></b></h2></div>
@@ -57,12 +62,12 @@
     </header>
     <p class="status" id="compareStatus" role="status" hidden>Os dois lados mostram a mesma pessoa.</p>
     <figure class="ruler" id="compareRuler" aria-label="Régua comparando as duas pessoas" hidden></figure>
-    <p class="detail" id="compareDetail"><span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span></p>
+    <div class="detail" id="compareDetail"><span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span></div>
     <p class="note" id="compareHiddenNote" hidden></p>
   </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
-  <div class="docs-dialog-head"><div><span class="eyebrow" id="docsKicker">Documentos</span><h3 id="docsTitle"></h3></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
+  <div class="docs-dialog-head"><div><span class="eyebrow" id="docsKicker">Documentos</span><h2 id="docsTitle"></h2></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
   <div id="docs" aria-live="polite"></div>
 </dialog>
 <script type="module" src="./bundle.js"></script>

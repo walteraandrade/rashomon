@@ -318,7 +318,7 @@ describe('AC10: clicking a dot fills the detail line, and clicking it again or t
       assert.ok(dot, 'the ruler must render one clickable dot')
       dot.fire('click')
       assert.match(els.compareDetail.innerHTML, /Geraldo/)
-      assert.match(els.compareDetail.innerHTML, /Simone: nenhum documento/)
+      assert.match(els.compareDetail.innerHTML, /<dt>Simone<\/dt><dd class="empty-hint">nenhum documento<\/dd>/)
       assert.doesNotMatch(els.compareDetail.innerHTML, /0 documentos/)
     })
   })

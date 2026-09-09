@@ -47,7 +47,7 @@ describe('term documents open in a modal, and only on request', () => {
     const html = read('design-5.html')
     const dialog = html.match(/<dialog class="docs-dialog" id="docsDialog"[^>]*>([\s\S]*?)<\/dialog>/)?.[1] ?? ''
     assert.ok(dialog, 'the dialog must exist')
-    assert.match(dialog, /<h3 id="docsTitle"><\/h3>/)
+    assert.match(dialog, /<h2 id="docsTitle"><\/h2>/)
     assert.match(dialog, /<button id="docsClose"/)
     assert.match(dialog, /<div id="docs" aria-live="polite"><\/div>/)
     assert.equal(html.match(/id="docs"/g)?.length, 1, 'one docs container on the page')

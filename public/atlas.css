@@ -1,3 +1,32 @@
+/* ============================================================================
+   rashomon · type system
+
+   This site draws no borders and spends almost no colour. Every limit a reader
+   sees -- where a section starts, what is a title and what is a caption, which
+   number is the answer -- is drawn by type alone. Four dials do that work, and
+   nothing else is allowed to:
+
+     1. FAMILY  League Spartan names a thing. Instrument Sans explains a thing.
+     2. SIZE    One ramp, --t-*. A component never invents a size.
+     3. COLOUR  --ink says "read this", --muted says "this supports it",
+                --accent marks the one thing under the cursor or in focus.
+     4. SPACE   The gap above a heading IS its rank. More air, higher rank.
+
+   The hierarchy, top to bottom:
+
+     h1        --t-mega  display 700  ink    what this page is        (once per page)
+     h2        --t-xl    display 700  ink    what this section is
+     h3        --t-lg    display 700  ink    what this block is
+     h4        --t-md    display 600  ink    one thing inside a block
+     .lede     --t-lg    sans 400     muted  the sentence under an h1
+     .sentence --t-lg    sans 500     ink    the sentence you can change
+     p, li     --t-base  sans 400     ink    prose
+     .figure-sub --t-sm  sans 400     muted  prose that supports a title
+     .note,.meta --t-xs  sans 400     muted  captions, counts, footnotes
+     .eyebrow  --t-2xs   display 500  muted  names the rank right below it
+     dt / dd             see "definition pairs"
+   ========================================================================= */
+
 :root {
   --bg: #101010;
   --panel: #181818;
@@ -16,73 +45,169 @@
      balanceColor, whose ends resolve to these exact colours. */
   --cmp-a: #7fa8ff;
   --cmp-b: #ff9d6b;
+
   --sans: 'Instrument Sans', system-ui, sans-serif;
   --display: 'League Spartan', 'Instrument Sans', system-ui, sans-serif;
+
+  /* The ramp. Nine steps, ratio around 1.25, the top three fluid so a 375px phone and a 1440px
+     desktop read the same ranks rather than the same pixels. --t-micro is the floor and exists
+     for SVG labels only; nothing on this site is smaller. */
+  --t-mega: clamp(38px, 5.6vw, 68px);
+  --t-xl: clamp(26px, 3vw, 38px);
+  --t-lg: clamp(20px, 2.2vw, 26px);
+  --t-md: 19px;
+  --t-base: 16px;
+  --t-sm: 15px;
+  --t-xs: 14px;
+  --t-2xs: 12px;
+  --t-micro: 11px;
+
+  /* Line height falls as size rises: display type sets tight, prose sets open. --lh-chip is the
+     sentence's own, where a <select> chip needs room to sit on the line without touching it. */
+  --lh-tight: 1.02;
+  --lh-snug: 1.15;
+  --lh-mid: 1.35;
+  --lh-body: 1.6;
+  --lh-chip: 2;
+
+  /* League Spartan is drawn wide; big sizes need it pulled in, small labels need it pushed out. */
+  --tr-mega: -.035em;
+  --tr-xl: -.025em;
+  --tr-lg: -.015em;
+  --tr-label: .14em;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: clamp(56px, 7vw, 96px);
+
+  /* A line of prose stops being readable past ~70 characters. Big type stops sooner. */
+  --measure: 66ch;
+  --measure-narrow: 48ch;
+  --measure-lede: 42ch;
+
   --gutter: clamp(16px, 4vw, 56px);
 }
 
 * { box-sizing: border-box; }
 html { overflow-x: hidden; scroll-behavior: smooth; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); overflow-x: hidden; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 var(--t-base)/var(--lh-body) var(--sans); overflow-x: hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input, select { font: inherit; color: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .45; }
-a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 [hidden] { display: none !important; }
-p { margin: 0; }
-h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 700; letter-spacing: -.01em; text-wrap: balance; }
-select option { background: var(--panel); color: var(--ink); font-size: 16px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
+/* ---------- the elements, one fixed style each ---------- */
+/* Headings are the display family without exception, and they carry no colour of their own: a
+   heading that needed --accent to be found is a heading in the wrong place. */
+h1, h2, h3, h4 { margin: 0; font-family: var(--display); color: var(--ink); text-wrap: balance; }
+h1 { font-size: var(--t-mega); font-weight: 700; line-height: var(--lh-tight); letter-spacing: var(--tr-mega); }
+h2 { font-size: var(--t-xl); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-xl); }
+h3 { font-size: var(--t-lg); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); }
+h4 { font-size: var(--t-md); font-weight: 600; line-height: var(--lh-mid); }
+
+p, li { margin: 0; font-size: var(--t-base); line-height: var(--lh-body); }
+p { max-width: var(--measure); }
+ol, ul { margin: 0; padding-left: 20px; }
+li + li { margin-top: var(--space-2); }
+
+/* <b> and <strong> mean two different jobs and get two different weights: <strong> raises a word
+   inside a sentence, <b> is the site's way of writing a value the sentence is about. */
+strong { font-weight: 600; }
+b { font-weight: 600; color: var(--ink); }
+em { font-style: italic; }
+a { color: var(--accent); }
+small { font-size: var(--t-xs); color: var(--muted); }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; color: var(--ink); }
+
+/* An eyebrow is the smallest type on the site and the only one that shouts in capitals. It never
+   stands alone: it names whatever sits directly under it, and it is what replaces a rule line. */
+.eyebrow, .stat dt { font-family: var(--display); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; text-transform: uppercase; letter-spacing: var(--tr-label); color: var(--muted); }
+
+/* Supporting prose. Three ranks below body, each one step smaller and all of them muted, so the
+   eye can skip every one of them and still get the page. */
+.lede { max-width: var(--measure-lede); font-size: var(--t-lg); line-height: var(--lh-mid); color: var(--muted); text-wrap: pretty; letter-spacing: var(--tr-lg); }
+.figure-sub, .chapter-intro { font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: var(--measure); text-wrap: pretty; }
+.note, .meta, .empty-hint { font-size: var(--t-xs); line-height: var(--lh-body); color: var(--muted); }
+
+/* ---------- definition pairs ---------- */
+/* dt names, dd answers. The default is a real definition list: the term in display type, its
+   explanation in sans underneath. */
+dl { margin: 0; }
+dt { font-family: var(--display); font-size: var(--t-md); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); color: var(--ink); }
+dd { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); }
+
+/* .stat is the one named exception, and it inverts the pair: a measurement is a number with a
+   caption, not a term with a definition. So the dd becomes the headline and the dt drops to
+   eyebrow rank underneath it -- same two elements, one variant with a name to learn. */
+.stat > div { display: flex; flex-direction: column-reverse; gap: var(--space-1); }
+.stat dd { font-family: var(--display); font-size: var(--t-lg); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); color: var(--ink); font-variant-numeric: tabular-nums; }
+
 /* ---------- header ---------- */
-.top { display: flex; align-items: center; gap: 24px; padding: 18px var(--gutter); }
+.top { display: flex; align-items: center; gap: var(--space-5); padding: 18px var(--gutter); }
 /* Margin, not gap: gap would also push the accent dot away from the word. */
-.brand { display: inline-flex; align-items: center; font: 800 26px/1 var(--display); color: var(--ink); text-decoration: none; flex: 0 0 auto; }
-.brand img { width: 40px; height: 40px; margin-right: 12px; flex: 0 0 auto; }
+/* The mark shares its rank with an h3: the site's name is a peer of a block title, under the
+   page's own h1, which is the point of having an h1 at all. */
+.brand { display: inline-flex; align-items: center; font-family: var(--display); font-size: var(--t-lg); font-weight: 800; line-height: 1; letter-spacing: var(--tr-lg); color: var(--ink); text-decoration: none; flex: 0 0 auto; }
+.brand img { width: 32px; height: 32px; margin-right: var(--space-3); flex: 0 0 auto; }
 .brand span { color: var(--accent); }
 .person-pick:empty { display: none; }
-.top nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 20px; font-size: 15px; }
+.top nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-5); font-size: var(--t-sm); }
 .top nav a { color: var(--muted); text-decoration: none; }
 .top nav a:hover { color: var(--accent); }
-.eyebrow { font: 700 13px/1.2 var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 
-main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
+main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) var(--space-8); }
+
+/* ---------- masthead: the one h1 ---------- */
+/* The top of the ramp, and the only place --t-mega is allowed. Its job is to make every h2 below
+   read as "a part of this", which is what stops three figure cards from looking like three sites. */
+.masthead { padding: var(--space-6) 0 var(--space-7); }
+.masthead h1 { margin-top: var(--space-3); max-width: 16ch; }
+.masthead .lede { margin-top: var(--space-4); }
 
 /* ---------- the sentence that controls each figure's own recorte ---------- */
 /* Figure 1's stats badge, next to its title -- same spot and voice as #testimonyLabel next to
-   #testimonyTitle: no color of its own, so .figure-title h2 b's accent wins on both. */
-#atlasStats { font-size: 14px; font-weight: 500; white-space: nowrap; margin-left: 10px; }
-/* Each figure's sentence lives inside its own .figure-head now, which is a two-column grid
+   #testimonyTitle: no colour of its own, so .figure-title h2 b's accent wins on both. */
+#atlasStats { font-size: var(--t-xs); font-weight: 500; white-space: nowrap; margin-left: var(--space-2); letter-spacing: 0; }
+/* Each figure's sentence lives inside its own .figure-head, which is a two-column grid
    (title | subtitle); both figure heads wrap their sentence in the same .sentence div, so one
    rule spans it across both columns to read as its own row underneath them. */
-.figure-head > .sentence { grid-column: 1 / -1; margin-top: 4px; }
-.sentence { margin-bottom: 4px; }
-/* Each control is a chip on the line: a filled box with a chevron reads as "this changes", where
-   a bare underline read as a link. A <select> ignores line-height for its own box, so the chip
+.figure-head > .sentence { grid-column: 1 / -1; margin-top: var(--space-1); }
+.sentence { margin-bottom: var(--space-1); }
+/* The sentence sits at lede rank but in sans 500 and full --ink: it is the one paragraph on the
+   page a reader can edit, and it has to read as a control surface, not as a caption. Each
+   control is a chip on the line -- a filled box with a chevron reads as "this changes", where a
+   bare underline read as a link. A <select> ignores line-height for its own box, so the chip
    gets an explicit height; the sentence's line-height is what keeps daylight between lines. */
-.sentence-line { font-size: clamp(21px, 2.3vw, 28px); line-height: 2; font-weight: 500; max-width: 1120px; letter-spacing: -.01em; }
+.sentence-line { font-size: var(--t-lg); line-height: var(--lh-chip); font-weight: 500; max-width: 1120px; letter-spacing: var(--tr-lg); }
 .pick { display: inline-block; position: relative; max-width: 100%; vertical-align: baseline; margin: 0; }
 /* The chevron is drawn in CSS so it follows --accent; a data-URI SVG cannot read a token. */
 .pick::after { content: ''; position: absolute; right: .55em; top: 50%; width: .32em; height: .32em; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
 .pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 0; border-radius: .4em; padding: 0 1.25em 0 .5em; height: 1.55em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.55em; font-weight: 600; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s; }
 .pick select:hover { background-color: var(--line); color: var(--ink); }
 .pick select:focus-visible { outline-offset: 2px; }
-.status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 10px; min-height: 22px; }
-.status { font-size: 15px; color: var(--muted); }
+select option { background: var(--panel); color: var(--ink); font-size: var(--t-base); }
+.status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); min-height: 22px; }
+.status { font-size: var(--t-sm); color: var(--muted); }
 .status.error { color: var(--danger); }
-.domain-chip { color: var(--accent); font-size: 13px; padding: 4px 10px; }
-.domain-chip b { font-weight: 600; }
+.domain-chip { color: var(--accent); font-size: var(--t-xs); padding: var(--space-1) 10px; }
+.domain-chip b { font-weight: 600; color: inherit; }
 
 /* ---------- figures: one card per graph ---------- */
-.figure { margin-top: 28px; padding: 22px 24px 18px; border-radius: 12px; background: var(--panel); }
-.figure-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px 40px; align-items: end; padding-bottom: 16px; margin-bottom: 14px; }
-.figure-title { display: flex; flex-direction: column; gap: 6px; }
-.figure-title h2 { font-size: clamp(24px, 2.4vw, 32px); }
-.figure-title h2 b { color: var(--accent); font-variant-numeric: tabular-nums; }
-.figure-sub { font-size: 15px; line-height: 1.5; color: var(--muted); max-width: 72ch; }
-.figure-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
+.figure { margin-top: var(--space-7); padding: var(--space-5) var(--space-5) 18px; border-radius: 12px; background: var(--panel); }
+.figure-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-2) var(--space-7); align-items: end; padding-bottom: var(--space-4); margin-bottom: var(--space-4); }
+.figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
+/* The accent is spent here on purpose: the only word in a figure title that is a live number. */
+.figure-title h2 b { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: inherit; }
+
+.figure-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-6); align-items: start; }
 
 /* ---------- workspace: the atlas figure ---------- */
 /* A reload dims what is on screen instead of blanking it, so the column keeps its height and
@@ -90,25 +215,27 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .workspace .viewport, .workspace .columns, .workspace .inspector { transition: opacity .15s; }
 .workspace.is-loading .viewport, .workspace.is-loading .columns, .workspace.is-loading .inspector { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
-.map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-bottom: 14px; }
+.map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
 .search { flex: 1 1 220px; }
-.search input { width: 100%; background: var(--bg); border: 0; border-radius: 6px; min-height: 40px; padding: 8px 12px; font-size: 15px; }
+.search input { width: 100%; background: var(--bg); border: 0; border-radius: 6px; min-height: 40px; padding: var(--space-2) var(--space-3); font-size: var(--t-sm); }
 .search input::placeholder { color: var(--muted); }
 .segment { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border-radius: 999px; padding: 3px; background: var(--bg); }
-.segment button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 7px 14px; font-size: 14px; }
+.segment button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 7px var(--space-4); font-size: var(--t-xs); }
 .segment button[aria-pressed="true"], .segment button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .zoom { display: flex; align-items: center; gap: 6px; }
-.zoom button { width: 34px; height: 34px; padding: 0; font-size: 18px; }
-.zoom #zoomReset { width: 56px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.quiet-button { background: var(--soft); border: 0; padding: 7px 12px; border-radius: 6px; color: var(--muted); font-size: 14px; white-space: nowrap; }
+.zoom button { width: 34px; height: 34px; padding: 0; font-size: var(--t-md); }
+.zoom #zoomReset { width: 56px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; }
+.quiet-button { background: var(--soft); border: 0; padding: 7px var(--space-3); border-radius: 6px; color: var(--muted); font-size: var(--t-xs); white-space: nowrap; }
 .quiet-button:hover { color: var(--ink); background: var(--line); }
 .quiet-button.toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
-.mobile-hint { display: none; margin: 8px 0; color: var(--muted); font-size: 14px; }
-.search-note { color: var(--accent); font-size: 14px; padding-top: 8px; min-height: 24px; }
+.mobile-hint { display: none; margin: var(--space-2) 0; color: var(--muted); font-size: var(--t-xs); }
+.search-note { color: var(--accent); font-size: var(--t-xs); padding-top: var(--space-2); min-height: 24px; }
 
 .viewport { overflow: auto; min-height: 360px; scrollbar-color: var(--line) var(--bg); }
 .map-stage { width: fit-content; margin: auto; }
 .map-svg { display: block; width: var(--map-width, auto); height: auto; }
+/* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
+   point of the graph. The family and weight are still fixed here, like everywhere else. */
 .map-svg .word { font-family: var(--sans); font-weight: 500; fill: var(--ink); font-size: var(--size); }
 .word-button { cursor: pointer; }
 .word-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
@@ -124,25 +251,26 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .map-svg.is-masked .word-button .word, .map-svg.is-masked .word-button.is-neighbor .word { fill: var(--mask, var(--muted)); }
 .map-svg.is-masked .word-button.is-selected .word, .map-svg.is-masked .word-button.is-match .word { fill: var(--accent); }
 .map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
-.mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: 8px; vertical-align: middle; background: linear-gradient(90deg, #ff6b7d, rgba(139, 144, 156, .5), #7ee787); }
+.mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, #ff6b7d, rgba(139, 144, 156, .5), #7ee787); }
 .underline { stroke: var(--accent); stroke-width: 1.5; opacity: 0; }
 .word-button.is-selected .underline { opacity: 1; }
-.person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); }
-.micro { fill: var(--muted); font: 600 11px var(--display); letter-spacing: 2px; }
-.center-note { fill: var(--muted); font: 13px var(--sans); }
+.person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
+.micro { fill: var(--muted); font-family: var(--display); font-size: var(--t-micro); font-weight: 600; letter-spacing: var(--tr-label); text-transform: uppercase; }
+.center-note { fill: var(--muted); font-family: var(--sans); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
 .boundary { fill: none; stroke: var(--line); stroke-width: 1; }
 .halo-in { stop-color: var(--accent); stop-opacity: .045; }
 .halo-out { stop-color: var(--accent); stop-opacity: 0; }
 
-.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding: 14px 0; color: var(--muted); font-size: 14px; }
-.type-scale { display: inline-flex; align-items: baseline; gap: 5px; margin-right: 8px; color: var(--ink); }
-.type-scale span:first-child { font-size: 12px; }
-.type-scale span:last-child { font-size: 22px; }
-.legend i { display: inline-block; width: 22px; height: 1px; background: var(--accent); vertical-align: middle; margin-right: 8px; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; color: var(--muted); font-size: var(--t-xs); }
+.type-scale { display: inline-flex; align-items: baseline; gap: 5px; margin-right: var(--space-2); color: var(--ink); }
+.type-scale span:first-child { font-size: var(--t-2xs); }
+.type-scale span:last-child { font-size: var(--t-lg); }
+.legend i { display: inline-block; width: 22px; height: 1px; background: var(--accent); vertical-align: middle; margin-right: var(--space-2); }
+
 .strip { margin: 0; padding: 6px 0 10px; }
-.strip-mean-row { position: relative; height: 22px; margin-top: 10px; }
-.strip-mean { position: absolute; left: clamp(0px, var(--pos, 50%), 100%); transform: translateX(clamp(-100%, -50%, 0%)); font-size: 13px; color: var(--accent); white-space: nowrap; }
+.strip-mean-row { position: relative; height: 22px; margin-top: var(--space-3); }
+.strip-mean { position: absolute; left: clamp(0px, var(--pos, 50%), 100%); transform: translateX(clamp(-100%, -50%, 0%)); font-size: var(--t-2xs); color: var(--accent); white-space: nowrap; }
 .strip-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .strip-axis { stroke: var(--line); stroke-width: 2; }
 .strip-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
@@ -151,23 +279,26 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .strip-dot circle { fill: var(--tone, var(--muted)); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: stroke .12s; }
 .strip-dot:hover circle, .strip-dot:focus-visible circle { stroke: var(--ink); stroke-width: 2; fill-opacity: 1; }
 .strip-dot.is-active circle { stroke: var(--accent); stroke-width: 3; fill-opacity: 1; }
-.strip-axis-labels { display: flex; justify-content: space-between; padding: 8px 0 0; font-size: 14px; color: var(--muted); }
-.strip .note { font-size: 14px; color: var(--muted); margin-top: 10px; }
-.overflow { padding: 0 0 20px; }
-.overflow p { font-size: 15px; color: var(--muted); margin-bottom: 8px; }
-.overflow button { margin: 4px 6px 0 0; }
+.strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
+.strip .note { margin-top: var(--space-3); }
+
+.overflow { padding: 0 0 var(--space-5); }
+.overflow p { font-size: var(--t-sm); color: var(--muted); margin-bottom: var(--space-2); }
+.overflow button { margin: var(--space-1) 6px 0 0; }
 .overflow .is-dim { opacity: .35; }
 .overflow .is-match, .overflow .is-selected { color: var(--accent); }
 
-.columns { padding: 8px 0 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.columns { padding: var(--space-2) 0 var(--space-5); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 /* Each card gets a ground of its own: the metadata line and the word under it are one thing,
    and with no card behind them a reader on a three-column grid ties the line to the wrong word.
    A very light wash rather than a border, so eighteen of these do not read as a table. */
-.column-card { border: 0; padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; }
+.column-card { border: 0; padding: var(--space-3) var(--space-4); border-radius: 10px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; }
 .column-card:hover { background: var(--soft); }
 .column-card.is-selected { background: color-mix(in srgb, var(--accent) 9%, var(--soft)); }
-.column-card strong { display: block; font-size: clamp(20px, 2vw, 32px); font-weight: 500; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
-.column-card span { color: var(--muted); font-size: 14px; }
+/* The word carries the card, so it sits at h3 rank in sans -- the list is the map's other face
+   and the map writes its words in sans too. */
+.column-card strong { display: block; font-size: var(--t-lg); font-weight: 500; letter-spacing: -.02em; line-height: var(--lh-snug); overflow-wrap: anywhere; margin-top: var(--space-1); }
+.column-card span { display: block; color: var(--muted); font-size: var(--t-xs); }
 .column-card.is-selected strong, .column-card:hover strong { color: var(--accent); }
 .column-card.is-dim { opacity: .35; }
 .columns.is-masked .column-card strong { color: var(--mask, var(--muted)); }
@@ -177,97 +308,119 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .columns.is-masked .column-card:hover strong { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 
 /* ---------- the lists under the strip ---------- */
-.outlets { min-width: 0; padding-top: 4px; }
-.outlets > .eyebrow { display: flex; align-items: center; gap: 8px; padding: 0 0 6px; }
-.outlets .eyebrow b { color: var(--accent); text-transform: none; letter-spacing: 0; font: 500 15px var(--sans); overflow-wrap: anywhere; }
+.outlets { min-width: 0; padding-top: var(--space-1); }
+.outlets > .eyebrow { display: flex; align-items: center; gap: var(--space-2); padding: 0 0 6px; }
+.outlets .eyebrow b { color: var(--accent); text-transform: none; letter-spacing: 0; font-family: var(--sans); font-size: var(--t-sm); font-weight: 500; overflow-wrap: anywhere; }
 /* The one outlet list: as many columns as the figure is wide, so 80 outlets are a scrollable
    block of a few hundred pixels rather than a screen and a half of single-file rows. */
-.outlet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 28px; max-height: 210px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-#outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: 16px; font-size: 15px; color: var(--muted); }
-.outlet { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: 4px 0; font-size: 14px; color: inherit; }
+.outlet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 var(--space-6); max-height: 210px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+#outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: var(--space-4); font-size: var(--t-sm); color: var(--muted); }
+.outlet { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: var(--space-1) 0; font-size: var(--t-xs); color: inherit; }
 .outlet:hover { color: var(--accent); }
 .outlet.is-active { color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
 .outlet .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outlet .n { color: var(--muted); font-variant-numeric: tabular-nums; }
-.outlet .t { min-width: 40px; text-align: center; border-radius: 4px; padding: 2px 5px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
+.outlet .t { min-width: 40px; text-align: center; border-radius: 4px; padding: 2px 5px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
 .outlet .t:empty { visibility: hidden; }
-.outlets .note { font-size: 14px; color: var(--muted); margin: 12px 0 0; }
-.testimony-lists { min-width: 0; font-size: 15px; color: var(--muted); }
-/* The per-source means as one wrapping row of chips: four full-width rows cost 164px to say
-   four numbers, and the strip above already carries the shape of the distribution. */
-.source-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 4px; }
-.source-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--soft); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 14px; }
-.source-chip b { font-weight: 600; color: var(--ink); }
-.source-chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
-.testimony .verdict { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 4px 0 6px; }
-.testimony .verdict strong { font: 700 32px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--tone, var(--ink)); }
-.testimony .verdict span { font-size: 14px; color: var(--muted); }
-.testimony .sub { margin: 14px 0 2px; }
-.testimony .focus { margin: 6px 0 4px; font-size: 14px; color: var(--muted); }
-.testimony .focus b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
-.testimony .focus strong { color: var(--tone, var(--ink)); font-variant-numeric: tabular-nums; }
+.outlets .note { margin: var(--space-3) 0 0; }
+.testimony-lists { min-width: 0; font-size: var(--t-sm); color: var(--muted); }
 
-.inspector { padding: 12px 0 0 28px; min-width: 0; align-self: stretch; }
-.inspector h3 { font-size: 30px; line-height: 1.1; margin: 10px 0 18px; overflow-wrap: anywhere; }
-.metric { display: flex; flex-wrap: wrap; gap: 16px 28px; padding-bottom: 18px; margin-bottom: 18px; }
-.metric strong { display: block; font: 700 30px/1 var(--display); font-variant-numeric: tabular-nums; }
-.metric span { display: block; font-size: 14px; color: var(--muted); margin-top: 4px; }
-.inspector p { font-size: 15px; color: var(--muted); margin-bottom: 14px; }
-.score-highlight { color: var(--accent); }
-.empty-note { margin-top: 12px; }
-.related { margin: 8px 0 20px; }
-.related button { width: 100%; border: 0; background: none; display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 0; font-size: 17px; }
+/* Figure 2's answer: one stat pair, the number at h2 rank because it is what the whole figure is
+   for, and its name in eyebrow type underneath. The reading in words follows as a caption. */
+.testimony .verdict { padding: var(--space-1) 0 var(--space-1); }
+.testimony .verdict dd { font-size: var(--t-xl); line-height: 1; color: var(--tone, var(--ink)); }
+.testimony .verdict-class { margin-top: var(--space-1); font-size: var(--t-xs); color: var(--muted); }
+.testimony .sub { margin: var(--space-4) 0 2px; }
+.testimony .focus { margin: 6px 0 var(--space-1); font-size: var(--t-xs); color: var(--muted); }
+.testimony .focus b { overflow-wrap: anywhere; }
+.testimony .focus strong { color: var(--tone, var(--ink)); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* The per-source means as one wrapping row of stat chips: four full-width rows cost 164px to say
+   four numbers, and the strip above already carries the shape of the distribution. Inside a chip
+   the pair goes back upright -- name first, number after -- because the row is read sideways. */
+.source-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: 2px 0 var(--space-1); }
+.source-chip { display: inline-flex; align-items: center; gap: var(--space-2); background: var(--soft); border-radius: 999px; padding: 5px 6px 5px var(--space-3); }
+.source-chip dt { font-family: var(--sans); font-size: var(--t-xs); font-weight: 600; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.source-chip dd { display: inline-flex; align-items: center; gap: var(--space-2); font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.source-chip .n { font-variant-numeric: tabular-nums; }
+.source-chip .t { min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 6px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
+.source-chip .t:empty { display: none; }
+
+/* ---------- the atlas inspector ---------- */
+.inspector { padding: var(--space-3) 0 0 var(--space-6); min-width: 0; align-self: stretch; }
+/* The selected word is the subject of this column, so it is an h3 -- one rank under the figure's
+   own h2, which is exactly what it is. */
+.inspector h3 { margin: 10px 0 18px; overflow-wrap: anywhere; }
+.metric { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-6); padding-bottom: 18px; margin-bottom: 18px; }
+.inspector p { font-size: var(--t-sm); color: var(--muted); margin-bottom: var(--space-4); }
+.inspector .eyebrow { margin-top: var(--space-5); }
+.metric + p, .inspector .eyebrow:first-child { margin-top: 0; }
+.score-highlight { color: var(--accent); font-weight: 600; }
+.empty-note { margin-top: var(--space-3); }
+.related { margin: var(--space-2) 0 var(--space-5); }
+.related button { width: 100%; border: 0; background: none; display: flex; align-items: center; gap: var(--space-3); text-align: left; padding: 10px 0; font-size: var(--t-md); }
 .related button:hover span { color: var(--accent); }
 .related span { flex: 1; overflow-wrap: anywhere; }
-.related b { font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; }
-.docs-summary { margin: 0 0 6px; color: var(--muted); font-size: 14px; }
-.docs-open { width: 100%; margin-top: 4px; padding: 11px; border: 0; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-size: 15px; font-weight: 600; }
+.related b { font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; font-size: var(--t-sm); }
+.docs-summary { margin: 0 0 6px; color: var(--muted); font-size: var(--t-xs); }
+.docs-open { width: 100%; margin-top: var(--space-1); padding: 11px; border: 0; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-size: var(--t-sm); font-weight: 600; }
 .docs-open:hover { filter: brightness(1.08); }
 
 /* ---------- the documents modal ---------- */
 /* Documents are fetched only when this opens (issue: the main page must never GET /docs on its
-   own), and they scroll inside the dialog so a long text never grows the page. */
+   own), and they scroll inside the dialog so a long text never grows the page. A dialog is its
+   own document to a reader, so its title is an h2 and not a continuation of the page's ranks. */
 .docs-dialog { width: min(720px, calc(100vw - 32px)); max-height: min(85vh, 900px); margin: auto; padding: 0; border: 0; border-radius: 12px; background: var(--panel); color: var(--ink); display: none; flex-direction: column; }
 .docs-dialog[open] { display: flex; }
 .docs-dialog::backdrop { background: rgba(0, 0, 0, .6); }
-.docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 22px 14px; }
-.docs-dialog-head h3 { font-size: 26px; line-height: 1.1; margin-top: 4px; overflow-wrap: anywhere; }
-#docs { overflow-y: auto; scrollbar-width: thin; padding: 6px 22px 14px; min-height: 120px; }
-.doc { padding: 12px 0; }
-.doc p { margin: 6px 0; color: var(--ink); font-size: 15px; }
-.doc a { font-size: 14px; }
-.empty { padding: 80px 24px; text-align: center; color: var(--muted); font-size: 16px; }
+.docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
+.docs-dialog-head h2 { font-size: var(--t-lg); margin-top: var(--space-1); overflow-wrap: anywhere; }
+#docs { overflow-y: auto; scrollbar-width: thin; padding: 6px 22px var(--space-4); min-height: 120px; }
+.doc { padding: var(--space-3) 0; }
+.doc p { margin: 6px 0; color: var(--ink); font-size: var(--t-sm); }
+.doc a { font-size: var(--t-xs); }
+.empty { padding: 80px var(--space-5); text-align: center; color: var(--muted); font-size: var(--t-base); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
+/* ---------- candidates ---------- */
+.candidate .samples { padding-left: var(--space-3); }
+.candidate .doc .eyebrow { margin-bottom: var(--space-1); }
+
 /* ---------- the page that explains how to read ---------- */
-.reading { padding-top: 8px; }
-.chapter { margin-top: 8px; }
-.chapter-nav { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 30px; font-size: 15px; }
+/* Prose is the only place on the site where headings stack freely, so this is where the "space
+   is the rank" rule has to be spelled out: an h2 opens more air than an h3, an h3 more than a
+   paragraph, and nothing draws a line. :where() keeps the specificity at zero so any component
+   inside a chapter can still set its own margins. */
+.reading { padding-top: var(--space-2); }
+.chapter { margin-top: var(--space-2); }
+.chapter :where(h2) { margin-top: var(--space-7); }
+.chapter :where(h3) { margin-top: var(--space-6); }
+.chapter :where(h4) { margin-top: var(--space-5); }
+.chapter :where(h2, h3, h4):first-child { margin-top: 0; }
+.chapter :where(p, ol, ul, dl) { margin-top: var(--space-3); }
+.chapter :where(h2, h3, h4) + :where(p, ol, ul, dl) { margin-top: var(--space-2); }
+.chapter-nav { display: flex; flex-wrap: wrap; gap: var(--space-2) 22px; margin: var(--space-5) 0 var(--space-7); font-size: var(--t-sm); }
 .chapter-nav a { color: var(--muted); text-decoration: none; padding-bottom: 2px; }
 .chapter-nav a:hover { color: var(--accent); }
-.chapter-grid > div { scroll-margin-top: 24px; }
-.chapter h3[id] { scroll-margin-top: 24px; }
-.chapter h2 { font-size: clamp(26px, 3vw, 34px); margin-bottom: 8px; }
-.chapter-intro { color: var(--muted); max-width: 66ch; margin-bottom: 26px; }
-.chapter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 40px; }
-.chapter h3 { font-size: 20px; margin-bottom: 8px; }
-.chapter h3 + h3, .chapter p + h3, .chapter ol + h3, .chapter .pmi-scale + h3 { margin-top: 22px; }
-.chapter-grid p, .chapter-grid li { font-size: 15px; line-height: 1.55; color: var(--muted); max-width: 48ch; }
-.chapter-grid p + p { margin-top: 10px; }
+.chapter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-7) var(--space-7); align-items: start; }
+.chapter-grid > div { scroll-margin-top: var(--space-5); }
+.chapter h2[id], .chapter h3[id] { scroll-margin-top: var(--space-5); }
+/* Inside the grid a column is narrow, so prose drops one step to --t-sm and stays muted: the
+   headings above it are what a reader scans, and the body is what they land on. */
+.chapter-grid :where(p, li) { font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: var(--measure-narrow); }
+.chapter-grid :where(p) + :where(p) { margin-top: 10px; }
 .chapter-grid b { color: var(--ink); font-weight: 600; }
-/* A GDELT theme code quoted in prose: it is a machine token, and has to read as one. */
-.chapter-grid code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; color: var(--ink); }
-.chapter ol { margin: 0; padding-left: 20px; }
-.chapter li { margin-bottom: 8px; }
-.pmi-scale { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 14px; max-width: 440px; }
-.pmi-scale div { background: var(--panel); border-radius: 6px; padding: 10px 12px; }
-.pmi-scale b { display: block; font: 700 24px/1 var(--display); color: var(--accent); margin-bottom: 4px; }
-.pmi-scale span { font-size: 13px; color: var(--muted); }
-.chapter-foot { margin-top: 28px; padding-top: 16px; color: var(--muted); font-size: 14px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; }
+/* The PMI ladder is the site's one true definition list: a value, then what it means. It uses
+   the default dt/dd style, which is the whole reason that default exists. */
+.pmi-scale { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin: var(--space-3) 0 var(--space-4); max-width: 440px; }
+.pmi-scale > div { background: var(--panel); border-radius: 6px; padding: 10px var(--space-3); }
+.pmi-scale dt { font-size: var(--t-lg); color: var(--accent); margin-bottom: var(--space-1); font-variant-numeric: tabular-nums; }
+.pmi-scale dd { font-size: var(--t-2xs); line-height: 1.35; }
+.chapter-foot { margin-top: var(--space-6); padding-top: var(--space-4); color: var(--muted); font-size: var(--t-xs); display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-5); max-width: none; }
 
 /* ---------- figure 3: the ruler (compare two people, issue #91) ---------- */
 .ruler { margin: 18px 0 0; padding: 6px 0 10px; }
-.ruler-end-row { display: flex; justify-content: space-between; font-size: 14px; padding-bottom: 4px; }
+.ruler-end-row { display: flex; justify-content: space-between; font-size: var(--t-xs); padding-bottom: var(--space-1); }
 .ruler-end { font-weight: 600; overflow-wrap: anywhere; }
 .ruler-end.cmp-a { color: var(--cmp-a); }
 .ruler-end.cmp-b { color: var(--cmp-b); }
@@ -281,27 +434,32 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 .ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--cmp, var(--muted)) 12%, transparent); stroke: color-mix(in srgb, var(--cmp, var(--muted)) 45%, var(--bg)); }
 .ruler-word.is-selected .ruler-text { fill: var(--accent); }
 .ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: var(--accent); stroke-width: 2; }
-.ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.ruler-overflow p { flex: 1 0 100%; margin: 0; font-size: 14px; color: var(--muted); }
+.ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
+.ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
 .ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }
 .ruler-overflow .quiet-button:hover { color: var(--ink); }
 .ruler-overflow .quiet-button.is-selected { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
-.ruler-axis-labels { display: flex; justify-content: space-between; padding: 8px 0 0; font-size: 14px; color: var(--muted); }
-.ruler .note { font-size: 14px; color: var(--muted); margin-top: 10px; }
-/* The detail line and its two-state wording carry over from the deleted compare.html: the term
-   in League Spartan, each side's own numbers or "nenhum documento" next to it. */
-.detail { margin: 18px 0 0; min-height: 26px; font-size: 15px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px; }
-.detail .term { color: var(--ink); font: 700 20px/1.2 var(--display); }
-.detail .side b { color: var(--ink); font-weight: 600; }
-#compareHiddenNote { font-size: 14px; color: var(--muted); margin: 10px 0 0; }
+.ruler-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
+.ruler .note { margin-top: var(--space-3); }
+/* The detail line: the word at h4 rank because it is the subject of the line, then one stat pair
+   per person. Both sides keep the same shape whether the number is real or missing. */
+.detail { margin: 18px 0 0; min-height: 26px; }
+.detail .term { display: block; font-family: var(--display); font-size: var(--t-md); font-weight: 700; line-height: var(--lh-mid); letter-spacing: var(--tr-lg); color: var(--ink); }
+.detail-sides { display: flex; flex-wrap: wrap; gap: var(--space-1) 22px; margin-top: var(--space-1); }
+.detail-sides > div { min-width: 0; }
+.detail-sides dt { font-family: var(--sans); font-size: var(--t-xs); font-weight: 600; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ink); overflow-wrap: anywhere; }
+.detail-sides dd { font-size: var(--t-xs); color: var(--muted); }
+.detail-sides dd b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.detail-sides dd.empty-hint { color: var(--muted); font-style: italic; }
+#compareHiddenNote { margin: 10px 0 0; }
 #compareA, #compareB { font-family: var(--display); }
 
 /* ---------- smaller screens ---------- */
 @media (max-width: 1000px) {
-  .figure { padding: 18px 16px 14px; }
+  .figure { padding: 18px var(--space-4) var(--space-4); }
   .figure-head { grid-template-columns: 1fr; }
-  .figure-body { grid-template-columns: 1fr; gap: 20px; }
-  .inspector { padding: 16px 0 0; }
+  .figure-body { grid-template-columns: 1fr; gap: var(--space-5); }
+  .inspector { padding: var(--space-4) 0 0; }
   .columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .related { display: grid; grid-template-columns: 1fr 1fr; gap: 0 25px; }
   .chapter-grid { grid-template-columns: 1fr 1fr; }
@@ -309,8 +467,10 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 
 @media (max-width: 700px) {
   .mobile-hint { display: block; }
-  .top { flex-wrap: wrap; gap: 12px 20px; }
+  .top { flex-wrap: wrap; gap: var(--space-3) var(--space-5); }
   .top nav { margin-left: 0; width: 100%; }
+  .masthead { padding: var(--space-5) 0 var(--space-6); }
+  .masthead h1 { max-width: none; }
   .columns { grid-template-columns: 1fr; }
   .related { grid-template-columns: 1fr; }
   .chapter-grid { grid-template-columns: 1fr; }

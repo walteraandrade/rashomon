@@ -12,15 +12,19 @@
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="40" height="40">rashomon<span>.</span></a><nav><a href="/">atlas</a><a class="compare-link" href="/#compare">comparar pessoas</a></nav></header>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="32" height="32">rashomon<span>.</span></a><nav><a href="/">atlas</a><a class="compare-link" href="/#compare">comparar pessoas</a></nav></header>
 <main class="reading">
+  <header class="masthead">
+    <p class="eyebrow">Rashomon · guia</p>
+    <h1 id="comoLerTitle">Como ler o rashomon</h1>
+    <p class="lede">O site junta textos que citam uma pessoa pública e mostra três gráficos sobre eles: o atlas de palavras, a avaliação por veículo e a régua que compara duas pessoas.</p>
+  </header>
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
-    <h2 id="comoLerTitle">Como ler o rashomon</h2>
-    <p class="chapter-intro">O site junta textos que citam uma pessoa pública e mostra três gráficos sobre eles: o atlas de palavras, a avaliação por veículo e a régua que compara duas pessoas. Tudo vale só para o recorte escolhido na frase de cada gráfico: pessoa, período e fonte.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Como fazer uma análise</a><a href="#atlas">Gráfico 1 · Atlas</a><a href="#avaliacao">Gráfico 2 · Avaliação</a><a href="#comparar">Gráfico 3 · Comparar</a><a href="#pmi">PMI</a></nav>
+    <p class="chapter-intro">Tudo vale só para o recorte escolhido na frase de cada gráfico: pessoa, período e fonte. Trocar o recorte troca todos os números desta página.</p>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Como fazer uma análise</a><a href="#atlas">Gráfico 1 · Atlas</a><a href="#avaliacao">Gráfico 2 · Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Gráfico 3 · Comparar</a></nav>
     <div class="chapter-grid">
       <div id="analise">
-        <h3>Como fazer uma análise</h3>
+        <h2>Como fazer uma análise</h2>
         <ol>
           <li><b>Escolha uma pessoa.</b> O site junta textos que citam ela: posts do Bluesky, notícias, discursos na Câmara e no Senado.</li>
           <li><b>Escolha o período e a fonte.</b> Isso é o recorte. Tudo que aparece depois vale só para esse recorte.</li>
@@ -30,7 +34,7 @@
         </ol>
       </div>
       <div id="atlas">
-        <h3>Gráfico 1 · Atlas de palavras</h3>
+        <h2>Gráfico 1 · Atlas de palavras</h2>
         <p>O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. As posições evitam colisões; elas não medem distância nem opinião.</p>
         <h3>Frequência</h3>
         <p>Em quantos textos sobre a pessoa a palavra aparece. Uma palavra em 173 de 440 textos é grande no mapa. Frequência diz o que se fala muito.</p>
@@ -51,25 +55,27 @@
         <p><b>Colorir por avaliação</b> pinta cada palavra do mapa, e vem ligado por padrão. A cor compara a nota média dos textos que têm a palavra com a média da pessoa no recorte, e não com o zero: assim o vício do nome some da conta. Vermelho: os textos com essa palavra são mais hostis que o normal para essa pessoa. Verde: mais favoráveis. Cinza: igual, ou menos de 3 textos avaliados. A cor resume dois números; ao clicar na palavra, os dois aparecem por extenso.</p>
       </div>
       <div id="avaliacao">
-        <h3>Gráfico 2 · Avaliação por veículo</h3>
+        <h2>Gráfico 2 · Avaliação por veículo</h2>
         <p>Um modelo treinado para isto, o kikori, lê cada texto e dá uma nota de −10 a +10 para a pessoa citada. Até −2,5 conta como contra; de +2,5 para cima, a favor; no meio, neutro. Vale para todas as fontes, ao contrário do tom.</p>
         <p>É uma opinião de máquina, e ela tem um vício conhecido: o nome da pessoa puxa a nota. A mesma frase hostil sai mais branda para uns e mais dura para outros. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
         <p><b>A régua</b> faz essa comparação. Cada bolinha é um veículo na sua nota média; o tamanho é quantos textos ele tem; a linha vertical é a média da pessoa. Bolinhas longe uma da outra falam da mesma pessoa de jeitos diferentes. Só entram veículos com 3 ou mais textos avaliados.</p>
         <p>Embaixo da régua, os mesmos números em lista: por fonte, por veículo, e a lista de todos os veículos do recorte com quantos textos cada um tem. Tocar num veículo restringe os dois gráficos a ele.</p>
-        <h3 id="pmi">PMI</h3>
+      </div>
+      <div id="pmi">
+        <h2>PMI</h2>
         <p>Frequência conta. PMI compara. Ele pergunta: essa palavra aparece com essa pessoa mais do que apareceria por acaso?</p>
         <p>"presidente" aparece com todo político: frequência alta, PMI baixo. Uma palavra que aparece quase só com uma pessoa tem PMI alto. PMI mostra o que é típico dela.</p>
-        <div class="pmi-scale">
-          <div><b>0</b><span>igual ao acaso</span></div>
-          <div><b>1</b><span>o dobro</span></div>
-          <div><b>2</b><span>quatro vezes</span></div>
-          <div><b>3</b><span>oito vezes</span></div>
-        </div>
+        <dl class="pmi-scale">
+          <div><dt>0</dt><dd>igual ao acaso</dd></div>
+          <div><dt>1</dt><dd>o dobro</dd></div>
+          <div><dt>2</dt><dd>quatro vezes</dd></div>
+          <div><dt>3</dt><dd>oito vezes</dd></div>
+        </dl>
         <p>Cada +1 dobra. Pode ser negativo: a palavra aparece menos com essa pessoa do que com as outras.</p>
         <p><b>Por que "PMI ponderado"?</b> Uma palavra que apareceu em só 2 textos pode ter PMI enorme sem merecer. Então o tamanho no mapa usa PMI × ln(1 + documentos). Isso segura as palavras raras e deixa as frequentes subirem.</p>
       </div>
       <div id="comparar">
-        <h3>Gráfico 3 · Régua entre duas pessoas</h3>
+        <h2>Gráfico 3 · Régua entre duas pessoas</h2>
         <p>Aqui a régua é feita das próprias palavras, escritas onde elas ficam, e não de bolinhas. A posição diz de quem a palavra é: numa ponta, ela só aparece com uma das duas pessoas; na outra ponta, só com a outra. No meio, a palavra é dividida: as duas usam mais ou menos igual.</p>
         <p>O tamanho da letra é quantos documentos a palavra tem com as duas pessoas, somados. "Documentos" ou "PMI ponderado" na frase mudam só a posição, nunca o tamanho.</p>
         <p>Cada pessoa entra com duas listas, as palavras mais frequentes e as mais grudentas, então a régua mostra mais palavras do que o número escolhido na frase. Palavra escrita ocupa espaço, e às vezes não cabe tudo sem uma cobrir a outra. As que ficaram de fora aparecem numa lista logo abaixo da régua, com o total escrito, e clicam igual às desenhadas.</p>

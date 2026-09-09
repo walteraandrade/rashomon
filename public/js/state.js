@@ -1,95 +1,17 @@
-// Mutable UI state, owned here so api.js/layout.js/render.js stay stateless. `state` itself
-// is a live-mutated object (consumers write state.source directly); everything
-// else goes through a getter/setter pair so the module that owns the value is the only one
-// that can reassign it — ES module bindings can't be reassigned from the importing side.
-
-export const state = { source: 'all' }
-
-// The outlet in focus inside the second figure. It is paint-only and deliberately not part of
-// `state`: an outlet used to narrow the whole page — the atlas, the documents, the header —
-// which meant a click on the lower graph silently redrew the upper one. It now colours nothing
-// but its own figure, and never reaches a querystring.
-/** @type {string} */
-let outlet = 'all'
-export const getOutlet = () => outlet
-/** @param {string} d */
-export const setOutlet = (d) => {
-  outlet = d
-}
-
-/** @type {Map<string, import('./format.js').Layout>} */
-export const layoutCache = new Map()
-
-/** @type {string | null} */
-let selected = null
-export const getSelected = () => selected
-/** @param {string | null} id */
-export const setSelected = (id) => {
-  selected = id
-}
-
-// The colour mask over the map's words (testimony per term against the person's mean). A
-// paint-only flag: the data it reads always travels with the graph. On by default: the colour
-// is the one reading the atlas adds over a word cloud.
-let mask = true
-export const getMask = () => mask
-/** @param {boolean} on */
-export const setMask = (on) => {
-  mask = on
-}
-
-let zoom = 1
-export const getZoom = () => zoom
-/** @param {number} z */
-export const setZoomLevel = (z) => {
-  zoom = Math.max(1, Math.min(2, z))
-  return zoom
-}
-
-let requestId = 0
-export const nextRequestId = () => ++requestId
-export const currentRequestId = () => requestId
-
-/** @type {AbortController | null} */
-let controller = null
-/** @param {AbortController | null} c */
-export const setController = (c) => {
-  controller = c
-}
-export const getController = () => controller
-
-let docsId = 0
-/** @type {AbortController | null} */
-let docsController = null
-/** @param {AbortController | null} c */
-export const setDocsController = (c) => {
-  docsController = c
-}
-// Bumps docsId and aborts any in-flight docs fetch, so a stale response can never overwrite
-// a newer one: every loadDocs caller checks its own id against currentDocsId() before painting.
-export const cancelDocs = () => {
-  ++docsId
-  docsController?.abort()
-  return docsId
-}
-export const currentDocsId = () => docsId
-
-// The candidate queue reloads whenever the period changes; one controller so a slower earlier
-// request can never repaint the panel over a newer one.
-/** @type {AbortController | null} */
-let candidateController = null
-/** @param {AbortController | null} c */
-export const setCandidateController = (c) => {
-  candidateController = c
-}
-export const getCandidateController = () => candidateController
+// Page-wide, DOM-free state: the scope memo (shared by every figure) plus the two generic
+// helpers both figures need. Everything that is genuinely per-figure (the source filter, the
+// focused outlet, zoom, the layout cache, the mask, request/abort bookkeeping) lives inside
+// that figure's own module now, the same way public/js/app.js already kept people/graph/nodes
+// as local module state rather than here.
 
 // Bounded, short-lived memo of successful API responses (issue #43). One bucket per scope
-// (graph, sources, docs) because the three depend on different subsets of the controls: the
-// outlet list ignores sort and term limit entirely, so a sort change must not evict it. Only
-// resolved values are written, so an error or an abort never becomes a cache hit, and the TTL
-// is deliberately shorter than a reader's attention span: this coalesces one burst of
-// filter fiddling, it is not an offline store.
+// (graph, sources, docs, testimony) because each depends on a different subset of the
+// controls: the outlet list ignores sort and term limit entirely, so a sort change must not
+// evict it. Only resolved values are written, so an error or an abort never becomes a cache
+// hit, and the TTL is deliberately shorter than a reader's attention span: this coalesces one
+// burst of filter fiddling, it is not an offline store. Shared across figures on purpose: every
+// key already embeds the person id and the full querystring, so two figures on two different
+// people never collide on the same bucket entry.
 export const SCOPE_TTL_MS = 20_000
 export const SCOPE_LIMIT = 8
 
@@ -131,3 +53,36 @@ export const writeScope = (scope, key, value, now = Date.now()) => {
 }
 
 export const clearScopes = () => scopes.clear()
+
+// Reuses a fresh entry instead of fetching, and only memoizes a value the fetch actually
+// resolved: a rejection (network error, or the browser aborting the request) leaves the
+// bucket untouched, so the next attempt is a real attempt. An abort here says the browser
+// stopped listening, never that the server stopped running the SQL.
+/**
+ * @template T
+ * @param {string} scope
+ * @param {string} key
+ * @param {() => Promise<T>} fetcher
+ * @returns {Promise<T>}
+ */
+export const fromScope = async (scope, key, fetcher) => {
+  const hit = readScope(scope, key)
+  if (hit) return /** @type {T} */ (hit.value)
+  return /** @type {T} */ (writeScope(scope, key, await fetcher()))
+}
+
+// Coalesces a burst of control changes into one load. The trailing edge is the one that
+// matters: a reader dragging through the period options should pay for the option they stop
+// on, not for every option they pass through.
+/**
+ * @param {() => void} fn
+ * @param {number} [ms]
+ */
+export const debounce = (fn, ms = 140) => {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer
+  return () => {
+    clearTimeout(timer)
+    timer = setTimeout(fn, ms)
+  }
+}

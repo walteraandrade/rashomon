@@ -172,7 +172,7 @@ const sentenceSplit = /[.!?\n\r]+/
 const runBreakers = /[,:;|—–"“”«»()\[\]]/g
 const capitalized = /^\p{Lu}[\p{L}'’-]*$/u
 
-export const capitalizedRuns = (text: string): string[] =>
+const rawCapitalizedRuns = (text: string): string[] =>
   decodeEntities(text)
     .replace(/https?:\/\/\S+/g, ' ')
     .replace(/[#@]\S+/g, ' ')
@@ -197,13 +197,41 @@ export const capitalizedRuns = (text: string): string[] =>
       flush()
       return runs.map((r) => r.join(' '))
     })
-    .map((name) => normalize(name).replace(/\s+/g, ' ').trim())
 
-// Same runs /candidates discovers, read as terms instead of as people to track. Untracked
-// names are the point: "Alexandre de Moraes" is a phrase in the map whether or not anyone
-// ever adds him to seed.json. A person's own name is dropped per person, at query time, by
-// graph.ts's name-token filter -- not here, since one text can name several people.
-export const properNouns = (text: string): Term[] => capitalizedRuns(text).map((term) => ({ term, kind: 'phrase' as const }))
+const tidy = (name: string) => normalize(name).replace(/\s+/g, ' ').trim()
+
+export const capitalizedRuns = (text: string): string[] => rawCapitalizedRuns(text).map(tidy)
+
+// Shouting is not capitalization. A post written entirely in capitals makes every word look
+// like a name, so one run swallows the sentence: "FALTAM 29 DIAS PARA LULA NO PRIMEIRO TURNO"
+// became a single "name", and since a phrase replaces its words that one run deleted every
+// word in the post. A run has to carry a lowercase letter somewhere to be a name here.
+const shouted = (run: string) => run === run.toUpperCase()
+
+// A name is short. Four words past the particles is already generous; a longer run is a
+// title-cased headline or a list of links, not a person or a place.
+const MAX_NAME_WORDS = 4
+
+// A capitalized stopword is grammar or page furniture, never part of a name: "PR Os",
+// "Brasil O", "Whatsapp Agora" are all runs the raw heuristic is happy to produce.
+const holdsStopword = (run: string) => tidy(run).split(' ').some((w) => !particles.has(w) && stopwords.has(w))
+
+// Same runs /candidates discovers, but read as terms rather than as people to track, and held
+// to a stricter bar than that queue is. /candidates is a human review list where noise costs a
+// glance; here a run becomes vocabulary *and* silences the words inside it, so the three guards
+// above are the price of that power. discoverNames still sees the raw runs.
+//
+// Untracked names are the point: "Alexandre de Moraes" is a phrase in the map whether or not
+// anyone ever adds him to seed.json. A person's own name is dropped per person, at query time,
+// by graph.ts's name-token filter -- not here, since one text can name several people.
+export const properNouns = (text: string): Term[] =>
+  rawCapitalizedRuns(text).flatMap((run) => {
+    // keepWord, so this counts exactly the words contentWords keeps: namePairs has to be able
+    // to find the run as a consecutive stretch of the token sequence, or it suppresses nothing.
+    const words = tidy(run).split(' ').filter((w) => !particles.has(w) && keepWord(w))
+    const usable = words.length >= 2 && words.length <= MAX_NAME_WORDS
+    return usable && !shouted(run) && !holdsStopword(run) ? [{ term: tidy(run), kind: 'phrase' as const }] : []
+  })
 
 // Names that already match an alias (or an `exclude` entry) exactly are not candidates:
 // seed.json stays the curated layer on top of discovery. Exact, not containment, so

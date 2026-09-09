@@ -30,6 +30,9 @@ import { debounce, fromScope, readScope } from '../state.js'
 /** @typedef {import('../format.js').Term} Term */
 /** @typedef {{ id: string, name: string }} Person */
 /** @typedef {{ person?: string, days?: string, source?: string, sort?: string, limit?: string }} Seed */
+// Whatever GET /api/people rejected with, or null when it answered. Distinct from an empty
+// `people` array: an outage must never paint as "no one is registered yet" (issue #92).
+/** @typedef {unknown} PeopleError */
 
 // Elements this figure owns by id. The markup in design-5.html guarantees each one exists
 // (the sentence and the toolbar live inside #workspace; #docsDialog sits next to it), and the
@@ -213,8 +216,8 @@ const resolvePerson = (people, seeded) => (seeded && people.some((p) => p.id ===
 // Mounts figure 1 into `root` (#workspace): populates the sentence's controls from `people`
 // and `initial`, wires every listener, and runs the first load. Nothing here reaches into
 // figure 2's DOM, and nothing in figure 2 reaches into this one.
-/** @param {any} root @param {{ people: Person[], initial: Seed }} args */
-export const mount = (root, { people, initial }) => {
+/** @param {any} root @param {{ people: Person[], initial: Seed, peopleError?: PeopleError }} args */
+export const mount = (root, { people, initial, peopleError = null }) => {
   /** @type {Graph | null} */
   let graph = null
   /** @type {Term[]} */
@@ -460,6 +463,26 @@ export const mount = (root, { people, initial }) => {
     if (first) {
       $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
       $('inspector').textContent = 'Aguardando dados.'
+    }
+    // A failed GET /api/people (app.js's own boot()) is not the same thing as a seed with no
+    // one in it: an outage gets the same "no fictional graph" copy master showed, with a
+    // retry that reloads the page (the only way this figure can ask app.js to fetch again,
+    // since the person list is fetched once, up in the shell, and handed down).
+    if (peopleError) {
+      busy = false
+      $('status').classList.add('error')
+      $('status').textContent = 'Não foi possível carregar dados reais.'
+      $('viewport').hidden = false
+      $('columns').hidden = true
+      $('overflow').hidden = true
+      $('legend').textContent = ''
+      $('viewport').innerHTML =
+        '<div class="empty">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
+      $('retry').addEventListener('click', () => location.reload())
+      $('inspector').textContent = 'Use tentar novamente quando a API estiver disponível.'
+      $('viewport').setAttribute('aria-busy', 'false')
+      root.classList.remove('is-loading')
+      return
     }
     if (!people.length) {
       busy = false

@@ -5,6 +5,7 @@
   "scripts": {
     "ingest": "tsx src/ingest.ts",
     "dev": "tsx src/server.ts",
+    "build": "esbuild public/js/app.js --bundle --minify --format=esm --target=es2022 --outfile=public/bundle.js --log-level=warning",
     "reindex": "tsx src/reindex.ts",
     "purge": "tsx src/purge.ts",
     "score": "tsx src/score.ts",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@types/node": "^26.4.1",
     "@types/pg": "^8.23.1",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   },

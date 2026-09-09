@@ -81,3 +81,13 @@ export const candidatesQuery = ({ days, min = '3', limit = '30' }) => new URLSea
 
 /** @param {URLSearchParams} queryParams @param {AbortSignal} [signal] */
 export const loadCandidates = (queryParams, signal) => json('/api/candidates?' + queryParams, signal)
+
+// The ruler figure's own call. /api/compare is not nested under /people/:id either (like
+// /api/candidates), so both person ids travel as plain query params instead of one in the path.
+// domain and lean stay at the server's own default 'all': this figure carries no control for
+// either (issue #91 §2).
+/** @param {{ a: string, b: string, days: string, source: string, limit: string }} opts */
+export const compareParams = ({ a, b, days, source, limit }) => new URLSearchParams({ a, b, days, source, limit, kind: ATLAS_KINDS })
+
+/** @param {URLSearchParams} queryParams @param {AbortSignal} [signal] */
+export const loadCompare = (queryParams, signal) => json('/api/compare?' + queryParams, signal)

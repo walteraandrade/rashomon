@@ -26,6 +26,10 @@
  * @typedef {{ x: number, y: number }} Point
  * @typedef {{ points: Point[], ports: Map<string, number[]>, adjacent: { index: number, weight: number }[][] }} Routing
  * @typedef {{ placed: PlacedTerm[], overflow: Term[], center: CenterBox, routing?: Routing }} Layout
+ * @typedef {{ id: string, name: string }} PersonRef
+ * @typedef {{ count: number, pmi: number, tone: number | null }} CompareSide
+ * @typedef {{ term: string, kind: string, a: CompareSide | 'name' | null, b: CompareSide | 'name' | null }} CompareTerm
+ * @typedef {{ days: number, a: { person: PersonRef, about: number }, b: { person: PersonRef, about: number }, terms: CompareTerm[] }} Compare
  */
 
 /** @type {Record<string, string>} */
@@ -175,6 +179,26 @@ export const MASK_SPAN = 1.5
 
 /** @param {number} delta */
 export const maskColor = (delta) => scaleColor(delta, MASK_SPAN, true)
+
+// The ruler figure's own hue pair, one per side: not red/green (that pair already means
+// hostile/favourable, from testimony) but a scoped, data-encoding exception to "one gold accent"
+// the same way toneColor/maskColor already are. Kept in step with atlas.css's --cmp-a/--cmp-b.
+const CMP_A_HEX = hex('#7fa8ff')
+const CMP_B_HEX = hex('#ff9d6b')
+
+// A signed position on the ruler, -1 (all A) to +1 (all B), on the same red/grey-analogue ramp
+// shape as scaleColor: the middle is the same quiet SCALE_MID grey ("divided, no signal"), each
+// end saturates into its own side's hue. balance = 0 returns SCALE_MID itself (not a computed
+// near-grey), so a term piled dead centre reads exactly as "on the mean" does elsewhere.
+/** @param {number} balance */
+export const balanceColor = (balance) => {
+  const x = Math.max(-1, Math.min(1, Number(balance) || 0))
+  if (x === 0) return SCALE_MID
+  const mid = hex(SCALE_MID)
+  const [from, to, k] = x < 0 ? [CMP_A_HEX, mid, x + 1] : [mid, CMP_B_HEX, x]
+  const rgb = from.map((v, i) => Math.round(v + (to[i] - v) * k)).join(',')
+  return `rgb(${rgb})`
+}
 
 /** @param {{ testimony?: TermTestimony | null }} term @param {number | null | undefined} personScore @returns {string | null} */
 export const termMask = (term, personScore) => {

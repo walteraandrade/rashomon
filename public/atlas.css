@@ -48,11 +48,12 @@ main { max-width: 1440px; margin: auto; padding: 8px var(--gutter) 56px; }
 
 /* ---------- the sentence that controls each figure's own recorte ---------- */
 /* Figure 1's stats badge, next to its title -- same spot and voice as #testimonyLabel next to
-   #testimonyTitle, only muted rather than accented: it echoes the status line below it. */
-#atlasStats { color: var(--muted); font-size: 14px; font-weight: 500; white-space: nowrap; margin-left: 10px; }
+   #testimonyTitle: no color of its own, so .figure-title h2 b's accent wins on both. */
+#atlasStats { font-size: 14px; font-weight: 500; white-space: nowrap; margin-left: 10px; }
 /* Each figure's sentence lives inside its own .figure-head now, which is a two-column grid
-   (title | subtitle); the sentence spans both so it reads as its own row underneath them. */
-.figure-head > .sentence, .figure-head > .sentence-line { grid-column: 1 / -1; margin-top: 4px; }
+   (title | subtitle); both figure heads wrap their sentence in the same .sentence div, so one
+   rule spans it across both columns to read as its own row underneath them. */
+.figure-head > .sentence { grid-column: 1 / -1; margin-top: 4px; }
 .sentence { margin-bottom: 4px; }
 /* Each control is a chip on the line: a filled box with a chevron reads as "this changes", where
    a bare underline read as a link. A <select> ignores line-height for its own box, so the chip

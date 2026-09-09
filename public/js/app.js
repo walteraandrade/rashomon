@@ -43,18 +43,41 @@ const loadPeople = async () => {
   return res.json()
 }
 
+// Loading copy at parse time, before the network round trip resolves, so a cold start (a
+// Vercel function waking up, a slow first request) shows the same "loading" reader as every
+// later load instead of bare static markup. Each figure's own load() repaints this exact copy
+// once it runs, so writing it here once, straight onto the static elements design-5.html
+// already ships, costs nothing and never races a figure's own paint.
+const paintBootLoading = () => {
+  const status = document.getElementById('status')
+  if (status) status.textContent = 'Carregando a base local…'
+  const viewport = document.getElementById('viewport')
+  if (viewport) viewport.innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
+  const testimonyList = document.getElementById('testimonyList')
+  if (testimonyList) testimonyList.textContent = 'Carregando…'
+}
+
 export const boot = async () => {
+  paintBootLoading()
   /** @type {Person[]} */
   let people = []
+  /** @type {unknown} */
+  let peopleError = null
   try {
     people = await loadPeople()
-  } catch {
-    people = []
+  } catch (e) {
+    peopleError = e
   }
   for (const figure of FIGURES) {
     const root = document.getElementById(figure.sectionId)
     if (!root) continue
-    figure.mount(root, { people, initial: seedFor(figure.id, figure.keys, location.search) })
+    // Each figure mounts on its own: one figure throwing must never stop the other from
+    // reaching the reader, which is the whole point of splitting them (issue #92).
+    try {
+      figure.mount(root, { people, initial: seedFor(figure.id, figure.keys, location.search), peopleError })
+    } catch (err) {
+      console.error(`figure "${figure.id}" failed to mount`, err)
+    }
   }
 }
 

@@ -13,6 +13,9 @@ import { debounce, fromScope, readScope } from '../state.js'
 
 /** @typedef {{ id: string, name: string }} Person */
 /** @typedef {{ person?: string, days?: string, source?: string }} Seed */
+// Whatever GET /api/people rejected with, or null when it answered. Distinct from an empty
+// `people` array: an outage must never paint as "no one is registered yet" (issue #92).
+/** @typedef {unknown} PeopleError */
 
 // Elements this figure owns by id. The markup in design-5.html guarantees each one exists
 // inside #testimony.
@@ -35,8 +38,8 @@ const resolvePerson = (people, seeded) => (seeded && people.some((p) => p.id ===
 
 // Mounts figure 2 into `root` (#testimony): populates its own sentence's controls from
 // `people` and `initial`, wires every listener, and runs the first load.
-/** @param {any} root @param {{ people: Person[], initial: Seed }} args */
-export const mount = (root, { people, initial }) => {
+/** @param {any} root @param {{ people: Person[], initial: Seed, peopleError?: PeopleError }} args */
+export const mount = (root, { people, initial, peopleError = null }) => {
   /** @type {import('../format.js').Testimony | null} */
   let testimony = null
   /** @type {import('../format.js').OutletRow[] | null} */
@@ -119,6 +122,18 @@ export const mount = (root, { people, initial }) => {
     controller?.abort()
     controller = new AbortController()
     outlet = 'all'
+    // Same distinction as figure 1: an /api/people outage is not an empty seed, and gets a
+    // retry that reloads the page, the only way this figure can ask the shell to fetch again.
+    if (peopleError) {
+      testimony = null
+      outletRows = null
+      $('testimonyList').innerHTML =
+        '<p class="note">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="testimonyRetry">Tentar novamente</button></p>'
+      $('outletList').textContent = ''
+      $('strip').hidden = true
+      $('testimonyRetry')?.addEventListener('click', () => location.reload())
+      return
+    }
     if (!people.length) {
       testimony = null
       outletRows = null

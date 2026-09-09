@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
-import { collocations, contentWords, nameTokens, properNouns, standaloneWords, terms, wordPairs } from '../src/extract.js'
+import { capitalizedRuns, collocations, contentWords, nameTokens, properNouns, standaloneWords, terms, wordPairs } from '../src/extract.js'
 import { graphFor } from '../src/graph.js'
 import { buildPhrases, loadPhrases, resetPhraseStage, stagePhrases } from '../src/phrases.js'
 import { parseKindList, parseQuery } from '../src/query.js'
@@ -78,6 +78,31 @@ describe('extraction reads several words as one term', () => {
     const out = terms('primeiro turno decisivo', [], new Set(['primeiro turno']))
     assert.deepEqual(termsOfKind(out, 'word'), ['decisivo'])
     assert.deepEqual(termsOfKind(out, 'phrase'), ['primeiro turno'])
+  })
+
+  it('reads shouting as shouting, not as a name', () => {
+    // A real production post. Every word matches the capitalized test, so the raw heuristic
+    // built one run out of the whole sentence — and with substitution that one run deleted
+    // every word in the post and put "dias para lula no primeiro turno" in their place.
+    const shout = 'FALTAM 29 DIAS PARA LULA NO PRIMEIRO TURNO'
+    assert.deepEqual(properNouns(shout), [])
+    assert.deepEqual(termsOfKind(terms(shout), 'word'), ['faltam', 'lula', 'primeiro', 'turno'])
+    // And the pair must survive to the staging table, or the lexicon can never learn it.
+    assert.ok(wordPairs(shout).some((p) => p.w1 === 'primeiro' && p.w2 === 'turno'))
+  })
+
+  it('refuses a run longer than a name, and one holding a capitalized stopword', () => {
+    assert.deepEqual(properNouns('Preso na Cadeia Publica de Ponta Grossa Hildebrando de Souza ontem'), [])
+    assert.deepEqual(properNouns('Falou o Whatsapp Agora sobre isso'), [])
+    assert.deepEqual(properNouns('Veja PR Os numeros'), [])
+  })
+
+  it('still reads an ordinary name, mixed case, inside a shouting-free sentence', () => {
+    assert.deepEqual(properNouns('O relator Alexandre de Moraes decidiu').map((t) => t.term), ['alexandre de moraes'])
+  })
+
+  it('leaves /candidates on the raw runs, which is a review queue and tolerates noise', () => {
+    assert.ok(capitalizedRuns('FALTAM 29 DIAS PARA LULA NO PRIMEIRO TURNO').length > 0)
   })
 
   it('a capitalized run takes its words away too, with no lexicon involved', () => {

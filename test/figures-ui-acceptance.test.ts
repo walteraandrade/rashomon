@@ -18,15 +18,17 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
 
 describe('figures UI: the page is a sequence of graphs', () => {
-  it('design-5.html carries two figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
+  it('design-5.html carries three figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
     const html = read('design-5.html')
     const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
-    assert.deepEqual(figures, ['workspace', 'testimony'])
+    // Issue #91 adds a third figure, the ruler comparing two people, after #testimony.
+    assert.deepEqual(figures, ['workspace', 'testimony', 'compare'])
     // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
     // <b id="testimonyLabel"> in figure 2's own heading below.
     assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
     assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
-    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 2)
+    assert.match(html, /<span class="eyebrow">Gráfico 3<\/span><h2 id="compareTitle">/)
+    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 3)
     assert.doesNotMatch(html, /class="side"/)
     // The atlas keeps its toolbar and its detail column inside its own figure.
     const atlas = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
@@ -38,12 +40,15 @@ describe('figures UI: the page is a sequence of graphs', () => {
     assert.doesNotMatch(html, /id="domainClear"/)
     assert.doesNotMatch(html, /id="domainChip"/)
     // Issue #92 gave figure 2 its own sentence (person/days/source, 3 controls) alongside
-    // figure 1's original five, so the shared count is 8 now, not 5 — split per figure below.
-    assert.equal(html.match(/<span class="pick">/g)?.length, 8)
+    // figure 1's original five; issue #91 adds figure 3's own six (compareA/B/days/source/
+    // measure/limit), so the shared count is 14 now — split per figure below.
+    assert.equal(html.match(/<span class="pick">/g)?.length, 14)
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.equal(workspace.match(/<span class="pick">/g)?.length, 5, "figure 1's sentence keeps its five controls")
     assert.equal(testimony.match(/<span class="pick">/g)?.length, 3, "figure 2's own sentence has person/days/source, no sort/limit")
+    assert.equal(compare.match(/<span class="pick">/g)?.length, 6, "figure 3's own sentence has both people, days, source, measure and limit")
   })
 
   it('closing the dialog goes through the handler table, and Escape closes it before it clears anything', () => {

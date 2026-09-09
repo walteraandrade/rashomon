@@ -26,6 +26,16 @@ const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain') =>
     return stub
   })
 
+// paintRuler's dots (issue #91) carry two data-* attributes on the same tag (data-term and
+// data-kind), unlike the single-attribute stubs above, so onPick(term, kind) reads both off
+// one click.
+const dataTermStubs = (html: string) =>
+  [...html.matchAll(/<g[^>]*\bdata-term="([^"]*)"[^>]*\bdata-kind="([^"]*)"[^>]*>/g)].map(([, term, kind]) => {
+    const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
+    stub.dataset = { term, kind }
+    return stub
+  })
+
 // A generic node: covers every button/div/dialog id both figures touch. `innerHTML` is kept
 // as plain text (this harness parses nothing beyond the two data-* attributes above), which is
 // enough since no criterion here asserts markup shape — only requests and control wiring.
@@ -44,7 +54,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain'; html: string; stubs: ReturnType<typeof dataStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -76,16 +86,17 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
-    const stubs = dataStubs(this.html, attr)
+    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : dataStubs(this.html, attr)
     this.domainStubs.push({ attr, html: this.html, stubs })
     return stubs
   }
   querySelectorAll(selector: string) {
     if (selector === '[data-domain]') return this.stubsFor('data-domain')
     if (selector === '[data-strip-domain]') return this.stubsFor('data-strip-domain')
+    if (selector === '[data-term]') return this.stubsFor('data-term')
     return []
   }
   showModal() {
@@ -211,7 +222,32 @@ const testimonyIds = () => ({
   testimonyRetry: new FakeBox('testimonyRetry'),
 })
 
-export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds>
+// Figure 3 (issue #91): its own person selects, sentence controls, ruler host, detail/status/
+// note lines, and the retry button the error branch paints into #compareDetail's innerHTML.
+const compareIds = () => ({
+  compare: new FakeBox('compare'),
+  compareA: new FakeSelect('compareA'),
+  compareB: new FakeSelect('compareB'),
+  compareDays: new FakeSelect('compareDays', DAYS_OPTIONS),
+  compareSource: new FakeSelect('compareSource'),
+  compareMeasure: new FakeSelect('compareMeasure', [
+    { value: 'count', text: 'documentos' },
+    { value: 'pmi', text: 'PMI × ln(1 + docs)' },
+  ]),
+  compareLimit: new FakeSelect('compareLimit', [
+    { value: '20', text: '20' },
+    { value: '40', text: '40', selected: true },
+    { value: '60', text: '60' },
+    { value: '100', text: '100' },
+  ]),
+  compareStatus: new FakeBox('compareStatus'),
+  compareRuler: new FakeBox('compareRuler'),
+  compareDetail: new FakeBox('compareDetail'),
+  compareHiddenNote: new FakeBox('compareHiddenNote'),
+  compareRetry: new FakeBox('compareRetry'),
+})
+
+export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -220,7 +256,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // browser-shaped `Option` constructor, runs `fn`, then restores every global this touched —
 // same discipline as fake-dom.ts's withFakeDocument, extended to what a real mount() needs.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fakeDocument = {
     getElementById: (id: string) => (els as unknown as Record<string, unknown>)[id] ?? null,

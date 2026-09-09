@@ -83,7 +83,10 @@ describe('AC2: the import graph walks public/js/figures/ and matches the spec ex
       'render.js': ['./format.js', './layout.js'],
       'figures/atlas.js': ['./api.js', './format.js', './layout.js', './render.js', './state.js'],
       'figures/testimony.js': ['./api.js', './format.js', './render.js', './state.js'],
-      'app.js': ['./figures/atlas.js', './figures/testimony.js'],
+      // Issue #91 adds the third figure, the ruler; it follows figures/testimony.js's own
+      // shape (no direct layout.js import — the swarm packing lives inside render.js).
+      'figures/compare.js': ['./api.js', './format.js', './render.js', './state.js'],
+      'app.js': ['./figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort())
     for (const [file, allowed] of Object.entries(expected)) {
@@ -284,10 +287,11 @@ describe('AC10/AC11: the sentence and the stats badge live inside each figure, n
     assert.doesNotMatch(design5(), /<section class="sentence"/)
   })
 
-  it('exactly two .sentence-line elements exist, one inside each figure-head', () => {
+  it('exactly three .sentence-line elements exist, one inside each figure-head', () => {
     const html = design5()
     const matches = [...html.matchAll(/class="sentence-line"/g)]
-    assert.equal(matches.length, 2, 'one sentence-line per figure, no page-wide one left over')
+    // Issue #91 gives the ruler its own sentence-line too.
+    assert.equal(matches.length, 3, 'one sentence-line per figure, no page-wide one left over')
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
     for (const id of ['person', 'days', 'source', 'sort', 'limit']) assert.match(workspace, new RegExp(`id="${id}"`), `#workspace must contain #${id}`)

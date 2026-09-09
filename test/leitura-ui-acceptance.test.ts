@@ -49,28 +49,24 @@ describe('Leitura UI: the site explains itself on its own page', () => {
   it('design-5.html no longer carries the chapter and links to the page from the header and from each figure', () => {
     const html = read('design-5.html')
     assert.doesNotMatch(html, /id="como-ler"/)
-    assert.match(html, /<a class="compare-link" href="compare\.html">comparar pessoas<\/a><a href="como-ler\.html">como ler<\/a>/, 'the header links to the page')
+    // Issue #91: compare.html is deleted, the third figure lives on this page instead, so the
+    // nav link now points at an in-page anchor rather than a separate file (AC15).
+    assert.match(html, /<a class="compare-link" href="#compare">comparar pessoas<\/a><a href="como-ler\.html">como ler<\/a>/, 'the header links to the page')
     assert.match(html, /href="como-ler\.html#atlas"/)
     assert.match(html, /href="como-ler\.html#avaliacao"/)
-    assert.match(read('compare.html'), /href="como-ler\.html/)
   })
 })
 
 describe('Leitura UI: one stylesheet, one type system', () => {
-  it('compare.html links the shared atlas.css and carries no <style> block of its own', () => {
-    const html = read('compare.html')
-    assert.match(html, /<link rel="stylesheet" href="atlas\.css">/)
-    assert.doesNotMatch(html, /<style[\s>]/i)
-    assert.deepEqual([...html.matchAll(/style="([^"]*)"/g)], [], 'no inline style= on the compare page either')
-  })
-
   it('atlas.css declares the two faces and layout.js measures text with the same families', () => {
     const css = read('atlas.css')
     assert.match(css, /--sans:\s*'Instrument Sans'/)
     assert.match(css, /--display:\s*'League Spartan'/)
     assert.ok(FONT_SANS.startsWith("'Instrument Sans'"), 'canvas measurement must use the face the map is painted with')
     assert.ok(FONT_DISPLAY.startsWith("'League Spartan'"), 'the centre name is measured with the display face')
-    for (const page of ['design-5.html', 'compare.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=League\+Spartan[^"]*Instrument\+Sans/, `${page} loads both faces`)
+    // compare.html is gone (issue #91): the ruler now lives on design-5.html, already in this
+    // loop, so the deleted page's own slot is dropped rather than replaced.
+    for (const page of ['design-5.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=League\+Spartan[^"]*Instrument\+Sans/, `${page} loads both faces`)
   })
 
   it('atlas.css has no type smaller than 12px and no 10px uppercase labels', () => {

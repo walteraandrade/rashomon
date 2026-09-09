@@ -31,6 +31,7 @@ describe('Cache-Control on /api reads', () => {
       '/api/people/lula/timeline',
       '/api/people/tarcisio/testimony?method=stub',
       '/api/tone',
+      '/api/compare?a=lula&b=bolsonaro',
     ])
       assert.deepEqual(await header(url), { status: 200, cache: ROLLING }, url)
   })
@@ -58,7 +59,13 @@ describe('errors are never cached', () => {
   before(seed)
 
   it('does not store a 404 for an unknown person', async () => {
-    for (const url of ['/api/people/nobody/graph', '/api/people/nobody/docs', '/api/people/nobody/testimony'])
+    for (const url of [
+      '/api/people/nobody/graph',
+      '/api/people/nobody/docs',
+      '/api/people/nobody/testimony',
+      '/api/compare?a=nobody&b=lula',
+      '/api/compare?a=lula&b=nobody',
+    ])
       assert.deepEqual(await header(url), { status: 404, cache: NO_STORE }, url)
   })
 

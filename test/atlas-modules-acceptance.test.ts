@@ -124,7 +124,7 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'api.js': [],
       'layout.js': ['./format.js'],
       'render.js': ['./format.js', './layout.js'],
-      'app.js': ['./api.js', './format.js', './layout.js', './render.js', './state.js'],
+      'app.js': ['./api.js', './dist/testimony-island.js', './format.js', './layout.js', './render.js', './state.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in public/js must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected))

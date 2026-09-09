@@ -20,10 +20,12 @@ describe('figures UI: the page is a sequence of graphs', () => {
   it('design-5.html carries two figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
     const html = read('design-5.html')
     const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
-    assert.deepEqual(figures, ['workspace', 'testimony'])
+    assert.deepEqual(figures, ['workspace'], 'the second figure is a Svelte mount point')
+    assert.match(html, /<div id="testimonyFigure"><\/div>/)
     assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras<\/h2>/)
-    assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
-    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 2)
+    // Gráfico 2's own eyebrow, title and subtitle come from TestimonyFigure.svelte; they are
+    // asserted against its rendered output in test/testimony-svelte-acceptance.test.ts.
+    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 1)
     assert.doesNotMatch(html, /class="side"/)
     // The atlas keeps its toolbar and its detail column inside its own figure.
     const atlas = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''

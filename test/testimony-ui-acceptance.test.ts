@@ -183,16 +183,13 @@ describe('testimony UI: the route and the painter agree on the shape', () => {
 })
 
 describe('testimony UI: the page holds the panel and explains it', () => {
-  it('design-5.html gives the avaliação its own figure: title with the score, the strip, then the lists', () => {
+  it('design-5.html hands the whole second figure to the Svelte mount point, after the atlas', () => {
     const html = read('design-5.html')
-    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
-    assert.ok(figure, 'the second figure must exist')
-    assert.match(figure, /<h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"><\/b><\/h2>/)
-    assert.match(figure, /<figure class="strip" id="strip"[^>]*hidden><\/figure>/)
-    assert.match(figure, /<div class="testimony-lists" id="testimonyList">/)
-    assert.ok(figure.indexOf('id="strip"') < figure.indexOf('id="testimonyList"'), 'the chart comes before its lists')
-    assert.ok(figure.indexOf('id="testimonyList"') < figure.indexOf('id="outlets"'), 'the outlet list closes the figure')
-    assert.ok(html.indexOf('id="workspace"') < html.indexOf('id="testimony"'), 'after the atlas figure')
+    assert.match(html, /<div id="testimonyFigure"><\/div>/)
+    assert.ok(html.indexOf('id="workspace"') < html.indexOf('id="testimonyFigure"'), 'after the atlas figure')
+    // The figure's own shape (title with the score, then the ruler, then the lists) is asserted
+    // against the component's rendered output in test/testimony-svelte-acceptance.test.ts.
+    assert.doesNotMatch(html, /id="testimonyList"|id="outletList"|id="strip"/, 'no leftover containers the component does not own')
   })
 
   it('the "Como ler" page defines the scale, the cut and the name bias', () => {
@@ -339,9 +336,9 @@ describe('testimony strip: the outlets on the axis under the map', () => {
   })
 
   it('design-5.html makes the strip the chart of the second figure, and the como-ler page explains it', () => {
-    const html = read('design-5.html')
-    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
-    assert.match(figure, /<\/header>\s*<figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden><\/figure>/)
+    // The ruler is the first thing TestimonyFigure.svelte draws after its header; that order is
+    // asserted against the component's output in test/testimony-svelte-acceptance.test.ts.
+    assert.match(read('design-5.html'), /<div id="testimonyFigure"><\/div>/)
     const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.match(chapter, /<b>A régua<\/b>/)
     assert.match(chapter, /a linha vertical é a média da pessoa/)

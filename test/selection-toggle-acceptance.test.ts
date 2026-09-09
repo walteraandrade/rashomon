@@ -75,30 +75,21 @@ describe('the outlet in focus is local to the second figure', () => {
       assert.equal(q.has('domain'), false, `${name} must answer for the whole recorte`)
   })
 
-  it('a click on an outlet dot or row leaves the focus alone', () => {
-    const calls: string[] = []
-    const h = createHandlers({ releaseOutlet: () => calls.push('releaseOutlet') })
-    for (const selector of ['[data-domain]', '[data-testimony-domain]', '[data-strip-domain]'])
-      h.outletBackground({ closest: (s: string) => (s.includes(selector.slice(1, -1)) ? {} : null) } as unknown as Element)
-    assert.deepEqual(calls, [])
-  })
-
-  it('a click on empty space in the figure releases the outlet', () => {
-    const calls: string[] = []
-    const h = createHandlers({ releaseOutlet: () => calls.push('releaseOutlet') })
-    h.outletBackground({ closest: () => null } as unknown as Element)
-    assert.deepEqual(calls, ['releaseOutlet'])
-  })
-
-  it('switching person releases the outlet, and no other control does', () => {
+  // The three outlet behaviours (a click on a row or dot keeps the focus, a click on empty
+  // space releases it, a new person drops it) moved into TestimonyFigure.svelte with the state
+  // they act on; they are asserted in test/testimony-svelte-acceptance.test.ts.
+  it('no control other than the person touches the outlet, and the page never sends one', () => {
     for (const [id, expected] of [
-      ['person', ['resetOutlet']],
-      ['days', []],
-      ['sort', []],
-      ['limit', []],
+      ['person', ['updateHeader', 'load']],
+      ['days', ['loadCandidates', 'updateHeader', 'load']],
+      ['sort', ['updateHeader', 'load']],
     ] as const) {
       const calls: string[] = []
-      createHandlers({ resetOutlet: () => calls.push('resetOutlet') }).control(id)()
+      createHandlers({
+        loadCandidates: () => calls.push('loadCandidates'),
+        updateHeader: () => calls.push('updateHeader'),
+        load: () => calls.push('load'),
+      }).control(id)()
       assert.deepEqual(calls, expected, `control(${id})`)
     }
   })
@@ -134,12 +125,12 @@ describe('the second figure carries one outlet list, merged', () => {
     assert.deepEqual(merged, [{ domain: 'g1.globo.com', sources: ['gnews'], docs: 4, score: null, n: 0 }])
   })
 
-  it('the figure is one column, with no second ruler and no second outlet ranking', () => {
+  // The figure's own shape (one column, one ruler, one outlet list, summary before list) is
+  // rendered by TestimonyFigure.svelte and asserted against its output in
+  // test/testimony-svelte-acceptance.test.ts. design-5.html only holds the mount point.
+  it('design-5.html hands the figure to one mount point and keeps no containers of its own', () => {
     const html = readFileSync(join(dirname(dirname(fileURLToPath(import.meta.url))), 'public', 'design-5.html'), 'utf8')
-    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
-    assert.ok(figure, 'the second figure must exist')
-    assert.doesNotMatch(figure, /figure-lists/, 'the two-column grid left half the width empty')
-    assert.doesNotMatch(figure, /<details/, 'the one outlet list is the figure, not a disclosure beside it')
-    assert.ok(figure.indexOf('id="testimonyList"') < figure.indexOf('id="outletList"'), 'the summary comes before the list')
+    assert.match(html, /<div id="testimonyFigure"><\/div>/)
+    assert.doesNotMatch(html, /figure-lists|id="outletList"|id="testimonyList"/)
   })
 })

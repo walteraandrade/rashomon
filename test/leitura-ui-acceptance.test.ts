@@ -48,7 +48,8 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.doesNotMatch(html, /id="como-ler"/)
     assert.match(html, /<a class="compare-link" href="compare\.html">comparar pessoas<\/a><a href="como-ler\.html">como ler<\/a>/, 'the header links to the page')
     assert.match(html, /href="como-ler\.html#atlas"/)
-    assert.match(html, /href="como-ler\.html#avaliacao"/)
+    // The second figure's own "como ler" link is rendered by TestimonyFigure.svelte and is
+    // asserted against its output in test/testimony-svelte-acceptance.test.ts.
     assert.match(read('compare.html'), /href="como-ler\.html/)
   })
 })

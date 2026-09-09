@@ -230,7 +230,6 @@ describe('issue #43 AC5: local-only interactions still reach no network, and the
         getZoomLevel: () => 1,
         clearSearch: spy('clearSearch'),
         canClear: () => true,
-        resetOutlet: spy('resetOutlet'),
         updateHeader: spy('updateHeader'),
         setSource: spy('setSource'),
       }),

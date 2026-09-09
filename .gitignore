@@ -3,3 +3,8 @@ data
 .claude/worktrees
 .vercel
 .env*.local
+.svelte-ssr
+!.svelte-ssr/*.d.ts
+public/js/dist
+!public/js/dist/*.d.ts
+.svelte-check

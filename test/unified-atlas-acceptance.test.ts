@@ -33,7 +33,6 @@ const spies = () => {
     getZoomLevel: () => 1,
     clearSearch: spy('clearSearch'),
     canClear: () => true,
-    resetOutlet: spy('resetOutlet'),
     updateHeader: spy('updateHeader'),
     setSource: spy('setSource'),
   }
@@ -96,10 +95,10 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
     assert.deepEqual(other.calls, [])
   })
 
-  it('only the person control releases the outlet in focus, and only the period control refetches candidates', () => {
+  it('only the period control refetches candidates; no control touches the outlet in focus', () => {
     const person = spies()
     person.handlers.control('person')()
-    assert.deepEqual(person.calls, ['resetOutlet', 'updateHeader', 'load'])
+    assert.deepEqual(person.calls, ['updateHeader', 'load'], 'the figure drops its own outlet when the person changes')
     const days = spies()
     days.handlers.control('days')()
     assert.deepEqual(days.calls, ['loadCandidates', 'updateHeader', 'load'])

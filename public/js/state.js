@@ -5,18 +5,6 @@
 
 export const state = { source: 'all' }
 
-// The outlet in focus inside the second figure. It is paint-only and deliberately not part of
-// `state`: an outlet used to narrow the whole page — the atlas, the documents, the header —
-// which meant a click on the lower graph silently redrew the upper one. It now colours nothing
-// but its own figure, and never reaches a querystring.
-/** @type {string} */
-let outlet = 'all'
-export const getOutlet = () => outlet
-/** @param {string} d */
-export const setOutlet = (d) => {
-  outlet = d
-}
-
 /** @type {Map<string, import('./format.js').Layout>} */
 export const layoutCache = new Map()
 

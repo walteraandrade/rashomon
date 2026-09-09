@@ -194,7 +194,6 @@ describe('AC7: "candidatos" list in the atlas', () => {
     const calls: string[] = []
     const handlers = createHandlers({
       loadCandidates: () => calls.push('loadCandidates'),
-      resetOutlet: () => calls.push('resetOutlet'),
       updateHeader: () => calls.push('updateHeader'),
       load: () => calls.push('load'),
     })

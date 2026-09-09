@@ -12,9 +12,13 @@
     "bench": "tsx src/bench.ts",
     "bench:writes": "tsx src/bench-writes.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts",
+    "test": "pnpm build && DATA_DIR=memory:// node --import tsx --test test/*.test.ts",
     "migrate": "tsx src/migrate.ts",
-    "push": "tsx src/push.ts"
+    "push": "tsx src/push.ts",
+    "build:ui": "vite build",
+    "build:ssr": "vite build -c vite.ssr.config.js",
+    "check": "svelte-check --tsgo --tsconfig ./tsconfig.svelte.json",
+    "build": "pnpm build:ui && pnpm build:ssr"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -26,10 +30,15 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@types/node": "^26.4.1",
     "@types/pg": "^8.23.1",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
     "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3",
+    "vite": "^8.2.2"
   },
   "packageManager": "pnpm@11.17.0"
 }

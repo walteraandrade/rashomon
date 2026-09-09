@@ -5,6 +5,7 @@
 // when a `document` exists, which is what lets node:test import the pieces below.
 
 import * as api from './api.js'
+import { mountTestimonyFigure, props as figure } from './dist/testimony-island.js'
 import { fmt, label, SOURCE_SEGMENTS, sourceLabels } from './format.js'
 import { centerLabel, pack } from './layout.js'
 import {
@@ -19,13 +20,7 @@ import {
   paintDocsError,
   paintDocsLoading,
   paintDocsTitle,
-  paintOutlets,
-  paintOutletsError,
   paintSelection,
-  paintStrip,
-  paintTestimony,
-  paintTestimonyError,
-  paintTestimonyLoading,
 } from './render.js'
 import {
   cancelDocs,
@@ -34,7 +29,6 @@ import {
   getCandidateController,
   getController,
   getMask,
-  getOutlet,
   getSelected,
   getZoom,
   layoutCache,
@@ -44,7 +38,6 @@ import {
   setController,
   setDocsController,
   setMask,
-  setOutlet,
   setSelected,
   setZoomLevel,
   state,
@@ -86,8 +79,6 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
  *   getZoomLevel?: () => number,
  *   clearSearch?: () => void,
  *   canClear?: () => boolean,
- *   resetOutlet?: () => void,
- *   releaseOutlet?: () => void,
  *   updateHeader?: () => void,
  *   setSource?: (source: string) => void,
  *   toggleMask?: () => void,
@@ -106,8 +97,6 @@ export const createHandlers = ({
   getZoomLevel = () => 1,
   clearSearch = () => {},
   canClear = () => true,
-  resetOutlet = () => {},
-  releaseOutlet = () => {},
   updateHeader = () => {},
   setSource = () => {},
   toggleMask = () => {},
@@ -159,7 +148,6 @@ export const createHandlers = ({
   // filter and the period control is the only one that refetches the candidate queue.
   /** @param {string} id */
   control: (id) => () => {
-    if (id === 'person') resetOutlet()
     if (id === 'days') loadCandidates()
     updateHeader()
     load()
@@ -173,13 +161,6 @@ export const createHandlers = ({
   zoomIn: () => setZoom(getZoomLevel() + 0.25),
   zoomOut: () => setZoom(getZoomLevel() - 0.25),
   zoomReset: () => setZoom(1),
-  // A click on empty space inside the second figure releases the outlet in focus, the way a
-  // click on the empty map releases the selected term.
-  /** @param {Element | null} target */
-  outletBackground: (target) => {
-    if (target && target.closest('[data-domain], [data-testimony-domain], [data-strip-domain]')) return
-    releaseOutlet()
-  },
   // Closing the modal aborts whatever /docs request is still in flight.
   docsClose: () => closeDocs(),
 })
@@ -276,11 +257,6 @@ let mode = 'map'
 /** @type {Layout | null} */
 let currentLayout = null
 let lastMapWidth = 0
-let lastStripWidth = 0
-/** @type {import('./format.js').Testimony | null} */
-let testimony = null
-/** @type {import('./format.js').OutletRow[] | null} */
-let outletRows = null
 /** @type {import('./format.js').Measure | null} */
 let measure = null
 
@@ -307,12 +283,9 @@ const resizeMap = () => {
       $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - width) / 2)
     }
   }
-  // The strip is drawn in pixels, so a width change redraws it from the data in hand.
-  const stripWidth = $('strip').clientWidth
-  if (testimony && stripWidth && stripWidth !== lastStripWidth) {
-    lastStripWidth = stripWidth
-    paintStrip({ data: testimony, domain: getOutlet(), onPick: pickOutlet, width: stripWidth })
-  }
+  // The strip is drawn in pixels; the figure redraws itself when this changes.
+  const stripWidth = $('testimonyFigure').clientWidth
+  if (stripWidth) figure.width = stripWidth
   $('zoomReset').textContent = Math.round(getZoom() * 100) + '%'
   $('zoomOut').disabled = getZoom() <= 1
   $('zoomIn').disabled = getZoom() >= 2
@@ -382,26 +355,6 @@ const loadDocs = async (n) => {
   }
 }
 
-// Picking an outlet is a reading inside the second figure and nothing else. It repaints that
-// figure from the data already in hand — no fetch, no new querystring, and above all no change
-// to the atlas above it, which is what a click down here used to do.
-/** @param {string} d */
-const pickOutlet = (d) => {
-  if (d === getOutlet()) return
-  setOutlet(d)
-  repaintTestimonyFigure()
-}
-
-// Every painter of the second figure, over the data the flows already resolved. Each one is a
-// no-op without its data, so this is safe before the first load answers.
-const repaintTestimonyFigure = () => {
-  if (testimony) {
-    paintTestimony({ data: testimony, domain: getOutlet(), onPick: pickOutlet })
-    paintStrip({ data: testimony, domain: getOutlet(), onPick: pickOutlet, width: lastStripWidth || undefined })
-  }
-  if (outletRows) paintOutlets({ rows: outletRows, testimony, domain: getOutlet(), onPick: pickOutlet })
-}
-
 /** @param {number} id @param {AbortSignal} signal */
 const loadSourcesFlow = async (id, signal) => {
   const person = $('person').value
@@ -409,10 +362,9 @@ const loadSourcesFlow = async (id, signal) => {
   try {
     const rows = await fromScope('sources', key, () => api.loadSources(person, api.sourcesParams(controlValues()), signal))
     if (id !== currentRequestId()) return
-    outletRows = rows
-    repaintTestimonyFigure()
+    figure.outletRows = rows
   } catch (e) {
-    if (id === currentRequestId() && !aborted(e)) paintOutletsError()
+    if (id === currentRequestId() && !aborted(e)) figure.outletRows = []
   }
 }
 
@@ -424,21 +376,20 @@ const loadTestimonyFlow = async (id, signal) => {
   const person = $('person').value
   const key = scopeKeys(person, graphQuery()).testimony
   if (!readScope('testimony', key)) {
-    testimony = null
-    paintTestimonyLoading()
+    figure.testimony = null
+    figure.status = 'loading'
   }
   try {
     const data = await fromScope('testimony', key, () => api.loadTestimony(person, api.testimonyParams(controlValues()), signal))
     if (id !== currentRequestId()) return
-    testimony = data
-    lastStripWidth = $('strip').clientWidth || 0
-    // The outlet list needs this payload too (it carries the means), so it repaints here even
-    // though its own /sources call may have answered long before.
-    repaintTestimonyFigure()
+    figure.testimony = data
+    figure.status = 'ready'
+    figure.person = person
+    figure.width = $('testimonyFigure').clientWidth || figure.width
   } catch (e) {
     if (id === currentRequestId() && !aborted(e)) {
-      testimony = null
-      paintTestimonyError()
+      figure.testimony = null
+      figure.status = 'error'
     }
   }
 }
@@ -619,10 +570,6 @@ const handlers = createHandlers({
     $('search').value = ''
   },
   canClear: () => !busy && !!graph,
-  resetOutlet: () => {
-    setOutlet('all')
-  },
-  releaseOutlet: () => pickOutlet('all'),
   updateHeader,
   setSource: (value) => {
     state.source = value
@@ -651,7 +598,6 @@ export const boot = () => {
   $('zoomOut').addEventListener('click', handlers.zoomOut)
   $('zoomReset').addEventListener('click', handlers.zoomReset)
   for (const id of ['strip', 'testimonyList', 'outletList'])
-    $(id).addEventListener('click', (/** @type {MouseEvent} */ e) => handlers.outletBackground(/** @type {Element | null} */ (e.target)))
   for (const id of ['viewport', 'columns'])
     $(id).addEventListener('click', (/** @type {MouseEvent} */ e) => handlers.background(/** @type {Element | null} */ (e.target)))
   $('docsClose').addEventListener('click', handlers.docsClose)
@@ -661,6 +607,9 @@ export const boot = () => {
   })
   $('docsDialog').addEventListener('close', () => cancelDocs())
   document.addEventListener('keydown', handlers.keydown)
+  // One mount for the whole second figure; the props are read fresh on every reactive pass,
+  // so the flows below only assign to the locals above.
+  mountTestimonyFigure($('testimonyFigure'))
   new ResizeObserver(resizeMap).observe($('viewport'))
   document.fonts?.ready?.then(() => {
     layoutCache.clear()

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "checkJs": true
+  },
+  "include": [
+    "public/js/components",
+    "public/js/format.js",
+    "public/js/layout.js"
+  ],
+  "exclude": [
+    ".svelte-ssr",
+    "public/js/dist"
+  ]
+}

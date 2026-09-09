@@ -22,5 +22,9 @@
     "api",
     "src",
     "test"
+  ],
+  "exclude": [
+    ".svelte-ssr",
+    "public/js/dist"
   ]
 }

@@ -9,6 +9,7 @@ import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/qu
 import { persons, seed } from './fixture.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
 import { createHandlers } from '../public/js/app.js'
+import './close.js'
 
 const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${relPath}`, import.meta.url)), 'utf8')
 

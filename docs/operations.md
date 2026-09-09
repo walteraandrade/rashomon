@@ -1,0 +1,182 @@
+# Operations
+
+Deploying, writing, indexing, measuring and caching. Everything here assumes one rule: PGlite allows one process per data directory, so the server and an `ingest`/`reindex` never share a `DATA_DIR`.
+
+## Environment
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `PORT` | `3210` | server port |
+| `DATA_DIR` | `./data/pg` | PGlite directory; `memory://` is in-memory and is what tests use |
+| `DATABASE_URL` / `POSTGRES_URL` | unset | switches every command to a managed Postgres over `pg` |
+| `PG_POOL_MAX` | `3` | connections per function instance, managed Postgres only |
+| `BSKY_HANDLE` / `BSKY_APP_PASSWORD` | unset | authenticated Bluesky, so its collector can paginate |
+| `GKG_SLOTS` | `24` | how many 15-minute GDELT slots to look back (24 = 6h) |
+| `ANALYZE_MIN_DOCS` | `200` | ingest size from which planner statistics are refreshed |
+| `WRITE_BATCH_ROWS` | `500` | rows per insert statement (1..10000) |
+| `WRITE_BATCH_DOCS` | `200` | documents per transaction (1..5000) |
+| `MIN_PHRASE_COUNT` | `5` | occurrences a word pair needs to enter the phrase lexicon (2..1000000) |
+| `MIN_PHRASE_PERCENT` | `35` | stickiness a word pair needs, in percent (1..100) |
+| `TESTIMONY_SCORER` | `onnx` | which scorer `pnpm score` runs; `stub` is the hermetic one |
+| `TESTIMONY_MODEL` / `TESTIMONY_REVISION` / `TESTIMONY_DTYPE` | kikori / unset / `q8` | the model, its Hub revision and its precision |
+| `MODEL_DIR` | `./data/models` | model cache |
+| `PERF` | unset | opt-in request instrumentation |
+| `API_CACHE_*` | see [HTTP caching](#http-caching) | cache windows in whole hours |
+
+## Deploy
+
+`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN.
+
+```bash
+vercel env pull .env.local                                          # POSTGRES_URL, POSTGRES_URL_NON_POOLING
+DATABASE_URL=$POSTGRES_URL_NON_POOLING pnpm migrate                 # create the schema once
+DATABASE_URL=$POSTGRES_URL_NON_POOLING DATA_DIR=./data/pg pnpm push # one-way copy of a local PGlite into it
+vercel deploy --prod
+```
+
+Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky; trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3).
+
+## Writes, batches and recovery
+
+Ingest and reindex are the only write paths, and both are bounded in the same two ways: `WRITE_BATCH_ROWS`
+rows per insert statement, `WRITE_BATCH_DOCS` documents per transaction. Neither bound grows with the size
+of the corpus, so a run over 20k or 200k documents holds the same amount of memory and never keeps a
+transaction open across an arbitrary amount of work.
+
+- **Batches.** Person, term and candidate rows go in through `unnest`, one statement per batch instead of
+  one per row, with `on conflict do nothing` so replaying a batch is a no-op rather than a duplicate-key
+  failure. The person seed is upserted the same way, from json, because `unnest` on a `text[][]` would
+  flatten one person's aliases into the next.
+- **Transactions.** `insertDoc` writes a document and everything derived from it in one transaction: a
+  document can never end up in `docs` without the person, term and candidate rows it implies. `pnpm ingest`
+  uses the bulk form, which commits a group of documents at a time; a group that fails rolls back whole and
+  is then replayed document by document, so one unwritable document costs only itself and the rest of the
+  group still lands. The failure count is printed per source.
+- **No pointless updates.** The `on conflict` on `docs` carries a `where`: a re-collected document that
+  would change neither `domain` nor `tone` writes no new row version at all. The two rules it has to keep
+  survive it — the first source still owns the row (`coalesce(docs.domain, excluded.domain)`), and a
+  non-GDELT source still resolves to a null tone.
+- **Reindex.** It reads documents by keyset pagination on the primary key (`where id > $1 order by id
+  limit $2`), never materializing more than one page of text, and commits one transaction per page.
+
+**Recovery from an interrupted reindex.** Run `pnpm reindex` again. It starts by truncating
+`doc_terms`, `doc_persons` and `doc_candidates` and rebuilds from `docs`, so it depends on no previous
+state and is idempotent: interrupting it can leave the derived tables holding fewer documents than `docs`,
+but never a document with only part of its rows, because each page is a transaction. There is deliberately
+no resume watermark: a document that names nobody and yields no candidate writes no derived row at all, so
+the highest `doc_id` present in the derived tables is not evidence of where a run stopped, and resuming
+from it would silently skip documents. A full rebuild is cheap enough (about 7 s per 20k documents here)
+that guessing is not worth it. The same command repairs a database whose derived rows were damaged any
+other way, and `pnpm ingest` is safe to run before it: its writes are per document and complete.
+
+**Vacuum.** `pnpm reindex` empties its three derived tables with `truncate`, not `delete`. PGlite has no
+autovacuum, so deleting every row would leave the pages dead and the rebuild would append past them: on the
+20k-document benchmark the database grew from 32.1 MB to 41.0 MB after one reindex and 49.4 MB after two,
+while truncate holds it at 32.1 MB across any number of runs. That is why no vacuum follows a reindex. A
+`pnpm purge` is the opposite case — a permanent deletion whose pages are never refilled — so it runs
+`vacuum full` on the tables it emptied, as `purge orphan-terms` already did. Neither ever runs from a
+request: like `analyze`, both belong to the process that owns `DATA_DIR`, with the server stopped.
+
+**Measuring it.** `pnpm bench:writes` builds a deterministic synthetic corpus (the same
+`src/bench-corpus.ts` as `pnpm bench`) in its own `DATA_DIR`, then reports statements sent to PGlite,
+throughput, peak RSS, peak heap and database size for an ingest and for two consecutive reindexes. Like
+`pnpm bench` it refuses to open `./data/pg`. Knobs: `BENCH_WRITES_DOCS` (20000), `BENCH_WRITES_DATA_DIR`
+(`./data/bench-writes`), `BENCH_WRITES_DAYS`, `BENCH_WRITES_SEED`, `BENCH_WRITES_NOW`.
+
+## Indexes and planner statistics
+
+`migrate()` is the whole schema: `create table if not exists` / `create index if not exists`, so it is
+idempotent and runs the same against `memory://` in tests as against a directory with data in it.
+
+One index exists because it was measured, not because it looked plausible: `doc_persons (person_id, doc_id)`.
+The table's primary key is `(doc_id, person_id)`, but every person-scoped route filters on `person_id`
+first, so the key could not serve them and each request scanned the whole table. Adding the reversed pair
+makes the scope an index-only lookup (the second column is `doc_id` precisely so nothing has to visit the
+heap), and on the 20k-doc benchmark corpus it cuts `/sources` by 25%, `/docs` by 22%, its count query by
+34%, `/testimony` by 21-26% and `/rising` by 13%, for 0.27 MB, under 1% of the database. `/graph`'s
+`terms` and `signature` do not move: they are dominated by `doc_terms`, not by the person scope.
+
+Three further candidates were benchmarked and **rejected**, each for its own reason:
+
+| candidate | verdict |
+| --- | --- |
+| `docs (source, published_at)` | only two plans reference it and neither timing moves outside noise; 0.62 MB for nothing |
+| `docs (domain, published_at)` | one plan references it, 0% change; 0.88 MB on top of the `docs (domain)` it does not replace |
+| `docs (published_at desc, id desc)` | no plan uses it at all: the window filter already selects half the table, where a sequential scan is correct, and `docs`'s `order by` sorts a few hundred joined rows |
+
+The numbers, the plans and the method are in `docs/perf-baseline.md` and in the PR for issue #44. Re-run
+them with `pnpm bench` after any schema change; a candidate index that no plan references is a candidate
+that does not ship.
+
+**Statistics.** Postgres estimates row counts from statistics that a bulk write leaves stale, and PGlite
+has no autovacuum daemon to refresh them, so `analyze` is explicit here — targeted at the five tables the
+queries touch, never database-wide, and never from a request:
+
+- `pnpm reindex` always analyzes: it empties and refills `doc_terms`, `doc_persons` and `doc_candidates`,
+  so every estimate about them is wrong by the time it returns.
+- `pnpm ingest` analyzes only after a *large* ingest: at least `ANALYZE_MIN_DOCS` new docs (default 200,
+  clamped to 1..1000000). A run that adds a handful of documents does not move an estimate and skips it,
+  printing why.
+- Nothing else ever calls it. There is no cron job and no maintenance script, and a test asserts that no
+  module outside `src/db.ts`, `src/ingest.ts`, `src/reindex.ts` and `src/bench.ts` runs `analyze`.
+
+That is what keeps maintenance inside the process that owns `DATA_DIR`. PGlite allows one process per
+directory, so a second one cannot analyze a database the server is holding — it could not even open it.
+Adding the index to a database that predates it is the same one-off: `pnpm reindex` (or any other command
+that calls `migrate()`) builds it, in about 100 ms per 8k rows, with the server stopped as usual.
+
+## Performance baseline
+
+Two separate things: opt-in instrumentation on the running API, and a benchmark that builds its own database and reports numbers. Both are local, free and offline. Browser rendering time is out of scope here; this measures API latency and database work only.
+
+**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms` and `x-perf-sql-count`, plus one JSON line on stdout:
+
+```json
+{"perf":"request","method":"GET","path":"/api/people/lula/graph","query":"days=30","status":200,"ms":227.6,"db_ms":446.2,"sql":5}
+```
+
+`sql` counts statements sent to PGlite during the request and `db_ms` sums the time awaited on them, so a route that fans out with `Promise.all` reports more `db_ms` than `ms`; the difference is the concurrency. The line carries the request line and timings only — never a row, a response body or an environment value — so no document text and no credential can reach a log. `PERF_LOG=0` keeps the counters and headers and silences the line. Headers are additive: response bodies are byte-identical with and without `PERF`.
+
+**Benchmark.** `pnpm bench` generates a deterministic synthetic corpus (`src/bench-corpus.ts`, fixed seed) into its own `DATA_DIR`, replays every scenario in `src/bench-scenarios.ts` (graph, sources, docs, timeline, tone, testimony, rising, candidates, people) and writes `docs/perf-baseline.md`: environment, table sizes, cold and warm p50/p95 per scenario, statements per request, and `EXPLAIN (ANALYZE, BUFFERS)` for each statement the routes run. No network, no external API, no paid tooling.
+
+The dataset is synthetic on purpose. It resembles production in shape — source mix, recency skew, roughly a third of docs naming a tracked person, a Zipf vocabulary — not in content. **The benchmark never opens `./data/pg`**: PGlite allows one process per directory, so a second opener corrupts it. Generation runs in a child process and the measuring process then opens the database cold, which is what makes the cold column meaningful. Copying a real database is possible but only with the owning process stopped, and it is not what the committed baseline used.
+
+```bash
+pnpm bench                                  # 20k docs into ./data/bench, 30 iterations, writes docs/perf-baseline.md
+BENCH_DOCS=100000 BENCH_RESET=1 pnpm bench  # bigger corpus, rebuilt from scratch
+PERF=0 pnpm bench                           # same scenarios with the instrumentation off, to price it
+```
+
+`BENCH_DATA_DIR` (default `./data/bench`, gitignored, refuses `./data/pg`), `BENCH_DOCS` (20000), `BENCH_DAYS` (120), `BENCH_SEED`, `BENCH_ITERATIONS` (30), `BENCH_PERSON` (`lula`), `BENCH_TERM` (`reforma`), `BENCH_RESET=1` (rebuild instead of reusing an existing corpus of the same size) and `BENCH_OUT` (default `docs/perf-baseline.md`). The dataset is reused between runs when its doc count already matches, so only the first run pays for generation.
+
+`pnpm test` never runs the benchmark: it asserts that every scenario is still a request the API answers and that the corpus is deterministic, against the shared in-memory fixture, and never asserts a timing.
+
+## HTTP caching
+
+Every `/api/*` GET is public, read-only and depends on data that only changes when `pnpm push` copies a local PGlite into the managed Postgres. So each 200 carries `Cache-Control: public, s-maxage=<window>, stale-while-revalidate=86400`, and on Vercel a CDN hit answers without running a function or touching Supabase — the cheapest read there is on both free plans. The CDN keys on the full URL, query string included, so two different filter sets never share an entry.
+
+| Route | `s-maxage` | Why |
+|---|---|---|
+| `/api/people` | 24h | The only route with no `now()` in its SQL. It changes when `seed.json` changes, which means an edit, a `pnpm reindex` and a push. |
+| `graph`, `sources`, `docs`, `timeline`, `testimony`, `/api/tone` | 6h | Default window `days=30`; 6h is ~1% of it. |
+| `rising`, `/api/candidates` | 1h | Default window `days=7` and both are read as "what changed lately"; 1% of 7 days is ~1.7h, rounded down. |
+
+The rule behind the table: an entry may be at most ~1% of the shortest default window the route reports on, capped at a day.
+
+**Staleness, in plain terms.** A reader can see a page up to `s-maxage` old: up to 6 hours on the graph, sources, docs, timeline, testimony and tone views, up to 1 hour on rising and candidates, up to a day on the list of tracked people. Within `stale-while-revalidate` (a day) the CDN may serve one entry that is older still while it refreshes in the background, so the worst case is `s-maxage + swr`. Two visible consequences: (1) documents ingested and pushed in the meantime do not appear yet; (2) the windows are `now() - interval 'N days'`, not calendar days, so at the old edge a document that has just fallen out of a window can still be counted for up to `s-maxage`. On `days=30` that edge moves 0.8% of the window, on `days=7` 0.6%. Both are far smaller than the gap between two `pnpm push` runs, which is the real age of the data.
+
+**What is never cached.** Anything that is not a 200 on a GET gets `Cache-Control: no-store`: the 404 for an unknown person, the 404 for an unknown `/api` path, and any future non-GET method. An uncaught exception is turned into a 500 by Hono's own error handler, which does not pass through this middleware and therefore carries no `Cache-Control` at all; Vercel does not cache a function response that has no `Cache-Control`. Nothing under `public/` is touched — those files are served by the CDN from `vercel.json`, not by this middleware.
+
+There is no `max-age`, on purpose: the directive targets the shared cache. A browser with no `max-age` and no `Last-Modified` has no heuristic freshness to lean on and re-asks the CDN, which answers from its own copy without waking a function.
+
+```bash
+API_CACHE_HOURS=6         # graph, sources, docs, timeline, testimony, tone
+API_CACHE_TREND_HOURS=1   # rising, candidates
+API_CACHE_STATIC_HOURS=24 # people
+API_CACHE_SWR_HOURS=24    # stale-while-revalidate; 0 drops the directive
+```
+
+Each is read as whole hours, floor 1 (0 for the stale window), ceiling 168 (a week); anything unset or non-numeric falls back to the default above.
+
+**Invalidation.** Vercel scopes the CDN cache per deployment, so a deployment built from new code starts cold and no reader keeps seeing the previous data. That does not happen by itself after `pnpm push`: a push changes rows in Supabase and touches no file here, so nothing triggers a build. Redeploy explicitly (`vercel deploy --prod`, or "Redeploy" in the dashboard **without** "use existing build cache", which is what reuses the previous artefacts) or use the project's *Purge Cache* action. This has not been verified against the production project from this repo; if a no-op redeploy turns out to be deduplicated onto the existing deployment, purge the cache explicitly instead. Until then, the honest guarantee is the one in the header: at most `s-maxage + stale-while-revalidate` after a push, every reader sees the new data.
+

@@ -157,8 +157,21 @@ a text, and exists so the unigram counts are exact), then keeps the pairs that c
 Adjacency is measured after stopwords are dropped, so "primeiro do turno" feeds the same pair as
 "primeiro turno". Only pairs — longer units come from the proper-noun path.
 
-The phrase is added, never substituted: "primeiro", "turno" and "primeiro turno" are three rows
-in `doc_terms` and can all reach the map, each with its own count.
+The phrase replaces its words. Letting "primeiro", "turno" and "primeiro turno" compete for the
+same map spends three slots on one idea, so a word occurrence a phrase covers yields no `word`
+row. It is positional, not by word: "a reforma avança; a reforma tributária passa" still yields
+"reforma", because one of its two occurrences is outside the phrase. `doc_terms` records
+presence, so a word only leaves a document when *every* occurrence of it there is inside a
+phrase. The cost is that a word's document count now means "documents where it appears at least
+once outside every phrase", which is why a reindex has to run whole: half a corpus on the old
+rule and half on the new one would make both counts incomparable.
+
+A pair touching a tracked person's own name never enters the lexicon. `graph.ts` would hide it
+from that person's own graph, and since the phrase replaces its words, "lula defende" as a
+phrase would delete "defende" from Lula's map and put nothing in its place. Multi-word names
+still reach the map through the proper-noun path, which spells them whole.
+
+A database that predates this needs one `pnpm reindex` to gain phrases at all, and the same run is what rewrites the word rows under the substitution rule. Until it runs, the corpus carries no `phrase` row and every word still counts as it always did.
 
 `pnpm reindex` reads the corpus twice, and has to: which pairs stick is a fact about the whole
 corpus, so no document can be tagged until every document has been counted. Deriving the phrase

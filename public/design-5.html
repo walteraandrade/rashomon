@@ -57,7 +57,9 @@
         <p>Algumas coisas só fazem sentido juntas. "Primeiro turno" não é "primeiro" mais "turno"; "Alexandre de Moraes" é uma pessoa, não três palavras. O mapa trata essas duas coisas como um termo só, chamado expressão.</p>
         <p>Nomes próprios entram porque quem escreveu usou maiúscula: isso já é a marca de que o pedaço é um nome. Não vale para o nome que abre a frase, que é maiúsculo por gramática.</p>
         <p>As outras expressões o próprio arquivo descobre. O site conta todos os pares de palavras vizinhas e pergunta: das vezes que a palavra mais rara do par apareceu, em quantas ela estava dentro deste par? "Turno" quase não tem outro lugar para estar, então "primeiro turno" vira expressão. "Dias" está em toda parte, então "faltam dias" não vira. O corte é 35% e no mínimo 5 aparições.</p>
-        <p>A expressão é somada, não substitui: "primeiro", "turno" e "primeiro turno" podem aparecer no mesmo mapa, cada um com a sua contagem.</p>
+        <p>A expressão substitui as palavras dela. Onde o texto diz "primeiro turno", o mapa mostra só isso, e não mais "primeiro" e "turno" soltos. A palavra volta a contar sozinha nos textos em que ela aparece fora da expressão.</p>
+        <p>Por isso a contagem de uma palavra passa a significar: em quantos textos ela aparece pelo menos uma vez fora de qualquer expressão.</p>
+        <p>Pares que carregam o nome de alguém que o site acompanha ficam de fora: "Lula defende" não vira expressão, senão "defende" sumiria do mapa do Lula sem nada no lugar. Nome com mais de uma palavra continua entrando pela maiúscula.</p>
         <h3>O que fica de fora</h3>
         <p>O GDELT cola etiquetas próprias em cada notícia, com nomes de máquina como <code>econ_freetrade</code>. Ninguém escreveu isso numa frase, então elas não entram neste mapa. Continuam na API e no <a href="atlas-legacy.html">atlas anterior</a>.</p>
         <h3>Linha entre duas palavras</h3>

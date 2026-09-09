@@ -1,6 +1,6 @@
 import seedPersons from '../seed.json' with { type: 'json' }
 import { analyzeTables, db, migrate } from './db.js'
-import { domainOf } from './extract.js'
+import { domainOf, nameTokens } from './extract.js'
 import { buildPhrases, loadPhrases, resetPhraseStage, stagePhrases } from './phrases.js'
 import { derive, inBatches, inTransaction, upsertPersons, writeBatchDocs, writeDerived } from './store.js'
 import type { Person, Source, Term } from './types.js'
@@ -73,7 +73,7 @@ export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => 
   // half-written pass costs nothing and rolling one back would buy nothing either.
   await resetPhraseStage()
   await eachPage(size, (rows) => stagePhrases(rows.map((r) => r.text)))
-  const phrases = await buildPhrases()
+  const phrases = await buildPhrases(persons.flatMap(nameTokens))
   const lexicon = await loadPhrases()
   // One transaction per page: an interruption leaves whole pages committed and never a
   // document with only part of its derived rows. Recovery is to run it again (see README).

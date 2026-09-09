@@ -73,10 +73,48 @@ export const wordPairs = (text: string): { w1: string; w2: string | null }[] => 
 export const collocations = (text: string, lexicon: Phrases): Term[] =>
   wordPairs(text).flatMap(({ w1, w2 }) => (w2 && lexicon.has(`${w1} ${w2}`) ? [{ term: `${w1} ${w2}`, kind: 'phrase' as const }] : []))
 
+// Every position where `needle` sits as a consecutive run inside `hay`. Both come from
+// contentWords, which drops the same tokens in both, so a name's surviving words really are
+// consecutive here even when the name itself had particles in it.
+const runsAt = (hay: readonly string[], needle: readonly string[]): number[] =>
+  needle.length ? hay.flatMap((_, i) => (needle.every((w, j) => hay[i + j] === w) ? [i] : [])) : []
+
+// The token positions some phrase has already claimed in this text.
+const claimed = (ws: readonly string[], text: string, lexicon: Phrases): Set<number> => {
+  const marks = new Set<number>()
+  for (const { term } of properNouns(text)) {
+    const needle = term.split(' ').filter(keepWord)
+    for (const at of runsAt(ws, needle)) needle.forEach((_, j) => marks.add(at + j))
+  }
+  // wordPairs has already nulled the pairs a capitalized run claims, so the two loops cannot
+  // disagree about who owns a position.
+  wordPairs(text).forEach(({ w1, w2 }, i) => {
+    if (w2 && lexicon.has(`${w1} ${w2}`)) marks.add(i), marks.add(i + 1)
+  })
+  return marks
+}
+
+// The words of a text that no phrase swallowed. Positional, not by word: a text saying
+// "a reforma avança; a reforma tributária passa" still yields "reforma" on its own, because one
+// of its two occurrences is outside the phrase. A word only leaves when every occurrence of it
+// in that text is inside a phrase -- doc_terms records presence, so that is exactly the question.
+export const standaloneWords = (text: string, lexicon: Phrases = new Set<string>()): Term[] => {
+  const ws = contentWords(text)
+  const marks = claimed(ws, text, lexicon)
+  return ws.flatMap((term, i) => (marks.has(i) ? [] : [{ term, kind: 'word' as const }]))
+}
+
 // Proper nouns need no lexicon: capitalization is the writer's own mark that the run is one
 // name. Collocations need one, so a text yields none until `pnpm reindex` has built it.
+//
+// The phrase replaces its words rather than sitting beside them: "primeiro turno" is one thing
+// said, and letting it compete with "primeiro" and "turno" for the same map spends three slots
+// on one idea. The cost is that a word's document count now means "documents where it appears
+// at least once outside every phrase", which is why `pnpm reindex` has to be run whole after
+// the lexicon changes -- half the corpus on the old rule and half on the new one would make
+// the counts of both incomparable.
 export const terms = (text: string, extra: Term[] = [], lexicon: Phrases = new Set<string>()): Term[] =>
-  uniq([...hashtags(text), ...words(text), ...properNouns(text), ...collocations(text, lexicon), ...extra], (t) => `${t.kind}:${t.term}`)
+  uniq([...hashtags(text), ...standaloneWords(text, lexicon), ...properNouns(text), ...collocations(text, lexicon), ...extra], (t) => `${t.kind}:${t.term}`)
 
 const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
 export const decodeEntities = (s: string) =>

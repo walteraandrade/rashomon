@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
-import { collocations, contentWords, properNouns, terms, wordPairs } from '../src/extract.js'
+import { collocations, contentWords, nameTokens, properNouns, standaloneWords, terms, wordPairs } from '../src/extract.js'
 import { graphFor } from '../src/graph.js'
 import { buildPhrases, loadPhrases, resetPhraseStage, stagePhrases } from '../src/phrases.js'
 import { parseKindList, parseQuery } from '../src/query.js'
 import { reindexAll } from '../src/reindex.js'
+import { insertDoc } from '../src/store.js'
 import type { GraphQuery } from '../src/graph.js'
 import { persons, seed } from './fixture.js'
 import './close.js'
@@ -73,10 +74,30 @@ describe('extraction reads several words as one term', () => {
     )
   })
 
-  it('adds the phrase without taking the words away', () => {
+  it('takes the words away: the phrase replaces them, it does not sit beside them', () => {
     const out = terms('primeiro turno decisivo', [], new Set(['primeiro turno']))
-    assert.deepEqual(termsOfKind(out, 'word'), ['primeiro', 'turno', 'decisivo'])
+    assert.deepEqual(termsOfKind(out, 'word'), ['decisivo'])
     assert.deepEqual(termsOfKind(out, 'phrase'), ['primeiro turno'])
+  })
+
+  it('a capitalized run takes its words away too, with no lexicon involved', () => {
+    const out = terms('O relator Alexandre de Moraes decidiu hoje')
+    assert.deepEqual(termsOfKind(out, 'word'), ['relator', 'decidiu'])
+    assert.deepEqual(termsOfKind(out, 'phrase'), ['alexandre de moraes'])
+  })
+
+  it('keeps a word that appears once outside the phrase and once inside it', () => {
+    // Presence, not count, is what doc_terms records, so the question is whether *any*
+    // occurrence survives — not whether the word was ever swallowed.
+    const out = terms('a reforma avanca e a reforma tributaria passa', [], new Set(['reforma tributaria']))
+    assert.ok(termsOfKind(out, 'word').includes('reforma'))
+    assert.ok(!termsOfKind(out, 'word').includes('tributaria'), 'tributaria only ever appears inside the phrase')
+    assert.deepEqual(termsOfKind(out, 'phrase'), ['reforma tributaria'])
+  })
+
+  it('leaves every word alone while no lexicon exists', () => {
+    assert.deepEqual(termsOfKind(terms('primeiro turno decisivo'), 'word'), ['primeiro', 'turno', 'decisivo'])
+    assert.deepEqual(standaloneWords('primeiro turno decisivo').map((t) => t.term), ['primeiro', 'turno', 'decisivo'])
   })
 })
 
@@ -142,18 +163,30 @@ describe('reindex builds the lexicon and tags the corpus with it', () => {
     assert.ok(termsOfKind(graph.nodes, 'phrase').includes('reforma tributaria'))
   })
 
-  it('still carries the two words on their own: the phrase is added, never substituted', async () => {
+  it('no longer carries "tributaria" on its own: every occurrence of it was inside the phrase', async () => {
     const graph = await graphFor(lula, wide)
-    const words = termsOfKind(graph.nodes, 'word')
-    assert.ok(words.includes('reforma'))
-    assert.ok(words.includes('tributaria'))
+    assert.ok(!termsOfKind(graph.nodes, 'word').includes('tributaria'))
+  })
+
+  it('keeps a tracked name out of the collocation lexicon, so no word is deleted with nothing put in its place', async () => {
+    // "Lula defende" is frequent and perfectly sticky in the fixture, and would be a phrase but
+    // for this rule. graph.ts would then hide it from Lula's own map — and, since a phrase
+    // replaces its words, "defende" would vanish from that map along with it.
+    const { rows } = await db.query<{ term: string }>(`select term from phrases`)
+    const tracked = new Set(persons.flatMap(nameTokens))
+    for (const { term } of rows) for (const word of term.split(' ')) assert.ok(!tracked.has(word), `${term} names a tracked person`)
+    const graph = await graphFor(lula, wide)
+    assert.ok(termsOfKind(graph.nodes, 'word').includes('defende'))
   })
 
   it("drops a phrase carrying one of the person's own name words from that person's own map", async () => {
-    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase' and term = 'lula defende'`)
-    assert.ok(rows[0].n > 0, 'sanity: the fixture must produce the phrase this filter has to hide')
-    const graph = await graphFor(lula, wide)
-    for (const term of termsOfKind(graph.nodes, 'phrase')) assert.ok(!term.split(' ').includes('lula'), `${term} names the person, it is not said about them`)
+    // Capitalized runs still produce them: seed.json cannot stop anyone from writing the name
+    // mid-sentence, so the query-time filter is the one that has to hold.
+    await insertDoc({ source: 'rss', uri: 'https://example.org/phrase-name', text: 'O deputado Jair Bolsonaro discursou', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase' and term = 'jair bolsonaro'`)
+    assert.equal(rows[0].n, 1, 'sanity: the run this filter has to hide must exist')
+    const graph = await graphFor(persons[2], wide)
+    for (const term of termsOfKind(graph.nodes, 'phrase')) assert.ok(!term.split(' ').includes('bolsonaro'), `${term} names the person, it is not said about them`)
   })
 })
 

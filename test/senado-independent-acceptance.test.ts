@@ -11,6 +11,7 @@ import { collectors, defaultSources } from '../src/collectors/index.js'
 import { senado } from '../src/collectors/senado.js'
 import type { Person, RawDoc, Source } from '../src/types.js'
 import { persons, seed, docs } from './fixture.js'
+import { docPageText, docsText, sourceTable } from './docs.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
 import { createHandlers } from '../public/js/app.js'
 import './close.js'
@@ -142,15 +143,14 @@ describe('senado collector acceptance criteria, independently verified (issue #2
     assert.equal(jairBolsonaro?.senadoId, undefined)
   })
 
-  it('AC10: README documents senado in the source list, ingest defaults, every source= enum, and the senadoId seed field', () => {
-    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
-    assert.match(readme, /senado/i, 'README must mention senado at all')
-    assert.match(readme, /default sources:.*senado/i, 'ingest default-sources line must list senado')
-    const enumLines = readme.split('\n').filter((l) => /source=all\|/.test(l))
-    assert.ok(enumLines.length >= 3, 'expected multiple route listings with a source= enum')
-    for (const line of enumLines) assert.match(line, /\bsenado\b/, `source= enum missing senado: ${line}`)
-    assert.match(readme, /senadoId/)
-    assert.match(readme, /dadosabertos\.senado\.leg\.br/)
+  // This used to read README.md and count `source=all|...` lines, so it broke when PR #81
+  // split the README into docs/ pages without changing one fact. The criterion is that
+  // senado ships documented: the fact, wherever a reader finds it.
+  it('AC10: the docs describe senado as a default source, its open-data host and the senadoId seed field', () => {
+    assert.equal(sourceTable.get('senado')?.byDefault, true, 'docs/sources.md must show senado as a default source')
+    assert.match(docPageText.get('docs/api.md') ?? '', /`senado`/, 'docs/api.md must list senado as a source filter value')
+    assert.match(docsText, /senadoId/)
+    assert.match(docsText, /dadosabertos\.senado\.leg\.br/)
   })
 
   it('AC11: the segSource control includes a senado button wired to the shared segment handler', () => {

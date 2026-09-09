@@ -165,17 +165,22 @@ Two key forms, read in this order:
 | bare | `?days=7` | seeds every figure that has that control |
 | prefixed with the figure id | `?atlas.days=7` | seeds that figure only, and wins over the bare key |
 
-The figure ids are `atlas` (figure 1, `#workspace`) and `testimony` (figure 2, `#testimony`).
-Figure 1 reads `person`, `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days`
-and `source` — it has no sort or limit control, matching what `narrowToTestimony` and
-`narrowToSources` already drop.
+The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`) and
+`compare` (figure 3, `#compare`). Figure 1 reads `person`, `days`, `source`, `sort` and `limit`;
+figure 2 reads `person`, `days` and `source` — it has no sort or limit control, matching what
+`narrowToTestimony` and `narrowToSources` already drop. Figure 3 reads `a` (bare fallback
+`person`, same as figure 1 and 2's own `person` key), `b`, `days`, `source`, `limit` and
+`measure` — `b` and `measure` have no bare equivalent, since no other figure has a second
+person or a measure selector.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the
 figure's own default stand, exactly as if no querystring were there. An unknown person id falls
-back to the first person in `GET /api/people`. These keys are client-side only — each figure
-still narrows its own request through `public/js/api.js`, so nothing here reaches the server
-verbatim.
+back to the first person in `GET /api/people`; figure 3's `b`, when absent or unknown, falls
+back to the second distinct person in that same list, or to `a`'s own id when the tracked list
+has only one person — making `a === b` a reachable, legal state, not a guarded error. These keys
+are client-side only — each figure still narrows its own request through `public/js/api.js`, so
+nothing here reaches the server verbatim.
 
 `GET /api/people` is fetched exactly once, by the shell, however many figures mount. If it
 fails, the failure travels down into every `mount()` as `peopleError` and each figure paints

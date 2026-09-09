@@ -28,17 +28,28 @@ describe('Leitura UI: the recorte is one sentence', () => {
   })
 })
 
-describe('Leitura UI: the page explains itself', () => {
-  it('design-5.html carries a "Como ler" chapter that defines frequência, PMI, the weighted size, lines and tone', () => {
-    const html = read('design-5.html')
-    const chapter = html.match(/<section class="chapter" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+describe('Leitura UI: the site explains itself on its own page', () => {
+  it('como-ler.html carries the "Como ler" chapter that defines frequência, PMI, the weighted size, lines and tone', () => {
+    const html = read('como-ler.html')
+    const chapter = html.match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.ok(chapter, 'the chapter must exist with id="como-ler"')
-    assert.match(chapter, /<h2[^>]*>Como ler este atlas<\/h2>/)
-    for (const heading of ['Como fazer uma análise', 'Frequência', 'PMI', 'Linha entre duas palavras', 'Tom']) assert.match(chapter, new RegExp(`<h3>${heading}<\\/h3>`), heading)
+    assert.match(chapter, /<h2[^>]*>Como ler o rashomon<\/h2>/)
+    for (const heading of ['Como fazer uma análise', 'Frequência', 'Linha entre duas palavras', 'Tom']) assert.match(chapter, new RegExp(`<h3>${heading}<\\/h3>`), heading)
+    assert.match(chapter, /<h3 id="pmi">PMI<\/h3>/)
     assert.match(chapter, /mais do que apareceria por acaso/, 'PMI must be defined in plain words')
     assert.match(chapter, /PMI × ln\(1 \+ documentos\)/, 'the weighted size must be spelled out')
     assert.match(chapter, /Só existe nos textos que vêm do GDELT/, 'tone stays a GDELT-only fact')
-    assert.match(html, /<a class="compare-link" href="compare\.html">comparar pessoas<\/a><a href="#como-ler">como ler<\/a>/, 'the header links to the chapter')
+    assert.match(html, /<link rel="stylesheet" href="atlas\.css">/)
+    assert.doesNotMatch(html, /<style[\s>]|<script/i, 'the reading page is markup only')
+  })
+
+  it('design-5.html no longer carries the chapter and links to the page from the header and from each figure', () => {
+    const html = read('design-5.html')
+    assert.doesNotMatch(html, /id="como-ler"/)
+    assert.match(html, /<a class="compare-link" href="compare\.html">comparar pessoas<\/a><a href="como-ler\.html">como ler<\/a>/, 'the header links to the page')
+    assert.match(html, /href="como-ler\.html#atlas"/)
+    assert.match(html, /href="como-ler\.html#avaliacao"/)
+    assert.match(read('compare.html'), /href="como-ler\.html/)
   })
 })
 
@@ -56,7 +67,7 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     assert.match(css, /--display:\s*'League Spartan'/)
     assert.ok(FONT_SANS.startsWith("'Instrument Sans'"), 'canvas measurement must use the face the map is painted with')
     assert.ok(FONT_DISPLAY.startsWith("'League Spartan'"), 'the centre name is measured with the display face')
-    for (const page of ['design-5.html', 'compare.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=League\+Spartan[^"]*Instrument\+Sans/, `${page} loads both faces`)
+    for (const page of ['design-5.html', 'compare.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=League\+Spartan[^"]*Instrument\+Sans/, `${page} loads both faces`)
   })
 
   it('atlas.css has no type smaller than 12px and no 10px uppercase labels', () => {

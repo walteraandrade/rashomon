@@ -18,6 +18,7 @@ import {
   paintDocs,
   paintDocsError,
   paintDocsLoading,
+  paintDocsTitle,
   paintOutlets,
   paintOutletsError,
   paintSelection,
@@ -86,6 +87,8 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
  *   updateHeader?: () => void,
  *   setSource?: (source: string) => void,
  *   toggleMask?: () => void,
+ *   closeDocs?: () => void,
+ *   docsOpen?: () => boolean,
  * }} actions every action is optional so a test can inject only the ones a criterion is about
  */
 export const createHandlers = ({
@@ -102,6 +105,8 @@ export const createHandlers = ({
   updateHeader = () => {},
   setSource = () => {},
   toggleMask = () => {},
+  closeDocs = () => {},
+  docsOpen = () => false,
 }) => ({
   search: () => {
     paintCurrentSelection()
@@ -111,9 +116,16 @@ export const createHandlers = ({
     clearSearch()
     choose(null)
   },
+  // Escape closes the documents modal when it is open, and only then clears the selection:
+  // the reader who closes the texts of a word must still be looking at that word.
   /** @param {{ key: string }} e */
   keydown: (e) => {
-    if (e.key !== 'Escape' || !canClear()) return
+    if (e.key !== 'Escape') return
+    if (docsOpen()) {
+      closeDocs()
+      return
+    }
+    if (!canClear()) return
     clearSearch()
     choose(null)
   },
@@ -139,6 +151,16 @@ export const createHandlers = ({
   zoomIn: () => setZoom(getZoomLevel() + 0.25),
   zoomOut: () => setZoom(getZoomLevel() - 0.25),
   zoomReset: () => setZoom(1),
+  // The chip under the sentence: the outlet lists live in the second figure, so releasing the
+  // outlet filter must not need a scroll. Same steps as the person control minus the reload
+  // of the candidate queue.
+  domainClear: () => {
+    resetDomain()
+    updateHeader()
+    load()
+  },
+  // Closing the modal aborts whatever /docs request is still in flight.
+  docsClose: () => closeDocs(),
 })
 
 // The layout cache key: the same person, sort, term limit and term list must reuse the same
@@ -308,12 +330,17 @@ const choose = (id) => {
   $('selectionNote').textContent = chosen ? `${label(chosen)} selecionado. Detalhes atualizados.` : 'Seleção limpa.'
 }
 
+// The only path to GET /docs: the reader pressed the button in the inspector. The modal opens
+// first, with the loading copy or the memoized rows, and the fetch runs behind it.
 /** @param {Term | null} n */
 const loadDocs = async (n) => {
   const id = cancelDocs()
   const docsController = new AbortController()
   setDocsController(docsController)
   if (!$('docs') || !graph || !$('person').value) return
+  paintDocsTitle({ term: n, personName: graph.person.name })
+  const dialog = $('docsDialog')
+  if (dialog && !dialog.open) dialog.showModal()
   const person = $('person').value
   const base = graphQuery()
   const query = docsQuery(base, n)
@@ -381,7 +408,10 @@ const loadTestimonyFlow = async (id, signal) => {
   }
 }
 
+// The candidate queue has no panel on the atlas any more (it is a maintenance list, not a
+// reading); the flow stays for a page that carries `#candidateList`, and is a no-op without it.
 const loadCandidatesFlow = async () => {
+  if (!$('candidateList')) return
   getCandidateController()?.abort()
   const controller = new AbortController()
   setCandidateController(controller)
@@ -454,6 +484,14 @@ const updateHeader = () => {
   const source = sourceLabels[state.source] || state.source
   $('stats').hidden = !graph
   $('stats').textContent = graph ? `${fmt(graph.stats?.about)} docs · ${source}${domainSuffix(state.domain)}` : ''
+  $('domainClear').hidden = state.domain === 'all'
+  $('domainChip').textContent = state.domain === 'all' ? '' : state.domain
+}
+
+const closeDocs = () => {
+  cancelDocs()
+  const dialog = $('docsDialog')
+  if (dialog?.open) dialog.close()
 }
 
 // The controller for the request in flight; `load` replaces it before every fetch, so this
@@ -560,6 +598,8 @@ const handlers = createHandlers({
     $('mask').setAttribute('aria-pressed', String(getMask()))
     if (graph && !busy) paintCurrentSelection()
   },
+  closeDocs,
+  docsOpen: () => !!$('docsDialog')?.open,
 })
 
 export const boot = () => {
@@ -575,6 +615,13 @@ export const boot = () => {
   $('zoomIn').addEventListener('click', handlers.zoomIn)
   $('zoomOut').addEventListener('click', handlers.zoomOut)
   $('zoomReset').addEventListener('click', handlers.zoomReset)
+  $('domainClear').addEventListener('click', handlers.domainClear)
+  $('docsClose').addEventListener('click', handlers.docsClose)
+  // A click on the backdrop lands on the dialog element itself, never on its children.
+  $('docsDialog').addEventListener('click', (/** @type {MouseEvent} */ e) => {
+    if (e.target === $('docsDialog')) handlers.docsClose()
+  })
+  $('docsDialog').addEventListener('close', () => cancelDocs())
   document.addEventListener('keydown', handlers.keydown)
   new ResizeObserver(resizeMap).observe($('viewport'))
   document.fonts?.ready?.then(() => {

@@ -12,83 +12,49 @@
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="compare-link" href="compare.html">comparar pessoas</a><a href="#como-ler">como ler</a></nav><span id="stats" hidden></span></header>
+<header class="top"><a class="brand" href="/">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="compare-link" href="compare.html">comparar pessoas</a><a href="como-ler.html">como ler</a></nav><span id="stats" hidden></span></header>
 <main>
   <section class="sentence" aria-label="Recorte">
-    <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa"></select></span> nos <span class="pick"><select id="days" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="source" aria-label="Fonte"></select></span>, por <span class="pick"><select id="sort" aria-label="Tamanho por"><option value="count">frequência</option><option value="pmi">PMI ponderado</option></select></span>. Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras"><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
-    <p class="status" id="status" role="status"></p>
+    <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa"></select></span> nos <span class="pick"><select id="days" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="source" aria-label="Fonte"></select></span>, por <span class="pick"><select id="sort" aria-label="Tamanho por"><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option></select></span>. Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras"><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
+    <p class="status-row"><span class="status" id="status" role="status"></span><button id="domainClear" class="quiet-button domain-chip" hidden>Soltar veículo <b id="domainChip"></b> ×</button></p>
   </section>
-  <section class="workspace" id="workspace" aria-label="Mapa e detalhes">
-    <div class="canvas">
-      <div class="map-tools"><label class="search"><input id="search" type="search" placeholder="Encontrar uma palavra no recorte…" aria-label="Encontrar uma palavra no recorte"></label><div class="segment" role="group" aria-label="Modo de leitura"><button id="modeMap" aria-pressed="true">Mapa</button><button id="modeColumns" aria-pressed="false">Lista</button></div><button id="mask" class="quiet-button toggle" aria-pressed="false">Colorir por avaliação</button><div class="zoom" aria-label="Zoom do mapa"><button id="zoomOut" class="quiet-button" aria-label="Diminuir zoom">−</button><button id="zoomReset" class="quiet-button" aria-label="Restaurar zoom">100%</button><button id="zoomIn" class="quiet-button" aria-label="Aumentar zoom">+</button></div><button id="clear" class="quiet-button">Limpar seleção</button></div>
-      <p class="mobile-hint">Arraste o mapa para os lados para ver o círculo inteiro.</p>
-      <div id="searchNote" class="search-note" role="status"></div>
-      <div class="viewport" id="viewport" role="region" aria-label="Mapa circular interativo. Use Tab para navegar pelas palavras; em telas pequenas, role horizontalmente." tabindex="0"></div>
-      <div class="overflow" id="overflow" hidden></div>
-      <div id="columns" class="columns" hidden></div>
-      <div class="legend" id="legend"></div>
-      <figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden></figure>
-    </div>
-    <div class="side">
-      <details class="outlets" id="outlets"><summary class="eyebrow">Veículos <b id="domainLabel"></b></summary><div id="outletList">Aguardando dados.</div></details>
-      <details class="outlets testimony" id="testimony" open><summary class="eyebrow">Avaliação <b id="testimonyLabel"></b></summary><div id="testimonyList">Aguardando dados.</div></details>
-      <details class="outlets candidates" id="candidateQueue"><summary class="eyebrow">Candidatos <b id="candidateLabel"></b></summary><div id="candidateList">Aguardando dados.</div></details>
+
+  <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 1</span><h2 id="atlasTitle">Atlas de palavras</h2></div>
+      <p class="figure-sub">As palavras que mais aparecem nos textos que citam a pessoa. O tamanho é a frequência ou o PMI; a cor compara a avaliação dos textos com a palavra à média da pessoa. Clique numa palavra para ver com quem ela anda. <a href="como-ler.html#atlas">Como ler este gráfico</a>.</p>
+    </header>
+    <div class="map-tools"><label class="search"><input id="search" type="search" placeholder="Encontrar uma palavra no recorte…" aria-label="Encontrar uma palavra no recorte"></label><div class="segment" role="group" aria-label="Modo de leitura"><button id="modeMap" aria-pressed="true">Mapa</button><button id="modeColumns" aria-pressed="false">Lista</button></div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação</button><div class="zoom" aria-label="Zoom do mapa"><button id="zoomOut" class="quiet-button" aria-label="Diminuir zoom">−</button><button id="zoomReset" class="quiet-button" aria-label="Restaurar zoom">100%</button><button id="zoomIn" class="quiet-button" aria-label="Aumentar zoom">+</button></div><button id="clear" class="quiet-button">Limpar seleção</button></div>
+    <div class="figure-body">
+      <div class="canvas">
+        <p class="mobile-hint">Arraste o mapa para os lados para ver o círculo inteiro.</p>
+        <div id="searchNote" class="search-note" role="status"></div>
+        <div class="viewport" id="viewport" role="region" aria-label="Mapa circular interativo. Use Tab para navegar pelas palavras; em telas pequenas, role horizontalmente." tabindex="0"></div>
+        <div class="overflow" id="overflow" hidden></div>
+        <div id="columns" class="columns" hidden></div>
+        <div class="legend" id="legend"></div>
+      </div>
       <aside class="inspector" id="inspector" aria-label="Detalhes da pessoa ou da palavra"></aside>
     </div>
   </section>
   <div id="selectionNote" class="sr-only" role="status"></div>
-  <section class="chapter" id="como-ler" aria-labelledby="comoLerTitle">
-    <h2 id="comoLerTitle">Como ler este atlas</h2>
-    <p class="chapter-intro">O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. As posições evitam colisões; elas não medem distância nem opinião.</p>
-    <div class="chapter-grid">
-      <div>
-        <h3>Como fazer uma análise</h3>
-        <ol>
-          <li><b>Escolha uma pessoa.</b> O site junta textos que citam ela: posts do Bluesky, notícias, discursos na Câmara e no Senado.</li>
-          <li><b>Escolha o período e a fonte.</b> Isso é o recorte. Tudo que aparece depois vale só para esse recorte.</li>
-          <li><b>Olhe as palavras maiores.</b> Elas aparecem em mais textos junto do nome.</li>
-          <li><b>Clique numa palavra.</b> As linhas mostram outras palavras que estão nos mesmos textos. Ao lado, os textos de verdade, para conferir.</li>
-        </ol>
-      </div>
-      <div>
-        <h3>Frequência</h3>
-        <p>Em quantos textos sobre a pessoa a palavra aparece. Uma palavra em 173 de 440 textos é grande no mapa. Frequência diz o que se fala muito.</p>
-        <h3>Expressões</h3>
-        <p>Algumas coisas só fazem sentido juntas. "Primeiro turno" não é "primeiro" mais "turno"; "Alexandre de Moraes" é uma pessoa, não três palavras. O mapa trata essas duas coisas como um termo só, chamado expressão.</p>
-        <p>Nomes próprios entram porque quem escreveu usou maiúscula: isso já é a marca de que o pedaço é um nome. Não vale para o nome que abre a frase, que é maiúsculo por gramática.</p>
-        <p>As outras expressões o próprio arquivo descobre. O site conta todos os pares de palavras vizinhas e pergunta: das vezes que a palavra mais rara do par apareceu, em quantas ela estava dentro deste par? "Turno" quase não tem outro lugar para estar, então "primeiro turno" vira expressão. "Dias" está em toda parte, então "faltam dias" não vira. O corte é 35% e no mínimo 5 aparições.</p>
-        <p>A expressão substitui as palavras dela. Onde o texto diz "primeiro turno", o mapa mostra só isso, e não mais "primeiro" e "turno" soltos. A palavra volta a contar sozinha nos textos em que ela aparece fora da expressão.</p>
-        <p>Por isso a contagem de uma palavra passa a significar: em quantos textos ela aparece pelo menos uma vez fora de qualquer expressão.</p>
-        <p>Pares que carregam o nome de alguém que o site acompanha ficam de fora: "Lula defende" não vira expressão, senão "defende" sumiria do mapa do Lula sem nada no lugar. Nome com mais de uma palavra continua entrando pela maiúscula.</p>
-        <h3>O que fica de fora</h3>
-        <p>O GDELT cola etiquetas próprias em cada notícia, com nomes de máquina como <code>econ_freetrade</code>. Ninguém escreveu isso numa frase, então elas não entram neste mapa. Continuam na API e no <a href="atlas-legacy.html">atlas anterior</a>.</p>
-        <h3>Linha entre duas palavras</h3>
-        <p>As duas aparecem nos mesmos textos. Só isso. Não quer dizer apoio, causa ou opinião.</p>
-        <h3>Tom</h3>
-        <p>Só existe nos textos que vêm do GDELT. As outras fontes não têm tom, e o site não inventa um.</p>
-        <h3>Avaliação</h3>
-        <p>Um modelo treinado para isto, o kikori, lê cada texto e dá uma nota de −10 a +10 para a pessoa citada. Até −2,5 conta como contra; de +2,5 para cima, a favor; no meio, neutro. Vale para todas as fontes, ao contrário do tom.</p>
-        <p>É uma opinião de máquina, e ela tem um vício conhecido: o nome da pessoa puxa a nota. A mesma frase hostil sai mais branda para uns e mais dura para outros. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
-        <p><b>A régua embaixo do mapa</b> faz essa comparação. Cada bolinha é um veículo na sua nota média; o tamanho é quantos textos ele tem; a linha vertical é a média da pessoa. Bolinhas longe uma da outra falam da mesma pessoa de jeitos diferentes.</p>
-        <p><b>Colorir por avaliação</b> pinta cada palavra do mapa. A cor compara a nota média dos textos que têm a palavra com a média da pessoa no recorte, e não com o zero: assim o vício do nome some da conta. Vermelho: os textos com essa palavra são mais hostis que o normal para essa pessoa. Verde: mais favoráveis. Cinza: igual, ou menos de 3 textos avaliados. A cor resume dois números; ao clicar na palavra, os dois aparecem por extenso.</p>
-      </div>
-      <div>
-        <h3>PMI</h3>
-        <p>Frequência conta. PMI compara. Ele pergunta: essa palavra aparece com essa pessoa mais do que apareceria por acaso?</p>
-        <p>"presidente" aparece com todo político: frequência alta, PMI baixo. Uma palavra que aparece quase só com uma pessoa tem PMI alto. PMI mostra o que é típico dela.</p>
-        <div class="pmi-scale">
-          <div><b>0</b><span>igual ao acaso</span></div>
-          <div><b>1</b><span>o dobro</span></div>
-          <div><b>2</b><span>quatro vezes</span></div>
-          <div><b>3</b><span>oito vezes</span></div>
-        </div>
-        <p>Cada +1 dobra. Pode ser negativo: a palavra aparece menos com essa pessoa do que com as outras.</p>
-        <p><b>Por que "PMI ponderado"?</b> Uma palavra que apareceu em só 2 textos pode ter PMI enorme sem merecer. Então o tamanho no mapa usa PMI × ln(1 + documentos). Isso segura as palavras raras e deixa as frequentes subirem.</p>
-      </div>
+
+  <section class="figure testimony" id="testimony" aria-labelledby="testimonyTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 2</span><h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"></b></h2></div>
+      <p class="figure-sub">Cada bolinha é um veículo na nota média que o modelo kikori dá aos textos dele sobre a pessoa, de −10 (contra) a +10 (a favor). O tamanho é quantos textos. Compare veículos falando da mesma pessoa; nunca compare pessoas. <a href="como-ler.html#avaliacao">Como ler este gráfico</a>.</p>
+    </header>
+    <figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden></figure>
+    <div class="figure-body figure-lists">
+      <div class="testimony-lists" id="testimonyList">Aguardando dados.</div>
+      <details class="outlets" id="outlets"><summary class="eyebrow">Todos os veículos do recorte <b id="domainLabel"></b></summary><div id="outletList">Aguardando dados.</div></details>
     </div>
-    <p class="chapter-foot"><span>Tipos, tom por termo, linhas do tempo e termos em alta continuam no <a href="atlas-legacy.html">atlas anterior</a>.</span><span>Sem dados fictícios em produção.</span></p>
   </section>
 </main>
+<dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
+  <div class="docs-dialog-head"><div><span class="eyebrow" id="docsKicker">Documentos</span><h3 id="docsTitle"></h3></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
+  <div id="docs" aria-live="polite"></div>
+</dialog>
 <script type="module" src="./js/app.js"></script>
 </body>
 </html>

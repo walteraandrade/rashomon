@@ -17,8 +17,9 @@ export const setSelected = (id) => {
 }
 
 // The colour mask over the map's words (testimony per term against the person's mean). A
-// paint-only flag: the data it reads always travels with the graph.
-let mask = false
+// paint-only flag: the data it reads always travels with the graph. On by default: the colour
+// is the one reading the atlas adds over a word cloud.
+let mask = true
 export const getMask = () => mask
 /** @param {boolean} on */
 export const setMask = (on) => {

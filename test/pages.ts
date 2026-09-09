@@ -6,4 +6,4 @@ export const VERCEL_INSIGHTS = '/_vercel/insights/script.js'
 export const VERCEL_INSIGHTS_TAG = `<script defer src="${VERCEL_INSIGHTS}"></script>`
 
 /** Every page a visitor can land on, and therefore every page the analytics tag belongs on. */
-export const ANALYTICS_PAGES = ['design-5.html', 'como-ler.html', 'compare.html']
+export const ANALYTICS_PAGES = ['design-5.html', 'como-ler.html']

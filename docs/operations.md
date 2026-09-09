@@ -158,19 +158,19 @@ Every `/api/*` GET is public, read-only and depends on data that only changes wh
 | Route | `s-maxage` | Why |
 |---|---|---|
 | `/api/people` | 24h | The only route with no `now()` in its SQL. It changes when `seed.json` changes, which means an edit, a `pnpm reindex` and a push. |
-| `graph`, `sources`, `docs`, `timeline`, `testimony`, `/api/tone` | 6h | Default window `days=30`; 6h is ~1% of it. |
+| `graph`, `sources`, `docs`, `timeline`, `testimony`, `/api/tone`, `/api/compare` | 6h | Default window `days=30`; 6h is ~1% of it. |
 | `rising`, `/api/candidates` | 1h | Default window `days=7` and both are read as "what changed lately"; 1% of 7 days is ~1.7h, rounded down. |
 
 The rule behind the table: an entry may be at most ~1% of the shortest default window the route reports on, capped at a day.
 
-**Staleness, in plain terms.** A reader can see a page up to `s-maxage` old: up to 6 hours on the graph, sources, docs, timeline, testimony and tone views, up to 1 hour on rising and candidates, up to a day on the list of tracked people. Within `stale-while-revalidate` (a day) the CDN may serve one entry that is older still while it refreshes in the background, so the worst case is `s-maxage + swr`. Two visible consequences: (1) documents ingested and pushed in the meantime do not appear yet; (2) the windows are `now() - interval 'N days'`, not calendar days, so at the old edge a document that has just fallen out of a window can still be counted for up to `s-maxage`. On `days=30` that edge moves 0.8% of the window, on `days=7` 0.6%. Both are far smaller than the gap between two `pnpm push` runs, which is the real age of the data.
+**Staleness, in plain terms.** A reader can see a page up to `s-maxage` old: up to 6 hours on the graph, sources, docs, timeline, testimony, tone and compare views, up to 1 hour on rising and candidates, up to a day on the list of tracked people. Within `stale-while-revalidate` (a day) the CDN may serve one entry that is older still while it refreshes in the background, so the worst case is `s-maxage + swr`. Two visible consequences: (1) documents ingested and pushed in the meantime do not appear yet; (2) the windows are `now() - interval 'N days'`, not calendar days, so at the old edge a document that has just fallen out of a window can still be counted for up to `s-maxage`. On `days=30` that edge moves 0.8% of the window, on `days=7` 0.6%. Both are far smaller than the gap between two `pnpm push` runs, which is the real age of the data.
 
 **What is never cached.** Anything that is not a 200 on a GET gets `Cache-Control: no-store`: the 404 for an unknown person, the 404 for an unknown `/api` path, and any future non-GET method. An uncaught exception is turned into a 500 by Hono's own error handler, which does not pass through this middleware and therefore carries no `Cache-Control` at all; Vercel does not cache a function response that has no `Cache-Control`. Nothing under `public/` is touched — those files are served by the CDN from `vercel.json`, not by this middleware.
 
 There is no `max-age`, on purpose: the directive targets the shared cache. A browser with no `max-age` and no `Last-Modified` has no heuristic freshness to lean on and re-asks the CDN, which answers from its own copy without waking a function.
 
 ```bash
-API_CACHE_HOURS=6         # graph, sources, docs, timeline, testimony, tone
+API_CACHE_HOURS=6         # graph, sources, docs, timeline, testimony, tone, compare
 API_CACHE_TREND_HOURS=1   # rising, candidates
 API_CACHE_STATIC_HOURS=24 # people
 API_CACHE_SWR_HOURS=24    # stale-while-revalidate; 0 drops the directive

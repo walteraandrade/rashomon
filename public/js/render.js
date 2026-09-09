@@ -3,15 +3,19 @@
 // and the callbacks it wires (onChoose, onShowDocs, onPick) all come in as parameters, so
 // this module never reaches into public/js/state.js on its own.
 
-import { domainSuffix, esc, fmt, kinds, label, matching, mergeOutlets, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, trendOf } from './format.js'
+import { balanceColor, domainSuffix, esc, fmt, kinds, label, matching, mergeOutlets, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, trendOf } from './format.js'
 import { FONT_SANS, routesFrom, swarm } from './layout.js'
 
 /** @typedef {import('./format.js').Candidate} Candidate */
+/** @typedef {import('./format.js').Compare} Compare */
+/** @typedef {import('./format.js').CompareSide} CompareSide */
+/** @typedef {import('./format.js').CompareTerm} CompareTerm */
 /** @typedef {import('./format.js').Doc} Doc */
 /** @typedef {import('./format.js').Graph} Graph */
 /** @typedef {import('./format.js').Layout} Layout */
 /** @typedef {import('./format.js').Link} Link */
 /** @typedef {import('./format.js').OutletRow} OutletRow */
+/** @typedef {import('./format.js').PersonRef} PersonRef */
 /** @typedef {import('./format.js').PlacedTerm} PlacedTerm */
 /** @typedef {import('./format.js').Term} Term */
 /** @typedef {import('./format.js').Testimony} Testimony */
@@ -434,4 +438,146 @@ export const paintCandidatesLoading = () => {
 export const paintCandidatesError = (onRetry) => {
   $('candidateList').innerHTML = '<p class="note">Não foi possível carregar os candidatos. <button class="quiet-button" id="retryCandidates">Tentar novamente</button></p>'
   $('retryCandidates').addEventListener('click', onRetry)
+}
+
+// ---------- figure 3: the ruler (compare two people, issue #91) ----------
+
+/** @param {CompareSide | 'name' | null} v @param {string} measure */
+const scoreOf = (v, measure) => (v && v !== 'name' ? score(v, measure) : 0)
+
+/** @param {CompareSide | 'name' | null} v */
+const docsOf = (v) => (v && v !== 'name' ? v.count : 0)
+
+// Drops a term that is either side's own name, and scores the rest against `measure`: position
+// (`balance`, -1 all A .. 0 divided .. +1 all B) and `combined` (documents on both sides summed,
+// never measure-dependent, per spec §3). `hiddenCount` is what #compareHiddenNote reports, so
+// the omission is stated rather than silent.
+/**
+ * @param {CompareTerm[]} terms
+ * @param {string} measure
+ * @returns {{ items: (CompareTerm & { balance: number, combined: number })[], hiddenCount: number }}
+ */
+export const rulerTerms = (terms, measure) => {
+  let hiddenCount = 0
+  /** @type {(CompareTerm & { balance: number, combined: number })[]} */
+  const items = []
+  for (const t of terms) {
+    if (t.a === 'name' || t.b === 'name') {
+      hiddenCount++
+      continue
+    }
+    const sa = scoreOf(t.a, measure)
+    const sb = scoreOf(t.b, measure)
+    const mag = Math.abs(sa) + Math.abs(sb)
+    const balance = mag === 0 ? 0 : Math.max(-1, Math.min(1, (sb - sa) / mag))
+    items.push({ ...t, balance, combined: docsOf(t.a) + docsOf(t.b) })
+  }
+  return { items, hiddenCount }
+}
+
+const RULER_PAD = 28
+
+// The geometry of the ruler at a given pixel width, same shape as stripLayout: one circle per
+// word on the -1..+1 balance axis, stacked by `swarm` where they would overlap and shrunk
+// together (reusing stripRadius/STRIP_MIN_R/STRIP_MAX_HEIGHT, the same area-encodes-count and
+// height-cap rules the strip already uses) past a height cap. A self-contained function on
+// purpose (issue #91 §4): it mirrors paintStrip's shape without importing it.
+/**
+ * @param {(CompareTerm & { balance: number, combined: number })[]} items
+ * @param {number} width
+ */
+export const rulerLayout = (items, width = 860) => {
+  const inner = Math.max(80, width - 2 * RULER_PAD)
+  /** @param {number} balance */
+  const x = (balance) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
+  const sized = items.map((it) => ({ ...it, x: x(it.balance), r: stripRadius(it.combined, width) }))
+  const smallest = sized.reduce((m, d) => Math.min(m, d.r), Infinity)
+  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
+  let scale = 1
+  /** @param {number} k */
+  const attempt = (k) => {
+    const dots = swarm(sized.map((d) => ({ ...d, r: d.r * k })))
+    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
+    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
+  }
+  let fit = attempt(scale)
+  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
+    scale = Math.max(floor, scale * 0.92)
+    fit = attempt(scale)
+  }
+  return { dots: fit.dots, x, half: fit.half, height: fit.half * 2, width }
+}
+
+// The ruler itself: one dot per shared or exclusive word between two people, positioned by who
+// it leans toward and sized by how many documents it has with both, combined. Text stays in
+// HTML like the strip's axis labels; only the shapes are SVG. Returns the hidden-name count so
+// the caller can paint #compareHiddenNote without recomputing rulerTerms itself.
+/**
+ * @param {{ data: Compare, personA: PersonRef, personB: PersonRef, measure: string, selected: { term: string, kind: string } | null, onPick: (term: string, kind: string) => void, width?: number }} args
+ */
+export const paintRuler = ({ data, personA, personB, measure, selected, onPick, width = 860 }) => {
+  const ruler = $('compareRuler')
+  const { items, hiddenCount } = rulerTerms(data.terms, measure)
+  if (!items.length) {
+    ruler.hidden = true
+    ruler.innerHTML = ''
+    return { hiddenCount }
+  }
+  ruler.hidden = false
+  const { dots, x, half, height } = rulerLayout(items, width)
+  const tick = (/** @type {number} */ b) => `<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
+  ruler.innerHTML =
+    `<div class="ruler-end-row"><span class="ruler-end cmp-a">${esc(personA.name)}</span><span class="ruler-end cmp-b">${esc(personB.name)}</span></div>` +
+    `<svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Régua comparando ${esc(personA.name)} e ${esc(personB.name)}">` +
+    `<line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick).join('')}` +
+    dots
+      .map((d) => {
+        const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
+        return `<g class="ruler-dot ${isSelected ? 'is-selected' : ''}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(label(d))}, ${fmt(d.combined)} documentos"><title>${esc(label(d))} · ${fmt(d.combined)} documentos</title><circle cx="${d.x}" cy="${half + d.y}" r="${d.r}" style="--cmp:${balanceColor(d.balance)}"/></g>`
+      })
+      .join('') +
+    '</svg>' +
+    `<div class="ruler-axis-labels"><span>Só de ${esc(personA.name)}</span><span>dividida</span><span>Só de ${esc(personB.name)}</span></div>` +
+    '<p class="note">Uma bolinha por palavra; a posição mostra de quem ela é mais, o tamanho é quantos documentos ao todo dos dois lados somados. Toque numa bolinha para ver os números dos dois lados.</p>'
+  for (const el of queryAll('[data-term]', ruler)) {
+    const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
+    el.addEventListener('click', pick)
+    el.addEventListener('keydown', (event) => {
+      const e = /** @type {KeyboardEvent} */ (event)
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        pick()
+      }
+    })
+  }
+  return { hiddenCount }
+}
+
+export const paintRulerError = () => {
+  const ruler = $('compareRuler')
+  ruler.hidden = false
+  ruler.innerHTML = '<p class="note">Não foi possível carregar a comparação.</p>'
+}
+
+export const paintCompareLoading = () => {
+  $('compareDetail').textContent = 'Carregando…'
+}
+
+// The selected word's own numbers on both sides, one line, same two-state wording the deleted
+// compare.html's own detailHtml used: a real object reads as documents and PMI, a null side
+// reads "nenhum documento" (a measured zero, never "outside the top list").
+/** @param {{ term: CompareTerm | null, personA: PersonRef, personB: PersonRef }} args */
+export const paintCompareDetail = ({ term, personA, personB }) => {
+  const el = $('compareDetail')
+  if (!el) return
+  if (!term) {
+    el.innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
+    return
+  }
+  /** @param {PersonRef} person @param {CompareSide | 'name' | null} v */
+  const sideHtml = (person, v) =>
+    v && v !== 'name'
+      ? `<span class="side">${esc(person.name)}: <b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></span>`
+      : `<span class="side empty-hint">${esc(person.name)}: nenhum documento</span>`
+  el.innerHTML = `<span class="term">${esc(label(term))}</span>${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}`
 }

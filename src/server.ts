@@ -3,11 +3,12 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { cacheControl } from './cache.js'
 import { db, migrate } from './db.js'
-import { candidatesFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
+import { candidatesFor, compareFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round } from './perf.js'
 import type { Person } from './types.js'
 import {
   parseCandidatesQuery,
+  parseCompareQuery,
   parseDocsQuery,
   parseQuery,
   parseRisingQuery,
@@ -59,6 +60,22 @@ app.get('/api/people/:id/docs', async (c) => c.json(await docsFor(c.get('person'
 app.get('/api/people/:id/timeline', async (c) => c.json(await timelineFor(c.get('person'), parseTimelineQuery(c.req.query()))))
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
 app.get('/api/people/:id/testimony', async (c) => c.json(await testimonyFor(c.get('person'), parseTestimonyQuery(c.req.query()))))
+
+// Not nested under /people/:id, like /api/tone and /api/candidates: it spans two specific
+// people, neither of which is "the" resource. `a` is resolved before `b`, so if both are
+// invalid the body cannot distinguish which -- the same granularity /people/:id/* already
+// gives for one id.
+app.get('/api/compare', async (c) => {
+  const aId = (c.req.query('a') ?? '').trim()
+  const bId = (c.req.query('b') ?? '').trim()
+  const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = any($1::text[])`, [[aId, bId]])
+  const byId = new Map(rows.map((p) => [p.id, p]))
+  const a = byId.get(aId)
+  if (!a) return c.json({ error: 'person not found' }, 404)
+  const b = byId.get(bId)
+  if (!b) return c.json({ error: 'person not found' }, 404)
+  return c.json(await compareFor(a, b, parseCompareQuery(c.req.query())))
+})
 
 // Not nested under /people/:id: it spans every tracked person at once.
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))

@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/index.js'
-import type { CandidatesQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
+import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
 
 // Resolved lazily, per request, through the same `methods` map `pnpm score` uses (never a
 // literal): the default label is whatever `pnpm score`'s own default scorer would currently
@@ -131,4 +131,15 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
   days: int(q.days, 7, 1, 365),
   min: int(q.min, 5, 1, 1000),
   limit: int(q.limit, 50, 1, 200),
+})
+
+// No `min` (see CompareQuery). limit clamps to [1, 100], narrower than GraphQuery's [1, 200]:
+// each unioned key costs two exact figures instead of one, per issue #93's spec.
+export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
+  days: int(q.days, 30, 1, 365),
+  source: parseSourceList(q.source),
+  domain: parseDomainList(q.domain),
+  lean: parseLeanList(q.lean),
+  kind: parseKindList(q.kind),
+  limit: int(q.limit, 40, 1, 100),
 })

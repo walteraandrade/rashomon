@@ -11,4 +11,6 @@ import { oficial } from './oficial.js'
 import { nicho } from './nicho.js'
 
 export const collectors: Record<Source, Collector> = { bluesky, gdelt, rss, gnews, gkg, camara, senado, juridico, oficial, nicho }
-export const defaultSources: Source[] = ['bluesky', 'rss', 'gnews', 'gkg', 'senado', 'camara', 'juridico', 'oficial', 'nicho']
+// Bluesky last: its authenticated search answers in ~7 s a page and takes ~20 min for
+// every person, so a slow day must not keep the fast sources from being written first.
+export const defaultSources: Source[] = ['rss', 'gnews', 'gkg', 'senado', 'camara', 'juridico', 'oficial', 'nicho', 'bluesky']

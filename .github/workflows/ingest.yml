@@ -2,7 +2,8 @@ name: ingest
 
 # Collects every 6 hours into the managed Postgres behind production. GKG_SLOTS=28
 # looks back 7 hours, so one missed run still leaves no gap. Runs never overlap:
-# each one is a long-lived pg session doing bulk inserts and an ANALYZE.
+# each one is a long-lived pg session doing bulk inserts and an ANALYZE. A full run
+# takes ~25 min, ~20 of them Bluesky (which defaultSources runs last).
 on:
   schedule:
     - cron: '17 */6 * * *'
@@ -20,7 +21,7 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}

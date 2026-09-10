@@ -112,3 +112,87 @@ Adding roughly 20 feeds multiplies the document count. `sort=pmi` orders by
 `pmi * ln(1 + count)`, tuned against the current corpus size, and `CLAUDE.md`
 forbids changing it without a test. Any change here needs a before/after on the
 same person, not a green test suite alone.
+
+# Second pass — 2026-09-09
+
+The first pass asked which feeds answer. This one asks what a feed changes once
+its docs are in the corpus, which is a different question with a different answer.
+
+Method: the local corpus (38,885 docs) was copied, each candidate sampled, each
+sample inserted into its own clone, and `graphFor` run before and after with
+`sort=pmi`, `limit=20`. The number that matters is how many of a person's top 20
+terms the sample displaces.
+
+## What the corpus is made of
+
+| Source | Docs | Avg text |
+|---|---:|---:|
+| `gkg` | 18,024 | 74 chars |
+| `bluesky` | 14,083 | 155 |
+| `gnews` | 5,287 | 165 |
+| `rss` | 1,089 | 1,544 |
+| `nicho` | 212 | 754 |
+| `gdelt` | 106 | 72 |
+| `juridico` | 45 | 251 |
+| `oficial` | 32 | 1,592 |
+| `camara` | 7 | 564 |
+
+`gkg` and `bluesky` are 82% of it. Two things follow that are worth writing down:
+
+- 4,297 docs (11%) are on `.pt` domains, all of them through `gkg`; `sapo.pt`
+  alone is the second largest domain in the corpus, ahead of `uol.com.br`.
+  Portuguese-from-Portugal vocabulary scores inside a Brazilian-politics graph.
+- The `phrases` table is empty in the local database, so the collocation lexicon
+  has never been built there and the `phrase` kind is effectively off.
+
+## What each candidate displaces
+
+| Sample | Docs | Names someone | Top-20 churn |
+|---|---:|---:|---|
+| g1 politics, full text | 100 | 89% | moraes 10/20, fachin 7/20 |
+| eight other national feeds, headline only | 151 | ~55% | 0–1/20 |
+| regional press via Google News `site:` | 5,203 | 66% | 2–5/20 |
+| Câmara bill summaries (`/proposicoes`) | 381 | 100% | 2–7/20 |
+| DOU (`in.gov.br` search payload) | 361 | 92% | 0/20 |
+
+The control matters more than the ranking: g1's 100 full-text docs and the other
+eight feeds' 151 headlines were sampled in the same run, and only the full text
+moved anything. **More text per document beats more documents.**
+
+Two corrections to the first pass's instincts:
+
+- Regional press is not missing. All ten outlets probed are already in the corpus
+  through `gkg` (`em.com.br` 546 docs, `otempo.com.br` 467, `correio24horas.com.br`
+  250), just with a starved tail (`oliberal.com` 1, `campograndenews.com.br` 1).
+  Adding 5,203 regional headlines displaced 2–5 terms of 20.
+- DOU has the best hit rate of anything measured and changes nothing. Its new
+  vocabulary is `caput`, `inciso`, `lotacao`, `atribuicao` — administrative
+  boilerplate does not stick to a person.
+
+Câmara bill summaries sit in between: real agenda words (`imposto seletivo`,
+`sinarm`, `codigo de transito brasileiro`) mixed with legislative filler
+(`arts`, `dispor`, `regimentais`, `requer`), and they only reach the 8 people
+carrying a `camaraId`. Worth doing behind a stopword list, not before one.
+
+Reddit was re-probed. `search.json` is still 403 on any User-Agent, but
+`search.rss` answers 200 with 25 Atom entries — and rate-limits to two calls per
+burst, 429 after that even at 12 s spacing. It is an Atom feed (`<entry>`), which
+`rss.ts` cannot read: the parser reaches for `rss.channel.item`. A Reddit
+collector needs OAuth (100 QPM free for personal use) and its own parser.
+
+## What changed as a result
+
+`src/collectors/rss.ts` now reads each outlet's politics section instead of its
+front page. Only docs naming a tracked person get `doc_terms` rows, so a front
+page spends most of its fetch on documents that can never contribute a term:
+
+| Feed | Items | Naming someone | Avg text |
+|---|---:|---:|---:|
+| `g1.globo.com/rss/g1/` (was) | 100 | 18 | 2,607 |
+| `g1.globo.com/rss/g1/politica/` (now) | 100 | 89 | 4,392 |
+| `feeds.folha.uol.com.br/emcimadahora/` (was) | 100 | 26 | 375 |
+| `feeds.folha.uol.com.br/poder/` (now) | 100 | 77 | 389 |
+
+Same two requests per ingest, 44 usable docs before and 166 after, and the g1
+half now carries the article body. `g1/mundo/` (2 of 100) and `g1/economia/`
+(14 of 100) were measured and left out.

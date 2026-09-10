@@ -11,6 +11,15 @@ export type Db = {
   close: () => Promise<void>
 }
 
+// Same shape as query.ts's `int` (default, floor, ceiling) without importing it: db.ts sits
+// below the query layer and must not depend on it. Exported so every knob that reads the
+// environment (pool size, statistics threshold, write batch sizes) clamps the same way.
+// It sits above poolConfig because `base` below calls poolConfig at module load.
+export const clampEnv = (v: string | undefined, d: number, lo: number, hi: number) => {
+  const n = Number.parseInt(v ?? '', 10)
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
+}
+
 // Any sslmode in the URL would override the ssl option below, so it is stripped. A non-local
 // connection is verified against PG_SSL_CA, the server's CA certificate (PEM text), added to
 // Node's default trust store rather than replacing it: POSTGRES_URL from the Vercel Supabase
@@ -25,7 +34,7 @@ export const poolConfig = (url: string): pg.PoolConfig => {
   if (!isLocal && !ca) throw new Error('PG_SSL_CA is required for a non-local database connection')
   return {
     connectionString: parsed.toString(),
-    max: Number(process.env.PG_POOL_MAX ?? 3),
+    max: clampEnv(process.env.PG_POOL_MAX, 3, 1, 20),
     connectionTimeoutMillis: 10_000,
     ssl: isLocal ? undefined : { ca: [...tls.rootCertificates, ca as string], rejectUnauthorized: true },
   }
@@ -130,14 +139,6 @@ export const migrate = () => db.exec(schema)
 // fixed list and nothing a caller passes can widen it.
 export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony'] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
-
-// Same shape as query.ts's `int` (default, floor, ceiling) without importing it: db.ts sits
-// below the query layer and must not depend on it. Exported so every knob that reads the
-// environment (statistics threshold, write batch sizes) clamps the same way.
-export const clampEnv = (v: string | undefined, d: number, lo: number, hi: number) => {
-  const n = Number.parseInt(v ?? '', 10)
-  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
-}
 
 // How many new docs an ingest must write before its statistics refresh is worth the pause.
 export const analyzeMinDocs = () => clampEnv(process.env.ANALYZE_MIN_DOCS, 200, 1, 1_000_000)

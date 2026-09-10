@@ -88,6 +88,16 @@ describe('poolConfig', () => {
     })
   })
 
+  it('PG_POOL_MAX: unset, abc, 0 and 500 give 3, 3, 1 and 20', async () => {
+    const url = 'postgres://user:pw@localhost:5432/db'
+    const cases: [string | undefined, number][] = [[undefined, 3], ['abc', 3], ['0', 1], ['500', 20]]
+    await cases.reduce<Promise<void>>(
+      (acc, [value, expected]) =>
+        acc.then(() => withEnv({ PG_POOL_MAX: value }, () => assert.equal(poolConfig(url).max, expected))),
+      Promise.resolve(),
+    )
+  })
+
   it('AC6: importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset', () => {
     // This test file already imports src/db.ts above, under the test environment's
     // DATA_DIR=memory:// with no DATABASE_URL/POSTGRES_URL. That import already happened

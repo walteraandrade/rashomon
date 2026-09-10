@@ -241,12 +241,13 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
    nearly transparent, so it says "this one" without competing with what the colour means. */
 .word-button { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.word-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
-/* Under the cursor a soft box; picked or matched, the same box at roughly twice the presence.
-   The mark's own colour never changes: painting a picked word --accent threw away the one thing
-   the colour is there to say, and the box says "this one" perfectly well on its own. */
-.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); stroke: color-mix(in srgb, var(--wc-soft) 40%, transparent); }
-.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); stroke: color-mix(in srgb, var(--wc) 80%, transparent); stroke-width: 1.5; }
+.word-hit { fill: transparent; }
+/* Under the cursor a soft ground; picked or matched, the same ground at twice the strength. No
+   outline: this site draws no borders, so what answers to the cursor is a wash the word sits on,
+   never a box drawn around it. And the mark's own colour never changes -- painting a picked word
+   --accent threw away the one thing the colour is there to say. */
+.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 34%, transparent); }
 .word-button.is-dim { opacity: .22; }
 .word-button.is-neighbor { --wc: var(--green); }
 /* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
@@ -262,8 +263,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* The centre is the person's own entry to the documents, so it answers to the cursor the way a
    word does -- the same soft box, in the colour the name is already written in. */
 .center-label { cursor: pointer; }
-.center-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
-.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 7%, transparent); stroke: color-mix(in srgb, var(--accent) 32%, transparent); }
+.center-hit { fill: transparent; }
+.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 12%, transparent); }
 .micro { fill: var(--muted); font-family: var(--display); font-size: var(--t-micro); font-weight: 600; letter-spacing: var(--tr-label); text-transform: uppercase; }
 .center-note { fill: var(--muted); font-family: var(--sans); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
@@ -290,11 +291,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    of the dot is there to say. */
 .strip-dot { cursor: pointer; outline: none; --wc: var(--tone, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .strip-dot .dot-face { fill: var(--wc); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: fill-opacity .12s; }
-.strip-dot .dot-halo { fill: transparent; stroke: transparent; stroke-width: 1; }
-.strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 20%, transparent); stroke: color-mix(in srgb, var(--wc-soft) 45%, transparent); }
+.strip-dot .dot-halo { fill: transparent; }
+.strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 22%, transparent); }
 .strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
 .strip-dot.is-active .dot-face { fill-opacity: 1; }
-.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 30%, transparent); stroke: color-mix(in srgb, var(--wc) 80%, transparent); stroke-width: 1.5; }
+.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 42%, transparent); }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 
@@ -337,10 +338,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: var(--space-4); font-size: var(--t-sm); color: var(--muted); }
 .outlet { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: var(--space-1) 0; font-size: var(--t-xs); color: inherit; }
 .outlet:hover { color: var(--accent); }
-/* The bar that marks the focused outlet takes that outlet's own avaliação colour, the same one
-   its chip on the right already carries; only the row's text goes to --ink, because the row
-   itself is written in --muted and has no colour of its own to lose. */
-.outlet.is-active { color: var(--ink); background: color-mix(in srgb, var(--tone, var(--muted)) 12%, transparent); box-shadow: inset 3px 0 0 var(--tone, var(--accent)); padding-left: 10px; }
+/* The focused outlet sits on a wash of its own avaliação colour, the same one its chip on the
+   right already carries. It used to draw a 3px bar down its left edge; the wash says the same
+   thing without a line, which is the rule everywhere else on this page. */
+.outlet.is-active { color: var(--ink); background: color-mix(in srgb, var(--tone, var(--muted)) 18%, transparent); }
 .outlet .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outlet .n { color: var(--muted); font-variant-numeric: tabular-nums; }
 .outlet .t { min-width: 40px; text-align: center; border-radius: 4px; padding: 2px 5px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
@@ -463,13 +464,13 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ruler-axis { stroke: var(--line); stroke-width: 2; }
 .ruler-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
 /* The atlas's --wc/--wc-soft pair again: the word's colour is which side it leans to, and the
-   box under the cursor is that same colour, desaturated and nearly transparent. Recolouring the
-   word to --ink on hover would have hidden the one thing this figure draws. */
+   ground under the cursor is that same colour, desaturated and nearly transparent. Recolouring
+   the word on hover or on a pick would have hidden the one thing this figure draws. */
 .ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.ruler-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
+.ruler-hit { fill: transparent; }
 .ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--wc); }
-.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); stroke: color-mix(in srgb, var(--wc-soft) 40%, transparent); }
-.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); stroke: color-mix(in srgb, var(--wc) 80%, transparent); stroke-width: 1.5; }
+.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 34%, transparent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
 .ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }

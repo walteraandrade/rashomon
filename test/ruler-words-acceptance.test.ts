@@ -268,7 +268,10 @@ describe('AC7: atlas.css styles words, not dots, and the page keeps its no-<styl
     // word's own side colour, at two strengths. A selected word painted --accent threw away the
     // side it leans to, which is the only thing this figure draws.
     assert.match(css, /\.ruler-text \{[^}]*fill:\s*var\(--wc\)/)
-    assert.match(css, /\.ruler-word\.is-selected \.ruler-hit \{[^}]*var\(--wc\)/)
+    assert.match(css, /\.ruler-word\.is-selected \.ruler-hit \{[^}]*var\(--wc-soft\)/)
+    // No outline on a mark, anywhere: this site draws no borders, so hover and pick are a wash
+    // the word sits on, at two strengths, never a box drawn around it.
+    for (const rule of css.match(/\.(?:ruler-hit|word-hit|center-hit|dot-halo)[^{]*\{[^}]*\}/g) ?? []) assert.doesNotMatch(rule, /stroke/, rule)
     assert.doesNotMatch(css, /\.ruler-word:hover \.ruler-text/, 'the cursor must not repaint the word')
     assert.doesNotMatch(css, /\.ruler-word\.is-selected \{[^}]*--wc:\s*var\(--accent\)/, 'nor must the pick')
     assert.match(css, /\.ruler-overflow \{/)

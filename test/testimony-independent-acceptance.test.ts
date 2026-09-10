@@ -173,11 +173,12 @@ describe('testimony acceptance criteria, independently verified (issue #21)', ()
     assert.equal(allAgain.overall.n, 2)
   })
 
-  it('AC10: parseTestimonyQuery clamps days to [1,365] (default 30) and min to [1,1000] (default 3), pinned as its own literal', () => {
+  // days: [1,365] became the enumeration in DAYS with issue #111; default and ceiling unchanged.
+  it('AC10: parseTestimonyQuery snaps days to an allowed window (default 30) and clamps min to [1,1000] (default 3), pinned as its own literal', () => {
     const d = parseTestimonyQuery({})
     assert.equal(d.days, 30)
     assert.equal(d.min, 3)
-    assert.equal(parseTestimonyQuery({ days: '0' }).days, 1)
+    assert.equal(parseTestimonyQuery({ days: '0' }).days, 7)
     assert.equal(parseTestimonyQuery({ days: '366' }).days, 365)
     assert.equal(parseTestimonyQuery({ days: 'nan' }).days, 30)
     assert.equal(parseTestimonyQuery({ min: '0' }).min, 1)

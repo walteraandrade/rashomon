@@ -123,9 +123,11 @@ describe('compareFor: issue #93 acceptance criteria', () => {
 })
 
 describe('parseCompareQuery: issue #93 acceptance criteria', () => {
-  it('days defaults to 30 and clamps to [1, 365], per the spec\'s param table', () => {
+  // Issue #111 replaced the spec's [1, 365] clamp with the enumeration in DAYS; 30 is still
+  // the default and 365 still the widest window a caller can reach.
+  it('days defaults to 30 and snaps to the nearest allowed window', () => {
     assert.equal(parseCompareQuery({}).days, 30)
-    assert.equal(parseCompareQuery({ days: '0' }).days, 1)
+    assert.equal(parseCompareQuery({ days: '0' }).days, 7)
     assert.equal(parseCompareQuery({ days: '9999' }).days, 365)
   })
 

@@ -20,10 +20,12 @@ describe('tone acceptance criteria (issue #5)', () => {
     assert.deepEqual(Object.keys(r).sort(), ['cells', 'domains', 'persons'])
   })
 
-  it('AC2: days missing or non-numeric defaults to 30, clamped to [1, 365]', () => {
+  // The [1, 365] clamp became the enumeration in DAYS with issue #111: 30 is still the default
+  // and 365 still the widest window, but an in-between value now snaps instead of passing through.
+  it('AC2: days missing or non-numeric defaults to 30, and any other value snaps to an allowed window', () => {
     assert.equal(parseToneQuery({}).days, 30)
     assert.equal(parseToneQuery({ days: 'abc' }).days, 30)
-    assert.equal(parseToneQuery({ days: '-5' }).days, 1)
+    assert.equal(parseToneQuery({ days: '-5' }).days, 7)
     assert.equal(parseToneQuery({ days: '10000' }).days, 365)
   })
 

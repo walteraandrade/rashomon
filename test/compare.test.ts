@@ -93,7 +93,7 @@ describe('parseCompareQuery', () => {
   it('days defaults to 30 and clamps to [1, 365]', () => {
     assert.equal(parseCompareQuery({}).days, 30)
     assert.equal(parseCompareQuery({ days: 'nope' }).days, 30)
-    assert.equal(parseCompareQuery({ days: '0' }).days, 1)
+    assert.equal(parseCompareQuery({ days: '0' }).days, 7)
     assert.equal(parseCompareQuery({ days: '9999' }).days, 365)
   })
 

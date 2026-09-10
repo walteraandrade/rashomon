@@ -37,7 +37,7 @@ describe('signature acceptance criteria (issue #6)', () => {
   it('AC3: signature is identical regardless of kind, min, limit and sort', async () => {
     const a = await graphFor(lula, scope)
     const b = await graphFor(lula, { ...scope, kind: 'hashtag', min: 999, limit: 1, sort: 'count' })
-    const c = await graphFor(lula, { ...scope, kind: 'theme', min: 1, limit: 200, sort: 'pmi' })
+    const c = await graphFor(lula, { ...scope, kind: 'phrase', min: 1, limit: 200, sort: 'pmi' })
     assert.ok(a.signature.length > 0, 'sanity: variance check needs a non-empty signature')
     assert.deepEqual(b.signature, a.signature)
     assert.deepEqual(c.signature, a.signature)

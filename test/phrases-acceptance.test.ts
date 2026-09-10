@@ -231,15 +231,4 @@ describe('kind travels as a list, so the atlas can leave GDELT themes out', () =
     const graph = await graphFor(lula, { ...wide, kind: 'hashtag' })
     assert.deepEqual([...new Set(graph.nodes.map((n) => n.kind))], ['hashtag'])
   })
-
-  it('the list the atlas sends returns every kind except theme', async () => {
-    // The fixture's only theme rows sit past 3400 days, so this one criterion needs its own
-    // window; every other assertion here is happy inside `wide`.
-    const deep = { ...wide, days: 3500 }
-    const all = await graphFor(lula, deep)
-    assert.ok(all.nodes.some((n) => n.kind === 'theme'), 'sanity: the fixture must carry a theme term to exclude')
-    const atlas = await graphFor(lula, { ...deep, kind: 'word,hashtag,phrase' })
-    assert.ok(!atlas.nodes.some((n) => n.kind === 'theme'))
-    assert.ok(atlas.nodes.some((n) => n.kind === 'word'))
-  })
 })

@@ -211,3 +211,45 @@ describe('gkg() records no slot whose payload carried no documents', () => {
     assert.equal(okRows.length, 1, 'a slot that really parsed must be recorded exactly once')
   })
 })
+
+// Issue #108: GDELT's V2Themes column is no longer read into extraTerms at all, even when the
+// row carries one. A different `latest` from every other describe block in this file, so its
+// slots never collide with gkg_files rows a previous test already recorded.
+describe('gkg() drops GDELT themes: extraTerms is always [] (issue #108)', () => {
+  before(migrate)
+
+  const latest = '20260911130000'
+  const gkgRowWithThemes = (slot: string) => {
+    const cols = new Array(27).fill('')
+    cols[3] = 'example.org'
+    cols[4] = `https://example.org/${slot}`
+    cols[7] = 'TAX_FNCACT_JUDGE;WB_678_ECONOMY' // themes column, non-empty on purpose
+    cols[15] = '1.0'
+    cols[25] = 'srclc:por'
+    cols[26] = `<PAGE_TITLE>Doc ${slot}</PAGE_TITLE>`
+    return cols.join('\t')
+  }
+  const originalFetch = globalThis.fetch
+  before(() => {
+    globalThis.fetch = (async (url: unknown) => {
+      const u = String(url)
+      if (u.endsWith('lastupdate-translation.txt')) return { text: async () => `${latest}.translation.gkg.csv.zip` } as Response
+      const slot = u.match(/\/(\d{14})\.translation\.gkg\.csv\.zip$/)?.[1] ?? ''
+      return {
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        body: streamOf([zipSync({ 'entry.csv': strToU8(gkgRowWithThemes(slot)) })]),
+      } as unknown as Response
+    }) as unknown as typeof fetch
+  })
+  after(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('returns every doc with extraTerms: [] even though the row carries themes', async () => {
+    const docs = await gkg([])
+    assert.ok(docs.length > 0, 'sanity: the mock must yield at least one doc')
+    for (const d of docs) assert.deepEqual(d.extraTerms, [])
+  })
+})

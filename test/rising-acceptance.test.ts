@@ -97,6 +97,16 @@ describe('rising acceptance criteria (issue #3)', () => {
     assert.ok(wordOnly.terms.every((t) => t.kind === 'word'))
   })
 
+  // Issue #108: 'theme' left the recognized kind set, so a term text term_p/term_all keyed by
+  // literal kind='theme' now matches nothing, exactly like any other kind no doc_terms row ever
+  // carries (kind='bogus'), not a route error or an empty-vs-all distinction.
+  it('kind=theme behaves exactly as any other unrecognized kind token: filtered to nothing', async () => {
+    const theme = await risingFor(lula, { ...base, kind: 'theme', days: 2000, baseline: 2000 })
+    const bogus = await risingFor(lula, { ...base, kind: 'bogus', days: 2000, baseline: 2000 })
+    assert.deepEqual(theme.terms, [])
+    assert.deepEqual(bogus.terms, [])
+  })
+
   it('AC9: source filters both windows identically', async () => {
     const bluesky = await risingFor(lula, { ...base, source: 'bluesky', days: 30, baseline: 30 })
     assert.ok(bluesky.terms.some((t) => t.term === 'disputam'))

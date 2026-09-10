@@ -33,6 +33,13 @@ describe('docsFor', () => {
     assert.equal(total, 3)
   })
 
+  // Issue #108: 'theme' left the recognized kind set, so it must fall back exactly like any
+  // other unrecognized token, not like a known-but-empty subset.
+  it('AC4: kind=theme falls back to matching every kind, same as kind=bogus', async () => {
+    const { total } = await docsFor(lula, { ...base, term: 'reforma', kind: 'theme' })
+    assert.equal(total, 3)
+  })
+
   it('AC5: widens with the window', async () => {
     // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const { total, docs } = await docsFor(lula, { ...base, days: 365 })

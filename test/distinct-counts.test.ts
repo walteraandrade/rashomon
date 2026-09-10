@@ -206,16 +206,15 @@ const byId = (a: { source: string; target: string }, b: { source: string; target
 const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
 const [lula, tarcisio, bolsonaro] = persons
 const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
-// Docs 43-45 ("coalizao" under three kinds, doc 43 shared by lula and bolsonaro) sit past 3400 days.
+// Docs 43-45 ("coalizao" under two kinds, doc 43 shared by lula and bolsonaro) sit past 3400 days.
 const wide: GraphQuery = { ...graphBase, days: 3500, min: 1, limit: 200 }
 
 const graphCases: [string, Person, GraphQuery][] = [
   ['default window', lula, graphBase],
   ['one term text under two kinds in the default window (#reforma and reforma)', lula, { ...graphBase, kind: 'all', min: 1 }],
-  ['a doc shared by two persons, one term text under three kinds', lula, wide],
+  ['a doc shared by two persons, one term text under two kinds', lula, wide],
   ['the same shared doc seen from the other person', bolsonaro, wide],
   ['the shared window sorted by pmi', lula, { ...wide, sort: 'pmi', limit: 10 }],
-  ['kind=theme, which only docs 43-44 store', lula, { ...wide, kind: 'theme' }],
   ['kind=hashtag over the shared window', lula, { ...wide, kind: 'hashtag' }],
   ['kind=word over the shared window', bolsonaro, { ...wide, kind: 'word' }],
   ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 365, limit: 200 }],
@@ -261,32 +260,29 @@ describe('count(*) matches count(distinct doc_id) in the graph path (issue #47)'
     assert.equal(l.nodes.find((n) => n.id === 'word:coalizao')?.pmi, ref.nodes.find((n) => n.id === 'word:coalizao')?.pmi as number)
   })
 
-  it('keeps one term text under three kinds as three nodes with their own counts', async () => {
+  it('keeps one term text under two kinds as two nodes with their own counts', async () => {
     const g = await graphFor(lula, wide)
     const nodes = g.nodes.filter((n) => n.term === 'coalizao')
-    assert.deepEqual(nodes.map((n) => n.kind).sort(), ['hashtag', 'theme', 'word'])
-    // docs 43 and 44 carry all three for lula; doc 45 is bolsonaro-only
+    assert.deepEqual(nodes.map((n) => n.kind).sort(), ['hashtag', 'word'])
+    // docs 43 and 44 carry both for lula; doc 45 is bolsonaro-only
     for (const n of nodes) assert.equal(n.count, 2, `${n.id} must count 2 docs`)
     const b = await graphFor(bolsonaro, wide)
-    assert.equal(b.nodes.find((n) => n.id === 'theme:coalizao')?.count, 1, 'doc 45 stores no theme term')
     assert.equal(b.nodes.find((n) => n.id === 'hashtag:coalizao')?.count, 2)
   })
 
   it('links the same term text across kinds without collapsing or double-counting', async () => {
     const g = await graphFor(lula, wide)
     const pair = (s: string, t: string) => g.links.find((l) => l.source === s && l.target === t)
-    // docs 43 and 44 both carry all three, so every pair is exactly 2 — never 4 from the shared doc
-    assert.equal(pair('hashtag:coalizao', 'theme:coalizao')?.count, 2)
+    // docs 43 and 44 both carry both kinds, so the pair is exactly 2 — never 4 from the shared doc
     assert.equal(pair('hashtag:coalizao', 'word:coalizao')?.count, 2)
-    assert.equal(pair('theme:coalizao', 'word:coalizao')?.count, 2)
   })
 
   it('breaks a (count, term) tie across kinds by kind, deterministically', async () => {
-    // hashtag/theme/word:coalizao all count 2 for lula in this window, so nothing but `kind`
+    // hashtag/word:coalizao both count 2 for lula in this window, so nothing but `kind`
     // separates them; before #47 the order was whatever the plan emitted
     const g = await graphFor(lula, wide)
     const tied = g.nodes.filter((n) => n.term === 'coalizao')
-    assert.deepEqual(tied.map((n) => n.kind), ['hashtag', 'theme', 'word'])
+    assert.deepEqual(tied.map((n) => n.kind), ['hashtag', 'word'])
     for (let i = 0; i < 5; i++) {
       assert.deepEqual((await graphFor(lula, wide)).nodes.map((n) => n.id), g.nodes.map((n) => n.id))
     }

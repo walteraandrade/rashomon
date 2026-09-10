@@ -36,6 +36,8 @@ vercel deploy --prod
 
 Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky; trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3).
 
+`@huggingface/transformers` is required only by `pnpm score`; it ships as an `optionalDependencies` entry in `package.json`, not a regular dependency, and its label logic lives in `src/scorers/method.ts`, which has no imports at all. `src/query.ts` (the route path `api/index.ts` → `src/server.ts` serves) imports the method labels from there, never from `src/scorers/onnx.ts`, so the deployed `/api` function's import graph never reaches the model loader or the Hub client it dynamic-imports. Measured with `vercel build` on this repo: before this split, `.vercel/output/functions/api/index.func` was 94,327,622 bytes (~90 MB) and carried `onnxruntime-node`, `@huggingface/transformers` and `sharp`; after, it is 18,666,128 bytes (~18 MB) and carries none of them.
+
 ## Writes, batches and recovery
 
 Ingest and reindex are the only write paths, and both are bounded in the same two ways: `WRITE_BATCH_ROWS`

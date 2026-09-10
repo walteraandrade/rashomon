@@ -1,6 +1,6 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
-import { methods } from './scorers/index.js'
+import { methods } from './scorers/method.js'
 import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
 
 // Resolved lazily, per request, through the same `methods` map `pnpm score` uses (never a
@@ -16,7 +16,7 @@ const defaultTestimonyMethod = () => methods.onnx()
 // `:` is part of the charset because the kikori scorer labels its rows `kikori:<dtype>` and,
 // once a model revision is pinned, `kikori:<dtype>:<revision>`; without it the parser silently
 // fell back to 'onnx' and returned the placeholder rows. The revision's own charset
-// (src/scorers/onnx.ts) is narrower than this one, so a whole label always fits here.
+// (src/scorers/method.ts) is narrower than this one, so a whole label always fits here.
 const METHOD_TOKEN = /^[\w.:\/-]{1,128}$/
 
 export const int = (v: string | undefined, d: number, lo: number, hi: number) => {

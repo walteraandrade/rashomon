@@ -68,7 +68,7 @@ export type TestimonyQuery = {
 // No `min`, unlike GraphQuery/RisingQuery: a term present for one side and absent for the
 // other is exactly what /compare must keep as a measured null, so a floor tied to one side's
 // count cannot apply symmetrically (issue #93). No `sort` either -- both selection criteria
-// always run, see compareSql.
+// always run, see compareQuery.
 export type CompareQuery = {
   days: number
   source: string
@@ -180,14 +180,14 @@ const trackedCte = sql`
 // single words, and they are already handled by the equality above, so they never pay for a
 // string_to_array. It is not merely an optimization -- without it this expression would
 // duplicate the equality check on every row of the largest table in the database.
-const namePhraseSql = (names: string) => `(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
 const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
 
-// compareSql's flag for "this (term, kind) key is (or contains) that side's own name word":
-// the equality half namePhraseSql leaves to its caller's own where clause, plus the phrase
-// half, both against an arbitrary column (compareSql evaluates this on the unioned key, not
-// on doc_terms.term), so it cannot reuse namePhraseSql's hardcoded `t.term`.
-const isNameSql = (col: string, names: string) => `(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
+// compareQuery's flag for "this (term, kind) key is (or contains) that side's own name word":
+// the equality half namePhrase leaves to its caller's own where clause, plus the phrase
+// half, both against an arbitrary column (compareQuery evaluates this on the unioned key, not
+// on doc_terms.term), so it cannot reuse namePhrase's hardcoded `t.term`.
+const isName = (col: Sql, names: string[]) =>
+  sql`(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
 const graphQuery = (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
@@ -638,23 +638,26 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
 // Cross-person by construction, like toneSql: unlike scopeCte, `scope`/`tracked` here carry no
 // single person_id, since both sides share them (issue #93's cost-saving rationale -- the shared
 // PMI universe n/term_all is computed once, not once per side).
-const compareScopeCte = `
+const compareScopeCte = (q: CompareQuery) => {
+  const { domain } = resolveScope(q.domain, q.lean)
+  return sql`
   scope as (
     select d.id from docs d
-    where d.published_at >= now() - make_interval(days => $3)
-      and ($4 = 'all' or d.source = any(string_to_array($4, ',')))
-      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   tracked as (
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )`
+}
 
-// One side's about/term_p/scored/top-N CTEs, parameterized by the person id param ($1 or $2)
-// and that person's own nameTokens array param ($8 or $9) -- inherently per-person, since a
-// term can be A's own name and legitimate vocabulary for B (spec §3), so these cannot be
-// shared the way scope/tracked/n/term_all are.
+// One side's about/term_p/scored/top-N CTEs, parameterized by the person and that person's
+// own nameTokens array -- inherently per-person, since a term can be A's own name and
+// legitimate vocabulary for B (spec §3), so these cannot be shared the way
+// scope/tracked/n/term_all are.
 //
-// Deliberately not capped by $7 (limit) here: every term the person's docs carry in scope
+// Deliberately not capped by `limit` here: every term the person's docs carry in scope
 // gets an exact count/pmi/tone, with only the name-word exclusion applied, same as graphQuery's
 // term_p. `limit` only governs top_count/top_pmi, i.e. which keys enter the union below --
 // the exact figure for a unioned key is always looked up uncapped, in `scored_<side>`.
@@ -662,52 +665,57 @@ const compareScopeCte = `
 // Both top_count and top_pmi are computed for every call, per spec: dropping either would
 // silently exclude "loud but not sticky" or "rare but sticky" words from one side. pmi *
 // ln(1 + count) is sort=pmi's pinned formula (graphQuery), reused unchanged.
-const compareSideCte = (side: 'a' | 'b', personParam: string, namesParam: string) => `
-  about_${side} as (
-    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${personParam}
+const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
+  const names = nameTokens(person)
+  const about = sql.raw(`about_${side}`)
+  const np = sql.raw(`np_${side}`)
+  const termP = sql.raw(`term_p_${side}`)
+  const scored = sql.raw(`scored_${side}`)
+  const top = sql.raw(`${side}_top`)
+  return sql`
+  ${about} as (
+    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
-  np_${side} as materialized (select count(*)::float8 as total from about_${side}),
-  term_p_${side} as materialized (
+  ${np} as materialized (select count(*)::float8 as total from ${about}),
+  ${termP} as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join about_${side} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any(${namesParam}::text[])) and not ${namePhraseSql(namesParam)}
+    from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+    where not (t.term = any(${names}::text[])) and not ${namePhrase(names)}
     group by 1, 2
   ),
-  scored_${side} as (
+  ${scored} as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
-      ln((p.c_pt * n.total) / (np_${side}.total * a.c_t)) / ln(2) as pmi
-    from term_p_${side} p join term_all a using (term, kind), n, np_${side}
-    where $6 = 'all' or p.kind = any(string_to_array($6, ','))
+      ln((p.c_pt * n.total) / (${np}.total * a.c_t)) / ln(2) as pmi
+    from ${termP} p join term_all a using (term, kind), n, ${np}
+    where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
   ),
-  ${side}_top_count as (
-    select term, kind from scored_${side} order by count desc, term, kind limit $7
+  ${top}_count as (
+    select term, kind from ${scored} order by count desc, term, kind limit ${q.limit}
   ),
-  ${side}_top_pmi as (
-    select term, kind from scored_${side} order by pmi * ln(1 + count) desc, term, kind limit $7
+  ${top}_pmi as (
+    select term, kind from ${scored} order by pmi * ln(1 + count) desc, term, kind limit ${q.limit}
   )`
+}
 
-// $1 a's person id, $2 b's, $3 days, $4 source, $5 domain (already resolved via resolveScope),
-// $6 kind, $7 limit, $8 a's nameTokens, $9 b's nameTokens.
-//
 // `keys` is the union of up to four (term, kind) lists across both sides -- UNION (not UNION
 // ALL) dedupes on its own. `unioned` then looks up the exact, uncapped figure for every key on
 // each side via a left join, so a key selected only from the other side's lists comes back
 // null on this one, not a dropped row -- the whole point of the union (spec §3): a null must
 // be measured, never "outside the top list".
 //
-// is_name_a/is_name_b are computed against the key text directly (isNameSql), not against
+// is_name_a/is_name_b are computed against the key text directly (isName), not against
 // scored_a/scored_b: a term can be one side's own name word and therefore entirely absent
 // from that side's term_p (excluded there by construction), yet still need to read "name"
 // rather than null on this response.
-const compareSql = `
-  with ${compareScopeCte},
+const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
+  with ${compareScopeCte(q)},
   n as materialized (select count(*)::float8 as total from tracked),
   term_all as materialized (
     select t.term, t.kind, count(*)::float8 as c_t
     from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
   ),
-  ${compareSideCte('a', '$1', '$8')},
-  ${compareSideCte('b', '$2', '$9')},
+  ${compareSideCte('a', a, q)},
+  ${compareSideCte('b', b, q)},
   keys as (
     select term, kind from a_top_count
     union select term, kind from a_top_pmi
@@ -716,8 +724,8 @@ const compareSql = `
   ),
   unioned as (
     select k.term, k.kind,
-      ${isNameSql('k.term', '$8')} as is_name_a,
-      ${isNameSql('k.term', '$9')} as is_name_b,
+      ${isName(sql.raw('k.term'), nameTokens(a))} as is_name_a,
+      ${isName(sql.raw('k.term'), nameTokens(b))} as is_name_b,
       sa.count as a_count, round(sa.pmi::numeric, 2)::float8 as a_pmi, round(sa.tone::numeric, 2)::float8 as a_tone,
       sb.count as b_count, round(sb.pmi::numeric, 2)::float8 as b_pmi, round(sb.tone::numeric, 2)::float8 as b_tone
     from keys k
@@ -740,10 +748,7 @@ const compareSql = `
 // is "the" resource. Own function, not two graphFor calls: the shared PMI universe (n,
 // term_all) would otherwise be recomputed once per side, exactly the cost issue #93 avoids.
 export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
-  const namesA = nameTokens(a)
-  const namesB = nameTokens(b)
-  const { domain } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<CompareAggregates>(compareSql, [a.id, b.id, q.days, q.source, domain, q.kind, q.limit, namesA, namesB])
+  const { rows } = await run<CompareAggregates>(compareQuery(a, b, q))
   const { about_a, about_b, terms } = rows[0]
   return {
     days: q.days,
@@ -780,5 +785,5 @@ export const statements = {
   testimonySummary: testimonySummaryQuery(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
   termTestimony: termTestimonyQuery(samplePerson, sampleScope, 'stub', ['word:sample']).text,
   candidates: candidatesQuery({ days: 7, min: 5, limit: 50 }).text,
-  compare: compareSql,
+  compare: compareQuery(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
 } as const

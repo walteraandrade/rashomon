@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { after, describe, it, before } from 'node:test'
 import { db, migrate } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
-import { batches, insertDoc, insertDocs, upsertPersons, writeBatchDocs, writeBatchRows } from '../src/store.js'
+import { MAX_DOC_CHARS, batches, insertDoc, insertDocs, truncateText, upsertPersons, writeBatchDocs, writeBatchRows } from '../src/store.js'
 import { collidingUri, derivedCounts, enrichmentDocs, orphanTermCount, persons, rowVersion, seed, termsOf, untrackedPerson } from './fixture.js'
 import './close.js'
 
@@ -244,5 +244,57 @@ describe('write batch bounds (issue #50)', () => {
       assert.deepEqual(chunks.flat(), xs)
     }
     assert.deepEqual(batches([], 10), [])
+  })
+})
+
+describe('docs.text is capped at write time (issue #128)', () => {
+  before(seed)
+  const textOf = async (uri: string) => (await db.query<{ text: string }>(`select text from docs where uri = $1`, [uri])).rows[0]?.text
+  // A doc naming a tracked person, whose tail past the cap carries a word that appears nowhere else.
+  const filler = 'lula fala sobre a reforma tributaria no congresso '
+  const long = (tail: string) => `${filler.repeat(Math.ceil((MAX_DOC_CHARS + 500) / filler.length))}${tail}`
+
+  it('truncateText cuts at the last whitespace before the limit and never mid-word', () => {
+    assert.equal(truncateText('abc def ghi', 7), 'abc def')
+    assert.equal(truncateText('abc def ghi', 8), 'abc def')
+    assert.equal(truncateText('abc def ghi', 9), 'abc def')
+    assert.equal(truncateText('abc def ghi', 11), 'abc def ghi')
+    assert.equal(truncateText('abc def ghi', 100), 'abc def ghi')
+    assert.equal(truncateText('abcdefghij', 4), 'abcd')
+  })
+
+  it('stores exactly the truncated text for a doc over the cap, on a word boundary', async () => {
+    const uri = 'https://example.org/over-cap'
+    const text = long('zumbificacao')
+    assert.ok(text.length > MAX_DOC_CHARS, 'sanity: the fixture must exceed the cap')
+    await insertDoc({ source: 'rss', uri, text, publishedAt: new Date().toISOString() }, persons)
+    const stored = await textOf(uri)
+    assert.equal(stored, truncateText(text))
+    assert.ok(stored.length <= MAX_DOC_CHARS)
+    assert.ok(text.startsWith(stored))
+    assert.match(text[stored.length], /\s/, 'the cut lands right before whitespace')
+    assert.ok(!stored.includes('zumbificacao'))
+  })
+
+  it('leaves a doc under the cap untouched', async () => {
+    const uri = 'https://example.org/under-cap'
+    const text = filler.repeat(20)
+    await insertDoc({ source: 'rss', uri, text, publishedAt: new Date().toISOString() }, persons)
+    assert.equal(await textOf(uri), text)
+  })
+
+  it('derives terms from the truncated text, not the original', async () => {
+    const uri = 'https://example.org/over-cap-terms'
+    await insertDoc({ source: 'rss', uri, text: long('zumbificacao'), publishedAt: new Date().toISOString() }, persons)
+    const terms = await termsOf(uri)
+    assert.ok(terms.includes('reforma'))
+    assert.ok(!terms.includes('zumbificacao'))
+  })
+
+  it('applies the same cap through insertDocs', async () => {
+    const uri = 'https://example.org/over-cap-bulk'
+    const text = long('zumbificacao')
+    await insertDocs([{ source: 'rss', uri, text, publishedAt: new Date().toISOString() }], persons)
+    assert.equal(await textOf(uri), truncateText(text))
   })
 })

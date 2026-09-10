@@ -342,3 +342,26 @@ all four stay whole-site on purpose rather than by omission.
 `veja.abril.com.br/politica/feed/` (2788 chars an item) and
 `correiobraziliense.com.br/rss/noticia/politica/rss.xml` (4538) already point at a
 politics section and were left alone.
+
+# Fifth pass — 2026-09-10
+
+How long a stored document gets, per source, on the local corpus (39.8k docs), before any cap
+existed. `length(text)` in characters; `p99` is `percentile_cont(0.99)`.
+
+| Source | Docs | p50 | p99 | Max |
+|---|---|---|---|---|
+| `rss` | 1089 | 595 | 7942 | 20001 |
+| `oficial` | 32 | 252 | 5937 | 6169 |
+| `nicho` | 212 | 372 | 5228 | 16505 |
+| `camara` | 7 | 609 | 707 | 710 |
+| `juridico` | 45 | 190 | 623 | 640 |
+| `gnews` | 5287 | 156 | 389 | 930 |
+| `bluesky` | 14083 | 139 | 300 | 308 |
+| `gkg` | 18024 | 72 | 129 | 212 |
+| `gdelt` | 106 | 70 | 123 | 131 |
+
+Only the three feed sources that fill `content:encoded` ever pass 5k characters (`rss` 59
+docs, `nicho` 3, `oficial` 3), and only six documents pass 10k: g1 debate transcripts and two
+aosfatos explainers. The longest, at 20001, ends on a complete sentence, so it was not cut by
+the publisher either. `MAX_DOC_CHARS` in `src/store.ts` stays at the proposed 20 000: 2.5x the
+worst p99, and on this corpus it touches exactly one document, by a handful of characters.

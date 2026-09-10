@@ -23,6 +23,8 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 | `PERF` | unset | opt-in request instrumentation |
 | `API_CACHE_*` | see [HTTP caching](#http-caching) | cache windows in whole hours |
 
+`.env.example` lists these names with empty values; copy it to `.env.local`. `.gitignore` ignores `.env` and `.env.*` and negates `.env.example`, so a real credential file is never trackable. The benchmark-only `BENCH_*` variables stay out of it and are documented with `pnpm bench` below.
+
 ## Deploy
 
 `DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN.

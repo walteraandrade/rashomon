@@ -177,6 +177,7 @@ const trackedCte = `
 // string_to_array. It is not merely an optimization -- without it this expression would
 // duplicate the equality check on every row of the largest table in the database.
 const namePhraseSql = (names: string) => `(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
+const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
 
 // compareSql's flag for "this (term, kind) key is (or contains) that side's own name word":
 // the equality half namePhraseSql leaves to its caller's own where clause, plus the phrase
@@ -507,52 +508,53 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 // reusing scopeCte twice, so a doc is never double-counted into both windows.
 //
 // c_recent/c_baseline are count(*) (issue #47): same argument as graphSql's term_p, with
-// recent_about/baseline_about in place of `about` -- doc_persons' PK with person_id fixed to
-// $1, joined to a scope of docs.id, is one row per doc, and doc_terms' PK is one row per
+// recent_about/baseline_about in place of `about` -- doc_persons' PK with person_id fixed,
+// joined to a scope of docs.id, is one row per doc, and doc_terms' PK is one row per
 // (doc, term, kind). 13.5 ms -> 11.2 ms on the benchmark corpus. `kind` closes the order by
 // for the same reason it closes graphSql's: (lift, term) does not separate two kinds of one
 // term text, and count(*) lets the planner pick a different arbitrary order than distinct did.
-const risingSql = `
+const risingQuery = (person: Person, q: RisingQuery) => {
+  const exclude = nameTokens(person)
+  const { domain } = resolveScope(q.domain, q.lean)
+  const termsOf = (about: Sql, count: Sql) => sql`
+    select t.term, t.kind, count(*)::float8 as ${count}
+    from doc_terms t join ${about} a on a.doc_id = t.doc_id
+    where (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ','))) and not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
+    group by 1, 2`
+  return sql`
   with
   recent_scope as (
     select d.id from docs d
-    where d.published_at >= now() - make_interval(days => $2)
-      and ($4 = 'all' or d.source = $4)
-      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = ${q.source})
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   recent_about as (
-    select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = $1
+    select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
   baseline_scope as (
     select d.id from docs d
-    where d.published_at < now() - make_interval(days => $2)
-      and d.published_at >= now() - make_interval(days => $2 + $3)
-      and ($4 = 'all' or d.source = $4)
-      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+    where d.published_at < now() - make_interval(days => ${q.days})
+      and d.published_at >= now() - make_interval(days => ${q.days}::int + ${q.baseline}::int)
+      and (${q.source} = 'all' or d.source = ${q.source})
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   baseline_about as (
-    select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = $1
+    select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
-  recent_terms as (
-    select t.term, t.kind, count(*)::float8 as c_recent
-    from doc_terms t join recent_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = any(string_to_array($6, ','))) and not (t.term = any($7::text[])) and not ${namePhraseSql('$7')}
-    group by 1, 2
+  recent_terms as (${termsOf(sql.raw('recent_about'), sql.raw('c_recent'))}
   ),
-  baseline_terms as (
-    select t.term, t.kind, count(*)::float8 as c_baseline
-    from doc_terms t join baseline_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = any(string_to_array($6, ','))) and not (t.term = any($7::text[])) and not ${namePhraseSql('$7')}
-    group by 1, 2
+  baseline_terms as (${termsOf(sql.raw('baseline_about'), sql.raw('c_baseline'))}
   )
   select r.term, r.kind,
-    round((r.c_recent / $2)::numeric, 2)::float8 as count_recent,
-    round((coalesce(b.c_baseline, 0) / $3)::numeric, 2)::float8 as count_baseline,
-    round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift
+    round((r.c_recent / ${q.days})::numeric, 2)::float8 as count_recent,
+    round((coalesce(b.c_baseline, 0) / ${q.baseline})::numeric, 2)::float8 as count_baseline,
+    round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
   from recent_terms r left join baseline_terms b using (term, kind)
-  where r.c_recent >= $8
+  where r.c_recent >= ${q.min}
   order by lift desc, term, kind
-  limit $9`
+  limit ${q.limit}`
+}
 
 export type CandidatesQuery = { days: number; min: number; limit: number }
 type CandidateRow = { name: string; count: number; sources: number; previous: number }
@@ -601,19 +603,8 @@ export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number;
 }
 
 export const risingFor = async (person: Person, q: RisingQuery) => {
-  const exclude = nameTokens(person)
-  const { domain, outlets } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<RisingRow>(risingSql, [
-    person.id,
-    q.days,
-    q.baseline,
-    q.source,
-    domain,
-    q.kind,
-    exclude,
-    q.min,
-    q.limit,
-  ])
+  const { outlets } = resolveScope(q.domain, q.lean)
+  const { rows } = await run<RisingRow>(risingQuery(person, q))
   return { days: q.days, baseline: q.baseline, terms: rows, outlets }
 }
 
@@ -772,6 +763,7 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
 // never by the values bound, so the text a sample call renders is byte-for-byte the text the
 // handler sends.
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
+const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
 
 export const statements = {
   graph: graphSql,
@@ -780,7 +772,7 @@ export const statements = {
   docs: docsSql,
   docsCount: docsCountSql,
   timeline: timelineSql,
-  rising: risingSql,
+  rising: risingQuery(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
   tone: toneQuery({ days: 30, min: 3 }).text,
   testimonySummary: testimonySummaryQuery(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
   termTestimony: termTestimonySql,

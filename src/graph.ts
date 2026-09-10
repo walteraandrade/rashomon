@@ -336,28 +336,30 @@ export const docsWhereSql = `(
         and ($6 = 'all' or t.kind = any(string_to_array($6, ',')) or not (string_to_array($6, ',') <@ array['hashtag', 'word', 'phrase']))
     )
   )`
+const docsWhere = (term: string, kind: string) => sql`(
+    ${term} = '' or exists (
+      select 1 from doc_terms t where t.doc_id = d.id and t.term = ${term}
+        and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase']))
+    )
+  )`
 
-const docsSql = `
-  with ${scopeCteText}
+const docsQuery = (person: Person, q: DocsQuery) => sql`
+  with ${scopeCte(person, q)}
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
-  where ${docsWhereSql}
+  where ${docsWhere(q.term, q.kind)}
   order by d.published_at desc, d.id desc
-  limit $7 offset $8`
+  limit ${q.limit} offset ${q.offset}`
 
-const docsCountSql = `
-  with ${scopeCteText}
+const docsCountQuery = (person: Person, q: DocsQuery) => sql`
+  with ${scopeCte(person, q)}
   select count(*)::int as total
   from docs d join about a on a.doc_id = d.id
-  where ${docsWhereSql}`
+  where ${docsWhere(q.term, q.kind)}`
 
 export const docsFor = async (person: Person, q: DocsQuery) => {
-  const { domain, outlets } = resolveScope(q.domain, q.lean)
-  const params = [person.id, q.days, q.source, domain, q.term, q.kind]
-  const [docs, count] = await Promise.all([
-    db.query<DocRow>(docsSql, [...params, q.limit, q.offset]),
-    db.query<{ total: number }>(docsCountSql, params),
-  ])
+  const { outlets } = resolveScope(q.domain, q.lean)
+  const [docs, count] = await Promise.all([run<DocRow>(docsQuery(person, q)), run<{ total: number }>(docsCountQuery(person, q))])
   return { total: count.rows[0].total, docs: docs.rows, outlets }
 }
 
@@ -784,13 +786,14 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
 // handler sends.
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
+const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0 }
 
 export const statements = {
   graph: graphSql,
   links: linksSql,
   sources: sourcesQuery(samplePerson, sampleScope).text,
-  docs: docsSql,
-  docsCount: docsCountSql,
+  docs: docsQuery(samplePerson, sampleDocs).text,
+  docsCount: docsCountQuery(samplePerson, sampleDocs).text,
   timeline: timelineSql,
   rising: risingQuery(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
   tone: toneQuery({ days: 30, min: 3 }).text,

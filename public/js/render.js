@@ -368,7 +368,7 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
     dots
       .map(
         (d) =>
-          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 7}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
+          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
       )
       .join('') +
     '</svg>' +

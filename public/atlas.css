@@ -242,14 +242,18 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    nearly transparent, so it says "this one" without competing with what the colour means. */
 .word-button { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .word-hit { fill: transparent; }
-/* Under the cursor a glow; picked or matched, the same glow at twice the strength. It is blurred
-   on purpose: this site draws no borders, and a rectangle with a hard edge IS one, however soft
-   its fill. Blurred, the shape has no edge to read -- the word simply sits in a breath of its own
-   colour. The mark's own colour never changes either: painting a picked word --accent threw away
-   the one thing the colour is there to say. */
-.word-hit, .ruler-hit, .center-hit, .dot-halo { transition: fill .16s ease-out; }
-.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 22%, transparent); filter: blur(12px); }
-.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 40%, transparent); filter: blur(14px); }
+/* Under the cursor a ground; picked or matched, the same ground at twice the strength. Its edge
+   is blurred, because this site draws no borders and a rectangle with a hard edge IS one, however
+   soft its fill. Just enough blur to lose the edge -- the shape still hugs the word rather than
+   haloing it, or the colour spreads over the words next to it and the map turns to soup. The
+   blur lives on the shape itself, never on the state: put it on :hover and it switches off the
+   instant the cursor leaves, so the hard rectangle reappears for the length of the fade.
+   The mark's own colour never changes either: painting a picked word --accent threw away the one
+   thing the colour is there to say. */
+.word-hit, .ruler-hit { filter: blur(5px); transition: fill .16s ease-out; }
+.center-hit, .dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
+.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 15%, transparent); }
+.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 30%, transparent); }
 .word-button.is-dim { opacity: .22; }
 .word-button.is-neighbor { --wc: var(--green); }
 /* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
@@ -266,7 +270,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    word does -- the same soft box, in the colour the name is already written in. */
 .center-label { cursor: pointer; }
 .center-hit { fill: transparent; }
-.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 16%, transparent); filter: blur(14px); }
+.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
 .micro { fill: var(--muted); font-family: var(--display); font-size: var(--t-micro); font-weight: 600; letter-spacing: var(--tr-label); text-transform: uppercase; }
 .center-note { fill: var(--muted); font-family: var(--sans); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
@@ -294,10 +298,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-dot { cursor: pointer; outline: none; --wc: var(--tone, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .strip-dot .dot-face { fill: var(--wc); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: fill-opacity .12s; }
 .strip-dot .dot-halo { fill: transparent; }
-.strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 34%, transparent); filter: blur(6px); }
+.strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 .strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
 .strip-dot.is-active .dot-face { fill-opacity: 1; }
-.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 62%, transparent); filter: blur(7px); }
+.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 
@@ -494,8 +498,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .ruler-hit { fill: transparent; }
 .ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--wc); }
-.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 22%, transparent); filter: blur(10px); }
-.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 40%, transparent); filter: blur(12px); }
+.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 15%, transparent); }
+.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 30%, transparent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
 .ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }

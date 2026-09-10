@@ -3,7 +3,13 @@ import type { Collector, RawDoc, Source } from '../types.js'
 import { headers } from '../http.js'
 import { decodeEntities, domainOf } from '../extract.js'
 
-const feeds = ['https://g1.globo.com/rss/g1/', 'https://feeds.folha.uol.com.br/emcimadahora/rss091.xml']
+// Both are the politics section, not the outlet's front page: only docs naming a tracked
+// person get doc_terms rows, so a general feed spends most of its items on nobody. Measured
+// 2026-09-09 (docs/sources-research.md): g1's front page returned 100 items, 18 of them
+// naming someone tracked, at 2607 chars each; the politics feed returned 100 items, 89 of
+// them naming someone, at 4392 chars -- it carries the article body, not just the headline.
+// Folha's 'em cima da hora' went from 26 to 77 items naming someone at the same length.
+const feeds = ['https://g1.globo.com/rss/g1/politica/', 'https://feeds.folha.uol.com.br/poder/rss091.xml']
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
 
 const decode = (buf: ArrayBuffer) => {

@@ -6,7 +6,7 @@ One collector per source in `src/collectors/*`, all sharing the same `Collector`
 | --- | --- | --- |
 | `bluesky` | posts mentioning each tracked person | yes |
 | `gnews` | Google News RSS search per person, Brazil, pt-BR | yes |
-| `rss` | the generic feed list | yes |
+| `rss` | g1 and Folha, politics sections | yes |
 | `gkg` | GDELT GKG translation files, Portuguese rows | yes |
 | `senado` | plenary speech summaries of tracked senators | yes |
 | `camara` | floor-speech summaries of tracked deputies | yes |
@@ -20,6 +20,8 @@ Only `gkg` and `gdelt` carry tone. Every other source stores `tone = null`; see 
 ## Per collector
 
 Bluesky without login returns one page (100 posts) per person. To paginate, set `BSKY_HANDLE` and `BSKY_APP_PASSWORD` (app password, not the account password).
+
+`rss` reads two feeds, both the outlet's politics section rather than its front page: `g1.globo.com/rss/g1/politica/` and `feeds.folha.uol.com.br/poder/rss091.xml`. Only docs naming a tracked person get `doc_terms` rows ([terms](terms.md)), so a front page spends most of its items on nobody: measured on 2026-09-09, g1's front page named someone tracked in 18 of 100 items against the politics feed's 89, and Folha's `emcimadahora` in 26 against `poder`'s 77. g1's politics feed also carries the article body (4392 chars a item, against the front page's 2607 and Folha's 389), which is why `rss` averages an order of magnitude more text per doc than `gkg` or `bluesky`.
 
 `gnews` reads Google News RSS search per person (100 headlines each, Brazil, pt-BR).
 

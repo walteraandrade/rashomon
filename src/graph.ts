@@ -407,7 +407,7 @@ const timelineQuery = (person: Person, q: TimelineQuery) => {
 // surfaced here, since that would require wrapping this array in an object.
 export const timelineFor = async (person: Person, q: TimelineQuery) => (await run<TimelineRow>(timelineQuery(person, q))).rows
 
-// Cross-person on purpose: scopeCte's `about` scopes to a single person_id via $1, which
+// Cross-person on purpose: scopeCte's `about` scopes to a single person_id, which
 // does not fit a matrix spanning every tracked person, so this joins doc_persons/persons
 // directly instead. avg()/count() ignore SQL null automatically, so untoned (non-GDELT)
 // docs contribute nothing to either aggregate without a source/kind check.
@@ -763,27 +763,43 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   }
 }
 
-// The exact statements the routes run, exported read-only so `pnpm bench` can put each one
+// The exact builders the routes run, exported read-only so `pnpm bench` can put each one
 // through EXPLAIN (ANALYZE, BUFFERS) with representative parameters. Nothing here changes
-// what a route executes: a builder numbers its placeholders by the statement's shape alone,
-// never by the values bound, so the text a sample call renders is byte-for-byte the text the
-// handler sends.
+// what a route executes; it is the same function the handlers above call.
+export const queries = {
+  graph: graphQuery,
+  links: linksQuery,
+  sources: sourcesQuery,
+  docs: docsQuery,
+  docsCount: docsCountQuery,
+  timeline: timelineQuery,
+  rising: risingQuery,
+  tone: toneQuery,
+  testimonySummary: testimonySummaryQuery,
+  termTestimony: termTestimonyQuery,
+  candidates: candidatesQuery,
+  compare: compareQuery,
+} as const
+
+// The text each builder emits. A builder numbers its placeholders by the statement's shape
+// alone, never by the values bound, so what a sample call renders is byte-for-byte what the
+// handler sends (test/statements.test.ts pins it), and a test can still read the SQL.
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
 const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0 }
 const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count' }
 
 export const statements = {
-  graph: graphQuery(samplePerson, sampleGraph).text,
-  links: linksQuery(samplePerson, sampleScope, ['word:sample']).text,
-  sources: sourcesQuery(samplePerson, sampleScope).text,
-  docs: docsQuery(samplePerson, sampleDocs).text,
-  docsCount: docsCountQuery(samplePerson, sampleDocs).text,
-  timeline: timelineQuery(samplePerson, { ...sampleDocs, days: 90, bucket: 'day' }).text,
-  rising: risingQuery(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
-  tone: toneQuery({ days: 30, min: 3 }).text,
-  testimonySummary: testimonySummaryQuery(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
-  termTestimony: termTestimonyQuery(samplePerson, sampleScope, 'stub', ['word:sample']).text,
-  candidates: candidatesQuery({ days: 7, min: 5, limit: 50 }).text,
-  compare: compareQuery(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
+  graph: queries.graph(samplePerson, sampleGraph).text,
+  links: queries.links(samplePerson, sampleScope, ['word:sample']).text,
+  sources: queries.sources(samplePerson, sampleScope).text,
+  docs: queries.docs(samplePerson, sampleDocs).text,
+  docsCount: queries.docsCount(samplePerson, sampleDocs).text,
+  timeline: queries.timeline(samplePerson, { ...sampleDocs, days: 90, bucket: 'day' }).text,
+  rising: queries.rising(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
+  tone: queries.tone({ days: 30, min: 3 }).text,
+  testimonySummary: queries.testimonySummary(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
+  termTestimony: queries.termTestimony(samplePerson, sampleScope, 'stub', ['word:sample']).text,
+  candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,
+  compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
 } as const

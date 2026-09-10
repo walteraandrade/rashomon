@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import seedJson from '../seed.json' with { type: 'json' }
 import { corpus } from './bench-corpus.js'
 import { atlasScenarios, scenarios } from './bench-scenarios.js'
+import type { Sql } from './sql.js'
 import type { Person } from './types.js'
 
 // The benchmark owns its own database. Never point it at ./data/pg: PGlite allows one process
@@ -96,8 +97,7 @@ const table = (header: string[], rows: string[][]) =>
 
 const measurePhase = async () => {
   const { db } = await import('./db.js')
-  const { statements } = await import('./graph.js')
-  const { nameTokens } = await import('./extract.js')
+  const { queries } = await import('./graph.js')
 
   // First statement on a freshly opened directory: PGlite's wasm boot and page-cache warm-up.
   const openedAt = performance.now()
@@ -148,7 +148,6 @@ const measurePhase = async () => {
   const dbBytes = (await db.query<{ bytes: number }>(`select pg_database_size(current_database())::int as bytes`)).rows[0].bytes
 
   const person = persons.find((p) => p.id === PERSON)!
-  const exclude = nameTokens(person)
   const ids = (
     await db.query<{ id: string }>(
       `select kind || ':' || term as id from doc_terms t join doc_persons p on p.doc_id = t.doc_id
@@ -157,23 +156,25 @@ const measurePhase = async () => {
     )
   ).rows.map((r) => r.id)
 
-  const plans: [string, string, unknown[]][] = [
-    ['graph', statements.graph, [PERSON, 30, 'all', 'all', 'all', exclude, 2, 'count', 40]],
-    ['links', statements.links, [PERSON, 30, 'all', 'all', ids]],
-    ['sources', statements.sources, [PERSON, 30, 'all', 'all']],
-    ['docs', statements.docs, [PERSON, 30, 'all', 'all', TERM, 'word', 50, 0]],
-    ['docsCount', statements.docsCount, [PERSON, 30, 'all', 'all', TERM, 'word']],
-    ['timeline', statements.timeline, [PERSON, 90, 'all', 'all', TERM, 'word', 1]],
-    ['rising', statements.rising, [PERSON, 7, 30, 'all', 'all', 'all', exclude, 3, 20]],
-    ['tone', statements.tone, [30, 3]],
-    ['testimonySummary', statements.testimonySummary, [PERSON, 30, 'all', 'stub', 3]],
-    ['candidates', statements.candidates, [7, 5, 50]],
+  const scope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
+  const docs = { ...scope, term: TERM, kind: 'word', limit: 50, offset: 0 }
+  const plans: [string, Sql][] = [
+    ['graph', queries.graph(person, { ...scope, min: 2, sort: 'count', limit: 40 })],
+    ['links', queries.links(person, scope, ids)],
+    ['sources', queries.sources(person, scope)],
+    ['docs', queries.docs(person, docs)],
+    ['docsCount', queries.docsCount(person, docs)],
+    ['timeline', queries.timeline(person, { ...docs, days: 90, bucket: 'day' })],
+    ['rising', queries.rising(person, { ...scope, days: 7, baseline: 30, min: 3, limit: 20 })],
+    ['tone', queries.tone({ days: 30, min: 3 })],
+    ['testimonySummary', queries.testimonySummary(person, { days: 30, source: 'all', method: 'stub', min: 3 })],
+    ['candidates', queries.candidates({ days: 7, min: 5, limit: 50 })],
   ]
 
   const explained: [string, string][] = []
-  for (const [name, sql, params] of plans) {
+  for (const [name, { text, values }] of plans) {
     try {
-      const { rows } = await db.query<Record<string, string>>(`explain (analyze, buffers, verbose false) ${sql}`, params)
+      const { rows } = await db.query<Record<string, string>>(`explain (analyze, buffers, verbose false) ${text}`, values)
       explained.push([name, rows.map((r) => r['QUERY PLAN']).join('\n')])
     } catch (e) {
       explained.push([name, `EXPLAIN unavailable: ${(e as Error).message}`])

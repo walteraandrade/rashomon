@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Gate', detail: 'issue must carry spec-approved and a spec comment' },
     { title: 'Build', detail: 'builder-api then builder-ui on feat/<slug>' },
     { title: 'Verify', detail: 'tests written from the spec, validator judges, builders fix (max 2 rounds)' },
-    { title: 'Release', detail: 'push and open the PR' },
+    { title: 'Release', detail: 'merge the two acceptance suites into one, push and open the PR' },
   ],
 }
 
@@ -110,6 +110,11 @@ if (!approved) {
 }
 
 phase('Release')
+// Two files asserting the same criteria break together and cover nothing extra. The verifier earns its keep
+// by writing tests without reading the builder's code, not by its own file reaching master.
+const MERGE_SUITES = `Merge the acceptance suite you wrote into the builder's suite covering the same criteria: keep every distinct assertion from both, delete the redundant file, run pnpm test and commit. Leave src/ and public/ untouched.`
+await role('test-verifier', `${where}\n\n${MERGE_SUITES}`, { label: `merge tests #${issue}`, phase: 'Release' })
+
 const pr = await role('release', `${where}\n\nPush ${branch} and open a pull request against ${base} that closes #${issue}. Title: ${gate.title}. Include in the body: what changed, the test verifier table, the validator verdict, screenshot paths from the UI report.\n\nTest table:\n${tests.table}\n\nValidator: approve with ${verdict.gaps.length} nits.\n\nUI report:\n${uiReport}`,
   { label: `pr #${issue}`, effort: 'low' })
 return { issue, branch, worktree, status: 'pr-opened', pr }

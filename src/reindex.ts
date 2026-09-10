@@ -2,7 +2,7 @@ import seedPersons from '../seed.json' with { type: 'json' }
 import { analyzeTables, db, migrate } from './db.js'
 import { domainOf, nameTokens } from './extract.js'
 import { buildPhrases, loadPhrases, resetPhraseStage, stagePhrases } from './phrases.js'
-import { derive, inBatches, inTransaction, upsertPersons, writeBatchDocs, writeDerived } from './store.js'
+import { MAX_DOC_CHARS, derive, inBatches, inTransaction, truncateText, upsertPersons, writeBatchDocs, writeDerived } from './store.js'
 import type { Person, Source, Term } from './types.js'
 
 type Row = { id: number; source: Source; text: string; extra_terms: Term[]; extra_names: string[] }
@@ -54,10 +54,33 @@ const backfillDomains = async (size: number) => {
   }
 }
 
+// Rows stored before the cap existed are cut to it with the same `truncateText` ingest uses, so
+// a reindex and an ingest agree on every document. `length(text)` is Postgres's character count
+// and `text.length` JavaScript's code-unit count, which only differ on non-BMP characters, so the
+// predicate here reads as "certainly over", and any row it selects does shrink.
+const capTexts = async (size: number) => {
+  let capped = 0
+  for (;;) {
+    const { rows } = await db.query<{ id: number; text: string }>(`select id, text from docs where length(text) > $1 order by id limit $2`, [MAX_DOC_CHARS, size])
+    if (!rows.length) return capped
+    await inTransaction(() =>
+      inBatches(rows, size, (b) =>
+        db.query(`update docs set text = u.text from unnest($1::int[], $2::text[]) as u(id, text) where docs.id = u.id`, [
+          b.map((r) => r.id),
+          b.map((r) => truncateText(r.text)),
+        ]),
+      ),
+    )
+    capped += rows.length
+  }
+}
+
 // Separate from main()'s stdout/db wiring, so tests can reindex the fixture in-process.
 export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => {
   await upsertPersons(persons)
   const backfilled = await backfillDomains(size)
+  // Before the phrase pass and the derive pass, so both read the text that will stay.
+  const capped = await capTexts(size)
   // The corpus is read twice, and it has to be: which pairs of words stick together is a fact
   // about the whole corpus, so the lexicon cannot exist until every document has been counted,
   // and no document can be tagged with a phrase until it does. The alternative -- deriving
@@ -92,13 +115,14 @@ export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => 
   // most-common-value lists are stale by construction when it ends: refresh them here,
   // unconditionally, in the process that owns DATA_DIR.
   const analyzed = await analyzeTables()
-  return { docs, backfilled, analyzed, phrases }
+  return { docs, backfilled, capped, analyzed, phrases }
 }
 
 const main = async () => {
   await migrate()
-  const { docs, backfilled, analyzed, phrases } = await reindexAll(seedPersons)
+  const { docs, backfilled, capped, analyzed, phrases } = await reindexAll(seedPersons)
   if (backfilled) console.log(`backfilled domain for ${backfilled} docs`)
+  if (capped) console.log(`capped text of ${capped} docs at ${MAX_DOC_CHARS} chars`)
   console.log(`reindexed ${docs} docs`)
   console.log(`kept ${phrases} phrases`)
   console.log(`analyzed ${analyzed.join(', ')}`)

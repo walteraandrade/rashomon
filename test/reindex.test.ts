@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
 import { reindexAll } from '../src/reindex.js'
+import { MAX_DOC_CHARS, truncateText } from '../src/store.js'
 import { ANALYZED_TABLES } from '../src/db.js'
 import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
 import './close.js'
@@ -102,5 +103,31 @@ describe('reindex recovers from an interrupted run (issue #50)', () => {
     const once = await derivedRows()
     await reindexAll(persons)
     assert.deepEqual(await derivedRows(), once)
+  })
+})
+
+describe('reindex caps the text of rows stored before the cap (issue #128)', () => {
+  before(seed)
+  const uri = 'https://example.org/stored-long'
+  const filler = 'lula fala sobre a reforma tributaria no congresso '
+  const text = `${filler.repeat(Math.ceil((MAX_DOC_CHARS + 500) / filler.length))}zumbificacao`
+
+  it('rewrites the text with truncateText and derives terms from what stays', async () => {
+    await db.query(`insert into docs (source, uri, text, published_at) values ('rss', $1, $2, now())`, [uri, text])
+    const { capped } = await reindexAll(persons)
+    assert.equal(capped, 1)
+    const { rows } = await db.query<{ text: string }>(`select text from docs where uri = $1`, [uri])
+    assert.equal(rows[0].text, truncateText(text))
+    assert.ok(rows[0].text.length <= MAX_DOC_CHARS)
+    // The repeated filler makes `reforma tributaria` a phrase on this corpus, which is why the
+    // word is looked for as either; the tail word past the cap must be absent either way.
+    const terms = await termsOf(uri)
+    assert.ok(terms.some((t) => t.startsWith('reforma')))
+    assert.ok(!terms.includes('zumbificacao'))
+  })
+
+  it('reports zero on a second run, since nothing is over the cap any more', async () => {
+    const { capped } = await reindexAll(persons)
+    assert.equal(capped, 0)
   })
 })

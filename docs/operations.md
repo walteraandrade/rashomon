@@ -68,7 +68,7 @@ Every unbounded network read in the collector layer is capped, so one oversized 
 Ingest and reindex are the only write paths, and both are bounded in the same two ways: `WRITE_BATCH_ROWS`
 rows per insert statement, `WRITE_BATCH_DOCS` documents per transaction. Neither bound grows with the size
 of the corpus, so a run over 20k or 200k documents holds the same amount of memory and never keeps a
-transaction open across an arbitrary amount of work.
+transaction open across an arbitrary amount of work. A third bound sits on the document itself: `MAX_DOC_CHARS` (20 000 characters, `src/store.ts`) caps `docs.text` at write time, on a word boundary, and `pnpm reindex` applies it to rows stored before it existed — see [sources](sources.md#full-text-contentencoded).
 
 - **Batches.** Person, term and candidate rows go in through `unnest`, one statement per batch instead of
   one per row, with `on conflict do nothing` so replaying a batch is a no-op rather than a duplicate-key

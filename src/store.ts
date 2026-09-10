@@ -13,6 +13,23 @@ const toneFor = (doc: RawDoc) => (tonedSources.includes(doc.source) ? doc.tone ?
 export const writeBatchRows = () => clampEnv(process.env.WRITE_BATCH_ROWS, 500, 1, 10_000)
 export const writeBatchDocs = () => clampEnv(process.env.WRITE_BATCH_DOCS, 200, 1, 5_000)
 
+// The ceiling on characters per stored document. Measured on the local corpus on 2026-09-10
+// (docs/sources-research.md, "Fifth pass"): the 99th percentile of the longest source (`rss`,
+// whole articles from `content:encoded`) is 7.9k characters and the single longest document is
+// 20k, so this keeps every article measured and only ever cuts a tail. A literal, not an env
+// knob, for the same reason as MAX_RESPONSE_BYTES: a safety ceiling with headroom, not a setting.
+export const MAX_DOC_CHARS = 20_000
+
+// Cuts on the last whitespace at or before the limit, so no word is ever stored in half and the
+// derived terms are the terms of the text actually kept. Only when the first `max` characters
+// hold no whitespace at all does it cut mid-run, which is the case of no words to protect.
+export const truncateText = (text: string, max = MAX_DOC_CHARS): string => {
+  if (text.length <= max) return text
+  const head = text.slice(0, max + 1)
+  const at = head.search(/\s\S*$/)
+  return at > 0 ? head.slice(0, at).trimEnd() : text.slice(0, max)
+}
+
 export const batches = <T>(xs: readonly T[], size: number): T[][] =>
   Array.from({ length: Math.ceil(xs.length / size) }, (_, i) => xs.slice(i * size, (i + 1) * size))
 
@@ -166,9 +183,12 @@ type Batch = { derived: Derived[]; stale: number[]; written: number; enriched: n
 // The shared body of every write path, so a single document and a group of two hundred derive
 // through exactly one piece of code. It does not open a transaction: the caller decides how
 // much commits at once.
+// The cap is applied here, before the upsert and before `derive`, so what is stored and what is
+// derived are the same text, through insertDoc and insertDocs alike.
 const writeBatch = async (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Promise<{ written: number; enriched: number }> => {
-  const batch = await docs.reduce<Promise<Batch>>(async (acc, doc) => {
+  const batch = await docs.reduce<Promise<Batch>>(async (acc, raw) => {
     const a = await acc
+    const doc = { ...raw, text: truncateText(raw.text) }
     const row = await upsertDoc(doc)
     const result = outcome(row)
     if (result === 'unchanged') return a

@@ -1,7 +1,10 @@
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
+import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
+
+const run = <T>(q: Sql) => db.query<T>(q.text, q.values)
 
 export type GraphQuery = {
   days: number
@@ -65,7 +68,7 @@ export type TestimonyQuery = {
 // No `min`, unlike GraphQuery/RisingQuery: a term present for one side and absent for the
 // other is exactly what /compare must keep as a measured null, so a floor tied to one side's
 // count cannot apply symmetrically (issue #93). No `sort` either -- both selection criteria
-// always run, see compareSql.
+// always run, see compareQuery.
 export type CompareQuery = {
   days: number
   source: string
@@ -102,27 +105,30 @@ type CompareTermRow = {
 // One row: the two `about` counts as columns, the unioned term list as json the driver already parses.
 type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermRow[] }
 
-// $3 must already be normalized by parseSourceList; unlike kind, an unknown or empty
-// source is not rescued here and would scope to zero docs. $4 must already be the
-// effective domain scope from resolveScope (a comma-joined list, 'all', or '' for an
-// empty domain+lean intersection). string_to_array('', ',') yields an *empty* array
-// (verified against PGlite), so d.domain = any(...) matches nothing and the empty
-// intersection correctly scopes to zero rows.
-const scopeCte = `
+// `source` must already be normalized by parseSourceList; unlike kind, an unknown or empty
+// source is not rescued here and would scope to zero docs. domain+lean are resolved here into
+// the effective domain scope (a comma-joined list, 'all', or '' for an empty intersection).
+// string_to_array('', ',') yields an *empty* array (verified against PGlite), so
+// d.domain = any(...) matches nothing and the empty intersection correctly scopes to zero rows.
+type Scope = { days: number; source: string; domain: string; lean: string }
+const scopeCte = (person: Person, q: Scope) => {
+  const { domain } = resolveScope(q.domain, q.lean)
+  return sql`
   scope as (
     select d.id from docs d
-    where d.published_at >= now() - make_interval(days => $2)
-      and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
-      and ($4 = 'all' or d.domain = any(string_to_array($4, ',')))
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   about as (
-    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $1
+    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   )`
+}
 
 // PMI's universe. doc_terms only exists for docs naming at least one tracked person, so the
 // numerator's universe is that set; n.total and term_all must be restricted to it too, or the
 // denominator would count docs that can never contribute a term.
-const trackedCte = `
+const trackedCte = sql`
   tracked as (
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )`
@@ -163,8 +169,8 @@ const trackedCte = `
 // doc inside a group, and the distinct sort/hash was pure cost -- 270 ms to 152 ms on the
 // benchmark corpus, almost all of it term_all's, which drops a 3.9 MB quicksort by turning a
 // GroupAggregate into a HashAggregate (see docs/perf-baseline.md).
-// A person's own name words are already dropped as single terms by `t.term = any($6)`, whose
-// array is nameTokens(person). A phrase carrying one of them has to go for the same reason:
+// A person's own name words are already dropped as single terms by `t.term = any(exclude)`,
+// whose array is nameTokens(person). A phrase carrying one of them has to go for the same reason:
 // "lula da silva" and "jair bolsonaro" are not things said *about* the person, they are the
 // person. The overlap operator asks it of the phrase's words, so "flavio bolsonaro" leaves
 // Jair's map without ever being spelled out anywhere.
@@ -173,22 +179,26 @@ const trackedCte = `
 // single words, and they are already handled by the equality above, so they never pay for a
 // string_to_array. It is not merely an optimization -- without it this expression would
 // duplicate the equality check on every row of the largest table in the database.
-const namePhraseSql = (names: string) => `(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
+const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
 
-// compareSql's flag for "this (term, kind) key is (or contains) that side's own name word":
-// the equality half namePhraseSql leaves to its caller's own where clause, plus the phrase
-// half, both against an arbitrary column (compareSql evaluates this on the unioned key, not
-// on doc_terms.term), so it cannot reuse namePhraseSql's hardcoded `t.term`.
-const isNameSql = (col: string, names: string) => `(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
+// compareQuery's flag for "this (term, kind) key is (or contains) that side's own name word":
+// the equality half namePhrase leaves to its caller's own where clause, plus the phrase
+// half, both against an arbitrary column (compareQuery evaluates this on the unioned key, not
+// on doc_terms.term), so it cannot reuse namePhrase's hardcoded `t.term`.
+const isName = (col: Sql, names: string[]) =>
+  sql`(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
-const graphSql = `
-  with ${scopeCte}, ${trackedCte},
+const graphQuery = (person: Person, q: GraphQuery) => {
+  const exclude = nameTokens(person)
+  const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
+  return sql`
+  with ${scopeCte(person, q)}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
   term_p as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any($6::text[])) and not ${namePhraseSql('$6')}
+    where not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
     group by 1, 2
   ),
   term_all as materialized (
@@ -199,16 +209,16 @@ const graphSql = `
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
-    where p.c_pt >= $7 and ($5 = 'all' or p.kind = any(string_to_array($5, ',')))
+    where p.c_pt >= ${q.min} and (${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ',')))
   ),
   nodes_top as (
     select term, kind, count,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
-      (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) as sort_key
+      ${sortKey} as sort_key
     from nodes_scored
-    order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term, kind
-    limit $9
+    order by ${sortKey} desc, term, kind
+    limit ${q.limit}
   ),
   signature_scored as (
     select p.term, p.kind, p.c_pt::int as count,
@@ -234,6 +244,7 @@ const graphSql = `
       select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi) order by pmi desc, term, kind)
       from signature_top
     ), '[]'::json) as signature`
+}
 
 // count(*) rather than count(distinct a.doc_id) (issue #47): a row here is a (doc_id, a, b)
 // triple, and `kind || ':' || term` is injective over the three kinds Term allows
@@ -246,13 +257,13 @@ const graphSql = `
 // instead. Spelling the sort out is what keeps the response identical rather than merely
 // equivalent, and it still wins -- 26.6 ms -> 22.0 ms on the benchmark corpus, since it now
 // sorts the 443 output rows instead of the 3744 input ones.
-const linksSql = `
-  with ${scopeCte}
+const linksQuery = (person: Person, q: Scope, ids: string[]) => sql`
+  with ${scopeCte(person, q)}
   select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(*)::int as count
   from doc_terms a
   join doc_terms b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
   join about x on x.doc_id = a.doc_id
-  where (a.kind || ':' || a.term) = any($5::text[]) and (b.kind || ':' || b.term) = any($5::text[])
+  where (a.kind || ':' || a.term) = any(${ids}::text[]) and (b.kind || ':' || b.term) = any(${ids}::text[])
   group by 1, 2 having count(*) >= 2
   order by 1, 2`
 
@@ -260,14 +271,14 @@ const linksSql = `
 // mean kikori score of the docs in `about` that carry this term, next to the person's own
 // mean over the same `about`, so the client can colour each word by its distance from the
 // person rather than from zero -- the name bias moves every text of one person the same
-// way, and centring on the person's mean cancels it. Its own statement, like linksSql, and
-// for the same reason: the term list is the output of graphSql, and it only runs when asked.
+// way, and centring on the person's mean cancels it. Its own statement, like linksQuery, and
+// for the same reason: the term list is the output of graphQuery, and it only runs when asked.
 // count(*) is one row per doc per term by doc_terms' PK, same argument as term_p's.
-const termTestimonySql = `
-  with ${scopeCte},
+const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => sql`
+  with ${scopeCte(person, q)},
   scored as (
     select a.doc_id, dt.score
-    from about a join doc_testimony dt on dt.doc_id = a.doc_id and dt.person_id = $1 and dt.method = $5
+    from about a join doc_testimony dt on dt.doc_id = a.doc_id and dt.person_id = ${person.id} and dt.method = ${method}
     where dt.score is not null
   )
   select
@@ -276,15 +287,15 @@ const termTestimonySql = `
       select json_agg(json_build_object('id', id, 'score', score, 'n', n) order by id) from (
         select t.kind || ':' || t.term as id, round(avg(s.score)::numeric, 2)::float8 as score, count(*)::int as n
         from doc_terms t join scored s on s.doc_id = t.doc_id
-        where (t.kind || ':' || t.term) = any($6::text[])
+        where (t.kind || ':' || t.term) = any(${ids}::text[])
         group by 1
       ) x
     ), '[]'::json) as terms`
 
 type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: { id: string; score: number; n: number }[] }
 
-const sourcesSql = `
-  with ${scopeCte}
+const sourcesQuery = (person: Person, q: Scope) => sql`
+  with ${scopeCte(person, q)}
   select d.domain, d.source, count(*)::int as docs,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as tone_n
   from docs d join about a on a.doc_id = d.id
@@ -295,8 +306,7 @@ const sourcesSql = `
 // lean/basis are annotated per row from outlets.json regardless of whether q.lean
 // narrowed the scope: cheap, static, always-available metadata.
 export const sourcesFor = async (person: Person, q: GraphQuery) => {
-  const { domain } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<SourceRow>(sourcesSql, [person.id, q.days, q.source, domain])
+  const { rows } = await run<SourceRow>(sourcesQuery(person, q))
   return rows.map((r) => ({ ...r, ...labelFor(r.domain) }))
 }
 
@@ -306,34 +316,31 @@ export const sourcesFor = async (person: Person, q: GraphQuery) => {
 // Exported so a test can read the literal kind array back out of it and compare against
 // query.ts's KINDS, instead of re-typing a third copy that could silently drift from both
 // (issue #108's own postmortem on how 'theme' almost stayed out of sync here).
-export const docsWhereSql = `(
-    $5 = '' or exists (
-      select 1 from doc_terms t where t.doc_id = d.id and t.term = $5
-        and ($6 = 'all' or t.kind = any(string_to_array($6, ',')) or not (string_to_array($6, ',') <@ array['hashtag', 'word', 'phrase']))
+const docsWhere = (term: string, kind: string) => sql`(
+    ${term} = '' or exists (
+      select 1 from doc_terms t where t.doc_id = d.id and t.term = ${term}
+        and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase']))
     )
   )`
+export const docsWhereSql = docsWhere('', 'all').text
 
-const docsSql = `
-  with ${scopeCte}
+const docsQuery = (person: Person, q: DocsQuery) => sql`
+  with ${scopeCte(person, q)}
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
-  where ${docsWhereSql}
+  where ${docsWhere(q.term, q.kind)}
   order by d.published_at desc, d.id desc
-  limit $7 offset $8`
+  limit ${q.limit} offset ${q.offset}`
 
-const docsCountSql = `
-  with ${scopeCte}
+const docsCountQuery = (person: Person, q: DocsQuery) => sql`
+  with ${scopeCte(person, q)}
   select count(*)::int as total
   from docs d join about a on a.doc_id = d.id
-  where ${docsWhereSql}`
+  where ${docsWhere(q.term, q.kind)}`
 
 export const docsFor = async (person: Person, q: DocsQuery) => {
-  const { domain, outlets } = resolveScope(q.domain, q.lean)
-  const params = [person.id, q.days, q.source, domain, q.term, q.kind]
-  const [docs, count] = await Promise.all([
-    db.query<DocRow>(docsSql, [...params, q.limit, q.offset]),
-    db.query<{ total: number }>(docsCountSql, params),
-  ])
+  const { outlets } = resolveScope(q.domain, q.lean)
+  const [docs, count] = await Promise.all([run<DocRow>(docsQuery(person, q)), run<{ total: number }>(docsCountQuery(person, q))])
   return { total: count.rows[0].total, docs: docs.rows, outlets }
 }
 
@@ -360,11 +367,13 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
 // which is what the open upper bound did. least(last_i, ...) is the oldest-edge clamp:
 // scopeCte already bounds age at `days`, so it only matters at the last bucket's exact
 // edge, where it keeps the doc inside the series rather than off the end of it.
-const timelineSql = `
-  with ${scopeCte},
+const timelineQuery = (person: Person, q: TimelineQuery) => {
+  const bucketDays = q.bucket === 'day' ? 1 : 7
+  return sql`
+  with ${scopeCte(person, q)},
   bounds as (
-    select $2::int as days, $7::int as bucket_days,
-      ceil($2::float8 / $7::float8)::int - 1 as last_i
+    select ${q.days}::int as days, ${bucketDays}::int as bucket_days,
+      ceil(${q.days}::float8 / ${bucketDays}::float8)::int - 1 as last_i
   ),
   buckets as (
     select i,
@@ -383,72 +392,65 @@ const timelineSql = `
     from about a
     join docs d on d.id = a.doc_id
     cross join bounds b
-    where ${docsWhereSql}
+    where ${docsWhere(q.term, q.kind)}
     group by 1
   )
   select b.bucket_start, coalesce(h.count, 0)::int as count
   from buckets b
   left join hits h on h.i = b.i
   order by b.bucket_start asc`
+}
 
 // Stays a bare array on purpose: lean narrows which docs count toward each bucket
 // (via the same resolveScope as every other route), but outlets/basis are not
 // surfaced here, since that would require wrapping this array in an object.
-export const timelineFor = async (person: Person, q: TimelineQuery) => {
-  const bucketDays = q.bucket === 'day' ? 1 : 7
-  const { domain } = resolveScope(q.domain, q.lean)
-  const params = [person.id, q.days, q.source, domain, q.term, q.kind, bucketDays]
-  return (await db.query<TimelineRow>(timelineSql, params)).rows
-}
+export const timelineFor = async (person: Person, q: TimelineQuery) => (await run<TimelineRow>(timelineQuery(person, q))).rows
 
-// Cross-person on purpose: scopeCte's `about` scopes to a single person_id via $1, which
+// Cross-person on purpose: scopeCte's `about` scopes to a single person_id, which
 // does not fit a matrix spanning every tracked person, so this joins doc_persons/persons
 // directly instead. avg()/count() ignore SQL null automatically, so untoned (non-GDELT)
 // docs contribute nothing to either aggregate without a source/kind check.
 //
 // `tone is not null` is therefore free rather than a behaviour change (issue #47): it only
 // removes rows both aggregates already ignore, so avg and n are untouched, and a group can
-// only survive `count(d.tone) >= $2` when $2 >= 1 (parseToneQuery's floor) if it still holds
+// only survive `count(d.tone) >= min` when min >= 1 (parseToneQuery's floor) if it still holds
 // at least one toned row. It cuts the rows joined and hashed from 3847 to 1748 on the
 // benchmark corpus, 22.5 ms -> 14.3 ms, with the same buffer count.
-const toneSql = `
+const toneQuery = (q: ToneQuery) => sql`
   select p.id as person_id, d.domain as domain,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as n
   from docs d
   join doc_persons dp on dp.doc_id = d.id
   join persons p on p.id = dp.person_id
-  where d.published_at >= now() - make_interval(days => $1)
+  where d.published_at >= now() - make_interval(days => ${q.days})
     and d.domain is not null
     and d.tone is not null
   group by p.id, d.domain
-  having count(d.tone) >= $2
+  having count(d.tone) >= ${q.min}
   order by p.id, d.domain`
 
-const tonePersonsSql = `select id, name from persons order by name`
+const tonePersonsQuery = sql`select id, name from persons order by name`
 
 export const toneFor = async (q: ToneQuery) => {
-  const [cells, people] = await Promise.all([
-    db.query<ToneCellRow>(toneSql, [q.days, q.min]),
-    db.query<ToneListRow>(tonePersonsSql),
-  ])
+  const [cells, people] = await Promise.all([run<ToneCellRow>(toneQuery(q)), run<ToneListRow>(tonePersonsQuery)])
   const domains = [...new Set(cells.rows.map((c) => c.domain))].sort()
   return { persons: people.rows, domains, cells: cells.rows }
 }
 
-// Scoped to one person via $1, unlike toneSql (cross-person by construction): testimony's
+// Scoped to one person, unlike toneQuery (cross-person by construction): testimony's
 // PK already carries person_id, so an inner join on (doc_id, person_id, method) can never
 // leak another person's score for a shared doc into this scope. The inner join to
 // doc_testimony (not left join) is what makes an unscored pair contribute nothing anywhere,
 // including no zero-n placeholder row, per the spec.
-const testimonyScopeCte = `
+const testimonyScopeCte = (person: Person, q: TestimonyQuery) => sql`
   scope as (
     select d.source, d.domain, dt.score
     from doc_persons dp
     join docs d on d.id = dp.doc_id
-    join doc_testimony dt on dt.doc_id = dp.doc_id and dt.person_id = dp.person_id and dt.method = $4
-    where dp.person_id = $1
-      and d.published_at >= now() - make_interval(days => $2)
-      and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
+    join doc_testimony dt on dt.doc_id = dp.doc_id and dt.person_id = dp.person_id and dt.method = ${q.method}
+    where dp.person_id = ${person.id}
+      and d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
   )`
 
 // One statement for what overall, by_source and by_domain used to take three. All three
@@ -463,12 +465,12 @@ const testimonyScopeCte = `
 //
 // The three level filters are deliberately asymmetric and stay exactly as they were: overall
 // has no count floor, by_source floors at 1 (a group whose scores are all null contributes no
-// row), and only by_domain sees the caller's $5 and drops null domains.
+// row), and only by_domain sees the caller's min and drops null domains.
 //
 // json_agg carries its own order by, so the arrays come back in the order the split
 // statements' `order by` produced; the driver parses the json into the same row objects.
-const testimonySummarySql = `
-  with ${testimonyScopeCte},
+const testimonySummaryQuery = (person: Person, q: TestimonyQuery) => sql`
+  with ${testimonyScopeCte(person, q)},
   summary as materialized (
     select grouping(source) as g_source, grouping(domain) as g_domain, source, domain,
       round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n
@@ -483,7 +485,7 @@ const testimonySummarySql = `
     ), '[]'::json) as by_source,
     coalesce((
       select json_agg(json_build_object('domain', domain, 'source', source, 'score', score, 'n', n) order by domain, source)
-      from summary where g_domain = 0 and domain is not null and n >= $5
+      from summary where g_domain = 0 and domain is not null and n >= ${q.min}
     ), '[]'::json) as by_domain`
 
 type TestimonyOverallRow = { score: number | null; n: number }
@@ -493,7 +495,7 @@ type TestimonyByDomainRow = { domain: string; source: string; score: number; n: 
 type TestimonySummary = { overall: TestimonyOverallRow | null; by_source: TestimonyBySourceRow[]; by_domain: TestimonyByDomainRow[] }
 
 export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
-  const { rows } = await db.query<TestimonySummary>(testimonySummarySql, [person.id, q.days, q.source, q.method, q.min])
+  const { rows } = await run<TestimonySummary>(testimonySummaryQuery(person, q))
   const { overall, by_source, by_domain } = rows[0]
   return {
     method: q.method,
@@ -506,53 +508,54 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 // Two disjoint windows (recent, then baseline immediately before it), instead of
 // reusing scopeCte twice, so a doc is never double-counted into both windows.
 //
-// c_recent/c_baseline are count(*) (issue #47): same argument as graphSql's term_p, with
-// recent_about/baseline_about in place of `about` -- doc_persons' PK with person_id fixed to
-// $1, joined to a scope of docs.id, is one row per doc, and doc_terms' PK is one row per
+// c_recent/c_baseline are count(*) (issue #47): same argument as graphQuery's term_p, with
+// recent_about/baseline_about in place of `about` -- doc_persons' PK with person_id fixed,
+// joined to a scope of docs.id, is one row per doc, and doc_terms' PK is one row per
 // (doc, term, kind). 13.5 ms -> 11.2 ms on the benchmark corpus. `kind` closes the order by
-// for the same reason it closes graphSql's: (lift, term) does not separate two kinds of one
+// for the same reason it closes graphQuery's: (lift, term) does not separate two kinds of one
 // term text, and count(*) lets the planner pick a different arbitrary order than distinct did.
-const risingSql = `
+const risingQuery = (person: Person, q: RisingQuery) => {
+  const exclude = nameTokens(person)
+  const { domain } = resolveScope(q.domain, q.lean)
+  const termsOf = (about: Sql, count: Sql) => sql`
+    select t.term, t.kind, count(*)::float8 as ${count}
+    from doc_terms t join ${about} a on a.doc_id = t.doc_id
+    where (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ','))) and not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
+    group by 1, 2`
+  return sql`
   with
   recent_scope as (
     select d.id from docs d
-    where d.published_at >= now() - make_interval(days => $2)
-      and ($4 = 'all' or d.source = $4)
-      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = ${q.source})
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   recent_about as (
-    select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = $1
+    select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
   baseline_scope as (
     select d.id from docs d
-    where d.published_at < now() - make_interval(days => $2)
-      and d.published_at >= now() - make_interval(days => $2 + $3)
-      and ($4 = 'all' or d.source = $4)
-      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+    where d.published_at < now() - make_interval(days => ${q.days})
+      and d.published_at >= now() - make_interval(days => ${q.days}::int + ${q.baseline}::int)
+      and (${q.source} = 'all' or d.source = ${q.source})
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   baseline_about as (
-    select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = $1
+    select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
-  recent_terms as (
-    select t.term, t.kind, count(*)::float8 as c_recent
-    from doc_terms t join recent_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = any(string_to_array($6, ','))) and not (t.term = any($7::text[])) and not ${namePhraseSql('$7')}
-    group by 1, 2
+  recent_terms as (${termsOf(sql.raw('recent_about'), sql.raw('c_recent'))}
   ),
-  baseline_terms as (
-    select t.term, t.kind, count(*)::float8 as c_baseline
-    from doc_terms t join baseline_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = any(string_to_array($6, ','))) and not (t.term = any($7::text[])) and not ${namePhraseSql('$7')}
-    group by 1, 2
+  baseline_terms as (${termsOf(sql.raw('baseline_about'), sql.raw('c_baseline'))}
   )
   select r.term, r.kind,
-    round((r.c_recent / $2)::numeric, 2)::float8 as count_recent,
-    round((coalesce(b.c_baseline, 0) / $3)::numeric, 2)::float8 as count_baseline,
-    round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift
+    round((r.c_recent / ${q.days})::numeric, 2)::float8 as count_recent,
+    round((coalesce(b.c_baseline, 0) / ${q.baseline})::numeric, 2)::float8 as count_baseline,
+    round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
   from recent_terms r left join baseline_terms b using (term, kind)
-  where r.c_recent >= $8
+  where r.c_recent >= ${q.min}
   order by lift desc, term, kind
-  limit $9`
+  limit ${q.limit}`
+}
 
 export type CandidatesQuery = { days: number; min: number; limit: number }
 type CandidateRow = { name: string; count: number; sources: number; previous: number }
@@ -562,73 +565,61 @@ export type Candidate = CandidateRow & { samples: Omit<CandidateSampleRow, 'name
 // Cross-person by construction: candidates are names nobody tracks yet, so there is no
 // person_id to scope by. `previous` is the window of the same length right before this
 // one, so a caller can see what is rising without a second request.
-const candidatesSql = `
+const candidatesQuery = (q: CandidatesQuery) => sql`
   with recent as (
     select c.name, count(distinct c.doc_id)::int as count, count(distinct d.source)::int as sources
     from doc_candidates c join docs d on d.id = c.doc_id
-    where d.published_at >= now() - make_interval(days => $1)
+    where d.published_at >= now() - make_interval(days => ${q.days})
     group by c.name
-    having count(distinct c.doc_id) >= $2
+    having count(distinct c.doc_id) >= ${q.min}
   ),
   previous as (
     select c.name, count(distinct c.doc_id)::int as count
     from doc_candidates c join docs d on d.id = c.doc_id
-    where d.published_at < now() - make_interval(days => $1)
-      and d.published_at >= now() - make_interval(days => 2 * $1)
+    where d.published_at < now() - make_interval(days => ${q.days})
+      and d.published_at >= now() - make_interval(days => 2 * ${q.days})
     group by c.name
   )
   select r.name, r.count, r.sources, coalesce(p.count, 0)::int as previous
   from recent r left join previous p using (name)
   order by r.count desc, r.name
-  limit $3`
+  limit ${q.limit}`
 
-const candidateSamplesSql = `
+const candidateSamplesQuery = (names: string[], days: number) => sql`
   select name, id, source, text from (
     select c.name, d.id, d.source, d.text,
       row_number() over (partition by c.name order by d.published_at desc, d.id desc) as rn
     from doc_candidates c join docs d on d.id = c.doc_id
-    where c.name = any($1::text[]) and d.published_at >= now() - make_interval(days => $2)
+    where c.name = any(${names}::text[]) and d.published_at >= now() - make_interval(days => ${days})
   ) s
   where rn <= 3
   order by name, rn`
 
 export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number; candidates: Candidate[] }> => {
-  const { rows } = await db.query<CandidateRow>(candidatesSql, [q.days, q.min, q.limit])
-  const samples = rows.length ? (await db.query<CandidateSampleRow>(candidateSamplesSql, [rows.map((r) => r.name), q.days])).rows : []
+  const { rows } = await run<CandidateRow>(candidatesQuery(q))
+  const samples = rows.length ? (await run<CandidateSampleRow>(candidateSamplesQuery(rows.map((r) => r.name), q.days))).rows : []
   const byName = new Map<string, Candidate['samples']>()
   samples.forEach(({ name, ...doc }) => byName.set(name, [...(byName.get(name) ?? []), doc]))
   return { days: q.days, candidates: rows.map((r) => ({ ...r, samples: byName.get(r.name) ?? [] })) }
 }
 
 export const risingFor = async (person: Person, q: RisingQuery) => {
-  const exclude = nameTokens(person)
-  const { domain, outlets } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<RisingRow>(risingSql, [
-    person.id,
-    q.days,
-    q.baseline,
-    q.source,
-    domain,
-    q.kind,
-    exclude,
-    q.min,
-    q.limit,
-  ])
+  const { outlets } = resolveScope(q.domain, q.lean)
+  const { rows } = await run<RisingRow>(risingQuery(person, q))
   return { days: q.days, baseline: q.baseline, terms: rows, outlets }
 }
 
-// links stays a second statement on purpose: its `any($5)` term list is the output of the
+// links stays a second statement on purpose: its `any(ids)` term list is the output of the
 // first one, so folding it in would mean recomputing the ranking to feed itself. It is also
 // the cheap half of the route (see docs/perf-baseline.md) and is skipped entirely when the
 // graph has no nodes.
 export const graphFor = async (person: Person, q: GraphQuery) => {
-  const exclude = nameTokens(person)
-  const { domain, outlets } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<GraphAggregates>(graphSql, [person.id, q.days, q.source, domain, q.kind, exclude, q.min, q.sort, q.limit])
+  const { outlets } = resolveScope(q.domain, q.lean)
+  const { rows } = await run<GraphAggregates>(graphQuery(person, q))
   const { docs, about, nodes, signature } = rows[0]
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
-  const links = ids.length ? await db.query<LinkRow>(linksSql, [person.id, q.days, q.source, domain, ids]) : { rows: [] }
-  const testimony = q.method ? (await db.query<TermTestimonyRow>(termTestimonySql, [person.id, q.days, q.source, domain, q.method, ids])).rows[0] : null
+  const links = ids.length ? await run<LinkRow>(linksQuery(person, q, ids)) : { rows: [] }
+  const testimony = q.method ? (await run<TermTestimonyRow>(termTestimonyQuery(person, q, q.method, ids))).rows[0] : null
   const perTerm = new Map(testimony?.terms.map((t) => [t.id, { score: t.score, n: t.n }]) ?? [])
   return {
     person,
@@ -646,76 +637,84 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
 // Cross-person by construction, like toneSql: unlike scopeCte, `scope`/`tracked` here carry no
 // single person_id, since both sides share them (issue #93's cost-saving rationale -- the shared
 // PMI universe n/term_all is computed once, not once per side).
-const compareScopeCte = `
+const compareScopeCte = (q: CompareQuery) => {
+  const { domain } = resolveScope(q.domain, q.lean)
+  return sql`
   scope as (
     select d.id from docs d
-    where d.published_at >= now() - make_interval(days => $3)
-      and ($4 = 'all' or d.source = any(string_to_array($4, ',')))
-      and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   tracked as (
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )`
+}
 
-// One side's about/term_p/scored/top-N CTEs, parameterized by the person id param ($1 or $2)
-// and that person's own nameTokens array param ($8 or $9) -- inherently per-person, since a
-// term can be A's own name and legitimate vocabulary for B (spec §3), so these cannot be
-// shared the way scope/tracked/n/term_all are.
+// One side's about/term_p/scored/top-N CTEs, parameterized by the person and that person's
+// own nameTokens array -- inherently per-person, since a term can be A's own name and
+// legitimate vocabulary for B (spec §3), so these cannot be shared the way
+// scope/tracked/n/term_all are.
 //
-// Deliberately not capped by $7 (limit) here: every term the person's docs carry in scope
-// gets an exact count/pmi/tone, with only the name-word exclusion applied, same as graphSql's
+// Deliberately not capped by `limit` here: every term the person's docs carry in scope
+// gets an exact count/pmi/tone, with only the name-word exclusion applied, same as graphQuery's
 // term_p. `limit` only governs top_count/top_pmi, i.e. which keys enter the union below --
 // the exact figure for a unioned key is always looked up uncapped, in `scored_<side>`.
 //
 // Both top_count and top_pmi are computed for every call, per spec: dropping either would
 // silently exclude "loud but not sticky" or "rare but sticky" words from one side. pmi *
-// ln(1 + count) is sort=pmi's pinned formula (graphSql), reused unchanged.
-const compareSideCte = (side: 'a' | 'b', personParam: string, namesParam: string) => `
-  about_${side} as (
-    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${personParam}
+// ln(1 + count) is sort=pmi's pinned formula (graphQuery), reused unchanged.
+const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
+  const names = nameTokens(person)
+  const about = sql.raw(`about_${side}`)
+  const np = sql.raw(`np_${side}`)
+  const termP = sql.raw(`term_p_${side}`)
+  const scored = sql.raw(`scored_${side}`)
+  const top = sql.raw(`${side}_top`)
+  return sql`
+  ${about} as (
+    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
-  np_${side} as materialized (select count(*)::float8 as total from about_${side}),
-  term_p_${side} as materialized (
+  ${np} as materialized (select count(*)::float8 as total from ${about}),
+  ${termP} as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join about_${side} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any(${namesParam}::text[])) and not ${namePhraseSql(namesParam)}
+    from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+    where not (t.term = any(${names}::text[])) and not ${namePhrase(names)}
     group by 1, 2
   ),
-  scored_${side} as (
+  ${scored} as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
-      ln((p.c_pt * n.total) / (np_${side}.total * a.c_t)) / ln(2) as pmi
-    from term_p_${side} p join term_all a using (term, kind), n, np_${side}
-    where $6 = 'all' or p.kind = any(string_to_array($6, ','))
+      ln((p.c_pt * n.total) / (${np}.total * a.c_t)) / ln(2) as pmi
+    from ${termP} p join term_all a using (term, kind), n, ${np}
+    where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
   ),
-  ${side}_top_count as (
-    select term, kind from scored_${side} order by count desc, term, kind limit $7
+  ${top}_count as (
+    select term, kind from ${scored} order by count desc, term, kind limit ${q.limit}
   ),
-  ${side}_top_pmi as (
-    select term, kind from scored_${side} order by pmi * ln(1 + count) desc, term, kind limit $7
+  ${top}_pmi as (
+    select term, kind from ${scored} order by pmi * ln(1 + count) desc, term, kind limit ${q.limit}
   )`
+}
 
-// $1 a's person id, $2 b's, $3 days, $4 source, $5 domain (already resolved via resolveScope),
-// $6 kind, $7 limit, $8 a's nameTokens, $9 b's nameTokens.
-//
 // `keys` is the union of up to four (term, kind) lists across both sides -- UNION (not UNION
 // ALL) dedupes on its own. `unioned` then looks up the exact, uncapped figure for every key on
 // each side via a left join, so a key selected only from the other side's lists comes back
 // null on this one, not a dropped row -- the whole point of the union (spec §3): a null must
 // be measured, never "outside the top list".
 //
-// is_name_a/is_name_b are computed against the key text directly (isNameSql), not against
+// is_name_a/is_name_b are computed against the key text directly (isName), not against
 // scored_a/scored_b: a term can be one side's own name word and therefore entirely absent
 // from that side's term_p (excluded there by construction), yet still need to read "name"
 // rather than null on this response.
-const compareSql = `
-  with ${compareScopeCte},
+const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
+  with ${compareScopeCte(q)},
   n as materialized (select count(*)::float8 as total from tracked),
   term_all as materialized (
     select t.term, t.kind, count(*)::float8 as c_t
     from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
   ),
-  ${compareSideCte('a', '$1', '$8')},
-  ${compareSideCte('b', '$2', '$9')},
+  ${compareSideCte('a', a, q)},
+  ${compareSideCte('b', b, q)},
   keys as (
     select term, kind from a_top_count
     union select term, kind from a_top_pmi
@@ -724,8 +723,8 @@ const compareSql = `
   ),
   unioned as (
     select k.term, k.kind,
-      ${isNameSql('k.term', '$8')} as is_name_a,
-      ${isNameSql('k.term', '$9')} as is_name_b,
+      ${isName(sql.raw('k.term'), nameTokens(a))} as is_name_a,
+      ${isName(sql.raw('k.term'), nameTokens(b))} as is_name_b,
       sa.count as a_count, round(sa.pmi::numeric, 2)::float8 as a_pmi, round(sa.tone::numeric, 2)::float8 as a_tone,
       sb.count as b_count, round(sb.pmi::numeric, 2)::float8 as b_pmi, round(sb.tone::numeric, 2)::float8 as b_tone
     from keys k
@@ -748,10 +747,7 @@ const compareSql = `
 // is "the" resource. Own function, not two graphFor calls: the shared PMI universe (n,
 // term_all) would otherwise be recomputed once per side, exactly the cost issue #93 avoids.
 export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
-  const namesA = nameTokens(a)
-  const namesB = nameTokens(b)
-  const { domain } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<CompareAggregates>(compareSql, [a.id, b.id, q.days, q.source, domain, q.kind, q.limit, namesA, namesB])
+  const { rows } = await run<CompareAggregates>(compareQuery(a, b, q))
   const { about_a, about_b, terms } = rows[0]
   return {
     days: q.days,
@@ -766,20 +762,43 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   }
 }
 
-// The exact statements the routes run, exported read-only so `pnpm bench` can put each one
+// The exact builders the routes run, exported read-only so `pnpm bench` can put each one
 // through EXPLAIN (ANALYZE, BUFFERS) with representative parameters. Nothing here changes
-// what a route executes; it is the same string object the handlers above use.
+// what a route executes; it is the same function the handlers above call.
+export const queries = {
+  graph: graphQuery,
+  links: linksQuery,
+  sources: sourcesQuery,
+  docs: docsQuery,
+  docsCount: docsCountQuery,
+  timeline: timelineQuery,
+  rising: risingQuery,
+  tone: toneQuery,
+  testimonySummary: testimonySummaryQuery,
+  termTestimony: termTestimonyQuery,
+  candidates: candidatesQuery,
+  compare: compareQuery,
+} as const
+
+// The text each builder emits. A builder numbers its placeholders by the statement's shape
+// alone, never by the values bound, so what a sample call renders is byte-for-byte what the
+// handler sends (test/statements.test.ts pins it), and a test can still read the SQL.
+const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
+const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
+const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0 }
+const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count' }
+
 export const statements = {
-  graph: graphSql,
-  links: linksSql,
-  sources: sourcesSql,
-  docs: docsSql,
-  docsCount: docsCountSql,
-  timeline: timelineSql,
-  rising: risingSql,
-  tone: toneSql,
-  testimonySummary: testimonySummarySql,
-  termTestimony: termTestimonySql,
-  candidates: candidatesSql,
-  compare: compareSql,
+  graph: queries.graph(samplePerson, sampleGraph).text,
+  links: queries.links(samplePerson, sampleScope, ['word:sample']).text,
+  sources: queries.sources(samplePerson, sampleScope).text,
+  docs: queries.docs(samplePerson, sampleDocs).text,
+  docsCount: queries.docsCount(samplePerson, sampleDocs).text,
+  timeline: queries.timeline(samplePerson, { ...sampleDocs, days: 90, bucket: 'day' }).text,
+  rising: queries.rising(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
+  tone: queries.tone({ days: 30, min: 3 }).text,
+  testimonySummary: queries.testimonySummary(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
+  termTestimony: queries.termTestimony(samplePerson, sampleScope, 'stub', ['word:sample']).text,
+  candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,
+  compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
 } as const

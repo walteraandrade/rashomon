@@ -19,8 +19,9 @@ export const overLimit = (totalBytes: number, limitBytes: number): boolean => to
 /** A declared content-length, from either node:https' headers object or fetch's Headers. */
 export const headerLength = (value: string | string[] | null | undefined): number | null => {
   const raw = Array.isArray(value) ? value[0] : value
+  if (raw === undefined || raw === null || raw.trim() === '') return null // Number('') is 0, which would read as a declared zero
   const n = Number(raw)
-  return raw !== undefined && raw !== null && Number.isFinite(n) ? n : null
+  return Number.isFinite(n) ? n : null
 }
 
 export type CappedRead = { ok: true; data: Uint8Array } | { ok: false; bytes: number }

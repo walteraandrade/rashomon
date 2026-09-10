@@ -32,7 +32,23 @@ const concatBytes = (chunks: Uint8Array[], total: number): Uint8Array => {
 // synchronously before ondata ever gets a chance to see the running total. Feeding the
 // compressed bytes in small slices instead, checking the stop flag between calls, bounds
 // how much a single push() can inflate before the loop below gets a chance to stop feeding it.
+// The bound is not exact: deflate tops out near 1032:1, so one 64KB slice can yield ~64MB and the
+// effective ceiling is MAX_EXPANDED_BYTES + ~64MB, not MAX_EXPANDED_BYTES.
 const PUSH_SLICE_BYTES = 64 * 1024
+
+// A zip always ends with the end-of-central-directory record, signature PK\x05\x06, followed by
+// at most a 65535-byte comment. Its presence is what separates an entry-less archive from bytes
+// that are not a zip at all.
+const EOCD = [0x50, 0x4b, 0x05, 0x06]
+const EOCD_MAX_TRAILER = 22 + 0xffff
+
+const hasCentralDirectoryEnd = (bytes: Uint8Array): boolean => {
+  const from = Math.max(0, bytes.length - EOCD_MAX_TRAILER)
+  for (let i = bytes.length - EOCD.length; i >= from; i--) {
+    if (EOCD.every((byte, k) => bytes[i + k] === byte)) return true
+  }
+  return false
+}
 
 /**
  * Unzips the first entry of a GKG zip, bounded at limitBytes of *decompressed* output. Network-free
@@ -72,7 +88,15 @@ export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYT
       unzip.push(zipBytes.subarray(offset, end), end === zipBytes.length)
       offset = end
     } while (offset < zipBytes.length && !stopped)
-    if (!sawEntry && !stopped) resolve({ status: 'ok', csv: '' })
+    if (!sawEntry && !stopped) {
+      // No entry can mean an entry-less archive or, far more often, a payload that is not a zip
+      // at all -- an HTML error page the CDN answered 200 with, or an empty body. fflate's Unzip
+      // reports neither, so tell them apart here: only a real archive carries the end-of-central
+      // -directory record. Anything else throws, as unzipSync did, so processSlot never records
+      // the slot as done and a later run retries it.
+      if (hasCentralDirectoryEnd(zipBytes)) resolve({ status: 'ok', csv: '' })
+      else reject(new Error('invalid zip data'))
+    }
   })
 
 const col = { domain: 3, url: 4, themes: 7, persons: 11, tone: 15, translation: 25, extras: 26 } as const
@@ -148,6 +172,12 @@ const processSlot = async (slot: string): Promise<RawDoc[]> => {
     // Not marked done in gkg_files, so the next gkg() run sees this slot as pending again --
     // a transient outlier eventually succeeds or ages out of the GKG_SLOTS look-back window.
     log(`${slot}: oversize (${result.stage}, ${result.bytes} bytes > ${result.limit} limit), skipped`)
+    return []
+  }
+  if (result.csv === '') {
+    // An entry-less archive, which master reported as `null` and therefore never marked done.
+    // Keep that: recording it would retire the slot on the strength of an empty answer.
+    log(`${slot}: empty archive, skipped`)
     return []
   }
   const docs = parse(slot, result.csv)

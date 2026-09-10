@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { after, before, describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { zipSync, strToU8 } from 'fflate'
-import { unzipBounded, download, MAX_EXPANDED_BYTES } from '../src/collectors/gkg.js'
+import { unzipBounded, download, gkg, MAX_EXPANDED_BYTES } from '../src/collectors/gkg.js'
 import { MAX_RESPONSE_BYTES } from '../src/http.js'
+import { db, migrate } from '../src/db.js'
+import './close.js'
 
 const gkgSrc = readFileSync(fileURLToPath(new URL('../src/collectors/gkg.ts', import.meta.url)), 'utf8')
 
@@ -129,5 +131,83 @@ describe('processSlot (source text)', () => {
     const missingLine = body.slice(body.indexOf("result.status === 'missing'"), body.indexOf("result.status === 'oversize'"))
     assert.match(missingLine, /missing \(404\)/)
     assert.match(missingLine, /return.*\[\]|\[\]\)/)
+  })
+})
+
+// A payload that is not a zip must stay as loud as it was on master, where unzipSync threw
+// `invalid zip data`. Resolving it as an empty archive would let processSlot record the slot in
+// gkg_files, retiring it on the strength of an answer that carried no documents at all.
+describe('unzipBounded rejects bytes that are not an archive', () => {
+  it('rejects 1000 junk bytes', async () => {
+    const junk = new Uint8Array(1000).map((_, i) => (i * 37) % 256)
+    await assert.rejects(unzipBounded(junk), /invalid zip data/)
+  })
+
+  it('rejects an HTML error page the CDN answered 200 with', async () => {
+    await assert.rejects(unzipBounded(strToU8('<html>503 from the CDN</html>')), /invalid zip data/)
+  })
+
+  it('rejects a zero-length body', async () => {
+    await assert.rejects(unzipBounded(new Uint8Array(0)), /invalid zip data/)
+  })
+
+  it('still resolves an entry-less archive, which carries the end-of-central-directory record', async () => {
+    assert.deepEqual(await unzipBounded(zipSync({})), { status: 'ok', csv: '' })
+  })
+})
+
+describe('gkg() records no slot whose payload carried no documents', () => {
+  before(migrate)
+
+  // Slots are processed newest first, and a throw aborts the run the way it does on master, so
+  // the ok and entry-less slots are ordered ahead of the junk one to exercise all three.
+  const okSlot = '20260911120000'
+  const emptyZipSlot = '20260911114500'
+  const junkSlot = '20260911113000'
+  const latest = okSlot
+
+  const gkgRow = (slot: string) => {
+    const cols = new Array(27).fill('')
+    cols[3] = 'example.org'
+    cols[4] = `https://example.org/${slot}`
+    cols[15] = '1.0'
+    cols[25] = 'srclc:por'
+    cols[26] = `<PAGE_TITLE>Doc ${slot}</PAGE_TITLE>`
+    return cols.join('\t')
+  }
+
+  const ok = (bytes: Uint8Array) =>
+    ({ status: 200, ok: true, headers: { get: () => null }, body: streamOf([bytes]) }) as unknown as Response
+
+  const originalFetch = globalThis.fetch
+  const originalSlots = process.env.GKG_SLOTS
+  before(() => {
+    process.env.GKG_SLOTS = '4'
+    globalThis.fetch = (async (url: unknown) => {
+      const u = String(url)
+      if (u.endsWith('lastupdate-translation.txt')) {
+        return { text: async () => `${latest}.translation.gkg.csv.zip` } as Response
+      }
+      const slot = u.match(/\/(\d{14})\.translation\.gkg\.csv\.zip$/)?.[1] ?? ''
+      if (slot === junkSlot) return ok(strToU8('<html>503 from the CDN</html>'))
+      if (slot === emptyZipSlot) return ok(zipSync({}))
+      return ok(zipSync({ 'entry.csv': strToU8(gkgRow(slot)) }))
+    }) as unknown as typeof fetch
+  })
+  after(() => {
+    globalThis.fetch = originalFetch
+    if (originalSlots === undefined) delete process.env.GKG_SLOTS
+    else process.env.GKG_SLOTS = originalSlots
+  })
+
+  it('leaves a non-zip slot and an entry-less slot pending, and still records the ok slot', async () => {
+    // The non-zip slot throws and takes the run with it, exactly as unzipSync did on master.
+    await assert.rejects(gkg([]), /invalid zip data/)
+    for (const slot of [junkSlot, emptyZipSlot]) {
+      const rows = (await db.query(`select 1 from gkg_files where slot = $1`, [slot])).rows
+      assert.equal(rows.length, 0, `${slot} must stay pending so a later run retries it`)
+    }
+    const okRows = (await db.query(`select 1 from gkg_files where slot = $1`, [okSlot])).rows
+    assert.equal(okRows.length, 1, 'a slot that really parsed must be recorded exactly once')
   })
 })

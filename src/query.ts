@@ -34,7 +34,7 @@ export const parseSourceList = (v: string | undefined): string => {
   return tokens.length ? tokens.join(',') : 'all'
 }
 
-export const KINDS = ['hashtag', 'word', 'theme', 'phrase']
+export const KINDS = ['hashtag', 'word', 'phrase']
 
 // Same convention as parseSourceList: comma-separated, unknown tokens dropped, 'all' when
 // nothing valid survives. A lone valid token behaves exactly as the old single-token check

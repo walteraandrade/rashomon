@@ -74,11 +74,8 @@ describe('bench corpus', () => {
     assert.ok(named / docs.length > 0.2 && named / docs.length < 0.5, `${named}/${docs.length}`)
   })
 
-  it('gives themes to gkg docs only', () => {
-    for (const d of corpus(persons, options)) {
-      if (d.source === 'gkg') assert.ok((d.extraTerms ?? []).every((t) => t.kind === 'theme'))
-      else assert.deepEqual(d.extraTerms, [])
-    }
+  it('gives no extraTerms to any synthetic doc, gkg included', () => {
+    for (const d of corpus(persons, options)) assert.deepEqual(d.extraTerms, [])
   })
 
   it('draws domains from the fixed list, or a handle for bluesky', () => {

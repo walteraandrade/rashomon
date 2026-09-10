@@ -1,5 +1,5 @@
 import { Unzip, UnzipInflate } from 'fflate'
-import type { Collector, RawDoc, Term } from '../types.js'
+import type { Collector, RawDoc } from '../types.js'
 import { headers, sequential, headerLength, overLimit, readCapped, MAX_RESPONSE_BYTES } from '../http.js'
 import { db } from '../db.js'
 import { decodeEntities } from '../extract.js'
@@ -138,12 +138,9 @@ export const download = async (slot: string, fetchImpl: typeof fetch = fetch): P
   return unzipBounded(capped.data, MAX_EXPANDED_BYTES)
 }
 
-const themeTerm = (t: string): Term => ({ kind: 'theme', term: t.toLowerCase().replace(/^(tax_fncact_|tax_|wb_\d+_)/, '') })
-
 const rowToDoc = (slot: string) => (cols: string[]): RawDoc | null => {
   const title = decodeEntities(cols[col.extras]?.match(/<PAGE_TITLE>(.*?)<\/PAGE_TITLE>/)?.[1] ?? '')
   if (!title || !cols[col.url]) return null
-  const themes = [...new Set((cols[col.themes] ?? '').split(';').filter((t) => t && !/^tax_fncact$/i.test(t)))]
   return {
     source: 'gkg',
     uri: cols[col.url],
@@ -151,7 +148,7 @@ const rowToDoc = (slot: string) => (cols: string[]): RawDoc | null => {
     publishedAt: slotDate(slot).toISOString(),
     domain: cols[col.domain]?.toLowerCase().replace(/^www\./, '') || undefined,
     tone: Number.isFinite(parseFloat(cols[col.tone] ?? '')) ? parseFloat(cols[col.tone]) : undefined,
-    extraTerms: themes.map(themeTerm),
+    extraTerms: [],
     extraNames: [...new Set((cols[col.persons] ?? '').split(';').map((n) => n.trim()).filter(Boolean))],
   }
 }

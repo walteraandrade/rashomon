@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
@@ -66,6 +66,22 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
       assert.ok(!existsSync(join(root, 'public', rel)), `public/${rel} must not exist`)
       const res = await app.request(`/${rel}`)
       assert.equal(res.status, 404, `GET /${rel} must 404`)
+    }
+  })
+
+  // Deleting atlas-legacy.html left two dead hrefs in como-ler.html while the suite stayed
+  // green: nothing checked that a link between served pages resolves. A page that names a
+  // file is a page that must find it.
+  it('every relative link in a served page resolves to a file under public/', () => {
+    for (const page of readdirSync(join(root, 'public')).filter((f) => f.endsWith('.html'))) {
+      const html = readFileSync(join(root, 'public', page), 'utf8')
+      const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1])
+      const local = hrefs.filter((h) => !/^(https?:)?\/\/|^#|^mailto:|^\/_vercel\//.test(h))
+      for (const href of local) {
+        const rel = href.split(/[?#]/)[0].replace(/^\//, '')
+        if (!rel) continue
+        assert.ok(existsSync(join(root, 'public', rel)), `public/${page} links to ${href}, which does not exist under public/`)
+      }
     }
   })
 

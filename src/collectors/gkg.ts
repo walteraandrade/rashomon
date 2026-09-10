@@ -99,7 +99,7 @@ export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYT
     }
   })
 
-const col = { domain: 3, url: 4, themes: 7, persons: 11, tone: 15, translation: 25, extras: 26 } as const
+const col = { domain: 3, url: 4, persons: 11, tone: 15, translation: 25, extras: 26 } as const
 
 const log = (msg: string) => console.log(`[gkg] ${msg}`)
 

@@ -83,7 +83,6 @@ app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.quer
 // Names nobody tracks yet, ranked by document count; the human promotes them via seed.json.
 app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
 
-// The radial atlas is the current UI; index.html stays reachable as the legacy one.
 app.get('/', serveStatic({ path: './public/design-5.html' }))
 app.use('/*', serveStatic({ root: './public' }))
 

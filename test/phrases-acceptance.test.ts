@@ -215,7 +215,7 @@ describe('reindex builds the lexicon and tags the corpus with it', () => {
   })
 })
 
-describe('kind travels as a list, so the atlas can leave GDELT themes out', () => {
+describe('kind travels as a list, so a caller can ask for any subset of the three kinds', () => {
   before(seed)
 
   it('parses a comma-separated list, drops unknown tokens and falls back to all', () => {

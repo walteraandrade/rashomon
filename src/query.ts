@@ -38,8 +38,8 @@ export const KINDS = ['hashtag', 'word', 'phrase']
 
 // Same convention as parseSourceList: comma-separated, unknown tokens dropped, 'all' when
 // nothing valid survives. A lone valid token behaves exactly as the old single-token check
-// did, which is what lets `kind=word` keep working unchanged; the list exists so the atlas
-// can ask for everything except GDELT's machine themes without a new parameter.
+// did, which is what lets `kind=word` keep working unchanged; the list exists so a caller
+// can ask for any subset of the three kinds without a new parameter.
 export const parseKindList = (v: string | undefined): string => {
   const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => KINDS.includes(s)))]
   return tokens.length ? tokens.join(',') : 'all'

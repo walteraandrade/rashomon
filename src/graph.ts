@@ -330,18 +330,13 @@ export const sourcesFor = async (person: Person, q: GraphQuery) => {
 // Exported so a test can read the literal kind array back out of it and compare against
 // query.ts's KINDS, instead of re-typing a third copy that could silently drift from both
 // (issue #108's own postmortem on how 'theme' almost stayed out of sync here).
-export const docsWhereSql = `(
-    $5 = '' or exists (
-      select 1 from doc_terms t where t.doc_id = d.id and t.term = $5
-        and ($6 = 'all' or t.kind = any(string_to_array($6, ',')) or not (string_to_array($6, ',') <@ array['hashtag', 'word', 'phrase']))
-    )
-  )`
 const docsWhere = (term: string, kind: string) => sql`(
     ${term} = '' or exists (
       select 1 from doc_terms t where t.doc_id = d.id and t.term = ${term}
         and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase']))
     )
   )`
+export const docsWhereSql = docsWhere('', 'all').text
 
 const docsQuery = (person: Person, q: DocsQuery) => sql`
   with ${scopeCte(person, q)}
@@ -386,11 +381,13 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
 // which is what the open upper bound did. least(last_i, ...) is the oldest-edge clamp:
 // scopeCte already bounds age at `days`, so it only matters at the last bucket's exact
 // edge, where it keeps the doc inside the series rather than off the end of it.
-const timelineSql = `
-  with ${scopeCteText},
+const timelineQuery = (person: Person, q: TimelineQuery) => {
+  const bucketDays = q.bucket === 'day' ? 1 : 7
+  return sql`
+  with ${scopeCte(person, q)},
   bounds as (
-    select $2::int as days, $7::int as bucket_days,
-      ceil($2::float8 / $7::float8)::int - 1 as last_i
+    select ${q.days}::int as days, ${bucketDays}::int as bucket_days,
+      ceil(${q.days}::float8 / ${bucketDays}::float8)::int - 1 as last_i
   ),
   buckets as (
     select i,
@@ -409,23 +406,19 @@ const timelineSql = `
     from about a
     join docs d on d.id = a.doc_id
     cross join bounds b
-    where ${docsWhereSql}
+    where ${docsWhere(q.term, q.kind)}
     group by 1
   )
   select b.bucket_start, coalesce(h.count, 0)::int as count
   from buckets b
   left join hits h on h.i = b.i
   order by b.bucket_start asc`
+}
 
 // Stays a bare array on purpose: lean narrows which docs count toward each bucket
 // (via the same resolveScope as every other route), but outlets/basis are not
 // surfaced here, since that would require wrapping this array in an object.
-export const timelineFor = async (person: Person, q: TimelineQuery) => {
-  const bucketDays = q.bucket === 'day' ? 1 : 7
-  const { domain } = resolveScope(q.domain, q.lean)
-  const params = [person.id, q.days, q.source, domain, q.term, q.kind, bucketDays]
-  return (await db.query<TimelineRow>(timelineSql, params)).rows
-}
+export const timelineFor = async (person: Person, q: TimelineQuery) => (await run<TimelineRow>(timelineQuery(person, q))).rows
 
 // Cross-person on purpose: scopeCte's `about` scopes to a single person_id via $1, which
 // does not fit a matrix spanning every tracked person, so this joins doc_persons/persons
@@ -794,7 +787,7 @@ export const statements = {
   sources: sourcesQuery(samplePerson, sampleScope).text,
   docs: docsQuery(samplePerson, sampleDocs).text,
   docsCount: docsCountQuery(samplePerson, sampleDocs).text,
-  timeline: timelineSql,
+  timeline: timelineQuery(samplePerson, { ...sampleDocs, days: 90, bucket: 'day' }).text,
   rising: risingQuery(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
   tone: toneQuery({ days: 30, min: 3 }).text,
   testimonySummary: testimonySummaryQuery(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,

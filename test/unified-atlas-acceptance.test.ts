@@ -16,7 +16,6 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 // the search-highlighting rule here, against app.js's own event table.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const legacyPath = join(root, 'public', 'atlas-legacy.html')
 
 // Records which injected action each handler calls, so a criterion can assert both what was
 // called and what was deliberately not.
@@ -59,14 +58,15 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
     assert.match(bundle.headers.get('content-type') ?? '', /javascript/, '/bundle.js must be served with a JavaScript content type')
   })
 
-  it('legacy atlas remains reachable and links back to root', async () => {
-    assert.ok(existsSync(legacyPath), 'public/atlas-legacy.html must exist')
-    const legacyRes = await app.request('/atlas-legacy.html')
-    assert.equal(legacyRes.status, 200)
-    assert.match(legacyRes.headers.get('content-type') ?? '', /text\/html/)
-    // atlas-legacy.html is intentionally kept as one reference file with no module surface
-    // (CLAUDE.md), so this text match is on that file, not on design-5.html.
-    assert.match(readFileSync(legacyPath, 'utf8'), /class="brand" href="\/"/, 'legacy brand must link back to the new atlas')
+  // Issue #108: the two legacy pages are deleted outright, not just unlinked. Neither
+  // public/index.html nor public/atlas-legacy.html exists any more, and both 404 through the
+  // same catch-all static handler that already 404s an archived design.
+  it('AC8: the two deleted legacy pages 404 and no longer exist under public/', async () => {
+    for (const rel of ['index.html', 'atlas-legacy.html']) {
+      assert.ok(!existsSync(join(root, 'public', rel)), `public/${rel} must not exist`)
+      const res = await app.request(`/${rel}`)
+      assert.equal(res.status, 404, `GET /${rel} must 404`)
+    }
   })
 
   it('archived design alternatives moved out of public/ are no longer served', async () => {

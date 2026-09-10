@@ -1,43 +1,65 @@
 // DOM layer: paints the map, the inspector, the outlet list and the docs panel. Every
 // function here reads/writes the document directly (that is its job); the data it paints
 // and the callbacks it wires (onChoose, onShowPerson, onPick) all come in as parameters, so
-// this module never reaches into public/js/state.js on its own.
+// this module never reaches into src/ui/state.ts on its own.
 
-import { balanceColor, domainSuffix, esc, fmt, kinds, label, matching, mergeOutlets, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, trendOf } from './format.js'
+import {
+  balanceColor,
+  domainSuffix,
+  esc,
+  fmt,
+  kinds,
+  label,
+  matching,
+  mergeOutlets,
+  normalize,
+  relatedTo,
+  safeDocUrl,
+  score,
+  scoreName,
+  foldTestimonyDomains,
+  MASK_MIN,
+  signed,
+  sourceLabels,
+  termMask,
+  testimonyClass,
+  testimonyColor,
+  testimonyFocus,
+  testimonyPosition,
+  trendOf,
+  type Candidate,
+  type Compare,
+  type CompareSide,
+  type CompareTerm,
+  type Doc,
+  type Graph,
+  type Layout,
+  type Link,
+  type Measure,
+  type OutletRow,
+  type PersonRef,
+  type PersonTestimony,
+  type PlacedTerm,
+  type Term,
+  type Testimony,
+  type TestimonyDomainRow,
+} from './format.js'
 import { FONT_SANS, RULER_PAD, rulerLayout, routesFrom, swarm } from './layout.js'
-
-/** @typedef {import('./format.js').Candidate} Candidate */
-/** @typedef {import('./format.js').Compare} Compare */
-/** @typedef {import('./format.js').CompareSide} CompareSide */
-/** @typedef {import('./format.js').CompareTerm} CompareTerm */
-/** @typedef {import('./format.js').Doc} Doc */
-/** @typedef {import('./format.js').Graph} Graph */
-/** @typedef {import('./format.js').Layout} Layout */
-/** @typedef {import('./format.js').Link} Link */
-/** @typedef {import('./format.js').OutletRow} OutletRow */
-/** @typedef {import('./format.js').PersonRef} PersonRef */
-/** @typedef {import('./format.js').PlacedTerm} PlacedTerm */
-/** @typedef {import('./format.js').Term} Term */
-/** @typedef {import('./format.js').Testimony} Testimony */
 
 // Elements this page owns by id. The markup in design-5.html guarantees each one exists, and
 // the values read off them (select.value, button.disabled) are per-element, so this is typed
 // loosely on purpose rather than casting at all ~100 call sites.
-/** @type {(id: string) => any} */
-const $ = (id) => document.getElementById(id)
+const $ = (id: string): any => document.getElementById(id)
 
 // Every element matching a selector, typed as HTMLElement so `dataset` and `classList` are
 // visible to `tsc`; the atlas only ever selects its own markup.
-/** @type {(selector: string, root?: any) => NodeListOf<HTMLElement>} */
-const queryAll = (selector, root = document) => root.querySelectorAll(selector)
+const queryAll = (selector: string, root: any = document): NodeListOf<HTMLElement> => root.querySelectorAll(selector)
 
-
-// The browser canvas adapter that satisfies layout.js's injected `measure` parameter: the
-// only place in this codebase that touches a <canvas> for text metrics, so layout.js itself
+// The browser canvas adapter that satisfies layout.ts's injected `measure` parameter: the
+// only place in this codebase that touches a <canvas> for text metrics, so layout.ts itself
 // stays DOM-free and testable with a fake measure function.
-/** @returns {import('./format.js').Measure} */
-export const createCanvasMeasure = () => {
-  const ctx = /** @type {CanvasRenderingContext2D} */ (document.createElement('canvas').getContext('2d'))
+export const createCanvasMeasure = (): Measure => {
+  const ctx = document.createElement('canvas').getContext('2d') as CanvasRenderingContext2D
   return (text, size, family = FONT_SANS, weight = 500) => {
     ctx.font = `${weight} ${size}px ${family}`
     const m = ctx.measureText(text)
@@ -48,8 +70,7 @@ export const createCanvasMeasure = () => {
 // `personScore` is the person's own testimony mean in this recorte; with it, the word carries
 // a `--mask` colour (its texts' mean against the person's) that atlas.css only uses while the
 // map is masked, so flipping the mask is a class toggle and never a redraw.
-/** @param {PlacedTerm} p @param {string} sort @param {number | null} [personScore] */
-export const wordMarkup = (p, sort, personScore = null) => {
+export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | null = null) => {
   const mask = termMask(p, personScore)
   const t = p.testimony
   const testimonyNote = t ? ` · avaliação ${signed(t.score)} em ${fmt(t.n)} textos` : ''
@@ -57,8 +78,7 @@ export const wordMarkup = (p, sort, personScore = null) => {
 }
 
 // The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
-/** @param {import('./format.js').PersonTestimony | undefined} person */
-export const maskLegend = (person) =>
+export const maskLegend = (person: PersonTestimony | undefined) =>
   person && person.score !== null
     ? `<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
     : `<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
@@ -66,11 +86,10 @@ export const maskLegend = (person) =>
 // The person's own entry point to the documents: the centre of the map, and the head of the
 // list when the map is not on screen. Both are plain elements, so they need the keyboard
 // contract a <button> would have given them.
-/** @param {Element} el @param {() => void} onShowPerson */
-const wirePersonDocs = (el, onShowPerson) => {
+const wirePersonDocs = (el: Element, onShowPerson: () => void) => {
   el.addEventListener('click', () => onShowPerson())
   el.addEventListener('keydown', (event) => {
-    const e = /** @type {KeyboardEvent} */ (event)
+    const e = event as KeyboardEvent
     if (e.key !== 'Enter' && e.key !== ' ') return
     e.preventDefault()
     onShowPerson()
@@ -80,8 +99,25 @@ const wirePersonDocs = (el, onShowPerson) => {
 // Draws the SVG map plus the overflow list and legend; wires each word's click/keydown to
 // `onChoose`. Does not resize, scroll or paint the selection state — the caller sequences
 // those right after, same order as before the split.
-/** @param {{ layout: Layout, personName: string, about: number | undefined, mode: string, sort: string, onChoose: (id: string) => void, onShowPerson?: () => void, personTestimony?: import('./format.js').PersonTestimony }} args */
-export const drawMap = ({ layout, personName, about, mode, sort, onChoose, onShowPerson = () => {}, personTestimony }) => {
+export const drawMap = ({
+  layout,
+  personName,
+  about,
+  mode,
+  sort,
+  onChoose,
+  onShowPerson = () => {},
+  personTestimony,
+}: {
+  layout: Layout
+  personName: string
+  about: number | undefined
+  mode: string
+  sort: string
+  onChoose: (id: string) => void
+  onShowPerson?: () => void
+  personTestimony?: PersonTestimony
+}) => {
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
   $('viewport').innerHTML =
@@ -97,7 +133,7 @@ export const drawMap = ({ layout, personName, about, mode, sort, onChoose, onSho
     el.addEventListener('click', () => onChoose(String(el.dataset.node)))
     if (el.tagName.toLowerCase() === 'g')
       el.addEventListener('keydown', (event) => {
-        const e = /** @type {KeyboardEvent} */ (event)
+        const e = event as KeyboardEvent
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onChoose(String(el.dataset.node))
@@ -113,8 +149,35 @@ export const drawMap = ({ layout, personName, about, mode, sort, onChoose, onSho
 // Repaints selection classes on every word/column, the search note, the edge routes for the
 // selected term, and (by calling paintColumns at the end) the columns view — mirrors the
 // original single paintSelection, split only across two exported functions.
-/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, layout: Layout | null, mode: string, sort: string, onChoose: (id: string) => void, onShowPerson?: () => void, personName?: string, about?: number, mask?: boolean, personTestimony?: import('./format.js').PersonTestimony }} args */
-export const paintSelection = ({ nodes, links, selected, search, layout, mode, sort, onChoose, onShowPerson, personName, about, mask = false, personTestimony }) => {
+export const paintSelection = ({
+  nodes,
+  links,
+  selected,
+  search,
+  layout,
+  mode,
+  sort,
+  onChoose,
+  onShowPerson,
+  personName,
+  about,
+  mask = false,
+  personTestimony,
+}: {
+  nodes: Term[]
+  links: Link[]
+  selected: string | null
+  search: string
+  layout: Layout | null
+  mode: string
+  sort: string
+  onChoose: (id: string) => void
+  onShowPerson?: () => void
+  personName?: string
+  about?: number
+  mask?: boolean
+  personTestimony?: PersonTestimony
+}) => {
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
   // The mask is a class on the two surfaces that draw words; the colours are already there.
@@ -160,8 +223,31 @@ export const paintSelection = ({ nodes, links, selected, search, layout, mode, s
   paintColumns({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson, personName, about, personTestimony })
 }
 
-/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, sort: string, mode: string, onChoose: (id: string) => void, onShowPerson?: () => void, personName?: string, about?: number, personTestimony?: import('./format.js').PersonTestimony }} args */
-export const paintColumns = ({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson = () => {}, personName = '', about, personTestimony }) => {
+export const paintColumns = ({
+  nodes,
+  links,
+  selected,
+  search,
+  sort,
+  mode,
+  onChoose,
+  onShowPerson = () => {},
+  personName = '',
+  about,
+  personTestimony,
+}: {
+  nodes: Term[]
+  links: Link[]
+  selected: string | null
+  search: string
+  sort: string
+  mode: string
+  onChoose: (id: string) => void
+  onShowPerson?: () => void
+  personName?: string
+  about?: number
+  personTestimony?: PersonTestimony
+}) => {
   if (mode !== 'columns' || !nodes.length) return
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
@@ -180,8 +266,7 @@ export const paintColumns = ({ nodes, links, selected, search, sort, mode, onCho
 
 // The selected term's testimony next to the person's, spelled out, whether or not the mask is
 // on: the colour is a summary of exactly these two numbers.
-/** @param {Term} n @param {import('./format.js').PersonTestimony | undefined} person */
-export const testimonyLine = (n, person) => {
+export const testimonyLine = (n: Term, person: PersonTestimony | undefined) => {
   const t = n.testimony
   if (!t || !person || person.score === null) return ''
   const delta = t.score - person.score
@@ -189,15 +274,29 @@ export const testimonyLine = (n, person) => {
   return `<p>Textos com este termo: <strong class="score-highlight">${signed(t.score)}</strong> de avaliação em ${fmt(t.n)} ${t.n === 1 ? 'texto' : 'textos'}, contra ${signed(person.score)} da pessoa no recorte. ${reading}.</p>`
 }
 
-/** @param {{ node: Term, count?: number }[]} items @param {string} sort @param {boolean} [counts] */
-const relatedButtons = (items, sort, counts = true) =>
+const relatedButtons = (items: { node: Term; count?: number }[], sort: string, counts = true) =>
   items.map(({ node: n, count }) => `<button data-related="${esc(n.id)}"><span>${esc(label(n))}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`).join('')
 
 // Paints the inspector for the current selection (or the person summary when nothing is
 // selected). Documents are neither fetched nor opened from here: a word opens its own card when
 // it is picked, and the centre of the map opens the person's, so the inspector carries no button.
-/** @param {{ graph: Graph | null, nodes: Term[], links: Link[], selected: string | null, sort: string, daysLabel: string, onChoose: (id: string) => void }} args */
-export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoose }) => {
+export const inspect = ({
+  graph,
+  nodes,
+  links,
+  selected,
+  sort,
+  daysLabel,
+  onChoose,
+}: {
+  graph: Graph | null
+  nodes: Term[]
+  links: Link[]
+  selected: string | null
+  sort: string
+  daysLabel: string
+  onChoose: (id: string) => void
+}) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML =
@@ -218,13 +317,22 @@ export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoo
 }
 
 // The one outlet list on the page: /sources' document counts merged with /testimony's means
-// (see mergeOutlets in format.js). It used to be two lists in the same figure — this one, and
+// (see mergeOutlets in format.ts). It used to be two lists in the same figure — this one, and
 // a second "por veículo" ranking inside paintTestimony — so every outlet was read twice. It
 // lays out in as many columns as the figure is wide, which is what turns 80 outlets into a few
 // hundred pixels instead of a screen and a half. The two payloads arrive on their own
 // schedule; whichever has not landed yet simply contributes nothing.
-/** @param {{ rows: OutletRow[], testimony: Testimony | null, domain: string, onPick: (domain: string) => void }} args */
-export const paintOutlets = ({ rows, testimony, domain, onPick }) => {
+export const paintOutlets = ({
+  rows,
+  testimony,
+  domain,
+  onPick,
+}: {
+  rows: OutletRow[]
+  testimony: Testimony | null
+  domain: string
+  onPick: (domain: string) => void
+}) => {
   $('domainLabel').textContent = domainSuffix(domain)
   const merged = mergeOutlets(rows, testimony?.by_domain ?? [])
   $('outletList').innerHTML = merged.length
@@ -253,9 +361,8 @@ export const paintOutletsError = () => {
 // per source and per outlet, all from one response so the three blocks can never describe
 // different windows. Outlet rows narrow the recorte exactly like the outlet list does, so a
 // reader goes from "this outlet is the harshest" to its words in one click. The `3` in the
-// empty copy is api.js's narrowToTestimony `min`.
-/** @param {{ data: Testimony, domain: string, onPick: (domain: string) => void }} args */
-export const paintTestimony = ({ data, domain, onPick }) => {
+// empty copy is api.ts's narrowToTestimony `min`.
+export const paintTestimony = ({ data, domain, onPick }: { data: Testimony; domain: string; onPick: (domain: string) => void }) => {
   const { overall, by_source, by_domain, method } = data
   const score = overall.score
   if (score === null || score === undefined || !overall.n) {
@@ -307,8 +414,7 @@ const STRIP_PAD = 28
 // noticeably more than 10 without a single outlet swallowing the axis. On a narrow strip the
 // dots shrink with it (down to 55%), or a phone would get a stack three times taller than
 // the axis is wide.
-/** @param {number} n @param {number} [width] */
-export const stripRadius = (n, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
+export const stripRadius = (n: number, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
 
 // The strip never grows past this: a person with many outlets on similar scores (Lula: 148
 // outlets in under half the axis) stacked a 1262px tower at full size. Past the cap the dots
@@ -321,17 +427,14 @@ export const STRIP_MIN_R = 3
 // The geometry of the strip at a given pixel width: one circle per outlet on the -10..+10
 // axis, stacked by `swarm` where they would overlap. Exported so a test can assert the
 // placement without a document. `scale` is the shrink factor the cap forced (1 = none).
-/** @param {import('./format.js').TestimonyDomainRow[]} rows @param {number} width */
-export const stripLayout = (rows, width) => {
+export const stripLayout = (rows: TestimonyDomainRow[], width: number) => {
   const inner = Math.max(80, width - 2 * STRIP_PAD)
-  /** @param {number} score */
-  const x = (score) => STRIP_PAD + (testimonyPosition(score) / 100) * inner
+  const x = (score: number) => STRIP_PAD + (testimonyPosition(score) / 100) * inner
   const folded = foldTestimonyDomains(rows).map((d) => ({ ...d, x: x(d.score), r: stripRadius(d.n, width) }))
   const smallest = folded.reduce((m, d) => Math.min(m, d.r), Infinity)
   const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
   let scale = 1
-  /** @param {number} k */
-  const attempt = (k) => {
+  const attempt = (k: number) => {
     const dots = swarm(folded.map((d) => ({ ...d, r: d.r * k })))
     const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
     return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
@@ -348,8 +451,17 @@ export const stripLayout = (rows, width) => {
 // axis so the distance between two outlets is visible, which a list cannot show. Clicking a
 // dot narrows the recorte exactly like the panel and the outlet list do. Text stays in HTML
 // (the SVG only holds shapes), so labels never scale down with the axis on a narrow screen.
-/** @param {{ data: Testimony, domain: string, onPick: (domain: string) => void, width?: number }} args */
-export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
+export const paintStrip = ({
+  data,
+  domain,
+  onPick,
+  width = 860,
+}: {
+  data: Testimony
+  domain: string
+  onPick: (domain: string) => void
+  width?: number
+}) => {
   const strip = $('strip')
   const { dots, x, half, height } = stripLayout(data.by_domain, width)
   const overall = data.overall.score
@@ -359,7 +471,7 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
     return
   }
   strip.hidden = false
-  const tick = (/** @type {number} */ s) => `<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
+  const tick = (s: number) => `<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
   strip.innerHTML =
     `<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>` +
     `<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Veículos na régua da avaliação, de −10 a +10">` +
@@ -381,7 +493,7 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
     }
     el.addEventListener('click', pick)
     el.addEventListener('keydown', (event) => {
-      const e = /** @type {KeyboardEvent} */ (event)
+      const e = event as KeyboardEvent
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
         pick()
@@ -399,35 +511,32 @@ export const paintDocsLoading = () => {
 // markup gives the dialog, so this is the only painter that touches them. The caller writes the
 // words -- each figure names its own reading ("Documentos com palavra", "Documentos de", "As
 // duas pessoas") and this file never guesses which figure asked.
-/** @param {{ kicker: string, title: string }} args */
-export const paintDocsHead = ({ kicker, title }) => {
+export const paintDocsHead = ({ kicker, title }: { kicker: string; title: string }) => {
   if ($('docsKicker')) $('docsKicker').textContent = kicker
   if ($('docsTitle')) $('docsTitle').textContent = title
 }
 
 // One document, as the card writes it.
-/** @param {Doc} d */
-const docMarkup = (d) => {
+const docMarkup = (d: Doc) => {
   const href = safeDocUrl(d)
   return `<article class="doc"><p class="eyebrow">${esc(d.domain || d.source)}</p><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
 }
 
-/** @param {{ label: string | null, data: { docs: Doc[], total: number } }} side */
-const sideMarkup = ({ label: name, data }) =>
+export type DocsSideData = { label: string | null; data: { docs: Doc[]; total: number } }
+
+const sideMarkup = ({ label: name, data }: DocsSideData) =>
   (name ? `<p class="eyebrow docs-side-name">${esc(name)}</p>` : '') +
   (data.docs.length ? `<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` + data.docs.map(docMarkup).join('') : '<p>Nenhum documento encontrado.</p>')
 
 // One side is the card as it always was; two are the ruler asking the same word of both people,
 // side by side, because a word on that figure belongs to neither person alone.
-/** @param {{ label: string | null, data: { docs: Doc[], total: number } }[]} sides */
-export const paintDocs = (sides) => {
+export const paintDocs = (sides: DocsSideData[]) => {
   const box = $('docs')
   if (!box) return
   box.innerHTML = sides.length > 1 ? `<div class="docs-columns">${sides.map((side) => `<div>${sideMarkup(side)}</div>`).join('')}</div>` : (sides[0] ? sideMarkup(sides[0]) : '<p>Nenhum documento encontrado.</p>')
 }
 
-/** @param {() => void} onRetry */
-export const paintDocsError = (onRetry) => {
+export const paintDocsError = (onRetry: () => void) => {
   const box = $('docs')
   if (!box) return
   box.innerHTML = '<p>Não foi possível carregar documentos. <button class="quiet-button" id="retryDocs">Tentar novamente</button></p>'
@@ -436,8 +545,7 @@ export const paintDocsError = (onRetry) => {
 
 // The candidate queue: names nobody tracks yet. Each row toggles its own sample documents,
 // so the panel stays one click deep and never navigates away from the atlas.
-/** @param {{ candidates: Candidate[] }} data */
-export const paintCandidates = (data) => {
+export const paintCandidates = (data: { candidates: Candidate[] }) => {
   const list = data.candidates
   $('candidateLabel').textContent = list.length ? String(list.length) : ''
   if (!list.length) {
@@ -454,7 +562,7 @@ export const paintCandidates = (data) => {
     '<p class="note">Nomes que ainda não estão em seed.json, comparados com o período anterior de mesmo tamanho. Para acompanhar um nome, adicione-o ao arquivo e rode o índice.</p>'
   queryAll('[data-candidate]', $('candidateList')).forEach((el) =>
       el.addEventListener('click', () => {
-        const samples = /** @type {HTMLElement} */ (el.nextElementSibling)
+        const samples = el.nextElementSibling as HTMLElement
         samples.hidden = !samples.hidden
         el.setAttribute('aria-expanded', String(!samples.hidden))
       }),
@@ -465,8 +573,7 @@ export const paintCandidatesLoading = () => {
   $('candidateList').textContent = 'Carregando…'
 }
 
-/** @param {() => void} onRetry */
-export const paintCandidatesError = (onRetry) => {
+export const paintCandidatesError = (onRetry: () => void) => {
   $('candidateList').innerHTML = '<p class="note">Não foi possível carregar os candidatos. <button class="quiet-button" id="retryCandidates">Tentar novamente</button></p>'
   $('retryCandidates').addEventListener('click', onRetry)
 }
@@ -481,25 +588,19 @@ export const paintCandidatesError = (onRetry) => {
 // *raw* combined magnitude, so a term with a real, opposite-signed relationship on both sides
 // settles short of the ends instead of pinning to them the way an unclamped ratio would whenever
 // the two raw scores merely differ in sign.
-/** @param {CompareSide | 'name' | null} v @returns {v is CompareSide} */
-const isPresent = (v) => v !== null && v !== 'name'
+const isPresent = (v: CompareSide | 'name' | null): v is CompareSide => v !== null && v !== 'name'
 
-/** @param {CompareSide | 'name' | null} v */
-const docsOf = (v) => (v && v !== 'name' ? v.count : 0)
+const docsOf = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count : 0)
+
+export type RulerTerm = CompareTerm & { balance: number; combined: number }
 
 // Drops a term that is either side's own name, and scores the rest against `measure`: position
 // (`balance`, -1 all A .. 0 divided .. +1 all B) and `combined` (documents on both sides summed,
 // never measure-dependent, per spec §3). `hiddenCount` is what #compareHiddenNote reports, so
 // the omission is stated rather than silent.
-/**
- * @param {CompareTerm[]} terms
- * @param {string} measure
- * @returns {{ items: (CompareTerm & { balance: number, combined: number })[], hiddenCount: number }}
- */
-export const rulerTerms = (terms, measure) => {
+export const rulerTerms = (terms: CompareTerm[], measure: string): { items: RulerTerm[]; hiddenCount: number } => {
   let hiddenCount = 0
-  /** @type {(CompareTerm & { balance: number, combined: number })[]} */
-  const items = []
+  const items: RulerTerm[] = []
   for (const t of terms) {
     if (t.a === 'name' || t.b === 'name') {
       hiddenCount++
@@ -511,8 +612,8 @@ export const rulerTerms = (terms, measure) => {
     if (aPresent !== bPresent) {
       balance = aPresent ? -1 : 1
     } else if (aPresent && bPresent) {
-      const rawA = score(/** @type {CompareSide} */ (t.a), measure)
-      const rawB = score(/** @type {CompareSide} */ (t.b), measure)
+      const rawA = score(t.a as CompareSide, measure)
+      const rawB = score(t.b as CompareSide, measure)
       const mag = Math.abs(rawA) + Math.abs(rawB)
       balance = mag === 0 ? 0 : Math.max(-1, Math.min(1, (Math.max(0, rawB) - Math.max(0, rawA)) / mag))
     }
@@ -525,22 +626,20 @@ export const rulerTerms = (terms, measure) => {
 // transparent rect behind it is the hit area, so a 11px word is still comfortably clickable,
 // and `--cmp` carries the side colour the way `--size` carries the type size (the only inline
 // style this page allows, per CLAUDE.md).
-/**
- * @param {{ term: string, kind: string, text: string, balance: number, combined: number, x: number, y: number, size: number, w: number, h: number }} d
- * @param {number} half
- * @param {boolean} isSelected
- */
-const rulerWordMarkup = (d, half, isSelected) =>
+const rulerWordMarkup = (
+  d: { term: string; kind: string; text: string; balance: number; combined: number; x: number; y: number; size: number; w: number; h: number },
+  half: number,
+  isSelected: boolean,
+) =>
   `<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(d.text)}, ${fmt(d.combined)} documentos"><title>${esc(d.text)} · ${esc(kinds[d.kind] || d.kind || 'Tipo desconhecido')} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central">${esc(d.text)}</text></g>`
 
 // The words that the strip could not hold without overlapping. Never dropped in silence: the
 // count is stated and every one of them is still a button carrying the same data-term/data-kind
 // the drawn words carry, so clicking one selects it exactly like clicking it on the ruler.
-/**
- * @param {{ term: string, kind: string, text: string, balance: number }[]} overflow
- * @param {{ term: string, kind: string } | null} selected
- */
-const rulerOverflowMarkup = (overflow, selected) =>
+const rulerOverflowMarkup = (
+  overflow: { term: string; kind: string; text: string; balance: number }[],
+  selected: { term: string; kind: string } | null,
+) =>
   overflow.length
     ? `<div class="ruler-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:</p>` +
       overflow
@@ -554,14 +653,29 @@ const rulerOverflowMarkup = (overflow, selected) =>
 
 // The ruler itself: one word per shared or exclusive term between two people, written where it
 // leans and set in the type size its combined document count earns. `metrics` is the injected
-// text measurer layout.js needs (createCanvasMeasure in the browser, a stub in tests), the same
-// contract figures/atlas.js already honours; `measure` next to it is the chosen medida
+// text measurer layout.ts needs (createCanvasMeasure in the browser, a stub in tests), the same
+// contract figures/atlas.ts already honours; `measure` next to it is the chosen medida
 // (documentos or PMI) and only moves the words sideways. Returns the hidden-name count and how
 // many words were drawn versus listed, so the caller can paint its notes without recomputing.
-/**
- * @param {{ data: Compare, personA: PersonRef, personB: PersonRef, measure: string, metrics: import('./format.js').Measure, selected: { term: string, kind: string } | null, onPick: (term: string, kind: string) => void, width?: number }} args
- */
-export const paintRuler = ({ data, personA, personB, measure, metrics, selected, onPick, width = 860 }) => {
+export const paintRuler = ({
+  data,
+  personA,
+  personB,
+  measure,
+  metrics,
+  selected,
+  onPick,
+  width = 860,
+}: {
+  data: Compare
+  personA: PersonRef
+  personB: PersonRef
+  measure: string
+  metrics: Measure
+  selected: { term: string; kind: string } | null
+  onPick: (term: string, kind: string) => void
+  width?: number
+}) => {
   const ruler = $('compareRuler')
   const { items, hiddenCount } = rulerTerms(data.terms, measure)
   if (!items.length) {
@@ -574,7 +688,7 @@ export const paintRuler = ({ data, personA, personB, measure, metrics, selected,
   }
   ruler.hidden = false
   const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
-  const tick = (/** @type {number} */ b) => `<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
+  const tick = (b: number) => `<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
   ruler.innerHTML =
     `<div class="ruler-end-row"><span class="ruler-end cmp-a">${esc(personA.name)}</span><span class="ruler-end cmp-b">${esc(personB.name)}</span></div>` +
     `<svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Régua comparando ${esc(personA.name)} e ${esc(personB.name)}">` +
@@ -592,7 +706,7 @@ export const paintRuler = ({ data, personA, personB, measure, metrics, selected,
     // one here would pick twice and cancel itself out.
     if (String(el.tagName || '').toLowerCase() !== 'button')
       el.addEventListener('keydown', (event) => {
-        const e = /** @type {KeyboardEvent} */ (event)
+        const e = event as KeyboardEvent
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           pick()
@@ -615,16 +729,14 @@ export const paintCompareLoading = () => {
 // The selected word's own numbers on both sides, one line, same two-state wording the deleted
 // compare.html's own detailHtml used: a real object reads as documents and PMI, a null side
 // reads "nenhum documento" (a measured zero, never "outside the top list").
-/** @param {{ term: CompareTerm | null, personA: PersonRef, personB: PersonRef }} args */
-export const paintCompareDetail = ({ term, personA, personB }) => {
+export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTerm | null; personA: PersonRef; personB: PersonRef }) => {
   const el = $('compareDetail')
   if (!el) return
   if (!term) {
     el.innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
     return
   }
-  /** @param {PersonRef} person @param {CompareSide | 'name' | null} v */
-  const sideHtml = (person, v) =>
+  const sideHtml = (person: PersonRef, v: CompareSide | 'name' | null) =>
     v && v !== 'name'
       ? `<div><dt>${esc(person.name)}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
       : `<div><dt>${esc(person.name)}</dt><dd class="empty-hint">nenhum documento</dd></div>`

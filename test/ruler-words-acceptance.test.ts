@@ -3,10 +3,10 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, rulerLayout, swarm, swarmBy } from '../public/js/layout.js'
-import { paintRuler, rulerTerms } from '../public/js/render.js'
+import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, rulerLayout, swarm, swarmBy } from '../src/ui/layout.js'
+import { paintRuler, rulerTerms } from '../src/ui/render.js'
 import { withFiguresDom } from './fake-mount-dom.js'
-import type { Compare, CompareTerm } from '../public/js/format.js'
+import type { Compare, CompareTerm } from '../src/ui/format.js'
 
 // Issue #99: the ruler draws the word itself where it used to draw an anonymous dot. The
 // criteria here are the reading ones -- a word is legible, no word covers another, nothing

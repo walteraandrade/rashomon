@@ -3,9 +3,9 @@ import { describe, it } from 'node:test'
 import { readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import * as appModule from '../public/js/app.js'
-import { paintOutlets, paintTestimony } from '../public/js/render.js'
-import { clearScopes } from '../public/js/state.js'
+import * as appModule from '../src/ui/app.js'
+import { paintOutlets, paintTestimony } from '../src/ui/render.js'
+import { clearScopes } from '../src/ui/state.js'
 import { withFakeDocument } from './fake-dom.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
@@ -16,6 +16,8 @@ import './close.js'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const readPublic = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
+// The front-end modules are TypeScript under src/ui; only the built bundle lives in public/.
+const readModule = (name: string) => readFileSync(join(root, 'src', 'ui', name), 'utf8')
 
 const FLYING = 'pet-caracara.png'
 const PERCHED = 'pet-caracara-perched.png'
@@ -147,8 +149,8 @@ describe('the pet: the rules atlas.css holds it to', () => {
 
   it('the sprite markup carries its intrinsic size, so the box never grows under the reader', () => {
     const emitted: [keyof typeof GRID, string][] = [
-      [FLYING, readPublic('js/render.js')],
-      [PERCHED, readPublic('js/figures/atlas.js')],
+      [FLYING, readModule('render.ts')],
+      [PERCHED, readModule('figures/atlas.ts')],
     ]
     for (const [file, source] of emitted) {
       const tag = source.match(new RegExp(`<img[^>]*src="/${file}"[^>]*>`))

@@ -12,21 +12,21 @@ import { VERCEL_INSIGHTS } from './pages.js'
 // this file exists: a committed artifact can silently fall behind its source, and the page
 // would keep serving the stale bundle with nothing failing. So the bundle's freshness is a
 // tested invariant, not a habit someone has to remember. `pnpm build` regenerates it.
-describe('public/bundle.js stays in step with public/js', () => {
+describe('public/bundle.js stays in step with src/ui', () => {
   const out = mkdtempSync(join(tmpdir(), 'rashomon-bundle-'))
   after(() => rmSync(out, { recursive: true, force: true }))
 
-  it('is byte-identical to a fresh build of public/js/app.js', () => {
+  it('is byte-identical to a fresh build of src/ui/app.ts', () => {
     const fresh = join(out, 'bundle.js')
     execFileSync(
       'node_modules/.bin/esbuild',
-      ['public/js/app.js', '--bundle', '--minify', '--format=esm', '--target=es2022', `--outfile=${fresh}`, '--log-level=warning'],
+      ['src/ui/app.ts', '--bundle', '--minify', '--format=esm', '--target=es2022', `--outfile=${fresh}`, '--log-level=warning'],
       { stdio: 'pipe' },
     )
     assert.equal(
       readFileSync('public/bundle.js', 'utf8'),
       readFileSync(fresh, 'utf8'),
-      'public/bundle.js is stale: a module under public/js changed without a rebuild. Run `pnpm build` and commit the result.',
+      'public/bundle.js is stale: a module under src/ui changed without a rebuild. Run `pnpm build` and commit the result.',
     )
   })
 
@@ -40,17 +40,16 @@ describe('public/bundle.js stays in step with public/js', () => {
     assert.deepEqual(srcs, ['./bundle.js'])
   })
 
-  it('is served, and so are the source modules the tests import', async () => {
+  it('is served, and the TypeScript sources it is built from are not', async () => {
     const bundle = await app.request('/bundle.js')
     assert.equal(bundle.status, 200)
     assert.match(bundle.headers.get('content-type') ?? '', /javascript/)
-    // The nine modules stay in public/js as the source of truth: every front-end test imports
-    // them directly, and atlas-modules-acceptance.test.ts pins their import graph. The three
-    // under figures/ are listed too, so a static-handler regression on the subdirectory fails
-    // here rather than silently in the browser.
-    for (const file of ['api.js', 'app.js', 'format.js', 'layout.js', 'render.js', 'state.js', 'figures/atlas.js', 'figures/testimony.js', 'figures/compare.js']) {
-      const res = await app.request(`/js/${file}`)
-      assert.equal(res.status, 200, `/js/${file} must still be served`)
+    // The ten modules live in src/ui as the source of truth: every front-end test imports them
+    // directly, and atlas-modules-acceptance.test.ts pins their import graph. They are
+    // TypeScript, so no browser could run them -- public/ must not ship them at all.
+    for (const file of ['api.ts', 'app.ts', 'format.ts', 'layout.ts', 'render.ts', 'state.ts', 'figures/atlas.ts', 'figures/testimony.ts', 'figures/compare.ts']) {
+      assert.equal((await app.request(`/js/${file}`)).status, 404, `/js/${file} must not be served`)
+      assert.equal((await app.request(`/${file}`)).status, 404, `/${file} must not be served`)
     }
   })
 })

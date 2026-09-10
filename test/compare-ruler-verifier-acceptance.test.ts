@@ -5,13 +5,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { persons, seed } from './fixture.js'
-import { clearScopes } from '../public/js/state.js'
-import { compareParams } from '../public/js/api.js'
-import { balanceColor, SCALE_MID } from '../public/js/format.js'
-import { paintCompareDetail, paintRuler, rulerTerms } from '../public/js/render.js'
+import { clearScopes } from '../src/ui/state.js'
+import { compareParams } from '../src/ui/api.js'
+import { balanceColor, SCALE_MID } from '../src/ui/format.js'
+import { paintCompareDetail, paintRuler, rulerTerms } from '../src/ui/render.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
-import type { Compare, CompareTerm } from '../public/js/format.js'
+import type { Compare, CompareTerm } from '../src/ui/format.js'
 
 // The injected text measurer paintRuler hands to layout.js, the same contract public/js/layout.js
 // documents: deterministic here, a real canvas in the browser. 0.6em per character is close
@@ -27,10 +27,10 @@ const metrics = (text: string, size: number) => text.length * size * 0.6
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
 const comoLer = () => readFileSync(join(root, 'public', 'como-ler.html'), 'utf8')
-const compareSource = () => readFileSync(join(root, 'public', 'js', 'figures', 'compare.js'), 'utf8')
+const compareSource = () => readFileSync(join(root, 'src', 'ui', 'figures', 'compare.ts'), 'utf8')
 const jsFiles = () => ({
-  testimony: readFileSync(join(root, 'public', 'js', 'figures', 'testimony.js'), 'utf8'),
-  atlas: readFileSync(join(root, 'public', 'js', 'figures', 'atlas.js'), 'utf8'),
+  testimony: readFileSync(join(root, 'src', 'ui', 'figures', 'testimony.ts'), 'utf8'),
+  atlas: readFileSync(join(root, 'src', 'ui', 'figures', 'atlas.ts'), 'utf8'),
 })
 
 const geraldo = { id: 'geraldo', name: 'Geraldo' }
@@ -48,7 +48,7 @@ const compareData = (terms: CompareTerm[], a = geraldo, b = simone): Compare => 
 
 describe('AC1: figures/compare.js is importable outside a browser and exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
-  const mod = await import('../public/js/figures/compare.js')
+  const mod = await import('../src/ui/figures/compare.js')
 
   it('does not touch document at import time', () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/compare.js must not touch document')
@@ -71,7 +71,7 @@ describe('AC2: figures/compare.js declares exactly the import list the spec give
   })
 
   it('app.js imports all three figure mounts, including figures/compare.js', () => {
-    const appSrc = readFileSync(join(root, 'public', 'js', 'app.js'), 'utf8')
+    const appSrc = readFileSync(join(root, 'src', 'ui', 'app.ts'), 'utf8')
     assert.deepEqual(
       importsOf(appSrc).sort(),
       ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'].sort(),
@@ -249,7 +249,7 @@ describe('AC8: the hidden-name note is absent when the dropped count is zero, pr
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'porto', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush(60)
       assert.equal(els.compareHiddenNote.hidden, true)
@@ -265,7 +265,7 @@ describe('AC8: the hidden-name note is absent when the dropped count is zero, pr
         { term: 'porto', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: { count: 1, pmi: 1, tone: null } },
       ]
       routeFetch(calls, { '/compare': compareData(terms) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush(60)
       assert.equal(els.compareHiddenNote.hidden, false)
@@ -285,7 +285,7 @@ describe('AC9: the same-person notice shows exactly when a === b', () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([], geraldo, geraldo) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush(60)
       assert.equal(els.compareStatus.hidden, false)
@@ -296,7 +296,7 @@ describe('AC9: the same-person notice shows exactly when a === b', () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([], geraldo, simone) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush(60)
       assert.equal(els.compareStatus.hidden, true)
@@ -311,7 +311,7 @@ describe('AC10: clicking a dot fills the detail line, and clicking it again or t
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'porto', kind: 'word', a: { count: 8, pmi: 0.6, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush(60)
       const [dot] = els.compareRuler.querySelectorAll('[data-term]')
@@ -327,7 +327,7 @@ describe('AC10: clicking a dot fills the detail line, and clicking it again or t
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'porto', kind: 'word', a: { count: 8, pmi: 0.6, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush(60)
       let dot = els.compareRuler.querySelectorAll('[data-term]')[0]
@@ -343,7 +343,7 @@ describe('AC10: clicking a dot fills the detail line, and clicking it again or t
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'porto', kind: 'word', a: { count: 8, pmi: 0.6, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush(60)
       const dot = els.compareRuler.querySelectorAll('[data-term]')[0]
@@ -369,7 +369,7 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
       await withFiguresDom(async (els, calls) => {
         clearScopes()
         routeFetch(calls, { '/compare': compareData([]) })
-        const { mount } = await import('../public/js/figures/compare.js')
+        const { mount } = await import('../src/ui/figures/compare.js')
         mount(els.compare, { people, initial: {} })
         await flush(60)
         const before = calls.length
@@ -390,8 +390,8 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
         '/testimony': { method: 'kikori', overall: { score: null, n: 0 }, by_source: [], by_domain: [] },
         '/compare': compareData([]),
       })
-      const { mount: mountCompare } = await import('../public/js/figures/compare.js')
-      const { mount: mountTestimony } = await import('../public/js/figures/testimony.js')
+      const { mount: mountCompare } = await import('../src/ui/figures/compare.js')
+      const { mount: mountTestimony } = await import('../src/ui/figures/testimony.js')
       mountTestimony(els.testimony, { people, initial: {} })
       mountCompare(els.compare, { people, initial: {} })
       await flush(60)

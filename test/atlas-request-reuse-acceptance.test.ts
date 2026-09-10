@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
 import { app } from '../src/server.js'
-import { candidatesQuery, narrowToSources, params, sourcesParams } from '../public/js/api.js'
-import { createHandlers, docsQuery, scopeKeys } from '../public/js/figures/atlas.js'
-import { SCOPE_LIMIT, SCOPE_TTL_MS, clearScopes, debounce, fromScope, readScope, writeScope } from '../public/js/state.js'
+import { candidatesQuery, narrowToSources, params, sourcesParams } from '../src/ui/api.js'
+import { createHandlers, docsQuery, scopeKeys } from '../src/ui/figures/atlas.js'
+import { SCOPE_LIMIT, SCOPE_TTL_MS, clearScopes, debounce, fromScope, readScope, writeScope } from '../src/ui/state.js'
 import { seed } from './fixture.js'
 import './close.js'
 

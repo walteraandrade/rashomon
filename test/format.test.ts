@@ -14,7 +14,7 @@ import {
   scoreName,
   sourceLabels,
   toneColor,
-} from '../public/js/format.js'
+} from '../src/ui/format.js'
 
 describe('esc', () => {
   it('escapes the five HTML-sensitive characters', () => {

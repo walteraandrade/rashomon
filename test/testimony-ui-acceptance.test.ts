@@ -4,10 +4,10 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { loadTestimony, narrowToTestimony, params, testimonyParams } from '../public/js/api.js'
-import { scopeKeys } from '../public/js/figures/atlas.js'
-import { signed, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor } from '../public/js/format.js'
-import { paintColumns, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../public/js/render.js'
+import { loadTestimony, narrowToTestimony, params, testimonyParams } from '../src/ui/api.js'
+import { scopeKeys } from '../src/ui/figures/atlas.js'
+import { signed, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, toneColor } from '../src/ui/format.js'
+import { paintColumns, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../src/ui/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { seed } from './fixture.js'
 import './close.js'
@@ -219,7 +219,7 @@ describe('testimony UI: the page holds the panel and explains it', () => {
 
 describe('testimony strip: the outlets on the axis under the map', () => {
   it('swarm keeps every x, never overlaps two dots and puts the biggest on the axis', async () => {
-    const { swarm } = await import('../public/js/layout.js')
+    const { swarm } = await import('../src/ui/layout.js')
     const items = [
       { id: 'a', x: 100, r: 10 },
       { id: 'b', x: 104, r: 6 },
@@ -241,7 +241,7 @@ describe('testimony strip: the outlets on the axis under the map', () => {
   })
 
   it('foldTestimonyDomains merges one outlet across sources, weighted by texts, most texts first', async () => {
-    const { foldTestimonyDomains } = await import('../public/js/format.js')
+    const { foldTestimonyDomains } = await import('../src/ui/format.js')
     const folded = foldTestimonyDomains([
       { domain: 'g1.globo.com', source: 'gnews', score: -4, n: 3 },
       { domain: 'bbc.com', source: 'gnews', score: 2, n: 5 },
@@ -255,7 +255,7 @@ describe('testimony strip: the outlets on the axis under the map', () => {
   })
 
   it('stripLayout puts -10 at the left pad, +10 at the right pad and sizes dots by texts', async () => {
-    const { stripLayout, stripRadius } = await import('../public/js/render.js')
+    const { stripLayout, stripRadius } = await import('../src/ui/render.js')
     const layout = stripLayout(
       [
         { domain: 'left.example', source: 'gnews', score: -10, n: 3 },
@@ -278,7 +278,7 @@ describe('testimony strip: the outlets on the axis under the map', () => {
   })
 
   it('caps the strip at STRIP_MAX_HEIGHT by shrinking every dot together, never by dropping one', async () => {
-    const { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripLayout } = await import('../public/js/render.js')
+    const { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripLayout } = await import('../src/ui/render.js')
     // 150 outlets inside a quarter of the axis, like Lula's, each with plenty of texts.
     const crowded = Array.from({ length: 150 }, (_, i) => ({ domain: `o${i}.example`, source: 'gnews', score: -5 + (i % 50) * 0.1, n: 5 + (i % 40) * 3 }))
     const full = stripLayout(crowded.slice(0, 5), 957)
@@ -355,7 +355,7 @@ describe('testimony mask: words coloured against the person mean', () => {
   const placed = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9, ...over })
 
   it('termMask centres on the person, is null under MASK_MIN texts or without a person mean', async () => {
-    const { MASK_MIN, maskColor, termMask, toneColor } = await import('../public/js/format.js')
+    const { MASK_MIN, maskColor, termMask, toneColor } = await import('../src/ui/format.js')
     assert.equal(MASK_MIN, 3)
     assert.equal(termMask({ testimony: { score: -2.4, n: 10 } }, -2.4), maskColor(0), 'on the mean: the neutral middle')
     assert.equal(termMask({ testimony: { score: -3.9, n: 10 } }, -2.4), maskColor(-1.5), 'MASK_SPAN below the person: full red')
@@ -368,7 +368,7 @@ describe('testimony mask: words coloured against the person mean', () => {
   })
 
   it('wordMarkup carries the --mask colour and the testimony in its title only when it has one', async () => {
-    const { wordMarkup } = await import('../public/js/render.js')
+    const { wordMarkup } = await import('../src/ui/render.js')
     const masked = wordMarkup(placed({ testimony: { score: -4.9, n: 12 } }), 'count', person.score)
     assert.match(masked, /style="--size:20px;--mask:rgb\(255,107,125\)"/)
     assert.match(masked, /· avaliação -4,9 em 12 textos<\/title>/)
@@ -393,7 +393,7 @@ describe('testimony mask: words coloured against the person mean', () => {
   })
 
   it('testimonyLine reads the two numbers out for the selected term', async () => {
-    const { testimonyLine } = await import('../public/js/render.js')
+    const { testimonyLine } = await import('../src/ui/render.js')
     const n = { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: -3.1, n: 12 } }
     assert.match(testimonyLine(n, person), /<strong class="score-highlight">-3,1<\/strong> de avaliação em 12 textos, contra -2,4 da pessoa no recorte\. mais hostis que a média da pessoa\./)
     assert.match(testimonyLine({ ...n, testimony: { score: -2.2, n: 12 } }, person), /na média da pessoa/)
@@ -404,7 +404,7 @@ describe('testimony mask: words coloured against the person mean', () => {
   })
 
   it('the mask is a paint toggle: createHandlers.mask flips it and nothing refetches', async () => {
-    const { createHandlers } = await import('../public/js/figures/atlas.js')
+    const { createHandlers } = await import('../src/ui/figures/atlas.js')
     let flips = 0
     let loads = 0
     const h = createHandlers({ toggleMask: () => flips++, load: () => loads++ })
@@ -415,12 +415,12 @@ describe('testimony mask: words coloured against the person mean', () => {
   })
 
   it('the graph query asks for testimony and the sources/docs queries do not echo it', async () => {
-    const { docsQuery } = await import('../public/js/figures/atlas.js')
+    const { docsQuery } = await import('../src/ui/figures/atlas.js')
     const p = controls()
     assert.equal(p.get('testimony'), '1')
     assert.equal(narrowToTestimony(p).has('testimony'), false)
     assert.equal(testimonyParams({ days: '30', sort: 'count', limit: '18', source: 'all' }).has('testimony'), false)
-    const { narrowToSources } = await import('../public/js/api.js')
+    const { narrowToSources } = await import('../src/ui/api.js')
     assert.equal(narrowToSources(p).has('testimony'), false)
     assert.equal(docsQuery(p, null).has('testimony'), false)
   })

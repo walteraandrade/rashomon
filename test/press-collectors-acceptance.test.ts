@@ -8,8 +8,8 @@ import { insertDoc, tonedSources } from '../src/store.js'
 import { parseRisingQuery, parseSourceList, parseTimelineQuery } from '../src/query.js'
 import { persons, seed } from './fixture.js'
 import { docPageText, docsText } from './docs.js'
-import { SOURCE_SEGMENTS, sourceLabels } from '../public/js/format.js'
-import { createHandlers } from '../public/js/figures/atlas.js'
+import { SOURCE_SEGMENTS, sourceLabels } from '../src/ui/format.js'
+import { createHandlers } from '../src/ui/figures/atlas.js'
 import './close.js'
 
 const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${relPath}`, import.meta.url)), 'utf8')

@@ -1,7 +1,7 @@
 // Page-wide, DOM-free state: the scope memo (shared by every figure) plus the two generic
 // helpers both figures need. Everything that is genuinely per-figure (the source filter, the
 // focused outlet, zoom, the layout cache, the mask, request/abort bookkeeping) lives inside
-// that figure's own module now, the same way public/js/app.js already kept people/graph/nodes
+// that figure's own module now, the same way src/ui/app.ts already kept people/graph/nodes
 // as local module state rather than here.
 
 // Bounded, short-lived memo of successful API responses (issue #43). One bucket per scope
@@ -15,23 +15,21 @@
 export const SCOPE_TTL_MS = 20_000
 export const SCOPE_LIMIT = 8
 
-/** @type {Map<string, Map<string, { at: number, value: unknown }>>} */
-const scopes = new Map()
+type Entry = { at: number; value: unknown }
 
-/** @param {string} scope */
-const bucket = (scope) => {
+const scopes = new Map<string, Map<string, Entry>>()
+
+const bucket = (scope: string) => {
   const found = scopes.get(scope)
   if (found) return found
-  /** @type {Map<string, { at: number, value: unknown }>} */
-  const fresh = new Map()
+  const fresh = new Map<string, Entry>()
   scopes.set(scope, fresh)
   return fresh
 }
 
 // Returns a one-element box on a hit and null on a miss, so a cached `undefined` or `null`
 // response is still distinguishable from "nothing cached".
-/** @param {string} scope @param {string} key @param {number} [now] */
-export const readScope = (scope, key, now = Date.now()) => {
+export const readScope = (scope: string, key: string, now = Date.now()) => {
   const entry = bucket(scope).get(key)
   if (!entry) return null
   if (now - entry.at > SCOPE_TTL_MS) {
@@ -41,14 +39,13 @@ export const readScope = (scope, key, now = Date.now()) => {
   return { value: entry.value }
 }
 
-/** @param {string} scope @param {string} key @param {unknown} value @param {number} [now] */
-export const writeScope = (scope, key, value, now = Date.now()) => {
+export const writeScope = (scope: string, key: string, value: unknown, now = Date.now()) => {
   const entries = bucket(scope)
   entries.delete(key)
   entries.set(key, { at: now, value })
   // Insertion order is eviction order: the oldest write goes first, so a long session cannot
   // grow the memo without bound.
-  while (entries.size > SCOPE_LIMIT) entries.delete(/** @type {string} */ (entries.keys().next().value))
+  while (entries.size > SCOPE_LIMIT) entries.delete(entries.keys().next().value as string)
   return value
 }
 
@@ -58,29 +55,17 @@ export const clearScopes = () => scopes.clear()
 // resolved: a rejection (network error, or the browser aborting the request) leaves the
 // bucket untouched, so the next attempt is a real attempt. An abort here says the browser
 // stopped listening, never that the server stopped running the SQL.
-/**
- * @template T
- * @param {string} scope
- * @param {string} key
- * @param {() => Promise<T>} fetcher
- * @returns {Promise<T>}
- */
-export const fromScope = async (scope, key, fetcher) => {
+export const fromScope = async <T>(scope: string, key: string, fetcher: () => Promise<T>): Promise<T> => {
   const hit = readScope(scope, key)
-  if (hit) return /** @type {T} */ (hit.value)
-  return /** @type {T} */ (writeScope(scope, key, await fetcher()))
+  if (hit) return hit.value as T
+  return writeScope(scope, key, await fetcher()) as T
 }
 
 // Coalesces a burst of control changes into one load. The trailing edge is the one that
 // matters: a reader dragging through the period options should pay for the option they stop
 // on, not for every option they pass through.
-/**
- * @param {() => void} fn
- * @param {number} [ms]
- */
-export const debounce = (fn, ms = 140) => {
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let timer
+export const debounce = (fn: () => void, ms = 140) => {
+  let timer: ReturnType<typeof setTimeout> | undefined
   return () => {
     clearTimeout(timer)
     timer = setTimeout(fn, ms)

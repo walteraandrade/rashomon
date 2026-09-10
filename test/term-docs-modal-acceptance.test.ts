@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { drawMap, inspect, paintColumns, paintDocs, paintDocsHead } from '../public/js/render.js'
+import { drawMap, inspect, paintColumns, paintDocs, paintDocsHead } from '../src/ui/render.js'
 import { withFakeDocument } from './fake-dom.js'
 
 // The documents panel used to live inside the inspector: first as a button plus a sibling

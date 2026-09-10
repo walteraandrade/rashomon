@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { persons } from './fixture.js'
-import { clearScopes } from '../public/js/state.js'
+import { clearScopes } from '../src/ui/state.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 // Independent verification of issue #92's acceptance criteria, written from the approved spec
@@ -15,12 +15,12 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 // happened to make the builder's own assertions pass would not also make these pass.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const jsDir = join(root, 'public', 'js')
+const jsDir = join(root, 'src', 'ui')
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
 const moduleSource = (name: string) => readFileSync(join(jsDir, name), 'utf8')
 const jsFiles = (dir = jsDir, prefix = ''): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.js') ? [`${prefix}${entry.name}`] : [],
+    entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.ts') ? [`${prefix}${entry.name}`] : [],
   )
 const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 
@@ -55,9 +55,9 @@ const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promis
 
 describe('AC1: both figure modules are importable outside a browser with no document side effect', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
-  const atlas = await import('../public/js/figures/atlas.js')
+  const atlas = await import('../src/ui/figures/atlas.js')
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/atlas.js touched document')
-  const testimony = await import('../public/js/figures/testimony.js')
+  const testimony = await import('../src/ui/figures/testimony.js')
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/testimony.js touched document')
 
   it('figures/atlas.js exports a mount function', () => {
@@ -70,26 +70,26 @@ describe('AC1: both figure modules are importable outside a browser with no docu
 
 describe('AC2: the import graph walks public/js/figures/ and matches the spec exactly', () => {
   it('every file in public/js/figures/ is visible to the recursive walk', () => {
-    assert.ok(jsFiles().includes('figures/atlas.js'))
-    assert.ok(jsFiles().includes('figures/testimony.js'))
+    assert.ok(jsFiles().includes('figures/atlas.ts'))
+    assert.ok(jsFiles().includes('figures/testimony.ts'))
   })
 
   it('the declared import list of every module matches the spec, acyclically', () => {
     const expected: Record<string, string[]> = {
-      'format.js': [],
-      'state.js': [],
-      'api.js': [],
-      'layout.js': ['./format.js'],
-      'render.js': ['./format.js', './layout.js'],
+      'format.ts': [],
+      'state.ts': [],
+      'api.ts': [],
+      'layout.ts': ['./format.js'],
+      'render.ts': ['./format.js', './layout.js'],
       // The documents card belongs to no figure since all three open it, so it sits one layer
       // above render.js and below figures/: it fetches, paints and owns #docsDialog.
-      'docs-card.js': ['./api.js', './render.js', './state.js'],
-      'figures/atlas.js': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
-      'figures/testimony.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'docs-card.ts': ['./api.js', './render.js', './state.js'],
+      'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
+      'figures/testimony.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
       // Issue #91 adds the third figure, the ruler; it follows figures/testimony.js's own
       // shape (no direct layout.js import — the swarm packing lives inside render.js).
-      'figures/compare.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
-      'app.js': ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
+      'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort())
     for (const [file, allowed] of Object.entries(expected)) {
@@ -100,7 +100,7 @@ describe('AC2: the import graph walks public/js/figures/ and matches the spec ex
 })
 
 describe('AC3: app.js is a shell exporting only boot', async () => {
-  const app = await import('../public/js/app.js')
+  const app = await import('../src/ui/app.js')
   it('boot is the sole export', () => {
     assert.deepEqual(Object.keys(app), ['boot'])
     assert.equal(typeof app.boot, 'function')
@@ -108,8 +108,8 @@ describe('AC3: app.js is a shell exporting only boot', async () => {
 })
 
 describe('AC4: state.js and figures/testimony.js drop per-figure state, keep the shared memo', async () => {
-  const state = await import('../public/js/state.js')
-  const testimony = await import('../public/js/figures/testimony.js')
+  const state = await import('../src/ui/state.js')
+  const testimony = await import('../src/ui/figures/testimony.js')
 
   it('state.js still carries fromScope and debounce alongside the scope memo', () => {
     for (const name of ['readScope', 'writeScope', 'clearScopes', 'SCOPE_TTL_MS', 'SCOPE_LIMIT', 'fromScope', 'debounce'])
@@ -129,24 +129,24 @@ describe('AC4: state.js and figures/testimony.js drop per-figure state, keep the
 describe('AC5: the two acceptance suites this issue touches import from the new module paths', () => {
   it('atlas-request-reuse-acceptance.test.ts imports createHandlers/docsQuery/scopeKeys from figures/atlas.js and fromScope/debounce from state.js', () => {
     const src = readFileSync(join(root, 'test', 'atlas-request-reuse-acceptance.test.ts'), 'utf8')
-    const atlasImport = src.match(/import\s*\{([^}]*)\}\s*from\s*['"]\.\.\/public\/js\/figures\/atlas\.js['"]/)
-    assert.ok(atlasImport, 'must import from ../public/js/figures/atlas.js')
+    const atlasImport = src.match(/import\s*\{([^}]*)\}\s*from\s*['"]\.\.\/src\/ui\/figures\/atlas\.js['"]/)
+    assert.ok(atlasImport, 'must import from ../src/ui/figures/atlas.js')
     for (const name of ['createHandlers', 'docsQuery', 'scopeKeys']) assert.match(atlasImport![1], new RegExp(`\\b${name}\\b`))
-    const stateImport = src.match(/import\s*\{([^}]*)\}\s*from\s*['"]\.\.\/public\/js\/state\.js['"]/)
-    assert.ok(stateImport, 'must import from ../public/js/state.js')
+    const stateImport = src.match(/import\s*\{([^}]*)\}\s*from\s*['"]\.\.\/src\/ui\/state\.js['"]/)
+    assert.ok(stateImport, 'must import from ../src/ui/state.js')
     for (const name of ['fromScope', 'debounce']) assert.match(stateImport![1], new RegExp(`\\b${name}\\b`))
   })
 
   it('unified-atlas-acceptance.test.ts imports createHandlers from figures/atlas.js', () => {
     const src = readFileSync(join(root, 'test', 'unified-atlas-acceptance.test.ts'), 'utf8')
-    assert.match(src, /from ['"]\.\.\/public\/js\/figures\/atlas\.js['"]/)
+    assert.match(src, /from ['"]\.\.\/src\/ui\/figures\/atlas\.js['"]/)
   })
 })
 
 describe('AC6: figures/atlas.js drops resetOutlet; figures/testimony.js releases its own outlet locally', async () => {
   it('createHandlers accepts no resetOutlet action, and control("person") never mentions an outlet', async () => {
-    const { createHandlers } = await import('../public/js/figures/atlas.js')
-    const src = moduleSource(join('figures', 'atlas.js'))
+    const { createHandlers } = await import('../src/ui/figures/atlas.js')
+    const src = moduleSource(join('figures', 'atlas.ts'))
     const signature = src.match(/export const createHandlers = \(\{([\s\S]*?)\}\) => \(\{/)?.[1] ?? ''
     assert.doesNotMatch(signature, /\bresetOutlet\b/, "createHandlers' action parameter list must not declare resetOutlet any more (a comment may still mention it as documentation)")
     const calls: string[] = []
@@ -161,7 +161,7 @@ describe('AC6: figures/atlas.js drops resetOutlet; figures/testimony.js releases
   it("changing testimony's own person, days or source releases its own focused outlet, via a real mount()", async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      const { mount } = await import('../public/js/figures/testimony.js')
+      const { mount } = await import('../src/ui/figures/testimony.js')
       routeFetch(calls, {
         '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 5 }],
         '/testimony': { method: 'kikori', overall: { score: null, n: 0 }, by_source: [], by_domain: [] },
@@ -184,7 +184,7 @@ describe('AC7: the two figures can show different people at once (fresh people o
   it('atlas.person=B and testimony.person=A produce two different requests', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      const appModule = await import('../public/js/app.js')
+      const appModule = await import('../src/ui/app.js')
       routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personB), '/sources': [], '/testimony': emptyTestimony })
       await withLocation(`?atlas.person=${personB.id}&testimony.person=${personA.id}`, () => appModule.boot())
       await flush()
@@ -202,7 +202,7 @@ describe('AC8: a bare key seeds both figures; a prefixed atlas.days overrides fi
   it('bare source= seeds both figures', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      const appModule = await import('../public/js/app.js')
+      const appModule = await import('../src/ui/app.js')
       routeDefault(calls)
       await withLocation('?source=gnews', () => appModule.boot())
       await flush()
@@ -214,7 +214,7 @@ describe('AC8: a bare key seeds both figures; a prefixed atlas.days overrides fi
   it('atlas.days overrides figure 1 only, leaving figure 2 on the bare value', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      const appModule = await import('../public/js/app.js')
+      const appModule = await import('../src/ui/app.js')
       routeDefault(calls)
       await withLocation('?days=30&atlas.days=7', () => appModule.boot())
       await flush()
@@ -228,7 +228,7 @@ describe('AC9: control changes never cross figures (source control, not days)', 
   it("changing figure 1's source control reloads only figure 1", async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      const appModule = await import('../public/js/app.js')
+      const appModule = await import('../src/ui/app.js')
       routeDefault(calls)
       await withLocation('', () => appModule.boot())
       await flush()
@@ -245,7 +245,7 @@ describe('AC9: control changes never cross figures (source control, not days)', 
   it("changing figure 2's source control reloads only figure 2", async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      const appModule = await import('../public/js/app.js')
+      const appModule = await import('../src/ui/app.js')
       routeDefault(calls)
       await withLocation('', () => appModule.boot())
       await flush()
@@ -264,7 +264,7 @@ describe('AC12: GET /api/people is fetched exactly once regardless of how many f
   it('one call feeds both person selects with the same people', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      const appModule = await import('../public/js/app.js')
+      const appModule = await import('../src/ui/app.js')
       routeDefault(calls)
       await withLocation('', () => appModule.boot())
       await flush()
@@ -305,7 +305,7 @@ describe('AC10/AC11: the sentence and the stats badge live inside each figure, n
 
 describe('AC13: the strip repaints off its own ResizeObserver in figures/testimony.js, never through figures/atlas.js', () => {
   it("figures/atlas.js's source never mentions #strip, #testimonyList or #outletList", () => {
-    const src = moduleSource(join('figures', 'atlas.js'))
+    const src = moduleSource(join('figures', 'atlas.ts'))
     for (const id of ['strip', 'testimonyList', 'outletList']) assert.doesNotMatch(src, new RegExp(`\\$\\('${id}'\\)`), `figure 1 must not touch #${id}`)
   })
 
@@ -326,7 +326,7 @@ describe('AC13: the strip repaints off its own ResizeObserver in figures/testimo
         disconnect() {}
       }
       ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = CapturingResizeObserver
-      const { mount } = await import('../public/js/figures/testimony.js')
+      const { mount } = await import('../src/ui/figures/testimony.js')
       routeFetch(calls, {
         '/sources': [],
         '/testimony': { method: 'kikori', overall: { score: 1.5, n: 8 }, by_source: [], by_domain: [{ domain: 'g1.globo.com', source: 'gnews', score: 1.5, n: 8 }] },

@@ -2,11 +2,11 @@
 // background, Escape, the map/columns mode toggle, the mask toggle, zoom, the map/columns/
 // inspector painters, the documents modal (its markup sits outside #workspace, but only this
 // figure ever opens it) and this figure's own stats badge. Importing this module is side-effect
-// free outside a browser: mount() runs only once app.js hands it a root element and the
+// free outside a browser: mount() runs only once app.ts hands it a root element and the
 // fetched person list, which is what lets node:test import the pieces below with no document.
 
 import * as api from '../api.js'
-import { fmt, kinds, label, SOURCE_SEGMENTS, sourceLabels } from '../format.js'
+import { fmt, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type Measure, type Term } from '../format.js'
 import { centerLabel, pack } from '../layout.js'
 import {
   createCanvasMeasure,
@@ -19,24 +19,24 @@ import {
   paintSelection,
 } from '../render.js'
 import * as docsCard from '../docs-card.js'
-import { debounce, fromScope, readScope } from '../state.js'
+import { debounce, fromScope } from '../state.js'
 
-/** @typedef {import('../format.js').Graph} Graph */
-/** @typedef {import('../format.js').Layout} Layout */
-/** @typedef {import('../format.js').Link} Link */
-/** @typedef {import('../format.js').Term} Term */
-/** @typedef {{ id: string, name: string }} Person */
-/** @typedef {{ person?: string, days?: string, source?: string, sort?: string, limit?: string }} Seed */
+// The section element the shell mounts into. Only `classList` is ever read off it, and the
+// suites mount against a DOM stand-in rather than a real element, so the contract is that one
+// property instead of the whole HTMLElement surface.
+export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
+
+export type Person = { id: string; name: string }
+export type Seed = { person?: string; days?: string; source?: string; sort?: string; limit?: string }
 // Whatever GET /api/people rejected with, or null when it answered. Distinct from an empty
 // `people` array: an outage must never paint as "no one is registered yet" (issue #92).
-/** @typedef {unknown} PeopleError */
+export type PeopleError = unknown
 
 // Elements this figure owns by id. The markup in design-5.html guarantees each one exists
 // (the sentence and the toolbar live inside #workspace; the shared #docsDialog is not this
-// values read off them (select.value, button.disabled) are per-element, so this is typed
-// loosely on purpose rather than casting at all ~100 call sites.
-/** @type {(id: string) => any} */
-const $ = (id) => document.getElementById(id)
+// figure's). The values read off them (select.value, button.disabled) are per-element, so this
+// is typed loosely on purpose rather than casting at all ~100 call sites.
+const $ = (id: string): any => document.getElementById(id)
 
 // The one box on this page where a picture is allowed: nothing is on screen to compete with it,
 // because the atlas has failed. Both ways in -- an /api/people outage and a failed graph fetch --
@@ -48,8 +48,26 @@ const OUTAGE =
 
 // A caught value is `unknown`; the flows below only ever ask whether the browser aborted the
 // request, so this is the one place that inspects it.
-/** @param {unknown} e */
-const aborted = (e) => e instanceof Error && e.name === 'AbortError'
+const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
+
+// every action is optional so a test can inject only the ones a criterion is about
+export type HandlerActions = {
+  paintCurrentSelection?: () => void
+  choose?: (id: string | null) => void
+  getSelected?: () => string | null
+  load?: () => void
+  loadCandidates?: () => void
+  setMode?: (mode: string) => void
+  setZoom?: (zoom: number) => void
+  getZoomLevel?: () => number
+  clearSearch?: () => void
+  canClear?: () => boolean
+  updateHeader?: () => void
+  setSource?: (source: string) => void
+  toggleMask?: () => void
+  closeDocs?: () => void
+  docsOpen?: () => boolean
+}
 
 // The event table. Every DOM listener this figure installs resolves to exactly one entry
 // here, and each entry may only call the actions it is handed, so the mapping is inspectable
@@ -57,25 +75,6 @@ const aborted = (e) => e instanceof Error && e.name === 'AbortError'
 // selection and nothing else, since rebuilding the inspector would wipe the documents the
 // reader already loaded (issue #28). There is no `resetOutlet` action any more: the outlet in
 // focus belongs to figure 2 now, and only figure 2's own controls release it (issue #92).
-/**
- * @param {{
- *   paintCurrentSelection?: () => void,
- *   choose?: (id: string | null) => void,
- *   getSelected?: () => string | null,
- *   load?: () => void,
- *   loadCandidates?: () => void,
- *   setMode?: (mode: string) => void,
- *   setZoom?: (zoom: number) => void,
- *   getZoomLevel?: () => number,
- *   clearSearch?: () => void,
- *   canClear?: () => boolean,
- *   updateHeader?: () => void,
- *   setSource?: (source: string) => void,
- *   toggleMask?: () => void,
- *   closeDocs?: () => void,
- *   docsOpen?: () => boolean,
- * }} actions every action is optional so a test can inject only the ones a criterion is about
- */
 export const createHandlers = ({
   paintCurrentSelection = () => {},
   choose = () => {},
@@ -92,7 +91,7 @@ export const createHandlers = ({
   toggleMask = () => {},
   closeDocs = () => {},
   docsOpen = () => false,
-}) => ({
+}: HandlerActions) => ({
   search: () => {
     paintCurrentSelection()
   },
@@ -104,8 +103,7 @@ export const createHandlers = ({
   // Selecting is a toggle: clicking the selected term again lets it go. Without it the only
   // way back to the clean map was the clear button, which is off in the toolbar, far from the
   // word the reader is looking at.
-  /** @param {string | null} id */
-  pick: (id) => {
+  pick: (id: string | null) => {
     choose(id !== null && id === getSelected() ? null : id)
   },
   // A click that lands on nothing selectable is the other way out. The listener sits on the
@@ -113,16 +111,14 @@ export const createHandlers = ({
   // inside those two, anything without a data-node/data-col/data-person-docs is empty space.
   // The person's own entry point has to be in that list: it sits inside the viewport, so the
   // click that opens her card bubbles straight into this handler, which would close it again.
-  /** @param {Element | null} target */
-  background: (target) => {
+  background: (target: Element | null) => {
     if (!getSelected()) return
     if (target && target.closest('[data-node], [data-col], [data-person-docs]')) return
     choose(null)
   },
   // Escape closes the documents modal when it is open, and only then clears the selection:
   // the reader who closes the texts of a word must still be looking at that word.
-  /** @param {{ key: string }} e */
-  keydown: (e) => {
+  keydown: (e: { key: string }) => {
     if (e.key !== 'Escape') return
     if (docsOpen()) {
       closeDocs()
@@ -134,18 +130,16 @@ export const createHandlers = ({
   },
   modeMap: () => setMode('map'),
   modeColumns: () => setMode('columns'),
-  // Paint only: the per-term testimony always travels with the graph (api.js's testimony=1).
+  // Paint only: the per-term testimony always travels with the graph (api.ts's testimony=1).
   mask: () => toggleMask(),
   // One handler per control id, so the period control is the only one that refetches the
   // candidate queue.
-  /** @param {string} id */
-  control: (id) => () => {
+  control: (id: string) => () => {
     if (id === 'days') loadCandidates()
     updateHeader()
     load()
   },
-  /** @param {string} value */
-  source: (value) => () => {
+  source: (value: string) => () => {
     setSource(value)
     load()
     updateHeader()
@@ -159,24 +153,14 @@ export const createHandlers = ({
 
 // The layout cache key: the same person, sort, term limit and term list must reuse the same
 // packing, and any change to them must not.
-/**
- * @param {Person | undefined} person
- * @param {Term[]} terms
- * @param {string} sort
- * @param {string} limit
- */
-export const layoutKey = (person, terms, sort, limit) =>
+export const layoutKey = (person: Person | undefined, terms: Term[], sort: string, limit: string) =>
   JSON.stringify(person ? [person.id, person.name, sort, limit, terms.map((n) => [n.id, n.term, n.kind, n.count, n.pmi])] : [])
 
 // The docs panel reuses the graph querystring, narrowed to one term and five rows. A null
 // term means "documents about the person", which is `term=''` plus `kind=all`. `sort` and
 // `min` are dropped (issue #43): src/query.ts's parseDocsQuery reads neither, so leaving
 // them in made the same five rows look like a new query on every sort change.
-/**
- * @param {URLSearchParams} base
- * @param {Term | null} n
- */
-export const docsQuery = (base, n) =>
+export const docsQuery = (base: URLSearchParams, n: Term | null) =>
   api.docsParams({ days: base.get('days') ?? '30', source: base.get('source') ?? 'all', term: n ? n.term : '', kind: n ? n.kind : 'all' })
 
 // Issue #43: one cache key per scope, built from the filters that scope's route actually
@@ -185,12 +169,7 @@ export const docsQuery = (base, n) =>
 // up in the key, and a parameter added to a route later cannot silently share a stale entry.
 // This figure only ever reads its own `.graph`/`.docs` keys; `.sources`/`.testimony` stay here
 // too so the shape matches what test/atlas-request-reuse-acceptance.test.ts already asserts.
-/**
- * @param {string} personId
- * @param {URLSearchParams} graphParams the full params() querystring
- * @param {Term | null} [term] the docs panel's term, null for the person's own documents
- */
-export const scopeKeys = (personId, graphParams, term = null) => ({
+export const scopeKeys = (personId: string, graphParams: URLSearchParams, term: Term | null = null) => ({
   graph: personId + '?' + graphParams,
   sources: personId + '?' + api.narrowToSources(graphParams),
   docs: personId + '?' + docsQuery(graphParams, term),
@@ -200,49 +179,38 @@ export const scopeKeys = (personId, graphParams, term = null) => ({
 // A seeded value only ever overrides a <select> when it names one of that select's own
 // options; a malformed value (an unknown days/sort/limit) leaves the element at whatever its
 // markup already defaults to, and nothing throws.
-/** @param {any} select @param {string | undefined} value */
-const applySeed = (select, value) => {
+const applySeed = (select: any, value: string | undefined) => {
   if (value === undefined || !select) return
-  if ([...select.options].some((/** @type {any} */ o) => o.value === value)) select.value = value
+  if ([...select.options].some((o: any) => o.value === value)) select.value = value
 }
 
 // The seeded person id wins only when it names someone the API actually returned; otherwise
 // the figure falls back to the first person in the list, exactly like the page did before the
 // split.
-/** @param {Person[]} people @param {string | undefined} seeded */
-const resolvePerson = (people, seeded) => (seeded && people.some((p) => p.id === seeded) ? seeded : (people[0]?.id ?? ''))
+const resolvePerson = (people: Person[], seeded: string | undefined) =>
+  seeded && people.some((p) => p.id === seeded) ? seeded : (people[0]?.id ?? '')
 
 // Mounts figure 1 into `root` (#workspace): populates the sentence's controls from `people`
 // and `initial`, wires every listener, and runs the first load. Nothing here reaches into
 // figure 2's DOM, and nothing in figure 2 reaches into this one.
-/** @param {any} root @param {{ people: Person[], initial: Seed, peopleError?: PeopleError }} args */
-export const mount = (root, { people, initial, peopleError = null }) => {
-  /** @type {Graph | null} */
-  let graph = null
-  /** @type {Term[]} */
-  let nodes = []
-  /** @type {Link[]} */
-  let links = []
+export const mount = (root: FigureRoot, { people, initial, peopleError = null }: { people: Person[]; initial: Seed; peopleError?: PeopleError }) => {
+  let graph: Graph | null = null
+  let nodes: Term[] = []
+  let links: Link[] = []
   let busy = false
   let mode = 'map'
-  /** @type {Layout | null} */
-  let currentLayout = null
+  let currentLayout: Layout | null = null
   let lastMapWidth = 0
-  /** @type {import('../format.js').Measure | null} */
-  let measure = null
-  /** @type {Map<string, Layout>} */
-  const layoutCache = new Map()
-  /** @type {string | null} */
-  let selected = null
+  let measure: Measure | null = null
+  const layoutCache = new Map<string, Layout>()
+  let selected: string | null = null
   let mask = true
   let zoom = 1
-  let source = SOURCE_SEGMENTS.some(([v]) => v === initial.source) ? /** @type {string} */ (initial.source) : 'all'
+  let source = SOURCE_SEGMENTS.some(([v]) => v === initial.source) ? (initial.source as string) : 'all'
   let requestId = 0
-  /** @type {AbortController | null} */
-  let controller = null
-  let cardTerm = /** @type {Term | null} */ (null)
-  /** @type {AbortController | null} */
-  let candidateController = null
+  let controller: AbortController | null = null
+  let cardTerm: Term | null = null
+  let candidateController: AbortController | null = null
 
   const nextRequestId = () => ++requestId
   const currentRequestId = () => requestId
@@ -252,27 +220,24 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   const graphQuery = () => api.params(controlValues())
   const daysLabel = () => $('days').selectedOptions[0].textContent.toLowerCase()
   const getZoom = () => zoom
-  /** @param {number} z */
-  const setZoomLevel = (z) => {
+  const setZoomLevel = (z: number) => {
     zoom = Math.max(1, Math.min(2, z))
     return zoom
   }
   const getSelected = () => selected
-  /** @param {string | null} id */
-  const setSelected = (id) => {
+  const setSelected = (id: string | null) => {
     selected = id
   }
   const getMask = () => mask
-  /** @param {boolean} on */
-  const setMask = (on) => {
+  const setMask = (on: boolean) => {
     mask = on
   }
 
   const getLayout = () => {
-    const person = /** @type {Graph} */ (graph).person
+    const person = (graph as Graph).person
     const key = layoutKey(person, nodes, $('sort').value, $('limit').value)
     if (!layoutCache.has(key)) layoutCache.set(key, pack(measured(), nodes, centerLabel(measured(), person.name), $('sort').value))
-    return /** @type {Layout} */ (layoutCache.get(key))
+    return layoutCache.get(key) as Layout
   }
 
   // Only the map's own width and the zoom controls: the strip and the testimony lists belong
@@ -292,8 +257,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     $('zoomIn').disabled = getZoom() >= 2
   }
 
-  /** @param {number} value */
-  const setZoom = (value) => {
+  const setZoom = (value: number) => {
     const vp = $('viewport')
     const oldWidth = Math.max(1, vp.scrollWidth)
     const center = (vp.scrollLeft + vp.clientWidth / 2) / oldWidth
@@ -309,7 +273,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id) })
 
   const drawCurrentMap = () => {
-    const current = /** @type {Graph} */ (graph)
+    const current = graph as Graph
     currentLayout = getLayout()
     drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personTestimony: current.stats?.testimony })
     resizeMap()
@@ -317,8 +281,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - $('viewport').clientWidth) / 2)
   }
 
-  /** @param {string | null} id */
-  const choose = (id) => {
+  const choose = (id: string | null) => {
     setSelected(id)
     docsCard.close()
     paintCurrentSelection()
@@ -340,8 +303,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
 
   // This figure's two readings, handed to the shared card: a word ("Documentos com palavra")
   // and the person at the centre ("Documentos sobre"). The recorte is this figure's own.
-  /** @param {Term | null} n */
-  const showDocs = (n) => {
+  const showDocs = (n: Term | null) => {
     if (!graph || !$('person').value) return
     cardTerm = n
     docsCard.open({
@@ -394,8 +356,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     paintCurrentInspector()
   }
 
-  /** @param {string} next */
-  const setMode = (next) => {
+  const setMode = (next: string) => {
     mode = next
     docsCard.close()
     render()
@@ -418,7 +379,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     $('atlasStats').textContent = graph ? `${fmt(graph.stats?.about)} docs · ${sourceLabels[source] || source}` : ''
   }
 
-  const signal = () => /** @type {AbortController} */ (controller).signal
+  const signal = () => (controller as AbortController).signal
 
   // A reload keeps the previous map, columns, legend and inspector on screen, dimmed by the
   // `is-loading` class, and swaps them in one go when the data lands. Blanking them first made
@@ -444,9 +405,9 @@ export const mount = (root, { people, initial, peopleError = null }) => {
       $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
       $('inspector').textContent = 'Aguardando dados.'
     }
-    // A failed GET /api/people (app.js's own boot()) is not the same thing as a seed with no
+    // A failed GET /api/people (app.ts's own boot()) is not the same thing as a seed with no
     // one in it: an outage gets the same "no fictional graph" copy master showed, with a
-    // retry that reloads the page (the only way this figure can ask app.js to fetch again,
+    // retry that reloads the page (the only way this figure can ask app.ts to fetch again,
     // since the person list is fetched once, up in the shell, and handed down).
     if (peopleError) {
       busy = false
@@ -558,7 +519,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   $('zoomOut').addEventListener('click', handlers.zoomOut)
   $('zoomReset').addEventListener('click', handlers.zoomReset)
   for (const id of ['viewport', 'columns'])
-    $(id).addEventListener('click', (/** @type {MouseEvent} */ e) => handlers.background(/** @type {Element | null} */ (e.target)))
+    $(id).addEventListener('click', (e: MouseEvent) => handlers.background(e.target as Element | null))
   document.addEventListener('keydown', handlers.keydown)
   new ResizeObserver(resizeMap).observe($('viewport'))
   document.fonts?.ready?.then(() => {

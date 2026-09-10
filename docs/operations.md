@@ -153,8 +153,8 @@ PERF=0 pnpm bench                           # same scenarios with the instrument
 
 ## Front-end bootstrapping
 
-The page at `/` is a sequence of independent figures (`public/js/figures/*.js`), each with its
-own sentence of `<select>`s and its own fetches. `public/js/app.js` reads the querystring once,
+The page at `/` is a sequence of independent figures (`src/ui/figures/*.ts`), each with its
+own sentence of `<select>`s and its own fetches. `src/ui/app.ts` reads the querystring once,
 at mount, to seed them. Nothing is ever written back to `location` or `history`: the controls
 change what a figure shows, never the URL.
 
@@ -179,7 +179,7 @@ figure's own default stand, exactly as if no querystring were there. An unknown 
 back to the first person in `GET /api/people`; figure 3's `b`, when absent or unknown, falls
 back to the second distinct person in that same list, or to `a`'s own id when the tracked list
 has only one person — making `a === b` a reachable, legal state, not a guarded error. These keys
-are client-side only — each figure still narrows its own request through `public/js/api.js`, so
+are client-side only — each figure still narrows its own request through `src/ui/api.ts`, so
 nothing here reaches the server verbatim.
 
 `GET /api/people` is fetched exactly once, by the shell, however many figures mount. If it
@@ -195,8 +195,8 @@ chart on screen for it to compete with.
 
 | Box | Painter | Sprite | Copy it sits beside |
 |---|---|---|---|
-| an empty recorte in figure 2 | `paintTestimony` (`render.js`) | `pet-caracara.png`, 106×78 | "Nenhum texto avaliado neste recorte… Tente um período maior ou outra fonte." |
-| the atlas with nothing to draw | `OUTAGE` (`figures/atlas.js`) | `pet-caracara-perched.png`, 26×37 | "Falha de rede ou base indisponível. Nenhum grafo fictício será exibido." |
+| an empty recorte in figure 2 | `paintTestimony` (`render.ts`) | `pet-caracara.png`, 106×78 | "Nenhum texto avaliado neste recorte… Tente um período maior ou outra fonte." |
+| the atlas with nothing to draw | `OUTAGE` (`figures/atlas.ts`) | `pet-caracara-perched.png`, 26×37 | "Falha de rede ou base indisponível. Nenhum grafo fictício será exibido." |
 
 Four rules hold it there, and `test/pet-acceptance.test.ts` pins each one:
 

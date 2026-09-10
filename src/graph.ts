@@ -435,20 +435,20 @@ export const toneFor = async (q: ToneQuery) => {
   return { persons: people.rows, domains, cells: cells.rows }
 }
 
-// Scoped to one person via $1, unlike toneSql (cross-person by construction): testimony's
+// Scoped to one person, unlike toneQuery (cross-person by construction): testimony's
 // PK already carries person_id, so an inner join on (doc_id, person_id, method) can never
 // leak another person's score for a shared doc into this scope. The inner join to
 // doc_testimony (not left join) is what makes an unscored pair contribute nothing anywhere,
 // including no zero-n placeholder row, per the spec.
-const testimonyScopeCte = `
+const testimonyScopeCte = (person: Person, q: TestimonyQuery) => sql`
   scope as (
     select d.source, d.domain, dt.score
     from doc_persons dp
     join docs d on d.id = dp.doc_id
-    join doc_testimony dt on dt.doc_id = dp.doc_id and dt.person_id = dp.person_id and dt.method = $4
-    where dp.person_id = $1
-      and d.published_at >= now() - make_interval(days => $2)
-      and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
+    join doc_testimony dt on dt.doc_id = dp.doc_id and dt.person_id = dp.person_id and dt.method = ${q.method}
+    where dp.person_id = ${person.id}
+      and d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
   )`
 
 // One statement for what overall, by_source and by_domain used to take three. All three
@@ -463,12 +463,12 @@ const testimonyScopeCte = `
 //
 // The three level filters are deliberately asymmetric and stay exactly as they were: overall
 // has no count floor, by_source floors at 1 (a group whose scores are all null contributes no
-// row), and only by_domain sees the caller's $5 and drops null domains.
+// row), and only by_domain sees the caller's min and drops null domains.
 //
 // json_agg carries its own order by, so the arrays come back in the order the split
 // statements' `order by` produced; the driver parses the json into the same row objects.
-const testimonySummarySql = `
-  with ${testimonyScopeCte},
+const testimonySummaryQuery = (person: Person, q: TestimonyQuery) => sql`
+  with ${testimonyScopeCte(person, q)},
   summary as materialized (
     select grouping(source) as g_source, grouping(domain) as g_domain, source, domain,
       round(avg(score)::numeric, 2)::float8 as score, count(score)::int as n
@@ -483,7 +483,7 @@ const testimonySummarySql = `
     ), '[]'::json) as by_source,
     coalesce((
       select json_agg(json_build_object('domain', domain, 'source', source, 'score', score, 'n', n) order by domain, source)
-      from summary where g_domain = 0 and domain is not null and n >= $5
+      from summary where g_domain = 0 and domain is not null and n >= ${q.min}
     ), '[]'::json) as by_domain`
 
 type TestimonyOverallRow = { score: number | null; n: number }
@@ -493,7 +493,7 @@ type TestimonyByDomainRow = { domain: string; source: string; score: number; n: 
 type TestimonySummary = { overall: TestimonyOverallRow | null; by_source: TestimonyBySourceRow[]; by_domain: TestimonyByDomainRow[] }
 
 export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
-  const { rows } = await db.query<TestimonySummary>(testimonySummarySql, [person.id, q.days, q.source, q.method, q.min])
+  const { rows } = await run<TestimonySummary>(testimonySummaryQuery(person, q))
   const { overall, by_source, by_domain } = rows[0]
   return {
     method: q.method,
@@ -771,6 +771,7 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
 // what a route executes: a builder numbers its placeholders by the statement's shape alone,
 // never by the values bound, so the text a sample call renders is byte-for-byte the text the
 // handler sends.
+const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 
 export const statements = {
   graph: graphSql,
@@ -781,7 +782,7 @@ export const statements = {
   timeline: timelineSql,
   rising: risingSql,
   tone: toneQuery({ days: 30, min: 3 }).text,
-  testimonySummary: testimonySummarySql,
+  testimonySummary: testimonySummaryQuery(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
   termTestimony: termTestimonySql,
   candidates: candidatesQuery({ days: 7, min: 5, limit: 50 }).text,
   compare: compareSql,

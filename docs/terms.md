@@ -10,6 +10,27 @@ Terms are only stored for docs that mention at least one tracked person. A doc n
 
 `pnpm purge orphan-terms` deletes the term rows a database collected before this rule and runs `vacuum full doc_terms` to return the pages to disk (plain `vacuum` only marks them reusable and leaves the file the same size). It takes an exclusive lock on `doc_terms`, so run it with the server stopped; it is a one-off per database, and `pnpm reindex` produces the same result from scratch. `pnpm purge <source>` does the same for the tables its cascade empties.
 
+## Stopwords and full text
+
+`stopwords` in `src/extract.ts` is corpus-specific, not a grammar. It grew when feeds started
+syndicating whole articles, because a body carries filler a headline never did: weekday tokens
+(`terça-feira` tokenizes to `terca` plus `feira`), month names and caption words. Measured on
+the corpus, `setembro` ranked 6th in Lula's atlas as a pure dateline.
+
+A stopword also forbids a phrase — `holdsStopword` refuses any capitalized run holding one, and
+`src/phrases.ts` measures adjacency after the set is dropped — so five obvious-looking
+neighbours are deliberately absent, each for a phrase it would take with it: `segunda`
+("segunda turma"), `marco` ("Marco Aurélio"), `janeiro` ("Rio de Janeiro"), `segundo`
+("segundo turno"), `dois` ("Dois Irmãos"). Two phrases were given up on purpose, both measured
+first: "Sete de Setembro" (one occurrence against 323 datelines) and "Feira de Santana" (zero
+against 145). `test/syndicated-full-text.test.ts` pins all of it. Adding a word here changes
+every person's ranking, so measure before, not after.
+
+A change to the set only reaches documents that are derived again. `doc_terms` rows written
+before it keep the word: after a real ingest on the corpus, `setembro` was still ranked 12th
+for Lula on 257 documents that had stored it earlier. Run `pnpm reindex` to make the change
+retroactive, exactly as after editing `seed.json`.
+
 ## Phrases
 
 A `phrase` term is several words read as one unit, and there are two kinds of them.

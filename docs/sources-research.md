@@ -196,3 +196,149 @@ page spends most of its fetch on documents that can never contribute a term:
 Same two requests per ingest, 44 usable docs before and 166 after, and the g1
 half now carries the article body. `g1/mundo/` (2 of 100) and `g1/economia/`
 (14 of 100) were measured and left out.
+
+# Third pass — 2026-09-10
+
+The question was whether fetching the article body of documents already stored would
+improve the graph enough to justify building a collector for it. It would, and then a
+cheaper path with no legal question turned out to give almost the same result.
+
+## The scraping experiment, and why it was abandoned
+
+258 pages were fetched on a copy of the corpus and their text replaced in place. Four
+extractors were compared over the same raw HTML, "ok" meaning 800–40 000 characters:
+a naive `<p>` regex 210/258 (42 of them the whole home page), a dependency-free
+extractor 173, cheerio 179, jsdom + Readability **247**. cheerio bought six documents
+over the dependency-free version at 55x the time, so it was never a middle option.
+
+Replacing 342 bodies took the average document from 128 to 3553 characters, 28x, and
+moved Moraes's PMI top-20 by 14 of 20 — the same order as the 2026-09-09 g1 result.
+`doc_persons` grew by 970 rows: bodies name people the headline never did.
+
+Three corrections to the assumptions that started it: `bluesky` cannot be enriched at
+all (10 291 documents naming someone, zero http uris — a post *is* the text); only
+1087 of `gkg`'s 18 024 documents name a tracked person; and Google News redirects are
+77% of the fetchable pool, not 24%. Those redirects need a `batchexecute` POST, which
+resolved 106/106 at two requests each.
+
+**Abandoned anyway.** Storing article bodies is a copy, and publisher terms of use
+forbid it. `/api/people/:id/docs` and `/api/candidates` both serve `docs.text` in
+public, so it would also have been republication. Discarding the body after deriving
+was not a way out either: `reindexAll` truncates the derived tables and rebuilds from
+`docs.text`, so the enrichment would evaporate at the next `pnpm reindex`.
+
+## What replaced it: `content:encoded`
+
+`toDoc` read `item.description` and never `content:encoded`, the element a publisher
+uses to syndicate the whole article on purpose. Nine of the eighteen feeds already
+collected fill it:
+
+| feed | description | content:encoded | gain |
+|---|---|---|---|
+| apublica.org | 160 | 9984 | 62x |
+| noticias.stf.jus.br | 118 | 4056 | 34x |
+| jota.info | 185 | 5491 | 30x |
+| intercept.com.br | 401 | 11813 | 30x |
+| lupa.uol.com.br | 190 | 4042 | 21x |
+| camara.leg.br (ELEICOES) | 184 | 3451 | 19x |
+| camara.leg.br (POLITICA) | 175 | 2879 | 17x |
+| conjur.com.br | 542 | 8183 | 15x |
+| revistaforum.com.br | 404 | 6169 | 15x |
+
+`jota.info` blocked 5 of 5 pages when scraped and `intercept.com.br` returned 403.
+Both hand the whole article over in their own feed.
+
+Six more feeds fill it and were added to `rss` for that reason: `osul.com.br` (399
+items per fetch, 3238 chars), `cnnbrasil.com.br` (60, 2877), `correiobraziliense`
+(30, 4482), `metropoles.com` (20, 5436), `veja.abril.com.br` (20, 3035),
+`poder360.com.br` (10, 3032). Four of the six are the outlet's whole site, which the
+second pass argued against; the fourth pass below is the check of whether each of them
+has a politics section to read instead. These do not fill it: g1, Folha, Brasil de
+Fato, CartaCapital, Gazeta do Povo, O Antagonista, Aos Fatos, Nexo, Piauí, BBC,
+Congresso em Foco, Agência Brasil, Senado. g1 is the one exception worth naming: its
+politics feed puts the whole article in `description` instead (4491 chars an item on
+2026-09-10), and `body()` prefers whichever of the two is longer.
+
+## Measured against a clean copy
+
+One fetch of those fifteen feeds yields 670 full-text documents, 323 naming a tracked
+person, 4921 characters average. Inserted with `insertDocs`: 593 new, 77 already
+known by uri, 3.6s.
+
+| person | scraping 342 bodies | one full-text fetch |
+|---|---|---|
+| moraes | 14/20 | 13/20 |
+| fachin | 10/20 | 9/20 |
+| lula | 3/20 | 5/20 |
+| bolsonaro | 6/20 | 5/20 |
+| haddad | 5/20 | 2/20 |
+| tarcisio | 4/20 | 1/20 |
+
+Moraes's incoming terms are almost the identical set — `supremo tribunal federal`,
+`daniel vorcaro`, `banco master`, `andre mendonca`, `policia federal`,
+`andrei rodrigues`, `paulo gonet`, `edson fachin`, `banqueiro` — and the same
+truncation garbage leaves: `mend(11)`, `gonet(24)`, `cristiano(101)`, `zanin(110)`.
+Full text spells names whole, so the phrase rule replaces half-names with real ones.
+
+Syndicated text is also cleaner than scraped text: `Foto:` appears in 6 of 323
+documents against 45 of 105 when scraped, and `foto` never reaches a top-20.
+Readability cannot separate a photo credit from a sentence; a publisher's feed never
+included one.
+
+## Two defects this exposed
+
+`upsertDoc` never updated `text`, so 77 of the 670 documents kept their headline and
+the article was discarded. It now keeps the longer of the two and re-derives that
+document's terms.
+
+Body text carries filler a headline never did — `feira=193 segundo=193 dois=155
+alem=122 durante=116` by document frequency, and `setembro` at rank 6 in Lula's
+atlas. Nineteen words were added to `stopwords`; five obvious neighbours were left
+out because a stopword also forbids a phrase. See
+[terms.md](terms.md#stopwords-and-full-text).
+
+## End to end, on a copy of the corpus
+
+`pnpm ingest rss juridico oficial nicho` against a copy of `data/pg`:
+
+```
+[rss] fetched 740, new 731, enriched 1
+[juridico] fetched 45, new 36, enriched 8
+[oficial] fetched 45, new 15, enriched 20
+[nicho] fetched 321, new 161, enriched 73
+total docs: 39828
+```
+
+943 new documents, 102 of them documents that already existed as a headline and were
+replaced by the article. Moraes's top-20 afterwards, from that one run: `edson
+fachin, supremo tribunal federal, daniel vorcaro, andre mendonca, supremo, banco
+master, policia federal, andrei rodrigues, mensagens, paulo gonet, relatorio, relator,
+ministros, conducao, retirou, investigacoes, inquerito, banqueiro, improbidade,
+procedimento`.
+
+The new stopwords only reach documents derived after them: `setembro` was still ranked
+12th for Lula on 257 documents that had stored it earlier. `pnpm reindex` is what makes
+the set retroactive.
+
+## Still unmeasured
+
+Whether a feed keeps filling `content:encoded` over time. `pnpm ingest` now prints
+`enriched` per source, which is the signal that would fall to zero first.
+
+# Fourth pass — 2026-09-10
+
+The third pass added four whole-site feeds, which is what the second pass argued
+against: a front page spends most of its items on people nobody tracks. Each of the
+four was checked for a politics section that fills `content:encoded`. None has one, so
+all four stay whole-site on purpose rather than by omission.
+
+| Outlet | Paths tried | Result |
+|---|---|---|
+| `cnnbrasil.com.br` | `/politica/feed/`, `/politica/feed`, `/rss/politica`, `/tag/politica/feed/`, `/category/politica/feed/`, `/feed/?cat=politica` | 404 or the whole-site feed unchanged; the politics page declares no `<link rel="alternate" type="application/rss+xml">` (it renders client-side). Politics and eleições are 19 of the site feed's 60 items, the largest single slice. |
+| `metropoles.com` | `/politica/feed`, `/tag/politica/feed`, `/category/politica/feed`, `/brasil/feed`, `/distrito-federal/politica-df/feed` | All answer, and none carries the article: `content:encoded` averages 121–126 chars on every one of them, against 2933 on `/feed`. `/politica/feed` is the stale Blog do Noblat (last item July 2025) and `/distrito-federal/politica-df/feed` is years old. Swapping any of them in would throw away the full text this pass exists for. |
+| `poder360.com.br` | `/poder-politica/feed/`, `/categoria/poder-politica/feed/`, `/tag/politica/feed/`, `/feed/politica` | The politics page declares only `/feed/`. `/tag/politica/feed/` is a real, distinct feed but a hand-tagged subset, 10 items over four days at 2139 chars against the site feed's 3616. It costs coverage and text for nothing: every item of the site feed is under a `poder-*` section (`poder-justica`, `poder-governo`, `poder-economia`, `poder-eleicoes-2026`) — the outlet publishes politics and nothing else. |
+| `osul.com.br` | `/politica/feed/`, `/categoria/politica/feed/`, `/tag/politica/feed/`, `/noticias/politica/feed/`, `/feed/?cat=politica` | `/politica/feed/` is an empty WordPress *comments* feed ("Comentários sobre:", zero items); every other path serves the same 400-item whole-site feed. The site page declares no alternate feed. This is the noisiest of the four (celebrities and sport sit next to politics), and there is no narrower feed to read. |
+
+`veja.abril.com.br/politica/feed/` (2788 chars an item) and
+`correiobraziliense.com.br/rss/noticia/politica/rss.xml` (4538) already point at a
+politics section and were left alone.

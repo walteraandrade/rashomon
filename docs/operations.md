@@ -72,11 +72,17 @@ transaction open across an arbitrary amount of work.
   is then replayed document by document, so one unwritable document costs only itself and the rest of the
   group still lands. The failure count is printed per source.
 - **No pointless updates.** The `on conflict` on `docs` carries a `where`: a re-collected document that
-  would change neither `domain` nor `tone` writes no new row version at all. The two rules it has to keep
-  survive it — the first source still owns the row (`coalesce(docs.domain, excluded.domain)`), and a
-  non-GDELT source still resolves to a null tone.
+  would change neither `domain` nor `tone` nor `text` writes no new row version at all. The three rules it
+  has to keep survive it — the first source still owns the row (`coalesce(docs.domain, excluded.domain)`),
+  a non-GDELT source still resolves to a null tone, and only a *longer* text replaces the stored one, so a
+  feed that truncates cannot undo an enrichment ([sources](sources.md#full-text-contentencoded)).
 - **Reindex.** It reads documents by keyset pagination on the primary key (`where id > $1 order by id
   limit $2`), never materializing more than one page of text, and commits one transaction per page.
+
+**A change to how text is derived ships with a `pnpm reindex`.** Editing `stopwords`, the phrase rules or
+`seed.json` changes nothing already stored: `doc_terms`, `doc_persons` and `doc_candidates` are written
+once, when a document is inserted or enriched, so a new stopword still ranks in the atlas on every document
+collected before it. Deploy the code and run `pnpm reindex` against the same database in the same release.
 
 **Recovery from an interrupted reindex.** Run `pnpm reindex` again. It starts by truncating
 `doc_terms`, `doc_persons` and `doc_candidates` and rebuilds from `docs`, so it depends on no previous

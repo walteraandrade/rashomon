@@ -192,7 +192,7 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
 
   it('keeps every writable document of a failing group and charges only the bad one', async () => {
     const family = [...persons, untrackedPerson('ainda-nao-cadastrado')]
-    assert.deepEqual(await insertDocs(group, family, 3), { written: 2, failed: 1 })
+    assert.deepEqual(await insertDocs(group, family, 3), { written: 2, enriched: 0, failed: 1 })
     assert.equal((await derivedCounts(uris[0]))?.persons, 1)
     assert.equal(await derivedCounts(uris[1]), null)
     assert.equal((await derivedCounts(uris[2]))?.persons, 1)
@@ -200,7 +200,7 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
 
   it('counts a replayed group as nothing new and duplicates no derived row', async () => {
     const counts = await derivedCounts(uris[0])
-    assert.deepEqual(await insertDocs([group[0], group[2]], persons, 2), { written: 0, failed: 0 })
+    assert.deepEqual(await insertDocs([group[0], group[2]], persons, 2), { written: 0, enriched: 0, failed: 0 })
     assert.deepEqual(await derivedCounts(uris[0]), counts)
   })
 })

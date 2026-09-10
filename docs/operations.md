@@ -9,7 +9,7 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 | `PORT` | `3210` | server port |
 | `DATA_DIR` | `./data/pg` | PGlite directory; `memory://` is in-memory and is what tests use |
 | `DATABASE_URL` / `POSTGRES_URL` | unset | switches every command to a managed Postgres over `pg` |
-| `PG_SSL_CA` | unset | the Postgres server's CA certificate, PEM text; required for any non-local `DATABASE_URL`/`POSTGRES_URL` — a missing value stops the connection instead of falling back to an unverified one |
+| `PG_SSL_CA` | unset | the Postgres server's CA certificate, PEM text (Supabase: Project Settings > Database > SSL configuration > download certificate); required for any non-local `DATABASE_URL`/`POSTGRES_URL` — a missing value stops the connection instead of falling back to an unverified one |
 | `PG_POOL_MAX` | `3` | connections per function instance, managed Postgres only |
 | `BSKY_HANDLE` / `BSKY_APP_PASSWORD` | unset | authenticated Bluesky, so its collector can paginate |
 | `GKG_SLOTS` | `24` | how many 15-minute GDELT slots to look back (24 = 6h) |
@@ -29,13 +29,15 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 `DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN. `PG_SSL_CA` (the Postgres server's CA certificate, PEM text) must be set in Vercel alongside `DATABASE_URL`/`POSTGRES_URL` before a deploy that talks to a non-local database: `poolConfig` refuses to build a connection to any non-local host without it, so a deploy missing the variable fails closed rather than connecting with an unverified chain.
 
 ```bash
-vercel env pull .env.local                                          # POSTGRES_URL, POSTGRES_URL_NON_POOLING
-DATABASE_URL=$POSTGRES_URL_NON_POOLING pnpm migrate                 # create the schema once
-DATABASE_URL=$POSTGRES_URL_NON_POOLING DATA_DIR=./data/pg pnpm push # one-way copy of a local PGlite into it
+vercel env pull .env.local                       # POSTGRES_URL, POSTGRES_URL_NON_POOLING
+export PG_SSL_CA="$(cat prod-ca.crt)"            # nothing here loads .env; poolConfig reads the process environment
+export DATABASE_URL=$POSTGRES_URL_NON_POOLING
+pnpm migrate                                     # create the schema once
+DATA_DIR=./data/pg pnpm push                     # one-way copy of a local PGlite into it
 vercel deploy --prod
 ```
 
-Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), a `PG_SSL_CA` repository secret (the same PEM CA text `poolConfig` requires), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky; the workflow stops before running `pnpm ingest` if either `DATABASE_URL` or `PG_SSL_CA` is missing. Trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3).
+Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` and `PG_SSL_CA` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), a `PG_SSL_CA` repository secret (the same PEM CA text `poolConfig` requires), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky; the workflow stops before running `pnpm ingest` if either `DATABASE_URL` or `PG_SSL_CA` is missing. Trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3).
 
 ## Writes, batches and recovery
 

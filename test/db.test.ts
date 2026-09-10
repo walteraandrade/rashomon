@@ -79,7 +79,10 @@ describe('poolConfig', () => {
 
   it('AC7: src/push.ts sets no independent ssl key, so it inherits poolConfig unchanged', () => {
     const src = readRepoFile('src/push.ts')
-    assert.doesNotMatch(src, /ssl\s*:/)
+    const poolCall = /new pg\.Pool\(\{([^;]*?)\}\)/.exec(src)
+    assert.ok(poolCall, 'expected src/push.ts to construct a pg.Pool')
+    assert.doesNotMatch(poolCall[1], /\bssl\s*:/)
+    assert.match(poolCall[1], /poolConfig\(url\)/)
   })
 
   it('AC8: the docs state that a non-local connection requires PG_SSL_CA, a PEM CA certificate, and fails closed without it', () => {

@@ -1,5 +1,16 @@
 import type { Person, Phrases, RawDoc, Term } from './types.js'
 
+// The last three lines are the words a full article carries and a headline never did, added
+// when feeds started syndicating whole bodies (docs/sources-research.md, "Third pass"). Dates
+// are the bulk of it: `setembro` ranked 6th in Lula's atlas purely as a dateline, and the
+// weekday tokens climbed with it -- "terca-feira" tokenizes to `terca` plus `feira`.
+//
+// Five obvious-looking neighbours are deliberately absent, because a stopword also forbids a
+// phrase (see `holdsStopword`, and note phrases.ts measures adjacency *after* this set is
+// dropped): `segunda` would kill "segunda turma", the STF chamber; `marco` "marco aurelio";
+// `janeiro` "rio de janeiro"; `segundo` "segundo turno"; `dois` "dois irmaos das missoes".
+// Each was measured against the corpus rather than assumed -- the ones kept here cost at most
+// one junk phrase row apiece.
 const stopwords = new Set(
   `a o e os as um uma uns umas de do da dos das em no na nos nas por para com sem sob sobre entre ate apos ante contra desde perante
    que quem qual quais onde quando como porque pois mas porem todavia contudo entao logo nem ou seja
@@ -11,6 +22,8 @@ const stopwords = new Set(
    nao sim mais menos muito muita muitos muitas pouco pouca poucos poucas todo toda todos todas
    ja ainda tambem so apenas aqui ali la agora hoje ontem amanha sempre nunca
    ano anos dia dias mes meses hora horas vez vezes
+   feira terca quarta quinta sexta fevereiro abril maio junho julho agosto setembro outubro novembro dezembro
+   alem durante foto fotos
    pelo pela pelos pelas neste nesta nesse nessa naquele naquela num numa dele dela deles delas
    voce voces gente cara tipo coisa coisas
    antes depois mesmo mesma cada outro outra outros outras qualquer alguns algumas algum alguma nada tudo

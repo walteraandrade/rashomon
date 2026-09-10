@@ -8,8 +8,11 @@ import type { Person, Phrases, RawDoc } from './types.js'
 const runSource = async (name: string, ps: Person[], lexicon: Phrases) => {
   const collect = collectors[name as keyof typeof collectors]
   const docs = await collect(ps).catch((e: Error) => (console.error(`[${name}] ${e.message}`), [] as RawDoc[]))
-  const { written, failed } = await insertDocs(docs, ps, undefined, lexicon)
-  console.log(`[${name}] fetched ${docs.length}, new ${written}${failed ? `, failed ${failed}` : ''}`)
+  const { written, enriched, failed } = await insertDocs(docs, ps, undefined, lexicon)
+  // `enriched` is the early warning this project has no other source for: it counts documents
+  // whose stored text a feed just replaced with a longer one. A feed that quietly stops filling
+  // `content:encoded` shows up here as a number falling to zero, before the atlas gets duller.
+  console.log(`[${name}] fetched ${docs.length}, new ${written}${enriched ? `, enriched ${enriched}` : ''}${failed ? `, failed ${failed}` : ''}`)
   return written
 }
 

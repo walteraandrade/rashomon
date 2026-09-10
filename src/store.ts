@@ -118,41 +118,80 @@ export const writeDerived = async (rows: readonly Derived[], size = writeBatchRo
 // restates the two assignments rather than sharing them because a conflict target cannot see
 // the values it is about to set. Both rules survive it: `coalesce(docs.domain, ...)` still
 // keeps the first domain, and a non-GDELT source still resolves to null tone.
+//
+// The third rule, alongside those two: the longer text wins. A document
+// often reaches us twice -- a `gnews` headline first, then the publisher's own feed carrying
+// the whole article in `content:encoded` (src/collectors/rss.ts's `body`) -- and the graph is
+// scored from that text, so keeping the headline would throw the article away. Only *longer*
+// replaces, never merely different, so a feed that truncates cannot undo an enrichment and a
+// re-collected document still writes no row version at all.
 const upsertDoc = async (doc: RawDoc) => {
-  const { rows } = await db.query<{ id: number; inserted: boolean }>(
+  const { rows } = await db.query<{ id: number; inserted: boolean; took_incoming: boolean }>(
     `insert into docs (source, uri, text, published_at, extra_terms, domain, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (uri) do update set
+       text = case when length(excluded.text) > length(docs.text) then excluded.text else docs.text end,
        domain = coalesce(docs.domain, excluded.domain),
        tone = case when docs.source = any($9::text[]) then coalesce(docs.tone, excluded.tone) else null end
      where docs.domain is distinct from coalesce(docs.domain, excluded.domain)
         or docs.tone is distinct from (case when docs.source = any($9::text[]) then coalesce(docs.tone, excluded.tone) else null end)
-     returning id, (xmax = 0) as inserted`,
+        or length(excluded.text) > length(docs.text)
+     returning id, (xmax = 0) as inserted, (text = $3) as took_incoming`,
     [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, toneFor(doc), JSON.stringify(doc.extraNames ?? []), tonedSources],
   )
   // A suppressed conflict update returns no row at all: the uri is known and nothing changed.
   return rows[0]
 }
 
+// What one upsert did, which decides what has to be derived. `took_incoming` is the stored text
+// compared against the parameter inside the statement, so no length arithmetic is involved: a
+// character count from Postgres and a UTF-16 code unit count from JavaScript disagree on any
+// non-BMP character, and an enrichment read as 'unchanged' would leave the article's text beside
+// the headline's terms until the next reindex.
+export type Written = 'inserted' | 'enriched' | 'unchanged'
+const outcome = (row: { inserted: boolean; took_incoming: boolean } | undefined): Written =>
+  !row ? 'unchanged' : row.inserted ? 'inserted' : row.took_incoming ? 'enriched' : 'unchanged'
+
+// Terms and candidates of the replaced text have to go, or the headline's would be summed with
+// the article's -- doc_terms' primary key makes the insert idempotent, not corrective.
+// doc_persons is deliberately left alone: the headline named those people, the body only ever
+// adds to them, and writeDerived's `on conflict do nothing` rewrites them for free.
+const clearDerived = async (ids: readonly number[]) => {
+  if (!ids.length) return
+  await db.query(`delete from doc_terms where doc_id = any($1::int[])`, [ids])
+  await db.query(`delete from doc_candidates where doc_id = any($1::int[])`, [ids])
+}
+
+type Batch = { derived: Derived[]; stale: number[]; written: number; enriched: number }
+
+// The shared body of every write path, so a single document and a group of two hundred derive
+// through exactly one piece of code. It does not open a transaction: the caller decides how
+// much commits at once.
+const writeBatch = async (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Promise<{ written: number; enriched: number }> => {
+  const batch = await docs.reduce<Promise<Batch>>(async (acc, doc) => {
+    const a = await acc
+    const row = await upsertDoc(doc)
+    const result = outcome(row)
+    if (result === 'unchanged') return a
+    return {
+      derived: [...a.derived, derive(row.id, doc, ps, lexicon)],
+      stale: result === 'enriched' ? [...a.stale, row.id] : a.stale,
+      written: a.written + (result === 'inserted' ? 1 : 0),
+      enriched: a.enriched + (result === 'enriched' ? 1 : 0),
+    }
+  }, Promise.resolve({ derived: [], stale: [], written: 0, enriched: 0 }))
+  await clearDerived(batch.stale)
+  await writeDerived(batch.derived)
+  return { written: batch.written, enriched: batch.enriched }
+}
+
 // One transaction per document: it can commit with its derived rows or not at all, so no
 // document is ever left in `docs` without the person, term and candidate rows it implies.
+// The boolean still means "a document nobody had": an enrichment of a known uri reads as
+// false here, and is counted separately by insertDocs.
 export const insertDoc = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<string>()): Promise<boolean> =>
-  inTransaction(async () => {
-    const row = await upsertDoc(doc)
-    if (!row?.inserted) return false
-    await writeDerived([derive(row.id, doc, ps, lexicon)])
-    return true
-  })
+  inTransaction(async () => (await writeBatch([doc], ps, lexicon)).written === 1)
 
-const insertGroup = (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases) =>
-  inTransaction(async () => {
-    const derived = await docs.reduce<Promise<Derived[]>>(async (acc, doc) => {
-      const rows = await acc
-      const row = await upsertDoc(doc)
-      return row?.inserted ? [...rows, derive(row.id, doc, ps, lexicon)] : rows
-    }, Promise.resolve([]))
-    await writeDerived(derived)
-    return derived.length
-  })
+const insertGroup = (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases) => inTransaction(() => writeBatch(docs, ps, lexicon))
 
 // The bulk path. A group commits as one transaction; when it fails it rolls back whole and is
 // replayed document by document, so one unwritable document costs only itself and everything
@@ -160,14 +199,16 @@ const insertGroup = (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases) =>
 // `lexicon` trails `size` rather than following `ps`: every existing caller passes the batch
 // size positionally, and an empty lexicon is the honest default anyway -- a database that has
 // never been reindexed has no phrases to tag.
+export type InsertTotals = { written: number; enriched: number; failed: number }
+
 export const insertDocs = (docs: readonly RawDoc[], ps: Person[], size = writeBatchDocs(), lexicon: Phrases = new Set<string>()) =>
-  batches(docs, size).reduce<Promise<{ written: number; failed: number }>>(async (acc, group) => {
+  batches(docs, size).reduce<Promise<InsertTotals>>(async (acc, group) => {
     const totals = await acc
-    const written = await insertGroup(group, ps, lexicon).catch(() => null)
-    if (written !== null) return { written: totals.written + written, failed: totals.failed }
-    return group.reduce<Promise<{ written: number; failed: number }>>(async (inner, doc) => {
+    const counts = await insertGroup(group, ps, lexicon).catch(() => null)
+    if (counts) return { ...totals, written: totals.written + counts.written, enriched: totals.enriched + counts.enriched }
+    return group.reduce<Promise<InsertTotals>>(async (inner, doc) => {
       const t = await inner
-      const ok = await insertDoc(doc, ps, lexicon).catch((e: Error) => (console.error(`[store] ${doc.uri}: ${e.message}`), null))
-      return ok === null ? { written: t.written, failed: t.failed + 1 } : { written: t.written + (ok ? 1 : 0), failed: t.failed }
+      const one = await insertGroup([doc], ps, lexicon).catch((e: Error) => (console.error(`[store] ${doc.uri}: ${e.message}`), null))
+      return one ? { ...t, written: t.written + one.written, enriched: t.enriched + one.enriched } : { ...t, failed: t.failed + 1 }
     }, Promise.resolve(totals))
-  }, Promise.resolve({ written: 0, failed: 0 }))
+  }, Promise.resolve({ written: 0, enriched: 0, failed: 0 }))

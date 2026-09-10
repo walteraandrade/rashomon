@@ -9,6 +9,7 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 | `PORT` | `3210` | server port |
 | `DATA_DIR` | `./data/pg` | PGlite directory; `memory://` is in-memory and is what tests use |
 | `DATABASE_URL` / `POSTGRES_URL` | unset | switches every command to a managed Postgres over `pg` |
+| `PG_SSL_CA` | unset | the Postgres server's CA certificate, PEM text; required for any non-local `DATABASE_URL`/`POSTGRES_URL` — a missing value stops the connection instead of falling back to an unverified one |
 | `PG_POOL_MAX` | `3` | connections per function instance, managed Postgres only |
 | `BSKY_HANDLE` / `BSKY_APP_PASSWORD` | unset | authenticated Bluesky, so its collector can paginate |
 | `GKG_SLOTS` | `24` | how many 15-minute GDELT slots to look back (24 = 6h) |
@@ -25,7 +26,7 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 
 ## Deploy
 
-`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN.
+`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN. `PG_SSL_CA` (the Postgres server's CA certificate, PEM text) must be set in Vercel alongside `DATABASE_URL`/`POSTGRES_URL` before a deploy that talks to a non-local database: `poolConfig` refuses to build a connection to any non-local host without it, so a deploy missing the variable fails closed rather than connecting with an unverified chain.
 
 ```bash
 vercel env pull .env.local                                          # POSTGRES_URL, POSTGRES_URL_NON_POOLING

@@ -10,17 +10,20 @@ export type Db = {
   close: () => Promise<void>
 }
 
-// Supabase serves a self-signed chain, and any sslmode in the URL would override the ssl
-// option, so it is stripped: the connection stays encrypted, without chain verification.
+// Any sslmode in the URL would override the ssl option below, so it is stripped. A non-local
+// connection is verified against PG_SSL_CA, the server's CA certificate (PEM text); without
+// it, poolConfig refuses to build a config rather than connect with an unverified chain.
 export const poolConfig = (url: string): pg.PoolConfig => {
   const parsed = new URL(url)
   parsed.searchParams.delete('sslmode')
   const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
+  const ca = process.env.PG_SSL_CA
+  if (!isLocal && !ca) throw new Error('PG_SSL_CA is required for a non-local database connection')
   return {
     connectionString: parsed.toString(),
     max: Number(process.env.PG_POOL_MAX ?? 3),
     connectionTimeoutMillis: 10_000,
-    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+    ssl: isLocal ? undefined : { ca, rejectUnauthorized: true },
   }
 }
 

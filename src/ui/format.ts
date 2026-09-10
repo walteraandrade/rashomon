@@ -44,7 +44,7 @@ export const normalize = (s: unknown) =>
     .toLowerCase()
     .trim()
 
-export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', theme: 'Tema', phrase: 'Expressão' }
+export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' }
 
 export const sourceLabels: Record<string, string> = {
   all: 'todas as fontes',
@@ -137,7 +137,7 @@ export const toneColor = (t: number | null | undefined) => scaleColor(t, 3)
 // Testimony is kikori's -10..+10 score per (doc, person), from GET /api/people/:id/testimony.
 // The model's own class cut is neg <= -2.5 / pos >= 2.5 (README, "The kikori contract"); the
 // color saturates at twice that, where a row is unambiguously on one side.
-export const TESTIMONY_CUT = 2.5
+const TESTIMONY_CUT = 2.5
 
 export const testimonyColor = (s: number | null | undefined) => scaleColor(s, 2 * TESTIMONY_CUT)
 

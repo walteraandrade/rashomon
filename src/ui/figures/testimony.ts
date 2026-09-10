@@ -59,7 +59,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   // no-op without its data, so this is safe before the first load answers.
   const repaint = () => {
     if (testimony) {
-      paintTestimony({ data: testimony, domain: outlet, onPick: pickOutlet })
+      paintTestimony({ data: testimony, domain: outlet })
       paintStrip({ data: testimony, domain: outlet, onPick: pickOutlet, width: lastStripWidth || undefined })
     }
     if (outletRows) paintOutlets({ rows: outletRows, testimony, domain: outlet, onPick: pickOutlet })

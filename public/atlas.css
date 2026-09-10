@@ -38,9 +38,6 @@
   --accent-ink: #141414;
   --green: #cfd6c8;
   --danger: #ef9a9a;
-  --hashtag: #9fd9c2;
-  --word: #a9c3ec;
-  --theme: #e8a9cf;
   /* The ruler figure's own hue pair, one per side (issue #91): kept in step with format.js's
      balanceColor, whose ends resolve to these exact colours. */
   --cmp-a: #7fa8ff;
@@ -203,8 +200,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); min-height: 22px; }
 .status { font-size: var(--t-sm); color: var(--muted); }
 .status.error { color: var(--danger); }
-.domain-chip { color: var(--accent); font-size: var(--t-xs); padding: var(--space-1) 10px; }
-.domain-chip b { font-weight: 600; color: inherit; }
 
 /* ---------- figures: one card per graph ---------- */
 .figure { margin-top: var(--space-7); padding: var(--space-5) var(--space-5) 18px; border-radius: 12px; background: var(--panel); }
@@ -370,7 +365,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .testimony .verdict { padding: var(--space-1) 0 var(--space-1); }
 .testimony .verdict dd { font-size: var(--t-xl); line-height: 1; color: var(--tone, var(--ink)); }
 .testimony .verdict-class { margin-top: var(--space-1); font-size: var(--t-xs); color: var(--muted); }
-.testimony .sub { margin: var(--space-4) 0 2px; }
 .testimony .focus { margin: 6px 0 var(--space-1); font-size: var(--t-xs); color: var(--muted); }
 .testimony .focus b { overflow-wrap: anywhere; }
 .testimony .focus strong { color: var(--tone, var(--ink)); font-variant-numeric: tabular-nums; font-weight: 600; }

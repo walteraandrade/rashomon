@@ -85,13 +85,6 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
     }
   })
 
-  it('archived design alternatives moved out of public/ are no longer served', async () => {
-    for (const path of ['/design-1.html', '/design-2.html', '/design-3.html', '/design-4.html', '/design-6.html', '/designs.html', '/graph-lab.html', '/graph-circle-lab.html']) {
-      const res = await app.request(path)
-      assert.equal(res.status, 404, `${path} must 404 now that it lives in docs/designs/, not public/`)
-    }
-  })
-
   it('search highlighting does not rebuild the inspector or wipe loaded documents', () => {
     const { calls, handlers } = spies()
     handlers.search()

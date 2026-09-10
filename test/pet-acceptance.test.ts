@@ -56,7 +56,7 @@ describe('the pet: the files it ships as', () => {
 describe('the pet: the empty recorte in figure 2', () => {
   it('paintTestimony puts the flying bird up when the recorte scored nothing, and says what to do next', () => {
     withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      paintTestimony({ data: empty, domain: 'all', onPick: () => {} })
+      paintTestimony({ data: empty, domain: 'all' })
       const html = els.testimonyList.innerHTML
       assert.match(html, new RegExp(`src="/${FLYING}"`), 'the empty recorte is the one box a picture is allowed in')
       assert.match(html, /alt=""/, 'the sprite is decorative: the sentence beside it carries the meaning')
@@ -67,7 +67,7 @@ describe('the pet: the empty recorte in figure 2', () => {
 
   it('the bird leaves as soon as the recorte has data', () => {
     withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      paintTestimony({ data: withData, domain: 'all', onPick: () => {} })
+      paintTestimony({ data: withData, domain: 'all' })
       assert.doesNotMatch(els.testimonyList.innerHTML, /<img/, 'nothing on this page may sit next to a number a reader is reading')
     })
   })

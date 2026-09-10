@@ -209,7 +209,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let source = SOURCE_SEGMENTS.some(([v]) => v === initial.source) ? (initial.source as string) : 'all'
   let requestId = 0
   let controller: AbortController | null = null
-  let cardTerm: Term | null = null
   let candidateController: AbortController | null = null
 
   const nextRequestId = () => ++requestId
@@ -305,7 +304,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   // and the person at the centre ("Documentos sobre"). The recorte is this figure's own.
   const showDocs = (n: Term | null) => {
     if (!graph || !$('person').value) return
-    cardTerm = n
     docsCard.open({
       kicker: n ? `Documentos com ${kinds[n.kind] ? kinds[n.kind].toLowerCase() : 'o termo'}` : 'Documentos sobre',
       title: n ? label(n) : graph.person.name,

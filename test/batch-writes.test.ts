@@ -10,7 +10,7 @@ process.env.PERF = '1'
 
 const { db, migrate } = await import('../src/db.js')
 const { measure } = await import('../src/perf.js')
-const { derive, insertDocs, upsertPersons, writeDerived } = await import('../src/store.js')
+const { insertDocs, upsertPersons, writeDerived } = await import('../src/store.js')
 const { reindexAll } = await import('../src/reindex.js')
 await import('./close.js')
 

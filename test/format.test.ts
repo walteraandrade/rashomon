@@ -50,7 +50,7 @@ describe('normalize', () => {
 
 describe('kinds / sourceLabels', () => {
   it('kinds carries a pt-BR label for every graph node kind', () => {
-    assert.deepEqual(kinds, { word: 'Palavra', hashtag: 'Hashtag', theme: 'Tema', phrase: 'Expressão' })
+    assert.deepEqual(kinds, { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' })
   })
 
   it('sourceLabels never leaves the raw internal token "all" unlabeled in pt-BR UI copy', () => {

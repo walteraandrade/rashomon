@@ -269,7 +269,7 @@ export const RULER_PAD = 28
 // the ruler trades height for legibility first and only then drops a word -- visibly.
 export const RULER_MAX_HEIGHT = 520
 export const RULER_SIZE_MIN = 11
-export const RULER_SIZE_MAX = 30
+const RULER_SIZE_MAX = 30
 const RULER_GAP_X = 8
 const RULER_GAP_Y = 3
 

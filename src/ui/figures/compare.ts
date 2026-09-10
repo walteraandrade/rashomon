@@ -10,7 +10,7 @@
 // figure asks.
 
 import * as api from '../api.js'
-import { kinds, SOURCE_SEGMENTS, scoreName, sourceLabels, type Compare, type Measure } from '../format.js'
+import { html, kinds, SOURCE_SEGMENTS, scoreName, sourceLabels, type Compare, type Measure } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintCompareDetail, paintCompareLoading, paintRuler, paintRulerError } from '../render.js'
 import { debounce, fromScope, readScope } from '../state.js'
@@ -214,12 +214,12 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   // markup); days keeps its design-5.html options. Both people selects share the tracked list;
   // `a` takes a seeded value (or the bare `person=`, resolved by app.ts), `b` falls back to the
   // second distinct person.
-  $('compareSource').innerHTML = SOURCE_SEGMENTS.map(([value, text]) => `<option value="${value}">${sourceLabels[value] ?? text}</option>`).join('')
-  $('compareMeasure').innerHTML = `<option value="count">documentos</option><option value="pmi">${scoreName('pmi')}</option>`
+  $('compareSource').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
+  $('compareMeasure').innerHTML = html`<option value="count">documentos</option><option value="pmi">${scoreName('pmi')}</option>`
   // Default 20, not 40: /api/compare unions four top-lists (each side's most frequent and each
   // side's stickiest), so "40 por pessoa" is ~130 words on the wire. A dot that small still
   // reads; a word does not, and 20 lands near 65, which fits the strip whole at both widths.
-  $('compareLimit').innerHTML = ['20', '40', '60', '100'].map((v) => `<option value="${v}"${v === '20' ? ' selected' : ''}>${v}</option>`).join('')
+  $('compareLimit').innerHTML = html`${['20', '40', '60', '100'].map((v) => html`<option value="${v}"${v === '20' ? ' selected' : ''}>${v}</option>`)}`
   $('compareA').innerHTML = ''
   $('compareB').innerHTML = ''
   for (const p of people) {

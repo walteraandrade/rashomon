@@ -369,14 +369,14 @@ describe('testimony mask: words coloured against the person mean', () => {
 
   it('wordMarkup carries the --mask colour and the testimony in its title only when it has one', async () => {
     const { wordMarkup } = await import('../src/ui/render.js')
-    const masked = wordMarkup(placed({ testimony: { score: -4.9, n: 12 } }), 'count', person.score)
+    const masked = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 } }), 'count', person.score))
     assert.match(masked, /style="--size:20px;--mask:rgb\(255,107,125\)"/)
     assert.match(masked, /· avaliação -4,9 em 12 textos<\/title>/)
     for (const value of inlineStyles(masked)) assert.ok(value.startsWith('--'))
-    const bare = wordMarkup(placed({}), 'count', person.score)
+    const bare = String(wordMarkup(placed({}), 'count', person.score))
     assert.doesNotMatch(bare, /--mask/)
     assert.doesNotMatch(bare, /avaliação/)
-    assert.doesNotMatch(wordMarkup(placed({ testimony: { score: -4.9, n: 2 } }), 'count', person.score), /--mask/, 'under the floor: title yes, colour no')
+    assert.doesNotMatch(String(wordMarkup(placed({ testimony: { score: -4.9, n: 2 } }), 'count', person.score)), /--mask/, 'under the floor: title yes, colour no')
   })
 
   it('paintColumns colours cards the same way and spells the score out', () => {
@@ -395,9 +395,9 @@ describe('testimony mask: words coloured against the person mean', () => {
   it('testimonyLine reads the two numbers out for the selected term', async () => {
     const { testimonyLine } = await import('../src/ui/render.js')
     const n = { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: -3.1, n: 12 } }
-    assert.match(testimonyLine(n, person), /<strong class="score-highlight">-3,1<\/strong> de avaliação em 12 textos, contra -2,4 da pessoa no recorte\. mais hostis que a média da pessoa\./)
-    assert.match(testimonyLine({ ...n, testimony: { score: -2.2, n: 12 } }, person), /na média da pessoa/)
-    assert.match(testimonyLine({ ...n, testimony: { score: 5, n: 2 } }, person), /poucos textos para comparar/)
+    assert.match(String(testimonyLine(n, person)), /<strong class="score-highlight">-3,1<\/strong> de avaliação em 12 textos, contra -2,4 da pessoa no recorte\. mais hostis que a média da pessoa\./)
+    assert.match(String(testimonyLine({ ...n, testimony: { score: -2.2, n: 12 } }, person)), /na média da pessoa/)
+    assert.match(String(testimonyLine({ ...n, testimony: { score: 5, n: 2 } }, person)), /poucos textos para comparar/)
     assert.equal(testimonyLine({ ...n, testimony: null }, person), '')
     assert.equal(testimonyLine(n, undefined), '')
     assert.equal(testimonyLine(n, { ...person, score: null }), '')

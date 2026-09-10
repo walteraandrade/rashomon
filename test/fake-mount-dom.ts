@@ -86,8 +86,9 @@ class FakeBox extends Listenable {
   get innerHTML() {
     return this.html
   }
+  // Stringified like the real setter: the painters assign format.ts's `Html` values now.
   set innerHTML(value: string) {
-    this.html = value
+    this.html = String(value)
     this.domainStubs = []
   }
   querySelector() {
@@ -153,12 +154,12 @@ class FakeSelect extends Listenable {
   add(option: { text: string; value: string }) {
     this.options.push({ value: option.value, textContent: option.text })
   }
-  // Both figures build the source segment list with SOURCE_SEGMENTS.map(...).join('') and
+  // Both figures build the source segment list with html`${SOURCE_SEGMENTS.map(...)}` and
   // assign it here, and the atlas clears the person select the same way before repopulating
   // it with .add(); parsing the emitted <option> tags keeps applySeed's own option lookup
   // honest instead of special-casing "source" here.
   set innerHTML(html: string) {
-    this.options = [...html.matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(([, value, textContent]) => ({ value, textContent }))
+    this.options = [...String(html).matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(([, value, textContent]) => ({ value, textContent }))
     if (this.options.length && !this.options.some((o) => o.value === this.current)) this.current = this.options[0].value
   }
   get innerHTML() {

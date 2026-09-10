@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   domainSuffix,
-  esc,
   fmt,
+  html,
   kinds,
   label,
   matching,
@@ -13,12 +13,20 @@ import {
   score,
   scoreName,
   sourceLabels,
+  raw,
   toneColor,
 } from '../src/ui/format.js'
 
-describe('esc', () => {
-  it('escapes the five HTML-sensitive characters', () => {
-    assert.equal(esc(`<a href="x">&'</a>`), '&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;')
+describe('html', () => {
+  it('escapes the five HTML-sensitive characters in every interpolation', () => {
+    assert.equal(String(html`<p>${`<a href="x">&'</a>`}</p>`), '<p>&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;</p>')
+  })
+  it('passes nested html through, joins arrays, drops null and undefined, keeps numbers', () => {
+    const inner = html`<b>${'<i>'}</b>`
+    assert.equal(String(html`<p>${inner}${[inner, '<']}${null}${undefined}${3}</p>`), '<p><b>&lt;i&gt;</b><b>&lt;i&gt;</b>&lt;3</p>')
+  })
+  it('raw marks markup built elsewhere as trusted', () => {
+    assert.equal(String(html`<p>${raw('<b>x</b>')}</p>`), '<p><b>x</b></p>')
   })
 })
 

@@ -6,8 +6,8 @@
 import {
   balanceColor,
   domainSuffix,
-  esc,
   fmt,
+  html,
   kinds,
   label,
   matching,
@@ -74,14 +74,14 @@ export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | nu
   const mask = termMask(p, personScore)
   const t = p.testimony
   const testimonyNote = t ? ` · avaliação ${signed(t.score)} em ${fmt(t.n)} textos` : ''
-  return `<g class="word-button" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}" data-node="${esc(p.id)}" role="button" tabindex="0" aria-pressed="false" aria-label="${esc(label(p))}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${esc(label(p))} · ${esc(kinds[p.kind] || p.kind || 'Tipo desconhecido')} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="word-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}" rx="9"/><rect class="word-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}" rx="6"/><text class="word" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => `<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${esc(line)}</tspan>`).join('')}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
+  return html`<g class="word-button" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}" data-node="${p.id}" role="button" tabindex="0" aria-pressed="false" aria-label="${label(p)}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${label(p)} · ${kinds[p.kind] || p.kind || 'Tipo desconhecido'} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="word-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}" rx="9"/><rect class="word-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}" rx="6"/><text class="word" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => html`<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${line}</tspan>`)}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
 }
 
 // The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
 const maskLegend = (person: PersonTestimony | undefined) =>
   person && person.score !== null
-    ? `<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
-    : `<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
+    ? html`<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
+    : html`<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
 
 // The person's own entry point to the documents: the centre of the map, and the head of the
 // list when the map is not on screen. Both are plain elements, so they need the keyboard
@@ -120,13 +120,10 @@ export const drawMap = ({
 }) => {
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
-  $('viewport').innerHTML =
-    `<div class="map-stage"><svg class="map-svg" viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a ${esc(personName)}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g>` +
-    `<g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${esc(personName)}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => `<tspan x="0" y="${textY + i * c.lineHeight}">${esc(line)}</tspan>`).join('')}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g>` +
-    `<g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null)).join('')}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>`
+  $('viewport').innerHTML = html`<div class="map-stage"><svg class="map-svg" viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a ${personName}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>`
   $('overflow').hidden = mode !== 'map' || !overflow.length
   $('overflow').innerHTML = overflow.length
-    ? `<p>${overflow.length} ${overflow.length === 1 ? 'termo não coube' : 'termos não couberam'} sem reduzir a legibilidade. Todos continuam selecionáveis aqui:</p>${overflow.map((n) => `<button class="quiet-button" data-node="${esc(n.id)}">${esc(label(n))}</button>`).join('')}`
+    ? html`<p>${overflow.length} ${overflow.length === 1 ? 'termo não coube' : 'termos não couberam'} sem reduzir a legibilidade. Todos continuam selecionáveis aqui:</p>${overflow.map((n) => html`<button class="quiet-button" data-node="${n.id}">${label(n)}</button>`)}`
     : ''
   for (const el of queryAll('#viewport [data-person-docs]')) wirePersonDocs(el, onShowPerson)
   for (const el of queryAll('#viewport [data-node], #overflow [data-node]')) {
@@ -140,10 +137,7 @@ export const drawMap = ({
         }
       })
   }
-  $('legend').innerHTML =
-    `<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span>` +
-    `<span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>` +
-    maskLegend(personTestimony)
+  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span><span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}`
 }
 
 // Repaints selection classes on every word/column, the search note, the edge routes for the
@@ -207,13 +201,12 @@ export const paintSelection = ({
     if (selected && layout) {
       const routes = routesFrom(layout, selected)
       const maxCount = Math.max(1, ...links.map((l) => l.count))
-      edges.innerHTML = links
+      edges.innerHTML = html`${links
         .filter((l) => l.source === selected || l.target === selected)
         .map((l) => {
           const path = routes.get(l.source === selected ? l.target : l.source)
-          return path ? `<path class="edge" d="${path}" stroke-linejoin="round" stroke-width="${0.8 + (1.8 * l.count) / maxCount}"/>` : ''
-        })
-        .join('')
+          return path ? html`<path class="edge" d="${path}" stroke-linejoin="round" stroke-width="${0.8 + (1.8 * l.count) / maxCount}"/>` : ''
+        })}`
       if ($('routeNote') && edges.childElementCount < related.size)
         $('routeNote').textContent = `${edges.childElementCount} de ${related.size} relações no mapa; lista completa no painel.`
     }
@@ -251,15 +244,13 @@ export const paintColumns = ({
   if (mode !== 'columns' || !nodes.length) return
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
-  const personRow = `<div class="column-person" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${esc(personName)}"><span>No centro da conversa · ${fmt(about)} documentos</span><strong>${esc(personName)}</strong></div>`
-  $('columns').innerHTML = personRow + nodes
-    .map((n, i) => {
-      const dim = normalizedSearch ? !matching(n, search) : selected && n.id !== selected && !related.has(n.id)
-      const mask = termMask(n, personTestimony?.score ?? null)
-      const t = n.testimony
-      return `<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${esc(n.id)}"${mask ? ` style="--mask:${mask}"` : ''}><span>${String(i + 1).padStart(2, '0')} · ${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${esc(label(n))}</strong></button>`
-    })
-    .join('')
+  const personRow = html`<div class="column-person" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><span>No centro da conversa · ${fmt(about)} documentos</span><strong>${personName}</strong></div>`
+  $('columns').innerHTML = html`${personRow}${nodes.map((n, i) => {
+    const dim = normalizedSearch ? !matching(n, search) : selected && n.id !== selected && !related.has(n.id)
+    const mask = termMask(n, personTestimony?.score ?? null)
+    const t = n.testimony
+    return html`<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${n.id}"${mask ? html` style="--mask:${mask}"` : ''}><span>${String(i + 1).padStart(2, '0')} · ${kinds[n.kind] || n.kind || 'Tipo desconhecido'} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${label(n)}</strong></button>`
+  })}`
   queryAll('[data-col]', $('columns')).forEach((el) => el.addEventListener('click', () => onChoose(String(el.dataset.col))))
   queryAll('[data-person-docs]', $('columns')).forEach((el) => wirePersonDocs(el, onShowPerson))
 }
@@ -271,11 +262,11 @@ export const testimonyLine = (n: Term, person: PersonTestimony | undefined) => {
   if (!t || !person || person.score === null) return ''
   const delta = t.score - person.score
   const reading = t.n < MASK_MIN ? 'poucos textos para comparar' : delta <= -0.5 ? 'mais hostis que a média da pessoa' : delta >= 0.5 ? 'mais favoráveis que a média da pessoa' : 'na média da pessoa'
-  return `<p>Textos com este termo: <strong class="score-highlight">${signed(t.score)}</strong> de avaliação em ${fmt(t.n)} ${t.n === 1 ? 'texto' : 'textos'}, contra ${signed(person.score)} da pessoa no recorte. ${reading}.</p>`
+  return html`<p>Textos com este termo: <strong class="score-highlight">${signed(t.score)}</strong> de avaliação em ${fmt(t.n)} ${t.n === 1 ? 'texto' : 'textos'}, contra ${signed(person.score)} da pessoa no recorte. ${reading}.</p>`
 }
 
 const relatedButtons = (items: { node: Term; count?: number }[], sort: string, counts = true) =>
-  items.map(({ node: n, count }) => `<button data-related="${esc(n.id)}"><span>${esc(label(n))}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`).join('')
+  items.map(({ node: n, count }) => html`<button data-related="${n.id}"><span>${label(n)}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`)
 
 // Paints the inspector for the current selection (or the person summary when nothing is
 // selected). Documents are neither fetched nor opened from here: a word opens its own card when
@@ -299,14 +290,10 @@ export const inspect = ({
 }) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
-    $('inspector').innerHTML =
-      `<p class="eyebrow">A pessoa no centro</p><h3>${esc(graph?.person?.name || '')}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p>` +
-      `<p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
+    $('inspector').innerHTML = html`<p class="eyebrow">A pessoa no centro</p><h3>${graph?.person?.name || ''}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p><p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
   } else {
     const related = relatedTo(nodes, links, n.id)
-    $('inspector').innerHTML =
-      `<p class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</p><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
-      `<p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div>`
+    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>`
   }
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {
@@ -336,14 +323,10 @@ export const paintOutlets = ({
   $('domainLabel').textContent = domainSuffix(domain)
   const merged = mergeOutlets(rows, testimony?.by_domain ?? [])
   $('outletList').innerHTML = merged.length
-    ? '<div class="outlet-grid">' +
-      merged
-        .map(
-          (r) =>
-            `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${esc(r.sources.map((x) => sourceLabels[x] ?? x).join(', '))}"><span class="d">${esc(r.domain)}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span></button>`,
-        )
-        .join('') +
-      `</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o modelo kikori (${esc(testimony?.method ?? '')}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
+    ? html`<div class="outlet-grid">${merged.map(
+        (r) =>
+          html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}"><span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span></button>`,
+      )}</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o modelo kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
     : '<p class="note">Nenhum veículo neste recorte.</p>'
   queryAll('[data-domain]', $('outletList')).forEach((el) =>
     el.addEventListener('click', () => {
@@ -370,8 +353,7 @@ export const paintTestimony = ({ data, domain }: { data: Testimony; domain: stri
     // The only place on the page a picture is allowed: there is no chart on screen to compete
     // with when this fires, and the outlet list below stays plain text so one empty recorte can
     // never put two birds up at once.
-    $('testimonyList').innerHTML =
-      `<div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método ${esc(method)}).<br>Tente um período maior ou outra fonte.</p></div>`
+    $('testimonyList').innerHTML = html`<div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método ${method}).<br>Tente um período maior ou outra fonte.</p></div>`
     return
   }
   $('testimonyLabel').textContent = signed(score)
@@ -382,19 +364,16 @@ export const paintTestimony = ({ data, domain }: { data: Testimony; domain: stri
     domain === 'all'
       ? ''
       : focus
-        ? `<p class="focus"><b>${esc(domain)}</b>: <strong style="--tone:${testimonyColor(focus.score)}">${signed(focus.score)}</strong> em ${fmt(focus.n)} ${focus.n === 1 ? 'texto' : 'textos'}. O número acima é o recorte inteiro.</p>`
-        : `<p class="focus"><b>${esc(domain)}</b>: menos de 3 textos avaliados, sem média própria. O número acima é o recorte inteiro.</p>`
+        ? html`<p class="focus"><b>${domain}</b>: <strong style="--tone:${testimonyColor(focus.score)}">${signed(focus.score)}</strong> em ${fmt(focus.n)} ${focus.n === 1 ? 'texto' : 'textos'}. O número acima é o recorte inteiro.</p>`
+        : html`<p class="focus"><b>${domain}</b>: menos de 3 textos avaliados, sem média própria. O número acima é o recorte inteiro.</p>`
   // No second scale here: the strip above is already a −10..+10 ruler with every outlet on it,
   // and no outlet ranking either — the merged list in paintOutlets is the only one now. What is
   // left is the recorte's own number, the focused outlet's, and the per-source means as a strip
   // of chips rather than four full-width rows.
-  $('testimonyList').innerHTML =
-    `<dl class="verdict stat"><div><dt>Média do recorte</dt><dd style="--tone:${testimonyColor(score)}">${signed(score)}</dd></div></dl>` +
-    `<p class="verdict-class">${testimonyClass(score)} · média de ${fmt(overall.n)} ${overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>` +
-    focusLine +
-    `<dl class="source-chips">${by_source
-      .map((r) => `<div class="source-chip"><dt>${esc(sourceLabels[r.source] ?? r.source)}</dt><dd><span class="n">${fmt(r.n)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null || r.score === undefined ? '' : signed(r.score)}</span></dd></div>`)
-      .join('')}</dl>`
+  $('testimonyList').innerHTML = html`<dl class="verdict stat"><div><dt>Média do recorte</dt><dd style="--tone:${testimonyColor(score)}">${signed(score)}</dd></div></dl><p class="verdict-class">${testimonyClass(score)} · média de ${fmt(overall.n)} ${overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>${focusLine}<dl class="source-chips">${by_source.map(
+    (r) =>
+      html`<div class="source-chip"><dt>${sourceLabels[r.source] ?? r.source}</dt><dd><span class="n">${fmt(r.n)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null || r.score === undefined ? '' : signed(r.score)}</span></dd></div>`,
+  )}</dl>`
 }
 
 export const paintTestimonyLoading = () => {
@@ -471,21 +450,11 @@ export const paintStrip = ({
     return
   }
   strip.hidden = false
-  const tick = (s: number) => `<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
-  strip.innerHTML =
-    `<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>` +
-    `<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Veículos na régua da avaliação, de −10 a +10">` +
-    `<line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(tick).join('')}` +
-    `<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>` +
-    dots
-      .map(
-        (d) =>
-          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
-      )
-      .join('') +
-    '</svg>' +
-    '<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div>' +
-    `<p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui${domain === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>`
+  const tick = (s: number) => html`<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
+  strip.innerHTML = html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div><svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Veículos na régua da avaliação, de −10 a +10"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(tick)}<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>${dots.map(
+    (d) =>
+      html`<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${d.domain}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${d.domain}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
+  )}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui${domain === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>`
   for (const el of queryAll('[data-strip-domain]', strip)) {
     const pick = () => {
       const d = el.dataset.stripDomain
@@ -519,21 +488,20 @@ export const paintDocsHead = ({ kicker, title }: { kicker: string; title: string
 // One document, as the card writes it.
 const docMarkup = (d: Doc) => {
   const href = safeDocUrl(d)
-  return `<article class="doc"><p class="eyebrow">${esc(d.domain || d.source)}</p><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
+  return html`<article class="doc"><p class="eyebrow">${d.domain || d.source}</p><p>${d.text}</p>${href ? html`<a href="${href}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
 }
 
 export type DocsSideData = { label: string | null; data: { docs: Doc[]; total: number } }
 
 const sideMarkup = ({ label: name, data }: DocsSideData) =>
-  (name ? `<p class="eyebrow docs-side-name">${esc(name)}</p>` : '') +
-  (data.docs.length ? `<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` + data.docs.map(docMarkup).join('') : '<p>Nenhum documento encontrado.</p>')
+  html`${name ? html`<p class="eyebrow docs-side-name">${name}</p>` : ''}${data.docs.length ? html`<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>${data.docs.map(docMarkup)}` : html`<p>Nenhum documento encontrado.</p>`}`
 
 // One side is the card as it always was; two are the ruler asking the same word of both people,
 // side by side, because a word on that figure belongs to neither person alone.
 export const paintDocs = (sides: DocsSideData[]) => {
   const box = $('docs')
   if (!box) return
-  box.innerHTML = sides.length > 1 ? `<div class="docs-columns">${sides.map((side) => `<div>${sideMarkup(side)}</div>`).join('')}</div>` : (sides[0] ? sideMarkup(sides[0]) : '<p>Nenhum documento encontrado.</p>')
+  box.innerHTML = sides.length > 1 ? html`<div class="docs-columns">${sides.map((side) => html`<div>${sideMarkup(side)}</div>`)}</div>` : sides[0] ? sideMarkup(sides[0]) : '<p>Nenhum documento encontrado.</p>'
 }
 
 export const paintDocsError = (onRetry: () => void) => {
@@ -552,14 +520,10 @@ export const paintCandidates = (data: { candidates: Candidate[] }) => {
     $('candidateList').innerHTML = '<p class="note">Nenhum nome novo com 3 ou mais documentos neste período.</p>'
     return
   }
-  $('candidateList').innerHTML =
-    list
-      .map((c, i) => {
-        const t = trendOf(c)
-        return `<div class="candidate"><button class="outlet" data-candidate="${i}" aria-expanded="false" aria-controls="candidateSamples${i}" title="Ver documentos de exemplo"><span class="d">${esc(c.name)}</span><span class="n">${fmt(c.count)} docs</span><span class="s">${fmt(c.sources)} ${c.sources === 1 ? 'fonte' : 'fontes'}</span><span class="t ${t.cls}">${esc(t.text)}</span></button><div class="samples" id="candidateSamples${i}" hidden>${c.samples.map((d) => `<article class="doc"><p class="eyebrow">${esc(d.source)} · doc ${esc(d.id)}</p><p>${esc(d.text)}</p></article>`).join('') || '<p class="note">Sem exemplos neste período.</p>'}</div></div>`
-      })
-      .join('') +
-    '<p class="note">Nomes que ainda não estão em seed.json, comparados com o período anterior de mesmo tamanho. Para acompanhar um nome, adicione-o ao arquivo e rode o índice.</p>'
+  $('candidateList').innerHTML = html`${list.map((c, i) => {
+    const t = trendOf(c)
+    return html`<div class="candidate"><button class="outlet" data-candidate="${i}" aria-expanded="false" aria-controls="candidateSamples${i}" title="Ver documentos de exemplo"><span class="d">${c.name}</span><span class="n">${fmt(c.count)} docs</span><span class="s">${fmt(c.sources)} ${c.sources === 1 ? 'fonte' : 'fontes'}</span><span class="t ${t.cls}">${t.text}</span></button><div class="samples" id="candidateSamples${i}" hidden>${c.samples.length ? c.samples.map((d) => html`<article class="doc"><p class="eyebrow">${d.source} · doc ${d.id}</p><p>${d.text}</p></article>`) : html`<p class="note">Sem exemplos neste período.</p>`}</div></div>`
+  })}<p class="note">Nomes que ainda não estão em seed.json, comparados com o período anterior de mesmo tamanho. Para acompanhar um nome, adicione-o ao arquivo e rode o índice.</p>`
   queryAll('[data-candidate]', $('candidateList')).forEach((el) =>
       el.addEventListener('click', () => {
         const samples = el.nextElementSibling as HTMLElement
@@ -631,7 +595,7 @@ const rulerWordMarkup = (
   half: number,
   isSelected: boolean,
 ) =>
-  `<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(d.text)}, ${fmt(d.combined)} documentos"><title>${esc(d.text)} · ${esc(kinds[d.kind] || d.kind || 'Tipo desconhecido')} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central">${esc(d.text)}</text></g>`
+  html`<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${d.term}" data-kind="${d.kind}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.combined)} documentos"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central">${d.text}</text></g>`
 
 // The words that the strip could not hold without overlapping. Never dropped in silence: the
 // count is stated and every one of them is still a button carrying the same data-term/data-kind
@@ -641,14 +605,10 @@ const rulerOverflowMarkup = (
   selected: { term: string; kind: string } | null,
 ) =>
   overflow.length
-    ? `<div class="ruler-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:</p>` +
-      overflow
-        .map((d) => {
-          const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
-          return `<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${esc(d.text)}</button>`
-        })
-        .join('') +
-      '</div>'
+    ? html`<div class="ruler-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:</p>${overflow.map((d) => {
+        const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
+        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${d.text}</button>`
+      })}</div>`
     : ''
 
 // The ruler itself: one word per shared or exclusive term between two people, written where it
@@ -688,16 +648,8 @@ export const paintRuler = ({
   }
   ruler.hidden = false
   const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
-  const tick = (b: number) => `<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
-  ruler.innerHTML =
-    `<div class="ruler-end-row"><span class="ruler-end cmp-a">${esc(personA.name)}</span><span class="ruler-end cmp-b">${esc(personB.name)}</span></div>` +
-    `<svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Régua comparando ${esc(personA.name)} e ${esc(personB.name)}">` +
-    `<line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick).join('')}` +
-    words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind)).join('') +
-    '</svg>' +
-    `<div class="ruler-axis-labels"><span>Só de ${esc(personA.name)}</span><span>dividida</span><span>Só de ${esc(personB.name)}</span></div>` +
-    `<p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.</p>` +
-    rulerOverflowMarkup(overflow, selected)
+  const tick = (b: number) => html`<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
+  ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${personA.name}</span><span class="ruler-end cmp-b">${personB.name}</span></div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Régua comparando ${personA.name} e ${personB.name}"><line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick)}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}</svg><div class="ruler-axis-labels"><span>Só de ${personA.name}</span><span>dividida</span><span>Só de ${personB.name}</span></div><p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.</p>${rulerOverflowMarkup(overflow, selected)}`
   for (const el of queryAll('[data-term]', ruler)) {
     const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
     el.addEventListener('click', pick)
@@ -738,7 +690,7 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
   }
   const sideHtml = (person: PersonRef, v: CompareSide | 'name' | null) =>
     v && v !== 'name'
-      ? `<div><dt>${esc(person.name)}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
-      : `<div><dt>${esc(person.name)}</dt><dd class="empty-hint">nenhum documento</dd></div>`
-  el.innerHTML = `<span class="term">${esc(label(term))}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>`
+      ? html`<div><dt>${person.name}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
+      : html`<div><dt>${person.name}</dt><dd class="empty-hint">nenhum documento</dd></div>`
+  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>`
 }

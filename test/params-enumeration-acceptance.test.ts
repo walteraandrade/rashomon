@@ -48,7 +48,7 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     for (const v of offered) assert.ok(LIMITS.includes(v), `atlas offers limit=${v}`)
 
     const compare = readFileSync(new URL('../src/ui/figures/compare.ts', import.meta.url), 'utf8')
-    const options = compare.match(/\$\('compareLimit'\)\.innerHTML = \[([^\]]+)\]/)?.[1]
+    const options = compare.match(/\$\('compareLimit'\)\.innerHTML = html`\$\{\[([^\]]+)\]/)?.[1]
     assert.ok(options, 'compare.ts should build the compareLimit options from a literal list')
     const compareOffered = [...options.matchAll(/'(\d+)'/g)].map((m) => Number(m[1]))
     assert.ok(compareOffered.length >= 3)

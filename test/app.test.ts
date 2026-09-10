@@ -7,14 +7,13 @@ import { persons } from './fixture.js'
 import { clearScopes } from '../src/ui/state.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
-// Issue #92's independence criteria: each figure owns its own sentence, its own fetches and
-// its own state, driven here against the real modules (public/js/app.js's boot() and each
-// figure's own mount()) with a fake document and a spied fetch — never against a claim about
-// them, and never by grepping design-5.html for behaviour (CLAUDE.md).
+// src/ui/app.ts, the shell: boot() fetches /api/people once, seeds each figure from the
+// querystring and hands a failure down to every figure. Issue #92's independence criteria are
+// driven against the real modules (boot() and each figure's own mount()) with a fake document
+// and a spied fetch — never against a claim about them.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
-const moduleSource = (name: string) => readFileSync(join(root, 'src', 'ui', name), 'utf8')
 
 const people = persons.map(({ id, name }) => ({ id, name }))
 const [personA, personB] = people
@@ -98,6 +97,28 @@ describe('issue #92 AC8: a bare querystring key seeds both figures; a prefixed o
       assert.equal(els.testimonyDays.value, '365', 'figure 2 takes its own prefixed value over the bare one')
     })
   })
+
+  it('bare source= seeds both figures', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeDefault(calls)
+      await withLocation('?source=gnews', () => appModule.boot())
+      await flush()
+      assert.equal(els.source.value, 'gnews')
+      assert.equal(els.testimonySource.value, 'gnews')
+    })
+  })
+
+  it('atlas.days overrides figure 1 only, leaving figure 2 on the bare value', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeDefault(calls)
+      await withLocation('?days=30&atlas.days=7', () => appModule.boot())
+      await flush()
+      assert.equal(els.days.value, '7', "figure 1 takes its own prefixed override")
+      assert.equal(els.testimonyDays.value, '30', 'figure 2 keeps the bare value')
+    })
+  })
 })
 
 describe('issue #92 AC9: a control change never crosses figures', () => {
@@ -130,6 +151,38 @@ describe('issue #92 AC9: a control change never crosses figures', () => {
       const added = calls.slice(before)
       assert.ok(added.some((u) => u.includes('/graph')), 'figure 1 must reload')
       assert.ok(!added.some((u) => u.includes('/sources') || u.includes('/testimony')), `figure 2 must not reload: ${JSON.stringify(added)}`)
+    })
+  })
+
+  it("changing figure 1's source control reloads only figure 1", async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeDefault(calls)
+      await withLocation('', () => appModule.boot())
+      await flush()
+      const before = calls.length
+      els.source.value = 'gnews'
+      els.source.fire('change')
+      await flush(220)
+      const added = calls.slice(before)
+      assert.ok(added.some((u) => u.includes('/graph')), 'figure 1 must reload')
+      assert.ok(!added.some((u) => u.includes('/sources') || u.includes('/testimony')), `figure 2 must not reload: ${JSON.stringify(added)}`)
+    })
+  })
+
+  it("changing figure 2's source control reloads only figure 2", async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeDefault(calls)
+      await withLocation('', () => appModule.boot())
+      await flush()
+      const before = calls.length
+      els.testimonySource.value = 'gnews'
+      els.testimonySource.fire('change')
+      await flush(220)
+      const added = calls.slice(before)
+      assert.ok(added.some((u) => u.includes('/sources') || u.includes('/testimony')), 'figure 2 must reload')
+      assert.ok(!added.some((u) => u.includes('/graph')), `figure 1 must not reload: ${JSON.stringify(added)}`)
     })
   })
 })
@@ -175,21 +228,6 @@ describe('issue #92 AC10/AC11: the sentence and the stats badge moved into each 
     const head = testimony.match(/<header class="figure-head">[\s\S]*?<\/header>/)?.[0] ?? ''
     const sentence = head.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
     for (const id of ['testimonyPerson', 'testimonyDays', 'testimonySource']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must sit inside #testimony's own sentence-line`)
-  })
-})
-
-describe('issue #92 AC13: the strip repaints off its own ResizeObserver, not figure 1\'s resizeMap', () => {
-  it("figures/testimony.js observes #strip with its own ResizeObserver", () => {
-    const src = moduleSource(join('figures', 'testimony.ts'))
-    assert.match(src, /new ResizeObserver\(/, 'figure 2 must own its own ResizeObserver')
-    assert.match(src, /\.observe\(\$\('strip'\)\)/, "it must observe its own #strip")
-  })
-
-  it("figures/atlas.js's resize handling no longer reads or writes #strip, #testimonyList or #outletList", () => {
-    const src = moduleSource(join('figures', 'atlas.ts'))
-    assert.doesNotMatch(src, /\$\('strip'\)/, 'figure 1 must not touch #strip any more')
-    assert.doesNotMatch(src, /\$\('testimonyList'\)/, 'figure 1 must not touch #testimonyList any more')
-    assert.doesNotMatch(src, /\$\('outletList'\)/, 'figure 1 must not touch #outletList any more')
   })
 })
 

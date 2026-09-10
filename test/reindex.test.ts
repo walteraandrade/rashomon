@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
-import { db } from '../src/db.js'
+import { ANALYZED_TABLES, db } from '../src/db.js'
+import { nameTokens } from '../src/extract.js'
+import { graphFor, type GraphQuery } from '../src/graph.js'
 import { reindexAll } from '../src/reindex.js'
-import { MAX_DOC_CHARS, truncateText } from '../src/store.js'
-import { ANALYZED_TABLES } from '../src/db.js'
+import { MAX_DOC_CHARS, insertDoc, truncateText } from '../src/store.js'
 import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
 import './close.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
 // so it lives in its own file: node:test runs one process per file, hence its own database.
+
+const lula = persons[0]
+const wide: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 200, min: 1, sort: 'count', method: null }
+const termsOfKind = (nodes: { term: string; kind: string }[], kind: string) => nodes.filter((n) => n.kind === kind).map((n) => n.term)
+
 describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => {
   const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
   before(seed)
@@ -129,5 +135,50 @@ describe('reindex caps the text of rows stored before the cap (issue #128)', () 
   it('reports zero on a second run, since nothing is over the cap any more', async () => {
     const { capped } = await reindexAll(persons)
     assert.equal(capped, 0)
+  })
+})
+
+describe('reindex builds the lexicon and tags the corpus with it', () => {
+  before(async () => {
+    await seed()
+    process.env.MIN_PHRASE_COUNT = '2'
+    process.env.MIN_PHRASE_PERCENT = '35'
+    await reindexAll(persons)
+  })
+
+  it('reports how many phrases it kept and writes doc_terms rows of kind phrase', async () => {
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase'`)
+    assert.ok(rows[0].n > 0, 'the fixture must yield at least one phrase row')
+  })
+
+  it('surfaces a real collocation from the fixture as one term on the map', async () => {
+    const graph = await graphFor(lula, wide)
+    assert.ok(termsOfKind(graph.nodes, 'phrase').includes('reforma tributaria'))
+  })
+
+  it('no longer carries "tributaria" on its own: every occurrence of it was inside the phrase', async () => {
+    const graph = await graphFor(lula, wide)
+    assert.ok(!termsOfKind(graph.nodes, 'word').includes('tributaria'))
+  })
+
+  it('keeps a tracked name out of the collocation lexicon, so no word is deleted with nothing put in its place', async () => {
+    // "Lula defende" is frequent and perfectly sticky in the fixture, and would be a phrase but
+    // for this rule. graph.ts would then hide it from Lula's own map — and, since a phrase
+    // replaces its words, "defende" would vanish from that map along with it.
+    const { rows } = await db.query<{ term: string }>(`select term from phrases`)
+    const tracked = new Set(persons.flatMap(nameTokens))
+    for (const { term } of rows) for (const word of term.split(' ')) assert.ok(!tracked.has(word), `${term} names a tracked person`)
+    const graph = await graphFor(lula, wide)
+    assert.ok(termsOfKind(graph.nodes, 'word').includes('defende'))
+  })
+
+  it("drops a phrase carrying one of the person's own name words from that person's own map", async () => {
+    // Capitalized runs still produce them: seed.json cannot stop anyone from writing the name
+    // mid-sentence, so the query-time filter is the one that has to hold.
+    await insertDoc({ source: 'rss', uri: 'https://example.org/phrase-name', text: 'O deputado Jair Bolsonaro discursou', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase' and term = 'jair bolsonaro'`)
+    assert.equal(rows[0].n, 1, 'sanity: the run this filter has to hide must exist')
+    const graph = await graphFor(persons[2], wide)
+    for (const term of termsOfKind(graph.nodes, 'phrase')) assert.ok(!term.split(' ').includes('bolsonaro'), `${term} names the person, it is not said about them`)
   })
 })

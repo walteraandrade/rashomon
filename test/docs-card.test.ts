@@ -7,6 +7,12 @@ import { mount as mountTestimony } from '../src/ui/figures/testimony.js'
 import { clearScopes } from '../src/ui/state.js'
 import { persons } from './fixture.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
 
 // The documents card, driven through the real mount()s. The button in the inspector is gone, so
 // every figure asks for texts with its own click: the atlas by picking a word or the person at
@@ -192,5 +198,31 @@ describe('figure 3: a word on the ruler opens both people at once', () => {
       await flush()
       assert.equal(els.docsDialog.open, false)
     })
+  })
+})
+
+describe('the card that holds the documents: markup and stylesheet', () => {
+  it('design-5.html holds one dialog with the docs container, its title, its grip and a close button', () => {
+    const html = read('design-5.html')
+    const dialog = html.match(/<dialog class="docs-dialog" id="docsDialog"[^>]*>([\s\S]*?)<\/dialog>/)?.[1] ?? ''
+    assert.ok(dialog, 'the dialog must exist')
+    assert.match(dialog, /<h2 id="docsTitle"><\/h2>/)
+    assert.match(dialog, /<button id="docsClose"/)
+    assert.match(dialog, /<div class="docs-dialog-head" id="docsGrip"/, 'the head is what the reader drags')
+    assert.match(dialog, /<div id="docs" aria-live="polite"><\/div>/)
+    assert.equal(html.match(/id="docs"/g)?.length, 1, 'one docs container on the page')
+  })
+
+  it('atlas.css floats it on a wide screen, drags it by the head, and scrolls inside it', () => {
+    const css = read('atlas.css')
+    assert.match(css, /\.docs-dialog \{[^}]*max-height/)
+    assert.match(css, /#docs \{[^}]*overflow-y:\s*auto/)
+    assert.match(css, /\.docs-dialog\.is-floating \{[^}]*position:\s*fixed/)
+    assert.match(css, /\.docs-dialog\.is-floating \.docs-dialog-head \{[^}]*cursor:\s*grab/)
+    assert.doesNotMatch(css, /\.docs-toggle/)
+  })
+
+  it('atlas.css no longer styles the old inspector button', () => {
+    assert.doesNotMatch(read('atlas.css'), /\.docs-open/)
   })
 })

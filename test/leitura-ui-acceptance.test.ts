@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FONT_DISPLAY, FONT_SANS } from '../src/ui/layout.js'
@@ -9,7 +9,8 @@ import { VERCEL_INSIGHTS_TAG } from './pages.js'
 
 // The "Leitura" redesign: one sentence of controls, the map as the figure, a "Como ler"
 // chapter that defines PMI on the page itself, and one stylesheet shared by every page. These
-// criteria read static markup only; behaviour still goes through the modules.
+// criteria read static markup only (design-5.html, como-ler.html, atlas.css); behaviour goes
+// through the modules, in the per-module files.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
@@ -86,5 +87,102 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     const literals = [...css.matchAll(/font(?:-size)?:\s*(?:\d+\s+)?(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
     assert.deepEqual(literals, [], 'every font-size comes from the ramp')
     assert.ok(css.match(/font-size:\s*var\(--t-/g)!.length > 40, 'the ramp is what the components read')
+  })
+})
+
+describe('the page is a sequence of graphs', () => {
+  it('design-5.html carries three figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
+    const html = read('design-5.html')
+    const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
+    // Issue #91 adds a third figure, the ruler comparing two people, after #testimony.
+    assert.deepEqual(figures, ['workspace', 'testimony', 'compare'])
+    // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
+    // <b id="testimonyLabel"> in figure 2's own heading below.
+    assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
+    assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
+    assert.match(html, /<span class="eyebrow">Gráfico 3<\/span><h2 id="compareTitle">/)
+    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 3)
+    assert.doesNotMatch(html, /class="side"/)
+    // The atlas keeps its toolbar and its detail column inside its own figure.
+    const atlas = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    for (const id of ['search', 'modeMap', 'mask', 'zoomIn', 'clear', 'viewport', 'legend', 'inspector']) assert.match(atlas, new RegExp(`id="${id}"`), `${id} belongs to the atlas figure`)
+  })
+
+  it('there is no page-wide outlet filter: no chip under the sentence, and each figure keeps its own controls', () => {
+    const html = read('design-5.html')
+    assert.doesNotMatch(html, /id="domainClear"/)
+    assert.doesNotMatch(html, /id="domainChip"/)
+    // Issue #92 gave figure 2 its own sentence (person/days/source, 3 controls) alongside
+    // figure 1's original five; issue #91 adds figure 3's own six (compareA/B/days/source/
+    // measure/limit), so the shared count is 14 now — split per figure below.
+    assert.equal(html.match(/<span class="pick">/g)?.length, 14)
+    const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.equal(workspace.match(/<span class="pick">/g)?.length, 5, "figure 1's sentence keeps its five controls")
+    assert.equal(testimony.match(/<span class="pick">/g)?.length, 3, "figure 2's own sentence has person/days/source, no sort/limit")
+    assert.equal(compare.match(/<span class="pick">/g)?.length, 6, "figure 3's own sentence has both people, days, source, measure and limit")
+  })
+})
+
+describe('issue #92 AC10/AC11: the sentence and the stats badge moved into each figure', () => {
+  it('#stats no longer lives in header.top; #atlasStats lives in #workspace instead', () => {
+    const html = read('design-5.html')
+    const header = html.match(/<header class="top">[\s\S]*?<\/header>/)?.[0] ?? ''
+    assert.doesNotMatch(header, /id="stats"/, 'header.top no longer describes the whole page with a number')
+    const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const figureTitle = workspace.match(/<div class="figure-title">[\s\S]*?<\/div>/)?.[0] ?? ''
+    assert.match(figureTitle, /id="atlasStats"/, '#atlasStats belongs to #workspace\'s own figure-title now')
+  })
+
+  it('there is no top-level <section class="sentence">', () => {
+    assert.doesNotMatch(read('design-5.html'), /<section class="sentence"/, 'the sentence moved inside each figure\'s own figure-head')
+  })
+
+  it("#workspace's figure-head carries its own sentence-line with person/days/source/sort/limit", () => {
+    const workspace = read('design-5.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const head = workspace.match(/<header class="figure-head">[\s\S]*?<\/header>/)?.[0] ?? ''
+    const sentence = head.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
+    for (const id of ['person', 'days', 'source', 'sort', 'limit']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must sit inside #workspace's own sentence-line`)
+  })
+
+  it("#testimony's figure-head carries its own sentence-line with testimonyPerson/testimonyDays/testimonySource", () => {
+    const testimony = read('design-5.html').match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const head = testimony.match(/<header class="figure-head">[\s\S]*?<\/header>/)?.[0] ?? ''
+    const sentence = head.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
+    for (const id of ['testimonyPerson', 'testimonyDays', 'testimonySource']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must sit inside #testimony's own sentence-line`)
+  })
+})
+
+describe('every page finds what it names', () => {
+  it('every relative href and src in a served page resolves to a file under public/', () => {
+    for (const page of readdirSync(join(root, 'public')).filter((f) => f.endsWith('.html'))) {
+      const html = readFileSync(join(root, 'public', page), 'utf8')
+      const hrefs = [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1])
+      const local = hrefs.filter((h) => !/^(https?:)?\/\/|^#|^mailto:|^\/_vercel\//.test(h))
+      for (const href of local) {
+        const rel = href.split(/[?#]/)[0].replace(/^\//, '')
+        if (!rel) continue
+        assert.ok(existsSync(join(root, 'public', rel)), `public/${page} links to ${href}, which does not exist under public/`)
+      }
+    }
+  })
+
+  it('atlas.css keeps the sentence controls and the mode segment usable on mobile widths (issue #28)', () => {
+    const css = read('atlas.css')
+    assert.match(css, /\.pick select\s*\{[^}]*max-width:\s*100%;/, 'every select in the sentence must shrink to the screen')
+    assert.match(css, /\.segment\s*\{[^}]*max-width:\s*100%;[^}]*overflow-x:\s*auto;/)
+  })
+
+  it('the workspace carries an id so a reload can dim it in place instead of blanking the map', () => {
+    assert.match(read('design-5.html'), /<section class="figure workspace" id="workspace"/)
+    assert.match(read('atlas.css'), /\.workspace\.is-loading \.viewport[^{]*\{[^}]*opacity/)
+  })
+
+  it('the como-ler page explains the centring of the mask', () => {
+    const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.match(chapter, /<b>Colorir por avaliação<\/b>/)
+    assert.match(chapter, /com a média da pessoa no recorte, e não com o zero/)
+    assert.match(chapter, /menos de 3 textos avaliados/)
   })
 })

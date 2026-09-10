@@ -5,26 +5,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { seed } from './fixture.js'
-import { docsText } from './docs.js'
 import { clearScopes } from '../src/ui/state.js'
-import { compareParams, loadCompare } from '../src/ui/api.js'
-import { balanceColor, SCALE_MID } from '../src/ui/format.js'
-import { paintCompareDetail, paintRuler, rulerTerms } from '../src/ui/render.js'
-import { withFakeDocument } from './fake-dom.js'
+import { compareParams } from '../src/ui/api.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Compare, CompareTerm } from '../src/ui/format.js'
 
-// The injected text measurer paintRuler hands to layout.js, the same contract public/js/layout.js
-// documents: deterministic here, a real canvas in the browser. 0.6em per character is close
-// enough to Instrument Sans that a word's box is the right order of magnitude.
-const metrics = (text: string, size: number) => text.length * size * 0.6
-
-// Independent verification of issue #91's numbered acceptance criteria, written from the
-// approved spec rather than from public/js/figures/compare.js's own implementation. Follows
-// the pattern of test/atlas-figures-independence.test.ts (#92's own test plan): a fake
-// document, a spied fetch, no browser, and the pure logic module (rulerTerms) exercised
-// directly wherever a criterion is about numbers rather than a click.
+// src/ui/figures/compare.ts, figure 3 (issues #91, #93, #99): its mount(), its own controls, the
+// selected word, and the markup of its card. rulerTerms and paintRuler are in
+// test/render.test.ts, rulerLayout in test/layout.test.ts and balanceColor in test/format.test.ts.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
@@ -53,144 +42,18 @@ describe('AC1: figures/compare.js is importable outside a browser, touches docum
   })
 })
 
-describe('AC3: compareParams/loadCompare match calling /api/compare directly', () => {
-  it('produces the same query string result as calling /api/compare with kind=word,hashtag,phrase and no domain/lean', async () => {
+describe('AC3: compareParams matches calling /api/compare directly', () => {
+  it('produces the same body as calling /api/compare with kind=word,hashtag,phrase and no domain/lean', async () => {
     await seed()
-    const qp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' })
-    const resA = await app.request('/api/compare?' + qp.toString())
-    const resB = await app.request('/api/compare?a=lula&b=bolsonaro&days=30&source=all&limit=40&kind=word,hashtag,phrase')
-    assert.equal(resA.status, 200)
-    assert.deepEqual(await resA.json(), await resB.json())
-  })
-
-  it('never sets domain or lean, leaving both at the server default', () => {
-    const qp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' })
-    assert.equal(qp.has('domain'), false)
-    assert.equal(qp.has('lean'), false)
-  })
-
-  it('loadCompare fetches /api/compare with the exact query string it was given', async () => {
-    const previous = globalThis.fetch
-    const calls: string[] = []
-    globalThis.fetch = (async (url: string) => {
-      calls.push(url)
-      return { ok: true, status: 200, json: async () => ({}) } as Response
-    }) as typeof fetch
-    try {
-      const qp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' })
-      await loadCompare(qp)
-      assert.equal(calls[0], '/api/compare?' + qp.toString())
-    } finally {
-      globalThis.fetch = previous
+    for (const [qp, direct] of [
+      [compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' }), '/api/compare?a=lula&b=bolsonaro&days=30&source=all&limit=40&kind=word,hashtag,phrase'],
+      [compareParams({ a: 'tarcisio', b: 'bolsonaro', days: '365', source: 'gdelt', limit: '20' }), '/api/compare?a=tarcisio&b=bolsonaro&days=365&source=gdelt&limit=20&kind=word,hashtag,phrase'],
+    ] as const) {
+      const viaHelper = await app.request('/api/compare?' + qp.toString())
+      const viaDirect = await app.request(direct)
+      assert.equal(viaHelper.status, 200)
+      assert.deepEqual(await viaHelper.json(), await viaDirect.json())
     }
-  })
-})
-
-describe('AC4: format.js exports balanceColor', () => {
-  it('balanceColor(0) equals SCALE_MID', () => {
-    assert.equal(balanceColor(0), SCALE_MID)
-  })
-
-  it('balanceColor(-1) and balanceColor(1) are two distinct, non-grey colours', () => {
-    const left = balanceColor(-1)
-    const right = balanceColor(1)
-    assert.notEqual(left, right)
-    assert.notEqual(left, SCALE_MID)
-    assert.notEqual(right, SCALE_MID)
-  })
-
-  it('is monotonic in |balance| for each sign, walking a few sample points', () => {
-    const toRgb = (c: string) => (c.startsWith('#') ? [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16)) : (c.match(/\d+/g) ?? []).map(Number))
-    const mid = toRgb(SCALE_MID)
-    const dist = (c: string) => {
-      const [r, g, b] = toRgb(c)
-      const [mr, mg, mb] = mid
-      return Math.hypot(r - mr, g - mg, b - mb)
-    }
-    const negatives = [0, -0.25, -0.5, -0.75, -1].map((b) => dist(balanceColor(b)))
-    const positives = [0, 0.25, 0.5, 0.75, 1].map((b) => dist(balanceColor(b)))
-    for (let i = 1; i < negatives.length; i++) assert.ok(negatives[i] >= negatives[i - 1], `distance from SCALE_MID must not decrease walking toward -1: ${negatives}`)
-    for (let i = 1; i < positives.length; i++) assert.ok(positives[i] >= positives[i - 1], `distance from SCALE_MID must not decrease walking toward +1: ${positives}`)
-    assert.ok(negatives[negatives.length - 1] > negatives[0], 'the -1 end must be strictly further from SCALE_MID than the centre')
-    assert.ok(positives[positives.length - 1] > positives[0], 'the +1 end must be strictly further from SCALE_MID than the centre')
-  })
-})
-
-describe('AC5: computes balance -1/+1 for a one-sided term and 0 for an identical-both-sides term', () => {
-  it('an a-only term is -1, a b-only term is +1, an identical-both-sides term is 0, under count', () => {
-    const terms = [
-      { term: 'onlyA', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: null },
-      { term: 'onlyB', kind: 'word', a: null, b: { count: 5, pmi: 1, tone: null } },
-      { term: 'same', kind: 'word', a: { count: 4, pmi: 2, tone: null }, b: { count: 4, pmi: 2, tone: null } },
-    ]
-    const { items } = rulerTerms(terms, 'count')
-    assert.equal(items.find((t) => t.term === 'onlyA')!.balance, -1)
-    assert.equal(items.find((t) => t.term === 'onlyB')!.balance, 1)
-    assert.equal(items.find((t) => t.term === 'same')!.balance, 0)
-  })
-
-  it('the identical-both-sides term stays 0 under pmi too, regardless of measure', () => {
-    const terms = [{ term: 'same', kind: 'word', a: { count: 4, pmi: 2, tone: null }, b: { count: 4, pmi: 2, tone: null } }]
-    assert.equal(rulerTerms(terms, 'pmi').items[0].balance, 0)
-  })
-})
-
-describe('AC6: measure changes position but never the combined document count', () => {
-  it('switching measure moves at least one term\'s balance while combined stays identical for every term', () => {
-    const terms = [
-      { term: 'mixed', kind: 'word', a: { count: 10, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } },
-      { term: 'aonly', kind: 'word', a: { count: 1, pmi: 0.1, tone: null }, b: null },
-    ]
-    const byCount = rulerTerms(terms, 'count')
-    const byPmi = rulerTerms(terms, 'pmi')
-    assert.deepEqual(
-      byCount.items.map((t) => t.combined),
-      byPmi.items.map((t) => t.combined),
-      'combined must never depend on measure',
-    )
-    const balanceCount = byCount.items.find((t) => t.term === 'mixed')!.balance
-    const balancePmi = byPmi.items.find((t) => t.term === 'mixed')!.balance
-    assert.notEqual(balanceCount, balancePmi, 'balance must move with measure for a term with different count/pmi shapes on each side')
-  })
-})
-
-describe('regression: an opposite-signed-but-real term on both sides never pins to a literal end, and a null side never wins on the other\'s negative score', () => {
-  it('alcolumbre (real docs and a negative PMI on the b side) settles short of -1', () => {
-    const terms = [{ term: 'alcolumbre', kind: 'word', a: { count: 233, pmi: 0.61, tone: null }, b: { count: 8, pmi: -2.93, tone: null } }]
-    const balance = rulerTerms(terms, 'pmi').items[0].balance
-    assert.ok(Math.abs(balance) < 1, `balance must not pin to a literal end when both sides have documents, got ${balance}`)
-  })
-
-  it('an a-only term (b truly absent) with a negative PMI is still -1, not +1', () => {
-    const terms = [{ term: 'onlyANegative', kind: 'word', a: { count: 5, pmi: -1, tone: null }, b: null }]
-    assert.equal(rulerTerms(terms, 'pmi').items[0].balance, -1)
-  })
-})
-
-describe('AC7: a term where either side is the string "name" is absent from the rendered set', () => {
-  it('rulerTerms drops it and counts it as hidden', () => {
-    const terms: CompareTerm[] = [
-      { term: 'lula', kind: 'word', a: 'name', b: { count: 3, pmi: 1, tone: null } },
-      { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
-    ]
-    const { items, hiddenCount } = rulerTerms(terms, 'count')
-    assert.equal(items.length, 1)
-    assert.equal(items[0].term, 'reforma')
-    assert.equal(hiddenCount, 1)
-  })
-
-  it('paintRuler produces no dot for the name term and reports the same hiddenCount', () => {
-    withFakeDocument(['compareRuler'], (els) => {
-      const terms: CompareTerm[] = [
-        { term: 'lula', kind: 'word', a: 'name', b: { count: 3, pmi: 1, tone: null } },
-        { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
-      ]
-      const data = compareData(terms)
-      const { hiddenCount } = paintRuler({ data, personA, personB, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.equal(hiddenCount, 1)
-      assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="lula"/)
-      assert.match(els.compareRuler.innerHTML, /data-term="reforma"/)
-    })
   })
 })
 
@@ -507,24 +370,6 @@ describe('AC12: no word rendered by the ruler ever opens #docsDialog', () => {
       .join('\n')
     assert.doesNotMatch(code, /docsDialog/)
   })
-
-  it('a rendered dot carries no data-docs-open-style attribute and no reference to the dialog', () => {
-    withFakeDocument(['compareRuler'], (els) => {
-      const data = compareData([{ term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }])
-      paintRuler({ data, personA, personB, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.doesNotMatch(els.compareRuler.innerHTML, /data-docs-open/)
-      assert.doesNotMatch(els.compareRuler.innerHTML, /docsDialog/)
-    })
-  })
-
-  it('paintCompareDetail never emits a link or button referencing the dialog', () => {
-    withFakeDocument(['compareDetail'], (els) => {
-      paintCompareDetail({ term: { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }, personA, personB })
-      assert.doesNotMatch(els.compareDetail.innerHTML, /docsDialog/)
-      assert.doesNotMatch(els.compareDetail.innerHTML, /<a\b/)
-      assert.doesNotMatch(els.compareDetail.innerHTML, /<button\b/)
-    })
-  })
 })
 
 describe('AC13: design-5.html carries the third figure card', () => {
@@ -578,12 +423,24 @@ describe('AC16: como-ler.html explains the ruler under #comparar', () => {
   })
 })
 
-describe('issue #91 AC15 docs cross-check: the /api/compare route stays documented for the name/null distinction', () => {
-  // Not a new criterion (test/compare-api-acceptance.test.ts already covers issue #93 AC15
-  // directly); re-asserted here only as a sanity check that this issue did not regress it.
-  it('the docs still name the own-name "name" hiding and the null-side distinction', () => {
-    assert.match(docsText, /\/api\/compare/)
-    assert.match(docsText, /"name"/)
-    assert.match(docsText, /own name/)
+describe('atlas.css styles words, not dots (issue #99 AC7)', () => {
+  it('carries the ruler word rules and no longer carries the dot rules', () => {
+    const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+    assert.match(css, /\.ruler-text \{/)
+    // Neither the cursor nor the pick repaints the word: the box behind it carries both, in the
+    // word's own side colour, at two strengths. A selected word painted --accent threw away the
+    // side it leans to, which is the only thing this figure draws.
+    assert.match(css, /\.ruler-text \{[^}]*fill:\s*var\(--wc\)/)
+    assert.match(css, /\.ruler-word\.is-selected \.ruler-hit \{[^}]*var\(--wc-soft\)/)
+    // No outline on a mark, anywhere: this site draws no borders, so hover and pick are a wash
+    // the word sits on, at two strengths, never a box drawn around it.
+    for (const rule of css.match(/\.(?:ruler-hit|ruler-glow|word-hit|word-glow|center-hit|dot-halo)[^{]*\{[^}]*\}/g) ?? []) assert.doesNotMatch(rule, /stroke/, rule)
+    // Core plus penumbra: one uniformly blurred rectangle is fog, and fog has no edge to read.
+    assert.match(css, /\.word-glow, \.ruler-glow \{[^}]*blur\((\d+)px\)/)
+    assert.match(css, /\.word-hit, \.ruler-hit \{[^}]*blur\((\d+)px\)/)
+    assert.doesNotMatch(css, /\.ruler-word:hover \.ruler-text/, 'the cursor must not repaint the word')
+    assert.doesNotMatch(css, /\.ruler-word\.is-selected \{[^}]*--wc:\s*var\(--accent\)/, 'nor must the pick')
+    assert.match(css, /\.ruler-overflow \{/)
+    assert.doesNotMatch(css, /\.ruler-dot/, 'nothing draws a ruler dot any more')
   })
 })

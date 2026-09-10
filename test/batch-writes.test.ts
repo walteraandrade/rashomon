@@ -5,7 +5,8 @@ import { describe, it, before } from 'node:test'
 // loaded, which is why every import below is dynamic. With it on, `db` counts the statements
 // it sends to PGlite, and that counter is the only direct proof that a batch really is one
 // statement and not one per row. node:test gives this file its own process and its own
-// memory:// database, so the flag never reaches another suite.
+// memory:// database, so the flag never reaches another suite -- which is why this stays apart
+// from test/store.test.ts, the file that otherwise holds every write-path test.
 process.env.PERF = '1'
 
 const { db, migrate } = await import('../src/db.js')

@@ -23,7 +23,7 @@ neighbours are deliberately absent, each for a phrase it would take with it: `se
 ("segunda turma"), `marco` ("Marco Aurélio"), `janeiro` ("Rio de Janeiro"), `segundo`
 ("segundo turno"), `dois` ("Dois Irmãos"). Two phrases were given up on purpose, both measured
 first: "Sete de Setembro" (one occurrence against 323 datelines) and "Feira de Santana" (zero
-against 145). `test/syndicated-full-text.test.ts` pins all of it. Adding a word here changes
+against 145). `test/extract.test.ts` pins all of it. Adding a word here changes
 every person's ranking, so measure before, not after.
 
 A change to the set only reaches documents that are derived again. `doc_terms` rows written

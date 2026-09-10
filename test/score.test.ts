@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
-import { scoreAll } from '../src/score.js'
+import { testimonyFor } from '../src/graph.js'
+import { resolveRun, scoreAll } from '../src/score.js'
 import { scorers } from '../src/scorers/index.js'
 import { insertDoc } from '../src/store.js'
-import { persons, seed } from './fixture.js'
+import { withEnv } from './env.js'
+import { insertTestimony, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
 const countRows = async (method: string) =>
@@ -64,5 +66,88 @@ describe('scoreAll across methods', () => {
     assert.equal(scored, pairsTotal)
     assert.equal(Number(await countRows('onnx')), pairsTotal, 'the old rows stay untouched')
     assert.equal(Number(await countRows('kikori:q8')), pairsTotal)
+  })
+})
+
+// Issue #67: the method label carried the dtype only, so a retrain republished under the same
+// name left every existing row alone and scored only the pairs added since.
+const REV = '8f3c1d2'
+const OTHER = 'deadbee'
+const unversioned = { TESTIMONY_DTYPE: undefined, TESTIMONY_REVISION: undefined }
+
+describe('pnpm score refuses to write unversioned kikori rows', () => {
+  it('throws for the onnx scorer when TESTIMONY_REVISION is unset or malformed', async () => {
+    await withEnv(unversioned, () => assert.throws(() => resolveRun('onnx'), /TESTIMONY_REVISION/))
+    await withEnv({ ...unversioned, TESTIMONY_REVISION: 'a b' }, () =>
+      assert.throws(() => resolveRun('onnx'), /TESTIMONY_REVISION/),
+    )
+  })
+
+  it('resolves the versioned label once the revision is set', async () => {
+    await withEnv({ ...unversioned, TESTIMONY_REVISION: REV }, () =>
+      assert.equal(resolveRun('onnx').method, `kikori:q8:${REV}`),
+    )
+  })
+
+  it('never blocks the stub scorer, and still rejects an unknown one', async () => {
+    await withEnv(unversioned, () => {
+      assert.equal(resolveRun('stub').method, 'stub')
+      assert.throws(() => resolveRun('nope'), /unknown scorer/)
+    })
+  })
+})
+
+// The label a `pnpm score` run under that revision would actually resolve, not a hand-written
+// string: what the acceptance criterion is about is a revision change producing a new label.
+const labelFor = async (revision: string) => {
+  let label = ''
+  await withEnv({ TESTIMONY_DTYPE: undefined, TESTIMONY_REVISION: revision }, () => {
+    label = resolveRun('onnx').method
+  })
+  return label
+}
+
+const overall = async (method: string) => {
+  const r = await testimonyFor(persons[1], { days: 30, source: 'all', method, min: 3 })
+  assert.equal(r.method, method)
+  return r.overall
+}
+
+describe('a revision change re-scores every pair and leaves the old rows readable', () => {
+  before(async () => {
+    // The suite above already wrote kikori:q8 rows for every pair; start from the fixture again.
+    await reseed()
+    // What a store scored before this issue looks like: rows under the bare dtype label.
+    await insertTestimony('https://estadao.com.br/30', 'tarcisio', 'kikori:q8', 1)
+    await insertTestimony('https://estadao.com.br/31', 'tarcisio', 'kikori:q8', 3)
+  })
+
+  it('scores every pair under the first revision, then every pair again under the second', async () => {
+    const pairs = Number((await db.query<{ n: string }>(`select count(*) as n from doc_persons`)).rows[0].n)
+    const [first, second] = [await labelFor(REV), await labelFor(OTHER)]
+    assert.notEqual(first, second, 'a revision change must produce a distinct method label')
+
+    assert.equal(await scoreAll(first, scorers.stub), pairs)
+    assert.equal(
+      await scoreAll(second, scorers.stub),
+      pairs,
+      'the second revision must re-score every pair, not just the ones added since the first run',
+    )
+
+    assert.equal(Number(await countRows(first)), pairs)
+    assert.equal(Number(await countRows(second)), pairs)
+  })
+
+  it('answers each revision from its own rows and keeps the pre-issue rows intact', async () => {
+    const legacy = await overall('kikori:q8')
+    assert.deepEqual(legacy, { score: 2, n: 2 }, 'the two unversioned rows survive both runs untouched')
+
+    const a = await overall(await labelFor(REV))
+    const b = await overall(await labelFor(OTHER))
+    assert.ok(a.n > 0 && b.n > 0)
+    assert.deepEqual(a, b, 'the same scorer under two revisions must give the same numbers, from separate rows')
+    assert.notDeepEqual(a, legacy, 'and neither may be answered from the unversioned rows')
+
+    assert.deepEqual(await overall('kikori:q8:never-scored'), { score: null, n: 0 })
   })
 })

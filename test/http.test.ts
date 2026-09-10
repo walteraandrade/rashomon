@@ -79,16 +79,27 @@ describe('readCapped', () => {
 // project's testing convention (see bluesky-timeout.test.ts) -- so slowGet's own wiring is
 // asserted from its source text instead.
 describe('slowGet request size guard (source text)', () => {
-  it('checks content-length via headerLength before reading any response body', () => {
-    const beforeBody = src.slice(0, src.indexOf("res.on('data'"))
+  const slowGetBody = src.slice(src.indexOf('export const slowGet'))
+  const dataIdx = slowGetBody.indexOf("res.on('data'")
+
+  it('checks content-length via headerLength, and rejects, before any body listener is registered', () => {
+    const beforeBody = slowGetBody.slice(0, dataIdx)
     assert.match(beforeBody, /headerLength\(res\.headers\['content-length'\]\)/)
     assert.match(beforeBody, /overLimit\(declared, MAX_RESPONSE_BYTES\)/)
+    assert.match(beforeBody, /res\.destroy\(\)/)
+    assert.match(beforeBody, /fail\(/, 'an over-limit declared length must reject, not resolve')
+    assert.doesNotMatch(beforeBody, /resolve\(/, 'the declared-length check must never resolve')
   })
 
-  it('stops accumulating once the running total exceeds MAX_RESPONSE_BYTES while streaming', () => {
-    const dataHandler = src.slice(src.indexOf("res.on('data'"), src.indexOf("res.on('error'"))
+  it('stops accumulating once the running total exceeds MAX_RESPONSE_BYTES while streaming, never resolving a partial body', () => {
+    const dataHandler = slowGetBody.slice(dataIdx, slowGetBody.indexOf("res.on('end'"))
     assert.match(dataHandler, /total \+= c\.length/)
     assert.match(dataHandler, /overLimit\(total, MAX_RESPONSE_BYTES\)/)
     assert.match(dataHandler, /res\.destroy\(\)/)
+    assert.match(dataHandler, /fail\(/)
+    // the resolve only happens on 'end', which the oversize branch above returns out of via
+    // fail() before ever reaching -- so an oversize response can never resolve at all.
+    const endHandler = slowGetBody.slice(slowGetBody.indexOf("res.on('end'"))
+    assert.match(endHandler, /if \(settled\) return/, 'end must no-op once fail() already settled the promise')
   })
 })

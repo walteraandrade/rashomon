@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { paintCandidates, paintOutlets, wordMarkup } from '../public/js/render.js'
+import { paintCandidates, paintOutlets, wordMarkup } from '../src/ui/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 
 // Independent verification of issue #37's acceptance criteria, written from the issue text
@@ -14,13 +14,13 @@ import { inlineStyles, withFakeDocument } from './fake-dom.js'
 // inline style=, an inline script) -- never to extract behaviour from it.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const jsDir = join(root, 'public', 'js')
-// Issue #92 adds public/js/figures/*.js: the walk must see that subdirectory too, so a new
+const jsDir = join(root, 'src', 'ui')
+// Issue #92 adds src/ui/figures/*.ts: the walk must see that subdirectory too, so a new
 // figure module is never invisible to the import-graph test or the "every module is served"
 // check below.
 const jsFiles = (dir = jsDir, prefix = ''): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.js') ? [`${prefix}${entry.name}`] : [],
+    entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.ts') ? [`${prefix}${entry.name}`] : [],
   )
 const moduleSource = (name: string) => readFileSync(join(jsDir, name), 'utf8')
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
@@ -30,20 +30,21 @@ const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8'
 const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 
 describe('issue #37 AC1: the split page still serves the same atlas over the same routes', () => {
-  it('GET / answers 200 and every module it needs is served as JavaScript', async () => {
+  it('GET / answers 200 and the one script it needs is served as JavaScript', async () => {
     assert.equal((await app.request('/')).status, 200)
-    for (const file of jsFiles()) {
-      const res = await app.request(`/js/${file}`)
-      assert.equal(res.status, 200, `/js/${file} must be served`)
-      assert.match(res.headers.get('content-type') ?? '', /javascript/, `/js/${file} must be served with a JavaScript content type or the browser refuses the module`)
-    }
+    // The modules are TypeScript under src/ui now: a browser cannot run them, so the bundle is
+    // the only script public/ ships, and the sources must not be reachable over HTTP at all.
+    const bundle = await app.request('/bundle.js')
+    assert.equal(bundle.status, 200)
+    assert.match(bundle.headers.get('content-type') ?? '', /javascript/)
+    for (const file of jsFiles()) assert.equal((await app.request(`/js/${file}`)).status, 404, `/js/${file} must not be served`)
     const css = await app.request('/atlas.css')
     assert.equal(css.status, 200)
     assert.match(css.headers.get('content-type') ?? '', /text\/css/)
   })
 
   it('api.js builds exactly the documented endpoints, with the same defaults the page used before the split', async () => {
-    const { candidatesQuery, endpoint, params, sourcesParams } = await import('../public/js/api.js')
+    const { candidatesQuery, endpoint, params, sourcesParams } = await import('../src/ui/api.js')
     assert.equal(endpoint('lula'), '/api/people/lula')
     const p = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     // `kind` is the one default that moved since the split: the atlas now names the kinds it
@@ -55,8 +56,8 @@ describe('issue #37 AC1: the split page still serves the same atlas over the sam
   })
 
   it('the docs panel narrows the graph querystring to one term and five rows', async () => {
-    const { docsQuery } = await import('../public/js/figures/atlas.js')
-    const { params } = await import('../public/js/api.js')
+    const { docsQuery } = await import('../src/ui/figures/atlas.js')
+    const { params } = await import('../src/ui/api.js')
     const base = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     const forTerm = docsQuery(base, { id: 'reforma', term: 'reforma', kind: 'word', count: 4, pmi: 1 })
     assert.equal(forTerm.get('term'), 'reforma')
@@ -114,31 +115,31 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
 
 describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actually hold', () => {
   it('layout.js, format.js, state.js and api.js never touch the document', () => {
-    for (const file of ['layout.js', 'format.js', 'state.js', 'api.js'])
+    for (const file of ['layout.ts', 'format.ts', 'state.ts', 'api.ts'])
       assert.ok(!/\bdocument\b/.test(moduleSource(file)), `${file} must stay DOM-free so it is importable under node:test`)
   })
 
   it('render.js never fetches and api.js never renders', () => {
-    assert.ok(!/\bfetch\s*\(/.test(moduleSource('render.js')), 'render.js paints; it must not fetch')
-    assert.ok(!/\bdocument\b/.test(moduleSource('api.js')), 'api.js fetches; it must not render')
+    assert.ok(!/\bfetch\s*\(/.test(moduleSource('render.ts')), 'render.js paints; it must not fetch')
+    assert.ok(!/\bdocument\b/.test(moduleSource('api.ts')), 'api.js fetches; it must not render')
   })
 
-  it('AC2: the import graph is acyclic and matches the documented direction, including public/js/figures/', () => {
+  it('AC2: the import graph is acyclic and matches the documented direction, including src/ui/figures/', () => {
     const expected: Record<string, string[]> = {
-      'format.js': [],
-      'state.js': [],
-      'api.js': [],
-      'layout.js': ['./format.js'],
-      'render.js': ['./format.js', './layout.js'],
+      'format.ts': [],
+      'state.ts': [],
+      'api.ts': [],
+      'layout.ts': ['./format.js'],
+      'render.ts': ['./format.js', './layout.js'],
       // The documents card belongs to no figure since all three open it, so it sits one layer
       // above render.js and below figures/: it fetches, paints and owns #docsDialog.
-      'docs-card.js': ['./api.js', './render.js', './state.js'],
-      'figures/atlas.js': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
-      'figures/testimony.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
-      'figures/compare.js': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
-      'app.js': ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
+      'docs-card.ts': ['./api.js', './render.js', './state.js'],
+      'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
+      'figures/testimony.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
     }
-    assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in public/js must have a declared place in the import graph')
+    assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected)) {
       // A module under figures/ imports its siblings (../api.js, not ./api.js); importsOf
       // returns the literal specifier, so this resolves each one relative to its own file
@@ -156,28 +157,28 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
   it('AC3: app.js is importable outside a browser and exposes exactly one export, boot', async () => {
     const previous = (globalThis as { document?: unknown }).document
     assert.equal(previous, undefined, 'this suite must run with no document, or the import guard proves nothing')
-    const module = await import('../public/js/app.js')
+    const module = await import('../src/ui/app.js')
     assert.deepEqual(Object.keys(module), ['boot'], 'app.js is a shell now: every other export moved into the figure that owns it')
     assert.equal(typeof module.boot, 'function')
   })
 
   it('AC1: public/js/figures/atlas.js and figures/testimony.js are importable outside a browser too', async () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
-    const atlas = await import('../public/js/figures/atlas.js')
+    const atlas = await import('../src/ui/figures/atlas.js')
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/atlas.js must not touch document at import time')
     assert.equal(typeof atlas.mount, 'function')
-    const testimony = await import('../public/js/figures/testimony.js')
+    const testimony = await import('../src/ui/figures/testimony.js')
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/testimony.js must not touch document at import time')
     assert.equal(typeof testimony.mount, 'function')
   })
 
   it('AC4: figures/atlas.js and state.js export exactly what the split promises, no more', async () => {
-    const atlas = await import('../public/js/figures/atlas.js')
+    const atlas = await import('../src/ui/figures/atlas.js')
     assert.deepEqual(Object.keys(atlas).sort(), ['createHandlers', 'docsQuery', 'layoutKey', 'mount', 'scopeKeys'].sort())
-    const state = await import('../public/js/state.js')
+    const state = await import('../src/ui/state.js')
     for (const name of ['fromScope', 'debounce', 'readScope', 'writeScope', 'clearScopes', 'SCOPE_TTL_MS', 'SCOPE_LIMIT']) assert.equal(typeof (state as Record<string, unknown>)[name] !== 'undefined', true, `state.js must still export ${name}`)
     for (const name of ['outlet', 'zoom', 'layoutCache', 'mask', 'getController', 'setController', 'getMask', 'setMask']) assert.equal(name in state, false, `state.js must not export ${name}: it is figure-private now`)
-    const testimony = await import('../public/js/figures/testimony.js')
+    const testimony = await import('../src/ui/figures/testimony.js')
     assert.deepEqual(Object.keys(testimony), ['mount'], 'figures/testimony.js exposes only mount; outlet/zoom/layoutCache/mask/request-id bookkeeping stay local')
   })
 })

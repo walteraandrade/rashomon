@@ -6,14 +6,14 @@ import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { persons, seed } from './fixture.js'
 import { docsText } from './docs.js'
-import { clearScopes } from '../public/js/state.js'
-import { compareParams, loadCompare } from '../public/js/api.js'
-import { balanceColor, SCALE_MID } from '../public/js/format.js'
-import { paintCompareDetail, paintRuler, rulerTerms } from '../public/js/render.js'
+import { clearScopes } from '../src/ui/state.js'
+import { compareParams, loadCompare } from '../src/ui/api.js'
+import { balanceColor, SCALE_MID } from '../src/ui/format.js'
+import { paintCompareDetail, paintRuler, rulerTerms } from '../src/ui/render.js'
 import { withFakeDocument } from './fake-dom.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
-import type { Compare, CompareTerm } from '../public/js/format.js'
+import type { Compare, CompareTerm } from '../src/ui/format.js'
 
 // The injected text measurer paintRuler hands to layout.js, the same contract public/js/layout.js
 // documents: deterministic here, a real canvas in the browser. 0.6em per character is close
@@ -43,7 +43,7 @@ const compareData = (terms: CompareTerm[], a = personA, b = personB): Compare =>
 
 describe('AC1: figures/compare.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
-  const mod = await import('../public/js/figures/compare.js')
+  const mod = await import('../src/ui/figures/compare.js')
   it('does not touch document at import time', () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/compare.js must not touch document')
   })
@@ -203,7 +203,7 @@ describe('AC8: the hidden-name note is absent when the count is zero, present wi
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       assert.equal(els.compareHiddenNote.hidden, true)
@@ -218,7 +218,7 @@ describe('AC8: the hidden-name note is absent when the count is zero, present wi
         { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
       ]
       routeFetch(calls, { '/compare': compareData(terms) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       assert.equal(els.compareHiddenNote.hidden, false)
@@ -236,7 +236,7 @@ describe('AC9: shows the same-person notice only when a === b', () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([], personA, personA) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       assert.equal(els.compareStatus.hidden, false)
@@ -247,7 +247,7 @@ describe('AC9: shows the same-person notice only when a === b', () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([], personA, personB) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       assert.equal(els.compareStatus.hidden, true)
@@ -260,7 +260,7 @@ describe('AC10: clicking a dot fills the detail line, including "nenhum document
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       const [dot] = els.compareRuler.querySelectorAll('[data-term]')
@@ -278,7 +278,7 @@ describe('AC10: clicking the same dot again, or empty ruler space, clears the se
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       let dot = els.compareRuler.querySelectorAll('[data-term]')[0]
@@ -294,7 +294,7 @@ describe('AC10: clicking the same dot again, or empty ruler space, clears the se
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       const dot = els.compareRuler.querySelectorAll('[data-term]')[0]
@@ -327,14 +327,14 @@ const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promis
 // app.js's own self-boot only ever fires once per process, and only when a document already
 // exists at import time; importing it statically here, before any test installs a fake
 // document, keeps that guard false for this whole file.
-const appModule = await import('../public/js/app.js')
+const appModule = await import('../src/ui/app.js')
 
 describe("AC9 bootstrap: a === b's resolution contract, from the querystring down to /api/compare", () => {
   it('initial: { a: "lula", b: "lula" } sends a=lula&b=lula to /api/compare', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([], personA, personA) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: { a: 'lula', b: 'lula' } })
       await flush()
       const url = calls.find((u) => u.includes('/api/compare'))
@@ -359,7 +359,7 @@ describe("AC9 bootstrap: a === b's resolution contract, from the querystring dow
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([], personA, personB) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       assert.equal(els.compareB.value, personB.id)
@@ -370,7 +370,7 @@ describe("AC9 bootstrap: a === b's resolution contract, from the querystring dow
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([], personA, personA) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people: [personA], initial: {} })
       await flush()
       assert.equal(els.compareB.value, els.compareA.value)
@@ -452,7 +452,7 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
       clearScopes()
       const terms = [{ term: 'mixed', kind: 'word', a: { count: 10, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } }]
       routeFetch(calls, { '/compare': compareData(terms) })
-      const { mount } = await import('../public/js/figures/compare.js')
+      const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
       els.compareRuler.querySelectorAll('[data-term]')[0].fire('click')
@@ -500,7 +500,7 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
 
 describe('AC12: no word rendered by the ruler ever opens #docsDialog', () => {
   it('figures/compare.js never wires docsDialog (a comment may still name it as documentation)', () => {
-    const src = readFileSync(join(root, 'public', 'js', 'figures', 'compare.js'), 'utf8')
+    const src = readFileSync(join(root, 'src', 'ui', 'figures', 'compare.ts'), 'utf8')
     const code = src
       .split('\n')
       .map((line) => line.replace(/\/\/.*/, ''))

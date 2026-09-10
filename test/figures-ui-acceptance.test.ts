@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { createHandlers } from '../public/js/figures/atlas.js'
-import { paintSelection } from '../public/js/render.js'
+import { createHandlers } from '../src/ui/figures/atlas.js'
+import { paintSelection } from '../src/ui/render.js'
 import { withFakeDocument } from './fake-dom.js'
 import { persons } from './fixture.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
@@ -77,7 +77,7 @@ describe('figures UI: colour by avaliação is the default', () => {
   // mount() itself renders, the same way a reader would see it.
   it('the mask starts on, read off the control mount() renders', async () => {
     await withFiguresDom(async (els, calls) => {
-      const { mount } = await import('../public/js/figures/atlas.js')
+      const { mount } = await import('../src/ui/figures/atlas.js')
       const people = persons.map(({ id, name }) => ({ id, name }))
       routeFetch(calls, { '/graph': { person: people[0], nodes: [], links: [], stats: { about: 0, testimony: { method: 'kikori', score: null, n: 0 } } } })
       mount(els.workspace, { people, initial: {} })
@@ -101,7 +101,7 @@ describe('figures UI: colour by avaliação is the default', () => {
 
 describe('figures UI: the neutral middle of the mask fades', () => {
   it('maskColor is translucent on the mean and opaque at the ends; the chip ramps stay opaque', async () => {
-    const { maskColor, SCALE_MID, testimonyColor, toneColor } = await import('../public/js/format.js')
+    const { maskColor, SCALE_MID, testimonyColor, toneColor } = await import('../src/ui/format.js')
     assert.equal(maskColor(0), 'rgba(139,144,156,0.50)')
     assert.equal(maskColor(-0.75), 'rgba(197,126,141,0.75)', 'halfway: colour and alpha both halfway')
     assert.equal(maskColor(-1.5), 'rgb(255,107,125)')

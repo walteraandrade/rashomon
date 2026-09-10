@@ -4,8 +4,8 @@ import { readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { createHandlers } from '../public/js/figures/atlas.js'
-import { sourceLabels } from '../public/js/format.js'
+import { createHandlers } from '../src/ui/figures/atlas.js'
+import { sourceLabels } from '../src/ui/format.js'
 import { persons } from './fixture.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
@@ -48,15 +48,15 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
     assert.match(res.headers.get('content-type') ?? '', /text\/html/)
   })
 
-  it('the extracted stylesheet and every JS module are served with the right mime type', async () => {
+  it('the extracted stylesheet and the one script the page loads are served with the right mime type', async () => {
     const css = await app.request('/atlas.css')
     assert.equal(css.status, 200)
     assert.match(css.headers.get('content-type') ?? '', /text\/css/)
-    for (const file of ['api.js', 'app.js', 'format.js', 'layout.js', 'render.js', 'state.js']) {
-      const res = await app.request(`/js/${file}`)
-      assert.equal(res.status, 200, `/js/${file} must be served`)
-      assert.match(res.headers.get('content-type') ?? '', /javascript/, `/js/${file} must be served with a JavaScript content type`)
-    }
+    // The modules are TypeScript under src/ui now, so public/bundle.js is the only script the
+    // page loads and the only one that can carry a JavaScript mime type.
+    const bundle = await app.request('/bundle.js')
+    assert.equal(bundle.status, 200, '/bundle.js must be served')
+    assert.match(bundle.headers.get('content-type') ?? '', /javascript/, '/bundle.js must be served with a JavaScript content type')
   })
 
   it('legacy atlas remains reachable and links back to root', async () => {
@@ -111,7 +111,7 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
 
   it("issue #92 AC6: changing testimony's own person, days or source control releases testimony's own focused outlet", async () => {
     await withFiguresDom(async (els, calls) => {
-      const { mount } = await import('../public/js/figures/testimony.js')
+      const { mount } = await import('../src/ui/figures/testimony.js')
       const people = persons.map(({ id, name }) => ({ id, name }))
       routeFetch(calls, {
         '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 5 }],

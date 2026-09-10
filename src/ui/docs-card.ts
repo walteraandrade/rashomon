@@ -1,6 +1,6 @@
 // The documents card (#docsDialog), shared by all three figures.
 //
-// It used to be private to figures/atlas.js, which was fine while the atlas was the only thing
+// It used to be private to figures/atlas.ts, which was fine while the atlas was the only thing
 // that could open it. It cannot stay there now that figure 2 opens an outlet's texts and figure
 // 3 opens a word's on both sides at once: each figure has its own sentence, so a card owned by
 // figure 1 would answer with figure 1's recorte and label it with figure 1's person -- a lie
@@ -13,16 +13,14 @@ import * as api from './api.js'
 import { paintDocs, paintDocsError, paintDocsHead, paintDocsLoading } from './render.js'
 import { fromScope, readScope } from './state.js'
 
-/** @typedef {{ personId: string, personName: string, query: URLSearchParams, label?: string }} DocsSide */
-/** @typedef {{ kicker: string, title: string, sides: DocsSide[] }} DocsRequest */
+export type DocsSide = { personId: string; personName: string; query: URLSearchParams; label?: string }
+export type DocsRequest = { kicker: string; title: string; sides: DocsSide[] }
 
 // Guarded, unlike the figures' own $: everything here runs after an await, and a page (or a
 // test) can have moved on by then. A missing document means there is nothing left to paint.
-/** @type {(id: string) => any} */
-const $ = (id) => (typeof document === 'undefined' ? null : document.getElementById(id))
+const $ = (id: string): any => (typeof document === 'undefined' ? null : document.getElementById(id))
 
-/** @param {unknown} e */
-const aborted = (e) => e instanceof Error && e.name === 'AbortError'
+const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 // Below this width the card stops floating: a window the reader has to drag around a phone is
 // worse than the centred sheet, so there the dialog goes back to showModal().
@@ -32,11 +30,11 @@ const floating = () => typeof window !== 'undefined' && !!window.matchMedia?.(`(
 // Where the card sits while floating, in viewport pixels, plus what it is showing and in which
 // of its two shapes. The spot survives a close, so a reader who parked the card out of the way
 // finds it there again; it is clamped on every open in case the window shrank in between.
-let spot = /** @type {{ x: number, y: number } | null} */ (null)
+let spot: { x: number; y: number } | null = null
 let isFloating = false
-let request = /** @type {DocsRequest | null} */ (null)
+let request: DocsRequest | null = null
 let requestId = 0
-let controller = /** @type {AbortController | null} */ (null)
+let controller: AbortController | null = null
 
 export const isOpen = () => !!$('docsDialog')?.open
 
@@ -68,8 +66,7 @@ const clamp = () => {
 
 // `wide` is the two-sided card: the ruler's reading needs room for two columns, so the floating
 // card grows rather than stacking them, which would have buried the comparison.
-/** @param {boolean} wide */
-const show = (wide) => {
+const show = (wide: boolean) => {
   const dialog = $('docsDialog')
   if (!dialog) return
   const float = floating()
@@ -87,9 +84,9 @@ const show = (wide) => {
       // that floats over the figure while the reader goes on picking words it is not -- it would
       // take the keyboard away from the map on every click. So the floating card gives focus
       // straight back to whatever had it.
-      const had = /** @type {HTMLElement | null} */ (typeof document !== 'undefined' ? document.activeElement : null)
+      const had = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null
       dialog.show?.()
-      const now = /** @type {HTMLElement | null} */ (typeof document !== 'undefined' ? document.activeElement : null)
+      const now = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null
       if (now && now !== had && dialog.contains?.(now)) {
         if (had && had.focus && had !== document.body) had.focus({ preventScroll: true })
         else now.blur?.()
@@ -102,30 +99,28 @@ const show = (wide) => {
 // Dragging by the head. Pointer capture keeps the moves coming when the cursor outruns the
 // card, and the grip is the head minus its close button, so that one control still takes its
 // own clicks.
-/** @param {PointerEvent} e */
-const startDrag = (e) => {
+const startDrag = (e: PointerEvent) => {
   const dialog = $('docsDialog')
-  const target = /** @type {Element | null} */ (e.target)
+  const target = e.target as Element | null
   if (!dialog || !floating() || e.button !== 0) return
   if (target?.closest('button')) return
   const box = dialog.getBoundingClientRect()
   const dx = e.clientX - box.left
   const dy = e.clientY - box.top
-  const head = /** @type {HTMLElement} */ (e.currentTarget)
+  const head = e.currentTarget as HTMLElement
   head.setPointerCapture?.(e.pointerId)
   dialog.classList.add('is-dragging')
-  /** @param {PointerEvent} move */
-  const onMove = (move) => {
+  const onMove = (move: PointerEvent) => {
     spot = { x: move.clientX - dx, y: move.clientY - dy }
     clamp()
   }
   const onUp = () => {
-    head.removeEventListener('pointermove', /** @type {EventListener} */ (onMove))
+    head.removeEventListener('pointermove', onMove as EventListener)
     head.removeEventListener('pointerup', onUp)
     head.removeEventListener('pointercancel', onUp)
     dialog.classList.remove('is-dragging')
   }
-  head.addEventListener('pointermove', /** @type {EventListener} */ (onMove))
+  head.addEventListener('pointermove', onMove as EventListener)
   head.addEventListener('pointerup', onUp)
   head.addEventListener('pointercancel', onUp)
   e.preventDefault()
@@ -133,16 +128,14 @@ const startDrag = (e) => {
 
 // One side of the card: a memo hit paints straight from the scope, so re-opening the same word
 // after a sort change costs nothing. A miss shows the loading copy first.
-/** @param {DocsSide} side @param {AbortSignal} signal */
-const fetchSide = async (side, signal) => ({
+const fetchSide = async (side: DocsSide, signal: AbortSignal) => ({
   label: side.label ?? null,
   data: await fromScope('docs', side.personId + '?' + side.query, () => api.loadDocs(side.personId, side.query, signal)),
 })
 
 // The one path to GET /docs. `req.sides` is one entry for a single reading (a word, a person,
 // an outlet) and two for the ruler, which asks the same word of both people at once.
-/** @param {DocsRequest} req */
-export const open = async (req) => {
+export const open = async (req: DocsRequest) => {
   if (!$('docs')) return
   const id = cancel()
   const current = new AbortController()
@@ -160,20 +153,20 @@ export const open = async (req) => {
   }
 }
 
-// Wired once, by app.js, because the card is page-wide: the close button, the modal backdrop,
+// Wired once, by app.ts, because the card is page-wide: the close button, the modal backdrop,
 // the grip, and the resize that swaps its shape when the window crosses FLOATING_MIN.
 export const mountDocsCard = () => {
   const dialog = $('docsDialog')
   if (!dialog) return
   $('docsClose')?.addEventListener('click', () => close())
   // A click on the backdrop lands on the dialog element itself, never on its children.
-  dialog.addEventListener('click', (/** @type {MouseEvent} */ e) => {
+  dialog.addEventListener('click', (e: MouseEvent) => {
     if (e.target === dialog) close()
   })
   dialog.addEventListener('close', () => cancel())
-  $('docsGrip')?.addEventListener('pointerdown', /** @type {EventListener} */ (startDrag))
+  $('docsGrip')?.addEventListener('pointerdown', startDrag as EventListener)
   if (typeof window === 'undefined') return
-  let pending = /** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined)
+  let pending: ReturnType<typeof setTimeout> | undefined = undefined
   window.addEventListener('resize', () => {
     clearTimeout(pending)
     pending = setTimeout(() => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bskyUrl } from '../public/js/format.js'
+import { bskyUrl } from '../src/ui/format.js'
 
 describe('bskyUrl (public/js/format.js)', () => {
   it('AC1: maps a well-formed bluesky doc to its bsky.app post URL', () => {

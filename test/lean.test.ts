@@ -6,7 +6,7 @@ import { parseDomainList, parseLeanList } from '../src/query.js'
 import { OUTLETS } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'
 import outletsJson from '../outlets.json' with { type: 'json' }
-import { params, sourcesParams } from '../public/js/api.js'
+import { params, sourcesParams } from '../src/ui/api.js'
 import './close.js'
 
 const [, , bolsonaro] = persons

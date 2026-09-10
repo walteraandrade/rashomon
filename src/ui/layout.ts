@@ -1,16 +1,9 @@
 // Pure geometry: word packing and edge routing for the radial atlas. No DOM access here —
 // text measurement is injected as `measure(text, size, family, weight) => width`, supplied by
-// a browser canvas adapter at the call site (see public/design-5.html). That is what lets this
-// module run, and be tested, outside a browser: pass any deterministic stand-in measure.
+// a browser canvas adapter at the call site (see render.ts's createCanvasMeasure). That is what
+// lets this module run, and be tested, outside a browser: pass any deterministic stand-in.
 
-import { label, score } from './format.js'
-
-/** @typedef {import('./format.js').Box} Box */
-/** @typedef {import('./format.js').CenterBox} CenterBox */
-/** @typedef {import('./format.js').Layout} Layout */
-/** @typedef {import('./format.js').Measure} Measure */
-/** @typedef {import('./format.js').PlacedTerm} PlacedTerm */
-/** @typedef {import('./format.js').Term} Term */
+import { label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --display custom properties: canvas text
 // measurement needs literal font-family strings, and canvas cannot read a CSS custom
@@ -18,19 +11,10 @@ import { label, score } from './format.js'
 export const FONT_SANS = "'Instrument Sans', system-ui, sans-serif"
 export const FONT_DISPLAY = "'League Spartan', 'Instrument Sans', system-ui, sans-serif"
 
-/**
- * @param {Measure} measure
- * @param {string} text
- * @param {number} size
- * @param {number} maxWidth
- * @param {string} [family]
- * @param {number} [weight]
- * @returns {string[]}
- */
-export const wrapLines = (measure, text, size, maxWidth, family = FONT_SANS, weight = 500) => {
+export const wrapLines = (measure: Measure, text: string, size: number, maxWidth: number, family = FONT_SANS, weight = 500): string[] => {
   if (measure(text, size, family, weight) <= maxWidth) return [text]
   const units = Array.from(text)
-  const lines = []
+  const lines: string[] = []
   let line = ''
   for (const ch of units) {
     if (line && measure(line + ch, size, family, weight) > maxWidth) {
@@ -48,12 +32,7 @@ export const wrapLines = (measure, text, size, maxWidth, family = FONT_SANS, wei
   return lines
 }
 
-/**
- * @param {Measure} measure
- * @param {string} name
- * @returns {CenterBox}
- */
-export const centerLabel = (measure, name) => {
+export const centerLabel = (measure: Measure, name: string): CenterBox => {
   const size = 52
   const lines = wrapLines(measure, name, size, 286, FONT_DISPLAY, 700)
   const lineHeight = 57
@@ -61,18 +40,15 @@ export const centerLabel = (measure, name) => {
   return { lines, size, lineHeight, w: Math.max(240, w), h: lines.length * lineHeight + 88, x: 0, y: 0 }
 }
 
-/** @param {Box} a @param {Box} b @param {number} [gap] */
-const overlaps = (a, b, gap = 7) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 + gap && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + gap
+const overlaps = (a: Box, b: Box, gap = 7) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 + gap && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + gap
 
-/** @param {Box} box @param {number} [radius] */
-const inCircle = (box, radius = 346) =>
+const inCircle = (box: Box, radius = 346) =>
   [-1, 1].every((sx) => [-1, 1].every((sy) => Math.hypot(box.x + (sx * box.w) / 2, box.y + (sy * box.h) / 2) <= radius))
 
 // A fixed polar grid of placement candidates, computed once at module load: every packPass
 // call scores this same set rather than searching a continuous space, so packing stays
 // deterministic and fast.
-/** @type {{ x: number, y: number, r: number }[]} */
-const candidates = []
+const candidates: { x: number; y: number; r: number }[] = []
 for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.push({ x: r * Math.cos((a * Math.PI) / 180), y: r * Math.sin((a * Math.PI) / 180), r })
 
 // Type size is relative to how full the ring is, not absolute: the more terms a layout asks
@@ -82,28 +58,17 @@ for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.
 export const SIZE_CEILING = 38
 export const SIZE_FLOOR = 13
 
-/** @param {number} count @returns {{ minSize: number, maxSize: number }} */
-export const sizeRange = (count) => {
+export const sizeRange = (count: number): { minSize: number; maxSize: number } => {
   const density = Math.max(0, Math.min(1, (count - 8) / 14))
   return { minSize: 20 - (20 - SIZE_FLOOR) * density, maxSize: SIZE_CEILING - 16 * density }
 }
 
-/**
- * @param {Measure} measure
- * @param {Term[]} terms
- * @param {CenterBox} center
- * @param {string} sort
- * @param {number} [phase]
- * @returns {Layout}
- */
-export const packPass = (measure, terms, center, sort, phase = 0) => {
+export const packPass = (measure: Measure, terms: Term[], center: CenterBox, sort: string, phase = 0): Layout => {
   const values = terms.map((n) => score(n, sort))
   const min = Math.min(...values, 0)
   const max = Math.max(...values, 0)
-  /** @type {PlacedTerm[]} */
-  const placed = []
-  /** @type {Term[]} */
-  const overflow = []
+  const placed: PlacedTerm[] = []
+  const overflow: Term[] = []
   const { minSize, maxSize } = sizeRange(terms.length)
   for (const [rank, n] of terms.entries()) {
     const t = max === min ? 0.5 : (values[rank] - min) / (max - min)
@@ -116,8 +81,7 @@ export const packPass = (measure, terms, center, sort, phase = 0) => {
     const targetR = 182 + 104 * Math.sqrt(fraction)
     const angle = -Math.PI / 2 + rank * Math.PI * (3 - Math.sqrt(5)) + phase
     const target = { x: targetR * Math.cos(angle), y: targetR * Math.sin(angle) }
-    /** @type {Box | null} */
-    let best = null
+    let best: Box | null = null
     let cost = Infinity
     for (const c of candidates) {
       const nextCost = (c.r - targetR) ** 2 * 1.2 + (c.x - target.x) ** 2 * 0.22 + (c.y - target.y) ** 2 * 0.22
@@ -136,14 +100,7 @@ export const packPass = (measure, terms, center, sort, phase = 0) => {
 // Packs once, then retries the whole layout at a few starting phases whenever some terms
 // overflowed, keeping the best (most-placed) attempt — a cheap way to dodge an unlucky
 // golden-angle seam without a real solver.
-/**
- * @param {Measure} measure
- * @param {Term[]} terms
- * @param {CenterBox} center
- * @param {string} sort
- * @returns {Layout}
- */
-export const pack = (measure, terms, center, sort) => {
+export const pack = (measure: Measure, terms: Term[], center: CenterBox, sort: string): Layout => {
   let best = packPass(measure, terms, center, sort)
   for (const phase of [0.5, -0.5, 1.1, -1.1]) {
     if (!best.overflow.length || !best.placed.length) break
@@ -153,8 +110,7 @@ export const pack = (measure, terms, center, sort) => {
   return best
 }
 
-/** @param {{ x: number, y: number }} a @param {{ x: number, y: number }} b @param {Box} rect */
-const segmentBlocked = (a, b, rect) => {
+const segmentBlocked = (a: Point, b: Point, rect: Box) => {
   let lo = 0
   let hi = 1
   for (const [start, delta, min, max] of [
@@ -177,18 +133,11 @@ const segmentBlocked = (a, b, rect) => {
 // Builds a visibility graph around every placed box (center + terms), corners and edge
 // midpoints as waypoints, so routesFrom can shortest-path an edge around obstacles instead
 // of drawing a straight line through other words.
-/**
- * @param {Layout} layout
- * @returns {import('./format.js').Routing}
- */
-export const routeGraph = (layout) => {
+export const routeGraph = (layout: Layout): Routing => {
   const obstacles = [layout.center, ...layout.placed].map((p) => ({ ...p, w: p.w + 6, h: p.h + 6 }))
-  /** @type {import('./format.js').Point[]} */
-  const points = []
-  /** @type {Map<string, number[]>} */
-  const ports = new Map()
-  /** @param {number} x @param {number} y */
-  const add = (x, y) => {
+  const points: Point[] = []
+  const ports = new Map<string, number[]>()
+  const add = (x: number, y: number) => {
     if (Math.hypot(x, y) > 355 || obstacles.some((r) => Math.abs(x - r.x) < r.w / 2 && Math.abs(y - r.y) < r.h / 2)) return null
     points.push({ x, y })
     return points.length - 1
@@ -205,11 +154,10 @@ export const routeGraph = (layout) => {
           [r.x, r.y + r.h / 2 + 1],
         ]
           .map(([x, y]) => add(x, y))
-          .filter((i) => i !== null),
+          .filter((i): i is number => i !== null),
       )
   }
-  /** @type {{ index: number, weight: number }[][]} */
-  const adjacent = points.map(() => [])
+  const adjacent: { index: number; weight: number }[][] = points.map(() => [])
   for (let i = 0; i < points.length; i++)
     for (let j = i + 1; j < points.length; j++) {
       const a = points[i]
@@ -225,18 +173,11 @@ export const routeGraph = (layout) => {
 // Dijkstra from every port of `id` to every other placed term's ports. Caches the routing
 // graph on `layout.routing` (computed once per layout, on first call), so re-selecting a
 // different term never rebuilds the visibility graph.
-/**
- * @param {Layout} layout
- * @param {string} id
- * @returns {Map<string, string>}
- */
-export const routesFrom = (layout, id) => {
-  layout.routing ??= routeGraph(layout)
-  const { points, ports, adjacent } = layout.routing
+export const routesFrom = (layout: Layout, id: string): Map<string, string> => {
+  const { points, ports, adjacent } = (layout.routing ??= routeGraph(layout))
   const distances = points.map(() => Infinity)
-  /** @type {(number | null)[]} */
-  const previous = points.map(() => null)
-  const visited = new Set()
+  const previous: (number | null)[] = points.map(() => null)
+  const visited = new Set<number>()
   for (const start of ports.get(id) || []) distances[start] = 0
   for (let step = 0; step < points.length; step++) {
     let best = -1
@@ -249,18 +190,14 @@ export const routesFrom = (layout, id) => {
         previous[edge.index] = best
       }
   }
-  /** @type {Map<string, string>} */
-  const routes = new Map()
+  const routes = new Map<string, string>()
   for (const [target, ends] of ports) {
     if (target === id) continue
-    /** @type {number | null} */
-    let end = null
+    let end: number | null = null
     for (const i of ends) if (end === null || distances[i] < distances[end]) end = i
     if (end === null) continue
-    /** @type {import('./format.js').Point[]} */
-    const path = []
-    /** @type {number | null} */
-    let cursor = end
+    const path: Point[] = []
+    let cursor: number | null = end
     while (cursor !== null) {
       path.unshift(points[cursor])
       cursor = previous[cursor]
@@ -279,20 +216,21 @@ export const routesFrom = (layout, id) => {
 // leave the figure, sending the item to `overflow` instead of letting it push the height up,
 // and `escape` is the last resort when no candidate is free at all. Deterministic: same input,
 // same picture, so a test can assert the geometry.
-/**
- * @template {{ x: number }} T
- * @param {T[]} items
- * @param {{ size: (item: T) => number, reach: (placed: T & { y: number }, item: T) => number | null, fits?: (item: T, y: number) => boolean, escape?: (item: T, candidates: number[]) => number | null }} rules
- * @returns {{ placed: (T & { y: number })[], overflow: T[] }}
- */
-export const swarmBy = (items, { size, reach, fits = () => true, escape = () => null }) => {
-  /** @type {(T & { y: number })[]} */
-  const placed = []
-  /** @type {T[]} */
-  const overflow = []
+export type SwarmRules<T> = {
+  size: (item: T) => number
+  reach: (placed: T & { y: number }, item: T) => number | null
+  fits?: (item: T, y: number) => boolean
+  escape?: (item: T, candidates: number[]) => number | null
+}
+
+export const swarmBy = <T extends { x: number }>(
+  items: T[],
+  { size, reach, fits = () => true, escape = () => null }: SwarmRules<T>,
+): { placed: (T & { y: number })[]; overflow: T[] } => {
+  const placed: (T & { y: number })[] = []
+  const overflow: T[] = []
   for (const item of [...items].sort((a, b) => size(b) - size(a) || a.x - b.x)) {
-    /** @type {{ p: T & { y: number }, dy: number }[]} */
-    const near = []
+    const near: { p: T & { y: number }; dy: number }[] = []
     for (const p of placed) {
       const dy = reach(p, item)
       if (dy !== null) near.push({ p, dy })
@@ -310,15 +248,9 @@ export const swarmBy = (items, { size, reach, fits = () => true, escape = () => 
 
 // The testimony strip's own shape: circles, so the clearance between two of them shrinks as
 // they drift apart horizontally, and nothing is ever dropped (the strip shrinks its radii
-// instead, in render.js). Kept as its own name because every caller and test speaks of a swarm
+// instead, in render.ts). Kept as its own name because every caller and test speaks of a swarm
 // of dots, not of the skeleton above.
-/**
- * @template {{ x: number, r: number }} T
- * @param {T[]} items
- * @param {number} [gap]
- * @returns {(T & { y: number })[]}
- */
-export const swarm = (items, gap = 1.5) =>
+export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5): (T & { y: number })[] =>
   swarmBy(items, {
     size: (d) => d.r,
     reach: (p, item) => {
@@ -341,24 +273,25 @@ export const RULER_SIZE_MAX = 30
 const RULER_GAP_X = 8
 const RULER_GAP_Y = 3
 
-/** @typedef {{ term: string, kind: string, balance: number, combined: number }} RulerItem */
+export type RulerItem = { term: string; kind: string; balance: number; combined: number }
+
+export type RulerLayout<T> = {
+  words: (T & { text: string; x: number; y: number; size: number; w: number; h: number })[]
+  overflow: (T & { text: string; size: number })[]
+  x: (balance: number) => number
+  half: number
+  height: number
+  width: number
+}
 
 // Figure 3's geometry: the word itself on the -1..+1 balance axis, in the same language figure
 // 1 speaks, instead of an anonymous dot. x is the balance, the type size is `combined`
 // (documents on both sides, never measure-dependent) on a sqrt ramp so one loud word cannot
 // dwarf the rest, and y comes from swarmBy, which stacks the boxes that would collide. Pure:
 // text widths arrive through the same injected `measure` the atlas packer uses.
-/**
- * @template {RulerItem} T
- * @param {Measure} measure
- * @param {T[]} items
- * @param {number} [width]
- * @returns {{ words: (T & { text: string, x: number, y: number, size: number, w: number, h: number })[], overflow: (T & { text: string, size: number })[], x: (balance: number) => number, half: number, height: number, width: number }}
- */
-export const rulerLayout = (measure, items, width = 860) => {
+export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], width = 860): RulerLayout<T> => {
   const inner = Math.max(80, width - 2 * RULER_PAD)
-  /** @param {number} balance */
-  const x = (balance) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
+  const x = (balance: number) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
   if (!items.length) return { words: [], overflow: [], x, half: 40, height: 80, width }
   const roots = items.map((it) => Math.sqrt(Math.max(0, it.combined)))
   const lo = Math.min(...roots)

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createHandlers } from '../public/js/figures/atlas.js'
+import { createHandlers } from '../src/ui/figures/atlas.js'
 import { persons } from './fixture.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
@@ -76,7 +76,7 @@ describe('selection is a toggle, and empty space releases it', () => {
 
 describe('the outlet in focus is local to the second figure', () => {
   it('no route the page builds carries a domain', async () => {
-    const { params, sourcesParams, testimonyParams } = await import('../public/js/api.js')
+    const { params, sourcesParams, testimonyParams } = await import('../src/ui/api.js')
     const opts = { days: '30', sort: 'count', limit: '18', source: 'all' }
     for (const [name, q] of [
       ['graph', params(opts)],
@@ -92,7 +92,7 @@ describe('the outlet in focus is local to the second figure', () => {
   // testimony figure instead of a proxy handler atlas used to carry for it.
   it('a click on an outlet dot or row leaves the focus alone, and a click on empty space in the figure releases it', async () => {
     await withFiguresDom(async (els, calls) => {
-      const { mount } = await import('../public/js/figures/testimony.js')
+      const { mount } = await import('../src/ui/figures/testimony.js')
       const people = persons.map(({ id, name }) => ({ id, name }))
       routeFetch(calls, {
         '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 5 }],
@@ -118,7 +118,7 @@ describe('the outlet in focus is local to the second figure', () => {
 
 describe('the second figure carries one outlet list, merged', () => {
   it('mergeOutlets keeps every outlet, attaches a mean only where one exists, and orders by documents', async () => {
-    const { mergeOutlets } = await import('../public/js/format.js')
+    const { mergeOutlets } = await import('../src/ui/format.js')
     const merged = mergeOutlets(
       [
         { domain: 'small.example', source: 'rss', docs: 2, tone: null },
@@ -137,7 +137,7 @@ describe('the second figure carries one outlet list, merged', () => {
   })
 
   it('mergeOutlets survives a missing testimony payload', async () => {
-    const { mergeOutlets } = await import('../public/js/format.js')
+    const { mergeOutlets } = await import('../src/ui/format.js')
     const merged = mergeOutlets([{ domain: 'g1.globo.com', source: 'gnews', docs: 4, tone: null }], [])
     assert.deepEqual(merged, [{ domain: 'g1.globo.com', sources: ['gnews'], docs: 4, score: null, n: 0 }])
   })

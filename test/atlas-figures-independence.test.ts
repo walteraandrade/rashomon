@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { persons } from './fixture.js'
-import { clearScopes } from '../public/js/state.js'
+import { clearScopes } from '../src/ui/state.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 // Issue #92's independence criteria: each figure owns its own sentence, its own fetches and
@@ -14,7 +14,7 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
-const moduleSource = (name: string) => readFileSync(join(root, 'public', 'js', name), 'utf8')
+const moduleSource = (name: string) => readFileSync(join(root, 'src', 'ui', name), 'utf8')
 
 const people = persons.map(({ id, name }) => ({ id, name }))
 const [personA, personB] = people
@@ -40,7 +40,7 @@ const routeDefault = (calls: string[]) =>
 // exists. Importing it statically, before any test installs a fake document, keeps that guard
 // false for the whole file, so every test below drives boot() itself, exactly once, on its own
 // terms (criterion 12 depends on this: a stray auto-boot would double the /api/people count).
-const appModule = await import('../public/js/app.js')
+const appModule = await import('../src/ui/app.js')
 
 const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promise<T> => {
   const previous = (globalThis as { location?: unknown }).location
@@ -180,13 +180,13 @@ describe('issue #92 AC10/AC11: the sentence and the stats badge moved into each 
 
 describe('issue #92 AC13: the strip repaints off its own ResizeObserver, not figure 1\'s resizeMap', () => {
   it("figures/testimony.js observes #strip with its own ResizeObserver", () => {
-    const src = moduleSource(join('figures', 'testimony.js'))
+    const src = moduleSource(join('figures', 'testimony.ts'))
     assert.match(src, /new ResizeObserver\(/, 'figure 2 must own its own ResizeObserver')
     assert.match(src, /\.observe\(\$\('strip'\)\)/, "it must observe its own #strip")
   })
 
   it("figures/atlas.js's resize handling no longer reads or writes #strip, #testimonyList or #outletList", () => {
-    const src = moduleSource(join('figures', 'atlas.js'))
+    const src = moduleSource(join('figures', 'atlas.ts'))
     assert.doesNotMatch(src, /\$\('strip'\)/, 'figure 1 must not touch #strip any more')
     assert.doesNotMatch(src, /\$\('testimonyList'\)/, 'figure 1 must not touch #testimonyList any more')
     assert.doesNotMatch(src, /\$\('outletList'\)/, 'figure 1 must not touch #outletList any more')

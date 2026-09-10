@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { SIZE_CEILING, SIZE_FLOOR, centerLabel, pack, packPass, routeGraph, routesFrom, sizeRange, wrapLines } from '../public/js/layout.js'
+import { SIZE_CEILING, SIZE_FLOOR, centerLabel, pack, packPass, routeGraph, routesFrom, sizeRange, wrapLines } from '../src/ui/layout.js'
 
 // Deterministic stand-in for the browser canvas adapter (public/js/render.js's
 // createCanvasMeasure): width scales linearly with character count and font size, so wrapping

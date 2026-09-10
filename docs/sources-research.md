@@ -100,7 +100,7 @@ swamps Bluesky in the PMI ranking.
 
 **B. Named collectors reusing `fetchFeed`** (`stf`/`juridico`, `oficial`,
 `nicho`), each about five lines. Cost: `Source` in `src/types.ts`, the map in
-`src/collectors/index.ts`, and the labels in `public/js/format.js:54` all have to
+`src/collectors/index.ts`, and the labels in `src/ui/format.ts:54` all have to
 grow, and `docs/factory.md`'s one-issue-at-a-time rule still applies.
 
 B is the only option that lets the interface show the divergence between

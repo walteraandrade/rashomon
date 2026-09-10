@@ -3,8 +3,8 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { FONT_DISPLAY, FONT_SANS } from '../public/js/layout.js'
-import { SOURCE_SEGMENTS } from '../public/js/format.js'
+import { FONT_DISPLAY, FONT_SANS } from '../src/ui/layout.js'
+import { SOURCE_SEGMENTS } from '../src/ui/format.js'
 import { VERCEL_INSIGHTS_TAG } from './pages.js'
 
 // The "Leitura" redesign: one sentence of controls, the map as the figure, a "Como ler"

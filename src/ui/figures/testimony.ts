@@ -1,62 +1,59 @@
 // Figure 2, end to end: its own sentence (person, days, source — no sort/limit, matching what
 // /sources and /testimony actually read), the strip, the testimony list, the outlet list,
 // picking and releasing the focused outlet, and its own ResizeObserver on #strip. Importing
-// this module is side-effect free outside a browser: mount() runs only once app.js hands it a
+// this module is side-effect free outside a browser: mount() runs only once app.ts hands it a
 // root element and the fetched person list, which is what lets node:test import it with no
-// document. Nothing here imports or calls into figures/atlas.js, and nothing there calls into
+// document. Nothing here imports or calls into figures/atlas.ts, and nothing there calls into
 // this file either (issue #92).
 
 import * as api from '../api.js'
-import { SOURCE_SEGMENTS, sourceLabels } from '../format.js'
+import { SOURCE_SEGMENTS, sourceLabels, type OutletRow, type Testimony } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { paintOutlets, paintOutletsError, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../render.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
-/** @typedef {{ id: string, name: string }} Person */
-/** @typedef {{ person?: string, days?: string, source?: string }} Seed */
+// The section element the shell mounts into. Only `classList` is ever read off it, and the
+// suites mount against a DOM stand-in rather than a real element, so the contract is that one
+// property instead of the whole HTMLElement surface.
+export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
+
+export type Person = { id: string; name: string }
+export type Seed = { person?: string; days?: string; source?: string }
 // Whatever GET /api/people rejected with, or null when it answered. Distinct from an empty
 // `people` array: an outage must never paint as "no one is registered yet" (issue #92).
-/** @typedef {unknown} PeopleError */
+export type PeopleError = unknown
 
 // Elements this figure owns by id. The markup in design-5.html guarantees each one exists
 // inside #testimony.
-/** @type {(id: string) => any} */
-const $ = (id) => document.getElementById(id)
+const $ = (id: string): any => document.getElementById(id)
 
-/** @param {unknown} e */
-const aborted = (e) => e instanceof Error && e.name === 'AbortError'
+const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 // A seeded value only ever overrides a <select> when it names one of that select's own
 // options; a malformed value leaves the element at its default index, and nothing throws.
-/** @param {any} select @param {string | undefined} value */
-const applySeed = (select, value) => {
+const applySeed = (select: any, value: string | undefined) => {
   if (value === undefined || !select) return
-  if ([...select.options].some((/** @type {any} */ o) => o.value === value)) select.value = value
+  if ([...select.options].some((o: any) => o.value === value)) select.value = value
 }
 
-/** @param {Person[]} people @param {string | undefined} seeded */
-const resolvePerson = (people, seeded) => (seeded && people.some((p) => p.id === seeded) ? seeded : (people[0]?.id ?? ''))
+const resolvePerson = (people: Person[], seeded: string | undefined) =>
+  seeded && people.some((p) => p.id === seeded) ? seeded : (people[0]?.id ?? '')
 
 // Mounts figure 2 into `root` (#testimony): populates its own sentence's controls from
 // `people` and `initial`, wires every listener, and runs the first load.
-/** @param {any} root @param {{ people: Person[], initial: Seed, peopleError?: PeopleError }} args */
-export const mount = (root, { people, initial, peopleError = null }) => {
-  /** @type {import('../format.js').Testimony | null} */
-  let testimony = null
-  /** @type {import('../format.js').OutletRow[] | null} */
-  let outletRows = null
+export const mount = (root: FigureRoot, { people, initial, peopleError = null }: { people: Person[]; initial: Seed; peopleError?: PeopleError }) => {
+  let testimony: Testimony | null = null
+  let outletRows: OutletRow[] | null = null
   let outlet = 'all'
   let lastStripWidth = 0
   let requestId = 0
-  /** @type {AbortController | null} */
-  let controller = null
+  let controller: AbortController | null = null
 
   // narrowToSources/narrowToTestimony drop sort and limit regardless of what travels in, so a
-  // constant placeholder for both keeps this figure on api.js's existing, unchanged functions
+  // constant placeholder for both keeps this figure on api.ts's existing, unchanged functions
   // without a sort/limit control of its own.
   const controlValues = () => ({ days: $('testimonyDays').value, sort: 'count', limit: '18', source: $('testimonySource').value })
-  /** @param {string} personId @param {URLSearchParams} params */
-  const scopeKey = (personId, params) => personId + '?' + params
+  const scopeKey = (personId: string, params: URLSearchParams) => personId + '?' + params
 
   // Every painter of this figure, over the data the flows already resolved. Each one is a
   // no-op without its data, so this is safe before the first load answers.
@@ -72,8 +69,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   // figure from the data already in hand, and it asks the shared card for that outlet's own
   // texts. A number you cannot read the texts behind is exactly where a reader stops trusting
   // it, so the mean and its evidence answer to the same click. Releasing puts the card away.
-  /** @param {string} d */
-  const pickOutlet = (d) => {
+  const pickOutlet = (d: string) => {
     if (d === outlet) return
     outlet = d
     repaint()
@@ -86,8 +82,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   // This figure's own reading, handed to the shared card: every text this outlet wrote about
   // this figure's person, in this figure's period and source -- no term at all, which is what
   // makes it a different question from the atlas's "textos com esta palavra".
-  /** @param {string} d */
-  const showOutletDocs = (d) => {
+  const showOutletDocs = (d: string) => {
     const personId = $('testimonyPerson').value
     if (!personId) return
     const person = people.find((p) => p.id === personId)
@@ -99,8 +94,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     })
   }
 
-  /** @param {number} id @param {AbortSignal} signal */
-  const loadSourcesFlow = async (id, signal) => {
+  const loadSourcesFlow = async (id: number, signal: AbortSignal) => {
     const person = $('testimonyPerson').value
     const params = api.sourcesParams(controlValues())
     try {
@@ -113,8 +107,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     }
   }
 
-  /** @param {number} id @param {AbortSignal} signal */
-  const loadTestimonyFlow = async (id, signal) => {
+  const loadTestimonyFlow = async (id: number, signal: AbortSignal) => {
     const person = $('testimonyPerson').value
     const params = api.testimonyParams(controlValues())
     const key = scopeKey(person, params)
@@ -178,8 +171,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     debouncedLoad()
   }
 
-  /** @param {Element | null} target */
-  const background = (target) => {
+  const background = (target: Element | null) => {
     if (target && target.closest('[data-domain], [data-testimony-domain], [data-strip-domain]')) return
     releaseOutlet()
   }
@@ -197,7 +189,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   $('testimonyDays').addEventListener('change', onControlChange)
   $('testimonySource').addEventListener('change', onControlChange)
   for (const id of ['strip', 'testimonyList', 'outletList'])
-    $(id).addEventListener('click', (/** @type {MouseEvent} */ e) => background(/** @type {Element | null} */ (e.target)))
+    $(id).addEventListener('click', (e: MouseEvent) => background(e.target as Element | null))
   new ResizeObserver(() => {
     const width = $('strip').clientWidth
     if (testimony && width && width !== lastStripWidth) {

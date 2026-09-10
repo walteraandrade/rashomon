@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { endpoint, json, loadDocs, loadGraph, loadPeople, loadSources, params } from '../public/js/api.js'
+import { endpoint, json, loadDocs, loadGraph, loadPeople, loadSources, params } from '../src/ui/api.js'
 
 // Never hits the network (CLAUDE.md's hard constraint): every test stubs global.fetch and
 // restores it afterward, so this suite never depends on a running server or DATA_DIR.

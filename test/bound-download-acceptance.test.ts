@@ -21,7 +21,8 @@ const streamOf = (chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
   })
 
 describe('AC1: src/http.ts exports MAX_RESPONSE_BYTES = 32 MB', () => {
-  it('AC1: MAX_RESPONSE_BYTES is 32 * 1024 * 1024', () => {
+  it('AC1: MAX_RESPONSE_BYTES is exactly 32 * 1024 * 1024', () => {
+    assert.equal(MAX_RESPONSE_BYTES, 33554432)
     assert.equal(MAX_RESPONSE_BYTES, 32 * 1024 * 1024)
   })
 })
@@ -37,6 +38,7 @@ describe('AC2 & AC3: slowGet is guarded before and while reading the body', () =
     assert.match(beforeBody, /overLimit\(declared, MAX_RESPONSE_BYTES\)/, 'must compare it against MAX_RESPONSE_BYTES via the shared overLimit decision')
     assert.match(beforeBody, /res\.destroy\(\)/)
     assert.match(beforeBody, /fail\(/, 'an over-limit declared length must reject, not resolve')
+    assert.doesNotMatch(beforeBody, /resolve\(/, 'the declared-length check must never resolve')
   })
 
   it('AC3: the streaming handler keeps a running total and rejects once it crosses the limit, never resolving a partial body', () => {
@@ -53,7 +55,8 @@ describe('AC2 & AC3: slowGet is guarded before and while reading the body', () =
 })
 
 describe('AC4: the byte-over-limit decision is a pure, network-free unit', () => {
-  it('AC4: overLimit is callable directly with synthetic numbers, independent of any limit value', () => {
+  it('AC4: overLimit is a plain function, callable directly with synthetic numbers, independent of any limit value', () => {
+    assert.equal(typeof overLimit, 'function')
     assert.equal(overLimit(99, 100), false)
     assert.equal(overLimit(100, 100), false)
     assert.equal(overLimit(101, 100), true)
@@ -93,11 +96,25 @@ describe('AC5: gkg.ts checks content-length before touching the zip body', () =>
     assert.deepEqual(result, { status: 'oversize', stage: 'compressed', bytes: declared, limit: MAX_RESPONSE_BYTES })
     assert.equal(bodyTouched, false, 'download must never read res.body/arrayBuffer() once the declared length is over the ceiling')
   })
+
+  it('AC5: an under-limit declared content-length still reads the body and downloads normally', async () => {
+    const csv = 'a\tb\tc\n'
+    const zip = zipSync({ 'entry.csv': strToU8(csv) })
+    const res = {
+      status: 200,
+      ok: true,
+      headers: { get: (k: string) => (k === 'content-length' ? String(zip.length) : null) },
+      body: streamOf([zip]),
+    }
+    const fetchImpl = (async () => res) as unknown as typeof fetch
+    assert.deepEqual(await download('20260910120000', fetchImpl), { status: 'ok', csv })
+  })
 })
 
 describe('AC6: decompression is bounded by MAX_EXPANDED_BYTES via a network-free, fflate-driven unit', () => {
-  it('AC6: MAX_EXPANDED_BYTES is 256 * 1024 * 1024', () => {
-    assert.equal(MAX_EXPANDED_BYTES, 256 * 1024 * 1024)
+  it('AC6: MAX_EXPANDED_BYTES is 128 * 1024 * 1024', () => {
+    assert.equal(MAX_EXPANDED_BYTES, 134217728)
+    assert.equal(MAX_EXPANDED_BYTES, 128 * 1024 * 1024)
   })
 
   it('AC6: a payload under the limit resolves ok with the exact decoded text', async () => {
@@ -118,20 +135,20 @@ describe('AC6: decompression is bounded by MAX_EXPANDED_BYTES via a network-free
     }
   })
 
-  // A decompression-bomb shape: 256 MB of zeros compresses down to ~256 KB, so `bytes > limit`
-  // alone (the test above) passes even if the whole payload gets decompressed before the stop
-  // check ever runs -- which is exactly what unzipBounded used to do. Feeding the compressed
-  // input across several small pushes means the stop flag can act between them, so a genuine
-  // bound caps the reported bytes at roughly one push's worth of expansion, nowhere near the
-  // full 256 MB.
+  // A decompression-bomb shape: 300 MB of zeros compresses down to a few hundred KB, so
+  // `bytes > limit` alone (the test above) passes even if the whole payload gets decompressed
+  // before the stop check ever runs -- which is exactly what unzipBounded used to do. Feeding
+  // the compressed input across several small pushes means the stop flag can act between them,
+  // so a genuine bound caps the reported bytes at roughly one push's worth of expansion, nowhere
+  // near the full 300 MB.
   it('AC6: a decompression-bomb shape never decompresses past roughly one push worth of output', async () => {
-    const raw = 256 * 1024 * 1024
-    const zip = zipSync({ 'bomb.csv': new Uint8Array(raw) })
-    const result = await unzipBounded(zip, 1000)
+    const trueSize = 300 * 1024 * 1024
+    const zip = zipSync({ 'bomb.csv': new Uint8Array(trueSize) })
+    const result = await unzipBounded(zip, 2000)
     assert.equal(result.status, 'oversize')
     if (result.status === 'oversize') {
       assert.equal(result.stage, 'expanded')
-      assert.ok(result.bytes < raw / 2, `expected well under half of ${raw} bytes decompressed, got ${result.bytes}`)
+      assert.ok(result.bytes < trueSize / 3, `expected well under a third of ${trueSize} bytes decompressed, got ${result.bytes}`)
     }
   })
 })
@@ -142,10 +159,14 @@ describe('AC7: 404 and empty-zip behaviour is unchanged', () => {
     assert.deepEqual(await download('20260910120000', fetchImpl), { status: 'missing' })
   })
 
-  it('AC7: an empty zip (no entries) resolves { status: "ok", csv: "" }', async () => {
+  it('AC7: an empty zip (no entries) resolves { status: "ok", csv: "" } via download', async () => {
     const res = { status: 200, ok: true, headers: { get: () => null }, body: streamOf([zipSync({})]) }
     const fetchImpl = (async () => res) as unknown as typeof fetch
     assert.deepEqual(await download('20260910120000', fetchImpl), { status: 'ok', csv: '' })
+  })
+
+  it('AC7: an empty zip resolves { status: "ok", csv: "" } via unzipBounded directly', async () => {
+    assert.deepEqual(await unzipBounded(zipSync({})), { status: 'ok', csv: '' })
   })
 })
 
@@ -267,9 +288,9 @@ describe('AC10: rss.ts caps its feed fetch against the shared MAX_RESPONSE_BYTES
 })
 
 describe('AC12: the docs state the two size ceilings and the skip-without-marking-done retry fact', () => {
-  it('AC12: 32 MB and 256 MB are both documented', () => {
+  it('AC12: 32 MB and 128 MB are both documented', () => {
     assert.match(docsText, /32\s*MB/)
-    assert.match(docsText, /256\s*MB/)
+    assert.match(docsText, /128\s*MB/)
   })
 
   it('AC12: an oversize GKG slot is documented as skipped without being marked done, so a later run retries it', () => {

@@ -46,8 +46,8 @@ describe('unzipBounded — network-free, driven with a zipSync-built archive', (
     assert.deepEqual(await unzipBounded(zipSync({})), { status: 'ok', csv: '' })
   })
 
-  it('defaults its limit to MAX_EXPANDED_BYTES (256 MB)', () => {
-    assert.equal(MAX_EXPANDED_BYTES, 256 * 1024 * 1024)
+  it('defaults its limit to MAX_EXPANDED_BYTES (128 MB)', () => {
+    assert.equal(MAX_EXPANDED_BYTES, 128 * 1024 * 1024)
   })
 })
 

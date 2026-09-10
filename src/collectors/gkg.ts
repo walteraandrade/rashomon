@@ -10,7 +10,7 @@ const slots = Number(process.env.GKG_SLOTS ?? 24)
 
 // Bounds the *decompressed* stream, since only gkg unzips anything; MAX_RESPONSE_BYTES already
 // bounds the compressed download before it gets here (see download() below).
-export const MAX_EXPANDED_BYTES = 256 * 1024 * 1024
+export const MAX_EXPANDED_BYTES = 128 * 1024 * 1024
 
 export type SlotDownload =
   | { status: 'missing' }
@@ -32,9 +32,9 @@ const concatBytes = (chunks: Uint8Array[], total: number): Uint8Array => {
 // synchronously before ondata ever gets a chance to see the running total. Feeding the
 // compressed bytes in small slices instead, checking the stop flag between calls, bounds
 // how much a single push() can inflate before the loop below gets a chance to stop feeding it.
-// The bound is not exact: deflate tops out near 1032:1, so one 64KB slice can yield ~64MB and the
-// effective ceiling is MAX_EXPANDED_BYTES + ~64MB, not MAX_EXPANDED_BYTES.
-const PUSH_SLICE_BYTES = 64 * 1024
+// The bound is not exact: deflate tops out near 1032:1, so one 16KB slice can yield ~16MB and the
+// effective ceiling is MAX_EXPANDED_BYTES + ~16MB, not MAX_EXPANDED_BYTES.
+const PUSH_SLICE_BYTES = 16 * 1024
 
 // A zip always ends with the end-of-central-directory record, signature PK\x05\x06, followed by
 // at most a 65535-byte comment. Its presence is what separates an entry-less archive from bytes

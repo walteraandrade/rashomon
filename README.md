@@ -81,7 +81,7 @@ outlets.json      researched editorial lean per domain
 data/             PGlite databases, gitignored
 ```
 
-`docs/designs/` keeps the archived design alternatives; they live outside `public/`, so nothing serves them. `public/index.html` and `public/atlas-legacy.html`, the legacy UI pages, are gone.
+`public/index.html` and `public/atlas-legacy.html`, the legacy UI pages, are gone.
 
 ## Style
 

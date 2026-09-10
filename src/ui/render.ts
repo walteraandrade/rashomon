@@ -78,7 +78,7 @@ export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | nu
 }
 
 // The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
-export const maskLegend = (person: PersonTestimony | undefined) =>
+const maskLegend = (person: PersonTestimony | undefined) =>
   person && person.score !== null
     ? `<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
     : `<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
@@ -362,7 +362,7 @@ export const paintOutletsError = () => {
 // different windows. Outlet rows narrow the recorte exactly like the outlet list does, so a
 // reader goes from "this outlet is the harshest" to its words in one click. The `3` in the
 // empty copy is api.ts's narrowToTestimony `min`.
-export const paintTestimony = ({ data, domain, onPick }: { data: Testimony; domain: string; onPick: (domain: string) => void }) => {
+export const paintTestimony = ({ data, domain }: { data: Testimony; domain: string }) => {
   const { overall, by_source, by_domain, method } = data
   const score = overall.score
   if (score === null || score === undefined || !overall.n) {

@@ -11,7 +11,7 @@ const repoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${r
 
 const docsDir = fileURLToPath(new URL('../docs/', import.meta.url))
 
-/** Every markdown page a reader is expected to find, README first. `docs/designs/` is archived, not served, and stays out. */
+/** Every markdown page a reader is expected to find, README first. */
 export const docPages = ['README.md', ...readdirSync(docsDir).filter((f) => f.endsWith('.md')).map((f) => `docs/${f}`)]
 
 /** Page path to its text, for a check that belongs to one page. */

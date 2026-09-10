@@ -15,8 +15,8 @@ import type { Phrases } from './types.js'
 // everywhere. Deliberately not PMI: PMI's denominator rewards two rare words that happen to
 // co-occur once, which is the failure mode a lexicon must not have. It is a ratio of two
 // counts of the same kind, so it reads as a percentage and thresholds without calibration.
-export const minPhraseCount = () => clampEnv(process.env.MIN_PHRASE_COUNT, 5, 2, 1_000_000)
-export const minPhrasePercent = () => clampEnv(process.env.MIN_PHRASE_PERCENT, 35, 1, 100)
+const minPhraseCount = () => clampEnv(process.env.MIN_PHRASE_COUNT, 5, 2, 1_000_000)
+const minPhrasePercent = () => clampEnv(process.env.MIN_PHRASE_PERCENT, 35, 1, 100)
 
 export const resetPhraseStage = () => db.exec(`truncate phrase_stage`)
 

@@ -102,7 +102,7 @@ describe('testimony UI: pure helpers', () => {
 describe('testimony UI: the painter', () => {
   it('paints the overall score and the per-source means as chips, and leaves the outlet ranking to the merged list', () => {
     withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'all', onPick: () => {} })
+      paintTestimony({ data: sample, domain: 'all' })
       assert.equal(els.testimonyLabel.textContent, '-2,16')
       const html = els.testimonyList.innerHTML
       // Label and measurement, so <dt> names it and <dd> carries it; the reading in words drops
@@ -121,16 +121,16 @@ describe('testimony UI: the painter', () => {
 
   it('says the focused outlet\'s own score next to the overall one', () => {
     withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'bbc.com', onPick: () => {} })
+      paintTestimony({ data: sample, domain: 'bbc.com' })
       assert.match(els.testimonyList.innerHTML, /<p class="focus"><b>bbc\.com<\/b>: <strong[^>]*>-2<\/strong> em 6 textos\. O número acima é o recorte inteiro\.<\/p>/)
       assert.equal(els.testimonyLabel.textContent, '-2,16', 'the summary keeps the whole recorte')
     })
     withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'tiny.example', onPick: () => {} })
+      paintTestimony({ data: sample, domain: 'tiny.example' })
       assert.match(els.testimonyList.innerHTML, /<b>tiny\.example<\/b>: menos de 3 textos avaliados/)
     })
     withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'all', onPick: () => {} })
+      paintTestimony({ data: sample, domain: 'all' })
       assert.doesNotMatch(els.testimonyList.innerHTML, /class="focus"/)
     })
   })
@@ -150,7 +150,7 @@ describe('testimony UI: the painter', () => {
   it('says when nothing was scored instead of showing a zero', () => {
     withFakeDocument(ids, (els) => {
       els.testimonyLabel.textContent = 'stale'
-      paintTestimony({ data: { method: 'kikori:q8:abc', overall: { score: null, n: 0 }, by_source: [], by_domain: [] }, domain: 'all', onPick: () => {} })
+      paintTestimony({ data: { method: 'kikori:q8:abc', overall: { score: null, n: 0 }, by_source: [], by_domain: [] }, domain: 'all' })
       assert.equal(els.testimonyLabel.textContent, '')
       assert.match(els.testimonyList.innerHTML, /Nenhum texto avaliado neste recorte \(método kikori:q8:abc\)/)
       assert.doesNotMatch(els.testimonyList.innerHTML, /<strong/)
@@ -177,7 +177,7 @@ describe('testimony UI: the route and the painter agree on the shape', () => {
     const data = await res.json()
     assert.ok(data.overall.n > 0, 'the fixture must have scored rows in the window, or this proves nothing')
     withFakeDocument(ids, (els) => {
-      paintTestimony({ data, domain: 'estadao.com.br', onPick: () => {} })
+      paintTestimony({ data, domain: 'estadao.com.br' })
       assert.equal(els.testimonyLabel.textContent, signed(data.overall.score))
       assert.match(els.testimonyList.innerHTML, /<p class="focus"><b>estadao\.com\.br<\/b>/)
     })

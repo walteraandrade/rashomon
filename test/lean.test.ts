@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, type DocsQuery, type GraphQuery, type RisingQuery, type TimelineQuery } from '../src/graph.js'
-import { readFileSync } from 'node:fs'
 import { parseDomainList, parseLeanList } from '../src/query.js'
 import { OUTLETS } from '../src/outlets.js'
 import { persons, seed } from './fixture.js'

@@ -191,12 +191,4 @@ describe('issue #37 AC4: public/ only holds files that are served on purpose', (
       assert.equal(res.status, 200, `public/${entry.name} is shipped but not reachable`)
     }
   })
-
-  it('the archived design alternatives are gone from public/ and 404 over HTTP', async () => {
-    const shipped = readdirSync(join(root, 'public'))
-    for (const name of ['design-1.html', 'design-2.html', 'design-3.html', 'design-4.html', 'design-6.html', 'designs.html', 'graph-lab.html', 'graph-lab.md', 'graph-circle-lab.html', 'graph-circle-lab.md']) {
-      assert.ok(!shipped.includes(name), `${name} must live in docs/designs/, not public/`)
-      assert.equal((await app.request(`/${name}`)).status, 404)
-    }
-  })
 })

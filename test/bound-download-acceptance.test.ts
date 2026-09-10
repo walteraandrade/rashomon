@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { after, before, describe, it } from 'node:test'
 import { strToU8, zipSync } from 'fflate'
-import { headerLength, MAX_RESPONSE_BYTES, overLimit } from '../src/http.js'
+import { MAX_RESPONSE_BYTES, overLimit } from '../src/http.js'
 import { db, migrate } from '../src/db.js'
 import { download, gkg, MAX_EXPANDED_BYTES, unzipBounded } from '../src/collectors/gkg.js'
 import { fetchFeed } from '../src/collectors/rss.js'
@@ -178,7 +178,6 @@ describe('AC7: 404 and empty-zip behaviour is unchanged', () => {
 describe('AC8 & AC9: an oversize slot is skipped without marking gkg_files, and the run finishes anyway', () => {
   before(migrate)
 
-  const base = 'https://data.gdeltproject.org/gdeltv2'
   const latest = '20260910120000'
   const oversizeSlot = '20260910114500'
   const okSlot = '20260910113000'

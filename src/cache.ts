@@ -17,7 +17,7 @@ export const cacheWindows = (env: NodeJS.ProcessEnv = process.env): CacheWindows
   swr: int(env.API_CACHE_SWR_HOURS, 24, 0, MAX_HOURS) * HOUR,
 })
 
-export const apiCacheWindows = cacheWindows()
+const apiCacheWindows = cacheWindows()
 
 export const NO_STORE = 'no-store'
 

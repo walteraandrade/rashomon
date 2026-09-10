@@ -37,7 +37,7 @@ Bluesky without login returns one page (100 posts) per person. To paginate, set 
 
 - `juridico` (courts/legal press): `noticias.stf.jus.br`, `conjur.com.br`, `jota.info`.
 - `oficial` (institutional press): `camara.leg.br`'s POLITICA and ELEICOES feeds, `senado.leg.br`, `agenciabrasil.ebc.com.br`. Planalto's RSS feed is RDF, not RSS 2.0, and is deliberately excluded — `rss.ts`'s parser assumes RSS 2.0 for every feed and adding RDF support is left to a follow-up issue.
-- `nicho` (partisan/investigative/fact-check press): `brasildefato.com.br`, `revistaforum.com.br`, `cartacapital.com.br`, `gazetadopovo.com.br`, `oantagonista.com.br`, `intercept.com.br`, `apublica.org`, `aosfatos.org`, `lupa.uol.com.br`. `outlets.json` is not extended with `lean`/`basis` for these domains in this issue; they show no lean badge until a follow-up research issue fills it in.
+- `nicho` (partisan/investigative/fact-check press): `brasildefato.com.br`, `revistaforum.com.br`, `cartacapital.com.br`, `gazetadopovo.com.br`, `oantagonista.com.br`, `intercept.com.br`, `apublica.org`, `aosfatos.org`, `lupa.uol.com.br`, `revistaoeste.com`. `revistaoeste.com` is the one feed in the family that still ships the article body rather than a summary (1949 chars a item on 2026-09-10, against 100-400 for the rest), which is what makes a doc move the graph at all — see [source research](sources-research.md). `outlets.json` is not extended with `lean`/`basis` for these domains in this issue; they show no lean badge until a follow-up research issue fills it in.
 
 
 ## Tracked people

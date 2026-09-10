@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { collectors, defaultSources } from '../src/collectors/index.js'
+import { SOURCES } from '../src/query.js'
 import { docPageText, docPages, docsText, sourceTable } from './docs.js'
 import './close.js'
 
@@ -12,6 +13,13 @@ import './close.js'
 describe('docs drift', () => {
   const sources = Object.keys(collectors)
   const isDefault = (source: string) => defaultSources.some((s) => s === source)
+
+  // SOURCES is hand-written, and since issue #108 `pnpm purge <source>` rejects anything
+  // missing from it instead of purging zero rows. A collector left out of the list is now a
+  // source nobody can purge, so the two have to be the same set.
+  it('SOURCES names exactly the registered collectors', () => {
+    assert.deepEqual([...SOURCES].sort(), sources.slice().sort())
+  })
 
   it('every collector has a row in the source table', () => {
     for (const source of sources) {

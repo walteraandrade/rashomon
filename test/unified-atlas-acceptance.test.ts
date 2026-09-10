@@ -71,11 +71,11 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
 
   // Deleting atlas-legacy.html left two dead hrefs in como-ler.html while the suite stayed
   // green: nothing checked that a link between served pages resolves. A page that names a
-  // file is a page that must find it.
-  it('every relative link in a served page resolves to a file under public/', () => {
+  // file is a page that must find it, whichever attribute names it.
+  it('every relative href and src in a served page resolves to a file under public/', () => {
     for (const page of readdirSync(join(root, 'public')).filter((f) => f.endsWith('.html'))) {
       const html = readFileSync(join(root, 'public', page), 'utf8')
-      const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1])
+      const hrefs = [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1])
       const local = hrefs.filter((h) => !/^(https?:)?\/\/|^#|^mailto:|^\/_vercel\//.test(h))
       for (const href of local) {
         const rel = href.split(/[?#]/)[0].replace(/^\//, '')

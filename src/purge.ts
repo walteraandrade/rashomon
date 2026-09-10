@@ -42,11 +42,10 @@ const purgeSource = async (source: string) => {
 
 // Neither the GDELT theme terms nor the pre-revision kikori rows are read anywhere (issue
 // #108); the extra_terms update is scoped to rows that actually carry something, so the
-// reported count means "docs that had themes", not "every doc touched". doc_terms and
-// doc_testimony are the only tables emptied by a delete here -- docs itself is updated in
-// place, and shrinking a jsonb column back to '[]' does not leave the dead-tuple bloat a bulk
-// delete does, so it gets no vacuum full (see purgeOrphanTerms's own comment on why the other
-// two tables do).
+// reported count means "docs that had themes", not "every doc touched". docs is vacuumed with
+// the other two: an update is not an edit in place under MVCC, it writes a new tuple and leaves
+// the old one dead, so emptying a jsonb column on ~30k rows bloats docs exactly as a bulk
+// delete would. Without it the largest share of the space this purge frees stays in the file.
 export const purgeThemes = async () => {
   const { rows: extra } = await db.query<{ n: number }>(
     `with d as (update docs set extra_terms = '[]' where extra_terms <> '[]'::jsonb returning 1) select count(*)::int as n from d`,
@@ -59,7 +58,8 @@ export const purgeThemes = async () => {
        delete from doc_testimony where method like 'kikori:%' and method not like 'kikori:%:%' returning 1
      ) select count(*)::int as n from d`,
   )
-  if (terms[0].n || testimony[0].n) await vacuumFull(['doc_terms', 'doc_testimony'])
+  const tables = [...(extra[0].n ? ['docs'] : []), ...(terms[0].n || testimony[0].n ? ['doc_terms', 'doc_testimony'] : [])]
+  if (tables.length) await vacuumFull(tables)
   console.log(`purged ${terms[0].n} theme terms, ${extra[0].n} extra_terms rows and ${testimony[0].n} stale testimony rows`)
 }
 

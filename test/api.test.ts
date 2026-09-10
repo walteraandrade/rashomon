@@ -31,8 +31,7 @@ describe('params', () => {
     assert.equal(p.get('sort'), 'pmi')
     assert.equal(p.get('limit'), '18')
     assert.equal(p.get('min'), '2')
-    // Not 'all': the atlas asks for words, hashtags and phrases, and leaves GDELT's own
-    // theme codes out of the default recorte (see ATLAS_KINDS in api.js).
+    // Not 'all': the atlas names the three kinds it wants (see ATLAS_KINDS in api.js).
     assert.equal(p.get('kind'), 'word,hashtag,phrase')
     assert.equal(p.get('source'), 'all')
     // No outlet: picking one is a reading inside the second figure, so it never reaches a route.

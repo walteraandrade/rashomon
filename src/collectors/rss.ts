@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import type { Collector, RawDoc, Source } from '../types.js'
-import { headers } from '../http.js'
+import { headers, headerLength, overLimit, readCapped, MAX_RESPONSE_BYTES } from '../http.js'
 import { decodeEntities, domainOf } from '../extract.js'
 
 // Both are the politics section, not the outlet's front page: only docs naming a tracked
@@ -12,7 +12,7 @@ import { decodeEntities, domainOf } from '../extract.js'
 const feeds = ['https://g1.globo.com/rss/g1/politica/', 'https://feeds.folha.uol.com.br/poder/rss091.xml']
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
 
-const decode = (buf: ArrayBuffer) => {
+const decode = (buf: Uint8Array) => {
   const utf8 = new TextDecoder('utf-8').decode(buf)
   return /encoding=["']ISO-8859-1["']/i.test(utf8.slice(0, 200)) ? new TextDecoder('latin1').decode(buf) : utf8
 }
@@ -41,7 +41,15 @@ export const toDoc = (source: Source) => (item: any): RawDoc | null => {
 export const fetchFeed = (source: Source) => async (url: string): Promise<RawDoc[]> => {
   const res = await fetch(url, { headers })
   if (!res.ok) throw new Error(`${source} ${url} ${res.status}`)
-  const xml = parser.parse(decode(await res.arrayBuffer()))
+
+  const declared = headerLength(res.headers.get('content-length'))
+  if (declared !== null && overLimit(declared, MAX_RESPONSE_BYTES)) {
+    throw new Error(`${source} ${url}: response too large (declared ${declared} bytes exceeds ${MAX_RESPONSE_BYTES})`)
+  }
+  const capped = await readCapped(res.body, MAX_RESPONSE_BYTES)
+  if (!capped.ok) throw new Error(`${source} ${url}: response too large (exceeded ${MAX_RESPONSE_BYTES} bytes while streaming)`)
+
+  const xml = parser.parse(decode(capped.data))
   return asArray<any>(xml?.rss?.channel?.item).map(toDoc(source)).filter((d): d is RawDoc => d !== null)
 }
 

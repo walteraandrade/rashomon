@@ -89,6 +89,35 @@ describe('the longer text wins on a known uri, and its terms are re-derived', ()
   })
 })
 
+// Postgres counts characters and JavaScript counts UTF-16 code units, so any non-BMP character
+// makes the two disagree. An enrichment measured by comparing them would read as 'unchanged' and
+// leave the article's text stored beside the headline's terms.
+describe('a document carrying non-BMP characters is still recognised as enriched', () => {
+  before(seed)
+  const uri = 'https://example.org/syndicated-emoji'
+  const headline = { source: 'gnews' as const, uri, text: 'Lula 🇧🇷 fala hoje 😀', publishedAt: now(), domain: 'example.org' }
+  const article = {
+    source: 'rss' as const,
+    uri,
+    text: 'Lula 🇧🇷 fala hoje 😀. O presidente tratou da desoneração da folha e prometeu enviar o texto ao Congresso 🇧🇷 ainda neste semestre.',
+    publishedAt: now(),
+    domain: 'example.org',
+  }
+
+  it('disagrees on length, which is why the outcome cannot be measured that way', async () => {
+    const { rows } = await db.query<{ len: number }>(`select length($1::text) as len`, [headline.text])
+    assert.notEqual(rows[0]?.len, headline.text.length)
+  })
+
+  it('replaces the text and rewrites the derived terms', async () => {
+    assert.deepEqual(await insertDocs([headline], persons), { written: 1, enriched: 0, failed: 0 })
+    assert.ok(!(await termsOf(uri)).includes('desoneracao'))
+    assert.deepEqual(await insertDocs([article], persons), { written: 0, enriched: 1, failed: 0 })
+    assert.equal(await textOf(uri), article.text)
+    assert.ok((await termsOf(uri)).includes('desoneracao'), 'the article terms must reach doc_terms without a reindex')
+  })
+})
+
 describe('insertDocs counts enrichment apart from new documents', () => {
   before(seed)
   const uri = 'https://example.org/syndicated-2'

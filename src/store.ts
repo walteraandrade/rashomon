@@ -126,7 +126,7 @@ export const writeDerived = async (rows: readonly Derived[], size = writeBatchRo
 // replaces, never merely different, so a feed that truncates cannot undo an enrichment and a
 // re-collected document still writes no row version at all.
 const upsertDoc = async (doc: RawDoc) => {
-  const { rows } = await db.query<{ id: number; inserted: boolean; len: number }>(
+  const { rows } = await db.query<{ id: number; inserted: boolean; took_incoming: boolean }>(
     `insert into docs (source, uri, text, published_at, extra_terms, domain, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (uri) do update set
        text = case when length(excluded.text) > length(docs.text) then excluded.text else docs.text end,
@@ -135,21 +135,21 @@ const upsertDoc = async (doc: RawDoc) => {
      where docs.domain is distinct from coalesce(docs.domain, excluded.domain)
         or docs.tone is distinct from (case when docs.source = any($9::text[]) then coalesce(docs.tone, excluded.tone) else null end)
         or length(excluded.text) > length(docs.text)
-     returning id, (xmax = 0) as inserted, length(text) as len`,
+     returning id, (xmax = 0) as inserted, (text = $3) as took_incoming`,
     [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, toneFor(doc), JSON.stringify(doc.extraNames ?? []), tonedSources],
   )
   // A suppressed conflict update returns no row at all: the uri is known and nothing changed.
   return rows[0]
 }
 
-// What one upsert did, which decides what has to be derived. `len` is the length *after* the
-// statement, so an upsert that took the incoming text reports the incoming length. The one
-// imprecision: a metadata-only update whose stored text happens to be exactly as long as the
-// incoming one reads as 'enriched' and re-derives rows identical to the ones it deleted --
-// wasted work on a coincidence, never a wrong row.
+// What one upsert did, which decides what has to be derived. `took_incoming` is the stored text
+// compared against the parameter inside the statement, so no length arithmetic is involved: a
+// character count from Postgres and a UTF-16 code unit count from JavaScript disagree on any
+// non-BMP character, and an enrichment read as 'unchanged' would leave the article's text beside
+// the headline's terms until the next reindex.
 export type Written = 'inserted' | 'enriched' | 'unchanged'
-const outcome = (row: { inserted: boolean; len: number } | undefined, doc: RawDoc): Written =>
-  !row ? 'unchanged' : row.inserted ? 'inserted' : row.len === doc.text.length ? 'enriched' : 'unchanged'
+const outcome = (row: { inserted: boolean; took_incoming: boolean } | undefined): Written =>
+  !row ? 'unchanged' : row.inserted ? 'inserted' : row.took_incoming ? 'enriched' : 'unchanged'
 
 // Terms and candidates of the replaced text have to go, or the headline's would be summed with
 // the article's -- doc_terms' primary key makes the insert idempotent, not corrective.
@@ -170,7 +170,7 @@ const writeBatch = async (docs: readonly RawDoc[], ps: Person[], lexicon: Phrase
   const batch = await docs.reduce<Promise<Batch>>(async (acc, doc) => {
     const a = await acc
     const row = await upsertDoc(doc)
-    const result = outcome(row, doc)
+    const result = outcome(row)
     if (result === 'unchanged') return a
     return {
       derived: [...a.derived, derive(row.id, doc, ps, lexicon)],

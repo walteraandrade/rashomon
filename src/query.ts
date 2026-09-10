@@ -24,22 +24,54 @@ export const int = (v: string | undefined, d: number, lo: number, hi: number) =>
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
 }
 
-// The window is the one query parameter with no natural ceiling on distinct values: `days`
-// clamped to [1, 365], so `?days=364`, `?days=363`, ... were 365 distinct CDN keys per person
-// per filter set, each one a cold function invocation and a real query (issue #111). Only these
-// three windows are reachable now — the same three every <select> in public/design-5.html
-// offers — and any other value snaps to the nearest of them. Every route's own default (30, or
-// 7 on the trend routes) is one of them, so a caller that sends no `days` sees no change.
-export const DAYS = [7, 30, 365]
-
-// Ties go to the shorter window: DAYS is ascending and the comparison is strict, so the first
-// (cheapest) candidate wins. A missing or non-numeric value falls back to the caller's default
-// instead of snapping, exactly like `int` does.
-export const snapDays = (v: string | undefined, d: number): number => {
+// Snap a numeric parameter onto a small set of allowed values instead of clamping it. The CDN
+// keys on the full query string, so every distinct value a clamp lets through is its own cache
+// entry, its own cold function invocation and its own real query (issues #111, #127). Ties go to
+// the smaller value: `set` is ascending and the comparison is strict, so the first (cheapest)
+// candidate wins. A missing or non-numeric value falls back to the caller's default instead of
+// snapping, exactly like `int` does.
+export const snapTo = (set: readonly number[], v: string | undefined, d: number): number => {
   const n = Number.parseInt(v ?? '', 10)
   if (!Number.isFinite(n)) return d
-  return DAYS.reduce((best, x) => (Math.abs(x - n) < Math.abs(best - n) ? x : best))
+  return set.reduce((best, x) => (Math.abs(x - n) < Math.abs(best - n) ? x : best))
 }
+
+// The window is the one query parameter with no natural ceiling on distinct values: `days`
+// clamped to [1, 365], so `?days=364`, `?days=363`, ... were 365 distinct CDN keys per person
+// per filter set. Only these three windows are reachable now — the same three every <select> in
+// public/design-5.html offers. Every route's own default (30, or 7 on the trend routes) is one
+// of them, so a caller that sends no `days` sees no change.
+export const DAYS = [7, 30, 365]
+
+export const snapDays = (v: string | undefined, d: number): number => snapTo(DAYS, v, d)
+
+// Every `limit` the page sends plus every route default: the atlas <select id="limit"> offers
+// 12/18/24, the compare select 20/40/60/100, docsParams sends 5, candidatesQuery sends 30, and
+// the routes default to 40 (graph, compare), 50 (docs, candidates) and 20 (rising). Two values
+// the page never sends: 1, "just the top term", which the acceptance tests for issues #32 and
+// #93 pin against the fixture, and 200, the old documented ceiling, so a script can still ask
+// for everything. Unlike DAYS there is no per-figure select to read these from, so a new value
+// the page starts sending has to be added here (test/params-enumeration-acceptance.test.ts
+// checks).
+export const LIMITS = [1, 5, 12, 18, 20, 24, 30, 40, 50, 60, 100, 200]
+
+// rising and compare used to clamp `limit` to [1, 100], narrower than the others' [1, 200]:
+// each unioned compare key costs two exact figures instead of one (issue #93). The subset keeps
+// that ceiling.
+export const SMALL_LIMITS = LIMITS.filter((x) => x <= 100)
+
+// The page sends min=2 (graph) and min=3 (candidates); the route defaults are 2, 3 and 5. 1 is
+// "no floor", which the page never asks for but the acceptance tests for issues #5, #21 and #32
+// do, against a six-doc fixture where nothing else surfaces a single-doc row.
+export const MINS = [1, 2, 3, 5]
+
+// Nothing in src/ui sends `baseline`; the only reachable value is rising's default.
+export const BASELINES = [30]
+
+// Nothing in src/ui sends `offset`. A page of docs is 50 by default, so offsets are multiples
+// of 50 up to a ceiling of 1000: deep enough for a script that walks a term's documents, small
+// enough that every page is one of 21 keys.
+export const OFFSETS = Array.from({ length: 21 }, (_, i) => i * 50)
 
 export const SOURCES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado', 'juridico', 'oficial', 'nicho']
 
@@ -86,8 +118,8 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
-  limit: int(q.limit, 40, 1, 200),
-  min: int(q.min, 2, 1, 1000),
+  limit: snapTo(LIMITS, q.limit, 40),
+  min: snapTo(MINS, q.min, 2),
   sort: q.sort === 'pmi' ? 'pmi' : 'count',
   // Opt-in, so the default /graph response (and docs/perf-baseline.md) is untouched; the
   // label resolves exactly like /testimony's, so the two never disagree about the default.
@@ -101,19 +133,19 @@ export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
-  limit: int(q.limit, 50, 1, 200),
-  offset: int(q.offset, 0, 0, 1_000_000),
+  limit: snapTo(LIMITS, q.limit, 50),
+  offset: snapTo(OFFSETS, q.offset, 0),
 })
 
 export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery => ({
   days: snapDays(q.days, 7),
-  baseline: int(q.baseline, 30, 1, 365),
+  baseline: snapTo(BASELINES, q.baseline, 30),
   source: SOURCES.includes(q.source ?? '') ? q.source! : 'all',
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
-  limit: int(q.limit, 20, 1, 100),
-  min: int(q.min, 3, 1, 1000),
+  limit: snapTo(SMALL_LIMITS, q.limit, 20),
+  min: snapTo(MINS, q.min, 3),
 })
 
 export const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuery => ({
@@ -130,7 +162,7 @@ export const parseTimelineQuery = (q: Record<string, string | undefined>): Timel
 // GraphQuery.min's default of 2, so a copy-paste from parseQuery can't silently change it.
 export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery => ({
   days: snapDays(q.days, 30),
-  min: int(q.min, 3, 1, 1000),
+  min: snapTo(MINS, q.min, 3),
 })
 
 // Own dedicated parser, not a copy of parseQuery's or parseToneQuery's min: this one
@@ -140,23 +172,23 @@ export const parseTestimonyQuery = (q: Record<string, string | undefined>): Test
   days: snapDays(q.days, 30),
   source: parseSourceList(q.source),
   method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod(),
-  min: int(q.min, 3, 1, 1000),
+  min: snapTo(MINS, q.min, 3),
 })
 
 // Own literals (7 / 5 / 50), per issue #32: distinct from every other route's defaults.
 export const parseCandidatesQuery = (q: Record<string, string | undefined>): CandidatesQuery => ({
   days: snapDays(q.days, 7),
-  min: int(q.min, 5, 1, 1000),
-  limit: int(q.limit, 50, 1, 200),
+  min: snapTo(MINS, q.min, 5),
+  limit: snapTo(LIMITS, q.limit, 50),
 })
 
-// No `min` (see CompareQuery). limit clamps to [1, 100], narrower than GraphQuery's [1, 200]:
-// each unioned key costs two exact figures instead of one, per issue #93's spec.
+// No `min` (see CompareQuery). limit snaps to SMALL_LIMITS, capped at 100 where graph's goes to
+// 200: each unioned key costs two exact figures instead of one, per issue #93's spec.
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
   days: snapDays(q.days, 30),
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
-  limit: int(q.limit, 40, 1, 100),
+  limit: snapTo(SMALL_LIMITS, q.limit, 40),
 })

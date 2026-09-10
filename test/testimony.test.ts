@@ -96,11 +96,11 @@ describe('parseTestimonyQuery', () => {
     assert.equal(parseTestimonyQuery({ days: '9999' }).days, 365)
   })
 
-  it('min defaults to 3 and clamps to [1, 1000], as its own literal', () => {
+  it('min defaults to 3 and snaps to MINS, as its own literal', () => {
     assert.equal(parseTestimonyQuery({}).min, 3)
     assert.equal(parseTestimonyQuery({ min: 'nope' }).min, 3)
     assert.equal(parseTestimonyQuery({ min: '0' }).min, 1)
-    assert.equal(parseTestimonyQuery({ min: '5000' }).min, 1000)
+    assert.equal(parseTestimonyQuery({ min: '5000' }).min, 5)
   })
 
   it('method defaults to the kikori scorer label and validates its charset', () => {

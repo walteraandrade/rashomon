@@ -174,7 +174,7 @@ describe('testimony acceptance criteria, independently verified (issue #21)', ()
   })
 
   // days: [1,365] became the enumeration in DAYS with issue #111; default and ceiling unchanged.
-  it('AC10: parseTestimonyQuery snaps days to an allowed window (default 30) and clamps min to [1,1000] (default 3), pinned as its own literal', () => {
+  it('AC10: parseTestimonyQuery snaps days to an allowed window (default 30) and snaps min to MINS (default 3), pinned as its own literal', () => {
     const d = parseTestimonyQuery({})
     assert.equal(d.days, 30)
     assert.equal(d.min, 3)
@@ -182,7 +182,7 @@ describe('testimony acceptance criteria, independently verified (issue #21)', ()
     assert.equal(parseTestimonyQuery({ days: '366' }).days, 365)
     assert.equal(parseTestimonyQuery({ days: 'nan' }).days, 30)
     assert.equal(parseTestimonyQuery({ min: '0' }).min, 1)
-    assert.equal(parseTestimonyQuery({ min: '1001' }).min, 1000)
+    assert.equal(parseTestimonyQuery({ min: '1001' }).min, 5)
     // pinned distinctly from GraphQuery's min default (2) and ToneQuery's min default (3,
     // coincidentally equal but a separate literal per the spec) -- this only guards the
     // testimony parser's own value, not equality to either sibling parser

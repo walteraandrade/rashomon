@@ -131,7 +131,7 @@ describe('parseCompareQuery: issue #93 acceptance criteria', () => {
     assert.equal(parseCompareQuery({ days: '9999' }).days, 365)
   })
 
-  it('limit defaults to 40 and clamps to [1, 100], narrower than /graph\'s [1, 200]', () => {
+  it('limit defaults to 40 and snaps to SMALL_LIMITS, ceiling 100 where /graph\'s is 200', () => {
     assert.equal(parseCompareQuery({}).limit, 40)
     assert.equal(parseCompareQuery({ limit: '0' }).limit, 1)
     assert.equal(parseCompareQuery({ limit: '9999' }).limit, 100)

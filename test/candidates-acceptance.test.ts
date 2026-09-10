@@ -168,10 +168,10 @@ describe('AC6: parameters clamped in src/query.ts', () => {
     assert.deepEqual(parseCandidatesQuery({}), { days: 7, min: 5, limit: 50 })
   })
 
-  it('clamps out-of-range and garbage values', () => {
+  it('snaps out-of-range values to the nearest allowed one and falls back on garbage', () => {
     assert.deepEqual(parseCandidatesQuery({ days: '9999', min: '0', limit: '-3' }), { days: 365, min: 1, limit: 1 })
     assert.deepEqual(parseCandidatesQuery({ days: '0', min: '0', limit: '-3' }), { days: 7, min: 1, limit: 1 })
-    assert.deepEqual(parseCandidatesQuery({ days: 'abc', min: '2000', limit: '999' }), { days: 7, min: 1000, limit: 200 })
+    assert.deepEqual(parseCandidatesQuery({ days: 'abc', min: '2000', limit: '999' }), { days: 7, min: 5, limit: 200 })
   })
 })
 

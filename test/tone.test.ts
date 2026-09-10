@@ -95,12 +95,12 @@ describe('toneFor', () => {
 })
 
 describe('parseToneQuery', () => {
-  it("AC3: min defaults to 3 and clamps to [1, 1000], independent of GraphQuery.min's default of 2", () => {
+  it("AC3: min defaults to 3 and snaps to MINS, independent of GraphQuery.min's default of 2", () => {
     assert.equal(parseToneQuery({}).min, 3)
     assert.equal(parseToneQuery({ min: 'nope' }).min, 3)
     assert.equal(parseToneQuery({ min: '0' }).min, 1)
-    assert.equal(parseToneQuery({ min: '5000' }).min, 1000)
-    assert.equal(parseToneQuery({ min: '7' }).min, 7)
+    assert.equal(parseToneQuery({ min: '5000' }).min, 5)
+    assert.equal(parseToneQuery({ min: '7' }).min, 5)
   })
 
   it('AC2: days defaults to 30 and clamps to [1, 365]', () => {

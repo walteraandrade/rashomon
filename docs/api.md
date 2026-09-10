@@ -23,6 +23,17 @@ The contract is stable: `/api/people`, `/api/people/:id/graph` and `/api/people/
 
 This is a deliberate narrowing of the old `[1, 365]` clamp (issue #111). The API is public and unauthenticated, and the CDN keys on the full query string, so a free-form `days` was 365 distinct cache entries per person per filter set, each miss a cold function invocation and a real query. Three windows is a surface the cache can actually cover. A caller that used to ask for `?days=45` now gets the 30-day answer, and the response says which window it used wherever it reports one (`rising`, `candidates`, `compare`).
 
+## Enumerated integers (`limit`, `min`, `baseline`, `offset`)
+
+The same reasoning narrows the other integer parameters (issue #127). Each one takes a value from a short list and any other number snaps to the nearest one, ties going to the smaller; a missing or non-numeric value falls back to the route's own default, which is always in the list.
+
+- `limit`: **1**, **5**, **12**, **18**, **20**, **24**, **30**, **40**, **50**, **60**, **100** or **200** — every value the page sends (the atlas offers 12/18/24, the ruler 20/40/60/100, the docs card asks for 5, the candidates panel for 30), every route default (40 on `graph` and `compare`, 50 on `docs` and `candidates`, 20 on `rising`), 1 for "just the top term" and 200 for everything. `rising` and `compare` stop at **100**: each unioned compare key costs two exact figures instead of one, so their ceiling stays where issue #93 put it, and `?limit=200` reads as 100 there.
+- `min`: **1**, **2**, **3** or **5** — the page sends 2 on `graph` and 3 on `candidates`; the defaults are 2 (`graph`), 3 (`rising`, `testimony`, `tone`) and 5 (`candidates`); 1 is "no floor". `?min=4` reads as 3, `?min=1000` as 5.
+- `baseline` (`rising`): **30**, the only value. Nothing on the page sends it; the parameter stays in the contract so a caller that sends it still gets an answer, but the answer is the 30-day baseline.
+- `offset` (`docs`): a multiple of **50**, from **0** up to **1000**. Nothing on the page pages; a script that walks a term's documents pages 50 at a time, and `?offset=26` reads as 50.
+
+Before this the ranges were `[1, 200]`, `[1, 1000]`, `[1, 365]` and `[0, 1000000]`, which multiplied into millions of reachable cache keys per person and window.
+
 ## Shared filters
 
 `source`, `kind`, `domain` and `lean` each take a comma-separated list, matching a doc whose value is any of the listed ones. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all`. A single token behaves exactly as it always did. `rising` and `timeline` still take a single `source` value.

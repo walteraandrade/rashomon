@@ -106,11 +106,10 @@ type CompareTermRow = {
 type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermRow[] }
 
 // `source` must already be normalized by parseSourceList; unlike kind, an unknown or empty
-// source is not rescued here and would scope to zero docs. `domain` must already be the
-// effective domain scope from resolveScope (a comma-joined list, 'all', or '' for an empty
-// domain+lean intersection). string_to_array('', ',') yields an *empty* array (verified
-// against PGlite), so d.domain = any(...) matches nothing and the empty intersection
-// correctly scopes to zero rows.
+// source is not rescued here and would scope to zero docs. domain+lean are resolved here into
+// the effective domain scope (a comma-joined list, 'all', or '' for an empty intersection).
+// string_to_array('', ',') yields an *empty* array (verified against PGlite), so
+// d.domain = any(...) matches nothing and the empty intersection correctly scopes to zero rows.
 type Scope = { days: number; source: string; domain: string; lean: string }
 const scopeCte = (person: Person, q: Scope) => {
   const { domain } = resolveScope(q.domain, q.lean)

@@ -6,7 +6,7 @@
 // fetched person list, which is what lets node:test import the pieces below with no document.
 
 import * as api from '../api.js'
-import { fmt, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type Measure, type Term } from '../format.js'
+import { fmt, html, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type Measure, type Term } from '../format.js'
 import { centerLabel, pack } from '../layout.js'
 import {
   createCanvasMeasure,
@@ -497,7 +497,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   // The sentence's controls: source is built here (it has no static markup), the rest keep
   // their design-5.html options and only take a seeded value when it names one of them.
-  $('source').innerHTML = SOURCE_SEGMENTS.map(([value, text]) => `<option value="${value}">${sourceLabels[value] ?? text}</option>`).join('')
+  $('source').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
   $('source').value = source
   $('person').innerHTML = ''
   for (const p of people) $('person').add(new Option(p.name, p.id))

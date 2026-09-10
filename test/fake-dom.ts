@@ -19,11 +19,19 @@ export type FakeElement = {
   addEventListener: () => void
 }
 
+// The real innerHTML setter stringifies whatever it is given, which is how an `Html` value
+// from format.ts's html tag lands in the DOM; the fake does the same so tests read a string.
 const element = (id: string): FakeElement => {
+  let markup = ''
   const el: FakeElement = {
     id,
     textContent: '',
-    innerHTML: '',
+    get innerHTML() {
+      return markup
+    },
+    set innerHTML(value: string) {
+      markup = String(value)
+    },
     hidden: false,
     attributes: {},
     classes: {},
@@ -69,4 +77,4 @@ export const withFakeDocument = <T>(ids: string[], fn: (els: Record<string, Fake
 
 // Every style="..." literal in a blob of emitted markup, so a test can assert that only
 // CSS custom properties survive there (issue #37 AC2).
-export const inlineStyles = (markup: string) => [...markup.matchAll(/style="([^"]*)"/g)].map((m) => m[1])
+export const inlineStyles = (markup: unknown) => [...String(markup).matchAll(/style="([^"]*)"/g)].map((m) => m[1])

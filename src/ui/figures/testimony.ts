@@ -7,7 +7,7 @@
 // this file either (issue #92).
 
 import * as api from '../api.js'
-import { SOURCE_SEGMENTS, sourceLabels, type OutletRow, type Testimony } from '../format.js'
+import { html, SOURCE_SEGMENTS, sourceLabels, type OutletRow, type Testimony } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { paintOutlets, paintOutletsError, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../render.js'
 import { debounce, fromScope, readScope } from '../state.js'
@@ -178,7 +178,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   // This figure's own sentence: source is built here (it has no static markup), days keeps
   // its design-5.html options, both only take a seeded value when it names one of them.
-  $('testimonySource').innerHTML = SOURCE_SEGMENTS.map(([value, text]) => `<option value="${value}">${sourceLabels[value] ?? text}</option>`).join('')
+  $('testimonySource').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
   applySeed($('testimonySource'), initial.source)
   $('testimonyPerson').innerHTML = ''
   for (const p of people) $('testimonyPerson').add(new Option(p.name, p.id))

@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
+import * as renderModule from '../src/ui/render.js'
 import { paintCandidates, paintOutlets, wordMarkup } from '../src/ui/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 
@@ -96,7 +97,7 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
 
   it('the markup the painters actually emit carries only --var overrides', () => {
     const word = wordMarkup({ id: 'a', term: 'reforma', kind: 'word', pmi: 1, rank: 0, x: 1, y: 2, w: 90, h: 30, size: 28, lineHeight: 33, lines: ['reforma'], count: 4, score: 4 }, 'count')
-    for (const value of inlineStyles(word)) assert.ok(value.startsWith('--'), `wordMarkup emitted style="${value}"`)
+    for (const value of inlineStyles(String(word))) assert.ok(value.startsWith('--'), `wordMarkup emitted style="${value}"`)
 
     const emitted = withFakeDocument(['domainLabel', 'outletList', 'candidateLabel', 'candidateList'], (els) => {
       paintOutlets({
@@ -180,6 +181,151 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     for (const name of ['outlet', 'zoom', 'layoutCache', 'mask', 'getController', 'setController', 'getMask', 'setMask']) assert.equal(name in state, false, `state.js must not export ${name}: it is figure-private now`)
     const testimony = await import('../src/ui/figures/testimony.js')
     assert.deepEqual(Object.keys(testimony), ['mount'], 'figures/testimony.js exposes only mount; outlet/zoom/layoutCache/mask/request-id bookkeeping stay local')
+  })
+})
+
+// Issue #132: markup reaches innerHTML only through format.ts's html tag, so escaping is the
+// tag's job and never a painter's discipline. The scan below walks each module's source with
+// a small tokenizer (comments, quoted strings, regex literals, nested `${}`) and reports every
+// template literal whose literal text looks like markup (`<tag`, `</tag`) yet is not tagged
+// `html`. A regex over the raw file could not tell an inner untagged template from the tagged
+// one that wraps it, and this is exactly the place a forgotten escape would hide.
+type TemplateLiteral = { line: number; tagged: boolean; text: string }
+
+export const templateLiterals = (source: string): TemplateLiteral[] => {
+  const out: TemplateLiteral[] = []
+  const line = (at: number) => source.slice(0, at).split('\n').length
+  let i = 0
+  // What came just before, ignoring whitespace: a `/` after an operand is division, otherwise
+  // a regex literal that may carry quotes and backticks the scan must skip over.
+  let last = ''
+  const template = () => {
+    const start = i
+    const tagged = /html\s*$/.test(source.slice(0, start))
+    let text = ''
+    i++
+    let depth = 0
+    while (i < source.length) {
+      const c = source[i]
+      if (depth === 0) {
+        if (c === '\\') {
+          text += source[i + 1]
+          i += 2
+          continue
+        }
+        if (c === '`') {
+          i++
+          break
+        }
+        if (c === '$' && source[i + 1] === '{') {
+          depth = 1
+          i += 2
+          continue
+        }
+        text += c
+        i++
+        continue
+      }
+      // Inside `${}`: the same tokens as top level, with braces counted so the expression's own
+      // object literals and arrow bodies never end the interpolation early.
+      if (c === '`') {
+        template()
+        continue
+      }
+      if (c === "'" || c === '"') {
+        quoted(c)
+        continue
+      }
+      if (c === '{') depth++
+      if (c === '}') depth--
+      i++
+    }
+    out.push({ line: line(start), tagged, text })
+    last = '`'
+  }
+  const quoted = (q: string) => {
+    i++
+    while (i < source.length && source[i] !== q) i += source[i] === '\\' ? 2 : 1
+    i++
+    last = q
+  }
+  while (i < source.length) {
+    const c = source[i]
+    const two = source.slice(i, i + 2)
+    if (two === '//') {
+      i = source.indexOf('\n', i)
+      if (i < 0) i = source.length
+      continue
+    }
+    if (two === '/*') {
+      i = source.indexOf('*/', i + 2) + 2
+      continue
+    }
+    if (c === '`') {
+      template()
+      continue
+    }
+    if (c === "'" || c === '"') {
+      quoted(c)
+      continue
+    }
+    if (c === '/' && !/[\w)\]`'"]$/.test(last)) {
+      i++
+      let inClass = false
+      while (i < source.length && (inClass || source[i] !== '/')) {
+        if (source[i] === '\\') i++
+        else if (source[i] === '[') inClass = true
+        else if (source[i] === ']') inClass = false
+        i++
+      }
+      i++
+      last = '/'
+      continue
+    }
+    if (!/\s/.test(c)) last = c
+    i++
+  }
+  return out
+}
+
+const looksLikeMarkup = (text: string) => /<\/?[a-zA-Z]/.test(text)
+
+describe('issue #132: markup reaches innerHTML only through the html tag', () => {
+  it('the template scanner sees nesting, comments, strings and regex literals', () => {
+    const found = templateLiterals("const a = html`<p>${x ? `<b>${y}</b>` : ''}</p>` // `<i>`\nconst r = /['\"`]/g\nconst s = '`<u>`'\nconst t = `plain ${'<'}`")
+    assert.deepEqual(found.map((t) => [t.line, t.tagged, looksLikeMarkup(t.text)]), [[1, false, true], [1, true, true], [4, false, false]])
+  })
+
+  it('no module but format.ts calls esc(), and format.ts no longer exports it', async () => {
+    for (const file of jsFiles()) if (file !== 'format.ts') assert.ok(!/\besc\s*\(/.test(moduleSource(file)), `${file} must not call esc(): the html tag escapes`)
+    const format = await import('../src/ui/format.js')
+    assert.equal('esc' in format, false)
+    assert.equal(typeof format.html, 'function')
+    assert.equal(typeof format.raw, 'function')
+  })
+
+  it('no innerHTML = or insertAdjacentHTML( in src/ui is fed by a plain backtick literal', () => {
+    for (const file of jsFiles()) assert.ok(!/(?:innerHTML\s*=|insertAdjacentHTML\([^,]*,)\s*`/.test(moduleSource(file)), `${file} assigns a raw template literal to the DOM`)
+  })
+
+  it('every template literal that looks like markup is tagged html, in every module', () => {
+    let tagged = 0
+    for (const file of jsFiles())
+      for (const t of templateLiterals(moduleSource(file))) {
+        if (!looksLikeMarkup(t.text)) continue
+        assert.ok(t.tagged, `${file}:${t.line} builds markup in an untagged template literal`)
+        tagged++
+      }
+    assert.ok(tagged > 30, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
+  })
+
+  it('the html tag escapes what a painter forgets to: a document text with markup stays text', () => {
+    withFakeDocument(['docs'], (els) => {
+      const { paintDocs } = renderModule
+      paintDocs([{ label: null, data: { total: 1, docs: [{ source: 'rss', domain: 'x.com', text: '<img src=x onerror=alert(1)>', uri: 'https://x.com/a' }] } }])
+      assert.doesNotMatch(els.docs.innerHTML, /<img/)
+      assert.match(els.docs.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/)
+    })
   })
 })
 

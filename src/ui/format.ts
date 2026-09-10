@@ -31,7 +31,25 @@ export type Compare = { days: number; a: { person: PersonRef; about: number }; b
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 
-export const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c])
+const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c])
+
+// Markup that is safe to hand to innerHTML. Only `html` and `raw` make one, so a painter can
+// never assign a string it forgot to escape: the tag escapes every interpolation that is not
+// already Html, joins arrays, and drops null/undefined. The object stringifies to its markup,
+// which is what the innerHTML setter (and the fake DOM in tests) reads.
+const HTML_BRAND: unique symbol = Symbol('html')
+export type Html = { readonly [HTML_BRAND]: true; toString(): string }
+
+export const isHtml = (value: unknown): value is Html => typeof value === 'object' && value !== null && HTML_BRAND in value
+
+// Marks markup built elsewhere as trusted. The caller vouches for it; keep the call sites few.
+export const raw = (markup: string): Html => ({ [HTML_BRAND]: true, toString: () => markup })
+
+const piece = (value: unknown): string =>
+  isHtml(value) ? String(value) : Array.isArray(value) ? value.map(piece).join('') : value === null || value === undefined ? '' : esc(value)
+
+export const html = (strings: TemplateStringsArray, ...values: unknown[]): Html =>
+  raw(strings.reduce((out, s, i) => out + s + (i < values.length ? piece(values[i]) : ''), ''))
 
 export const fmt = (value: unknown) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 

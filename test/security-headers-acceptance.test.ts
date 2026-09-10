@@ -87,6 +87,12 @@ describe('security headers (vercel.json)', () => {
       const matched = rules.filter((r) => sourceMatches(r.source, path))
       assert.ok(matched.length > 0, `no headers entry resolves to ${path}`)
     }
+
+    // the CSP is scoped to exactly the three HTML sources, never the whole site (spec section 3)
+    for (const path of ['/api/people', '/api/people/1/graph', '/atlas.css', '/bundle.js']) {
+      const matched = rules.filter((r) => sourceMatches(r.source, path))
+      assert.equal(matched.length, 0, `${path} must not pick up the CSP`)
+    }
   })
 
   it('AC5-AC7: CSP, nosniff, referrer-policy and permissions-policy apply to every HTML entry point', () => {
@@ -143,8 +149,6 @@ describe('security headers (vercel.json)', () => {
   })
 
   it('AC10: the docs state the CSP forbids inline/eval scripts and allows inline styles for the per-value overrides', () => {
-    assert.match(docsText, /script/i)
-    assert.match(docsText, /(inline|unsafe-inline)/i)
     // the two facts: no inline/eval scripts, and inline styles are allowed for --size/--tone
     assert.match(
       docsText,
@@ -152,7 +156,7 @@ describe('security headers (vercel.json)', () => {
     )
     assert.match(
       docsText,
-      /style-src[\s\S]{0,200}unsafe-inline|allows inline styles|inline styles?[\s\S]{0,80}(--size|--tone)/i,
+      /inline styles?[\s\S]{0,80}(--size|--tone)|(--size|--tone)[\s\S]{0,80}inline styles?/i,
     )
   })
 })

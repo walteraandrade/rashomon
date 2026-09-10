@@ -1,4 +1,5 @@
 import { PGlite } from '@electric-sql/pglite'
+import tls from 'node:tls'
 import pg from 'pg'
 import { instrument, perfEnabled } from './perf.js'
 
@@ -10,17 +11,23 @@ export type Db = {
   close: () => Promise<void>
 }
 
-// Supabase serves a self-signed chain, and any sslmode in the URL would override the ssl
-// option, so it is stripped: the connection stays encrypted, without chain verification.
+// Any sslmode in the URL would override the ssl option below, so it is stripped. A non-local
+// connection is verified against PG_SSL_CA, the server's CA certificate (PEM text), added to
+// Node's default trust store rather than replacing it: POSTGRES_URL from the Vercel Supabase
+// integration can point at the pooler host, not db.<ref>.supabase.co, and the pooler may serve
+// a publicly-signed certificate that PG_SSL_CA alone would fail to verify. Without PG_SSL_CA
+// set, poolConfig refuses to build a config rather than connect with an unverified chain.
 export const poolConfig = (url: string): pg.PoolConfig => {
   const parsed = new URL(url)
   parsed.searchParams.delete('sslmode')
   const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
+  const ca = process.env.PG_SSL_CA
+  if (!isLocal && !ca) throw new Error('PG_SSL_CA is required for a non-local database connection')
   return {
     connectionString: parsed.toString(),
     max: Number(process.env.PG_POOL_MAX ?? 3),
     connectionTimeoutMillis: 10_000,
-    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+    ssl: isLocal ? undefined : { ca: [...tls.rootCertificates, ca as string], rejectUnauthorized: true },
   }
 }
 

@@ -9,6 +9,7 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 | `PORT` | `3210` | server port |
 | `DATA_DIR` | `./data/pg` | PGlite directory; `memory://` is in-memory and is what tests use |
 | `DATABASE_URL` / `POSTGRES_URL` | unset | switches every command to a managed Postgres over `pg` |
+| `PG_SSL_CA` | unset | the Postgres server's CA certificate, PEM text (Supabase: Project Settings > Database > SSL configuration > download certificate); required for any non-local `DATABASE_URL`/`POSTGRES_URL` — a missing value stops the connection instead of falling back to an unverified one |
 | `PG_POOL_MAX` | `3` | connections per function instance, managed Postgres only |
 | `BSKY_HANDLE` / `BSKY_APP_PASSWORD` | unset | authenticated Bluesky, so its collector can paginate |
 | `GKG_SLOTS` | `24` | how many 15-minute GDELT slots to look back (24 = 6h) |
@@ -27,16 +28,24 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 
 ## Deploy
 
-`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN.
+`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN. `PG_SSL_CA` (the Postgres server's CA certificate, PEM text) must be set in Vercel alongside `DATABASE_URL`/`POSTGRES_URL` before a deploy that talks to a non-local database: `poolConfig` refuses to build a connection to any non-local host without it, so a deploy missing the variable fails closed rather than connecting with an unverified chain. `ssl.ca` is `PG_SSL_CA` added to Node's own default trust store, never a replacement for it — `POSTGRES_URL` from the Vercel Supabase integration can point at the pooler host (`aws-0-<region>.pooler.supabase.com`), not `db.<ref>.supabase.co`, and the pooler may serve a publicly-signed certificate that `PG_SSL_CA` alone would fail to verify.
+
+**Rollout order matters.** `api/index.ts` calls `poolConfig` at module load, so a missing `PG_SSL_CA` does not degrade one route — it throws before the function can serve any request. Set the `PG_SSL_CA` secret in both the Vercel project (Settings > Environment Variables) and the GitHub repository secrets (for `.github/workflows/ingest.yml`) *before* merging a change that deploys against a non-local database, not after. Confirm the pooler's chain verifies against the CA you are about to set:
 
 ```bash
-vercel env pull .env.local                                          # POSTGRES_URL, POSTGRES_URL_NON_POOLING
-DATABASE_URL=$POSTGRES_URL_NON_POOLING pnpm migrate                 # create the schema once
-DATABASE_URL=$POSTGRES_URL_NON_POOLING DATA_DIR=./data/pg pnpm push # one-way copy of a local PGlite into it
+openssl s_client -connect <host>.pooler.supabase.com:5432 -starttls postgres -CAfile prod-ca.crt </dev/null 2>&1 | grep -E 'Verify return code|subject='
+```
+
+```bash
+vercel env pull .env.local                       # POSTGRES_URL, POSTGRES_URL_NON_POOLING
+export PG_SSL_CA="$(cat prod-ca.crt)"            # nothing here loads .env; poolConfig reads the process environment
+export DATABASE_URL=$POSTGRES_URL_NON_POOLING
+pnpm migrate                                     # create the schema once
+DATA_DIR=./data/pg pnpm push                     # one-way copy of a local PGlite into it
 vercel deploy --prod
 ```
 
-Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky; trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3).
+Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` and `PG_SSL_CA` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), a `PG_SSL_CA` repository secret (the same PEM CA text `poolConfig` requires), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky; the workflow stops before running `pnpm ingest` if either `DATABASE_URL` or `PG_SSL_CA` is missing. Trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3).
 
 `@huggingface/transformers` is required only by `pnpm score`. Its label logic lives in `src/scorers/method.ts`, which has no imports at all, and `src/query.ts` (the route path `api/index.ts` → `src/server.ts` serves) imports the method labels from there, never from `src/scorers/onnx.ts` — so the deployed `/api` function's import graph never reaches the model loader or the Hub client it dynamic-imports. That import-graph split is what keeps the package out of the deployment: the function bundler only traces what the graph reaches. Measured with `vercel build` on this repo: before this split, `.vercel/output/functions/api/index.func` was 94,327,622 bytes (~90 MB) and carried `onnxruntime-node`, `@huggingface/transformers` and `sharp`; after, it is 18,666,128 bytes (~18 MB) and carries none of them.
 

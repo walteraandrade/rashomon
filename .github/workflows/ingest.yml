@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 60
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PG_SSL_CA: ${{ secrets.PG_SSL_CA }}
       BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
       BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
       GKG_SLOTS: 28
@@ -36,4 +37,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: test -n "$DATABASE_URL" || { echo 'DATABASE_URL secret is missing'; exit 1; }
+      - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
       - run: pnpm ingest ${{ inputs.sources }}

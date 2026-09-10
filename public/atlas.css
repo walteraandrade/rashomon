@@ -241,19 +241,23 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
    nearly transparent, so it says "this one" without competing with what the colour means. */
 .word-button { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.word-hit { fill: transparent; }
+.word-glow, .word-hit { fill: transparent; }
 /* Under the cursor a ground; picked or matched, the same ground at twice the strength. Its edge
-   is blurred, because this site draws no borders and a rectangle with a hard edge IS one, however
-   soft its fill. Just enough blur to lose the edge -- the shape still hugs the word rather than
-   haloing it, or the colour spreads over the words next to it and the map turns to soup. The
-   blur lives on the shape itself, never on the state: put it on :hover and it switches off the
-   instant the cursor leaves, so the hard rectangle reappears for the length of the fade.
+   is two shapes, not one: a core barely blurred (2px) and a wider penumbra behind it (7px). One
+   uniformly blurred rectangle has no form -- it is fog, and fog has no boundary to read. Stacked,
+   the alpha falls off in two steps, which is what gives the ground a body and an edge without
+   ever drawing a line, and this site draws no lines. The blur lives on the shapes themselves,
+   never on the state: put it on :hover and it switches off the instant the cursor leaves, so a
+   hard rectangle reappears for the length of the fade.
    The mark's own colour never changes either: painting a picked word --accent threw away the one
    thing the colour is there to say. */
-.word-hit, .ruler-hit { filter: blur(5px); transition: fill .16s ease-out; }
+.word-glow, .ruler-glow { filter: blur(7px); transition: fill .16s ease-out; }
+.word-hit, .ruler-hit { filter: blur(2px); transition: fill .16s ease-out; }
 .center-hit, .dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
-.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 15%, transparent); }
-.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 30%, transparent); }
+.word-button:hover .word-glow, .word-button:focus-visible .word-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
+.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
+.word-button.is-selected .word-glow, .word-button.is-match .word-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 .word-button.is-dim { opacity: .22; }
 .word-button.is-neighbor { --wc: var(--green); }
 /* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
@@ -409,7 +413,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 }
 @media (prefers-reduced-motion: reduce) {
   .docs-dialog[open] { animation: none; }
-  .word-hit, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card { transition: none; }
+  .word-glow, .word-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card { transition: none; }
 }
 .docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
 /* One control, on a ground that is already lighter than the page: a chip here read as a second
@@ -496,10 +500,12 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    ground under the cursor is that same colour, desaturated and nearly transparent. Recolouring
    the word on hover or on a pick would have hidden the one thing this figure draws. */
 .ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.ruler-hit { fill: transparent; }
+.ruler-glow, .ruler-hit { fill: transparent; }
 .ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--wc); }
-.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 15%, transparent); }
-.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 30%, transparent); }
+.ruler-word:hover .ruler-glow, .ruler-word:focus-visible .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
+.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
+.ruler-word.is-selected .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
 .ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -71,6 +71,27 @@ describe('security headers (vercel.json)', () => {
     // fallback still serves statics is a manual preview-deploy check, per the spec.)
     const json = JSON.stringify(vercelConfig)
     assert.doesNotMatch(json, /"handle"\s*:\s*"filesystem"/)
+  })
+
+  // Under `rewrites` Vercel serves a file from public/ before it consults the list, so a file
+  // named like a literal `source` swallows the rewrite in silence: public/index.html did exactly
+  // that to `/` until #123 deleted it. The other direction matters too: a static `destination`
+  // that no file backs is a rewrite to a 404.
+  it('no file under public/ shadows a literal rewrite source, and every static destination is backed by one', () => {
+    const rewrites: { source: string; destination: string }[] = vercelConfig.rewrites
+    const isLiteral = (path: string) => !/[()*+?[\]{}|\\]/.test(path)
+    const shadowsOf = (path: string) => (path.endsWith('/') ? [`${path}index.html`] : [path, `${path}.html`, `${path}/index.html`])
+
+    for (const { source, destination } of rewrites) {
+      if (isLiteral(source)) {
+        for (const shadow of shadowsOf(source)) {
+          assert.ok(!existsSync(join(root, 'public', shadow)), `public${shadow} would be served in place of the rewrite ${source} -> ${destination}`)
+        }
+      }
+      if (!destination.startsWith('/api/')) {
+        assert.ok(existsSync(join(root, 'public', destination)), `rewrite ${source} -> ${destination} points at no file under public/`)
+      }
+    }
   })
 
   it('AC3: $schema, framework, buildCommand and outputDirectory are unchanged', () => {

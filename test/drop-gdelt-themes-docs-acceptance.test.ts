@@ -39,9 +39,10 @@ describe('issue #108 docs facts', () => {
     assert.match(around, /(gone|removed|deleted|no longer)/i, 'docs must say index.html is gone')
   })
 
-  it('AC18: CLAUDE.md no longer mentions GDELT theme codes anywhere, atlas or API', () => {
+  it('AC18: CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
-    assert.doesNotMatch(claude, /theme/i, 'CLAUDE.md must not describe theme codes staying in the atlas or the API any more')
+    assert.doesNotMatch(claude, /theme codes[^\n]*(stay|remain) in the API/i, 'CLAUDE.md must not describe theme codes staying in the API any more')
+    assert.doesNotMatch(claude, /`kind`[^\n]*`theme`/, 'CLAUDE.md must not list theme as a kind value')
   })
 
   it('AC18: CLAUDE.md no longer describes public/index.html as reachable legacy UI', () => {

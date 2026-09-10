@@ -111,7 +111,7 @@ type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermR
 // empty domain+lean intersection). string_to_array('', ',') yields an *empty* array
 // (verified against PGlite), so d.domain = any(...) matches nothing and the empty
 // intersection correctly scopes to zero rows.
-const scopeCte = `
+const scopeCteText = `
   scope as (
     select d.id from docs d
     where d.published_at >= now() - make_interval(days => $2)
@@ -121,6 +121,27 @@ const scopeCte = `
   about as (
     select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $1
   )`
+
+// `source` must already be normalized by parseSourceList; unlike kind, an unknown or empty
+// source is not rescued here and would scope to zero docs. `domain` must already be the
+// effective domain scope from resolveScope (a comma-joined list, 'all', or '' for an empty
+// domain+lean intersection). string_to_array('', ',') yields an *empty* array (verified
+// against PGlite), so d.domain = any(...) matches nothing and the empty intersection
+// correctly scopes to zero rows.
+type Scope = { days: number; source: string; domain: string; lean: string }
+const scopeCte = (person: Person, q: Scope) => {
+  const { domain } = resolveScope(q.domain, q.lean)
+  return sql`
+  scope as (
+    select d.id from docs d
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+  ),
+  about as (
+    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
+  )`
+}
 
 // PMI's universe. doc_terms only exists for docs naming at least one tracked person, so the
 // numerator's universe is that set; n.total and term_all must be restricted to it too, or the
@@ -186,7 +207,7 @@ const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and str
 const isNameSql = (col: string, names: string) => `(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
 const graphSql = `
-  with ${scopeCte}, ${trackedCte},
+  with ${scopeCteText}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
   term_p as materialized (
@@ -251,7 +272,7 @@ const graphSql = `
 // equivalent, and it still wins -- 26.6 ms -> 22.0 ms on the benchmark corpus, since it now
 // sorts the 443 output rows instead of the 3744 input ones.
 const linksSql = `
-  with ${scopeCte}
+  with ${scopeCteText}
   select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(*)::int as count
   from doc_terms a
   join doc_terms b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
@@ -268,7 +289,7 @@ const linksSql = `
 // for the same reason: the term list is the output of graphSql, and it only runs when asked.
 // count(*) is one row per doc per term by doc_terms' PK, same argument as term_p's.
 const termTestimonySql = `
-  with ${scopeCte},
+  with ${scopeCteText},
   scored as (
     select a.doc_id, dt.score
     from about a join doc_testimony dt on dt.doc_id = a.doc_id and dt.person_id = $1 and dt.method = $5
@@ -287,8 +308,8 @@ const termTestimonySql = `
 
 type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: { id: string; score: number; n: number }[] }
 
-const sourcesSql = `
-  with ${scopeCte}
+const sourcesQuery = (person: Person, q: Scope) => sql`
+  with ${scopeCte(person, q)}
   select d.domain, d.source, count(*)::int as docs,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as tone_n
   from docs d join about a on a.doc_id = d.id
@@ -299,8 +320,7 @@ const sourcesSql = `
 // lean/basis are annotated per row from outlets.json regardless of whether q.lean
 // narrowed the scope: cheap, static, always-available metadata.
 export const sourcesFor = async (person: Person, q: GraphQuery) => {
-  const { domain } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<SourceRow>(sourcesSql, [person.id, q.days, q.source, domain])
+  const { rows } = await run<SourceRow>(sourcesQuery(person, q))
   return rows.map((r) => ({ ...r, ...labelFor(r.domain) }))
 }
 
@@ -318,7 +338,7 @@ export const docsWhereSql = `(
   )`
 
 const docsSql = `
-  with ${scopeCte}
+  with ${scopeCteText}
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
   where ${docsWhereSql}
@@ -326,7 +346,7 @@ const docsSql = `
   limit $7 offset $8`
 
 const docsCountSql = `
-  with ${scopeCte}
+  with ${scopeCteText}
   select count(*)::int as total
   from docs d join about a on a.doc_id = d.id
   where ${docsWhereSql}`
@@ -365,7 +385,7 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
 // scopeCte already bounds age at `days`, so it only matters at the last bucket's exact
 // edge, where it keeps the doc inside the series rather than off the end of it.
 const timelineSql = `
-  with ${scopeCte},
+  with ${scopeCteText},
   bounds as (
     select $2::int as days, $7::int as bucket_days,
       ceil($2::float8 / $7::float8)::int - 1 as last_i
@@ -768,7 +788,7 @@ const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind:
 export const statements = {
   graph: graphSql,
   links: linksSql,
-  sources: sourcesSql,
+  sources: sourcesQuery(samplePerson, sampleScope).text,
   docs: docsSql,
   docsCount: docsCountSql,
   timeline: timelineSql,

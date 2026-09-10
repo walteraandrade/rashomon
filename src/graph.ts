@@ -271,13 +271,13 @@ const graphSql = `
 // instead. Spelling the sort out is what keeps the response identical rather than merely
 // equivalent, and it still wins -- 26.6 ms -> 22.0 ms on the benchmark corpus, since it now
 // sorts the 443 output rows instead of the 3744 input ones.
-const linksSql = `
-  with ${scopeCteText}
+const linksQuery = (person: Person, q: Scope, ids: string[]) => sql`
+  with ${scopeCte(person, q)}
   select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(*)::int as count
   from doc_terms a
   join doc_terms b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
   join about x on x.doc_id = a.doc_id
-  where (a.kind || ':' || a.term) = any($5::text[]) and (b.kind || ':' || b.term) = any($5::text[])
+  where (a.kind || ':' || a.term) = any(${ids}::text[]) and (b.kind || ':' || b.term) = any(${ids}::text[])
   group by 1, 2 having count(*) >= 2
   order by 1, 2`
 
@@ -285,14 +285,14 @@ const linksSql = `
 // mean kikori score of the docs in `about` that carry this term, next to the person's own
 // mean over the same `about`, so the client can colour each word by its distance from the
 // person rather than from zero -- the name bias moves every text of one person the same
-// way, and centring on the person's mean cancels it. Its own statement, like linksSql, and
+// way, and centring on the person's mean cancels it. Its own statement, like linksQuery, and
 // for the same reason: the term list is the output of graphSql, and it only runs when asked.
 // count(*) is one row per doc per term by doc_terms' PK, same argument as term_p's.
-const termTestimonySql = `
-  with ${scopeCteText},
+const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => sql`
+  with ${scopeCte(person, q)},
   scored as (
     select a.doc_id, dt.score
-    from about a join doc_testimony dt on dt.doc_id = a.doc_id and dt.person_id = $1 and dt.method = $5
+    from about a join doc_testimony dt on dt.doc_id = a.doc_id and dt.person_id = ${person.id} and dt.method = ${method}
     where dt.score is not null
   )
   select
@@ -301,7 +301,7 @@ const termTestimonySql = `
       select json_agg(json_build_object('id', id, 'score', score, 'n', n) order by id) from (
         select t.kind || ':' || t.term as id, round(avg(s.score)::numeric, 2)::float8 as score, count(*)::int as n
         from doc_terms t join scored s on s.doc_id = t.doc_id
-        where (t.kind || ':' || t.term) = any($6::text[])
+        where (t.kind || ':' || t.term) = any(${ids}::text[])
         group by 1
       ) x
     ), '[]'::json) as terms`
@@ -623,7 +623,7 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
   return { days: q.days, baseline: q.baseline, terms: rows, outlets }
 }
 
-// links stays a second statement on purpose: its `any($5)` term list is the output of the
+// links stays a second statement on purpose: its `any(ids)` term list is the output of the
 // first one, so folding it in would mean recomputing the ranking to feed itself. It is also
 // the cheap half of the route (see docs/perf-baseline.md) and is skipped entirely when the
 // graph has no nodes.
@@ -633,8 +633,8 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
   const { rows } = await db.query<GraphAggregates>(graphSql, [person.id, q.days, q.source, domain, q.kind, exclude, q.min, q.sort, q.limit])
   const { docs, about, nodes, signature } = rows[0]
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
-  const links = ids.length ? await db.query<LinkRow>(linksSql, [person.id, q.days, q.source, domain, ids]) : { rows: [] }
-  const testimony = q.method ? (await db.query<TermTestimonyRow>(termTestimonySql, [person.id, q.days, q.source, domain, q.method, ids])).rows[0] : null
+  const links = ids.length ? await run<LinkRow>(linksQuery(person, q, ids)) : { rows: [] }
+  const testimony = q.method ? (await run<TermTestimonyRow>(termTestimonyQuery(person, q, q.method, ids))).rows[0] : null
   const perTerm = new Map(testimony?.terms.map((t) => [t.id, { score: t.score, n: t.n }]) ?? [])
   return {
     person,
@@ -783,7 +783,7 @@ const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, of
 
 export const statements = {
   graph: graphSql,
-  links: linksSql,
+  links: linksQuery(samplePerson, sampleScope, ['word:sample']).text,
   sources: sourcesQuery(samplePerson, sampleScope).text,
   docs: docsQuery(samplePerson, sampleDocs).text,
   docsCount: docsCountQuery(samplePerson, sampleDocs).text,
@@ -791,7 +791,7 @@ export const statements = {
   rising: risingQuery(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
   tone: toneQuery({ days: 30, min: 3 }).text,
   testimonySummary: testimonySummaryQuery(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
-  termTestimony: termTestimonySql,
+  termTestimony: termTestimonyQuery(samplePerson, sampleScope, 'stub', ['word:sample']).text,
   candidates: candidatesQuery({ days: 7, min: 5, limit: 50 }).text,
   compare: compareSql,
 } as const

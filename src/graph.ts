@@ -562,39 +562,39 @@ export type Candidate = CandidateRow & { samples: Omit<CandidateSampleRow, 'name
 // Cross-person by construction: candidates are names nobody tracks yet, so there is no
 // person_id to scope by. `previous` is the window of the same length right before this
 // one, so a caller can see what is rising without a second request.
-const candidatesSql = `
+const candidatesQuery = (q: CandidatesQuery) => sql`
   with recent as (
     select c.name, count(distinct c.doc_id)::int as count, count(distinct d.source)::int as sources
     from doc_candidates c join docs d on d.id = c.doc_id
-    where d.published_at >= now() - make_interval(days => $1)
+    where d.published_at >= now() - make_interval(days => ${q.days})
     group by c.name
-    having count(distinct c.doc_id) >= $2
+    having count(distinct c.doc_id) >= ${q.min}
   ),
   previous as (
     select c.name, count(distinct c.doc_id)::int as count
     from doc_candidates c join docs d on d.id = c.doc_id
-    where d.published_at < now() - make_interval(days => $1)
-      and d.published_at >= now() - make_interval(days => 2 * $1)
+    where d.published_at < now() - make_interval(days => ${q.days})
+      and d.published_at >= now() - make_interval(days => 2 * ${q.days})
     group by c.name
   )
   select r.name, r.count, r.sources, coalesce(p.count, 0)::int as previous
   from recent r left join previous p using (name)
   order by r.count desc, r.name
-  limit $3`
+  limit ${q.limit}`
 
-const candidateSamplesSql = `
+const candidateSamplesQuery = (names: string[], days: number) => sql`
   select name, id, source, text from (
     select c.name, d.id, d.source, d.text,
       row_number() over (partition by c.name order by d.published_at desc, d.id desc) as rn
     from doc_candidates c join docs d on d.id = c.doc_id
-    where c.name = any($1::text[]) and d.published_at >= now() - make_interval(days => $2)
+    where c.name = any(${names}::text[]) and d.published_at >= now() - make_interval(days => ${days})
   ) s
   where rn <= 3
   order by name, rn`
 
 export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number; candidates: Candidate[] }> => {
-  const { rows } = await db.query<CandidateRow>(candidatesSql, [q.days, q.min, q.limit])
-  const samples = rows.length ? (await db.query<CandidateSampleRow>(candidateSamplesSql, [rows.map((r) => r.name), q.days])).rows : []
+  const { rows } = await run<CandidateRow>(candidatesQuery(q))
+  const samples = rows.length ? (await run<CandidateSampleRow>(candidateSamplesQuery(rows.map((r) => r.name), q.days))).rows : []
   const byName = new Map<string, Candidate['samples']>()
   samples.forEach(({ name, ...doc }) => byName.set(name, [...(byName.get(name) ?? []), doc]))
   return { days: q.days, candidates: rows.map((r) => ({ ...r, samples: byName.get(r.name) ?? [] })) }
@@ -783,6 +783,6 @@ export const statements = {
   tone: toneQuery({ days: 30, min: 3 }).text,
   testimonySummary: testimonySummarySql,
   termTestimony: termTestimonySql,
-  candidates: candidatesSql,
+  candidates: candidatesQuery({ days: 7, min: 5, limit: 50 }).text,
   compare: compareSql,
 } as const

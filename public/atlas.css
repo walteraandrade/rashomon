@@ -454,6 +454,18 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #compareHiddenNote { margin: 10px 0 0; }
 #compareA, #compareB { font-family: var(--display); }
 
+/* ---------- the pet ---------- */
+/* The one raster on a site that otherwise draws every limit with type. It is allowed exactly
+   where a graph is absent -- an empty recorte, an /api/people outage -- and never beside a
+   number a reader is reading. Integer scales only: a pixel sprite at 1.4x is a blurred sprite,
+   so these widths are 1x and 2x of the two files and nothing in between. */
+.pet { image-rendering: pixelated; flex: 0 0 auto; }
+.pet-empty { display: flex; align-items: center; gap: var(--space-5); padding: var(--space-3) 0; }
+.pet-empty .pet { width: 106px; height: 78px; }
+.pet-empty p { max-width: 38ch; }
+/* .empty centres its text, so the perched bird centres with it rather than sitting in a row. */
+.empty .pet { display: block; width: 52px; height: 74px; margin: 0 auto var(--space-4); }
+
 /* ---------- smaller screens ---------- */
 @media (max-width: 1000px) {
   .figure { padding: 18px var(--space-4) var(--space-4); }

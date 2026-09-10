@@ -80,3 +80,10 @@ Every doc stores `domain`: outlet host for news (`gnews` uses the `<source>` ele
 
 `pnpm purge <source>` deletes that source's docs (and resets `gkg_files` for `gkg`), for a clean re-fetch.
 
+## When a recorte holds nothing
+
+A window can be legally empty: a person nobody wrote about in seven days has terms, tone and
+outlets that are all correctly zero. The page says so in words and never fills the gap with a
+sample — the same rule that keeps `tone` null on a non-GDELT doc. What an empty recorte looks
+like on screen, which of the two boxes may carry the pixel sprite and why only one of them ever
+does, is in [operations.md](operations.md#empty-states-and-the-pet).

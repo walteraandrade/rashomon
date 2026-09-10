@@ -242,7 +242,11 @@ export const paintTestimony = ({ data, domain, onPick }) => {
   const score = overall.score
   if (score === null || score === undefined || !overall.n) {
     $('testimonyLabel').textContent = ''
-    $('testimonyList').innerHTML = `<p class="note">Nenhum texto avaliado neste recorte (método ${esc(method)}).</p>`
+    // The only place on the page a picture is allowed: there is no chart on screen to compete
+    // with when this fires, and the outlet list below stays plain text so one empty recorte can
+    // never put two birds up at once.
+    $('testimonyList').innerHTML =
+      `<div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método ${esc(method)}).<br>Tente um período maior ou outra fonte.</p></div>`
     return
   }
   $('testimonyLabel').textContent = signed(score)

@@ -41,6 +41,14 @@ import { debounce, fromScope, readScope } from '../state.js'
 /** @type {(id: string) => any} */
 const $ = (id) => document.getElementById(id)
 
+// The one box on this page where a picture is allowed: nothing is on screen to compete with it,
+// because the atlas has failed. Both ways in -- an /api/people outage and a failed graph fetch --
+// paint it, since to a reader they are the same box saying the same thing. Figures 2 and 3 print
+// the same outage in words and stay wordless: all three fail together, and three birds would read
+// as decoration rather than as one failure.
+const OUTAGE =
+  '<div class="empty"><img class="pet" src="/pet-caracara-perched.png" alt="" width="26" height="37">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
+
 // A caught value is `unknown`; the flows below only ever ask whether the browser aborted the
 // request, so this is the one place that inspects it.
 /** @param {unknown} e */
@@ -476,8 +484,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
       $('columns').hidden = true
       $('overflow').hidden = true
       $('legend').textContent = ''
-      $('viewport').innerHTML =
-        '<div class="empty">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
+      $('viewport').innerHTML = OUTAGE
       $('retry').addEventListener('click', () => location.reload())
       $('inspector').textContent = 'Use tentar novamente quando a API estiver disponível.'
       $('viewport').setAttribute('aria-busy', 'false')
@@ -514,8 +521,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
       $('columns').hidden = true
       $('overflow').hidden = true
       $('legend').textContent = ''
-      $('viewport').innerHTML =
-        '<div class="empty">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
+      $('viewport').innerHTML = OUTAGE
       $('retry').addEventListener('click', load)
       $('inspector').textContent = 'Use tentar novamente quando a API estiver disponível.'
     } finally {

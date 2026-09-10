@@ -82,8 +82,19 @@ const show = (wide) => {
     dialog.style.top = ''
   }
   if (!dialog.open) {
-    if (float) dialog.show?.()
-    else dialog.showModal?.()
+    if (float) {
+      // A <dialog> focuses its first control on open. For the modal that is right; for a card
+      // that floats over the figure while the reader goes on picking words it is not -- it would
+      // take the keyboard away from the map on every click. So the floating card gives focus
+      // straight back to whatever had it.
+      const had = /** @type {HTMLElement | null} */ (typeof document !== 'undefined' ? document.activeElement : null)
+      dialog.show?.()
+      const now = /** @type {HTMLElement | null} */ (typeof document !== 'undefined' ? document.activeElement : null)
+      if (now && now !== had && dialog.contains?.(now)) {
+        if (had && had.focus && had !== document.body) had.focus({ preventScroll: true })
+        else now.blur?.()
+      }
+    } else dialog.showModal?.()
   }
   if (float) clamp()
 }

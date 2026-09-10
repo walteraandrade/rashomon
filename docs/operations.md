@@ -26,7 +26,13 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 
 ## Deploy
 
-`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN. `PG_SSL_CA` (the Postgres server's CA certificate, PEM text) must be set in Vercel alongside `DATABASE_URL`/`POSTGRES_URL` before a deploy that talks to a non-local database: `poolConfig` refuses to build a connection to any non-local host without it, so a deploy missing the variable fails closed rather than connecting with an unverified chain.
+`DATABASE_URL` (or `POSTGRES_URL`, what the Vercel Supabase integration injects) switches every command from embedded PGlite to a managed Postgres over `pg`. Without it nothing changes. The serverless filesystem is read-only and short-lived, so a managed database is the only shape that works on Vercel; `api/index.ts` wraps the Hono app and `vercel.json` serves `public/` from the CDN. `PG_SSL_CA` (the Postgres server's CA certificate, PEM text) must be set in Vercel alongside `DATABASE_URL`/`POSTGRES_URL` before a deploy that talks to a non-local database: `poolConfig` refuses to build a connection to any non-local host without it, so a deploy missing the variable fails closed rather than connecting with an unverified chain. `ssl.ca` is `PG_SSL_CA` added to Node's own default trust store, never a replacement for it — `POSTGRES_URL` from the Vercel Supabase integration can point at the pooler host (`aws-0-<region>.pooler.supabase.com`), not `db.<ref>.supabase.co`, and the pooler may serve a publicly-signed certificate that `PG_SSL_CA` alone would fail to verify.
+
+**Rollout order matters.** `api/index.ts` calls `poolConfig` at module load, so a missing `PG_SSL_CA` does not degrade one route — it throws before the function can serve any request. Set the `PG_SSL_CA` secret in both the Vercel project (Settings > Environment Variables) and the GitHub repository secrets (for `.github/workflows/ingest.yml`) *before* merging a change that deploys against a non-local database, not after. Confirm the pooler's chain verifies against the CA you are about to set:
+
+```bash
+openssl s_client -connect <host>.pooler.supabase.com:5432 -starttls postgres -CAfile prod-ca.crt </dev/null 2>&1 | grep -E 'Verify return code|subject='
+```
 
 ```bash
 vercel env pull .env.local                       # POSTGRES_URL, POSTGRES_URL_NON_POOLING

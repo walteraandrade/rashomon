@@ -1,7 +1,10 @@
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
+import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
+
+const run = <T>(q: Sql) => db.query<T>(q.text, q.values)
 
 export type GraphQuery = {
   days: number
@@ -408,29 +411,26 @@ export const timelineFor = async (person: Person, q: TimelineQuery) => {
 //
 // `tone is not null` is therefore free rather than a behaviour change (issue #47): it only
 // removes rows both aggregates already ignore, so avg and n are untouched, and a group can
-// only survive `count(d.tone) >= $2` when $2 >= 1 (parseToneQuery's floor) if it still holds
+// only survive `count(d.tone) >= min` when min >= 1 (parseToneQuery's floor) if it still holds
 // at least one toned row. It cuts the rows joined and hashed from 3847 to 1748 on the
 // benchmark corpus, 22.5 ms -> 14.3 ms, with the same buffer count.
-const toneSql = `
+const toneQuery = (q: ToneQuery) => sql`
   select p.id as person_id, d.domain as domain,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as n
   from docs d
   join doc_persons dp on dp.doc_id = d.id
   join persons p on p.id = dp.person_id
-  where d.published_at >= now() - make_interval(days => $1)
+  where d.published_at >= now() - make_interval(days => ${q.days})
     and d.domain is not null
     and d.tone is not null
   group by p.id, d.domain
-  having count(d.tone) >= $2
+  having count(d.tone) >= ${q.min}
   order by p.id, d.domain`
 
-const tonePersonsSql = `select id, name from persons order by name`
+const tonePersonsQuery = sql`select id, name from persons order by name`
 
 export const toneFor = async (q: ToneQuery) => {
-  const [cells, people] = await Promise.all([
-    db.query<ToneCellRow>(toneSql, [q.days, q.min]),
-    db.query<ToneListRow>(tonePersonsSql),
-  ])
+  const [cells, people] = await Promise.all([run<ToneCellRow>(toneQuery(q)), run<ToneListRow>(tonePersonsQuery)])
   const domains = [...new Set(cells.rows.map((c) => c.domain))].sort()
   return { persons: people.rows, domains, cells: cells.rows }
 }
@@ -768,7 +768,10 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
 
 // The exact statements the routes run, exported read-only so `pnpm bench` can put each one
 // through EXPLAIN (ANALYZE, BUFFERS) with representative parameters. Nothing here changes
-// what a route executes; it is the same string object the handlers above use.
+// what a route executes: a builder numbers its placeholders by the statement's shape alone,
+// never by the values bound, so the text a sample call renders is byte-for-byte the text the
+// handler sends.
+
 export const statements = {
   graph: graphSql,
   links: linksSql,
@@ -777,7 +780,7 @@ export const statements = {
   docsCount: docsCountSql,
   timeline: timelineSql,
   rising: risingSql,
-  tone: toneSql,
+  tone: toneQuery({ days: 30, min: 3 }).text,
   testimonySummary: testimonySummarySql,
   termTestimony: termTestimonySql,
   candidates: candidatesSql,

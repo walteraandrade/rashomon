@@ -6,7 +6,7 @@
 // fetched person list, which is what lets node:test import the pieces below with no document.
 
 import * as api from '../api.js'
-import { fmt, label, SOURCE_SEGMENTS, sourceLabels } from '../format.js'
+import { fmt, kinds, label, SOURCE_SEGMENTS, sourceLabels } from '../format.js'
 import { centerLabel, pack } from '../layout.js'
 import {
   createCanvasMeasure,
@@ -16,12 +16,9 @@ import {
   paintCandidatesError,
   paintCandidatesLoading,
   paintColumns,
-  paintDocs,
-  paintDocsError,
-  paintDocsLoading,
-  paintDocsTitle,
   paintSelection,
 } from '../render.js'
+import * as docsCard from '../docs-card.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
 /** @typedef {import('../format.js').Graph} Graph */
@@ -35,7 +32,7 @@ import { debounce, fromScope, readScope } from '../state.js'
 /** @typedef {unknown} PeopleError */
 
 // Elements this figure owns by id. The markup in design-5.html guarantees each one exists
-// (the sentence and the toolbar live inside #workspace; #docsDialog sits next to it), and the
+// (the sentence and the toolbar live inside #workspace; the shared #docsDialog is not this
 // values read off them (select.value, button.disabled) are per-element, so this is typed
 // loosely on purpose rather than casting at all ~100 call sites.
 /** @type {(id: string) => any} */
@@ -113,11 +110,13 @@ export const createHandlers = ({
   },
   // A click that lands on nothing selectable is the other way out. The listener sits on the
   // map viewport and the list, so the toolbar and the inspector's own buttons never reach it;
-  // inside those two, anything without a data-node/data-col is empty space.
+  // inside those two, anything without a data-node/data-col/data-person-docs is empty space.
+  // The person's own entry point has to be in that list: it sits inside the viewport, so the
+  // click that opens her card bubbles straight into this handler, which would close it again.
   /** @param {Element | null} target */
   background: (target) => {
     if (!getSelected()) return
-    if (target && target.closest('[data-node], [data-col]')) return
+    if (target && target.closest('[data-node], [data-col], [data-person-docs]')) return
     choose(null)
   },
   // Escape closes the documents modal when it is open, and only then clears the selection:
@@ -177,16 +176,8 @@ export const layoutKey = (person, terms, sort, limit) =>
  * @param {URLSearchParams} base
  * @param {Term | null} n
  */
-export const docsQuery = (base, n) => {
-  const q = new URLSearchParams(base)
-  q.delete('sort')
-  q.delete('min')
-  q.delete('testimony')
-  q.set('term', n ? n.term : '')
-  q.set('kind', n ? n.kind : 'all')
-  q.set('limit', '5')
-  return q
-}
+export const docsQuery = (base, n) =>
+  api.docsParams({ days: base.get('days') ?? '30', source: base.get('source') ?? 'all', term: n ? n.term : '', kind: n ? n.kind : 'all' })
 
 // Issue #43: one cache key per scope, built from the filters that scope's route actually
 // reads, so a change to a control the route ignores cannot evict it. The keys are the
@@ -249,20 +240,12 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   let requestId = 0
   /** @type {AbortController | null} */
   let controller = null
-  let docsId = 0
-  /** @type {AbortController | null} */
-  let docsController = null
+  let cardTerm = /** @type {Term | null} */ (null)
   /** @type {AbortController | null} */
   let candidateController = null
 
   const nextRequestId = () => ++requestId
   const currentRequestId = () => requestId
-  const currentDocsId = () => docsId
-  const cancelDocs = () => {
-    ++docsId
-    docsController?.abort()
-    return docsId
-  }
 
   const measured = () => (measure ??= createCanvasMeasure())
   const controlValues = () => ({ days: $('days').value, sort: $('sort').value, limit: $('limit').value, source })
@@ -320,15 +303,15 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   }
 
   const paintCurrentSelection = () =>
-    paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), mask: getMask(), personTestimony: graph?.stats?.testimony })
+    paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: graph?.person?.name ?? '', about: graph?.stats?.about, mask: getMask(), personTestimony: graph?.stats?.testimony })
 
   const paintCurrentInspector = () =>
-    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id), onShowDocs: loadDocs })
+    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id) })
 
   const drawCurrentMap = () => {
     const current = /** @type {Graph} */ (graph)
     currentLayout = getLayout()
-    drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), personTestimony: current.stats?.testimony })
+    drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personTestimony: current.stats?.testimony })
     resizeMap()
     paintCurrentSelection()
     $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - $('viewport').clientWidth) / 2)
@@ -337,40 +320,35 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   /** @param {string | null} id */
   const choose = (id) => {
     setSelected(id)
-    cancelDocs()
+    docsCard.close()
     paintCurrentSelection()
     paintCurrentInspector()
     const chosen = nodes.find((n) => n.id === id)
     $('selectionNote').textContent = chosen ? `${label(chosen)} selecionado. Detalhes atualizados.` : 'Seleção limpa.'
+    // Picking a word IS the request for its texts, so the card follows the selection: it opens
+    // on the word just chosen and goes away with the selection it belonged to.
+    if (chosen) showDocs(chosen)
+    else docsCard.close()
   }
 
-  // The only path to GET /docs: the reader pressed the button in the inspector. The modal
-  // opens first, with the loading copy or the memoized rows, and the fetch runs behind it.
+  // The person's card replaces whatever word was on screen: leaving the word is what asking for
+  // the whole person means, so the selection goes first and her documents open after it.
+  const showPersonDocs = () => {
+    if (getSelected() !== null) choose(null)
+    showDocs(null)
+  }
+
+  // This figure's two readings, handed to the shared card: a word ("Documentos com palavra")
+  // and the person at the centre ("Documentos sobre"). The recorte is this figure's own.
   /** @param {Term | null} n */
-  const loadDocs = async (n) => {
-    const id = cancelDocs()
-    const controller = new AbortController()
-    docsController = controller
-    if (!$('docs') || !graph || !$('person').value) return
-    paintDocsTitle({ term: n, personName: graph.person.name })
-    const dialog = $('docsDialog')
-    if (dialog && !dialog.open) dialog.showModal()
-    const person = $('person').value
-    const base = graphQuery()
-    const query = docsQuery(base, n)
-    const key = scopeKeys(person, base, n).docs
-    // A hit paints straight from the memo, so re-entering the unselected inspector after a
-    // sort change or a view-mode switch shows the same five documents without a second
-    // request. A miss still shows the loading copy first.
-    const cached = readScope('docs', key)
-    if (!cached) paintDocsLoading()
-    try {
-      const data = await fromScope('docs', key, () => api.loadDocs(person, query, controller.signal))
-      if (id !== currentDocsId()) return
-      paintDocs(data)
-    } catch (e) {
-      if (id === currentDocsId() && !aborted(e)) paintDocsError(() => loadDocs(n))
-    }
+  const showDocs = (n) => {
+    if (!graph || !$('person').value) return
+    cardTerm = n
+    docsCard.open({
+      kicker: n ? `Documentos com ${kinds[n.kind] ? kinds[n.kind].toLowerCase() : 'o termo'}` : 'Documentos sobre',
+      title: n ? label(n) : graph.person.name,
+      sides: [{ personId: $('person').value, personName: graph.person.name, query: docsQuery(graphQuery(), n) }],
+    })
   }
 
   // The candidate queue has no panel on the atlas any more (it is a maintenance list, not a
@@ -405,7 +383,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     if (nodes.length) {
       if (!currentLayout || mode === 'map') drawCurrentMap()
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
-      paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), personTestimony: current.stats?.testimony })
+      paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony })
     } else {
       $('viewport').innerHTML = '<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'
       $('columns').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
@@ -419,7 +397,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   /** @param {string} next */
   const setMode = (next) => {
     mode = next
-    cancelDocs()
+    docsCard.close()
     render()
   }
 
@@ -440,12 +418,6 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     $('atlasStats').textContent = graph ? `${fmt(graph.stats?.about)} docs · ${sourceLabels[source] || source}` : ''
   }
 
-  const closeDocs = () => {
-    cancelDocs()
-    const dialog = $('docsDialog')
-    if (dialog?.open) dialog.close()
-  }
-
   const signal = () => /** @type {AbortController} */ (controller).signal
 
   // A reload keeps the previous map, columns, legend and inspector on screen, dimmed by the
@@ -457,7 +429,7 @@ export const mount = (root, { people, initial, peopleError = null }) => {
     const id = nextRequestId()
     controller?.abort()
     controller = new AbortController()
-    cancelDocs()
+    docsCard.close()
     resetGraph()
     const first = !graph
     busy = true
@@ -560,8 +532,8 @@ export const mount = (root, { people, initial, peopleError = null }) => {
       $('mask').setAttribute('aria-pressed', String(getMask()))
       if (graph && !busy) paintCurrentSelection()
     },
-    closeDocs,
-    docsOpen: () => !!$('docsDialog')?.open,
+    closeDocs: () => docsCard.close(),
+    docsOpen: docsCard.isOpen,
   })
 
   // The sentence's controls: source is built here (it has no static markup), the rest keep
@@ -587,12 +559,6 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   $('zoomReset').addEventListener('click', handlers.zoomReset)
   for (const id of ['viewport', 'columns'])
     $(id).addEventListener('click', (/** @type {MouseEvent} */ e) => handlers.background(/** @type {Element | null} */ (e.target)))
-  $('docsClose').addEventListener('click', handlers.docsClose)
-  // A click on the backdrop lands on the dialog element itself, never on its children.
-  $('docsDialog').addEventListener('click', (/** @type {MouseEvent} */ e) => {
-    if (e.target === $('docsDialog')) handlers.docsClose()
-  })
-  $('docsDialog').addEventListener('close', () => cancelDocs())
   document.addEventListener('keydown', handlers.keydown)
   new ResizeObserver(resizeMap).observe($('viewport'))
   document.fonts?.ready?.then(() => {

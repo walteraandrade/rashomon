@@ -6,6 +6,7 @@
 // is side-effect free outside a browser: boot() runs only when a `document` exists, which is
 // what lets node:test import the pieces below.
 
+import { mountDocsCard } from './docs-card.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountTestimony } from './figures/testimony.js'
@@ -92,6 +93,9 @@ export const boot = async () => {
   } catch (e) {
     peopleError = e
   }
+  // The documents card belongs to no figure -- all three open it -- so the shell wires it once,
+  // before any of them can ask for it.
+  mountDocsCard()
   for (const figure of FIGURES) {
     const root = document.getElementById(figure.sectionId)
     if (!root) continue

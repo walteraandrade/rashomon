@@ -65,16 +65,16 @@ describe('AC1: figures/compare.js is importable outside a browser and exports ex
 describe('AC2: figures/compare.js declares exactly the import list the spec gives, and no sibling figure ever reaches into it', () => {
   const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 
-  it('figures/compare.js imports exactly api.js, format.js, render.js, state.js (no direct layout.js)', () => {
+  it('figures/compare.js imports exactly api.js, docs-card.js, format.js, render.js, state.js (no direct layout.js)', () => {
     const resolved = importsOf(compareSource()).map((spec) => (spec.startsWith('../') ? `.${spec.slice(2)}` : spec))
-    assert.deepEqual(resolved.sort(), ['./api.js', './format.js', './render.js', './state.js'])
+    assert.deepEqual(resolved.sort(), ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'])
   })
 
   it('app.js imports all three figure mounts, including figures/compare.js', () => {
     const appSrc = readFileSync(join(root, 'public', 'js', 'app.js'), 'utf8')
     assert.deepEqual(
       importsOf(appSrc).sort(),
-      ['./figures/atlas.js', './figures/testimony.js', './figures/compare.js'].sort(),
+      ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'].sort(),
     )
   })
 
@@ -472,8 +472,8 @@ describe('AC14: public/compare.html no longer exists', () => {
 // ---------- AC15 ----------
 
 describe('AC15: the header nav link points at the in-page anchor', () => {
-  it('href="#compare", label unchanged ("comparar pessoas")', () => {
-    assert.match(design5(), /<a class="compare-link" href="#compare">comparar pessoas<\/a>/)
+  it('the header carries no in-page link to the ruler', () => {
+    assert.doesNotMatch(design5(), /compare-link|comparar pessoas/)
   })
 })
 

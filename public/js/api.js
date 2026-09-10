@@ -48,6 +48,17 @@ export const narrowToTestimony = (graphParams) => new URLSearchParams({ days: gr
 /** @param {Parameters<typeof params>[0]} opts */
 export const testimonyParams = (opts) => narrowToTestimony(params(opts))
 
+// The documents query, in one place because all three figures build one now: /docs reads term,
+// kind, days, source, domain and limit and nothing the graph's own ordering carries, and the
+// card always asks for five rows. `domain` travels only when a figure names an outlet -- the
+// atlas and the ruler always answer for the whole recorte.
+/** @param {{ days: string, source: string, term?: string, kind?: string, domain?: string, limit?: string }} opts */
+export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', limit = '5' }) => {
+  const q = new URLSearchParams({ days, source, term, kind, limit })
+  if (domain) q.set('domain', domain)
+  return q
+}
+
 /** @param {string} url @param {AbortSignal} [signal] */
 export const json = async (url, signal) => {
   const response = await fetch(url, { signal })

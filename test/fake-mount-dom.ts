@@ -19,10 +19,10 @@ class Listenable {
   }
 }
 
-const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain') =>
+const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'data-col') =>
   [...html.matchAll(new RegExp(`${attr}="([^"]*)"`, 'g'))].map(([, value]) => {
     const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
-    stub.dataset = attr === 'data-domain' ? { domain: value } : { stripDomain: value }
+    stub.dataset = attr === 'data-domain' ? { domain: value } : attr === 'data-col' ? { col: value } : { stripDomain: value }
     return stub
   })
 
@@ -37,6 +37,11 @@ const dataTermStubs = (html: string) =>
     stub.dataset = { term, kind }
     return stub
   })
+
+// The person's own entry to her documents (issue: the inspector's button is gone). It carries
+// no value, only the click and the Enter/Space a <button> would have handled on its own, so one
+// bare listenable per occurrence is the whole stub.
+const personDocsStubs = (html: string) => [...html.matchAll(/data-person-docs/g)].map(() => new Listenable())
 
 // A generic node: covers every button/div/dialog id both figures touch. `innerHTML` is kept
 // as plain text (this harness parses nothing beyond the two data-* attributes above), which is
@@ -56,7 +61,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-person-docs'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -88,10 +93,10 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-person-docs') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
-    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : dataStubs(this.html, attr)
+    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : dataStubs(this.html, attr)
     this.domainStubs.push({ attr, html: this.html, stubs })
     return stubs
   }
@@ -99,7 +104,16 @@ class FakeBox extends Listenable {
     if (selector === '[data-domain]') return this.stubsFor('data-domain')
     if (selector === '[data-strip-domain]') return this.stubsFor('data-strip-domain')
     if (selector === '[data-term]') return this.stubsFor('data-term')
+    if (selector === '[data-col]') return this.stubsFor('data-col')
+    if (selector === '[data-person-docs]') return this.stubsFor('data-person-docs')
     return []
+  }
+  style: Record<string, string> = {}
+  getBoundingClientRect() {
+    return { left: 0, top: 0, width: 360, height: 420 }
+  }
+  show() {
+    this.open = true
   }
   showModal() {
     this.open = true
@@ -200,7 +214,14 @@ const atlasIds = () => ({
   zoomReset: new FakeBox('zoomReset'),
   clear: new FakeBox('clear'),
   docsClose: new FakeBox('docsClose'),
+  docsGrip: new FakeBox('docsGrip'),
   docsDialog: new FakeBox('docsDialog'),
+  // The card's own three: #docs is what loadDocs checks for before it fetches at all, so a
+  // harness without it would let every "picking a word asks for its texts" criterion pass by
+  // never asking for anything.
+  docs: new FakeBox('docs'),
+  docsKicker: new FakeBox('docsKicker'),
+  docsTitle: new FakeBox('docsTitle'),
   atlasStats: new FakeBox('atlasStats'),
   inspector: new FakeBox('inspector'),
   // The real page creates #retry inside #viewport's innerHTML, so it only exists once an

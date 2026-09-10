@@ -264,7 +264,19 @@ describe('AC7: atlas.css styles words, not dots, and the page keeps its no-<styl
   it('carries the ruler word rules and no longer carries the dot rules', () => {
     const css = atlasCss()
     assert.match(css, /\.ruler-text \{/)
-    assert.match(css, /\.ruler-word\.is-selected \.ruler-text/)
+    // Neither the cursor nor the pick repaints the word: the box behind it carries both, in the
+    // word's own side colour, at two strengths. A selected word painted --accent threw away the
+    // side it leans to, which is the only thing this figure draws.
+    assert.match(css, /\.ruler-text \{[^}]*fill:\s*var\(--wc\)/)
+    assert.match(css, /\.ruler-word\.is-selected \.ruler-hit \{[^}]*var\(--wc-soft\)/)
+    // No outline on a mark, anywhere: this site draws no borders, so hover and pick are a wash
+    // the word sits on, at two strengths, never a box drawn around it.
+    for (const rule of css.match(/\.(?:ruler-hit|ruler-glow|word-hit|word-glow|center-hit|dot-halo)[^{]*\{[^}]*\}/g) ?? []) assert.doesNotMatch(rule, /stroke/, rule)
+    // Core plus penumbra: one uniformly blurred rectangle is fog, and fog has no edge to read.
+    assert.match(css, /\.word-glow, \.ruler-glow \{[^}]*blur\((\d+)px\)/)
+    assert.match(css, /\.word-hit, \.ruler-hit \{[^}]*blur\((\d+)px\)/)
+    assert.doesNotMatch(css, /\.ruler-word:hover \.ruler-text/, 'the cursor must not repaint the word')
+    assert.doesNotMatch(css, /\.ruler-word\.is-selected \{[^}]*--wc:\s*var\(--accent\)/, 'nor must the pick')
     assert.match(css, /\.ruler-overflow \{/)
     assert.doesNotMatch(css, /\.ruler-dot/, 'nothing draws a ruler dot any more')
   })

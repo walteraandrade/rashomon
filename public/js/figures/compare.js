@@ -3,11 +3,15 @@
 // side-effect free outside a browser: mount() runs only once app.js hands it a root element and
 // the fetched person list, which is what lets node:test import it with no document. Nothing
 // here imports or is imported by figures/atlas.js or figures/testimony.js (issue #92's
-// invariant, extended to this third figure by issue #91): no word rendered here ever opens
-// #docsDialog, and this figure never reads or releases the other two figures' own state.
+// invariant, extended to this third figure by issue #91): this figure never reads or releases
+// the other two figures' own state. It does open the shared documents card (docs-card.js), which
+// belongs to no figure -- and it opens it with BOTH people at once, because a word on this ruler
+// is never one person's: showing only the side it leans to would answer half the question the
+// figure asks.
 
 import * as api from '../api.js'
-import { SOURCE_SEGMENTS, scoreName, sourceLabels } from '../format.js'
+import { kinds, SOURCE_SEGMENTS, scoreName, sourceLabels } from '../format.js'
+import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintCompareDetail, paintCompareLoading, paintRuler, paintRulerError } from '../render.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
@@ -114,12 +118,35 @@ export const mount = (root, { people, initial, peopleError = null }) => {
   const pick = (term, kind) => {
     selected = selected && selected.term === term && selected.kind === kind ? null : { term, kind }
     repaint()
+    if (selected) showDocs(selected)
+    else docsCard.close()
   }
 
   const releaseSelection = () => {
     if (!selected) return
     selected = null
     repaint()
+    docsCard.close()
+  }
+
+  // Both sides, side by side. The two queries differ only in the person they are nested under:
+  // same word, same period, same source, so the card is a fair comparison and not two recortes
+  // that happen to share a title.
+  /** @param {{ term: string, kind: string }} word */
+  const showDocs = (word) => {
+    if (!data) return
+    const values = { days: $('compareDays').value, source: $('compareSource').value }
+    const side = (/** @type {{ id: string, name: string }} */ person) => ({
+      personId: person.id,
+      personName: person.name,
+      label: person.name,
+      query: api.docsParams({ ...values, term: word.term, kind: word.kind }),
+    })
+    docsCard.open({
+      kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
+      title: word.term,
+      sides: [side(data.a.person), side(data.b.person)],
+    })
   }
 
   /** @param {Element | null} target */

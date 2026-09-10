@@ -1,6 +1,6 @@
 // DOM layer: paints the map, the inspector, the outlet list and the docs panel. Every
 // function here reads/writes the document directly (that is its job); the data it paints
-// and the callbacks it wires (onChoose, onShowDocs, onPick) all come in as parameters, so
+// and the callbacks it wires (onChoose, onShowPerson, onPick) all come in as parameters, so
 // this module never reaches into public/js/state.js on its own.
 
 import { balanceColor, domainSuffix, esc, fmt, kinds, label, matching, mergeOutlets, normalize, relatedTo, safeDocUrl, score, scoreName, foldTestimonyDomains, MASK_MIN, signed, sourceLabels, termMask, testimonyClass, testimonyColor, testimonyFocus, testimonyPosition, trendOf } from './format.js'
@@ -53,7 +53,7 @@ export const wordMarkup = (p, sort, personScore = null) => {
   const mask = termMask(p, personScore)
   const t = p.testimony
   const testimonyNote = t ? ` · avaliação ${signed(t.score)} em ${fmt(t.n)} textos` : ''
-  return `<g class="word-button" transform="translate(${p.x},${p.y})" data-node="${esc(p.id)}" role="button" tabindex="0" aria-pressed="false" aria-label="${esc(label(p))}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${esc(label(p))} · ${esc(kinds[p.kind] || p.kind || 'Tipo desconhecido')} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="word-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}" rx="5"/><text class="word" text-anchor="middle" dominant-baseline="central" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}">${p.lines.map((line, i) => `<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${esc(line)}</tspan>`).join('')}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
+  return `<g class="word-button" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}" data-node="${esc(p.id)}" role="button" tabindex="0" aria-pressed="false" aria-label="${esc(label(p))}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${esc(label(p))} · ${esc(kinds[p.kind] || p.kind || 'Tipo desconhecido')} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="word-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}" rx="9"/><rect class="word-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}" rx="6"/><text class="word" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => `<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${esc(line)}</tspan>`).join('')}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
 }
 
 // The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
@@ -63,21 +63,36 @@ export const maskLegend = (person) =>
     ? `<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
     : `<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
 
+// The person's own entry point to the documents: the centre of the map, and the head of the
+// list when the map is not on screen. Both are plain elements, so they need the keyboard
+// contract a <button> would have given them.
+/** @param {Element} el @param {() => void} onShowPerson */
+const wirePersonDocs = (el, onShowPerson) => {
+  el.addEventListener('click', () => onShowPerson())
+  el.addEventListener('keydown', (event) => {
+    const e = /** @type {KeyboardEvent} */ (event)
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    e.preventDefault()
+    onShowPerson()
+  })
+}
+
 // Draws the SVG map plus the overflow list and legend; wires each word's click/keydown to
 // `onChoose`. Does not resize, scroll or paint the selection state — the caller sequences
 // those right after, same order as before the split.
-/** @param {{ layout: Layout, personName: string, about: number | undefined, mode: string, sort: string, onChoose: (id: string) => void, personTestimony?: import('./format.js').PersonTestimony }} args */
-export const drawMap = ({ layout, personName, about, mode, sort, onChoose, personTestimony }) => {
+/** @param {{ layout: Layout, personName: string, about: number | undefined, mode: string, sort: string, onChoose: (id: string) => void, onShowPerson?: () => void, personTestimony?: import('./format.js').PersonTestimony }} args */
+export const drawMap = ({ layout, personName, about, mode, sort, onChoose, onShowPerson = () => {}, personTestimony }) => {
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
   $('viewport').innerHTML =
     `<div class="map-stage"><svg class="map-svg" viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a ${esc(personName)}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g>` +
-    `<g class="center-label" aria-label="Pessoa central: ${esc(personName)}"><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => `<tspan x="0" y="${textY + i * c.lineHeight}">${esc(line)}</tspan>`).join('')}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g>` +
+    `<g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${esc(personName)}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => `<tspan x="0" y="${textY + i * c.lineHeight}">${esc(line)}</tspan>`).join('')}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g>` +
     `<g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null)).join('')}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>`
   $('overflow').hidden = mode !== 'map' || !overflow.length
   $('overflow').innerHTML = overflow.length
     ? `<p>${overflow.length} ${overflow.length === 1 ? 'termo não coube' : 'termos não couberam'} sem reduzir a legibilidade. Todos continuam selecionáveis aqui:</p>${overflow.map((n) => `<button class="quiet-button" data-node="${esc(n.id)}">${esc(label(n))}</button>`).join('')}`
     : ''
+  for (const el of queryAll('#viewport [data-person-docs]')) wirePersonDocs(el, onShowPerson)
   for (const el of queryAll('#viewport [data-node], #overflow [data-node]')) {
     el.addEventListener('click', () => onChoose(String(el.dataset.node)))
     if (el.tagName.toLowerCase() === 'g')
@@ -98,8 +113,8 @@ export const drawMap = ({ layout, personName, about, mode, sort, onChoose, perso
 // Repaints selection classes on every word/column, the search note, the edge routes for the
 // selected term, and (by calling paintColumns at the end) the columns view — mirrors the
 // original single paintSelection, split only across two exported functions.
-/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, layout: Layout | null, mode: string, sort: string, onChoose: (id: string) => void, mask?: boolean, personTestimony?: import('./format.js').PersonTestimony }} args */
-export const paintSelection = ({ nodes, links, selected, search, layout, mode, sort, onChoose, mask = false, personTestimony }) => {
+/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, layout: Layout | null, mode: string, sort: string, onChoose: (id: string) => void, onShowPerson?: () => void, personName?: string, about?: number, mask?: boolean, personTestimony?: import('./format.js').PersonTestimony }} args */
+export const paintSelection = ({ nodes, links, selected, search, layout, mode, sort, onChoose, onShowPerson, personName, about, mask = false, personTestimony }) => {
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
   // The mask is a class on the two surfaces that draw words; the colours are already there.
@@ -140,15 +155,18 @@ export const paintSelection = ({ nodes, links, selected, search, layout, mode, s
         $('routeNote').textContent = `${edges.childElementCount} de ${related.size} relações no mapa; lista completa no painel.`
     }
   }
-  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, personTestimony })
+  // The list is repainted whole here, so the person's own row has to travel with it: without
+  // her name and count this repaint would quietly blank the one entry to her documents.
+  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson, personName, about, personTestimony })
 }
 
-/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, sort: string, mode: string, onChoose: (id: string) => void, personTestimony?: import('./format.js').PersonTestimony }} args */
-export const paintColumns = ({ nodes, links, selected, search, sort, mode, onChoose, personTestimony }) => {
+/** @param {{ nodes: Term[], links: Link[], selected: string | null, search: string, sort: string, mode: string, onChoose: (id: string) => void, onShowPerson?: () => void, personName?: string, about?: number, personTestimony?: import('./format.js').PersonTestimony }} args */
+export const paintColumns = ({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson = () => {}, personName = '', about, personTestimony }) => {
   if (mode !== 'columns' || !nodes.length) return
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
-  $('columns').innerHTML = nodes
+  const personRow = `<div class="column-person" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${esc(personName)}"><span>No centro da conversa · ${fmt(about)} documentos</span><strong>${esc(personName)}</strong></div>`
+  $('columns').innerHTML = personRow + nodes
     .map((n, i) => {
       const dim = normalizedSearch ? !matching(n, search) : selected && n.id !== selected && !related.has(n.id)
       const mask = termMask(n, personTestimony?.score ?? null)
@@ -157,6 +175,7 @@ export const paintColumns = ({ nodes, links, selected, search, sort, mode, onCho
     })
     .join('')
   queryAll('[data-col]', $('columns')).forEach((el) => el.addEventListener('click', () => onChoose(String(el.dataset.col))))
+  queryAll('[data-person-docs]', $('columns')).forEach((el) => wirePersonDocs(el, onShowPerson))
 }
 
 // The selected term's testimony next to the person's, spelled out, whether or not the mask is
@@ -175,22 +194,21 @@ const relatedButtons = (items, sort, counts = true) =>
   items.map(({ node: n, count }) => `<button data-related="${esc(n.id)}"><span>${esc(label(n))}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`).join('')
 
 // Paints the inspector for the current selection (or the person summary when nothing is
-// selected). Documents are never fetched from here: the one button hands the term (or null,
-// for the person) to `onShowDocs`, and the caller opens the modal and loads on that click only.
-/** @param {{ graph: Graph | null, nodes: Term[], links: Link[], selected: string | null, sort: string, daysLabel: string, onChoose: (id: string) => void, onShowDocs: (n: Term | null) => void }} args */
-export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoose, onShowDocs }) => {
+// selected). Documents are neither fetched nor opened from here: a word opens its own card when
+// it is picked, and the centre of the map opens the person's, so the inspector carries no button.
+/** @param {{ graph: Graph | null, nodes: Term[], links: Link[], selected: string | null, sort: string, daysLabel: string, onChoose: (id: string) => void }} args */
+export const inspect = ({ graph, nodes, links, selected, sort, daysLabel, onChoose }) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML =
       `<p class="eyebrow">A pessoa no centro</p><h3>${esc(graph?.person?.name || '')}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p>` +
-      `<p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div><button class="docs-open" id="docsOpen">Ler documentos sobre a pessoa</button>`
+      `<p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
   } else {
     const related = relatedTo(nodes, links, n.id)
     $('inspector').innerHTML =
       `<p class="eyebrow">${esc(kinds[n.kind] || n.kind || 'Tipo desconhecido')} em foco</p><h3 tabindex="-1" id="termHeading">${esc(label(n))}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${esc(graph?.person.name ?? '')} · ${daysLabel}.</p>` +
-      `<p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div><button class="docs-open" id="docsOpen">Ler documentos deste termo</button>`
+      `<p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : '<p class="empty-note">Nenhuma relação retornada neste recorte.</p>'}</div>`
   }
-  $('docsOpen')?.addEventListener('click', () => onShowDocs(n ?? null))
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {
         onChoose(String(el.dataset.related))
@@ -214,7 +232,7 @@ export const paintOutlets = ({ rows, testimony, domain, onPick }) => {
       merged
         .map(
           (r) =>
-            `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" title="${esc(r.sources.map((x) => sourceLabels[x] ?? x).join(', '))}"><span class="d">${esc(r.domain)}</span><span class="n">${fmt(r.docs)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null ? '' : signed(r.score)}</span></button>`,
+            `<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${esc(r.domain)}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${esc(r.sources.map((x) => sourceLabels[x] ?? x).join(', '))}"><span class="d">${esc(r.domain)}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span></button>`,
         )
         .join('') +
       `</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o modelo kikori (${esc(testimony?.method ?? '')}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
@@ -350,7 +368,7 @@ export const paintStrip = ({ data, domain, onPick, width = 860 }) => {
     dots
       .map(
         (d) =>
-          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle cx="${d.x}" cy="${half + d.y}" r="${d.r}" style="--tone:${testimonyColor(d.score)}"/></g>`,
+          `<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${esc(d.domain)}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${esc(d.domain)}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${esc(d.domain)} · ${esc(d.sources.map((s) => sourceLabels[s] ?? s).join(', '))} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
       )
       .join('') +
     '</svg>' +
@@ -377,27 +395,35 @@ export const paintDocsLoading = () => {
   if (box) box.textContent = 'Carregando documentos…'
 }
 
-// The modal's own heading: which documents these are. Kicker and title are the two elements
-// the markup gives the dialog, so this is the only painter that touches them.
-/** @param {{ term: Term | null, personName: string }} args */
-export const paintDocsTitle = ({ term, personName }) => {
-  if ($('docsKicker')) $('docsKicker').textContent = term ? `Documentos com ${kinds[term.kind] ? kinds[term.kind].toLowerCase() : 'o termo'}` : 'Documentos sobre'
-  if ($('docsTitle')) $('docsTitle').textContent = term ? label(term) : personName
+// The card's own heading: which documents these are. Kicker and title are the two elements the
+// markup gives the dialog, so this is the only painter that touches them. The caller writes the
+// words -- each figure names its own reading ("Documentos com palavra", "Documentos de", "As
+// duas pessoas") and this file never guesses which figure asked.
+/** @param {{ kicker: string, title: string }} args */
+export const paintDocsHead = ({ kicker, title }) => {
+  if ($('docsKicker')) $('docsKicker').textContent = kicker
+  if ($('docsTitle')) $('docsTitle').textContent = title
 }
 
-/** @param {{ docs: Doc[], total: number }} data */
-export const paintDocs = (data) => {
+// One document, as the card writes it.
+/** @param {Doc} d */
+const docMarkup = (d) => {
+  const href = safeDocUrl(d)
+  return `<article class="doc"><p class="eyebrow">${esc(d.domain || d.source)}</p><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
+}
+
+/** @param {{ label: string | null, data: { docs: Doc[], total: number } }} side */
+const sideMarkup = ({ label: name, data }) =>
+  (name ? `<p class="eyebrow docs-side-name">${esc(name)}</p>` : '') +
+  (data.docs.length ? `<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` + data.docs.map(docMarkup).join('') : '<p>Nenhum documento encontrado.</p>')
+
+// One side is the card as it always was; two are the ruler asking the same word of both people,
+// side by side, because a word on that figure belongs to neither person alone.
+/** @param {{ label: string | null, data: { docs: Doc[], total: number } }[]} sides */
+export const paintDocs = (sides) => {
   const box = $('docs')
   if (!box) return
-  box.innerHTML = data.docs.length
-    ? `<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>` +
-      data.docs
-        .map((d) => {
-          const href = safeDocUrl(d)
-          return `<article class="doc"><p class="eyebrow">${esc(d.domain || d.source)}</p><p>${esc(d.text)}</p>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Abrir documento ↗</a>` : ''}</article>`
-        })
-        .join('')
-    : '<p>Nenhum documento encontrado.</p>'
+  box.innerHTML = sides.length > 1 ? `<div class="docs-columns">${sides.map((side) => `<div>${sideMarkup(side)}</div>`).join('')}</div>` : (sides[0] ? sideMarkup(sides[0]) : '<p>Nenhum documento encontrado.</p>')
 }
 
 /** @param {() => void} onRetry */
@@ -405,7 +431,7 @@ export const paintDocsError = (onRetry) => {
   const box = $('docs')
   if (!box) return
   box.innerHTML = '<p>Não foi possível carregar documentos. <button class="quiet-button" id="retryDocs">Tentar novamente</button></p>'
-  $('retryDocs').addEventListener('click', onRetry)
+  $('retryDocs')?.addEventListener('click', onRetry)
 }
 
 // The candidate queue: names nobody tracks yet. Each row toggles its own sample documents,
@@ -505,7 +531,7 @@ export const rulerTerms = (terms, measure) => {
  * @param {boolean} isSelected
  */
 const rulerWordMarkup = (d, half, isSelected) =>
-  `<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(d.text)}, ${fmt(d.combined)} documentos"><title>${esc(d.text)} · ${esc(kinds[d.kind] || d.kind || 'Tipo desconhecido')} · ${fmt(d.combined)} documentos</title><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="4"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}">${esc(d.text)}</text></g>`
+  `<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${esc(d.term)}" data-kind="${esc(d.kind)}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${esc(d.text)}, ${fmt(d.combined)} documentos"><title>${esc(d.text)} · ${esc(kinds[d.kind] || d.kind || 'Tipo desconhecido')} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central">${esc(d.text)}</text></g>`
 
 // The words that the strip could not hold without overlapping. Never dropped in silence: the
 // count is stated and every one of them is still a button carrying the same data-term/data-kind

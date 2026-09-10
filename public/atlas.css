@@ -100,7 +100,14 @@ button, input, select { font: inherit; color: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .45; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* Focus, without a ring. A keyboard reader has to be told where they are -- that is not
+   decoration and it does not get dropped -- but a 2px box drawn around a control is a border, and
+   this site draws none. So focus speaks the two languages the rest of the page speaks: a control
+   floods with a tint (an inset shadow, which has no edge of its own), and a link takes an
+   underline, which is type. Marks in SVG answer with their own ground and opt out here. */
+:focus-visible { outline: none; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); }
+a:focus-visible { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px; }
 [hidden] { display: none !important; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
@@ -192,7 +199,6 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
 .pick::after { content: ''; position: absolute; right: .55em; top: 50%; width: .32em; height: .32em; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
 .pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 0; border-radius: .4em; padding: 0 1.25em 0 .5em; height: 1.55em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.55em; font-weight: 600; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s; }
 .pick select:hover { background-color: var(--line); color: var(--ink); }
-.pick select:focus-visible { outline-offset: 2px; }
 select option { background: var(--panel); color: var(--ink); font-size: var(--t-base); }
 .status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); min-height: 22px; }
 .status { font-size: var(--t-sm); color: var(--muted); }
@@ -236,25 +242,45 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .map-svg { display: block; width: var(--map-width, auto); height: auto; }
 /* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
    point of the graph. The family and weight are still fixed here, like everywhere else. */
-.map-svg .word { font-family: var(--sans); font-weight: 500; fill: var(--ink); font-size: var(--size); }
-.word-button { cursor: pointer; }
-.word-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
-.word-button:hover .word, .word-button:focus-visible .word, .word-button.is-selected .word { fill: var(--accent); }
-.word-button:hover .word-hit, .word-button:focus-visible .word-hit, .word-button.is-selected .word-hit { fill: color-mix(in srgb, var(--accent) 5%, transparent); stroke: color-mix(in srgb, var(--accent) 45%, var(--bg)); }
+.map-svg .word { font-family: var(--sans); font-weight: 500; fill: var(--wc); font-size: var(--size); }
+/* --wc is the word's own colour, resolved once per state on the group so the hit box can borrow
+   it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
+   nearly transparent, so it says "this one" without competing with what the colour means. */
+.word-button { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.word-glow, .word-hit { fill: transparent; }
+/* Under the cursor a ground; picked or matched, the same ground at twice the strength. Its edge
+   is two shapes, not one: a core barely blurred (2px) and a wider penumbra behind it (7px). One
+   uniformly blurred rectangle has no form -- it is fog, and fog has no boundary to read. Stacked,
+   the alpha falls off in two steps, which is what gives the ground a body and an edge without
+   ever drawing a line, and this site draws no lines. The blur lives on the shapes themselves,
+   never on the state: put it on :hover and it switches off the instant the cursor leaves, so a
+   hard rectangle reappears for the length of the fade.
+   The mark's own colour never changes either: painting a picked word --accent threw away the one
+   thing the colour is there to say. */
+.word-glow, .ruler-glow { filter: blur(7px); transition: fill .16s ease-out; }
+.word-hit, .ruler-hit { filter: blur(2px); transition: fill .16s ease-out; }
+.center-hit, .dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
+.word-button:hover .word-glow, .word-button:focus-visible .word-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
+.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
+.word-button.is-selected .word-glow, .word-button.is-match .word-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 .word-button.is-dim { opacity: .22; }
-.word-button.is-neighbor .word { fill: var(--green); }
-.word-button.is-match .word { fill: var(--accent); }
+.word-button.is-neighbor { --wc: var(--green); }
 /* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
-   mask and gain the underline, so the relation stays visible without the green competing.
-   Hover keeps the mask colour too: the hit box already says "this is under the cursor", and
-   recolouring would hide the one thing the mask is there to show. */
-.map-svg.is-masked .word-button .word, .map-svg.is-masked .word-button.is-neighbor .word { fill: var(--mask, var(--muted)); }
-.map-svg.is-masked .word-button.is-selected .word, .map-svg.is-masked .word-button.is-match .word { fill: var(--accent); }
+   mask and gain the underline, so the relation stays visible without the green competing. So do
+   hover, pick and search match: every one of them is drawn by the box, never by repainting the
+   word, or the mask would go blank exactly on the word the reader is looking at. */
+.map-svg.is-masked .word-button, .map-svg.is-masked .word-button.is-neighbor { --wc: var(--mask, var(--muted)); }
 .map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
 .mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, #ff6b7d, rgba(139, 144, 156, .5), #7ee787); }
-.underline { stroke: var(--accent); stroke-width: 1.5; opacity: 0; }
+.underline { stroke: var(--wc, var(--accent)); stroke-width: 1.5; opacity: 0; }
 .word-button.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
+/* The centre is the person's own entry to the documents, so it answers to the cursor the way a
+   word does -- the same soft box, in the colour the name is already written in. */
+.center-label { cursor: pointer; }
+.center-hit { fill: transparent; }
+.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
 .micro { fill: var(--muted); font-family: var(--display); font-size: var(--t-micro); font-weight: 600; letter-spacing: var(--tr-label); text-transform: uppercase; }
 .center-note { fill: var(--muted); font-family: var(--sans); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
@@ -275,10 +301,17 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-axis { stroke: var(--line); stroke-width: 2; }
 .strip-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
 .strip-overall { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; opacity: .8; }
-.strip-dot { cursor: pointer; outline: none; }
-.strip-dot circle { fill: var(--tone, var(--muted)); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: stroke .12s; }
-.strip-dot:hover circle, .strip-dot:focus-visible circle { stroke: var(--ink); stroke-width: 2; fill-opacity: 1; }
-.strip-dot.is-active circle { stroke: var(--accent); stroke-width: 3; fill-opacity: 1; }
+/* Same rule as the atlas's words: what answers to the cursor is a soft shape in the mark's own
+   colour, desaturated toward --muted and nearly transparent. A dot has no box to draw, so it
+   gets a halo behind it -- an ink ring would have said "hovered" while hiding what the colour
+   of the dot is there to say. */
+.strip-dot { cursor: pointer; outline: none; --wc: var(--tone, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.strip-dot .dot-face { fill: var(--wc); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: fill-opacity .12s; }
+.strip-dot .dot-halo { fill: transparent; }
+.strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
+.strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
+.strip-dot.is-active .dot-face { fill-opacity: 1; }
+.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 
@@ -292,20 +325,24 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* Each card gets a ground of its own: the metadata line and the word under it are one thing,
    and with no card behind them a reader on a three-column grid ties the line to the wrong word.
    A very light wash rather than a border, so eighteen of these do not read as a table. */
-.column-card { border: 0; padding: var(--space-3) var(--space-4); border-radius: 10px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; }
-.column-card:hover { background: var(--soft); }
-.column-card.is-selected { background: color-mix(in srgb, var(--accent) 9%, var(--soft)); }
+.column-card { border: 0; padding: var(--space-3) var(--space-4); border-radius: 10px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+/* Same rule as the map: the ground behind the card carries hover and pick, in the card's own
+   colour, and the word on it never gets repainted. */
+.column-card:hover { background: color-mix(in srgb, var(--wc-soft) 12%, var(--soft)); }
+.column-card.is-selected { background: color-mix(in srgb, var(--wc-soft) 24%, var(--soft)); }
 /* The word carries the card, so it sits at h3 rank in sans -- the list is the map's other face
    and the map writes its words in sans too. */
 .column-card strong { display: block; font-size: var(--t-lg); font-weight: 500; letter-spacing: -.02em; line-height: var(--lh-snug); overflow-wrap: anywhere; margin-top: var(--space-1); }
 .column-card span { display: block; color: var(--muted); font-size: var(--t-xs); }
-.column-card.is-selected strong, .column-card:hover strong { color: var(--accent); }
 .column-card.is-dim { opacity: .35; }
-.columns.is-masked .column-card strong { color: var(--mask, var(--muted)); }
-.columns.is-masked .column-card.is-selected strong { color: var(--accent); }
-/* Under the mask the list keeps its colour on hover, like the map does, so the underline has to
-   carry the "under the cursor" signal on its own. */
-.columns.is-masked .column-card:hover strong { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+/* The list is the map without its centre, so the person gets the head of it: full width, above
+   the words, saying the same two things the centre of the map says. */
+.column-person { grid-column: 1 / -1; padding: var(--space-3) var(--space-4); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--soft)); cursor: pointer; }
+.column-person span { display: block; font-family: var(--display); font-size: var(--t-2xs); font-weight: 500; text-transform: uppercase; letter-spacing: var(--tr-label); color: var(--muted); }
+.column-person strong { display: block; margin-top: var(--space-1); font-family: var(--display); font-size: var(--t-lg); font-weight: 700; color: var(--accent); letter-spacing: var(--tr-lg); overflow-wrap: anywhere; }
+.column-person:hover { background: color-mix(in srgb, var(--accent) 13%, var(--soft)); }
+.column-card strong { color: var(--wc); }
+.columns.is-masked .column-card { --wc: var(--mask, var(--muted)); }
 
 /* ---------- the lists under the strip ---------- */
 .outlets { min-width: 0; padding-top: var(--space-1); }
@@ -315,9 +352,12 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    block of a few hundred pixels rather than a screen and a half of single-file rows. */
 .outlet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 var(--space-6); max-height: 210px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 #outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: var(--space-4); font-size: var(--t-sm); color: var(--muted); }
-.outlet { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: var(--space-1) 0; font-size: var(--t-xs); color: inherit; }
+.outlet { transition: background-color .16s ease-out, color .16s ease-out; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: var(--space-1) 0; font-size: var(--t-xs); color: inherit; }
 .outlet:hover { color: var(--accent); }
-.outlet.is-active { color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
+/* The focused outlet sits on a wash of its own avaliação colour, the same one its chip on the
+   right already carries. It used to draw a 3px bar down its left edge; the wash says the same
+   thing without a line, which is the rule everywhere else on this page. */
+.outlet.is-active { color: var(--ink); background: color-mix(in srgb, var(--tone, var(--muted)) 18%, transparent); }
 .outlet .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outlet .n { color: var(--muted); font-variant-numeric: tabular-nums; }
 .outlet .t { min-width: 40px; text-align: center; border-radius: 4px; padding: 2px 5px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
@@ -363,19 +403,53 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .related span { flex: 1; overflow-wrap: anywhere; }
 .related b { font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; font-size: var(--t-sm); }
 .docs-summary { margin: 0 0 6px; color: var(--muted); font-size: var(--t-xs); }
-.docs-open { width: 100%; margin-top: var(--space-1); padding: 11px; border: 0; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-size: var(--t-sm); font-weight: 600; }
-.docs-open:hover { filter: brightness(1.08); }
-
 /* ---------- the documents modal ---------- */
 /* Documents are fetched only when this opens (issue: the main page must never GET /docs on its
    own), and they scroll inside the dialog so a long text never grows the page. A dialog is its
    own document to a reader, so its title is an h2 and not a continuation of the page's ranks. */
-.docs-dialog { width: min(720px, calc(100vw - 32px)); max-height: min(85vh, 900px); margin: auto; padding: 0; border: 0; border-radius: 12px; background: var(--panel); color: var(--ink); display: none; flex-direction: column; }
-.docs-dialog[open] { display: flex; }
-.docs-dialog::backdrop { background: rgba(0, 0, 0, .6); }
+/* The ground is a little lighter at the top than at the bottom, which is what stops a card this
+   size from reading as a flat slab cut out of the page. No line anywhere: the split between the
+   head and the texts is space, like every other split on this site. */
+.docs-dialog { width: min(720px, calc(100vw - 32px)); max-height: min(85vh, 900px); margin: auto; padding: 0; border: 0; border-radius: 14px; background: linear-gradient(var(--soft), var(--panel) 120px); color: var(--ink); display: none; flex-direction: column; }
+.docs-dialog[open] { display: flex; animation: card-in .18s ease-out; }
+.docs-dialog::backdrop { background: rgba(0, 0, 0, .62); }
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-dialog[open] { animation: none; }
+  .word-glow, .word-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card { transition: none; }
+}
 .docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
+/* One control, on a ground that is already lighter than the page: a chip here read as a second
+   card sitting on the first. Type carries it, like every other quiet control on this site. */
+#docsClose { background: none; padding: 6px 0 6px var(--space-3); }
+#docsClose:hover { background: none; color: var(--ink); }
+/* Reached by keyboard it still has to say so; it says it the way every other control does. */
+#docsClose:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); border-radius: 6px; }
+/* Wide screens get the card, not the sheet: it floats over the figure, leaves the map readable
+   behind it, stays open while the reader picks the next word, and is dragged by its own head.
+   `left`/`top` arrive from the drag; until then the card sits where this rule puts it. */
+/* Three shadows rather than one: a tight contact shadow so the card sits on the page, a mid one
+   for its body, and a wide soft one for the room it takes up. One 44px blur did all three jobs
+   badly and read like a sticker. */
+.docs-dialog.is-floating { position: fixed; right: 24px; top: 96px; left: auto; margin: 0; width: min(380px, calc(100vw - 32px)); max-height: min(62vh, 560px); box-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 22px -8px rgba(0, 0, 0, .55), 0 36px 64px -20px rgba(0, 0, 0, .7); }
+.docs-dialog.is-floating .docs-dialog-head { padding: var(--space-4) 18px var(--space-3) 22px; cursor: grab; touch-action: none; }
+.docs-dialog.is-floating .docs-dialog-head h2 { font-size: var(--t-md); }
+.docs-dialog.is-dragging { user-select: none; }
+.docs-dialog.is-dragging .docs-dialog-head { cursor: grabbing; }
 .docs-dialog-head h2 { font-size: var(--t-lg); margin-top: var(--space-1); overflow-wrap: anywhere; }
-#docs { overflow-y: auto; scrollbar-width: thin; padding: 6px 22px var(--space-4); min-height: 120px; }
+/* The texts fade at both scroll edges rather than being sliced by the card's rim -- a cut edge
+   reads as a line, and this site draws none. */
+#docs { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 6px 22px var(--space-5); min-height: 120px; mask-image: linear-gradient(transparent, #000 14px, #000 calc(100% - 20px), transparent); }
+/* The ruler asks the same word of both people, so its card answers in two columns -- one per
+   person, each under its own name. Below the card's own width they stack. */
+.docs-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-5); }
+/* The column's own header, not the domain line each document carries. */
+.docs-side-name { margin-bottom: var(--space-2); color: var(--ink); }
+.docs-dialog.is-floating.is-wide { width: min(660px, calc(100vw - 32px)); }
+@media (max-width: 560px) { .docs-columns { grid-template-columns: 1fr; } }
 .doc { padding: var(--space-3) 0; }
 .doc p { margin: 6px 0; color: var(--ink); font-size: var(--t-sm); }
 .doc a { font-size: var(--t-xs); }
@@ -427,18 +501,21 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ruler-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .ruler-axis { stroke: var(--line); stroke-width: 2; }
 .ruler-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
-.ruler-word { cursor: pointer; outline: none; }
-.ruler-hit { fill: transparent; stroke: transparent; stroke-width: 1; }
-.ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--cmp, var(--muted)); }
-.ruler-word:hover .ruler-text, .ruler-word:focus-visible .ruler-text { fill: var(--ink); }
-.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--cmp, var(--muted)) 12%, transparent); stroke: color-mix(in srgb, var(--cmp, var(--muted)) 45%, var(--bg)); }
-.ruler-word.is-selected .ruler-text { fill: var(--accent); }
-.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: var(--accent); stroke-width: 2; }
+/* The atlas's --wc/--wc-soft pair again: the word's colour is which side it leans to, and the
+   ground under the cursor is that same colour, desaturated and nearly transparent. Recolouring
+   the word on hover or on a pick would have hidden the one thing this figure draws. */
+.ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.ruler-glow, .ruler-hit { fill: transparent; }
+.ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--wc); }
+.ruler-word:hover .ruler-glow, .ruler-word:focus-visible .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
+.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
+.ruler-word.is-selected .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
 .ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }
 .ruler-overflow .quiet-button:hover { color: var(--ink); }
-.ruler-overflow .quiet-button.is-selected { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
+.ruler-overflow .quiet-button.is-selected { color: var(--cmp, var(--ink)); background: color-mix(in srgb, var(--cmp, var(--muted)) 22%, var(--soft)); font-weight: 600; }
 .ruler-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
 .ruler .note { margin-top: var(--space-3); }
 /* The detail line: the word at h4 rank because it is the subject of the line, then one stat pair

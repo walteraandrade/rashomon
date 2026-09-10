@@ -105,23 +105,6 @@ type CompareTermRow = {
 // One row: the two `about` counts as columns, the unioned term list as json the driver already parses.
 type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermRow[] }
 
-// $3 must already be normalized by parseSourceList; unlike kind, an unknown or empty
-// source is not rescued here and would scope to zero docs. $4 must already be the
-// effective domain scope from resolveScope (a comma-joined list, 'all', or '' for an
-// empty domain+lean intersection). string_to_array('', ',') yields an *empty* array
-// (verified against PGlite), so d.domain = any(...) matches nothing and the empty
-// intersection correctly scopes to zero rows.
-const scopeCteText = `
-  scope as (
-    select d.id from docs d
-    where d.published_at >= now() - make_interval(days => $2)
-      and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
-      and ($4 = 'all' or d.domain = any(string_to_array($4, ',')))
-  ),
-  about as (
-    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $1
-  )`
-
 // `source` must already be normalized by parseSourceList; unlike kind, an unknown or empty
 // source is not rescued here and would scope to zero docs. `domain` must already be the
 // effective domain scope from resolveScope (a comma-joined list, 'all', or '' for an empty
@@ -146,7 +129,7 @@ const scopeCte = (person: Person, q: Scope) => {
 // PMI's universe. doc_terms only exists for docs naming at least one tracked person, so the
 // numerator's universe is that set; n.total and term_all must be restricted to it too, or the
 // denominator would count docs that can never contribute a term.
-const trackedCte = `
+const trackedCte = sql`
   tracked as (
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )`
@@ -187,8 +170,8 @@ const trackedCte = `
 // doc inside a group, and the distinct sort/hash was pure cost -- 270 ms to 152 ms on the
 // benchmark corpus, almost all of it term_all's, which drops a 3.9 MB quicksort by turning a
 // GroupAggregate into a HashAggregate (see docs/perf-baseline.md).
-// A person's own name words are already dropped as single terms by `t.term = any($6)`, whose
-// array is nameTokens(person). A phrase carrying one of them has to go for the same reason:
+// A person's own name words are already dropped as single terms by `t.term = any(exclude)`,
+// whose array is nameTokens(person). A phrase carrying one of them has to go for the same reason:
 // "lula da silva" and "jair bolsonaro" are not things said *about* the person, they are the
 // person. The overlap operator asks it of the phrase's words, so "flavio bolsonaro" leaves
 // Jair's map without ever being spelled out anywhere.
@@ -206,14 +189,17 @@ const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and str
 // on doc_terms.term), so it cannot reuse namePhraseSql's hardcoded `t.term`.
 const isNameSql = (col: string, names: string) => `(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
-const graphSql = `
-  with ${scopeCteText}, ${trackedCte},
+const graphQuery = (person: Person, q: GraphQuery) => {
+  const exclude = nameTokens(person)
+  const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
+  return sql`
+  with ${scopeCte(person, q)}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
   term_p as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any($6::text[])) and not ${namePhraseSql('$6')}
+    where not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
     group by 1, 2
   ),
   term_all as materialized (
@@ -224,16 +210,16 @@ const graphSql = `
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
-    where p.c_pt >= $7 and ($5 = 'all' or p.kind = any(string_to_array($5, ',')))
+    where p.c_pt >= ${q.min} and (${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ',')))
   ),
   nodes_top as (
     select term, kind, count,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
-      (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) as sort_key
+      ${sortKey} as sort_key
     from nodes_scored
-    order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term, kind
-    limit $9
+    order by ${sortKey} desc, term, kind
+    limit ${q.limit}
   ),
   signature_scored as (
     select p.term, p.kind, p.c_pt::int as count,
@@ -259,6 +245,7 @@ const graphSql = `
       select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi) order by pmi desc, term, kind)
       from signature_top
     ), '[]'::json) as signature`
+}
 
 // count(*) rather than count(distinct a.doc_id) (issue #47): a row here is a (doc_id, a, b)
 // triple, and `kind || ':' || term` is injective over the three kinds Term allows
@@ -286,7 +273,7 @@ const linksQuery = (person: Person, q: Scope, ids: string[]) => sql`
 // mean over the same `about`, so the client can colour each word by its distance from the
 // person rather than from zero -- the name bias moves every text of one person the same
 // way, and centring on the person's mean cancels it. Its own statement, like linksQuery, and
-// for the same reason: the term list is the output of graphSql, and it only runs when asked.
+// for the same reason: the term list is the output of graphQuery, and it only runs when asked.
 // count(*) is one row per doc per term by doc_terms' PK, same argument as term_p's.
 const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => sql`
   with ${scopeCte(person, q)},
@@ -522,11 +509,11 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 // Two disjoint windows (recent, then baseline immediately before it), instead of
 // reusing scopeCte twice, so a doc is never double-counted into both windows.
 //
-// c_recent/c_baseline are count(*) (issue #47): same argument as graphSql's term_p, with
+// c_recent/c_baseline are count(*) (issue #47): same argument as graphQuery's term_p, with
 // recent_about/baseline_about in place of `about` -- doc_persons' PK with person_id fixed,
 // joined to a scope of docs.id, is one row per doc, and doc_terms' PK is one row per
 // (doc, term, kind). 13.5 ms -> 11.2 ms on the benchmark corpus. `kind` closes the order by
-// for the same reason it closes graphSql's: (lift, term) does not separate two kinds of one
+// for the same reason it closes graphQuery's: (lift, term) does not separate two kinds of one
 // term text, and count(*) lets the planner pick a different arbitrary order than distinct did.
 const risingQuery = (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
@@ -628,9 +615,8 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
 // the cheap half of the route (see docs/perf-baseline.md) and is skipped entirely when the
 // graph has no nodes.
 export const graphFor = async (person: Person, q: GraphQuery) => {
-  const exclude = nameTokens(person)
-  const { domain, outlets } = resolveScope(q.domain, q.lean)
-  const { rows } = await db.query<GraphAggregates>(graphSql, [person.id, q.days, q.source, domain, q.kind, exclude, q.min, q.sort, q.limit])
+  const { outlets } = resolveScope(q.domain, q.lean)
+  const { rows } = await run<GraphAggregates>(graphQuery(person, q))
   const { docs, about, nodes, signature } = rows[0]
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
   const links = ids.length ? await run<LinkRow>(linksQuery(person, q, ids)) : { rows: [] }
@@ -669,13 +655,13 @@ const compareScopeCte = `
 // shared the way scope/tracked/n/term_all are.
 //
 // Deliberately not capped by $7 (limit) here: every term the person's docs carry in scope
-// gets an exact count/pmi/tone, with only the name-word exclusion applied, same as graphSql's
+// gets an exact count/pmi/tone, with only the name-word exclusion applied, same as graphQuery's
 // term_p. `limit` only governs top_count/top_pmi, i.e. which keys enter the union below --
 // the exact figure for a unioned key is always looked up uncapped, in `scored_<side>`.
 //
 // Both top_count and top_pmi are computed for every call, per spec: dropping either would
 // silently exclude "loud but not sticky" or "rare but sticky" words from one side. pmi *
-// ln(1 + count) is sort=pmi's pinned formula (graphSql), reused unchanged.
+// ln(1 + count) is sort=pmi's pinned formula (graphQuery), reused unchanged.
 const compareSideCte = (side: 'a' | 'b', personParam: string, namesParam: string) => `
   about_${side} as (
     select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${personParam}
@@ -780,9 +766,10 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
 const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0 }
+const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count' }
 
 export const statements = {
-  graph: graphSql,
+  graph: graphQuery(samplePerson, sampleGraph).text,
   links: linksQuery(samplePerson, sampleScope, ['word:sample']).text,
   sources: sourcesQuery(samplePerson, sampleScope).text,
   docs: docsQuery(samplePerson, sampleDocs).text,

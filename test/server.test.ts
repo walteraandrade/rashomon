@@ -193,6 +193,7 @@ const withDtype = (value: string | undefined, run: () => void | Promise<void>) =
 
 describe('testimony default method (issue #35)', () => {
   before(seedLabels)
+  after(reseed)
 
   it('with no ?method and no TESTIMONY_DTYPE, the route resolves to kikori:q8, the same label pnpm score writes by default', async () =>
     withDtype(undefined, async () => {

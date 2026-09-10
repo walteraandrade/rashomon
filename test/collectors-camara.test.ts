@@ -11,7 +11,7 @@ const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`..
 // Issue #24. AC1 (Source/Person types include 'camara'/camaraId?) is a compile-time criterion
 // covered by pnpm typecheck. The write path (tone null, the fixture doc's tag) is in
 // test/store.test.ts, the parsers in test/query.test.ts, the docs in test/docs-drift.test.ts and
-// the segmented control in test/atlas.test.ts.
+// the segmented control in test/figures-atlas.test.ts.
 
 describe('camara collector — AC2', () => {
   const src = readRepoFile('src/collectors/camara.ts')

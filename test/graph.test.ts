@@ -2012,6 +2012,7 @@ describe('shared testimony aggregations (issue #48)', () => {
 // The asymmetries a single-statement rewrite is most likely to flatten by accident.
 describe('testimony level asymmetries survive the merge (issue #48)', () => {
   before(seedAll)
+  after(reseed)
 
   it('overall has no count floor: a single score is reported even at min 1000', async () => {
     const r = await testimonyFor(bolsonaro, { days: 90, source: 'all', method: 'stub', min: 1000 })

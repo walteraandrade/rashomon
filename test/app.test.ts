@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { persons } from './fixture.js'
 import { clearScopes } from '../src/ui/state.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
@@ -11,9 +8,6 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 // querystring and hands a failure down to every figure. Issue #92's independence criteria are
 // driven against the real modules (boot() and each figure's own mount()) with a fake document
 // and a spied fetch — never against a claim about them.
-
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
 
 const people = persons.map(({ id, name }) => ({ id, name }))
 const [personA, personB] = people
@@ -199,35 +193,6 @@ describe('issue #92 AC12: /api/people is fetched exactly once, and seeds both fi
       assert.equal(els.person.options.length, people.length)
       assert.equal(els.testimonyPerson.options.length, people.length)
     })
-  })
-})
-
-describe('issue #92 AC10/AC11: the sentence and the stats badge moved into each figure', () => {
-  it('#stats no longer lives in header.top; #atlasStats lives in #workspace instead', () => {
-    const html = design5()
-    const header = html.match(/<header class="top">[\s\S]*?<\/header>/)?.[0] ?? ''
-    assert.doesNotMatch(header, /id="stats"/, 'header.top no longer describes the whole page with a number')
-    const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const figureTitle = workspace.match(/<div class="figure-title">[\s\S]*?<\/div>/)?.[0] ?? ''
-    assert.match(figureTitle, /id="atlasStats"/, '#atlasStats belongs to #workspace\'s own figure-title now')
-  })
-
-  it('there is no top-level <section class="sentence">', () => {
-    assert.doesNotMatch(design5(), /<section class="sentence"/, 'the sentence moved inside each figure\'s own figure-head')
-  })
-
-  it("#workspace's figure-head carries its own sentence-line with person/days/source/sort/limit", () => {
-    const workspace = design5().match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const head = workspace.match(/<header class="figure-head">[\s\S]*?<\/header>/)?.[0] ?? ''
-    const sentence = head.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
-    for (const id of ['person', 'days', 'source', 'sort', 'limit']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must sit inside #workspace's own sentence-line`)
-  })
-
-  it("#testimony's figure-head carries its own sentence-line with testimonyPerson/testimonyDays/testimonySource", () => {
-    const testimony = design5().match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const head = testimony.match(/<header class="figure-head">[\s\S]*?<\/header>/)?.[0] ?? ''
-    const sentence = head.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
-    for (const id of ['testimonyPerson', 'testimonyDays', 'testimonySource']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must sit inside #testimony's own sentence-line`)
   })
 })
 

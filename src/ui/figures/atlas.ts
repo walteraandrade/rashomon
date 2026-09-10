@@ -168,7 +168,7 @@ export const docsQuery = (base: URLSearchParams, n: Term | null) =>
 // querystrings themselves, which is what makes them honest: whatever ends up in the URL ends
 // up in the key, and a parameter added to a route later cannot silently share a stale entry.
 // This figure only ever reads its own `.graph`/`.docs` keys; `.sources`/`.testimony` stay here
-// too so the shape matches what test/atlas-request-reuse-acceptance.test.ts already asserts.
+// too so the shape matches what test/figures-atlas.test.ts already asserts.
 export const scopeKeys = (personId: string, graphParams: URLSearchParams, term: Term | null = null) => ({
   graph: personId + '?' + graphParams,
   sources: personId + '?' + api.narrowToSources(graphParams),

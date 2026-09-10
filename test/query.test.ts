@@ -14,6 +14,7 @@ import {
   parseCompareQuery,
   parseDocsQuery,
   parseDomainList,
+  parseKindList,
   parseLeanList,
   parseQuery,
   parseRisingQuery,
@@ -62,6 +63,25 @@ describe('parseSourceList (issue #8)', () => {
     assert.equal(parseSourceList('senado'), 'senado')
     assert.equal(parseSourceList('senado,gnews'), 'senado,gnews')
   })
+
+  it('accepts the press families, alone or in a comma list, order kept and deduped (issue #22 AC6)', () => {
+    assert.equal(parseSourceList('juridico'), 'juridico')
+    assert.equal(parseSourceList('juridico,oficial,nicho'), 'juridico,oficial,nicho')
+    assert.equal(parseSourceList('juridico,juridico,oficial'), 'juridico,oficial')
+  })
+})
+
+// The kind list travels like the source list: a caller can ask for any subset of the three
+// kinds, an unknown token is dropped and an all-unknown or missing list falls back to all.
+describe('parseKindList', () => {
+  it('parses a comma-separated list, drops unknown tokens and falls back to all', () => {
+    assert.equal(parseKindList('word,hashtag,phrase'), 'word,hashtag,phrase')
+    assert.equal(parseKindList('word,bogus'), 'word')
+    assert.equal(parseKindList('bogus'), 'all')
+    assert.equal(parseKindList(undefined), 'all')
+    assert.equal(parseKindList('word,word'), 'word', 'duplicates collapse, as in parseSourceList')
+    assert.equal(parseQuery({ kind: 'word,phrase' }).kind, 'word,phrase')
+  })
 })
 
 // issues #24/#25: the two independent inline literals in parseRisingQuery/parseTimelineQuery
@@ -72,6 +92,13 @@ describe('parseRisingQuery/parseTimelineQuery source', () => {
     assert.equal(parseTimelineQuery({ source: 'camara' }).source, 'camara')
     assert.equal(parseRisingQuery({ source: 'senado' }).source, 'senado')
     assert.equal(parseTimelineQuery({ source: 'senado' }).source, 'senado')
+  })
+
+  it('resolves the press families to themselves, not all (issue #22 AC7)', () => {
+    assert.equal(parseRisingQuery({ source: 'oficial' }).source, 'oficial')
+    assert.equal(parseTimelineQuery({ source: 'nicho' }).source, 'nicho')
+    assert.equal(parseRisingQuery({ source: 'juridico' }).source, 'juridico')
+    assert.equal(parseTimelineQuery({ source: 'juridico' }).source, 'juridico')
   })
 
   it('still falls back to all on a bogus token, so the check was widened, not loosened', () => {

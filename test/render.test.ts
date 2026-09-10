@@ -470,27 +470,29 @@ describe('regression: an opposite-signed-but-real term on both sides never pins 
 })
 
 describe('rulerTerms / paintRuler: a term where either side is the string "name" is absent from the rendered set (issue #91 AC7)', () => {
-  it('rulerTerms drops it and counts it as hidden', () => {
+  it('rulerTerms drops it and counts it as hidden, for either side', () => {
     const terms: CompareTerm[] = [
       { term: 'lula', kind: 'word', a: 'name', b: { count: 3, pmi: 1, tone: null } },
+      { term: 'bolsonaro', kind: 'word', a: { count: 4, pmi: 1, tone: null }, b: 'name' },
       { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
     ]
     const { items, hiddenCount } = rulerTerms(terms, 'count')
-    assert.equal(items.length, 1)
-    assert.equal(items[0].term, 'reforma')
-    assert.equal(hiddenCount, 1)
+    assert.deepEqual(items.map((t) => t.term), ['reforma'])
+    assert.equal(hiddenCount, 2, 'a name on the b side hides the term just as one on the a side does')
   })
 
   it('paintRuler produces no dot for the name term and reports the same hiddenCount', () => {
     withFakeDocument(['compareRuler'], (els) => {
       const terms: CompareTerm[] = [
         { term: 'lula', kind: 'word', a: 'name', b: { count: 3, pmi: 1, tone: null } },
+        { term: 'bolsonaro', kind: 'word', a: { count: 4, pmi: 1, tone: null }, b: 'name' },
         { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
       ]
       const data = compareData(terms)
       const { hiddenCount } = paintRuler({ data, personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.equal(hiddenCount, 1)
+      assert.equal(hiddenCount, 2)
       assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="lula"/)
+      assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="bolsonaro"/)
       assert.match(els.compareRuler.innerHTML, /data-term="reforma"/)
     })
   })

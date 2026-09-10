@@ -1,6 +1,6 @@
 // The security headers as data, so `src/server.ts` and `vercel.json` can carry the same set:
 // Vercel's CDN serves public/ without calling the function, so the JSON copy cannot go, and
-// `pnpm dev` or any other host has only this one. test/security-headers-drift.test.ts holds
+// `pnpm dev` or any other host has only this one. test/security-headers-acceptance.test.ts holds
 // the two copies together byte for byte.
 
 export const CSP = [

@@ -11,7 +11,7 @@ const FAMILIES = ['juridico', 'oficial', 'nicho'] as const
 // The three press families (issue #22) are thin lists of feeds over fetchFeed. AC1 (the Source
 // union) is compile-time; the write path is in test/store.test.ts, the parsers in
 // test/query.test.ts, the labels in test/format.test.ts, the segmented control in
-// test/atlas.test.ts and the docs in test/docs-drift.test.ts.
+// test/figures-atlas.test.ts and the docs in test/docs-drift.test.ts.
 
 describe('press collectors — AC2', () => {
   it('AC2: collectors registers juridico/oficial/nicho as functions, and defaultSources includes all three', () => {

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import { params } from '../src/ui/api.js'
+import { narrowToSources, params, sourcesParams } from '../src/ui/api.js'
 import { createHandlers, docsQuery, mount, scopeKeys } from '../src/ui/figures/atlas.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../src/ui/format.js'
 import { clearScopes, fromScope } from '../src/ui/state.js'
@@ -288,6 +288,14 @@ describe('a representative interaction sequence, counted per scope (issue #43 AC
 
 describe('docsQuery: the narrowed querystring still asks the API the same question (issue #43 AC4)', () => {
   before(seed)
+
+  it('sourcesParams drops domain, sort and limit, and the route answers identically without them', async () => {
+    const wide = sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all' })
+    assert.deepEqual(narrowToSources(controls()).toString(), wide.toString())
+    const before = await (await app.request('/api/people/lula/sources?' + controls())).json()
+    const after = await (await app.request('/api/people/lula/sources?' + narrowToSources(controls()))).json()
+    assert.deepEqual(after, before, 'narrowing the URL must not change a single row')
+  })
 
   it('drops sort and min, and the route answers identically without them', async () => {
     const q = docsQuery(controls(), null)

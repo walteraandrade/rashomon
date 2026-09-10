@@ -4,6 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { cacheControl } from './cache.js'
 import { db, migrate } from './db.js'
 import { candidatesFor, compareFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
+import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round } from './perf.js'
 import type { Person } from './types.js'
 import {
@@ -40,6 +41,15 @@ app.use('/api/*', async (c, next) => {
   await next()
   c.header('cache-control', cacheControl({ method: c.req.method, path: c.req.path, status: c.res.status }))
 })
+
+// The same headers vercel.json sends from the CDN, so a page served by this process (pnpm dev,
+// any non-Vercel host) is not bare. Set after next() on c.res, because serveStatic builds its
+// own Response. Only the HTML entry points: the API and the assets stay untouched.
+for (const path of HTML_PATHS)
+  app.use(path, async (c, next) => {
+    await next()
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) c.res.headers.set(key, value)
+  })
 
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)

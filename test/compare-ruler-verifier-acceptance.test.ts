@@ -472,8 +472,8 @@ describe('AC14: public/compare.html no longer exists', () => {
 // ---------- AC15 ----------
 
 describe('AC15: the header nav link points at the in-page anchor', () => {
-  it('href="#compare", label unchanged ("comparar pessoas")', () => {
-    assert.match(design5(), /<a class="compare-link" href="#compare">comparar pessoas<\/a>/)
+  it('the header carries no in-page link to the ruler', () => {
+    assert.doesNotMatch(design5(), /compare-link|comparar pessoas/)
   })
 })
 

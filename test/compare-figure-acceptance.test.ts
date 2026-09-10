@@ -553,10 +553,13 @@ describe('AC14: public/compare.html no longer exists', () => {
   })
 })
 
-describe('AC15: the header nav link points at the in-page anchor, same label', () => {
-  it('href="#compare", text "comparar pessoas"', () => {
-    const html = design5()
-    assert.match(html, /<a class="compare-link" href="#compare">comparar pessoas<\/a>/)
+// AC15 said the header nav link had to point at the in-page anchor with the same label. The
+// link is gone instead: it pointed at an anchor on the page it was already on, which is the one
+// link a page cannot usefully carry, and the ruler is the third figure down the same scroll.
+describe('the header carries no in-page link to the ruler', () => {
+  it('neither page names it', () => {
+    assert.doesNotMatch(design5(), /compare-link|comparar pessoas/)
+    assert.doesNotMatch(comoLer(), /compare-link|comparar pessoas/)
   })
 })
 

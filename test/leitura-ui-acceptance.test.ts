@@ -56,7 +56,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.doesNotMatch(html, /id="como-ler"/)
     // Issue #91: compare.html is deleted, the third figure lives on this page instead, so the
     // nav link now points at an in-page anchor rather than a separate file (AC15).
-    assert.match(html, /<a class="compare-link" href="#compare">comparar pessoas<\/a><a href="como-ler\.html">como ler<\/a>/, 'the header links to the page')
+    assert.match(html, /<nav><a href="como-ler\.html">como ler<\/a><\/nav>/, 'the header carries the one page the atlas is not')
     assert.match(html, /href="como-ler\.html#atlas"/)
     assert.match(html, /href="como-ler\.html#avaliacao"/)
   })

@@ -187,6 +187,40 @@ fails, the failure travels down into every `mount()` as `peopleError` and each f
 its own network-failure copy with a retry button. An outage is never reported as an empty
 `seed.json`.
 
+## Empty states and the pet
+
+The site draws no borders and spends almost no colour: type carries every limit. One raster
+breaks that rule, and it is allowed in exactly two boxes — the two places where there is no
+chart on screen for it to compete with.
+
+| Box | Painter | Sprite | Copy it sits beside |
+|---|---|---|---|
+| an empty recorte in figure 2 | `paintTestimony` (`render.js`) | `pet-caracara.png`, 106×78 | "Nenhum texto avaliado neste recorte… Tente um período maior ou outra fonte." |
+| the atlas with nothing to draw | `OUTAGE` (`figures/atlas.js`) | `pet-caracara-perched.png`, 26×37 | "Falha de rede ou base indisponível. Nenhum grafo fictício será exibido." |
+
+Four rules hold it there, and `test/pet-acceptance.test.ts` pins each one:
+
+- **One bird at a time.** `paintOutlets` empties in the same breath as `paintTestimony`, so the
+  outlet list stays plain text; figures 2 and 3 print the `peopleError` outage in words, because
+  all three figures fail together and three birds read as decoration rather than as one failure.
+- **It leaves when the data arrives.** A recorte with a score paints no `<img>` at all. Nothing
+  on this page may sit next to a number a reader is reading.
+- **Integer scales only.** `atlas.css` gives each sprite a width that is a whole multiple of its
+  own grid (106×78 and 52×74), the `<img>` carries that same size so the box cannot grow under
+  the reader, and `.pet` sets `image-rendering: pixelated`. A pixel sprite at a fractional scale,
+  or smoothed, is a blurred sprite.
+- **It is a state, never furniture.** Neither `design-5.html` nor `como-ler.html` may mention
+  `pet-caracara`: the sprite exists only where a painter decides it should.
+
+`OUTAGE` covers both of figure 1's ways into that box — a failed `GET /api/people` and a failed
+graph fetch. They carry identical copy, so painting only one of them would show the bird
+sometimes and not others for what a reader sees as the same box. An empty `seed.json` still
+paints no bird: nobody tracked is a different fact from nothing answering.
+
+Both files sit under `public/` and are served by the static handler like any other asset. They
+are quantised to the site's own palette tokens — seven colours in the flying sprite, six in the
+perched one, no hue outside `--cmp-b` — which is why they weigh 3 KB and 533 bytes.
+
 ## HTTP caching
 
 Every `/api/*` GET is public, read-only and depends on data that only changes when `pnpm push` copies a local PGlite into the managed Postgres. So each 200 carries `Cache-Control: public, s-maxage=<window>, stale-while-revalidate=86400`, and on Vercel a CDN hit answers without running a function or touching Supabase — the cheapest read there is on both free plans. The CDN keys on the full URL, query string included, so two different filter sets never share an entry.

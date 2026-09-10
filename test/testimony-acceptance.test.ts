@@ -116,10 +116,12 @@ describe('testimony acceptance criteria (issue #21)', () => {
     assert.deepEqual(r.by_source, [{ source: 'gkg', score: 3, n: 1 }])
   })
 
-  it('AC10: parseTestimonyQuery clamps days to [1, 365] (default 30) and min to [1, 1000] (default 3) as its own literal', () => {
+  // days: [1, 365] became the enumeration in DAYS with issue #111; the default and the widest
+  // reachable window are unchanged, so this criterion still reads the same figures.
+  it('AC10: parseTestimonyQuery snaps days to an allowed window (default 30) and clamps min to [1, 1000] (default 3) as its own literal', () => {
     assert.equal(parseTestimonyQuery({}).days, 30)
     assert.equal(parseTestimonyQuery({ days: '9999' }).days, 365)
-    assert.equal(parseTestimonyQuery({ days: '0' }).days, 1)
+    assert.equal(parseTestimonyQuery({ days: '0' }).days, 7)
     assert.equal(parseTestimonyQuery({}).min, 3)
     assert.equal(parseTestimonyQuery({ min: '5000' }).min, 1000)
     assert.equal(parseTestimonyQuery({ min: '0' }).min, 1)

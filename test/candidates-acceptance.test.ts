@@ -141,8 +141,10 @@ describe('AC5: GET /api/candidates', () => {
     assert.deepEqual(one.candidates.map((c) => c.name), ['hugo motta'])
   })
 
+  // days=14 until issue #111 enumerated the windows; 30 is the next one up and still wide
+  // enough to swallow the previous window this criterion is about.
   it('a longer window moves the previous docs into the count', async () => {
-    const { candidates } = await get('?days=14&min=2')
+    const { candidates } = await get('?days=30&min=2')
     const renan = candidates.find((c) => c.name === 'renan calheiros')!
     assert.equal(renan.count, 4)
     assert.equal(renan.previous, 0)
@@ -168,6 +170,7 @@ describe('AC6: parameters clamped in src/query.ts', () => {
 
   it('clamps out-of-range and garbage values', () => {
     assert.deepEqual(parseCandidatesQuery({ days: '9999', min: '0', limit: '-3' }), { days: 365, min: 1, limit: 1 })
+    assert.deepEqual(parseCandidatesQuery({ days: '0', min: '0', limit: '-3' }), { days: 7, min: 1, limit: 1 })
     assert.deepEqual(parseCandidatesQuery({ days: 'abc', min: '2000', limit: '999' }), { days: 7, min: 1000, limit: 200 })
   })
 })

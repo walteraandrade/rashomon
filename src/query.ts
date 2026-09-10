@@ -24,6 +24,23 @@ export const int = (v: string | undefined, d: number, lo: number, hi: number) =>
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
 }
 
+// The window is the one query parameter with no natural ceiling on distinct values: `days`
+// clamped to [1, 365], so `?days=364`, `?days=363`, ... were 365 distinct CDN keys per person
+// per filter set, each one a cold function invocation and a real query (issue #111). Only these
+// three windows are reachable now — the same three every <select> in public/design-5.html
+// offers — and any other value snaps to the nearest of them. Every route's own default (30, or
+// 7 on the trend routes) is one of them, so a caller that sends no `days` sees no change.
+export const DAYS = [7, 30, 365]
+
+// Ties go to the shorter window: DAYS is ascending and the comparison is strict, so the first
+// (cheapest) candidate wins. A missing or non-numeric value falls back to the caller's default
+// instead of snapping, exactly like `int` does.
+export const snapDays = (v: string | undefined, d: number): number => {
+  const n = Number.parseInt(v ?? '', 10)
+  if (!Number.isFinite(n)) return d
+  return DAYS.reduce((best, x) => (Math.abs(x - n) < Math.abs(best - n) ? x : best))
+}
+
 export const SOURCES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado', 'juridico', 'oficial', 'nicho']
 
 // Accepts a comma-separated list, drops unknown tokens silently, dedupes, and falls
@@ -64,7 +81,7 @@ export const parseLeanList = (v: string | undefined): string => {
 }
 
 export const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({
-  days: int(q.days, 30, 1, 365),
+  days: snapDays(q.days, 30),
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
@@ -80,7 +97,7 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
 export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => ({
   term: normalize((q.term ?? '').trim()),
   kind: parseKindList(q.kind),
-  days: int(q.days, 30, 1, 365),
+  days: snapDays(q.days, 30),
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
@@ -89,7 +106,7 @@ export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery
 })
 
 export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery => ({
-  days: int(q.days, 7, 1, 365),
+  days: snapDays(q.days, 7),
   baseline: int(q.baseline, 30, 1, 365),
   source: SOURCES.includes(q.source ?? '') ? q.source! : 'all',
   domain: parseDomainList(q.domain),
@@ -102,7 +119,7 @@ export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQ
 export const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuery => ({
   term: normalize((q.term ?? '').trim()),
   kind: parseKindList(q.kind),
-  days: int(q.days, 30, 1, 365),
+  days: snapDays(q.days, 30),
   source: SOURCES.includes(q.source ?? '') ? q.source! : 'all',
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
@@ -112,7 +129,7 @@ export const parseTimelineQuery = (q: Record<string, string | undefined>): Timel
 // Dedicated parser, not a copy of parseQuery: min defaults to 3 here, distinct from
 // GraphQuery.min's default of 2, so a copy-paste from parseQuery can't silently change it.
 export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery => ({
-  days: int(q.days, 30, 1, 365),
+  days: snapDays(q.days, 30),
   min: int(q.min, 3, 1, 1000),
 })
 
@@ -120,7 +137,7 @@ export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery
 // defaults to 3 too, but as a separate literal, so changing either of theirs cannot
 // silently change this one.
 export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => ({
-  days: int(q.days, 30, 1, 365),
+  days: snapDays(q.days, 30),
   source: parseSourceList(q.source),
   method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod(),
   min: int(q.min, 3, 1, 1000),
@@ -128,7 +145,7 @@ export const parseTestimonyQuery = (q: Record<string, string | undefined>): Test
 
 // Own literals (7 / 5 / 50), per issue #32: distinct from every other route's defaults.
 export const parseCandidatesQuery = (q: Record<string, string | undefined>): CandidatesQuery => ({
-  days: int(q.days, 7, 1, 365),
+  days: snapDays(q.days, 7),
   min: int(q.min, 5, 1, 1000),
   limit: int(q.limit, 50, 1, 200),
 })
@@ -136,7 +153,7 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
 // No `min` (see CompareQuery). limit clamps to [1, 100], narrower than GraphQuery's [1, 200]:
 // each unioned key costs two exact figures instead of one, per issue #93's spec.
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
-  days: int(q.days, 30, 1, 365),
+  days: snapDays(q.days, 30),
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),

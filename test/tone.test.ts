@@ -106,7 +106,7 @@ describe('parseToneQuery', () => {
   it('AC2: days defaults to 30 and clamps to [1, 365]', () => {
     assert.equal(parseToneQuery({}).days, 30)
     assert.equal(parseToneQuery({ days: 'nope' }).days, 30)
-    assert.equal(parseToneQuery({ days: '0' }).days, 1)
+    assert.equal(parseToneQuery({ days: '0' }).days, 7)
     assert.equal(parseToneQuery({ days: '9999' }).days, 365)
   })
 })

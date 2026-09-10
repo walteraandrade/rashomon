@@ -92,7 +92,7 @@ describe('parseTestimonyQuery', () => {
   it('days defaults to 30 and clamps to [1, 365]', () => {
     assert.equal(parseTestimonyQuery({}).days, 30)
     assert.equal(parseTestimonyQuery({ days: 'nope' }).days, 30)
-    assert.equal(parseTestimonyQuery({ days: '0' }).days, 1)
+    assert.equal(parseTestimonyQuery({ days: '0' }).days, 7)
     assert.equal(parseTestimonyQuery({ days: '9999' }).days, 365)
   })
 

@@ -1,6 +1,6 @@
 # API reference
 
-Every route is a public, read-only `GET` under `/api`. Query parameters are parsed and clamped in `src/query.ts`; responses are cached at the CDN, see [operations](operations.md#http-caching).
+Every route is a public, read-only `GET` under `/api`. Query parameters are parsed and clamped in `src/query.ts`; responses are cached at the CDN, see [operations](operations.md#http-caching). `days` is the one parameter that is not clamped but [enumerated](#the-window-days).
 
 | Route | Returns |
 | --- | --- |
@@ -16,6 +16,12 @@ Every route is a public, read-only `GET` under `/api`. Query parameters are pars
 | `/api/compare` | exact count/PMI/tone for two people, over the union of their strongest terms |
 
 The contract is stable: `/api/people`, `/api/people/:id/graph` and `/api/people/:id/sources` never lose a field. A new capability is a new route or a new optional parameter, never a breaking change to an existing one.
+
+## The window (`days`)
+
+`days` takes one of three values: **7**, **30** or **365** — the same three windows every period `<select>` on the site offers. Any other number snaps to the nearest one, ties going to the shorter window: `?days=18` reads as 7, `?days=19` as 30, `?days=197` as 30, `?days=198` as 365, and anything above 365 as 365. A missing or non-numeric value still falls back to the route's own default (30, or 7 on `rising` and `candidates`), so a caller that sends no `days` sees exactly what it always did.
+
+This is a deliberate narrowing of the old `[1, 365]` clamp (issue #111). The API is public and unauthenticated, and the CDN keys on the full query string, so a free-form `days` was 365 distinct cache entries per person per filter set, each miss a cold function invocation and a real query. Three windows is a surface the cache can actually cover. A caller that used to ask for `?days=45` now gets the 30-day answer, and the response says which window it used wherever it reports one (`rising`, `candidates`, `compare`).
 
 ## Shared filters
 

@@ -1,8 +1,8 @@
 import { db, migrate } from './db.js'
 import { methods, scorers } from './scorers/index.js'
-// Direct, not through scorers/index.js: importing onnx.ts is side-effect free, every network
-// call lives inside its `load` body, and the revision is a property of that scorer alone.
-import { modelRevision } from './scorers/onnx.js'
+// Direct, not through scorers/index.js: method.ts has no imports at all, so nothing it
+// exports can ever pull in the model loader.
+import { modelRevision } from './scorers/method.js'
 import type { Person, Scorer } from './types.js'
 
 type Pair = { doc_id: number; person_id: string; text: string; id: string; name: string; aliases: string[] }

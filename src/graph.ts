@@ -237,7 +237,7 @@ const graphSql = `
 
 // count(*) rather than count(distinct a.doc_id) (issue #47): a row here is a (doc_id, a, b)
 // triple, and `kind || ':' || term` is injective over the three kinds Term allows
-// (hashtag/word/theme -- none is a prefix of another up to a colon), so a group key (s, t)
+// (hashtag/word/phrase -- none is a prefix of another up to a colon), so a group key (s, t)
 // pins exactly one doc_terms row for a and one for b per doc. doc_terms' PK makes each of
 // those unique, and `about` contributes one row per doc (doc_persons PK with person_id fixed).
 //
@@ -303,10 +303,13 @@ export const sourcesFor = async (person: Person, q: GraphQuery) => {
 // term/kind reuse the doc_terms (kind, term) index via exists, so a doc carrying the term
 // under two kinds (only possible with kind = 'all' or an unknown kind) is still counted/returned once.
 // An unrecognized kind falls back to 'all' here too, so callers that bypass parseDocsQuery still get that fallback.
-const docsWhereSql = `(
+// Exported so a test can read the literal kind array back out of it and compare against
+// query.ts's KINDS, instead of re-typing a third copy that could silently drift from both
+// (issue #108's own postmortem on how 'theme' almost stayed out of sync here).
+export const docsWhereSql = `(
     $5 = '' or exists (
       select 1 from doc_terms t where t.doc_id = d.id and t.term = $5
-        and ($6 = 'all' or t.kind = any(string_to_array($6, ',')) or not (string_to_array($6, ',') <@ array['hashtag', 'word', 'theme', 'phrase']))
+        and ($6 = 'all' or t.kind = any(string_to_array($6, ',')) or not (string_to_array($6, ',') <@ array['hashtag', 'word', 'phrase']))
     )
   )`
 

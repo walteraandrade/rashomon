@@ -66,6 +66,13 @@ describe('timelineFor', () => {
     assert.equal(all.reduce((a, r) => a + r.count, 0), 4)
   })
 
+  // Issue #108: 'theme' left the recognized kind set, so kind=theme must fall back the same
+  // way kind=bogus already does, not behave like a known-but-empty subset.
+  it('AC6: kind=theme still matches the term under any kind, same as kind=bogus', async () => {
+    const theme = await timelineFor(bolsonaro, { ...base, term: 'golpe', kind: 'theme', days: 2140 })
+    assert.equal(theme.reduce((a, r) => a + r.count, 0), 4)
+  })
+
   it('AC7: a person without docs gets every bucket at zero', async () => {
     const rows = await timelineFor({ id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }, base)
     assert.equal(rows.length, 5)

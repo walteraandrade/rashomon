@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
@@ -16,7 +16,6 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 // the search-highlighting rule here, against app.js's own event table.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const legacyPath = join(root, 'public', 'atlas-legacy.html')
 
 // Records which injected action each handler calls, so a criterion can assert both what was
 // called and what was deliberately not.
@@ -59,14 +58,31 @@ describe('unified atlas acceptance criteria (issue #28), re-verified after the i
     assert.match(bundle.headers.get('content-type') ?? '', /javascript/, '/bundle.js must be served with a JavaScript content type')
   })
 
-  it('legacy atlas remains reachable and links back to root', async () => {
-    assert.ok(existsSync(legacyPath), 'public/atlas-legacy.html must exist')
-    const legacyRes = await app.request('/atlas-legacy.html')
-    assert.equal(legacyRes.status, 200)
-    assert.match(legacyRes.headers.get('content-type') ?? '', /text\/html/)
-    // atlas-legacy.html is intentionally kept as one reference file with no module surface
-    // (CLAUDE.md), so this text match is on that file, not on design-5.html.
-    assert.match(readFileSync(legacyPath, 'utf8'), /class="brand" href="\/"/, 'legacy brand must link back to the new atlas')
+  // Issue #108: the two legacy pages are deleted outright, not just unlinked. Neither
+  // public/index.html nor public/atlas-legacy.html exists any more, and both 404 through the
+  // same catch-all static handler that already 404s an archived design.
+  it('AC8: the two deleted legacy pages 404 and no longer exist under public/', async () => {
+    for (const rel of ['index.html', 'atlas-legacy.html']) {
+      assert.ok(!existsSync(join(root, 'public', rel)), `public/${rel} must not exist`)
+      const res = await app.request(`/${rel}`)
+      assert.equal(res.status, 404, `GET /${rel} must 404`)
+    }
+  })
+
+  // Deleting atlas-legacy.html left two dead hrefs in como-ler.html while the suite stayed
+  // green: nothing checked that a link between served pages resolves. A page that names a
+  // file is a page that must find it, whichever attribute names it.
+  it('every relative href and src in a served page resolves to a file under public/', () => {
+    for (const page of readdirSync(join(root, 'public')).filter((f) => f.endsWith('.html'))) {
+      const html = readFileSync(join(root, 'public', page), 'utf8')
+      const hrefs = [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1])
+      const local = hrefs.filter((h) => !/^(https?:)?\/\/|^#|^mailto:|^\/_vercel\//.test(h))
+      for (const href of local) {
+        const rel = href.split(/[?#]/)[0].replace(/^\//, '')
+        if (!rel) continue
+        assert.ok(existsSync(join(root, 'public', rel)), `public/${page} links to ${href}, which does not exist under public/`)
+      }
+    }
   })
 
   it('archived design alternatives moved out of public/ are no longer served', async () => {

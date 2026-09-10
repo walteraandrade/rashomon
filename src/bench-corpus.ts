@@ -42,8 +42,6 @@ const SOURCES: [Source, number][] = [
   ['juridico', 0.01], ['oficial', 0.02], ['nicho', 0.03],
 ]
 
-const THEMES = Array.from({ length: 60 }, (_, i) => `TAX_THEME_${i}`)
-
 const CANDIDATE_NAMES = [
   'Hugo Motta', 'Renan Calheiros', 'Rodrigo Pacheco', 'Arthur Lira', 'Fernando Haddad', 'Paulo Guedes',
   'Carla Zambelli', 'Marina Silva', 'Simone Tebet', 'Alexandre Padilha',
@@ -82,10 +80,7 @@ export const corpus = (persons: Person[], o: CorpusOptions): RawDoc[] => {
     const hashtag = rand() < 0.15 ? `#${zipf(words, rand())}` : ''
     const text = [head ? `${head} debate` : 'Analise sobre', body.join(' '), candidate, hashtag].filter(Boolean).join(' ')
     const domain = source === 'bluesky' ? pick(HANDLES, rand()) : pick(DOMAINS, rand())
-    const extraTerms: Term[] =
-      source === 'gkg'
-        ? Array.from({ length: 1 + Math.floor(rand() * 3) }, () => ({ term: pick(THEMES, rand()), kind: 'theme' as const }))
-        : []
+    const extraTerms: Term[] = []
     // Only gdelt/gkg carry tone; insertDoc drops it for anything else anyway.
     const tone = source === 'gkg' || source === 'gdelt' ? Math.round((rand() * 12 - 7) * 100) / 100 : undefined
     return { source, uri: `https://bench.local/${source}/${i}`, text, publishedAt, domain, tone, extraTerms }

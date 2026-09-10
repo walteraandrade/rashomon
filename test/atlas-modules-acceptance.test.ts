@@ -47,8 +47,8 @@ describe('issue #37 AC1: the split page still serves the same atlas over the sam
     const { candidatesQuery, endpoint, params, sourcesParams } = await import('../src/ui/api.js')
     assert.equal(endpoint('lula'), '/api/people/lula')
     const p = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
-    // `kind` is the one default that moved since the split: the atlas now names the kinds it
-    // wants instead of asking for all of them, so GDELT's theme codes stay out of the map.
+    // `kind` is the one default that moved since the split: the atlas names the three kinds it
+    // wants instead of asking for all of them.
     assert.equal(p.toString(), new URLSearchParams({ days: '30', sort: 'count', limit: '18', min: '2', source: 'all', kind: 'word,hashtag,phrase', testimony: '1' }).toString())
     // No route ever hears about an outlet any more, the /sources call least of all.
     assert.equal(sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all' }).has('domain'), false)

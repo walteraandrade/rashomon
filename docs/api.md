@@ -22,7 +22,7 @@ The contract is stable: `/api/people`, `/api/people/:id/graph` and `/api/people/
 `source`, `kind`, `domain` and `lean` each take a comma-separated list, matching a doc whose value is any of the listed ones. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all`. A single token behaves exactly as it always did. `rising` and `timeline` still take a single `source` value.
 
 - `source`: `bluesky`, `gdelt`, `rss`, `gnews`, `gkg`, `camara`, `senado`, `juridico`, `oficial`, `nicho`. See [sources](sources.md).
-- `kind`: `hashtag`, `word`, `theme`, `phrase`. The atlas at `/` sends `word,hashtag,phrase`, so GDELT's own theme codes stay out of the map by default; they remain in the API and in `atlas-legacy.html`.
+- `kind`: `hashtag`, `word`, `phrase`. The atlas at `/` sends `word,hashtag,phrase`, the full set.
 - `domain`: one outlet host, or one Bluesky author handle.
 - `lean`: `left`, `right`, `center`, additive on `graph`, `docs`, `rising`, `timeline` and `sources`. See [editorial lean](terms.md#editorial-lean).
 

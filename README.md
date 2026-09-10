@@ -25,6 +25,7 @@ pnpm dev       # http://localhost:3210
 | `pnpm reindex` | recompute terms, phrases, person matches and candidates from stored docs |
 | `pnpm score` | score every unscored `(doc, person)` pair, see [testimony](docs/testimony.md) |
 | `pnpm purge <source>` | delete one source's docs for a clean re-fetch |
+| `pnpm purge themes` | clear GDELT's stored theme terms, the `extra_terms` column and pre-revision `kikori:q8`-style testimony rows |
 | `pnpm migrate` / `pnpm push` | create the schema on a managed Postgres, then copy a local PGlite into it |
 | `pnpm export-docs` | dump every doc as one JSON line, for kikori's training set |
 | `pnpm bench` / `pnpm bench:writes` | read and write baselines against their own synthetic database |
@@ -80,7 +81,7 @@ outlets.json      researched editorial lean per domain
 data/             PGlite databases, gitignored
 ```
 
-`docs/designs/` keeps the archived design alternatives; they live outside `public/`, so nothing serves them. `public/index.html` is the legacy UI, reachable only by name.
+`docs/designs/` keeps the archived design alternatives; they live outside `public/`, so nothing serves them. `public/index.html` and `public/atlas-legacy.html`, the legacy UI pages, are gone.
 
 ## Style
 

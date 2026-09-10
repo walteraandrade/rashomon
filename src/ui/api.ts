@@ -4,12 +4,12 @@
 
 export const endpoint = (personId: string) => '/api/people/' + encodeURIComponent(personId)
 
-// The kinds the atlas asks for, and the one it leaves out. GDELT's themes (kind 'theme') are
-// its own topic codes -- econ_freetrade, env_oil -- machine labels nobody wrote in a sentence,
-// so they read as noise next to real words on a map whose whole claim is "this is what people
-// say". They stay in the API, and atlas-legacy.html still shows them; only the default recorte
-// drops them. Spelled here rather than imported because api.ts imports nothing (CLAUDE.md's
-// module direction), and shipped as a list because /graph takes kind as a comma-separated one.
+// The kinds the atlas asks for: the full set. GDELT's themes (kind 'theme') used to be its own
+// topic codes -- econ_freetrade, env_oil -- machine labels nobody wrote in a sentence, so they
+// read as noise next to real words on a map whose whole claim is "this is what people say".
+// They are no longer collected or served at all (issue #108), so this is simply every kind.
+// Spelled here rather than imported because api.ts imports nothing (CLAUDE.md's module
+// direction), and shipped as a list because /graph takes kind as a comma-separated one.
 export const ATLAS_KINDS = 'word,hashtag,phrase'
 
 // The graph sentence's own controls, as every route-narrowing helper below reads them.

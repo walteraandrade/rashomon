@@ -145,12 +145,12 @@ export const docs: RawDoc[] = [
   // Doc 43 names *two* tracked persons and doc 44/45 one each, so the term_all/tracked
   // universe must count doc 43 once: a `tracked` built by joining doc_persons instead of the
   // current `exists` would double it under count(*) and stay right under count(distinct).
-  // All three carry "coalizao" as a hashtag, as a word and (43/44) as a theme extra term, so
-  // the same term text lives under several kinds on one doc — the case that must stay three
-  // separate nodes with their own counts, and that gives linksSql a same-text pair
-  // co-occurring in exactly two docs (43 and 44), one of them the shared one.
-  { source: 'rss', uri: 'https://example.org/43', text: 'Lula e Bolsonaro discutem #coalizao e coalizao no plenário', publishedAt: daysAgo(3400), domain: 'example.org', extraTerms: [{ term: 'coalizao', kind: 'theme' }] },
-  { source: 'rss', uri: 'https://example.org/44', text: 'Lula defende #coalizao e coalizao ampla no plenário', publishedAt: daysAgo(3401), domain: 'example.org', extraTerms: [{ term: 'coalizao', kind: 'theme' }] },
+  // All three carry "coalizao" as a hashtag and as a word, so the same term text lives under
+  // two kinds on one doc — the case that must stay two separate nodes with their own counts,
+  // and that gives linksSql a same-text pair co-occurring in exactly two docs (43 and 44), one
+  // of them the shared one.
+  { source: 'rss', uri: 'https://example.org/43', text: 'Lula e Bolsonaro discutem #coalizao e coalizao no plenário', publishedAt: daysAgo(3400), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/44', text: 'Lula defende #coalizao e coalizao ampla no plenário', publishedAt: daysAgo(3401), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/45', text: 'Bolsonaro rejeita #coalizao e coalizao estreita', publishedAt: daysAgo(3402), domain: 'example.org' },
   // docs 46-48: one fixture doc per new press family (issue #72), dated 3500+ days ago — past
   // the widest window any pinned literal elsewhere in the suite reaches (3400, docs 43-45

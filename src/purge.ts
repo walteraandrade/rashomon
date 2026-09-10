@@ -1,6 +1,15 @@
 import { db, migrate } from './db.js'
+import { SOURCES } from './query.js'
 
-const usage = 'usage: pnpm purge <source|orphan-terms>'
+const usage = 'usage: pnpm purge <source|orphan-terms|themes>'
+
+// Validated here, not left to purgeSource to silently no-op on a typo: an argument that is
+// neither a known source nor one of the two maintenance targets throws the usage error instead
+// of running a delete that matches zero rows and looking like it worked.
+export const resolveTarget = (target: string | undefined): string => {
+  if (target === 'orphan-terms' || target === 'themes' || (target !== undefined && SOURCES.includes(target))) return target
+  throw new Error(usage)
+}
 
 // Reclaims the doc_terms rows written before docs naming no tracked person stopped producing
 // terms. `vacuum full` and not plain `vacuum`: measured on a synthetic 13k-doc database, a plain
@@ -31,12 +40,37 @@ const purgeSource = async (source: string) => {
   console.log(`purged ${rows[0].n} docs from ${source}`)
 }
 
+// Neither the GDELT theme terms nor the pre-revision kikori rows are read anywhere (issue
+// #108); the extra_terms update is scoped to rows that actually carry something, so the
+// reported count means "docs that had themes", not "every doc touched". docs is vacuumed with
+// the other two: an update is not an edit in place under MVCC, it writes a new tuple and leaves
+// the old one dead, so emptying a jsonb column on ~30k rows bloats docs exactly as a bulk
+// delete would. Without it the largest share of the space this purge frees stays in the file.
+export const purgeThemes = async () => {
+  const { rows: extra } = await db.query<{ n: number }>(
+    `with d as (update docs set extra_terms = '[]' where extra_terms <> '[]'::jsonb returning 1) select count(*)::int as n from d`,
+  )
+  const { rows: terms } = await db.query<{ n: number }>(
+    `with d as (delete from doc_terms where kind = 'theme' returning 1) select count(*)::int as n from d`,
+  )
+  const { rows: testimony } = await db.query<{ n: number }>(
+    `with d as (
+       delete from doc_testimony where method like 'kikori:%' and method not like 'kikori:%:%' returning 1
+     ) select count(*)::int as n from d`,
+  )
+  const tables = [...(extra[0].n ? ['docs'] : []), ...(terms[0].n || testimony[0].n ? ['doc_terms', 'doc_testimony'] : [])]
+  if (tables.length) await vacuumFull(tables)
+  console.log(`purged ${terms[0].n} theme terms, ${extra[0].n} extra_terms rows and ${testimony[0].n} stale testimony rows`)
+}
+
 const main = async () => {
-  const target = process.argv[2]
-  if (!target) throw new Error(usage)
+  const target = resolveTarget(process.argv[2])
   await migrate()
-  await (target === 'orphan-terms' ? purgeOrphanTerms() : purgeSource(target))
+  await (target === 'orphan-terms' ? purgeOrphanTerms() : target === 'themes' ? purgeThemes() : purgeSource(target))
   await db.close()
 }
 
-main()
+// Same guard as reindex.ts/score.ts: only runs main() when this file is the process entry
+// point, not when a test imports purgeThemes/resolveTarget. Without it, importing this module
+// at all ran the CLI unconditionally against process.argv.
+if (import.meta.url === `file://${process.argv[1]}`) await main()

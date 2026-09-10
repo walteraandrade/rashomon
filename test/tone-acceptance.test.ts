@@ -29,12 +29,12 @@ describe('tone acceptance criteria (issue #5)', () => {
     assert.equal(parseToneQuery({ days: '10000' }).days, 365)
   })
 
-  it("AC3: min missing or non-numeric defaults to 3 and clamps to [1, 1000], distinct from GraphQuery.min's own default of 2", () => {
+  it("AC3: min missing or non-numeric defaults to 3 and snaps to MINS, distinct from GraphQuery.min's own default of 2", () => {
     assert.equal(parseToneQuery({}).min, 3)
     assert.equal(parseToneQuery({ min: 'nan' }).min, 3)
     assert.notEqual(parseToneQuery({}).min, 2, 'must not silently copy GraphQuery.min default of 2')
     assert.equal(parseToneQuery({ min: '-1' }).min, 1)
-    assert.equal(parseToneQuery({ min: '999999' }).min, 1000)
+    assert.equal(parseToneQuery({ min: '999999' }).min, 5)
   })
 
   it('AC4: persons has every tracked person, ordered by name, shaped { id, name } with no aliases', async () => {

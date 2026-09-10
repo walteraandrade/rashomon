@@ -97,7 +97,7 @@ describe('parseCompareQuery', () => {
     assert.equal(parseCompareQuery({ days: '9999' }).days, 365)
   })
 
-  it('limit defaults to 40 and clamps to [1, 100]', () => {
+  it('limit defaults to 40 and snaps to SMALL_LIMITS, ceiling 100', () => {
     assert.equal(parseCompareQuery({}).limit, 40)
     assert.equal(parseCompareQuery({ limit: '0' }).limit, 1)
     assert.equal(parseCompareQuery({ limit: '9999' }).limit, 100)

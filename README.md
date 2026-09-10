@@ -69,7 +69,7 @@ src/extract.ts    normalization, hashtags, words, phrases, person matching
 src/phrases.ts    the collocation lexicon: staging, the two floors, load
 src/store.ts      doc and person inserts, shared by ingest and reindex
 src/graph.ts      the scoring SQL: counts, PMI, term-term links, testimony
-src/query.ts      query parsers; every parameter is clamped here
+src/query.ts      query parsers; every parameter is snapped or clamped here
 src/scorers/*     one scorer per method, same signature
 src/server.ts     the Hono API and the static files
 src/perf.ts       opt-in request instrumentation; src/bench*.ts the baselines

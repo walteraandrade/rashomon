@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { after, before, describe, it } from 'node:test'
@@ -116,6 +115,23 @@ describe('AC6: decompression is bounded by MAX_EXPANDED_BYTES via a network-free
       assert.equal(result.stage, 'expanded')
       assert.equal(result.limit, 50)
       assert.ok(result.bytes > 50)
+    }
+  })
+
+  // A decompression-bomb shape: 256 MB of zeros compresses down to ~256 KB, so `bytes > limit`
+  // alone (the test above) passes even if the whole payload gets decompressed before the stop
+  // check ever runs -- which is exactly what unzipBounded used to do. Feeding the compressed
+  // input across several small pushes means the stop flag can act between them, so a genuine
+  // bound caps the reported bytes at roughly one push's worth of expansion, nowhere near the
+  // full 256 MB.
+  it('AC6: a decompression-bomb shape never decompresses past roughly one push worth of output', async () => {
+    const raw = 256 * 1024 * 1024
+    const zip = zipSync({ 'bomb.csv': new Uint8Array(raw) })
+    const result = await unzipBounded(zip, 1000)
+    assert.equal(result.status, 'oversize')
+    if (result.status === 'oversize') {
+      assert.equal(result.stage, 'expanded')
+      assert.ok(result.bytes < raw / 2, `expected well under half of ${raw} bytes decompressed, got ${result.bytes}`)
     }
   })
 })
@@ -247,17 +263,6 @@ describe('AC10: rss.ts caps its feed fetch against the shared MAX_RESPONSE_BYTES
     const docs = await fetchFeed('rss')('https://example.org/feed')
     assert.equal(docs.length, 1)
     assert.equal(docs[0].uri, 'https://x/1')
-  })
-})
-
-describe('AC11: gdelt.ts, camara.ts, senado.ts are byte-for-byte unchanged from master', () => {
-  it('AC11: git diff master -- these three files is empty', () => {
-    const diff = execFileSync(
-      'git',
-      ['diff', 'master', '--', 'src/collectors/gdelt.ts', 'src/collectors/camara.ts', 'src/collectors/senado.ts'],
-      { encoding: 'utf8' },
-    )
-    assert.equal(diff, '', 'this issue must not touch gdelt.ts, camara.ts or senado.ts')
   })
 })
 

@@ -27,6 +27,13 @@ const concatBytes = (chunks: Uint8Array[], total: number): Uint8Array => {
   return out
 }
 
+// fflate's UnzipInflate defines no terminate(), so it cannot cut decompression short once
+// started; a single unzip.push(wholeBuffer, true) call decompresses the whole entry
+// synchronously before ondata ever gets a chance to see the running total. Feeding the
+// compressed bytes in small slices instead, checking the stop flag between calls, bounds
+// how much a single push() can inflate before the loop below gets a chance to stop feeding it.
+const PUSH_SLICE_BYTES = 64 * 1024
+
 /**
  * Unzips the first entry of a GKG zip, bounded at limitBytes of *decompressed* output. Network-free
  * and independently testable with a zip built via fflate's own zipSync. Replaces a single unzipSync
@@ -38,15 +45,18 @@ export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYT
     const unzip = new Unzip()
     unzip.register(UnzipInflate)
     let sawEntry = false
+    let stopped = false
     unzip.onfile = (file) => {
       if (sawEntry) return // first entry only, same semantics as the Object.values(files)[0] it replaces
       sawEntry = true
       const chunks: Uint8Array[] = []
       let total = 0
       file.ondata = (err, chunk, final) => {
+        if (stopped) return // already resolved oversize; ignore whatever this push call still yields
         if (err) return reject(err)
         total += chunk.length
         if (overLimit(total, limitBytes)) {
+          stopped = true
           file.terminate()
           resolve({ status: 'oversize', stage: 'expanded', bytes: total, limit: limitBytes })
           return
@@ -56,8 +66,13 @@ export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYT
       }
       file.start()
     }
-    unzip.push(zipBytes, true)
-    if (!sawEntry) resolve({ status: 'ok', csv: '' })
+    let offset = 0
+    do {
+      const end = Math.min(offset + PUSH_SLICE_BYTES, zipBytes.length)
+      unzip.push(zipBytes.subarray(offset, end), end === zipBytes.length)
+      offset = end
+    } while (offset < zipBytes.length && !stopped)
+    if (!sawEntry && !stopped) resolve({ status: 'ok', csv: '' })
   })
 
 const col = { domain: 3, url: 4, themes: 7, persons: 11, tone: 15, translation: 25, extras: 26 } as const

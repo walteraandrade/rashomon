@@ -9,8 +9,8 @@ export type SlowResponse = { status: number; body: string }
 
 // Shared wire-size ceiling for every unbounded network read in the collector layer: slowGet
 // here (gdelt, camara, senado), gkg.ts's zip fetch and rss.ts's feed fetch. A literal, not
-// env-overridable -- docs/sources.md's ~3.5MB/slot GKG figure gives an order of magnitude
-// of headroom, and an RSS feed is smaller still, so one ceiling serves both.
+// env-overridable -- see docs/sources.md for the measured GKG slot size this was picked
+// against (~13-14MB compressed, ~2.3x headroom, not the order of magnitude once assumed).
 export const MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 
 /** Pure accept/reject boundary: does this running total already exceed the limit. */
@@ -77,7 +77,7 @@ export const slowGet = (url: URL, timeoutMs = 45_000): Promise<SlowResponse> =>
         }
         chunks.push(c)
       })
-      res.on('error', () => {}) // destroy() above can raise here; fail() already settled the promise
+      res.on('error', fail) // a mid-body abort (ours via destroy(), or the socket's own) must reject, not hang
       res.on('end', () => {
         if (settled) return
         settled = true

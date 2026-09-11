@@ -3,6 +3,7 @@
 // never has to leave the graph. Modifier-click, middle-click, target=_blank and data-leave
 // still go to the page, which is the shareable copy of the same text.
 
+// Guarded: a test (or a page with no dialog) has no document to query.
 const $ = (id: string): any => (typeof document === 'undefined' ? null : document.getElementById(id))
 
 const HELP_SECTIONS = new Set(['analise', 'atlas', 'avaliacao', 'pmi', 'comparar'])
@@ -28,8 +29,8 @@ const helpHash = (href: string) => {
 
 const onClick = (event: MouseEvent) => {
   if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-  const node = event.target as { closest?: (selector: string) => HTMLAnchorElement | null; parentElement?: { closest?: (selector: string) => HTMLAnchorElement | null } } | null
-  const link = node?.closest?.('a[href]') ?? node?.parentElement?.closest?.('a[href]')
+  const node = event.target as Element | null
+  const link = node?.closest('a[href]')
   if (!link) return
   if (link.getAttribute('target') === '_blank' || link.hasAttribute('data-leave')) return
   const hash = helpHash(link.getAttribute('href') ?? '')

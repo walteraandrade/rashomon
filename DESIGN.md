@@ -96,7 +96,7 @@ Strategy: full palette for data, restrained for chrome. Neutrals are charcoal ti
 | Who | `--cmp-a` / `--cmp-b` | the ruler's two people |
 | Support | `--muted` | captions, keys' meanings, chrome labels |
 
-Surfaces stack `--bg` < `--panel` < `--soft`. Every figure sits on `--panel`. A data hue on a surface fights the marks (green card vs pink/lilac evaluation; blue card vs the ruler's two people) and, on a bipolar chart, picks a side. Which graph you are in is the eyebrow and the h2. `--green` is the neighbour highlight on the unmasked map and is not the evaluation green. `--danger` is errors only. `SCALE_MID` (`#8b909c`) is "no signal" on every ramp. Do not colour a heading to make it findable.
+Surfaces stack `--bg` < `--panel` < `--soft`. Every figure sits on `--panel`. A data hue on a surface fights the marks (green card vs pink/lilac evaluation; blue card vs the ruler's two people) and, on a bipolar chart, picks a side. Which graph you are in is the eyebrow and the h2. `--green` is the neighbour highlight on the unmasked map and is not the evaluation green. `--danger` is errors only. `SCALE_MID` (`#8b909c`, `--scale-mid`) is "no signal" on every ramp. Do not colour a heading to make it findable.
 
 ## Typography
 
@@ -122,7 +122,7 @@ No borders. Grouping is a surface wash or a gap. Cards exist when a dialog has t
 ## Components
 
 - **Sentence chips.** `<select>` in `.pick`: filled `--soft`, text `--accent`, chevron in accent. The only control surface on the page.
-- **Figure key.** A `dl.figure-key` of tamanho / cor / clique (or posição). Always visible. The encoding, not the essay.
+- **Figure key.** A `dl.figure-key` of tamanho / cor / posição / clique. Always visible. The encoding, not the essay.
 - **Help dialog.** `#helpDialog`, modal, same card language as `#docsDialog`. Opened by any in-page `como-ler.html` link; modifier-click and `data-leave` still go to the page.
 - **Docs dialog.** Floating above 760px, modal below. The only path to `GET /docs`.
 - **Quiet button / segment.** `--soft` chrome; pressed segment floods `--accent`.

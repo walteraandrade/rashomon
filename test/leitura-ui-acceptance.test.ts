@@ -66,6 +66,34 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       assert.match(figure, /<dl class="figure-key">/, `${id} carries its own key`)
     }
   })
+
+  it("figure 1's key on the page and in the dialog name the same encodings", () => {
+    const html = read('design-5.html')
+    const dts = (chunk: string) =>
+      [...(chunk.match(/<dl class="figure-key">[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
+        m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim(),
+      )
+    const figure = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const help = html.match(/id="help-atlas"[\s\S]*?(?=<div id="help-pmi")/)?.[0] ?? ''
+    assert.deepEqual(dts(figure), ['Tamanho', 'Cor', 'Posição', 'Clique'])
+    assert.deepEqual(dts(help), dts(figure))
+  })
+
+  it('the dialog and the shareable page keep the facts the figure itself cannot say', () => {
+    const dialog = read('design-5.html').match(/id="helpDialog"[\s\S]*?<\/dialog>/)?.[0] ?? ''
+    const page = read('como-ler.html')
+    for (const [hay, label] of [
+      [dialog, 'dialog'],
+      [page, 'como-ler.html'],
+    ] as const) {
+      assert.match(hay, /expressão/i, `${label} names phrases`)
+      assert.match(hay, /arrasta pelo topo/, `${label} names the floating docs card`)
+      assert.match(hay, /no centro/i, `${label} names the atlas centre entry`)
+      assert.match(hay, /primeira linha da lista/, `${label} names the list-head entry`)
+      assert.match(hay, /não couberam/, `${label} names the ruler overflow list`)
+      assert.match(hay, /não entra na régua/, `${label} names own-name words dropped from the ruler`)
+    }
+  })
 })
 
 describe('Leitura UI: one stylesheet, one type system', () => {
@@ -78,6 +106,14 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     // compare.html is gone (issue #91): the ruler now lives on design-5.html, already in this
     // loop, so the deleted page's own slot is dropped rather than replaced.
     for (const page of ['design-5.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=League\+Spartan[^"]*Instrument\+Sans/, `${page} loads both faces`)
+  })
+
+  it('the mask and ruler swatches use SCALE_MID, not --muted', () => {
+    const css = read('atlas.css')
+    assert.match(css, /--scale-mid:\s*#8b909c/)
+    assert.match(css, /\.mask-scale \{[^}]*var\(--scale-mid\)/)
+    assert.match(css, /\.key-pair \{[^}]*var\(--scale-mid\)/)
+    assert.doesNotMatch(css, /\.top nav \.help-link \{[^}]*--accent/, '"como ler" in the nav is chrome, not a live control')
   })
 
   it('atlas.css sizes type from one --t-* ramp, and its floor is 11px', () => {

@@ -27,7 +27,8 @@
       <dl class="figure-key">
         <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>frequência ou PMI, o que a frase escolhe</dd></div>
         <div><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
-        <div><dt>Clique</dt><dd>textos da palavra; no centro, textos da pessoa</dd></div>
+        <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
       </dl>
       <div class="sentence">
         <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa"></select></span> nos <span class="pick"><select id="days" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="source" aria-label="Fonte"></select></span>, por <span class="pick"><select id="sort" aria-label="Tamanho por"><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option></select></span>. Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras"><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
@@ -73,6 +74,7 @@
         <div><dt>Posição</dt><dd>de quem a palavra é mais</dd></div>
         <div><dt>Tamanho</dt><dd>documentos dos dois, somados</dd></div>
         <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>de que lado ela pende</dd></div>
+        <div><dt>Clique</dt><dd>textos das duas pessoas, neste gráfico</dd></div>
       </dl>
       <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A"></select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B"></select></span> nos <span class="pick"><select id="compareDays" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="compareSource" aria-label="Fonte"></select></span>, por <span class="pick"><select id="compareMeasure" aria-label="Medida"></select></span>. Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras"></select></span> palavras por pessoa.</p></div>
     </header>
@@ -101,11 +103,14 @@
     <div id="help-atlas">
       <h3>Gráfico 1 · Atlas</h3>
       <dl class="figure-key">
-        <div><dt>Tamanho</dt><dd>frequência ou PMI × ln(1 + documentos)</dd></div>
-        <div><dt>Cor</dt><dd>avaliação contra a média da pessoa, não contra o zero</dd></div>
+        <div><dt>Tamanho</dt><dd>frequência ou PMI, o que a frase escolhe</dd></div>
+        <div><dt>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
         <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
       </dl>
       <p>Cinza: igual à média, ou menos de 3 textos avaliados. Linha entre duas palavras: estão nos mesmos textos. Só isso.</p>
+      <p>Uma expressão é várias palavras como um termo só. Ela substitui as palavras que cobre; a contagem de uma palavra passa a ser os textos em que ela aparece fora de qualquer expressão.</p>
+      <p>Clique numa palavra abre os textos. No nome no centro, e na primeira linha da lista, abre os da pessoa. O cartão fica aberto na próxima escolha e arrasta pelo topo.</p>
     </div>
     <div id="help-pmi">
       <h3>PMI</h3>
@@ -126,6 +131,7 @@
     <div id="help-comparar">
       <h3>Gráfico 3 · Régua</h3>
       <p>A posição diz de quem a palavra é. O tamanho é documentos dos dois, somados. No meio, a palavra é dividida. Clique abre os textos das duas pessoas.</p>
+      <p>As que não couberam sem cobrir outra ficam numa lista abaixo, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
     </div>
     <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
     <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>

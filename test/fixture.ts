@@ -315,11 +315,20 @@ export const seed = () =>
   (ready ??= (async () => {
     if (process.env.DATA_DIR !== 'memory://') throw new Error('tests must run with DATA_DIR=memory://')
     await migrate()
-    await db.exec(`delete from doc_terms; delete from doc_persons; delete from docs; delete from persons;`)
+    await db.exec(`delete from doc_terms; delete from doc_persons; delete from docs; delete from persons; delete from phrases; delete from phrase_stage;`)
     await upsertPersons(persons)
     for (const d of docs) await insertDoc(d, persons)
     await seedTestimony()
   })())
+
+// A suite that writes past the fixture (another person, a future-dated doc, a lexicon) shares
+// its process with suites that pin counts against the fixture alone, now that tests live one
+// file per module. Such a suite registers `after(reseed)` so the next one reads the fixture and
+// nothing else.
+export const reseed = () => {
+  ready = null
+  return seed()
+}
 
 // Schema introspection, shared by the index/maintenance suites: pg_indexes is the only place
 // the shape migrate() actually produced can be read back, rather than re-asserting its source.

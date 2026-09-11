@@ -2,14 +2,21 @@ import assert from 'node:assert/strict'
 import { after, describe, it, before } from 'node:test'
 import { db, migrate } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
-import { MAX_DOC_CHARS, batches, insertDoc, insertDocs, truncateText, upsertPersons, writeBatchDocs, writeBatchRows } from '../src/store.js'
-import { collidingUri, derivedCounts, enrichmentDocs, orphanTermCount, persons, rowVersion, seed, termsOf, untrackedPerson } from './fixture.js'
+import { MAX_DOC_CHARS, batches, insertDoc, insertDocs, tonedSources, truncateText, upsertPersons, writeBatchDocs, writeBatchRows } from '../src/store.js'
+import { collidingUri, derivedCounts, enrichmentDocs, orphanTermCount, persons, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
 import './close.js'
+
+// The write path in src/store.ts. Every suite here layers its own docs on the shared fixture;
+// none reads a count the fixture alone would give, so no reseed is needed between them. The
+// statement-count suite lives in test/batch-writes.test.ts, because PERF has to be set before
+// src/db.ts loads.
 
 const [, tarcisio] = persons
 const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
+const now = () => new Date().toISOString()
 const stored = async (uri: string) =>
   (await db.query<{ source: string; tone: number | null }>(`select source, tone from docs where uri = $1`, [uri])).rows[0]
+const textOf = async (uri: string) => (await db.query<{ text: string }>(`select text from docs where uri = $1`, [uri])).rows[0]?.text ?? null
 
 describe('insertDoc persons', () => {
   const flavio = { id: 'flavio-bolsonaro', name: 'Flávio Bolsonaro', aliases: ['Flávio Bolsonaro'] }
@@ -84,6 +91,10 @@ describe('insertDoc senado (issue #25)', () => {
   const tagged = async (uri: string) =>
     (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
 
+  it('tonedSources never gains senado: tone stays null even if a senado doc supplies a tone field', () => {
+    assert.ok(!tonedSources.includes('senado'), 'senado must remain an untoned source')
+  })
+
   it('tags the speaking senator via the name-prefix, stores terms, and leaves tone null', async () => {
     const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/111111'
     await insertDoc(
@@ -94,6 +105,35 @@ describe('insertDoc senado (issue #25)', () => {
     assert.ok((await termsOf(uri)).includes('soberania'))
     assert.deepEqual(await stored(uri), { source: 'senado', tone: null })
   })
+})
+
+describe('insertDoc for the untoned collectors (issues #22, #24, #25)', () => {
+  before(seed)
+  const tagged = async (uri: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
+
+  it('tonedSources stays exactly [gdelt, gkg]', () => {
+    assert.deepEqual(tonedSources, ['gdelt', 'gkg'])
+  })
+
+  for (const source of ['camara', 'juridico', 'oficial', 'nicho'] as const) {
+    it(`a ${source} doc lands with tone = null even if a buggy RawDoc sets a numeric tone`, async () => {
+      const uri = `https://example.org/press-tone-${source}`
+      await insertDoc({ source, uri, text: `Fulano: teste de tone indevido em ${source}`, publishedAt: now(), tone: 42 }, persons)
+      assert.deepEqual(await stored(uri), { source, tone: null })
+    })
+  }
+
+  for (const [uri, source, person] of [
+    ['https://noticias.stf.jus.br/46', 'juridico', 'bolsonaro'],
+    ['https://agenciabrasil.ebc.com.br/47', 'oficial', 'lula'],
+    ['https://cartacapital.com.br/48', 'nicho', 'bolsonaro'],
+  ] as const) {
+    it(`the ${source} fixture doc tags exactly ${person}, tone null`, async () => {
+      assert.deepEqual(await tagged(uri), [person])
+      assert.deepEqual(await stored(uri), { source, tone: null })
+    })
+  }
 })
 
 describe('insertDoc tone', () => {
@@ -205,6 +245,128 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
   })
 })
 
+describe('the longer text wins on a known uri, and its terms are re-derived', () => {
+  before(seed)
+  const uri = 'https://example.org/syndicated-1'
+  const headline = { source: 'gnews' as const, uri, text: 'Lula fala sobre a pauta tributária', publishedAt: now(), domain: 'example.org' }
+  const article = {
+    source: 'rss' as const,
+    uri,
+    text: 'Lula fala sobre a pauta tributária. O presidente detalhou a proposta de isenção durante entrevista, citando a arrecadação prevista e o calendário de votação no Congresso.',
+    publishedAt: now(),
+    domain: 'example.org',
+  }
+
+  it('lands the headline first, with the headline terms', async () => {
+    assert.equal(await insertDoc(headline, persons), true)
+    assert.ok((await termsOf(uri)).includes('tributaria'))
+    assert.ok(!(await termsOf(uri)).includes('arrecadacao'))
+  })
+
+  it('replaces the stored text when the same uri arrives with the whole article', async () => {
+    const before = await rowVersion(uri)
+    // Not counted as new: the uri was already known, so `written` stays 0.
+    assert.equal(await insertDoc(article, persons), false)
+    assert.equal(await textOf(uri), article.text)
+    assert.notEqual(await rowVersion(uri), before)
+  })
+
+  it('derives the article terms and drops nothing but the stale ones', async () => {
+    const stored = await termsOf(uri)
+    assert.ok(stored.includes('arrecadacao'), 'a word only the article has must be there')
+    assert.ok(stored.includes('tributaria'), 'a word both have must survive')
+    assert.deepEqual(stored, [...new Set(stored)].sort(), 'no term may be stored twice')
+  })
+
+  it('keeps the person the headline named', async () => {
+    assert.equal((await derivedCounts(uri))?.persons, 1)
+  })
+
+  it('refuses a shorter text: a truncating feed cannot undo an enrichment', async () => {
+    const before = await rowVersion(uri)
+    assert.equal(await insertDoc(headline, persons), false)
+    assert.equal(await textOf(uri), article.text)
+    assert.equal(await rowVersion(uri), before, 'nothing changed, so no row version is written')
+  })
+})
+
+// Postgres counts characters and JavaScript counts UTF-16 code units, so any non-BMP character
+// makes the two disagree. An enrichment measured by comparing them would read as 'unchanged' and
+// leave the article's text stored beside the headline's terms.
+describe('a document carrying non-BMP characters is still recognised as enriched', () => {
+  before(seed)
+  const uri = 'https://example.org/syndicated-emoji'
+  const headline = { source: 'gnews' as const, uri, text: 'Lula 🇧🇷 fala hoje 😀', publishedAt: now(), domain: 'example.org' }
+  const article = {
+    source: 'rss' as const,
+    uri,
+    text: 'Lula 🇧🇷 fala hoje 😀. O presidente tratou da desoneração da folha e prometeu enviar o texto ao Congresso 🇧🇷 ainda neste semestre.',
+    publishedAt: now(),
+    domain: 'example.org',
+  }
+
+  it('disagrees on length, which is why the outcome cannot be measured that way', async () => {
+    const { rows } = await db.query<{ len: number }>(`select length($1::text) as len`, [headline.text])
+    assert.notEqual(rows[0]?.len, headline.text.length)
+  })
+
+  it('replaces the text and rewrites the derived terms', async () => {
+    assert.deepEqual(await insertDocs([headline], persons), { written: 1, enriched: 0, failed: 0 })
+    assert.ok(!(await termsOf(uri)).includes('desoneracao'))
+    assert.deepEqual(await insertDocs([article], persons), { written: 0, enriched: 1, failed: 0 })
+    assert.equal(await textOf(uri), article.text)
+    assert.ok((await termsOf(uri)).includes('desoneracao'), 'the article terms must reach doc_terms without a reindex')
+  })
+})
+
+describe('insertDocs counts enrichment apart from new documents', () => {
+  before(seed)
+  const uri = 'https://example.org/syndicated-2'
+  const short = { source: 'gnews' as const, uri, text: 'Bolsonaro comenta o julgamento', publishedAt: now(), domain: 'example.org' }
+  const long = {
+    source: 'rss' as const,
+    uri,
+    text: 'Bolsonaro comenta o julgamento. O ex-presidente afirmou que recorrerá da decisão e criticou o relatório apresentado pela acusação na sessão desta semana.',
+    publishedAt: now(),
+    domain: 'example.org',
+  }
+  const other = { source: 'rss' as const, uri: 'https://example.org/syndicated-3', text: 'Tarcísio anuncia investimento em Santos', publishedAt: now(), domain: 'example.org' }
+
+  it('reports written for the new one and enriched for the replaced one', async () => {
+    assert.deepEqual(await insertDocs([short], persons), { written: 1, enriched: 0, failed: 0 })
+    assert.deepEqual(await insertDocs([long, other], persons), { written: 1, enriched: 1, failed: 0 })
+  })
+
+  it('counts a replay as neither: the same documents change nothing', async () => {
+    assert.deepEqual(await insertDocs([long, other], persons), { written: 0, enriched: 0, failed: 0 })
+  })
+})
+
+describe('doc_candidates written by insertDoc (issue #32)', () => {
+  before(seedCandidates)
+  const candidatesOf = async (uri: string) =>
+    (await db.query<{ name: string }>(`select c.name from doc_candidates c join docs d on d.id = c.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.name)
+
+  it('AC4: stores the discovered names of a heuristic doc', async () => {
+    assert.deepEqual(await candidatesOf('at://did:plc:x/post/c3'), ['hugo motta', 'renan calheiros'])
+  })
+
+  it('AC4: stores the column names of a gkg doc, overlay applied, text ignored', async () => {
+    assert.deepEqual(await candidatesOf('https://folha.uol.com.br/c4'), ['hugo motta'])
+  })
+
+  it('AC4: does not rewrite candidates when the same uri arrives again', async () => {
+    const again = await insertDoc({ source: 'rss', uri: 'https://example.org/c1', text: 'Outro texto com Renan Calheiros', publishedAt: now() }, persons)
+    assert.equal(again, false)
+    assert.deepEqual(await candidatesOf('https://example.org/c1'), ['hugo motta'])
+  })
+
+  it('AC4: keeps the existing fixture docs free of candidates that match a tracked alias', async () => {
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_candidates where name in ('lula', 'tarcisio', 'bolsonaro', 'jair bolsonaro', 'luiz inacio')`)
+    assert.equal(rows[0].n, 0)
+  })
+})
+
 describe('write batch bounds (issue #50)', () => {
   const original = { rows: process.env.WRITE_BATCH_ROWS, docs: process.env.WRITE_BATCH_DOCS }
   after(() => {
@@ -249,7 +411,6 @@ describe('write batch bounds (issue #50)', () => {
 
 describe('docs.text is capped at write time (issue #128)', () => {
   before(seed)
-  const textOf = async (uri: string) => (await db.query<{ text: string }>(`select text from docs where uri = $1`, [uri])).rows[0]?.text
   // A doc naming a tracked person, whose tail past the cap carries a word that appears nowhere else.
   const filler = 'lula fala sobre a reforma tributaria no congresso '
   const long = (tail: string) => `${filler.repeat(Math.ceil((MAX_DOC_CHARS + 500) / filler.length))}${tail}`

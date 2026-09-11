@@ -51,7 +51,7 @@ export const snapDays = (v: string | undefined, d: number): number => snapTo(DAY
 // the page never sends: 1, "just the top term", which the acceptance tests for issues #32 and
 // #93 pin against the fixture, and 200, the old documented ceiling, so a script can still ask
 // for everything. Unlike DAYS there is no per-figure select to read these from, so a new value
-// the page starts sending has to be added here (test/params-enumeration-acceptance.test.ts
+// the page starts sending has to be added here (test/query.test.ts
 // checks).
 export const LIMITS = [1, 5, 12, 18, 20, 24, 30, 40, 50, 60, 100, 200]
 

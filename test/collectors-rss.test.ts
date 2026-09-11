@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { fetchFeed } from '../src/collectors/rss.js'
+import { body, fetchFeed, toDoc } from '../src/collectors/rss.js'
 import { MAX_RESPONSE_BYTES } from '../src/http.js'
 
 const rssSrc = readFileSync(fileURLToPath(new URL('../src/collectors/rss.ts', import.meta.url)), 'utf8')
@@ -77,5 +77,38 @@ describe('fetchFeed — behaviour, driven through a stubbed global fetch', () =>
   it('still throws on a non-ok status, unchanged from today', async () => {
     stubFetch({ status: 500, ok: false })
     await assert.rejects(fetchFeed('rss')('https://example.org/feed'), /rss https:\/\/example\.org\/feed 500/)
+  })
+})
+
+describe('rss body(): content:encoded is the article a publisher syndicates on purpose', () => {
+  it('prefers content:encoded over description when it carries more text', () => {
+    const item = { description: '<p>Resumo curto.</p>', 'content:encoded': `<p>${'Texto integral da matéria. '.repeat(20)}</p>` }
+    assert.match(body(item), /^Texto integral da mat/)
+    assert.ok(body(item).length > 400)
+  })
+
+  it('keeps description when content:encoded is only a caption or an embed', () => {
+    const item = { description: `<p>${'Um resumo bem longo do texto. '.repeat(20)}</p>`, 'content:encoded': '<img src="x.jpg"><figcaption>Foto: Agência</figcaption>' }
+    assert.match(body(item), /^Um resumo bem longo/)
+  })
+
+  it('is inert on a feed with no content:encoded at all', () => {
+    assert.equal(body({ description: '<p>Só o resumo.</p>' }), 'Só o resumo.')
+    assert.equal(body({}), '')
+  })
+
+  it('strips the HTML and decodes entities, exactly as description already was', () => {
+    assert.equal(body({ 'content:encoded': '<p>Lula &amp; Bolsonaro</p><p>no Congresso</p>' }), 'Lula & Bolsonaro no Congresso')
+  })
+
+  it('reaches the RawDoc: toDoc builds text from title plus the full body', () => {
+    const doc = toDoc('rss')({
+      link: 'https://example.org/full',
+      title: 'Manchete curta',
+      description: 'Resumo.',
+      'content:encoded': `<p>${'Corpo inteiro da matéria com muito mais texto. '.repeat(10)}</p>`,
+    })
+    assert.match(doc?.text ?? '', /^Manchete curta\. Corpo inteiro/)
+    assert.ok((doc?.text.length ?? 0) > 400)
   })
 })

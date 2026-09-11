@@ -42,6 +42,23 @@ describe('unzipBounded — network-free, driven with a zipSync-built archive', (
     await assert.doesNotReject(unzipBounded(zip, 5))
   })
 
+  // A decompression-bomb shape: 300 MB of zeros compresses down to a few hundred KB, so
+  // `bytes > limit` alone (the test above) passes even if the whole payload gets decompressed
+  // before the stop check ever runs -- which is exactly what unzipBounded used to do. Feeding
+  // the compressed input across several small pushes means the stop flag can act between them,
+  // so a genuine bound caps the reported bytes at roughly one push's worth of expansion, nowhere
+  // near the full 300 MB.
+  it('never decompresses a bomb shape past roughly one push worth of output', async () => {
+    const trueSize = 300 * 1024 * 1024
+    const zip = zipSync({ 'bomb.csv': new Uint8Array(trueSize) })
+    const result = await unzipBounded(zip, 2000)
+    assert.equal(result.status, 'oversize')
+    if (result.status === 'oversize') {
+      assert.equal(result.stage, 'expanded')
+      assert.ok(result.bytes < trueSize / 3, `expected well under a third of ${trueSize} bytes decompressed, got ${result.bytes}`)
+    }
+  })
+
   it('resolves ok with an empty csv for a zip with no entries', async () => {
     assert.deepEqual(await unzipBounded(zipSync({})), { status: 'ok', csv: '' })
   })
@@ -251,5 +268,66 @@ describe('gkg() drops GDELT themes: extraTerms is always [] (issue #108)', () =>
     const docs = await gkg([])
     assert.ok(docs.length > 0, 'sanity: the mock must yield at least one doc')
     for (const d of docs) assert.deepEqual(d.extraTerms, [])
+  })
+})
+
+// AC8 and AC9 are exercised together, functionally, by driving the real gkg() collector end to
+// end against a stubbed global fetch: one pending slot resolves oversize (a declared
+// content-length above MAX_RESPONSE_BYTES) among several that resolve ok. This proves both
+// criteria against the actual gkg_files table, not against gkg.ts's source text: the oversize
+// slot never gets a row, the ok slots do, and the whole run completes without throwing.
+describe('gkg() skips an oversize slot without marking gkg_files, and the run finishes anyway', () => {
+  before(migrate)
+
+  const latest = '20260910120000'
+  const oversizeSlot = '20260910114500'
+  const okSlot = '20260910113000'
+
+  const gkgRow = (slot: string) => {
+    const cols = new Array(27).fill('')
+    cols[3] = 'example.org'
+    cols[4] = `https://example.org/${slot}`
+    cols[15] = '1.0'
+    cols[25] = 'srclc:por'
+    cols[26] = `<PAGE_TITLE>Doc ${slot}</PAGE_TITLE>`
+    return cols.join('\t')
+  }
+
+  const originalFetch = globalThis.fetch
+  before(() => {
+    globalThis.fetch = (async (url: unknown) => {
+      const u = String(url)
+      if (u.endsWith('lastupdate-translation.txt')) {
+        return { text: async () => `${latest}.translation.gkg.csv.zip` } as Response
+      }
+      const m = u.match(/\/(\d{14})\.translation\.gkg\.csv\.zip$/)
+      const slot = m ? m[1] : ''
+      if (slot === oversizeSlot) {
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: (k: string) => (k === 'content-length' ? String(MAX_RESPONSE_BYTES + 1) : null) },
+          body: null,
+        } as unknown as Response
+      }
+      const zip = zipSync({ 'entry.csv': strToU8(gkgRow(slot)) })
+      return { status: 200, ok: true, headers: { get: () => null }, body: streamOf([zip]) } as unknown as Response
+    }) as unknown as typeof fetch
+  })
+  after(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('AC9: gkg() resolves without throwing and includes a doc from an ok slot even though one slot is oversize', async () => {
+    const docs = await gkg([])
+    assert.ok(docs.some((d) => d.uri === `https://example.org/${okSlot}`), 'the ok slot must still produce a doc')
+    assert.ok(!docs.some((d) => d.uri.includes(oversizeSlot)), 'the oversize slot must never produce a doc')
+  })
+
+  it('AC8: the oversize slot gets no gkg_files row; the ok slot does', async () => {
+    const oversizeRows = (await db.query(`select 1 from gkg_files where slot = $1`, [oversizeSlot])).rows
+    assert.equal(oversizeRows.length, 0, 'an oversize slot must never be inserted into gkg_files')
+    const okRows = (await db.query(`select 1 from gkg_files where slot = $1`, [okSlot])).rows
+    assert.equal(okRows.length, 1, 'a successfully parsed slot must be recorded in gkg_files exactly once')
   })
 })

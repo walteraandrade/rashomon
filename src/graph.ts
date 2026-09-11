@@ -782,7 +782,7 @@ export const queries = {
 
 // The text each builder emits. A builder numbers its placeholders by the statement's shape
 // alone, never by the values bound, so what a sample call renders is byte-for-byte what the
-// handler sends (test/statements.test.ts pins it), and a test can still read the SQL.
+// handler sends (test/graph.test.ts pins it), and a test can still read the SQL.
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
 const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0 }

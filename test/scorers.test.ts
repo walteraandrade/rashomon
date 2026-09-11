@@ -3,16 +3,111 @@ import { describe, it } from 'node:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { methods as methodsFromIndex } from '../src/scorers/index.js'
-import { methods as methodsFromMethod } from '../src/scorers/method.js'
+import { methods, scorers } from '../src/scorers/index.js'
+import { methods as methodsFromMethod, modelRevision } from '../src/scorers/method.js'
 import { onnx, pairIds, scoreFromLogits } from '../src/scorers/onnx.js'
-import { docsText } from './docs.js'
-import './close.js'
+import fixtures from './kikori-fixtures.json' with { type: 'json' }
+import { withEnv } from './env.js'
 
-// Independent verification of issue #112's acceptance criteria, written from the spec text
-// rather than from the builder's own module split. The point of the split is that the
-// request-serving path (api/index.ts -> src/server.ts -> src/query.ts) never traces into
-// src/scorers/onnx.ts, the only file that dynamic-imports @huggingface/transformers.
+// src/scorers/*: the kikori encoding and score formula, the method label, and the module split
+// (issue #112) that keeps the request-serving path away from the model loader. pnpm score itself
+// is in test/score.test.ts.
+
+const CLS = 101
+const SEP = 102
+const LABELS = ['neg', 'neu', 'pos']
+
+describe('kikori pair encoding', () => {
+  it('frames the pair as [CLS] person [SEP] text [SEP] with token types 0 / 1', () => {
+    const e = pairIds([7, 8], [1, 2, 3], 256, CLS, SEP)
+    assert.deepEqual(e.input_ids, [CLS, 7, 8, SEP, 1, 2, 3, SEP])
+    assert.deepEqual(e.token_type_ids, [0, 0, 0, 0, 1, 1, 1, 1])
+  })
+
+  it('cuts only the text on long inputs, so the closing [SEP] survives and the frame fits max_length', () => {
+    const person = [7, 8, 9]
+    const text = Array.from({ length: 1000 }, (_, i) => i + 1)
+    const e = pairIds(person, text, 256, CLS, SEP)
+    assert.equal(e.input_ids.length, 256)
+    assert.equal(e.input_ids[e.input_ids.length - 1], SEP)
+    assert.deepEqual(e.input_ids.slice(0, 5), [CLS, 7, 8, 9, SEP])
+    assert.equal(e.input_ids.slice(5, -1).length, 256 - person.length - 3)
+    assert.equal(e.token_type_ids.length, 256)
+    assert.equal(e.token_type_ids.filter((t) => t === 0).length, person.length + 2)
+  })
+
+  it('never cuts a text that already fits', () => {
+    const e = pairIds([7], [1, 2], 256, CLS, SEP)
+    assert.equal(e.input_ids.length, 6)
+  })
+})
+
+describe('kikori score formula', () => {
+  it('is (p_pos - p_neg) * 10 from a softmax over the logits in label order', () => {
+    assert.equal(scoreFromLogits([1, 1, 1], LABELS), 0)
+    assert.ok(scoreFromLogits([0, 0, 20], LABELS) > 9.99)
+    assert.ok(scoreFromLogits([20, 0, 0], LABELS) < -9.99)
+    const logits = [0.5, -1, 2]
+    const e = logits.map(Math.exp)
+    const z = e[0] + e[1] + e[2]
+    assert.ok(Math.abs(scoreFromLogits(logits, LABELS) - ((e[2] - e[0]) / z) * 10) < 1e-12)
+  })
+
+  it('follows the label order given by the model, not a fixed index', () => {
+    assert.ok(scoreFromLogits([0, 0, 20], ['pos', 'neu', 'neg']) < -9.99)
+  })
+})
+
+// Issue #67: the method label carried the dtype only, so a retrain republished under the same
+// name left every existing row alone and scored only the pairs added since — two models under
+// one label, with nothing recording the split.
+const REV = '8f3c1d2'
+const unversioned = { TESTIMONY_DTYPE: undefined, TESTIMONY_REVISION: undefined }
+
+describe('kikori method label', () => {
+  it('is kikori:<dtype>, q8 by default, so placeholder `onnx` rows are never reused', async () => {
+    await withEnv(unversioned, () => assert.equal(methods.onnx(), 'kikori:q8'))
+    await withEnv({ TESTIMONY_DTYPE: 'fp32', TESTIMONY_REVISION: undefined }, () => assert.equal(methods.onnx(), 'kikori:fp32'))
+    assert.equal(methods.stub(), 'stub')
+  })
+
+  it('AC3 of issue #112: methods from scorers/index.ts and scorers/method.ts are the same object by reference', () => {
+    assert.equal(methods, methodsFromMethod, 'both must be the very same object, not two definitions of the same shape')
+  })
+
+  it('is kikori:<dtype>:<revision> when TESTIMONY_REVISION is set', async () => {
+    await withEnv({ ...unversioned, TESTIMONY_REVISION: REV }, () => {
+      assert.equal(modelRevision(), REV)
+      assert.equal(methods.onnx(), `kikori:q8:${REV}`)
+    })
+    await withEnv({ TESTIMONY_DTYPE: 'fp32', TESTIMONY_REVISION: REV }, () =>
+      assert.equal(methods.onnx(), `kikori:fp32:${REV}`),
+    )
+  })
+
+  it('stays kikori:<dtype> when unset, so rows scored before this existed keep matching', async () => {
+    await withEnv(unversioned, () => {
+      assert.equal(modelRevision(), '')
+      assert.equal(methods.onnx(), 'kikori:q8')
+    })
+  })
+
+  it('treats a revision outside the charset as unset, never as part of the label', async () => {
+    const bad = ['a b', 'a:b', 'a/b', '', 'x'.repeat(65), 'rev#1']
+    await Promise.all(
+      bad.map((v) =>
+        withEnv({ ...unversioned, TESTIMONY_REVISION: v }, () => {
+          assert.equal(modelRevision(), '', `${JSON.stringify(v)} must not reach the label`)
+          assert.equal(methods.onnx(), 'kikori:q8')
+        }),
+      ),
+    )
+  })
+
+  it('leaves the stub label alone: it is a pure function with no model behind it', async () => {
+    await withEnv({ ...unversioned, TESTIMONY_REVISION: REV }, () => assert.equal(methods.stub(), 'stub'))
+  })
+})
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const srcDir = join(root, 'src')
@@ -82,20 +177,10 @@ describe('issue #112 AC2: src/scorers/onnx.ts no longer owns the label logic', (
     assert.match(source, /from\s+['"]\.\/method\.js['"]/, 'onnx.ts must import dtype/modelRevision back from ./method.js')
   })
 
-  it('AC2: still exports pairIds, scoreFromLogits and the default onnx scorer, with unchanged behavior', () => {
+  it('AC2: still exports pairIds, scoreFromLogits and the default onnx scorer', () => {
     assert.equal(typeof pairIds, 'function')
     assert.equal(typeof scoreFromLogits, 'function')
     assert.equal(typeof onnx, 'function')
-    const encoded = pairIds([1, 2], [3, 4, 5], 10, 100, 101)
-    assert.deepEqual(encoded.input_ids, [100, 1, 2, 101, 3, 4, 5, 101])
-    const score = scoreFromLogits([1, -1], ['pos', 'neg'])
-    assert.ok(score > 0, 'pos > neg logits must score positive, unchanged from before the split')
-  })
-})
-
-describe('issue #112 AC3: one source for the label', () => {
-  it('AC3: methods exported from scorers/index.ts and scorers/method.ts are the same object by reference', () => {
-    assert.equal(methodsFromIndex, methodsFromMethod, 'both must be the very same object, not two definitions of the same shape')
   })
 })
 
@@ -137,25 +222,36 @@ describe('issue #112 AC9: onnx.ts keeps its network-safety gate', () => {
     assert.doesNotMatch(source, /^\s*import\s+.*@huggingface\/transformers/m, 'the Hub client must never be a static import')
     assert.match(source, /await import\(['"]@huggingface\/transformers['"]\)/, 'the dynamic import must still be present, inside load()')
   })
+
+  it('AC13 of issue #21: importing the onnx scorer module resolves without invoking any model call', async () => {
+    const mod = await import('../src/scorers/onnx.js')
+    assert.equal(typeof mod.onnx, 'function')
+  })
 })
 
-describe('issue #112 AC12: docs/operations.md states the dependency and size facts', () => {
-  it('AC12: @huggingface/transformers is documented as required only by pnpm score and shipped as optional', () => {
-    assert.match(docsText, /@huggingface\/transformers[\s\S]{0,80}required only by[\s\S]{0,20}pnpm score/, 'operations docs must say the package is required only by pnpm score')
-    assert.match(docsText, /optionalDependencies/, 'operations docs must say it ships as an optional dependency')
-  })
+// Opt-in: downloads TESTIMONY_MODEL (default drifting-walter/kikori) into MODEL_DIR and runs the
+// real scorer over the model's own fixtures. KIKORI_CHECK=1 runs both dtypes; KIKORI_CHECK=q8
+// or =fp32 runs one. Every other suite keeps using `stub`.
+const check = process.env.KIKORI_CHECK ?? ''
+const dtypes = (['fp32', 'q8'] as const).filter((d) => check === '1' || check === d)
+const tolerance = { fp32: 0.01, q8: 1.5 }
+const expected = { fp32: 'score_fp32', q8: 'score_int8' } as const
 
-  it('AC12: the deployed /api function is documented as excluded from the import graph that reaches the model loader', () => {
-    assert.match(docsText, /deployed[\s\S]{0,20}\/api[\s\S]{0,120}never reaches the model loader/i)
-  })
-
-  it('AC12: the measured before/after size of .vercel/output/functions/api/index.func is recorded, and after is smaller', () => {
-    assert.match(docsText, /index\.func/, 'the docs must name the measured artifact')
-    const bytes = [...docsText.matchAll(/before this split,[\s\S]{0,80}?was\s+([\d,]+)\s+bytes[\s\S]{0,200}?after,\s+it is\s+([\d,]+)\s+bytes/g)]
-    assert.equal(bytes.length, 1, 'the docs must record one before/after size pair for index.func, in prose next to each other')
-    const [, before, after] = bytes[0]
-    assert.ok(Number(before.replace(/,/g, '')) > Number(after.replace(/,/g, '')), 'after must be recorded as smaller than before')
-    assert.match(docsText, /onnxruntime-node/, 'the docs must name onnxruntime-node among what the before build carried')
-    assert.match(docsText, /carries none of them/, 'the docs must state the after build carries none of the excluded packages')
-  })
+describe('kikori fixtures (real model)', { skip: dtypes.length === 0 && 'set KIKORI_CHECK=1 to download the model and run' }, () => {
+  process.env.TESTIMONY_MODEL ??= 'drifting-walter/kikori'
+  for (const dtype of dtypes) {
+    it(`${dtype} scores every fixture within ${tolerance[dtype]} of ${expected[dtype]}`, async () => {
+      process.env.TESTIMONY_DTYPE = dtype
+      const diffs: { person: string; got: number; want: number }[] = []
+      for (const f of fixtures) {
+        const got = await scorers.onnx(f.text, { id: f.person, name: f.person, aliases: [] })
+        assert.ok(typeof got === 'number')
+        diffs.push({ person: f.person, got, want: f[expected[dtype]] })
+      }
+      const off = diffs.filter((d) => Math.abs(d.got - d.want) > tolerance[dtype])
+      assert.deepEqual(off, [], `${dtype}: ${off.length} of ${fixtures.length} fixtures outside tolerance`)
+      const mean = diffs.reduce((a, d) => a + Math.abs(d.got - d.want), 0) / diffs.length
+      console.log(`${dtype}: n ${diffs.length} mean |dscore| ${mean.toFixed(4)} max ${Math.max(...diffs.map((d) => Math.abs(d.got - d.want))).toFixed(4)}`)
+    })
+  }
 })

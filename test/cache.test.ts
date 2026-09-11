@@ -32,6 +32,7 @@ describe('Cache-Control on /api reads', () => {
       '/api/people/tarcisio/testimony?method=stub',
       '/api/tone',
       '/api/compare?a=lula&b=bolsonaro',
+      '/api/people/lula/week',
     ])
       assert.deepEqual(await header(url), { status: 200, cache: ROLLING }, url)
   })

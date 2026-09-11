@@ -240,10 +240,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
 .workspace .viewport, .workspace .columns, .workspace .inspector,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
-.compare .ruler, .compare .detail { transition: opacity .16s ease-out; }
+.compare .ruler, .compare .detail,
+.week .week-chart { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
-.figure.is-loading .ruler, .figure.is-loading .detail,
+.figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
@@ -614,6 +615,31 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .detail-sides dd.empty-hint { color: var(--muted); font-style: italic; }
 #compareHiddenNote { margin: 10px 0 0; }
 #compareA, #compareB { font-family: var(--display); }
+
+.week-chart { margin: 18px 0 0; }
+.week-head, .week-about, .week-overflow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-2); }
+.week-day, .week-about .stat { justify-items: center; text-align: center; }
+.week-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.week-word { cursor: pointer; outline: none; }
+.week-hit { fill: transparent; }
+.week-text { font-family: var(--display); font-weight: 700; fill: var(--ink); }
+.week-text[data-size="t-md"] { font-size: var(--t-md); }
+.week-text[data-size="t-base"] { font-size: var(--t-base); }
+.week-text[data-size="t-sm"] { font-size: var(--t-sm); }
+.week-text[data-size="t-xs"] { font-size: var(--t-xs); }
+.week-text[data-size="t-2xs"] { font-size: var(--t-2xs); }
+.week-text[data-size="t-micro"] { font-size: var(--t-micro); }
+.week-word:hover .week-hit, .week-word:focus-visible .week-hit { fill: color-mix(in srgb, var(--ink) 8%, transparent); }
+.week-word.is-selected .week-hit { fill: color-mix(in srgb, var(--ink) 16%, transparent); }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-2); min-height: 12rem; }
+.week-grid .week-col { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
+.week-grid .ghost:last-child { width: 2.4em; height: calc(var(--h, 60) * 1px); }
+.sparkline { margin: var(--space-4) 0 0; }
+.spark-bars { display: flex; align-items: flex-end; gap: 3px; height: 1em; }
+.spark-bar { flex: 1; min-width: 0; height: calc(var(--h, .15) * 1em); background: var(--ink); border-radius: 1px; }
+.spark-bar.ghost { height: .55em; background: var(--soft); }
+.sparkline figcaption { margin-top: var(--space-2); font-size: var(--t-xs); color: var(--muted); }
+.sparkline.is-empty { min-height: 1em; }
 
 /* ---------- the pet ---------- */
 /* The one raster on a site that otherwise draws every limit with type. It is allowed exactly

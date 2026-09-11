@@ -22,8 +22,11 @@ import {
   parseTestimonyQuery,
   parseTimelineQuery,
   parseToneQuery,
+  parseWeekQuery,
   snapDays,
   snapTo,
+  brtDate,
+  calendarDay,
 } from '../src/query.js'
 import { candidatesQuery, compareParams, docsParams, params } from '../src/ui/api.js'
 import { withEnv } from './env.js'
@@ -230,6 +233,45 @@ describe('parseCompareQuery (issue #93)', () => {
   })
 })
 
+describe('parseWeekQuery (issue #147)', () => {
+  it('AC3/AC4: days default 7, limit default 8, both snap', () => {
+    assert.equal(parseWeekQuery({}).days, 7)
+    assert.equal(parseWeekQuery({ days: 'abc' }).days, 7)
+    assert.equal(parseWeekQuery({ days: '18' }).days, 7)
+    assert.equal(parseWeekQuery({ days: '30' }).days, 30)
+    assert.equal(parseWeekQuery({}).limit, 8)
+    assert.equal(LIMITS.includes(8), true)
+    assert.equal(parseWeekQuery({ limit: '1' }).limit, 1)
+    assert.equal(parseWeekQuery({ limit: '10' }).limit, 8)
+  })
+
+  it('AC5: source/kind/domain/lean parse as on /graph', () => {
+    assert.equal(parseWeekQuery({ source: 'gnews,bogus' }).source, 'gnews')
+    assert.equal(parseWeekQuery({ source: 'bogus' }).source, 'all')
+    assert.equal(parseWeekQuery({ kind: 'theme' }).kind, 'all')
+    assert.equal(parseWeekQuery({ kind: 'word,hashtag' }).kind, 'word,hashtag')
+    assert.equal(parseWeekQuery({ domain: 'g1.globo.com,bogus host' }).domain, 'g1.globo.com')
+    assert.equal(parseWeekQuery({ lean: 'left,bogus' }).lean, 'left')
+  })
+})
+
+describe('parseDocsQuery.day (issue #147)', () => {
+  it('AC14: keeps an overlapping calendar day; malformed, out-of-window and future become empty', () => {
+    const today = brtDate()
+    assert.equal(parseDocsQuery({ day: today }).day, today)
+    const sep8 = parseDocsQuery({ day: '2026-09-08' }).day
+    assert.ok(sep8 === '2026-09-08' || sep8 === '', '2026-09-08 is kept only while it overlaps the snapped window')
+    assert.equal(parseDocsQuery({ day: '2026-02-31' }).day, '')
+    assert.equal(parseDocsQuery({ day: 'nope' }).day, '')
+    assert.equal(parseDocsQuery({}).day, '')
+    assert.equal(parseDocsQuery({ day: '2020-01-01' }).day, '')
+    assert.equal(calendarDay('2026-02-31'), '')
+    const nudge = new Date(`${today}T15:00:00.000Z`)
+    nudge.setUTCDate(nudge.getUTCDate() + 1)
+    assert.equal(parseDocsQuery({ day: brtDate(nudge) }).day, '')
+  })
+})
+
 describe('parseCandidatesQuery (issue #32)', () => {
   it('AC6: uses 7 / 5 / 50 as defaults', () => {
     assert.deepEqual(parseCandidatesQuery({}), { days: 7, min: 5, limit: 50 })
@@ -264,6 +306,7 @@ const dayParsers: [string, (q: Record<string, string | undefined>) => { days: nu
   ['parseTestimonyQuery', parseTestimonyQuery, 30],
   ['parseCandidatesQuery', parseCandidatesQuery, 7],
   ['parseCompareQuery', parseCompareQuery, 30],
+  ['parseWeekQuery', parseWeekQuery, 7],
 ]
 
 describe('days enumeration acceptance criteria (issue #111)', () => {
@@ -343,6 +386,7 @@ const intParsers: [string, (q: Q) => Record<string, unknown>, Record<string, [nu
   ['parseTestimonyQuery', parseTestimonyQuery, { min: [3, MINS] }],
   ['parseCandidatesQuery', parseCandidatesQuery, { limit: [50, LIMITS], min: [5, MINS] }],
   ['parseCompareQuery', parseCompareQuery, { limit: [40, SMALL_LIMITS] }],
+  ['parseWeekQuery', parseWeekQuery, { limit: [8, LIMITS] }],
 ]
 
 const numbers = (markup: string) => [...markup.matchAll(/<option[^>]*>(\d+)<\/option>|value="(\d+)"/g)].map((m) => Number(m[1] ?? m[2]))
@@ -373,6 +417,10 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     assert.ok(MINS.includes(Number(candidates.get('min'))), 'the candidates request sends a min in MINS')
     const cmp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '20' })
     assert.ok(SMALL_LIMITS.includes(Number(cmp.get('limit'))))
+    const week = page.match(/<select id="weekLimit"[\s\S]*?<\/select>/)?.[0]
+    assert.ok(week, 'design-5.html should carry the week limit select')
+    for (const v of numbers(week)) assert.ok(LIMITS.includes(v), `week offers limit=${v}`)
+    assert.deepEqual(numbers(week), [5, 8, 12])
   })
 
   it('AC2: every parser keeps its own default when the parameter is absent or non-numeric, and every default is in its set', () => {
@@ -399,6 +447,9 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
       ['limit', LIMITS, '0', 1],
       ['limit', LIMITS, '-3', 1],
       ['limit', LIMITS, '3', 1],
+      ['limit', LIMITS, '6', 5],
+      ['limit', LIMITS, '7', 8],
+      ['limit', LIMITS, '10', 8],
       ['limit', LIMITS, '37', 40],
       ['limit', LIMITS, '45', 40],
       ['limit', LIMITS, '46', 50],

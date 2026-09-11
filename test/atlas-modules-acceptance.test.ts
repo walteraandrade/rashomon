@@ -69,6 +69,17 @@ describe('issue #37 AC1: the split page still serves the same atlas over the sam
     assert.equal(forPerson.get('term'), '')
     assert.equal(forPerson.get('kind'), 'all')
   })
+
+  it('issue #147: weekParams and docsParams.day', async () => {
+    const { docsParams, weekParams } = await import('../src/ui/api.js')
+    const week = weekParams({ source: 'all', limit: '8' })
+    assert.equal(week.get('days'), '7')
+    assert.equal(week.get('kind'), 'word,hashtag,phrase')
+    assert.equal(week.get('limit'), '8')
+    const withDay = docsParams({ days: '7', source: 'all', term: 'reforma', kind: 'word', day: '2026-09-08' })
+    assert.equal(withDay.get('day'), '2026-09-08')
+    assert.equal(docsParams({ days: '7', source: 'all' }).has('day'), false)
+  })
 })
 
 describe('issue #37 AC2: design-5.html carries no styles and no logic of its own', () => {
@@ -139,7 +150,8 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
       'figures/testimony.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
       'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
-      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/testimony.js', './help.js', './render.js'],
+      'figures/week.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/testimony.js', './figures/week.js', './help.js', './render.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected)) {

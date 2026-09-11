@@ -17,11 +17,11 @@
   <header class="masthead">
     <p class="eyebrow">Rashomon · guia</p>
     <h1 id="comoLerTitle">Como ler o rashomon</h1>
-    <p class="lede">Três gráficos sobre os textos que citam uma pessoa. A chave embaixo de cada título é o gráfico. Esta página é a mesma chave, para mandar o link.</p>
+    <p class="lede">Quatro gráficos sobre os textos que citam uma pessoa. A chave embaixo de cada título é o gráfico. Esta página é a mesma chave, para mandar o link.</p>
   </header>
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
     <p class="chapter-intro">Tudo vale só para o recorte da frase: pessoa, período e fonte.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a></nav>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#semana">Semana</a></nav>
     <div class="chapter-grid">
       <div id="analise">
         <h2>Como fazer uma análise</h2>
@@ -29,7 +29,7 @@
           <li><b>Escolha uma pessoa</b>, o período e a fonte. Isso é o recorte.</li>
           <li><b>Olhe as palavras maiores.</b> Clique numa para ler os textos. O cartão fica aberto na próxima escolha e arrasta pelo topo.</li>
           <li><b>Clique no nome no centro</b> (na primeira linha da lista) para os textos da pessoa, sem palavra no meio.</li>
-          <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é.</li>
+          <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é. <b>No 4</b>, o que ocupou cada dia.</li>
         </ol>
       </div>
       <div id="atlas">
@@ -71,8 +71,15 @@
         <p>Se as duas têm a palavra, ela fica dentro da régua. PMI negativo conta como zero na posição, senão uma palavra exclusiva do outro lado seria desenhada como se fosse desta ponta.</p>
         <p>As que não couberam sem cobrir outra ficam numa lista abaixo da régua, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
       </div>
+      <div id="semana">
+        <h2>Gráfico 4 · A semana em palavras</h2>
+        <p>Sete colunas, um dia de calendário em Brasília (America/Sao_Paulo) cada uma, a mais velha à esquerda. Não é a janela rolante de <code>/timeline</code>.</p>
+        <p>O tamanho da palavra é quantos textos daquele dia a carregam. A posição é o dia. Uma palavra que atravessa os dias se repete; o rastro é a repetição, não uma linha.</p>
+        <p>Clique numa palavra abre os textos daquele dia. Sem palavras no recorte, ficam os sete números de documentos e a frase de que não há palavras suficientes. Nada é inventado.</p>
+        <p>A faísca no atlas, quando uma palavra está em foco, são os últimos sete dias em janela rolante — não o recorte do atlas, nem 30 ou 365 dias.</p>
+      </div>
     </div>
-    <p class="chapter-foot"><span>Tom por termo, linhas do tempo e termos em alta continuam na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>
+    <p class="chapter-foot"><span>Tom por termo e termos em alta continuam na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>
   </section>
 </main>
 <script defer src="/_vercel/insights/script.js"></script>

@@ -32,9 +32,11 @@ const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'da
 // could not fit, a <button> in the overflow list; both are wired by the same painter loop and
 // both must be reachable here, or a criterion about the list would pass vacuously.
 const dataTermStubs = (html: string) =>
-  [...html.matchAll(/<(?:g|button)[^>]*\bdata-term="([^"]*)"[^>]*\bdata-kind="([^"]*)"[^>]*>/g)].map(([, term, kind]) => {
+  [...html.matchAll(/<(?:g|button)[^>]*\bdata-term="([^"]*)"[^>]*>/g)].map(([tag, term]) => {
+    const kind = /data-kind="([^"]*)"/.exec(tag)?.[1] ?? ''
+    const day = /data-day="([^"]*)"/.exec(tag)?.[1]
     const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
-    stub.dataset = { term, kind }
+    stub.dataset = { term, kind, ...(day ? { day } : {}) }
     return stub
   })
 
@@ -275,7 +277,20 @@ const compareIds = () => ({
   compareRetry: new FakeBox('compareRetry'),
 })
 
-export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds>
+const weekIds = () => ({
+  week: new FakeBox('week'),
+  weekPerson: new FakeSelect('weekPerson'),
+  weekSource: new FakeSelect('weekSource'),
+  weekLimit: new FakeSelect('weekLimit', [
+    { value: '5', text: '5' },
+    { value: '8', text: '8', selected: true },
+    { value: '12', text: '12' },
+  ]),
+  weekChart: new FakeBox('weekChart'),
+  weekRetry: new FakeBox('weekRetry'),
+})
+
+export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds> & ReturnType<typeof weekIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -284,7 +299,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // browser-shaped `Option` constructor, runs `fn`, then restores every global this touched —
 // same discipline as fake-dom.ts's withFakeDocument, extended to what a real mount() needs.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...weekIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fakeDocument = {
     getElementById: (id: string) => (els as unknown as Record<string, unknown>)[id] ?? null,

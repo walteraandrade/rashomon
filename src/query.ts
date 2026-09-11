@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery } from './graph.js'
+import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -30,9 +30,39 @@ export const DAYS = [7, 30, 365]
 export const snapDays = (v: string | undefined, d: number): number => snapTo(DAYS, v, d)
 
 // Every `limit` the page sends plus every route default. 1 is "just the top term" (used by
-// acceptance tests against the fixture); 200 remains reachable by scripts. A new page value
-// must be added here (test/query.test.ts).
-export const LIMITS = [1, 5, 12, 18, 20, 24, 30, 40, 50, 60, 100, 200]
+// acceptance tests against the fixture); 8 is figure 4's default; 200 remains reachable by
+// scripts. A new page value must be added here (test/query.test.ts).
+export const LIMITS = [1, 5, 8, 12, 18, 20, 24, 30, 40, 50, 60, 100, 200]
+
+export const WEEK_TZ = 'America/Sao_Paulo'
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export const calendarDay = (v: string): string => {
+  if (!DAY_RE.test(v)) return ''
+  const [y, m, d] = v.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return ''
+  return v
+}
+
+export const brtDate = (now = new Date()): string =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+
+const brtMidnightUtc = (day: string) => new Date(`${day}T03:00:00.000Z`)
+
+export const dayOverlapsWindow = (day: string, days: number, now = new Date()): boolean => {
+  if (day > brtDate(now)) return false
+  const start = brtMidnightUtc(day)
+  const end = new Date(start.getTime() + 86_400_000)
+  const windowStart = new Date(now.getTime() - days * 86_400_000)
+  return start.getTime() <= now.getTime() && end.getTime() > windowStart.getTime()
+}
+
+const keepDay = (raw: string | undefined, days: number): string => {
+  const day = calendarDay(raw ?? '')
+  return day && dayOverlapsWindow(day, days) ? day : ''
+}
 
 // compare and rising cap at 100: each unioned key costs two exact figures instead of one.
 export const SMALL_LIMITS = LIMITS.filter((x) => x <= 100)
@@ -89,16 +119,20 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   method: q.testimony === '1' ? (METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod()) : null,
 })
 
-export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => ({
-  term: normalize((q.term ?? '').trim()),
-  kind: parseKindList(q.kind),
-  days: snapDays(q.days, 30),
-  source: parseSourceList(q.source),
-  domain: parseDomainList(q.domain),
-  lean: parseLeanList(q.lean),
-  limit: snapTo(LIMITS, q.limit, 50),
-  offset: snapTo(OFFSETS, q.offset, 0),
-})
+export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => {
+  const days = snapDays(q.days, 30)
+  return {
+    term: normalize((q.term ?? '').trim()),
+    kind: parseKindList(q.kind),
+    days,
+    source: parseSourceList(q.source),
+    domain: parseDomainList(q.domain),
+    lean: parseLeanList(q.lean),
+    limit: snapTo(LIMITS, q.limit, 50),
+    offset: snapTo(OFFSETS, q.offset, 0),
+    day: keepDay(q.day, days),
+  }
+}
 
 export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery => ({
   days: snapDays(q.days, 7),
@@ -151,4 +185,13 @@ export const parseCompareQuery = (q: Record<string, string | undefined>): Compar
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
+})
+
+export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery => ({
+  days: snapDays(q.days, 7),
+  source: parseSourceList(q.source),
+  domain: parseDomainList(q.domain),
+  lean: parseLeanList(q.lean),
+  kind: parseKindList(q.kind),
+  limit: snapTo(LIMITS, q.limit, 8),
 })

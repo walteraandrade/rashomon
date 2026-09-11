@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, centerLabel, pack, packPass, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, wrapLines } from '../src/ui/layout.js'
+import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, centerLabel, pack, packPass, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
 
@@ -336,5 +336,32 @@ describe('swarm / swarmBy / rulerLayout: one beeswarm skeleton, two shapes (issu
     assert.deepEqual(once.words, twice.words)
     assert.deepEqual(once.overflow, twice.overflow)
     assert.equal(once.height, twice.height)
+  })
+})
+
+describe('weekLayout (issue #147)', () => {
+  const buckets = Array.from({ length: 7 }, (_, i) => ({
+    start: new Date(Date.UTC(2026, 8, 5 + i, 3)).toISOString(),
+    about: 2,
+    terms: [
+      { term: `alpha${i}`, kind: 'word', count: 8 },
+      { term: `beta${i}`, kind: 'word', count: 3 },
+    ],
+  }))
+
+  it('uses swarmBy, one column per day, and lists overflow instead of dropping it', () => {
+    const crowded = buckets.map((b) => ({
+      ...b,
+      terms: Array.from({ length: 40 }, (_, i) => ({ term: `palavra${i}`, kind: 'word', count: 40 - i })),
+    }))
+    const layout = weekLayout(measure, crowded, 860)
+    assert.equal(layout.columns.length, 7)
+    const xs = new Set(layout.columns.map((c) => c.x))
+    assert.equal(xs.size, 7)
+    const total = crowded[0].terms.length
+    for (const col of layout.columns) {
+      assert.equal(col.words.length + col.overflow.length, total)
+    }
+    assert.ok(layout.columns.some((c) => c.overflow.length > 0), 'a 40-word day must overflow the standing swarm')
   })
 })

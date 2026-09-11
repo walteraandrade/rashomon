@@ -20,6 +20,8 @@ import {
   paintTestimony,
   paintTestimonyError,
   paintTestimonyLoading,
+  paintWeek,
+  paintWeekLoading,
   rulerTerms,
   stripLayout,
   stripRadius,
@@ -617,6 +619,94 @@ describe('loading ghosts hold each figure\'s silhouette, with no invented words'
       assert.match(els.docs.innerHTML, /Lendo os documentos/)
       assert.equal(els.docs.getAttribute('aria-busy'), 'true')
       assert.doesNotMatch(els.outletList.innerHTML + els.compareRuler.innerHTML + els.docs.innerHTML, /Carregando/)
+    })
+  })
+
+  it('issue #147: paintWeekLoading is seven columns, not the word Carregando', () => {
+    withFakeDocument(['weekChart'], (els) => {
+      paintWeekLoading()
+      assert.equal(els.weekChart.hidden, false)
+      assert.match(els.weekChart.innerHTML, /week-grid/)
+      assert.equal((els.weekChart.innerHTML.match(/week-col/g) ?? []).length, 7)
+      assert.match(els.weekChart.innerHTML, /Lendo a semana/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /Carregando/)
+    })
+  })
+})
+
+describe('inspect sparkline (issue #147)', () => {
+  it('paints seven bars when a word is in focus and the sparkline is ready', () => {
+    const html = withFakeDocument(['inspector'], () => {
+      inspect({
+        graph,
+        nodes: [term],
+        links: [],
+        selected: term.id,
+        sort: 'pmi',
+        daysLabel: '30 dias',
+        onChoose: () => {},
+        sparkline: { status: 'ready', counts: [1, 2, 3, 4, 5, 6, 7] },
+      })
+      return document.getElementById('inspector')!.innerHTML
+    })
+    assert.match(html, /sparkline/)
+    assert.equal((html.match(/class="spark-bar[\s"]/g) ?? []).length, 7)
+    assert.match(html, /Últimos sete dias/)
+  })
+
+  it('omits the sparkline when the person is in focus', () => {
+    const html = paint(null)
+    assert.doesNotMatch(html, /sparkline/)
+  })
+
+  it('keeps a hole on fetch failure and a ghost of seven bars while loading', () => {
+    const empty = withFakeDocument(['inspector'], () => {
+      inspect({ graph, nodes: [term], links: [], selected: term.id, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, sparkline: { status: 'empty' } })
+      return document.getElementById('inspector')!.innerHTML
+    })
+    assert.match(empty, /sparkline is-empty|class="sparkline is-empty"/)
+    const loading = withFakeDocument(['inspector'], () => {
+      inspect({ graph, nodes: [term], links: [], selected: term.id, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, sparkline: { status: 'loading' } })
+      return document.getElementById('inspector')!.innerHTML
+    })
+    assert.equal((loading.match(/class="spark-bar[\s"]/g) ?? []).length, 7)
+    assert.match(loading, /ghost/)
+  })
+})
+
+describe('paintWeek (issue #147)', () => {
+  const buckets = Array.from({ length: 7 }, (_, i) => ({
+    start: new Date(Date.UTC(2026, 8, 5 + i, 3)).toISOString(),
+    about: i === 6 ? 3 : 0,
+    terms: i === 6 ? [{ term: 'reforma', kind: 'word', count: 3 }] : [],
+  }))
+
+  it('draws seven columns and repeats no connector lines', async () => {
+    await withFiguresDom((els) => {
+      paintWeek({
+        data: { days: 7, tz: 'America/Sao_Paulo', buckets },
+        metrics,
+        selected: null,
+        onPick: () => {},
+      })
+      assert.match(els.weekChart.innerHTML, /week-svg/)
+      assert.match(els.weekChart.innerHTML, /reforma/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /<line/)
+      assert.match(els.weekChart.innerHTML, /week-day/)
+    })
+  })
+
+  it('empty week keeps the about numbers and the empty sentence', async () => {
+    await withFiguresDom((els) => {
+      paintWeek({
+        data: { days: 7, tz: 'America/Sao_Paulo', buckets: buckets.map((b) => ({ ...b, terms: [], about: b.about })) },
+        metrics,
+        selected: null,
+        onPick: () => {},
+      })
+      assert.match(els.weekChart.innerHTML, /Não há palavras suficientes nesta semana/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /data-term/)
+      assert.match(els.weekChart.innerHTML, /week-about/)
     })
   })
 })

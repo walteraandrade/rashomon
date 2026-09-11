@@ -2,8 +2,9 @@ import { mountDocsCard } from './docs-card.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountTestimony } from './figures/testimony.js'
+import { mount as mountWeek } from './figures/week.js'
 import { mountHelp } from './help.js'
-import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintTestimonyLoading } from './render.js'
+import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintTestimonyLoading, paintWeekLoading } from './render.js'
 
 type Person = { id: string; name: string }
 // A `[key, bareKey | null]` pair names a different bare fallback or none (null).
@@ -31,6 +32,7 @@ const FIGURES: FigureEntry[] = [
     noticeId: 'compareDetail',
     mount: mountCompare,
   },
+  { id: 'week', sectionId: 'week', keys: ['person', 'source', 'limit'], noticeId: 'weekChart', mount: mountWeek },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.
@@ -59,6 +61,7 @@ const paintBootLoading = () => {
   paintTestimonyLoading()
   paintOutletsLoading()
   paintCompareLoading()
+  paintWeekLoading()
 }
 
 export const boot = async () => {

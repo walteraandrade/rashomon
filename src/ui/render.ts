@@ -40,8 +40,9 @@ import {
   type Term,
   type Testimony,
   type TestimonyDomainRow,
+  type Week,
 } from './format.js'
-import { FONT_SANS, RULER_PAD, rulerLayout, routesFrom, swarm } from './layout.js'
+import { FONT_SANS, RULER_PAD, rulerLayout, routesFrom, swarm, weekLayout } from './layout.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
@@ -249,6 +250,17 @@ const relatedButtons = (items: { node: Term; count?: number }[], sort: string, c
   items.map(({ node: n, count }) => html`<button data-related="${n.id}"><span>${label(n)}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`)
 
 // Paints the inspector. No fetch: documents open only on pick, not from here.
+export type Sparkline = { status: 'loading' } | { status: 'ready'; counts: number[] } | { status: 'empty' }
+
+const sparklineMarkup = (sparkline: Sparkline | null) => {
+  if (!sparkline) return ''
+  if (sparkline.status === 'loading')
+    return html`<figure class="sparkline" aria-hidden="true"><div class="spark-bars ghost-field">${[0, 1, 2, 3, 4, 5, 6].map(() => html`<span class="spark-bar ghost"></span>`)}</div></figure>`
+  if (sparkline.status === 'empty') return html`<figure class="sparkline is-empty"></figure>`
+  const max = Math.max(1, ...sparkline.counts)
+  return html`<figure class="sparkline"><div class="spark-bars">${sparkline.counts.map((c) => html`<span class="spark-bar" style="--h:${c / max}"></span>`)}</div><figcaption>Últimos sete dias, janela rolante. Não é o recorte do atlas.</figcaption></figure>`
+}
+
 export const inspect = ({
   graph,
   nodes,
@@ -257,6 +269,7 @@ export const inspect = ({
   sort,
   daysLabel,
   onChoose,
+  sparkline = null,
 }: {
   graph: Graph | null
   nodes: Term[]
@@ -265,13 +278,14 @@ export const inspect = ({
   sort: string
   daysLabel: string
   onChoose: (id: string) => void
+  sparkline?: Sparkline | null
 }) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML = html`<p class="eyebrow">A pessoa no centro</p><h3>${graph?.person?.name || ''}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p><p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
   } else {
     const related = relatedTo(nodes, links, n.id)
-    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>`
+    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p>${sparklineMarkup(sparkline)}<p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>`
   }
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {
@@ -734,4 +748,91 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
       ? html`<div><dt>${person.name}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
       : html`<div><dt>${person.name}</dt><dd class="empty-hint">nenhum documento</dd></div>`
   el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>`
+}
+
+const WEEKDAYS_PT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'] as const
+
+export const weekDayLabel = (start: string | Date) => {
+  const ymd = new Date(start).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const [, , day] = ymd.split('-')
+  const wd = new Date(`${ymd}T12:00:00.000Z`).getUTCDay()
+  return `${WEEKDAYS_PT[wd]} ${Number(day)}`
+}
+
+export const paintWeek = ({
+  data,
+  metrics,
+  selected,
+  onPick,
+  width = 860,
+}: {
+  data: Week
+  metrics: Measure
+  selected: { term: string; kind: string; day: string } | null
+  onPick: (term: string, kind: string, day: string) => void
+  width?: number
+}) => {
+  const host = $('weekChart')
+  if (!host) return
+  host.hidden = false
+  host.classList.remove('is-loading')
+  host.setAttribute('aria-busy', 'false')
+  const empty = data.buckets.every((b) => !b.terms.length)
+  if (empty) {
+    host.innerHTML = html`<ol class="week-about">${data.buckets.map(
+      (b) => html`<li><dl class="stat"><dt>${weekDayLabel(b.start)}</dt><dd>${fmt(b.about)}</dd></dl></li>`,
+    )}</ol><p class="note">Não há palavras suficientes nesta semana.</p>`
+    return
+  }
+  const { columns, half, height, colW } = weekLayout(metrics, data.buckets, width)
+  host.innerHTML = html`<div class="week-head">${columns.map(
+    (c) => html`<dl class="stat week-day"><dt>${weekDayLabel(c.start)}</dt><dd>${fmt(c.about)}</dd></dl>`,
+  )}</div><svg class="week-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Palavras por dia da semana">${columns.map(
+    (c) =>
+      html`<g class="week-col">${c.words.map((d) => {
+        const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind && selected.day === c.day
+        return html`<g class="week-word ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${c.day}" tabindex="0" role="button" aria-pressed="${String(isSelected)}"><rect class="week-hit" x="${d.x - d.w / 2}" y="${half + d.y - d.h / 2}" width="${d.w}" height="${d.h}" rx="4"/><text class="week-text" data-size="${d.token}" x="${d.x}" y="${half + d.y}" text-anchor="middle" dominant-baseline="middle">${d.text}</text></g>`
+      })}</g>`,
+  )}</svg><div class="week-overflow">${columns.map((c) =>
+    c.overflow.length
+      ? html`<div class="ruler-overflow" style="--col:${colW}px"><p>${fmt(c.overflow.length)} ${c.overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} neste dia:</p>${c.overflow.map((d) => {
+          const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind && selected.day === c.day
+          return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${c.day}" aria-pressed="${String(isSelected)}">${d.text}</button>`
+        })}</div>`
+      : html`<div></div>`,
+  )}</div>`
+  for (const el of queryAll('[data-term]', host)) {
+    const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind), String(el.dataset.day))
+    el.addEventListener('click', pick)
+    if (String(el.tagName || '').toLowerCase() !== 'button')
+      el.addEventListener('keydown', (event) => {
+        const e = event as KeyboardEvent
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          pick()
+        }
+      })
+  }
+}
+
+export const paintWeekError = () => {
+  const host = $('weekChart')
+  if (!host) return
+  host.hidden = false
+  host.classList.remove('is-loading')
+  host.setAttribute('aria-busy', 'false')
+  host.innerHTML = '<p class="note">Não foi possível carregar a semana.</p>'
+}
+
+const WEEK_GHOST = [72, 58, 90, 64, 80, 52, 70]
+
+export const paintWeekLoading = () => {
+  const host = $('weekChart')
+  if (!host) return
+  host.hidden = false
+  host.classList.remove('is-loading')
+  host.setAttribute('aria-busy', 'true')
+  host.innerHTML = html`<div class="week-grid ghost-field" aria-hidden="true">${WEEK_GHOST.map(
+    (h) => html`<div class="week-col">${ghostBar('ghost-kicker')}${ghostBar('ghost-stat')}<span class="ghost" style="--h:${h}"></span></div>`,
+  )}</div><p class="sr-only">Lendo a semana.</p>`
 }

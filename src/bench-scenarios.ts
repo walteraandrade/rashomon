@@ -31,6 +31,8 @@ export const scenarios: Scenario[] = [
   s('timeline.day.90d', 'timeline', (p) => `/api/people/${p}/timeline?days=90&bucket=day`),
   s('timeline.term.day.365d', 'timeline', (p, t) => `/api/people/${p}/timeline?days=365&bucket=day&term=${t}&kind=word`),
 
+  s('week.default', 'week', (p) => `/api/people/${p}/week?days=7`),
+
   s('tone.default', 'tone', () => `/api/tone?days=30`),
   s('tone.365d.min1', 'tone', () => `/api/tone?days=365&min=1`),
 

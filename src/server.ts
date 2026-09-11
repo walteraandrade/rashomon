@@ -3,7 +3,7 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { cacheControl } from './cache.js'
 import { db, migrate } from './db.js'
-import { candidatesFor, compareFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor } from './graph.js'
+import { candidatesFor, compareFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round } from './perf.js'
 import type { Person } from './types.js'
@@ -16,6 +16,7 @@ import {
   parseTestimonyQuery,
   parseTimelineQuery,
   parseToneQuery,
+  parseWeekQuery,
 } from './query.js'
 
 const port = Number(process.env.PORT ?? 3210)
@@ -62,6 +63,7 @@ app.get('/api/people/:id/graph', async (c) => c.json(await graphFor(c.get('perso
 app.get('/api/people/:id/sources', async (c) => c.json(await sourcesFor(c.get('person'), parseQuery(c.req.query()))))
 app.get('/api/people/:id/docs', async (c) => c.json(await docsFor(c.get('person'), parseDocsQuery(c.req.query()))))
 app.get('/api/people/:id/timeline', async (c) => c.json(await timelineFor(c.get('person'), parseTimelineQuery(c.req.query()))))
+app.get('/api/people/:id/week', async (c) => c.json(await weekFor(c.get('person'), parseWeekQuery(c.req.query()))))
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
 app.get('/api/people/:id/testimony', async (c) => c.json(await testimonyFor(c.get('person'), parseTestimonyQuery(c.req.query()))))
 

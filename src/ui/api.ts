@@ -27,11 +27,12 @@ export const narrowToTestimony = (graphParams: URLSearchParams) =>
 export const testimonyParams = (opts: GraphOpts) => narrowToTestimony(params(opts))
 
 // `domain` travels only when a figure names an outlet.
-export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; limit?: string }
+export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; limit?: string; day?: string }
 
-export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', limit = '5' }: DocsOpts) => {
+export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', limit = '5', day = '' }: DocsOpts) => {
   const q = new URLSearchParams({ days, source, term, kind, limit })
   if (domain) q.set('domain', domain)
+  if (day) q.set('day', day)
   return q
 }
 
@@ -67,3 +68,15 @@ export const compareParams = ({ a, b, days, source, limit }: { a: string; b: str
   new URLSearchParams({ a, b, days, source, limit, kind: ATLAS_KINDS })
 
 export const loadCompare = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/compare?' + queryParams, signal)
+
+export const timelineParams = ({ term, kind, days = '7', bucket = 'day' }: { term: string; kind: string; days?: string; bucket?: string }) =>
+  new URLSearchParams({ term, kind, days, bucket })
+
+export const loadTimeline = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
+  json(endpoint(personId) + '/timeline?' + queryParams, signal)
+
+export const weekParams = ({ days = '7', source, limit }: { days?: string; source: string; limit: string }) =>
+  new URLSearchParams({ days, source, limit, kind: ATLAS_KINDS })
+
+export const loadWeek = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
+  json(endpoint(personId) + '/week?' + queryParams, signal)

@@ -15,6 +15,7 @@ import {
   testimonyFor,
   timelineFor,
   toneFor,
+  weekFor,
   type CompareQuery,
   type DocsQuery,
   type GraphQuery,
@@ -22,6 +23,7 @@ import {
   type TestimonyQuery,
   type TimelineQuery,
   type ToneQuery,
+  type WeekQuery,
 } from '../src/graph.js'
 import { resolveScope } from '../src/outlets.js'
 import { KINDS, parseQuery, parseSourceList } from '../src/query.js'
@@ -41,7 +43,7 @@ const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
 const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
-const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
+const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0, day: '' }
 const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 20, min: 1 }
 const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
@@ -840,7 +842,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
 
   const totalFor = async (q: TimelineQuery) =>
-    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, limit: 500, offset: 0 })).total
+    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, limit: 500, offset: 0, day: '' })).total
 
   it('a doc exactly one bucket width old lands in the newest bucket, not the second', async () => {
     await withDocs([{ offset: '7 days' }], async () => {
@@ -1004,7 +1006,7 @@ describe('timelineFor: future-dated doc', () => {
   it('keeps the bucket-sum invariant against docsFor total when a doc is future-dated', async () => {
     const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all' } as const
     const rows = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
-    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0 })
+    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '' })
     assert.equal(total, 1, 'sanity: only the future doc falls inside this 30-day window')
     assert.equal(sumOf(rows), total)
   })
@@ -1330,8 +1332,8 @@ describe('statements render the same text the routes run (issue #131)', () => {
       graph: queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 }),
       links: queries.links(lula, scope, ['word:a', 'word:b']),
       sources: queries.sources(lula, scope),
-      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20 }),
-      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20 }),
+      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
+      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
       timeline: queries.timeline(lula, { ...scope, term: 'x', kind: 'phrase', bucket: 'week' }),
       rising: queries.rising(lula, { ...scope, baseline: 14, min: 1, limit: 5 }),
       tone: queries.tone({ days: 1, min: 1 }),
@@ -1339,6 +1341,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       termTestimony: queries.termTestimony(lula, scope, 'kikori', ['word:a']),
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),
       compare: queries.compare(lula, tarcisio, { ...scope, limit: 5 }),
+      week: queries.week(lula, { ...scope, limit: 8 }),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)
@@ -2143,5 +2146,136 @@ describe('testimony level asymmetries survive the merge (issue #48)', () => {
     assert.equal(typeof statements.testimonySummary, 'string')
     assert.ok(statements.testimonySummary.includes('grouping sets'))
     assert.ok(!Object.keys(statements).some((k) => k.startsWith('testimony') && k !== 'testimonySummary'))
+  })
+})
+
+const weekBase: WeekQuery = { days: 7, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 8 }
+
+const brtYmd = (value: Date | string) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+
+const todayBrt = () => brtYmd(new Date())
+
+describe('weekFor (issue #147)', () => {
+  before(seed)
+
+  it('AC2: default query is 7 BRT calendar days, oldest first, last bucket today', async () => {
+    const r = await weekFor(lula, weekBase)
+    assert.equal(r.days, 7)
+    assert.equal(r.tz, 'America/Sao_Paulo')
+    assert.equal(r.buckets.length, 7)
+    assert.equal(brtYmd(r.buckets[6].start), todayBrt())
+    for (let i = 1; i < 7; i++) {
+      assert.equal(new Date(r.buckets[i].start).getTime() - new Date(r.buckets[i - 1].start).getTime(), 86_400_000)
+    }
+    for (const b of r.buckets) assert.equal(new Date(b.start).getUTCHours(), 3)
+  })
+
+  it('AC3: days=7/30/365 change the bucket count; the page still sends 7', async () => {
+    assert.equal((await weekFor(lula, { ...weekBase, days: 7 })).buckets.length, 7)
+    assert.equal((await weekFor(lula, { ...weekBase, days: 30 })).buckets.length, 30)
+    assert.equal((await weekFor(lula, { ...weekBase, days: 365 })).buckets.length, 365)
+  })
+
+  it('AC4: limit clamps each day\'s terms, not about', async () => {
+    const one = await weekFor(lula, { ...weekBase, limit: 1 })
+    const full = await weekFor(lula, weekBase)
+    for (let i = 0; i < 7; i++) {
+      assert.ok(one.buckets[i].terms.length <= 1)
+      assert.equal(one.buckets[i].about, full.buckets[i].about)
+    }
+    assert.ok(full.buckets.some((b) => b.terms.length > 1), 'fixture Lula must have a day with several terms so limit=1 is a real clamp')
+  })
+
+  it('AC6: own-name words never appear', async () => {
+    const names = new Set(nameTokens(lula))
+    const r = await weekFor(lula, weekBase)
+    for (const b of r.buckets) for (const t of b.terms) {
+      assert.ok(!names.has(t.term), t.term)
+      assert.ok(!t.term.split(' ').some((w) => names.has(w)), t.term)
+    }
+  })
+
+  it('AC7: a BRT day with no about-docs is present with about 0 and empty terms', async () => {
+    const r = await weekFor(lula, weekBase)
+    const empty = r.buckets.filter((b) => b.about === 0)
+    assert.ok(empty.length >= 1)
+    for (const b of empty) assert.deepEqual(b.terms, [])
+  })
+
+  it('AC8: fixture Bolsonaro in the default week is seven zero buckets, not an error', async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    assert.equal(r.buckets.length, 7)
+    for (const b of r.buckets) {
+      assert.equal(b.about, 0)
+      assert.deepEqual(b.terms, [])
+    }
+  })
+
+  it('AC10: about is not filtered by kind', async () => {
+    const all = await weekFor(lula, weekBase)
+    const tags = await weekFor(lula, { ...weekBase, kind: 'hashtag' })
+    for (let i = 0; i < 7; i++) assert.equal(tags.buckets[i].about, all.buckets[i].about)
+    assert.ok(tags.buckets.every((b) => b.terms.every((t) => t.kind === 'hashtag')))
+  })
+
+  it('AC11: terms are ordered count desc, term asc, kind asc; two kinds are two rows', async () => {
+    const r = await weekFor(lula, { ...weekBase, limit: 40 })
+    const busy = r.buckets.find((bucket) => bucket.terms.length > 1)
+    assert.ok(busy)
+    const ranked: { term: string; kind: string; count: number }[] = busy.terms
+    for (let i = 1; i < ranked.length; i++) {
+      const prev = ranked[i - 1]
+      const next = ranked[i]
+      const ordered =
+        prev.count > next.count || (prev.count === next.count && (prev.term < next.term || (prev.term === next.term && prev.kind <= next.kind)))
+      assert.ok(ordered, `${prev.term}:${prev.kind} before ${next.term}:${next.kind}`)
+    }
+    const reforma = r.buckets.flatMap((b) => b.terms).filter((t) => t.term === 'reforma')
+    assert.ok(reforma.some((t) => t.kind === 'word'))
+    assert.ok(reforma.some((t) => t.kind === 'hashtag'))
+  })
+
+  it('AC12: /timeline stays a bare rolling array', async () => {
+    const rows = await timelineFor(lula, timelineBase)
+    assert.ok(Array.isArray(rows))
+    for (const row of rows) assert.deepEqual(Object.keys(row).sort(), ['bucket_start', 'count'])
+  })
+})
+
+describe('weekFor: future-dated doc (issue #147)', () => {
+  before(async () => {
+    await seed()
+    await insertDoc(futureDoc, persons)
+  })
+  after(reseed)
+
+  it('AC9: a future-dated about-doc counts in today\'s bucket', async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    assert.equal(r.buckets[6].about, 1)
+    assert.ok(r.buckets[6].terms.some((t) => t.term === 'golpe'))
+    for (const b of r.buckets.slice(0, 6)) assert.equal(b.about, 0)
+  })
+})
+
+describe('docsFor day filter (issue #147)', () => {
+  before(seed)
+
+  it('AC15: a kept day returns only docs on that BRT date; empty day matches today\'s /docs', async () => {
+    const open = await docsFor(lula, docsBase)
+    const blank = await docsFor(lula, { ...docsBase, day: '' })
+    assert.equal(blank.total, open.total)
+    const yesterday = brtYmd(new Date(Date.now() - 86_400_000))
+    const sliced = await docsFor(lula, { ...docsBase, day: yesterday })
+    assert.ok(sliced.docs.every((d) => brtYmd(d.published_at) === yesterday))
+    assert.ok(sliced.total <= open.total)
+    assert.ok(sliced.total >= 1, 'Lula\'s day1 cluster must land on yesterday BRT')
+  })
+
+  it('AC16: adding day does not add or remove fields on the /docs response', async () => {
+    const open = await docsFor(lula, docsBase)
+    const sliced = await docsFor(lula, { ...docsBase, day: brtYmd(new Date(Date.now() - 86_400_000)) })
+    assert.deepEqual(Object.keys(open).sort(), Object.keys(sliced).sort())
+    assert.deepEqual(Object.keys(open).sort(), ['docs', 'outlets', 'total'])
+    if (open.docs[0] && sliced.docs[0]) assert.deepEqual(Object.keys(open.docs[0]).sort(), Object.keys(sliced.docs[0]).sort())
   })
 })

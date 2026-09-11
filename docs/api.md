@@ -10,6 +10,7 @@ Every route is a public, read-only `GET` under `/api`. Query parameters are pars
 | `/api/people/:id/docs` | the documents behind a term |
 | `/api/people/:id/rising` | terms rising against a baseline window |
 | `/api/people/:id/timeline` | doc counts per bucket |
+| `/api/people/:id/week` | top terms per calendar day in Brazil |
 | `/api/people/:id/testimony` | kikori scores, overall and per outlet |
 | `/api/tone` | GDELT tone per (person, outlet), across everybody |
 | `/api/candidates` | untracked names worth adding to `seed.json` |
@@ -27,7 +28,7 @@ This is a deliberate narrowing of the old `[1, 365]` clamp (issue #111). The API
 
 The same reasoning narrows the other integer parameters (issue #127). Each one takes a value from a short list and any other number snaps to the nearest one, ties going to the smaller; a missing or non-numeric value falls back to the route's own default, which is always in the list.
 
-- `limit`: **1**, **5**, **12**, **18**, **20**, **24**, **30**, **40**, **50**, **60**, **100** or **200** — every value the page sends (the atlas offers 12/18/24, the ruler 20/40/60/100, the docs card asks for 5, the candidates panel for 30), every route default (40 on `graph` and `compare`, 50 on `docs` and `candidates`, 20 on `rising`), 1 for "just the top term" and 200 for everything. `rising` and `compare` stop at **100**: each unioned compare key costs two exact figures instead of one, so their ceiling stays where issue #93 put it, and `?limit=200` reads as 100 there.
+- `limit`: **1**, **5**, **8**, **12**, **18**, **20**, **24**, **30**, **40**, **50**, **60**, **100** or **200** — every value the page sends (the atlas offers 12/18/24, the week figure 5/8/12, the ruler 20/40/60/100, the docs card asks for 5, the candidates panel for 30), every route default (40 on `graph` and `compare`, 50 on `docs` and `candidates`, 20 on `rising`, 8 on `week`), 1 for "just the top term" and 200 for everything. `rising` and `compare` stop at **100**: each unioned compare key costs two exact figures instead of one, so their ceiling stays where issue #93 put it, and `?limit=200` reads as 100 there.
 - `min`: **1**, **2**, **3** or **5** — the page sends 2 on `graph` and 3 on `candidates`; the defaults are 2 (`graph`), 3 (`rising`, `testimony`, `tone`) and 5 (`candidates`); 1 is "no floor". `?min=4` reads as 3, `?min=1000` as 5.
 - `baseline` (`rising`): **30**, the only value. Nothing on the page sends it; the parameter stays in the contract so a caller that sends it still gets an answer, but the answer is the 30-day baseline.
 - `offset` (`docs`): a multiple of **50**, from **0** up to **1000**. Nothing on the page pages; a script that walks a term's documents pages 50 at a time, and `?offset=26` reads as 50.
@@ -65,7 +66,9 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also ca
 
 ## docs
 
-`GET /api/people/:id/docs?term=&kind=all&days=30&source=all&domain=all&lean=all&limit=50&offset=0` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs, outlets }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings. `outlets` follows the same rule as `graph`'s.
+`GET /api/people/:id/docs?term=&kind=all&days=30&source=all&domain=all&lean=all&limit=50&offset=0&day=` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs, outlets }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings. `outlets` follows the same rule as `graph`'s.
+
+`day` is optional. A value matching `YYYY-MM-DD` that names a real calendar day in `America/Sao_Paulo` and overlaps the rolling `[now() - days, now()]` window is kept; anything else (missing, malformed, `2026-02-31`, a date entirely before the window, a future calendar date) becomes empty and the route behaves as it did. When kept, only docs whose BRT date is that day are returned. It intersects the existing `days` window; it does not replace it. The response fields do not change.
 
 ## rising
 
@@ -74,6 +77,12 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also ca
 ## timeline
 
 `GET /api/people/:id/timeline?term=&kind=all&days=30&source=all&domain=all&lean=all&bucket=week|day` returns a bare JSON array of `{ bucket_start, count }` (no `tone`, no `outlets` — this route's contract stays a bare array), oldest bucket first, `ceil(days / bucket_days)` items. Buckets are rolling windows counted backward from query time, not calendar/ISO weeks; the oldest bucket is clamped to the window edge so counts sum exactly to `/docs`'s `total` for the same `term`/`kind`/`days`/`source`/`domain`/`lean`.
+
+## week
+
+`GET /api/people/:id/week?days=7&source=all&kind=all&domain=all&lean=all&limit=8` returns `{ days, tz, buckets }`. `tz` is always `"America/Sao_Paulo"`. `buckets` has exactly `days` rows, oldest first: each `{ start, about, terms }`, `start` the midnight that opens that calendar day in Brazil, `about` the docs naming the person that BRT day (not filtered by `kind`), `terms` the top `limit` `(term, kind)` pairs that day by count desc then term then kind. Own-name words and phrases that carry one are dropped the way `/graph` drops them. A day with no about-docs is present as `{ about: 0, terms: [] }`. A `published_at` after the end of today BRT counts in today's bucket.
+
+The span is today in BRT and the `days-1` calendar days before it, not `now() - interval`. A doc inside the rolling window of `/timeline` or `/docs` but on the eighth BRT date is out of `/week`. The sum of `about` is therefore not required to equal `/docs`'s `total` for the same `days`. No `tone`, no `pmi`, no `outlets`, no `lift`. `source` / `kind` / `domain` / `lean` parse as on `/graph` (comma lists); `kind` filters terms only. Cached with the rolling 6h class, not the 1h trend class.
 
 ## testimony
 

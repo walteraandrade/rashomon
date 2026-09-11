@@ -22,6 +22,9 @@ export type PersonRef = { id: string; name: string }
 export type CompareSide = { count: number; pmi: number; tone: number | null }
 export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null }
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
+export type WeekTerm = { term: string; kind: string; count: number }
+export type WeekBucket = { start: string | Date; about: number; terms: WeekTerm[] }
+export type Week = { days: number; tz: string; buckets: WeekBucket[] }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 

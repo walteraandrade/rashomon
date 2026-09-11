@@ -157,7 +157,7 @@ const measurePhase = async () => {
   ).rows.map((r) => r.id)
 
   const scope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
-  const docs = { ...scope, term: TERM, kind: 'word', limit: 50, offset: 0 }
+  const docs = { ...scope, term: TERM, kind: 'word', limit: 50, offset: 0, day: '' }
   const plans: [string, Sql][] = [
     ['graph', queries.graph(person, { ...scope, min: 2, sort: 'count', limit: 40 })],
     ['links', queries.links(person, scope, ids)],
@@ -165,6 +165,7 @@ const measurePhase = async () => {
     ['docs', queries.docs(person, docs)],
     ['docsCount', queries.docsCount(person, docs)],
     ['timeline', queries.timeline(person, { ...docs, days: 90, bucket: 'day' })],
+    ['week', queries.week(person, { ...scope, days: 7, limit: 8 })],
     ['rising', queries.rising(person, { ...scope, days: 7, baseline: 30, min: 3, limit: 20 })],
     ['tone', queries.tone({ days: 30, min: 3 })],
     ['testimonySummary', queries.testimonySummary(person, { days: 30, source: 'all', method: 'stub', min: 3 })],

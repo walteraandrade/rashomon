@@ -287,3 +287,74 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
   const used = Math.max(40, Math.ceil(reach) + 6)
   return { words: placed, overflow, x, half: used, height: used * 2, width }
 }
+
+export const WEEK_MAX_HEIGHT = 420
+export const WEEK_SIZE = { 't-md': 19, 't-base': 16, 't-sm': 15, 't-xs': 14, 't-2xs': 12, 't-micro': 11 } as const
+export type WeekSizeToken = keyof typeof WEEK_SIZE
+
+export const weekSizeToken = (count: number, maxCount: number): WeekSizeToken => {
+  if (maxCount <= 0 || count <= 0) return 't-micro'
+  const t = count / maxCount
+  if (t > 0.8) return 't-md'
+  if (t > 0.6) return 't-base'
+  if (t > 0.4) return 't-sm'
+  if (t > 0.25) return 't-xs'
+  if (t > 0.12) return 't-2xs'
+  return 't-micro'
+}
+
+export type WeekColumnIn = { start: string | Date; about: number; terms: { term: string; kind: string; count: number }[] }
+
+export type WeekPlaced = {
+  term: string
+  kind: string
+  count: number
+  day: string
+  text: string
+  x: number
+  y: number
+  size: number
+  token: WeekSizeToken
+  w: number
+  h: number
+}
+
+export type WeekColumnOut = {
+  start: string | Date
+  about: number
+  day: string
+  x: number
+  words: WeekPlaced[]
+  overflow: Omit<WeekPlaced, 'x' | 'y'>[]
+}
+
+export const weekDayKey = (start: string | Date) =>
+  new Date(start).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+
+export const weekLayout = (measure: Measure, buckets: WeekColumnIn[], width = 860) => {
+  const n = Math.max(1, buckets.length)
+  const colW = width / n
+  const maxCount = Math.max(1, ...buckets.flatMap((b) => b.terms.map((t) => t.count)))
+  const columns: WeekColumnOut[] = buckets.map((b, i) => {
+    const x = colW * i + colW / 2
+    const day = weekDayKey(b.start)
+    const sized = b.terms.map((t) => {
+      const token = weekSizeToken(t.count, maxCount)
+      const size = WEEK_SIZE[token]
+      const text = label(t)
+      const w = measure(text, size, FONT_DISPLAY, 700) + 8
+      const h = Math.round(size * 1.24)
+      return { ...t, day, text, x, size, token, w, h }
+    })
+    const half = WEEK_MAX_HEIGHT / 2
+    const { placed, overflow } = swarmBy(sized, {
+      size: (d) => d.size,
+      reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + 4 ? (p.h + item.h) / 2 + 3 : null),
+      fits: (item, y) => Math.abs(y) + item.h / 2 <= half,
+    })
+    return { start: b.start, about: b.about, day, x, words: placed, overflow }
+  })
+  const reach = columns.reduce((m, c) => Math.max(m, ...c.words.map((w) => Math.abs(w.y) + w.h / 2), 0), 0)
+  const used = Math.max(48, Math.ceil(reach) + 8)
+  return { columns, width, half: used, height: used * 2, colW }
+}

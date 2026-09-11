@@ -19,6 +19,15 @@ const emptyGraph = (person: { id: string; name: string }) => ({
   stats: { about: 0, testimony: { method: 'kikori', score: null, n: 0 } },
 })
 const emptyTestimony = { method: 'kikori', overall: { score: null, n: 0 }, by_source: [], by_domain: [] }
+const emptyWeek = {
+  days: 7,
+  tz: 'America/Sao_Paulo',
+  buckets: Array.from({ length: 7 }, (_, i) => ({
+    start: new Date(Date.now() - (6 - i) * 86_400_000).toISOString(),
+    about: 0,
+    terms: [],
+  })),
+}
 
 const routeDefault = (calls: string[]) =>
   routeFetch(calls, {
@@ -26,6 +35,7 @@ const routeDefault = (calls: string[]) =>
     '/graph': emptyGraph(personA),
     '/sources': [],
     '/testimony': emptyTestimony,
+    '/week': emptyWeek,
   })
 
 // app.js's own self-boot ("if (typeof document !== 'undefined') boot()") only ever fires once
@@ -54,6 +64,7 @@ describe('issue #92 AC7: the two figures can show different people at once', () 
         '/graph': emptyGraph(personA),
         '/sources': [],
         '/testimony': emptyTestimony,
+        '/week': emptyWeek,
       })
       await withLocation(`?atlas.person=${personA.id}&testimony.person=${personB.id}`, () => appModule.boot())
       await flush()
@@ -255,6 +266,25 @@ describe('issue #92: a failed GET /api/people is an outage, never an empty seed'
   })
 })
 
+describe('issue #147: figure 4 seeds from person/source/limit, never from bare days', () => {
+  it('week.person overrides bare person; bare days does not change the week request', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeDefault(calls)
+      await withLocation(`?person=${personA.id}&week.person=${personB.id}&days=365&source=gnews&week.limit=5`, () => appModule.boot())
+      await flush()
+      assert.equal(els.weekPerson.value, personB.id)
+      assert.equal(els.person.value, personA.id)
+      assert.equal(els.weekSource.value, 'gnews')
+      assert.equal(els.weekLimit.value, '5')
+      const weekCall = calls.find((u) => u.includes('/week'))
+      assert.ok(weekCall && weekCall.includes(`/people/${personB.id}/week`), weekCall ?? 'missing /week')
+      assert.match(weekCall, /days=7/)
+      assert.doesNotMatch(weekCall, /days=365/)
+    })
+  })
+})
+
 describe('issue #92: the loading ghost shows before /api/people resolves', () => {
   it('boot() paints the loading reader synchronously, ahead of the network round trip', async () => {
     await withFiguresDom(async (els, calls) => {
@@ -271,6 +301,7 @@ describe('issue #92: the loading ghost shows before /api/people resolves', () =>
         assert.match(els.testimonyList.innerHTML, /Lendo a avaliação/)
         assert.equal(els.strip.hidden, false)
         assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
+        assert.match(els.weekChart.innerHTML, /Lendo a semana/)
         void booting
       })
     })

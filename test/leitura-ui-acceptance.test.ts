@@ -60,11 +60,13 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.match(html, /<nav><a class="help-link" href="como-ler\.html">como ler<\/a><\/nav>/, 'the header still names the shareable guide')
     assert.match(html, /href="como-ler\.html#atlas"/)
     assert.match(html, /href="como-ler\.html#avaliacao"/)
+    assert.match(html, /href="como-ler\.html#semana"/)
     assert.match(html, /id="helpDialog"/, 'the atlas intercepts those links into an in-page dialog')
-    for (const id of ['workspace', 'testimony', 'compare']) {
+    for (const id of ['workspace', 'testimony', 'compare', 'week']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
       assert.match(figure, /<dl class="figure-key">/, `${id} carries its own key`)
     }
+    assert.match(html, /id="help-semana"/)
   })
 
   it("figure 1's key on the page and in the dialog name the same encodings", () => {
@@ -132,18 +134,18 @@ describe('Leitura UI: one stylesheet, one type system', () => {
 })
 
 describe('the page is a sequence of graphs', () => {
-  it('design-5.html carries three figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
+  it('design-5.html carries four figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
     const html = read('design-5.html')
     const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
-    // Issue #91 adds a third figure, the ruler comparing two people, after #testimony.
-    assert.deepEqual(figures, ['workspace', 'testimony', 'compare'])
+    assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'week'])
     // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
     // <b id="testimonyLabel"> in figure 2's own heading below.
     assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
     assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
     assert.match(html, /<span class="eyebrow">Gráfico 3<\/span><h2 id="compareTitle">/)
-    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 3)
-    for (const id of ['workspace', 'testimony', 'compare']) {
+    assert.match(html, /<span class="eyebrow">Gráfico 4<\/span><h2 id="weekTitle">/)
+    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 4)
+    for (const id of ['workspace', 'testimony', 'compare', 'week']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
       assert.match(figure, /<dl class="figure-key">/, `${id} carries its own key`)
     }
@@ -160,13 +162,20 @@ describe('the page is a sequence of graphs', () => {
     // Issue #92 gave figure 2 its own sentence (person/days/source, 3 controls) alongside
     // figure 1's original five; issue #91 adds figure 3's own six (compareA/B/days/source/
     // measure/limit), so the shared count is 14 now — split per figure below.
-    assert.equal(html.match(/<span class="pick">/g)?.length, 14)
+    assert.equal(html.match(/<span class="pick">/g)?.length, 17)
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
     const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.equal(workspace.match(/<span class="pick">/g)?.length, 5, "figure 1's sentence keeps its five controls")
     assert.equal(testimony.match(/<span class="pick">/g)?.length, 3, "figure 2's own sentence has person/days/source, no sort/limit")
     assert.equal(compare.match(/<span class="pick">/g)?.length, 6, "figure 3's own sentence has both people, days, source, measure and limit")
+    assert.equal(week.match(/<span class="pick">/g)?.length, 3, "figure 4's sentence has person, source and limit, no period chip")
+    const weekKey = week.match(/<dl class="figure-key">[\s\S]*?<\/dl>/)?.[0] ?? ''
+    assert.match(weekKey, /<dt>Tamanho<\/dt>/)
+    assert.match(weekKey, /<dt>Posição<\/dt>/)
+    assert.match(weekKey, /<dt>Clique<\/dt>/)
+    assert.doesNotMatch(weekKey, /<dt>Cor<\/dt>/)
   })
 })
 
@@ -229,5 +238,13 @@ describe('every page finds what it names', () => {
     assert.match(chapter, /<b>Colorir por avaliação<\/b>/)
     assert.match(chapter, /com a média da pessoa no recorte, e não com o zero/)
     assert.match(chapter, /menos de 3 textos avaliados/)
+  })
+
+  it('issue #147: the week chapter lives on the shareable page and in the in-page guide', () => {
+    const page = read('como-ler.html')
+    assert.match(page, /id="semana"/)
+    assert.match(page, /America\/Sao_Paulo|Brasília/)
+    assert.match(page, /janela rolante/)
+    assert.match(read('design-5.html'), /id="help-semana"/)
   })
 })

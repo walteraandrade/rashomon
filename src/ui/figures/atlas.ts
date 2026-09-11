@@ -14,6 +14,7 @@ import {
   paintCandidatesLoading,
   paintColumns,
   paintSelection,
+  type Sparkline,
 } from '../render.js'
 import * as docsCard from '../docs-card.js'
 import { debounce, fromScope } from '../state.js'
@@ -161,6 +162,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let requestId = 0
   let controller: AbortController | null = null
   let candidateController: AbortController | null = null
+  let sparkController: AbortController | null = null
+  let sparkline: Sparkline | null = null
 
   const nextRequestId = () => ++requestId
   const currentRequestId = () => requestId
@@ -218,7 +221,33 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: graph?.person?.name ?? '', about: graph?.stats?.about, mask: getMask(), personTestimony: graph?.stats?.testimony })
 
   const paintCurrentInspector = () =>
-    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id) })
+    inspect({
+      graph,
+      nodes,
+      links,
+      selected: getSelected(),
+      sort: $('sort').value,
+      daysLabel: daysLabel(),
+      onChoose: (id) => handlers.pick(id),
+      sparkline: getSelected() ? sparkline : null,
+    })
+
+  const loadSparkline = async (term: Term) => {
+    sparkController?.abort()
+    const control = new AbortController()
+    sparkController = control
+    sparkline = { status: 'loading' }
+    paintCurrentInspector()
+    try {
+      const rows = await api.loadTimeline($('person').value, api.timelineParams({ term: term.term, kind: term.kind }), control.signal)
+      if (control.signal.aborted) return
+      sparkline = { status: 'ready', counts: (rows as { count: number }[]).map((r) => r.count) }
+    } catch (e) {
+      if (aborted(e)) return
+      sparkline = { status: 'empty' }
+    }
+    paintCurrentInspector()
+  }
 
   const drawCurrentMap = () => {
     const current = graph as Graph
@@ -231,13 +260,16 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const choose = (id: string | null) => {
     setSelected(id)
+    const chosen = nodes.find((n) => n.id === id)
+    sparkline = chosen ? { status: 'loading' } : null
     docsCard.close()
     paintCurrentSelection()
     paintCurrentInspector()
-    const chosen = nodes.find((n) => n.id === id)
     $('selectionNote').textContent = chosen ? `${label(chosen)} selecionado. Detalhes atualizados.` : 'Seleção limpa.'
-    if (chosen) showDocs(chosen)
-    else docsCard.close()
+    if (chosen) {
+      showDocs(chosen)
+      loadSparkline(chosen)
+    }
   }
 
   const showPersonDocs = () => {

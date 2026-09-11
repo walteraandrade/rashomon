@@ -12,7 +12,7 @@ import './close.js'
 // src/db.ts loads.
 
 const [, tarcisio] = persons
-const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
+const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0, day: '' }
 const now = () => new Date().toISOString()
 const stored = async (uri: string) =>
   (await db.query<{ source: string; tone: number | null }>(`select source, tone from docs where uri = $1`, [uri])).rows[0]

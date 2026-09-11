@@ -28,6 +28,7 @@ export type DocsQuery = {
   lean: string
   limit: number
   offset: number
+  day: string
 }
 
 export type RisingQuery = {
@@ -67,6 +68,15 @@ export type TestimonyQuery = {
 // measured null, so a floor tied to one side's count cannot apply symmetrically. No `sort`:
 // both selection criteria always run, see compareQuery.
 export type CompareQuery = {
+  days: number
+  source: string
+  domain: string
+  lean: string
+  kind: string
+  limit: number
+}
+
+export type WeekQuery = {
   days: number
   source: string
   domain: string
@@ -258,11 +268,15 @@ const docsWhere = (term: string, kind: string) => sql`(
   )`
 export const docsWhereSql = docsWhere('', 'all').text
 
+const docsDay = (day: string) =>
+  sql`(${day} = '' or (d.published_at at time zone 'America/Sao_Paulo')::date = nullif(${day}, '')::date)`
+
 const docsQuery = (person: Person, q: DocsQuery) => sql`
   with ${scopeCte(person, q)}
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
   where ${docsWhere(q.term, q.kind)}
+    and ${docsDay(q.day)}
   order by d.published_at desc, d.id desc
   limit ${q.limit} offset ${q.offset}`
 
@@ -270,7 +284,8 @@ const docsCountQuery = (person: Person, q: DocsQuery) => sql`
   with ${scopeCte(person, q)}
   select count(*)::int as total
   from docs d join about a on a.doc_id = d.id
-  where ${docsWhere(q.term, q.kind)}`
+  where ${docsWhere(q.term, q.kind)}
+    and ${docsDay(q.day)}`
 
 export const docsFor = async (person: Person, q: DocsQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
@@ -609,6 +624,67 @@ const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
+const weekQuery = (person: Person, q: WeekQuery) => {
+  const exclude = nameTokens(person)
+  const { domain } = resolveScope(q.domain, q.lean)
+  return sql`
+  with
+  today as (
+    select (now() at time zone 'America/Sao_Paulo')::date as today
+  ),
+  dates as (
+    select (t.today - i)::date as day,
+      ((t.today - i)::timestamp at time zone 'America/Sao_Paulo') as start
+    from today t, generate_series(0, ${q.days}::int - 1) as i
+  ),
+  scoped as (
+    select d.id,
+      case
+        when d.published_at >= ((select today from today) + 1)::timestamp at time zone 'America/Sao_Paulo'
+        then (select today from today)
+        else (d.published_at at time zone 'America/Sao_Paulo')::date
+      end as day
+    from docs d
+    where (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+  ),
+  kept as (
+    select s.id, s.day from scoped s join dates dt on dt.day = s.day
+  ),
+  about_days as (
+    select k.day, count(*)::int as about
+    from kept k
+    join doc_persons dp on dp.doc_id = k.id and dp.person_id = ${person.id}
+    group by 1
+  ),
+  ranked as (
+    select day, term, kind, count,
+      row_number() over (partition by day order by count desc, term, kind) as rn
+    from (
+      select k.day, t.term, t.kind, count(*)::int as count
+      from kept k
+      join doc_persons dp on dp.doc_id = k.id and dp.person_id = ${person.id}
+      join doc_terms t on t.doc_id = k.id
+      where not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
+        and (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ',')))
+      group by k.day, t.term, t.kind
+    ) g
+  )
+  select dt.start, coalesce(a.about, 0)::int as about,
+    coalesce((
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count) order by count desc, term, kind)
+      from ranked r where r.day = dt.day and r.rn <= ${q.limit}
+    ), '[]'::json) as terms
+  from dates dt
+  left join about_days a on a.day = dt.day
+  order by dt.day`
+}
+
+export const weekFor = async (person: Person, q: WeekQuery) => {
+  const { rows } = await run<{ start: Date; about: number; terms: { term: string; kind: string; count: number }[] }>(weekQuery(person, q))
+  return { days: q.days, tz: 'America/Sao_Paulo' as const, buckets: rows }
+}
+
 // Not nested under /people/:id: spans two specific people, neither of which is "the" resource.
 export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   const { rows } = await run<CompareAggregates>(compareQuery(a, b, q))
@@ -641,13 +717,14 @@ export const queries = {
   termTestimony: termTestimonyQuery,
   candidates: candidatesQuery,
   compare: compareQuery,
+  week: weekQuery,
 } as const
 
 // The text each builder emits. Numbering follows statement shape, not values, so what a
 // sample call renders is byte-for-byte what the handler sends (test/graph.test.ts pins it).
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
-const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0 }
+const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0, day: '' }
 const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count' }
 
 export const statements = {
@@ -663,4 +740,5 @@ export const statements = {
   termTestimony: queries.termTestimony(samplePerson, sampleScope, 'stub', ['word:sample']).text,
   candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,
   compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
+  week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
 } as const

@@ -83,6 +83,20 @@
     <div class="detail" id="compareDetail"><span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span></div>
     <p class="note" id="compareHiddenNote" hidden></p>
   </section>
+
+  <section class="figure week" id="week" aria-labelledby="weekTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 4</span><h2 id="weekTitle">A semana em palavras</h2></div>
+      <p class="figure-sub">Sete dias no calendário de Brasília. A palavra se repete se atravessa os dias. <a href="como-ler.html#semana">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt>Tamanho</dt><dd>documentos naquele dia</dd></div>
+        <div><dt>Posição</dt><dd>o dia</dd></div>
+        <div><dt>Clique</dt><dd>os textos daquele dia</dd></div>
+      </dl>
+      <div class="sentence"><p class="sentence-line">Na semana de <span class="pick"><select id="weekPerson" aria-label="Pessoa (semana)"></select></span>, em <span class="pick"><select id="weekSource" aria-label="Fonte (semana)"></select></span>, as palavras que mais ocuparam cada dia. Mostrar <span class="pick"><select id="weekLimit" aria-label="Palavras por dia"><option value="5">5</option><option value="8" selected>8</option><option value="12">12</option></select></span> palavras por dia.</p></div>
+    </header>
+    <figure class="week-chart" id="weekChart" aria-label="Palavras por dia da semana" hidden></figure>
+  </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
   <div class="docs-dialog-head" id="docsGrip"><div><span class="eyebrow" id="docsKicker">Documentos</span><h2 id="docsTitle"></h2></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
@@ -97,7 +111,7 @@
       <ol>
         <li>Escolha pessoa, período e fonte na frase.</li>
         <li>Leia as palavras maiores. Clique numa para ver os textos.</li>
-        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é.</li>
+        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é. No 4, o que ocupou cada dia.</li>
       </ol>
     </div>
     <div id="help-atlas">
@@ -132,6 +146,16 @@
       <h3>Gráfico 3 · Régua</h3>
       <p>A posição diz de quem a palavra é. O tamanho é documentos dos dois, somados. No meio, a palavra é dividida. Clique abre os textos das duas pessoas.</p>
       <p>As que não couberam sem cobrir outra ficam numa lista abaixo, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
+    </div>
+    <div id="help-semana">
+      <h3>Gráfico 4 · A semana</h3>
+      <dl class="figure-key">
+        <div><dt>Tamanho</dt><dd>documentos naquele dia</dd></div>
+        <div><dt>Posição</dt><dd>o dia</dd></div>
+        <div><dt>Clique</dt><dd>os textos daquele dia</dd></div>
+      </dl>
+      <p>Sete colunas, um dia de calendário em Brasília cada uma, a mais velha à esquerda. O tamanho da palavra é quantos textos daquele dia a carregam. Uma palavra que atravessa os dias se repete; não há linha ligando as cópias.</p>
+      <p>Clique numa palavra abre os textos daquele dia. A faísca no atlas, quando uma palavra está em foco, são os últimos sete dias em janela rolante, não o recorte do atlas.</p>
     </div>
     <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
     <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>

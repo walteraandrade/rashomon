@@ -1,9 +1,5 @@
-// Figure 1, end to end: the sentence (person, days, source, sort, limit), search, pick/
-// background, Escape, the map/columns mode toggle, the mask toggle, zoom, the map/columns/
-// inspector painters, the documents modal (its markup sits outside #workspace, but only this
-// figure ever opens it) and this figure's own stats badge. Importing this module is side-effect
-// free outside a browser: mount() runs only once app.ts hands it a root element and the
-// fetched person list, which is what lets node:test import the pieces below with no document.
+// Figure 1, end to end. Side-effect free outside a browser: mount() only runs once the shell
+// hands it a root element, so node:test can import the pieces without a document.
 
 import * as api from '../api.js'
 import { fmt, html, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type Measure, type Term } from '../format.js'
@@ -21,36 +17,21 @@ import {
 import * as docsCard from '../docs-card.js'
 import { debounce, fromScope } from '../state.js'
 
-// The section element the shell mounts into. Only `classList` is ever read off it, and the
-// suites mount against a DOM stand-in rather than a real element, so the contract is that one
-// property instead of the whole HTMLElement surface.
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
 
 export type Person = { id: string; name: string }
 export type Seed = { person?: string; days?: string; source?: string; sort?: string; limit?: string }
-// Whatever GET /api/people rejected with, or null when it answered. Distinct from an empty
-// `people` array: an outage must never paint as "no one is registered yet" (issue #92).
+// Distinct from an empty `people` array: an outage must never paint as "no one registered yet".
 export type PeopleError = unknown
 
-// Elements this figure owns by id. The markup in design-5.html guarantees each one exists
-// (the sentence and the toolbar live inside #workspace; the shared #docsDialog is not this
-// figure's). The values read off them (select.value, button.disabled) are per-element, so this
-// is typed loosely on purpose rather than casting at all ~100 call sites.
+// Typed loosely on purpose: per-element values avoid casting at ~100 call sites.
 const $ = (id: string): any => document.getElementById(id)
 
-// The one box on this page where a picture is allowed: nothing is on screen to compete with it,
-// because the atlas has failed. Both ways in -- an /api/people outage and a failed graph fetch --
-// paint it, since to a reader they are the same box saying the same thing. Figures 2 and 3 print
-// the same outage in words and stay wordless: all three fail together, and three birds would read
-// as decoration rather than as one failure.
 const OUTAGE =
   '<div class="empty"><img class="pet" src="/pet-caracara-perched.png" alt="" width="26" height="37">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
 
-// A caught value is `unknown`; the flows below only ever ask whether the browser aborted the
-// request, so this is the one place that inspects it.
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
-// every action is optional so a test can inject only the ones a criterion is about
 export type HandlerActions = {
   paintCurrentSelection?: () => void
   choose?: (id: string | null) => void
@@ -69,12 +50,8 @@ export type HandlerActions = {
   docsOpen?: () => boolean
 }
 
-// The event table. Every DOM listener this figure installs resolves to exactly one entry
-// here, and each entry may only call the actions it is handed, so the mapping is inspectable
-// without a document. `search` is the load-bearing one: highlighting must repaint the
-// selection and nothing else, since rebuilding the inspector would wipe the documents the
-// reader already loaded (issue #28). There is no `resetOutlet` action any more: the outlet in
-// focus belongs to figure 2 now, and only figure 2's own controls release it (issue #92).
+// Every listener resolves to one entry here, testable without a document. `search` only
+// repaints the selection — rebuilding the inspector would wipe documents already loaded.
 export const createHandlers = ({
   paintCurrentSelection = () => {},
   choose = () => {},
@@ -100,24 +77,18 @@ export const createHandlers = ({
     clearSearch()
     choose(null)
   },
-  // Selecting is a toggle: clicking the selected term again lets it go. Without it the only
-  // way back to the clean map was the clear button, which is off in the toolbar, far from the
-  // word the reader is looking at.
+  // Selecting is a toggle: clicking again releases without requiring the clear button.
   pick: (id: string | null) => {
     choose(id !== null && id === getSelected() ? null : id)
   },
-  // A click that lands on nothing selectable is the other way out. The listener sits on the
-  // map viewport and the list, so the toolbar and the inspector's own buttons never reach it;
-  // inside those two, anything without a data-node/data-col/data-person-docs is empty space.
-  // The person's own entry point has to be in that list: it sits inside the viewport, so the
-  // click that opens her card bubbles straight into this handler, which would close it again.
+  // A click on empty space releases the selection; data-person-docs is excluded so her card
+  // open does not immediately close itself by bubbling into this handler.
   background: (target: Element | null) => {
     if (!getSelected()) return
     if (target && target.closest('[data-node], [data-col], [data-person-docs]')) return
     choose(null)
   },
-  // Escape closes the documents modal when it is open, and only then clears the selection:
-  // the reader who closes the texts of a word must still be looking at that word.
+  // Escape closes the docs card first, then clears the selection so the word stays visible.
   keydown: (e: { key: string }) => {
     if (e.key !== 'Escape') return
     if (docsOpen()) {
@@ -130,10 +101,7 @@ export const createHandlers = ({
   },
   modeMap: () => setMode('map'),
   modeColumns: () => setMode('columns'),
-  // Paint only: the per-term testimony always travels with the graph (api.ts's testimony=1).
   mask: () => toggleMask(),
-  // One handler per control id, so the period control is the only one that refetches the
-  // candidate queue.
   control: (id: string) => () => {
     if (id === 'days') loadCandidates()
     updateHeader()
@@ -147,28 +115,19 @@ export const createHandlers = ({
   zoomIn: () => setZoom(getZoomLevel() + 0.25),
   zoomOut: () => setZoom(getZoomLevel() - 0.25),
   zoomReset: () => setZoom(1),
-  // Closing the modal aborts whatever /docs request is still in flight.
   docsClose: () => closeDocs(),
 })
 
-// The layout cache key: the same person, sort, term limit and term list must reuse the same
-// packing, and any change to them must not.
 export const layoutKey = (person: Person | undefined, terms: Term[], sort: string, limit: string) =>
   JSON.stringify(person ? [person.id, person.name, sort, limit, terms.map((n) => [n.id, n.term, n.kind, n.count, n.pmi])] : [])
 
-// The docs panel reuses the graph querystring, narrowed to one term and five rows. A null
-// term means "documents about the person", which is `term=''` plus `kind=all`. `sort` and
-// `min` are dropped (issue #43): src/query.ts's parseDocsQuery reads neither, so leaving
-// them in made the same five rows look like a new query on every sort change.
+// `sort` and `min` are dropped: parseDocsQuery reads neither, so keeping them would make every
+// sort change look like a new query to the memo and any HTTP cache.
 export const docsQuery = (base: URLSearchParams, n: Term | null) =>
   api.docsParams({ days: base.get('days') ?? '30', source: base.get('source') ?? 'all', term: n ? n.term : '', kind: n ? n.kind : 'all' })
 
-// Issue #43: one cache key per scope, built from the filters that scope's route actually
-// reads, so a change to a control the route ignores cannot evict it. The keys are the
-// querystrings themselves, which is what makes them honest: whatever ends up in the URL ends
-// up in the key, and a parameter added to a route later cannot silently share a stale entry.
-// This figure only ever reads its own `.graph`/`.docs` keys; `.sources`/`.testimony` stay here
-// too so the shape matches what test/figures-atlas.test.ts already asserts.
+// One cache key per scope built from the filters that route actually reads, so a control the
+// route ignores cannot evict it. `.sources`/`.testimony` are included to match test assertions.
 export const scopeKeys = (personId: string, graphParams: URLSearchParams, term: Term | null = null) => ({
   graph: personId + '?' + graphParams,
   sources: personId + '?' + api.narrowToSources(graphParams),
@@ -176,23 +135,14 @@ export const scopeKeys = (personId: string, graphParams: URLSearchParams, term: 
   testimony: personId + '?' + api.narrowToTestimony(graphParams),
 })
 
-// A seeded value only ever overrides a <select> when it names one of that select's own
-// options; a malformed value (an unknown days/sort/limit) leaves the element at whatever its
-// markup already defaults to, and nothing throws.
 const applySeed = (select: any, value: string | undefined) => {
   if (value === undefined || !select) return
   if ([...select.options].some((o: any) => o.value === value)) select.value = value
 }
 
-// The seeded person id wins only when it names someone the API actually returned; otherwise
-// the figure falls back to the first person in the list, exactly like the page did before the
-// split.
 const resolvePerson = (people: Person[], seeded: string | undefined) =>
   seeded && people.some((p) => p.id === seeded) ? seeded : (people[0]?.id ?? '')
 
-// Mounts figure 1 into `root` (#workspace): populates the sentence's controls from `people`
-// and `initial`, wires every listener, and runs the first load. Nothing here reaches into
-// figure 2's DOM, and nothing in figure 2 reaches into this one.
 export const mount = (root: FigureRoot, { people, initial, peopleError = null }: { people: Person[]; initial: Seed; peopleError?: PeopleError }) => {
   let graph: Graph | null = null
   let nodes: Term[] = []
@@ -239,8 +189,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     return layoutCache.get(key) as Layout
   }
 
-  // Only the map's own width and the zoom controls: the strip and the testimony lists belong
-  // to figure 2's own ResizeObserver now (issue #92).
   const resizeMap = () => {
     const svg = $('viewport').querySelector('svg')
     if (svg) {
@@ -287,21 +235,15 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     paintCurrentInspector()
     const chosen = nodes.find((n) => n.id === id)
     $('selectionNote').textContent = chosen ? `${label(chosen)} selecionado. Detalhes atualizados.` : 'Seleção limpa.'
-    // Picking a word IS the request for its texts, so the card follows the selection: it opens
-    // on the word just chosen and goes away with the selection it belonged to.
     if (chosen) showDocs(chosen)
     else docsCard.close()
   }
 
-  // The person's card replaces whatever word was on screen: leaving the word is what asking for
-  // the whole person means, so the selection goes first and her documents open after it.
   const showPersonDocs = () => {
     if (getSelected() !== null) choose(null)
     showDocs(null)
   }
 
-  // This figure's two readings, handed to the shared card: a word ("Documentos com palavra")
-  // and the person at the centre ("Documentos sobre"). The recorte is this figure's own.
   const showDocs = (n: Term | null) => {
     if (!graph || !$('person').value) return
     docsCard.open({
@@ -311,8 +253,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     })
   }
 
-  // The candidate queue has no panel on the atlas any more (it is a maintenance list, not a
-  // reading); the flow stays for a page that carries `#candidateList`, and is a no-op without it.
   const loadCandidatesFlow = async () => {
     if (!$('candidateList')) return
     candidateController?.abort()
@@ -360,9 +300,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     render()
   }
 
-  // Resets the reader's state, not the painted surfaces: the old map, columns and overflow
-  // list stay on screen until render() replaces them, so nothing under them moves while a load
-  // is in flight (see load()).
+  // State is reset before the request; painted surfaces stay until render() replaces them.
   const resetGraph = () => {
     layoutCache.clear()
     currentLayout = null
@@ -379,11 +317,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const signal = () => (controller as AbortController).signal
 
-  // A reload keeps the previous map, columns, legend and inspector on screen, dimmed by the
-  // `is-loading` class, and swaps them in one go when the data lands. Blanking them first made
-  // the map column collapse from its drawn height to the empty-state minimum for the length of
-  // the request. Only the very first load, with nothing to keep, shows the loading copy in
-  // place of a map.
+  // `is-loading` dims existing content rather than blanking it, to prevent the map column from
+  // collapsing to empty-state height mid-request.
   const load = async () => {
     const id = nextRequestId()
     controller?.abort()
@@ -403,10 +338,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
       $('inspector').textContent = 'Aguardando dados.'
     }
-    // A failed GET /api/people (app.ts's own boot()) is not the same thing as a seed with no
-    // one in it: an outage gets the same "no fictional graph" copy master showed, with a
-    // retry that reloads the page (the only way this figure can ask app.ts to fetch again,
-    // since the person list is fetched once, up in the shell, and handed down).
+    // An outage shows the error illustration; retry reloads the page (the only path back to
+    // app.ts, which fetches the person list once and hands it down).
     if (peopleError) {
       busy = false
       $('status').classList.add('error')
@@ -463,9 +396,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     }
   }
 
-  // The controls debounce; the first load and the retry button do not. createHandlers keeps
-  // calling whatever `load` it is handed synchronously, so its own contract (and the tests
-  // written against it) is untouched — the coalescing lives here, at the wiring site.
+  // Controls debounce; first load and retry do not. createHandlers always calls `load`
+  // synchronously, so coalescing lives here at the wiring site.
   const debouncedLoad = debounce(load)
 
   const handlers = createHandlers({
@@ -495,8 +427,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     docsOpen: docsCard.isOpen,
   })
 
-  // The sentence's controls: source is built here (it has no static markup), the rest keep
-  // their design-5.html options and only take a seeded value when it names one of them.
   $('source').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
   $('source').value = source
   $('person').innerHTML = ''

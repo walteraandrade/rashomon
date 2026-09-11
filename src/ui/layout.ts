@@ -1,13 +1,7 @@
-// Pure geometry: word packing and edge routing for the radial atlas. No DOM access here —
-// text measurement is injected as `measure(text, size, family, weight) => width`, supplied by
-// a browser canvas adapter at the call site (see render.ts's createCanvasMeasure). That is what
-// lets this module run, and be tested, outside a browser: pass any deterministic stand-in.
-
 import { label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term } from './format.js'
 
-// Must stay in sync with atlas.css's --sans / --display custom properties: canvas text
-// measurement needs literal font-family strings, and canvas cannot read a CSS custom
-// property without going through the DOM, which this module deliberately avoids.
+// Must stay in sync with atlas.css's --sans / --display: canvas measurement needs literal
+// font-family strings and cannot read CSS custom properties without the DOM.
 export const FONT_SANS = "'Instrument Sans', system-ui, sans-serif"
 export const FONT_DISPLAY = "'League Spartan', 'Instrument Sans', system-ui, sans-serif"
 
@@ -45,16 +39,11 @@ const overlaps = (a: Box, b: Box, gap = 7) => Math.abs(a.x - b.x) < (a.w + b.w) 
 const inCircle = (box: Box, radius = 346) =>
   [-1, 1].every((sx) => [-1, 1].every((sy) => Math.hypot(box.x + (sx * box.w) / 2, box.y + (sy * box.h) / 2) <= radius))
 
-// A fixed polar grid of placement candidates, computed once at module load: every packPass
-// call scores this same set rather than searching a continuous space, so packing stays
-// deterministic and fast.
+// Placement candidates: fixed polar grid computed once so packing is deterministic.
 const candidates: { x: number; y: number; r: number }[] = []
 for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.push({ x: r * Math.cos((a * Math.PI) / 180), y: r * Math.sin((a * Math.PI) / 180), r })
 
-// Type size is relative to how full the ring is, not absolute: the more terms a layout asks
-// for, the lower both the ceiling and the floor, so a crowded atlas shrinks to fit the circle
-// instead of spilling half its words into the overflow list. SIZE_CEILING is the cap no term
-// passes however few of them there are.
+// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill.
 export const SIZE_CEILING = 38
 export const SIZE_FLOOR = 13
 
@@ -97,9 +86,7 @@ export const packPass = (measure: Measure, terms: Term[], center: CenterBox, sor
   return { placed, overflow, center }
 }
 
-// Packs once, then retries the whole layout at a few starting phases whenever some terms
-// overflowed, keeping the best (most-placed) attempt — a cheap way to dodge an unlucky
-// golden-angle seam without a real solver.
+// Retries the whole layout at a few starting phases when overflow occurs, keeping the most-placed.
 export const pack = (measure: Measure, terms: Term[], center: CenterBox, sort: string): Layout => {
   let best = packPass(measure, terms, center, sort)
   for (const phase of [0.5, -0.5, 1.1, -1.1]) {
@@ -130,9 +117,8 @@ const segmentBlocked = (a: Point, b: Point, rect: Box) => {
   return hi > 0 && lo < 1
 }
 
-// Builds a visibility graph around every placed box (center + terms), corners and edge
-// midpoints as waypoints, so routesFrom can shortest-path an edge around obstacles instead
-// of drawing a straight line through other words.
+// Visibility graph around every placed box; corners and edge midpoints as waypoints so
+// routesFrom can path an edge around obstacles.
 export const routeGraph = (layout: Layout): Routing => {
   const obstacles = [layout.center, ...layout.placed].map((p) => ({ ...p, w: p.w + 6, h: p.h + 6 }))
   const points: Point[] = []
@@ -170,9 +156,7 @@ export const routeGraph = (layout: Layout): Routing => {
   return { points, ports, adjacent }
 }
 
-// Dijkstra from every port of `id` to every other placed term's ports. Caches the routing
-// graph on `layout.routing` (computed once per layout, on first call), so re-selecting a
-// different term never rebuilds the visibility graph.
+// Dijkstra from every port of `id`. Routing graph is cached on `layout.routing` on first call.
 export const routesFrom = (layout: Layout, id: string): Map<string, string> => {
   const { points, ports, adjacent } = (layout.routing ??= routeGraph(layout))
   const distances = points.map(() => Infinity)
@@ -207,15 +191,10 @@ export const routesFrom = (layout: Layout, id: string): Map<string, string> => {
   return routes
 }
 
-// The beeswarm skeleton both strips share: every item keeps its x (its score on the axis) and
-// takes the y closest to the axis where it touches nothing already placed. Bigger items go
-// first, so the heavy marks sit on the line and the small ones stack around them. The two
-// strips differ only in the shape of a mark, and that difference is the injected `reach(placed,
-// item)`: the vertical distance `item` must keep from `placed` at their horizontal distance, or
-// null when the two never interfere at that distance. `fits` rejects a placement that would
-// leave the figure, sending the item to `overflow` instead of letting it push the height up,
-// and `escape` is the last resort when no candidate is free at all. Deterministic: same input,
-// same picture, so a test can assert the geometry.
+// Beeswarm skeleton both strips share. `reach(placed, item)` returns the vertical clearance
+// needed at the horizontal distance between the two items, or null when they never interfere.
+// `fits` rejects placements outside the figure; `escape` is the last resort.
+// Deterministic: same input, same picture.
 export type SwarmRules<T> = {
   size: (item: T) => number
   reach: (placed: T & { y: number }, item: T) => number | null
@@ -246,10 +225,8 @@ export const swarmBy = <T extends { x: number }>(
   return { placed, overflow }
 }
 
-// The testimony strip's own shape: circles, so the clearance between two of them shrinks as
-// they drift apart horizontally, and nothing is ever dropped (the strip shrinks its radii
-// instead, in render.ts). Kept as its own name because every caller and test speaks of a swarm
-// of dots, not of the skeleton above.
+// Circle swarm: clearance shrinks as items drift apart horizontally. No overflow — the strip
+// shrinks its radii in render.ts instead.
 export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5): (T & { y: number })[] =>
   swarmBy(items, {
     size: (d) => d.r,
@@ -261,12 +238,10 @@ export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5)
     escape: (item, candidates) => Math.max(...candidates.map(Math.abs)) + item.r + gap,
   }).placed
 
-// ---------- figure 3: the ruler (compare two people, issues #91 and #99) ----------
+// ---------- figure 3: the ruler ----------
 
 export const RULER_PAD = 28
-// How tall the strip may grow before a word is sent to the overflow list instead of drawn.
-// Words, unlike dots, cannot shrink past the 11px floor atlas.css sets for the whole site, so
-// the ruler trades height for legibility first and only then drops a word -- visibly.
+// Words cannot shrink past 11px, so the ruler trades height for legibility before dropping.
 export const RULER_MAX_HEIGHT = 520
 export const RULER_SIZE_MIN = 11
 const RULER_SIZE_MAX = 30
@@ -284,11 +259,8 @@ export type RulerLayout<T> = {
   width: number
 }
 
-// Figure 3's geometry: the word itself on the -1..+1 balance axis, in the same language figure
-// 1 speaks, instead of an anonymous dot. x is the balance, the type size is `combined`
-// (documents on both sides, never measure-dependent) on a sqrt ramp so one loud word cannot
-// dwarf the rest, and y comes from swarmBy, which stacks the boxes that would collide. Pure:
-// text widths arrive through the same injected `measure` the atlas packer uses.
+// Word-on-axis layout: x is balance (-1..+1), type size is sqrt(combined) so one loud word
+// cannot dwarf the rest. Text widths arrive through the injected `measure`.
 export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], width = 860): RulerLayout<T> => {
   const inner = Math.max(80, width - 2 * RULER_PAD)
   const x = (balance: number) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
@@ -296,18 +268,14 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
   const roots = items.map((it) => Math.sqrt(Math.max(0, it.combined)))
   const lo = Math.min(...roots)
   const hi = Math.max(...roots)
-  // Narrow viewports get a shorter type ramp, never a smaller floor: the smallest word on a
-  // phone is the same 11px it is on a desktop, and only the biggest one gives ground.
+  // Narrow viewports get a shorter type ramp but never a smaller floor.
   const top = Math.max(RULER_SIZE_MIN + 2, RULER_SIZE_MAX * Math.min(1, Math.max(0.62, width / 860)))
   const sized = items.map((it, i) => {
     const t = hi === lo ? 0.5 : (roots[i] - lo) / (hi - lo)
     const size = Math.round(RULER_SIZE_MIN + (top - RULER_SIZE_MIN) * t)
     const text = label(it)
     const w = measure(text, size) + 10
-    // A word is wide where a dot was a point, so a word sitting on either end would hang off
-    // the frame and get clipped. Its box is nudged just far enough inward to stay whole; the
-    // shift is at most half a word and never reorders anything, since every word at the same
-    // balance is nudged the same way.
+    // A word at either extreme would hang off the frame; nudge it just far enough inward.
     const centre = Math.min(Math.max(x(it.balance), w / 2), Math.max(w / 2, width - w / 2))
     return { ...it, text, x: centre, size, w, h: Math.round(size * 1.24) }
   })

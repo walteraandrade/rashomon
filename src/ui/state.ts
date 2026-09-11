@@ -1,17 +1,6 @@
-// Page-wide, DOM-free state: the scope memo (shared by every figure) plus the two generic
-// helpers both figures need. Everything that is genuinely per-figure (the source filter, the
-// focused outlet, zoom, the layout cache, the mask, request/abort bookkeeping) lives inside
-// that figure's own module now, the same way src/ui/app.ts already kept people/graph/nodes
-// as local module state rather than here.
-
-// Bounded, short-lived memo of successful API responses (issue #43). One bucket per scope
-// (graph, sources, docs, testimony) because each depends on a different subset of the
-// controls: the outlet list ignores sort and term limit entirely, so a sort change must not
-// evict it. Only resolved values are written, so an error or an abort never becomes a cache
-// hit, and the TTL is deliberately shorter than a reader's attention span: this coalesces one
-// burst of filter fiddling, it is not an offline store. Shared across figures on purpose: every
-// key already embeds the person id and the full querystring, so two figures on two different
-// people never collide on the same bucket entry.
+// Bounded TTL memo of successful API responses, one bucket per scope so a sort change does
+// not evict the outlet list. Only resolved values are written. Shared across figures: every
+// key embeds the person id and full querystring, so two figures never collide.
 export const SCOPE_TTL_MS = 20_000
 export const SCOPE_LIMIT = 8
 
@@ -27,8 +16,7 @@ const bucket = (scope: string) => {
   return fresh
 }
 
-// Returns a one-element box on a hit and null on a miss, so a cached `undefined` or `null`
-// response is still distinguishable from "nothing cached".
+// Returns a one-element box on a hit, null on a miss.
 export const readScope = (scope: string, key: string, now = Date.now()) => {
   const entry = bucket(scope).get(key)
   if (!entry) return null
@@ -43,27 +31,22 @@ export const writeScope = (scope: string, key: string, value: unknown, now = Dat
   const entries = bucket(scope)
   entries.delete(key)
   entries.set(key, { at: now, value })
-  // Insertion order is eviction order: the oldest write goes first, so a long session cannot
-  // grow the memo without bound.
+  // Insertion order is eviction order: the oldest write goes first.
   while (entries.size > SCOPE_LIMIT) entries.delete(entries.keys().next().value as string)
   return value
 }
 
 export const clearScopes = () => scopes.clear()
 
-// Reuses a fresh entry instead of fetching, and only memoizes a value the fetch actually
-// resolved: a rejection (network error, or the browser aborting the request) leaves the
-// bucket untouched, so the next attempt is a real attempt. An abort here says the browser
-// stopped listening, never that the server stopped running the SQL.
+// Uses a fresh entry when available; only memoizes a resolved value, so an error or abort
+// leaves the bucket untouched.
 export const fromScope = async <T>(scope: string, key: string, fetcher: () => Promise<T>): Promise<T> => {
   const hit = readScope(scope, key)
   if (hit) return hit.value as T
   return writeScope(scope, key, await fetcher()) as T
 }
 
-// Coalesces a burst of control changes into one load. The trailing edge is the one that
-// matters: a reader dragging through the period options should pay for the option they stop
-// on, not for every option they pass through.
+// Trailing edge: the reader pays for the option they stop on, not every option they pass through.
 export const debounce = (fn: () => void, ms = 140) => {
   let timer: ReturnType<typeof setTimeout> | undefined
   return () => {

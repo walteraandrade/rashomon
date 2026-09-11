@@ -2,27 +2,15 @@ import { clampEnv, db } from './db.js'
 import { discoverNames, personsMentioned, terms } from './extract.js'
 import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
 
-// Tone is a GDELT measure. A doc keeps the source that first delivered it, so a
-// later gkg row sharing the uri must not leak its tone into an rss/gnews doc.
+// Tone is GDELT-only; a later gkg row must not leak tone into a doc stored by rss/gnews.
 export const tonedSources: Source[] = ['gdelt', 'gkg']
 const toneFor = (doc: RawDoc) => (tonedSources.includes(doc.source) ? doc.tone ?? null : null)
 
-// The two bounds every write path here respects: rows carried by one statement, and documents
-// carried by one transaction. Neither grows with the size of the corpus, so ingest and reindex
-// run in constant memory and never hold a transaction open across an arbitrary amount of work.
 export const writeBatchRows = () => clampEnv(process.env.WRITE_BATCH_ROWS, 500, 1, 10_000)
 export const writeBatchDocs = () => clampEnv(process.env.WRITE_BATCH_DOCS, 200, 1, 5_000)
 
-// The ceiling on characters per stored document. Measured on the local corpus on 2026-09-10
-// (docs/sources-research.md, "Fifth pass"): the 99th percentile of the longest source (`rss`,
-// whole articles from `content:encoded`) is 7.9k characters and the single longest document is
-// 20k, so this keeps every article measured and only ever cuts a tail. A literal, not an env
-// knob, for the same reason as MAX_RESPONSE_BYTES: a safety ceiling with headroom, not a setting.
 export const MAX_DOC_CHARS = 20_000
 
-// Cuts on the last whitespace at or before the limit, so no word is ever stored in half and the
-// derived terms are the terms of the text actually kept. Only when the first `max` characters
-// hold no whitespace at all does it cut mid-run, which is the case of no words to protect.
 export const truncateText = (text: string, max = MAX_DOC_CHARS): string => {
   if (text.length <= max) return text
   const head = text.slice(0, max + 1)
@@ -38,9 +26,8 @@ export const inBatches = <T>(xs: readonly T[], size: number, fn: (batch: T[]) =>
 
 let open = 0
 
-// PGlite is a single connection, so a nested `begin` would silently join the transaction
-// already open and the inner `commit` would end it early: an inner call just runs in the
-// outer one and the outermost caller decides whether the whole unit commits.
+// PGlite is a single connection; a nested `begin` would silently join the open transaction and
+// the inner `commit` would end it early. Nested calls run in the outer one.
 export const inTransaction = async <T>(fn: () => Promise<T>): Promise<T> => {
   if (open) return fn()
   await db.exec(`begin`)
@@ -50,7 +37,6 @@ export const inTransaction = async <T>(fn: () => Promise<T>): Promise<T> => {
     await db.exec(`commit`)
     return value
   } catch (e) {
-    // A failed `commit` already ended the transaction, so this rollback is allowed to be a no-op.
     await db.exec(`rollback`).catch(() => undefined)
     throw e
   } finally {
@@ -67,9 +53,7 @@ export const pruneRemoved = async (ps: Person[]) => {
   })
 }
 
-// One statement per batch of people instead of one per person, and `where` on the conflict so a
-// seed that did not change writes no row version at all. Aliases travel as json because
-// `unnest` flattens a text[][] across rows and would mix one person's aliases into the next.
+// Aliases travel as json: `unnest` would mix one person's aliases into the next.
 export const upsertPersons = (ps: Person[], size = writeBatchRows()) => {
   const unique = [...new Map(ps.map((p) => [p.id, p])).values()]
   return inTransaction(() =>
@@ -89,22 +73,16 @@ export const upsertPersons = (ps: Person[], size = writeBatchRows()) => {
 export type Derived = { docId: number; persons: string[]; terms: Term[]; names: string[] }
 type Extractable = Pick<RawDoc, 'source' | 'text' | 'extraTerms' | 'extraNames'>
 
-// The only place extraction happens on the write path, so ingest and reindex cannot drift:
-// the same document yields the same person, term and candidate rows through either.
 export const derive = (docId: number, doc: Extractable, ps: Person[], lexicon: Phrases = new Set<string>()): Derived => {
   const matched = personsMentioned(doc.text, ps)
   return {
     docId,
     persons: matched.map((p) => p.id),
-    // Terms of a doc naming nobody tracked only ever fed the PMI denominator, at 68% of the
-    // largest table; the denominator now counts the same docs the numerator does (see graph.ts).
     terms: matched.length ? terms(doc.text, doc.extraTerms, lexicon) : [],
     names: discoverNames(doc, ps),
   }
 }
 
-// `unnest` keeps a batch of any size at two or three bound parameters, and `on conflict do
-// nothing` makes replaying a batch idempotent, which is what lets an interrupted run be retried.
 export const writeDerived = async (rows: readonly Derived[], size = writeBatchRows()) => {
   const persons = rows.flatMap((r) => r.persons.map((personId) => ({ docId: r.docId, personId })))
   const termRows = rows.flatMap((r) => r.terms.map((t) => ({ docId: r.docId, term: t.term, kind: t.kind })))
@@ -130,18 +108,7 @@ export const writeDerived = async (rows: readonly Derived[], size = writeBatchRo
   )
 }
 
-// The `where` on the conflict is what keeps a re-collected document from writing a new row
-// version for nothing: it fires only when the enrichment would really change something. It
-// restates the two assignments rather than sharing them because a conflict target cannot see
-// the values it is about to set. Both rules survive it: `coalesce(docs.domain, ...)` still
-// keeps the first domain, and a non-GDELT source still resolves to null tone.
-//
-// The third rule, alongside those two: the longer text wins. A document
-// often reaches us twice -- a `gnews` headline first, then the publisher's own feed carrying
-// the whole article in `content:encoded` (src/collectors/rss.ts's `body`) -- and the graph is
-// scored from that text, so keeping the headline would throw the article away. Only *longer*
-// replaces, never merely different, so a feed that truncates cannot undo an enrichment and a
-// re-collected document still writes no row version at all.
+// On conflict: domain keeps first non-null; tone is null for non-GDELT; longer text wins.
 const upsertDoc = async (doc: RawDoc) => {
   const { rows } = await db.query<{ id: number; inserted: boolean; took_incoming: boolean }>(
     `insert into docs (source, uri, text, published_at, extra_terms, domain, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -155,23 +122,14 @@ const upsertDoc = async (doc: RawDoc) => {
      returning id, (xmax = 0) as inserted, (text = $3) as took_incoming`,
     [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, toneFor(doc), JSON.stringify(doc.extraNames ?? []), tonedSources],
   )
-  // A suppressed conflict update returns no row at all: the uri is known and nothing changed.
   return rows[0]
 }
 
-// What one upsert did, which decides what has to be derived. `took_incoming` is the stored text
-// compared against the parameter inside the statement, so no length arithmetic is involved: a
-// character count from Postgres and a UTF-16 code unit count from JavaScript disagree on any
-// non-BMP character, and an enrichment read as 'unchanged' would leave the article's text beside
-// the headline's terms until the next reindex.
 export type Written = 'inserted' | 'enriched' | 'unchanged'
 const outcome = (row: { inserted: boolean; took_incoming: boolean } | undefined): Written =>
   !row ? 'unchanged' : row.inserted ? 'inserted' : row.took_incoming ? 'enriched' : 'unchanged'
 
-// Terms and candidates of the replaced text have to go, or the headline's would be summed with
-// the article's -- doc_terms' primary key makes the insert idempotent, not corrective.
-// doc_persons is deliberately left alone: the headline named those people, the body only ever
-// adds to them, and writeDerived's `on conflict do nothing` rewrites them for free.
+// Clear terms when text is replaced: headline terms must not sum with the article's.
 const clearDerived = async (ids: readonly number[]) => {
   if (!ids.length) return
   await db.query(`delete from doc_terms where doc_id = any($1::int[])`, [ids])
@@ -180,11 +138,7 @@ const clearDerived = async (ids: readonly number[]) => {
 
 type Batch = { derived: Derived[]; stale: number[]; written: number; enriched: number }
 
-// The shared body of every write path, so a single document and a group of two hundred derive
-// through exactly one piece of code. It does not open a transaction: the caller decides how
-// much commits at once.
-// The cap is applied here, before the upsert and before `derive`, so what is stored and what is
-// derived are the same text, through insertDoc and insertDocs alike.
+// Cap is applied before upsert and before `derive` so stored text and derived terms match.
 const writeBatch = async (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Promise<{ written: number; enriched: number }> => {
   const batch = await docs.reduce<Promise<Batch>>(async (acc, raw) => {
     const a = await acc
@@ -204,21 +158,12 @@ const writeBatch = async (docs: readonly RawDoc[], ps: Person[], lexicon: Phrase
   return { written: batch.written, enriched: batch.enriched }
 }
 
-// One transaction per document: it can commit with its derived rows or not at all, so no
-// document is ever left in `docs` without the person, term and candidate rows it implies.
-// The boolean still means "a document nobody had": an enrichment of a known uri reads as
-// false here, and is counted separately by insertDocs.
 export const insertDoc = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<string>()): Promise<boolean> =>
   inTransaction(async () => (await writeBatch([doc], ps, lexicon)).written === 1)
 
 const insertGroup = (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases) => inTransaction(() => writeBatch(docs, ps, lexicon))
 
-// The bulk path. A group commits as one transaction; when it fails it rolls back whole and is
-// replayed document by document, so one unwritable document costs only itself and everything
-// else in the group still lands with its derived rows.
-// `lexicon` trails `size` rather than following `ps`: every existing caller passes the batch
-// size positionally, and an empty lexicon is the honest default anyway -- a database that has
-// never been reindexed has no phrases to tag.
+// A batch failure rolls back and is replayed doc by doc, so one bad doc costs only itself.
 export type InsertTotals = { written: number; enriched: number; failed: number }
 
 export const insertDocs = (docs: readonly RawDoc[], ps: Person[], size = writeBatchDocs(), lexicon: Phrases = new Set<string>()) =>

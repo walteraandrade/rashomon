@@ -125,6 +125,7 @@ No borders. Grouping is a surface wash or a gap. Cards exist when a dialog has t
 - **Figure key.** A `dl.figure-key` of tamanho / cor / posição / clique. Always visible. The encoding, not the essay.
 - **Help dialog.** `#helpDialog`, modal, same card language as `#docsDialog`. Opened by any in-page `como-ler.html` link; modifier-click and `data-leave` still go to the page.
 - **Docs dialog.** Floating above 760px, modal below. The only path to `GET /docs`.
+- **Loading.** Ghost of the figure's own geometry (`--soft` wash of `--ink`), pulse until the recorte lands. A refetch dims what is already on screen. No spinner, no "Carregando…", no invented words.
 - **Quiet button / segment.** `--soft` chrome; pressed segment floods `--accent`.
 
 ## Do's and Don'ts
@@ -134,3 +135,4 @@ No borders. Grouping is a surface wash or a gap. Cards exist when a dialog has t
 - Do keep one type ramp. Don't invent a `font-size` in px.
 - Do draw limits with type and space. Don't add a border, a side stripe, or a card around every block.
 - Do leave `--hostile`/`--favor` for evaluation and `--cmp-a`/`--cmp-b` for the ruler. Don't reuse red/green for "who". Don't tint a figure with a data hue.
+- Do hold a figure's silhouette while it waits. Don't dump "Carregando…" into an empty hole.

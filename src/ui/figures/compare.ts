@@ -144,7 +144,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     }
     const params = api.compareParams(controlValues())
     const key = params.toString()
-    if (!readScope('compare', key)) paintCompareLoading()
+    if (!readScope('compare', key)) {
+      if (data) root.classList.add('is-loading')
+      else paintCompareLoading()
+    }
     try {
       const result = await fromScope('compare', key, () => api.loadCompare(params, (controller as AbortController).signal))
       if (id !== requestId) return
@@ -152,11 +155,13 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       selected = null
       lastWidth = $('compareRuler').clientWidth || 0
       $('compareStatus').hidden = result.a.person.id !== result.b.person.id
+      root.classList.remove('is-loading')
       repaint()
     } catch (e) {
       if (id === requestId && !aborted(e)) {
         data = null
         $('compareStatus').hidden = true
+        root.classList.remove('is-loading')
         paintRulerError()
         $('compareDetail').innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
         setHiddenNote(0)

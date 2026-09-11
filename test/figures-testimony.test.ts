@@ -154,8 +154,13 @@ describe('the page holds the figure and explains it', () => {
 
   it('the "Como ler" page defines the scale, the cut and the name bias', () => {
     const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const help = read('design-5.html').match(/id="help-avaliacao"[\s\S]*?(?=<div id="help-comparar")/)?.[0] ?? ''
     assert.match(chapter, /<h2>Gráfico 2 · Avaliação por veículo<\/h2>/)
-    assert.match(chapter, /nota de −10 a \+10/)
+    assert.match(chapter, /A nota não é de um jornalista nem do GDELT/)
+    assert.match(chapter, /programa do rashomon, o kikori/)
+    assert.match(help, /A nota não é de um jornalista nem do GDELT/)
+    assert.match(help, /programa do rashomon, o kikori/)
+    assert.match(chapter, /contra \(−10\) ou a favor \(\+10\)/)
     assert.match(chapter, /Até −2,5 conta como contra; de \+2,5 para cima, a favor/)
     assert.match(chapter, /nunca compare a nota de uma pessoa com a de outra/)
     assert.match(chapter, /Vale para todas as fontes, ao contrário do tom/)

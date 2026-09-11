@@ -8,6 +8,7 @@ import {
   createCanvasMeasure,
   drawMap,
   inspect,
+  paintAtlasLoading,
   paintCandidates,
   paintCandidatesError,
   paintCandidatesLoading,
@@ -317,8 +318,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const signal = () => (controller as AbortController).signal
 
-  // `is-loading` dims existing content rather than blanking it, to prevent the map column from
-  // collapsing to empty-state height mid-request.
+  // First paint holds the map's silhouette. A refetch dims what is already on screen so the
+  // column does not collapse. Outage and empty-list return before either, or they would flash.
   const load = async () => {
     const id = nextRequestId()
     controller?.abort()
@@ -331,13 +332,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     nodes = []
     links = []
     $('status').classList.remove('error')
-    $('status').textContent = 'Carregando a base local…'
-    $('viewport').setAttribute('aria-busy', 'true')
-    root.classList.add('is-loading')
-    if (first) {
-      $('viewport').innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
-      $('inspector').textContent = 'Aguardando dados.'
-    }
     // An outage shows the error illustration; retry reloads the page (the only path back to
     // app.ts, which fetches the person list once and hands it down).
     if (peopleError) {
@@ -366,6 +360,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       root.classList.remove('is-loading')
       return
     }
+    $('status').textContent = 'Lendo o recorte.'
+    $('viewport').setAttribute('aria-busy', 'true')
+    if (first) paintAtlasLoading()
+    else root.classList.add('is-loading')
     try {
       const person = $('person').value
       const query = graphQuery()

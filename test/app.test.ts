@@ -255,7 +255,7 @@ describe('issue #92: a failed GET /api/people is an outage, never an empty seed'
   })
 })
 
-describe('issue #92: the loading copy shows before /api/people resolves', () => {
+describe('issue #92: the loading ghost shows before /api/people resolves', () => {
   it('boot() paints the loading reader synchronously, ahead of the network round trip', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -265,9 +265,12 @@ describe('issue #92: the loading copy shows before /api/people resolves', () => 
       }) as typeof fetch
       await withLocation('', async () => {
         const booting = appModule.boot()
-        assert.equal(els.status.textContent, 'Carregando a base local…', 'a cold start must not show bare static markup')
-        assert.match(els.viewport.innerHTML, /Carregando o campo de palavras/)
-        assert.equal(els.testimonyList.textContent, 'Carregando…')
+        assert.equal(els.status.textContent, 'Lendo as pessoas.', 'a cold start must not show bare static markup')
+        assert.match(els.viewport.innerHTML, /ghost-field/)
+        assert.match(els.viewport.innerHTML, /class="ghost"/)
+        assert.match(els.testimonyList.innerHTML, /Lendo a avaliação/)
+        assert.equal(els.strip.hidden, false)
+        assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
         void booting
       })
     })

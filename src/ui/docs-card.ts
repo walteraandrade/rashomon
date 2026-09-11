@@ -107,7 +107,7 @@ const startDrag = (e: PointerEvent) => {
   e.preventDefault()
 }
 
-// Memo hit paints from scope; miss shows loading copy first.
+// Memo hit paints from scope; miss shows the documents ghost first.
 const fetchSide = async (side: DocsSide, signal: AbortSignal) => ({
   label: side.label ?? null,
   data: await fromScope('docs', side.personId + '?' + side.query, () => api.loadDocs(side.personId, side.query, signal)),

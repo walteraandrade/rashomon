@@ -139,7 +139,7 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
       'figures/testimony.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
       'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
-      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/testimony.js', './help.js'],
+      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/testimony.js', './help.js', './render.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected)) {

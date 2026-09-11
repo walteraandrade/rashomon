@@ -3,7 +3,7 @@
 import * as api from '../api.js'
 import { html, SOURCE_SEGMENTS, sourceLabels, type OutletRow, type Testimony } from '../format.js'
 import * as docsCard from '../docs-card.js'
-import { paintOutlets, paintOutletsError, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../render.js'
+import { paintOutlets, paintOutletsError, paintOutletsLoading, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../render.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
@@ -70,8 +70,13 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const loadSourcesFlow = async (id: number, signal: AbortSignal) => {
     const person = $('testimonyPerson').value
     const params = api.sourcesParams(controlValues())
+    const key = scopeKey(person, params)
+    if (!readScope('sources', key)) {
+      if (outletRows) $('outletList').classList.add('is-loading')
+      else paintOutletsLoading()
+    }
     try {
-      const rows = await fromScope('sources', scopeKey(person, params), () => api.loadSources(person, params, signal))
+      const rows = await fromScope('sources', key, () => api.loadSources(person, params, signal))
       if (id !== requestId) return
       outletRows = rows
       repaint()
@@ -85,8 +90,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     const params = api.testimonyParams(controlValues())
     const key = scopeKey(person, params)
     if (!readScope('testimony', key)) {
-      testimony = null
-      paintTestimonyLoading()
+      if (testimony) {
+        $('testimonyList').classList.add('is-loading')
+        $('strip').classList.add('is-loading')
+      } else paintTestimonyLoading()
     }
     try {
       const data = await fromScope('testimony', key, () => api.loadTestimony(person, params, signal))

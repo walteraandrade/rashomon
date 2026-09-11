@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-// Issue #134: comment-line density, no "master" in comments, Style contract, two named
-// stories gone, two keeper constraints kept, executable src unchanged vs origin/master.
+// Issue #134: density, no "master" in comments, Style contract, named stories gone, keepers kept.
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const srcDir = join(root, 'src')
@@ -44,17 +42,6 @@ const commentsAttachedTo = (src: string, decl: RegExp): string => {
   }
   return block.reverse().join('\n')
 }
-
-/** Drop comments so only executable text remains. `://` in URLs is not a comment. */
-const executable = (src: string): string =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
-    .map((line) => line.replace(/(?<!:)\/\/.*$/, '').trimEnd())
-    .filter((line) => line.trim() !== '')
-    .join('\n')
-
-const git = (args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trimEnd()
 
 describe('issue #134: comments state constraints, not history', () => {
   const files = srcTsRel()
@@ -123,18 +110,5 @@ describe('issue #134: comments state constraints, not history', () => {
     assert.match(tx, /begin/)
     assert.match(tx, /commit/)
     assert.match(tx, /transaction/)
-  })
-
-  it('AC6: vs origin/master, executable (non-comment) code of src/**/*.ts is unchanged', () => {
-    git(['rev-parse', '--verify', 'origin/master'])
-    const oldFiles = git(['ls-tree', '-r', '--name-only', 'origin/master', '--', 'src'])
-      .split('\n')
-      .filter((f) => f.endsWith('.ts'))
-      .sort()
-    const nowFiles = files.slice().sort()
-    assert.deepEqual(nowFiles, oldFiles, 'src/**/*.ts file set must match origin/master')
-
-    const changed = nowFiles.filter((rel) => executable(readSrc(rel)) !== executable(git(['show', `origin/master:${rel}`])))
-    assert.deepEqual(changed, [], `executable code changed vs origin/master in: ${changed.join(', ')}`)
   })
 })

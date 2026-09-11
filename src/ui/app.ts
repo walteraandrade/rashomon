@@ -3,6 +3,7 @@ import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountTestimony } from './figures/testimony.js'
 import { mountHelp } from './help.js'
+import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintTestimonyLoading } from './render.js'
 
 type Person = { id: string; name: string }
 // A `[key, bareKey | null]` pair names a different bare fallback or none (null).
@@ -53,13 +54,11 @@ const loadPeople = async (): Promise<Person[]> => {
 
 const paintBootLoading = () => {
   const status = document.getElementById('status')
-  if (status) status.textContent = 'Carregando a base local…'
-  const viewport = document.getElementById('viewport')
-  if (viewport) viewport.innerHTML = '<div class="empty">Carregando o campo de palavras…</div>'
-  const testimonyList = document.getElementById('testimonyList')
-  if (testimonyList) testimonyList.textContent = 'Carregando…'
-  const compareDetail = document.getElementById('compareDetail')
-  if (compareDetail) compareDetail.innerHTML = '<span class="empty-hint">Carregando a régua…</span>'
+  if (status) status.textContent = 'Lendo as pessoas.'
+  paintAtlasLoading()
+  paintTestimonyLoading()
+  paintOutletsLoading()
+  paintCompareLoading()
 }
 
 export const boot = async () => {
@@ -81,7 +80,7 @@ export const boot = async () => {
       figure.mount(root, { people, initial: seedFor(figure.id, figure.keys, location.search), peopleError })
     } catch (err) {
       console.error(`figure "${figure.id}" failed to mount`, err)
-      // A mount failure must not leave the loading copy on screen.
+      // A mount failure must not leave the loading ghost on screen.
       const notice = document.getElementById(figure.noticeId)
       if (notice) notice.textContent = 'Esta figura falhou ao carregar.'
     }

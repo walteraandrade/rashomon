@@ -296,11 +296,13 @@ export const paintOutlets = ({
 }) => {
   $('domainLabel').textContent = domainSuffix(domain)
   const merged = mergeOutlets(rows, testimony?.by_domain ?? [])
+  $('outletList').classList.remove('is-loading')
+  $('outletList').setAttribute('aria-busy', 'false')
   $('outletList').innerHTML = merged.length
     ? html`<div class="outlet-grid">${merged.map(
         (r) =>
           html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}"><span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span></button>`,
-      )}</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o modelo kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
+      )}</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
     : '<p class="note">Nenhum veículo neste recorte.</p>'
   queryAll('[data-domain]', $('outletList')).forEach((el) =>
     el.addEventListener('click', () => {
@@ -312,6 +314,50 @@ export const paintOutlets = ({
 
 export const paintOutletsError = () => {
   $('outletList').innerHTML = '<p class="note">Não foi possível carregar os veículos.</p>'
+  $('outletList').classList.remove('is-loading')
+  $('outletList').setAttribute('aria-busy', 'false')
+}
+
+const ghostBar = (cls: string) => html`<span class="ghost ${cls}"></span>`
+
+const ATLAS_GHOST_WORDS: [number, number, number, number][] = [
+  [-118, -92, 96, 22],
+  [88, -128, 72, 18],
+  [168, -28, 110, 24],
+  [124, 86, 68, 18],
+  [18, 156, 90, 20],
+  [-96, 138, 58, 16],
+  [-176, 36, 100, 22],
+  [-158, -156, 52, 14],
+  [36, -188, 80, 18],
+  [196, 64, 60, 16],
+  [-36, 48, 44, 14],
+  [8, -48, 76, 20],
+  [-210, -70, 64, 16],
+  [150, 150, 54, 16],
+]
+
+export const paintAtlasLoading = () => {
+  const viewport = $('viewport')
+  if (!viewport) return
+  viewport.setAttribute('aria-busy', 'true')
+  viewport.innerHTML = html`<div class="map-stage" aria-hidden="true"><svg class="map-svg" viewBox="-430 -402 860 804"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g class="ghost-field">${ATLAS_GHOST_WORDS.map(
+    ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="6"/>`,
+  )}<rect class="ghost" x="-72" y="-26" width="144" height="52" rx="10"/></g></svg></div>`
+  const inspector = $('inspector')
+  if (!inspector) return
+  inspector.innerHTML = html`<div class="ghost-field" aria-hidden="true"><p class="eyebrow">${ghostBar('ghost-kicker')}</p>${ghostBar('ghost-title')}<dl class="metric stat"><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div></dl>${ghostBar('ghost-line')}${ghostBar('ghost-line is-short')}</div>`
+}
+
+export const paintOutletsLoading = () => {
+  const list = $('outletList')
+  if (!list) return
+  list.classList.remove('is-loading')
+  list.setAttribute('aria-busy', 'true')
+  const widths = ['', 'is-mid', 'is-short']
+  list.innerHTML = html`<div class="outlet-grid ghost-field" aria-hidden="true">${[0, 1, 2, 3, 4, 5, 6, 7].map(
+    (i) => html`<div class="outlet"><span class="d">${ghostBar(`ghost-outlet-d ${widths[i % 3]}`)}</span><span class="n">${ghostBar('ghost-outlet-n')}</span><span class="t">${ghostBar('ghost-outlet-n')}</span></div>`,
+  )}</div><p class="sr-only">Lendo os veículos.</p>`
 }
 
 // Kikori's −10..+10 score overall, per source and per outlet from one response. The `3` in
@@ -321,10 +367,14 @@ export const paintTestimony = ({ data, domain }: { data: Testimony; domain: stri
   const score = overall.score
   if (score === null || score === undefined || !overall.n) {
     $('testimonyLabel').textContent = ''
+    $('testimonyList').classList.remove('is-loading')
+    $('testimonyList').setAttribute('aria-busy', 'false')
     $('testimonyList').innerHTML = html`<div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método ${method}).<br>Tente um período maior ou outra fonte.</p></div>`
     return
   }
   $('testimonyLabel').textContent = signed(score)
+  $('testimonyList').classList.remove('is-loading')
+  $('testimonyList').setAttribute('aria-busy', 'false')
   const focus = testimonyFocus(by_domain, domain)
   const focusLine =
     domain === 'all'
@@ -338,18 +388,47 @@ export const paintTestimony = ({ data, domain }: { data: Testimony; domain: stri
   )}</dl>`
 }
 
+const STRIP_PAD = 28
+
+const STRIP_GHOST_DOTS: [number, number][] = [
+  [92, 11],
+  [210, 8],
+  [348, 17],
+  [430, 10],
+  [528, 21],
+  [656, 9],
+  [768, 14],
+]
+
 export const paintTestimonyLoading = () => {
-  $('testimonyLabel').textContent = ''
-  $('testimonyList').textContent = 'Carregando…'
-  $('strip').hidden = true
+  if ($('testimonyLabel')) $('testimonyLabel').textContent = ''
+  const list = $('testimonyList')
+  if (list) {
+    list.classList.remove('is-loading')
+    list.setAttribute('aria-busy', 'true')
+    list.innerHTML = html`<div class="ghost-field" aria-hidden="true"><dl class="verdict stat"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-stat is-xl')}</dd></div></dl>${ghostBar('ghost-line is-short')}<dl class="source-chips">${[0, 1, 2, 3].map(() => html`<div class="source-chip">${ghostBar('ghost-chip')}</div>`)}</dl></div><p class="sr-only">Lendo a avaliação.</p>`
+  }
+  const strip = $('strip')
+  if (!strip) return
+  strip.hidden = false
+  strip.classList.remove('is-loading')
+  strip.setAttribute('aria-busy', 'true')
+  const width = 860
+  const height = 96
+  const half = 48
+  strip.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="strip-mean-row"></div><svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(
+    (s) => html`<line class="strip-tick" x1="${STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD)}" x2="${STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD)}" y1="${half - 5}" y2="${half + 5}"/>`,
+  )}${STRIP_GHOST_DOTS.map(([x, r]) => html`<circle class="ghost" cx="${x}" cy="${half}" r="${r}"/>`)}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div></div>`
 }
 
 export const paintTestimonyError = () => {
   $('testimonyList').innerHTML = '<p class="note">Não foi possível carregar a avaliação.</p>'
+  $('testimonyList').classList.remove('is-loading')
+  $('testimonyList').setAttribute('aria-busy', 'false')
   $('strip').hidden = true
+  $('strip').classList.remove('is-loading')
+  $('strip').setAttribute('aria-busy', 'false')
 }
-
-const STRIP_PAD = 28
 
 // Area grows with n; dots shrink on narrow screens (floor 55%) to avoid a tall stack.
 export const stripRadius = (n: number, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
@@ -396,10 +475,14 @@ export const paintStrip = ({
   const overall = data.overall.score
   if (!dots.length || overall === null || overall === undefined) {
     strip.hidden = true
+    strip.classList.remove('is-loading')
+    strip.setAttribute('aria-busy', 'false')
     strip.innerHTML = ''
     return
   }
   strip.hidden = false
+  strip.classList.remove('is-loading')
+  strip.setAttribute('aria-busy', 'false')
   const tick = (s: number) => html`<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
   strip.innerHTML = html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div><svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Veículos na régua da avaliação, de −10 a +10"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(tick)}<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>${dots.map(
     (d) =>
@@ -423,7 +506,11 @@ export const paintStrip = ({
 
 export const paintDocsLoading = () => {
   const box = $('docs')
-  if (box) box.textContent = 'Carregando documentos…'
+  if (!box) return
+  box.setAttribute('aria-busy', 'true')
+  box.innerHTML = html`<div class="ghost-field" aria-hidden="true">${[0, 1, 2].map(
+    () => html`<article class="doc">${ghostBar('ghost-doc-kicker')}${ghostBar('ghost-doc-line')}${ghostBar('ghost-doc-line is-short')}</article>`,
+  )}</div><p class="sr-only">Lendo os documentos.</p>`
 }
 
 export const paintDocsHead = ({ kicker, title }: { kicker: string; title: string }) => {
@@ -445,12 +532,14 @@ const sideMarkup = ({ label: name, data }: DocsSideData) =>
 export const paintDocs = (sides: DocsSideData[]) => {
   const box = $('docs')
   if (!box) return
+  box.setAttribute('aria-busy', 'false')
   box.innerHTML = sides.length > 1 ? html`<div class="docs-columns">${sides.map((side) => html`<div>${sideMarkup(side)}</div>`)}</div>` : sides[0] ? sideMarkup(sides[0]) : '<p>Nenhum documento encontrado.</p>'
 }
 
 export const paintDocsError = (onRetry: () => void) => {
   const box = $('docs')
   if (!box) return
+  box.setAttribute('aria-busy', 'false')
   box.innerHTML = '<p>Não foi possível carregar documentos. <button class="quiet-button" id="retryDocs">Tentar novamente</button></p>'
   $('retryDocs')?.addEventListener('click', onRetry)
 }
@@ -476,7 +565,9 @@ export const paintCandidates = (data: { candidates: Candidate[] }) => {
 }
 
 export const paintCandidatesLoading = () => {
-  $('candidateList').textContent = 'Carregando…'
+  const list = $('candidateList')
+  if (!list) return
+  list.innerHTML = html`<div class="ghost-field" aria-hidden="true">${[0, 1, 2].map(() => html`<div class="candidate">${ghostBar('ghost-line')}</div>`)}</div><p class="sr-only">Lendo os candidatos.</p>`
 }
 
 export const paintCandidatesError = (onRetry: () => void) => {
@@ -564,10 +655,14 @@ export const paintRuler = ({
   const { items, hiddenCount } = rulerTerms(data.terms, measure)
   if (!items.length) {
     ruler.hidden = false
+    ruler.classList.remove('is-loading')
+    ruler.setAttribute('aria-busy', 'false')
     ruler.innerHTML = '<p class="note">Nenhuma palavra neste recorte.</p>'
     return { hiddenCount, shown: 0, overflowCount: 0 }
   }
   ruler.hidden = false
+  ruler.classList.remove('is-loading')
+  ruler.setAttribute('aria-busy', 'false')
   const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
   const tick = (b: number) => html`<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
   ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${personA.name}</span><span class="ruler-end cmp-b">${personB.name}</span></div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Régua comparando ${personA.name} e ${personB.name}"><line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick)}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}</svg><div class="ruler-axis-labels"><span>Só de ${personA.name}</span><span>dividida</span><span>Só de ${personB.name}</span></div><p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.</p>${rulerOverflowMarkup(overflow, selected)}`
@@ -590,11 +685,40 @@ export const paintRuler = ({
 export const paintRulerError = () => {
   const ruler = $('compareRuler')
   ruler.hidden = false
+  ruler.classList.remove('is-loading')
+  ruler.setAttribute('aria-busy', 'false')
   ruler.innerHTML = '<p class="note">Não foi possível carregar a comparação.</p>'
 }
 
+const RULER_GHOST_WORDS: [number, number, number, number][] = [
+  [110, -14, 86, 20],
+  [210, 12, 64, 16],
+  [320, -8, 100, 22],
+  [430, 0, 72, 18],
+  [530, 16, 90, 20],
+  [640, -12, 58, 16],
+  [740, 8, 80, 18],
+]
+
 export const paintCompareLoading = () => {
-  $('compareDetail').textContent = 'Carregando…'
+  const ruler = $('compareRuler')
+  if (ruler) {
+    ruler.hidden = false
+    ruler.classList.remove('is-loading')
+    ruler.setAttribute('aria-busy', 'true')
+    const width = 860
+    const height = 88
+    const half = 44
+    const pad = 28
+    ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><line class="ruler-axis" x1="${pad}" x2="${width - pad}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(
+      (b) => html`<line class="ruler-tick" x1="${pad + ((b + 1) / 2) * (width - 2 * pad)}" x2="${pad + ((b + 1) / 2) * (width - 2 * pad)}" y1="${half - 5}" y2="${half + 5}"/>`,
+    )}${RULER_GHOST_WORDS.map(
+      ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
+    )}</svg></div><p class="sr-only">Lendo a régua.</p>`
+  }
+  const detail = $('compareDetail')
+  if (!detail) return
+  detail.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostBar('ghost-title')}<dl class="detail-sides"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div></dl></div>`
 }
 
 // Selected word's numbers on both sides; a null side reads "nenhum documento" (measured zero).

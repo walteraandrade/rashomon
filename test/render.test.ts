@@ -5,11 +5,15 @@ import {
   STRIP_MIN_R,
   drawMap,
   inspect,
+  paintAtlasLoading,
   paintCandidates,
   paintColumns,
   paintCompareDetail,
+  paintCompareLoading,
   paintDocs,
   paintDocsHead,
+  paintDocsLoading,
+  paintOutletsLoading,
   paintRuler,
   paintSelection,
   paintStrip,
@@ -193,8 +197,11 @@ describe('paintTestimony', () => {
   it('has loading and error states', () => {
     withFakeDocument(ids, (els) => {
       paintTestimonyLoading()
-      assert.equal(els.testimonyList.textContent, 'Carregando…')
+      assert.match(els.testimonyList.innerHTML, /ghost-field/)
+      assert.match(els.testimonyList.innerHTML, /Lendo a avaliação/)
       assert.equal(els.testimonyLabel.textContent, '')
+      assert.equal(els.strip.hidden, false, 'the strip keeps its silhouette while the recorte is in flight')
+      assert.match(els.strip.innerHTML, /strip-axis/)
       paintTestimonyError()
       assert.match(els.testimonyList.innerHTML, /Não foi possível carregar a avaliação/)
     })
@@ -280,9 +287,10 @@ describe('stripLayout / paintStrip: the outlets on the axis', () => {
       assert.equal(els.strip.innerHTML, '')
     })
     withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      els.strip.hidden = false
+      els.strip.hidden = true
       paintTestimonyLoading()
-      assert.equal(els.strip.hidden, true, 'a load in flight blanks the strip too')
+      assert.equal(els.strip.hidden, false, 'a load in flight keeps the strip visible as a ghost')
+      assert.match(els.strip.innerHTML, /ghost-field/)
     })
   })
 })
@@ -577,5 +585,38 @@ describe('paintCandidates (issue #32 AC7)', () => {
     })
     assert.equal(markup.label, '')
     assert.match(markup.list, /Nenhum nome novo com 3 ou mais documentos neste período\./)
+  })
+})
+
+describe('loading ghosts hold each figure\'s silhouette, with no invented words', () => {
+  it('paintAtlasLoading draws the map ring and ghost bars, not a Carregando hole', () => {
+    withFakeDocument(['viewport', 'inspector'], (els) => {
+      paintAtlasLoading()
+      assert.match(els.viewport.innerHTML, /ghost-field/)
+      assert.match(els.viewport.innerHTML, /class="boundary"/)
+      assert.match(els.viewport.innerHTML, /<rect class="ghost"/)
+      assert.doesNotMatch(els.viewport.innerHTML, /Carregando/)
+      assert.match(els.inspector.innerHTML, /ghost-kicker/)
+      assert.equal(els.viewport.getAttribute('aria-busy'), 'true')
+      for (const value of inlineStyles(els.viewport.innerHTML + els.inspector.innerHTML)) assert.ok(value.startsWith('--'), `atlas ghost emitted style="${value}"`)
+    })
+  })
+
+  it('paintOutletsLoading, paintCompareLoading and paintDocsLoading keep geometry and stay mute', () => {
+    withFakeDocument(['outletList', 'compareRuler', 'compareDetail', 'docs'], (els) => {
+      els.compareRuler.hidden = true
+      paintOutletsLoading()
+      paintCompareLoading()
+      paintDocsLoading()
+      assert.match(els.outletList.innerHTML, /outlet-grid/)
+      assert.match(els.outletList.innerHTML, /Lendo os veículos/)
+      assert.equal(els.compareRuler.hidden, false)
+      assert.match(els.compareRuler.innerHTML, /ruler-axis/)
+      assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
+      assert.match(els.compareDetail.innerHTML, /detail-sides/)
+      assert.match(els.docs.innerHTML, /Lendo os documentos/)
+      assert.equal(els.docs.getAttribute('aria-busy'), 'true')
+      assert.doesNotMatch(els.outletList.innerHTML + els.compareRuler.innerHTML + els.docs.innerHTML, /Carregando/)
+    })
   })
 })

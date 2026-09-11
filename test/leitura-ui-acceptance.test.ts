@@ -221,7 +221,7 @@ describe('every page finds what it names', () => {
 
   it('the workspace carries an id so a reload can dim it in place instead of blanking the map', () => {
     assert.match(read('design-5.html'), /<section class="figure workspace" id="workspace"/)
-    assert.match(read('atlas.css'), /\.workspace\.is-loading \.viewport[^{]*\{[^}]*opacity/)
+    assert.match(read('atlas.css'), /\.figure\.is-loading \.viewport[^{]*\{[^}]*opacity/)
   })
 
   it('the como-ler page explains the centring of the mask', () => {

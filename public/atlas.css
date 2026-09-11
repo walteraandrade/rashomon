@@ -236,9 +236,15 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 
 /* ---------- workspace: the atlas figure ---------- */
 /* A reload dims what is on screen instead of blanking it, so the column keeps its height and
-   nothing below the map moves until the new map lands. */
-.workspace .viewport, .workspace .columns, .workspace .inspector { transition: opacity .15s; }
-.workspace.is-loading .viewport, .workspace.is-loading .columns, .workspace.is-loading .inspector { opacity: .45; pointer-events: none; }
+   nothing below the map moves until the new map lands. First paint uses a ghost of the map,
+   not this dim: dimming an empty figure is how the old loading copy looked dead. */
+.workspace .viewport, .workspace .columns, .workspace .inspector,
+.testimony .strip, .testimony .testimony-lists, .testimony .outlets,
+.compare .ruler, .compare .detail { transition: opacity .16s ease-out; }
+.figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
+.figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
+.figure.is-loading .ruler, .figure.is-loading .detail,
+.strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
 .search { flex: 1 1 220px; }
@@ -438,6 +444,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 @media (prefers-reduced-motion: reduce) {
   .docs-dialog[open] { animation: none; }
   .word-glow, .word-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card { transition: none; }
+  .ghost-field { animation: none; }
 }
 .docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
 /* One control, on a ground that is already lighter than the page: a chip here read as a second
@@ -473,6 +480,38 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .doc a { font-size: var(--t-xs); }
 .empty { padding: 80px var(--space-5); text-align: center; color: var(--muted); font-size: var(--t-base); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* Ghost of a figure's own geometry while the recorte is in flight. --soft wash of --ink, never
+   a data hue and never invented words. The pulse is the wait; reduced motion stays still. */
+@keyframes ghost-pulse {
+  50% { opacity: .62; }
+}
+.ghost-field { animation: ghost-pulse 1.6s ease-in-out infinite; pointer-events: none; }
+.ghost {
+  display: block;
+  background: color-mix(in srgb, var(--ink) 28%, var(--soft));
+  fill: color-mix(in srgb, var(--ink) 36%, var(--soft));
+  border-radius: 6px;
+}
+.ghost-kicker { width: 9em; height: .7em; }
+.ghost-title { width: 10em; height: 1.35em; margin: 10px 0 18px; }
+.ghost-stat { width: 3.2em; height: 1.15em; }
+.ghost-stat.is-xl { width: 2.4em; height: 1.6em; }
+.ghost-line { width: 36ch; max-width: 100%; height: .7em; margin: 0 0 var(--space-3); }
+.ghost-line.is-short { width: 22ch; }
+.ghost-chip { width: 8.5em; height: 1.5em; border-radius: 999px; }
+.ghost-name { width: 7em; height: .85em; }
+.ghost-doc-kicker { width: 6em; height: .65em; margin-bottom: 6px; }
+.ghost-doc-line { width: 100%; height: .7em; margin: 6px 0; }
+.ghost-doc-line.is-short { width: 62%; }
+.ghost-outlet-d { width: 16em; max-width: 100%; height: .8em; }
+.ghost-outlet-d.is-mid { width: 11em; }
+.ghost-outlet-d.is-short { width: 8em; }
+.ghost-outlet-n { width: 2.2em; height: .8em; }
+.inspector .ghost-title { display: block; }
+.source-chip .ghost-chip { display: inline-block; }
+.outlet .ghost { display: inline-block; }
+.ruler-end-row .ghost-name:last-child { margin-left: auto; }
 
 /* ---------- the in-page guide ---------- */
 /* Same card language as the documents dialog, but this one is always a modal: it is a reading

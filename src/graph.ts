@@ -15,9 +15,7 @@ export type GraphQuery = {
   limit: number
   min: number
   sort: 'count' | 'pmi'
-  // The doc_testimony label to average per term, or null when the caller did not ask
-  // (`testimony=1`): the default response shape carries no testimony at all. Optional so the
-  // literals the tests and benchmarks build stay valid.
+  // `testimony=1` adds per-term kikori means; absent by default so the response shape is stable.
   method?: string | null
 }
 
@@ -65,10 +63,9 @@ export type TestimonyQuery = {
   min: number
 }
 
-// No `min`, unlike GraphQuery/RisingQuery: a term present for one side and absent for the
-// other is exactly what /compare must keep as a measured null, so a floor tied to one side's
-// count cannot apply symmetrically (issue #93). No `sort` either -- both selection criteria
-// always run, see compareQuery.
+// No `min` (see CompareQuery): a term present for one side and absent for the other is a
+// measured null, so a floor tied to one side's count cannot apply symmetrically. No `sort`:
+// both selection criteria always run, see compareQuery.
 export type CompareQuery = {
   days: number
   source: string
@@ -83,7 +80,6 @@ type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
 type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
-// One row: the two counts as columns, the two lists as json the driver already parses.
 type GraphAggregates = Stats & { nodes: TermRow[]; signature: SignatureRow[] }
 type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
 type RisingRow = { term: string; kind: string; count_recent: number; count_baseline: number; lift: number }
@@ -102,14 +98,11 @@ type CompareTermRow = {
   b_pmi: number | null
   b_tone: number | null
 }
-// One row: the two `about` counts as columns, the unioned term list as json the driver already parses.
 type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermRow[] }
 
-// `source` must already be normalized by parseSourceList; unlike kind, an unknown or empty
-// source is not rescued here and would scope to zero docs. domain+lean are resolved here into
-// the effective domain scope (a comma-joined list, 'all', or '' for an empty intersection).
-// string_to_array('', ',') yields an *empty* array (verified against PGlite), so
-// d.domain = any(...) matches nothing and the empty intersection correctly scopes to zero rows.
+// `source` must already be normalized by parseSourceList; an unknown or empty source scopes to
+// zero docs. domain+lean resolve into the effective domain scope; an empty intersection produces
+// an empty array for `= any(...)` and correctly matches nothing.
 type Scope = { days: number; source: string; domain: string; lean: string }
 const scopeCte = (person: Person, q: Scope) => {
   const { domain } = resolveScope(q.domain, q.lean)
@@ -125,69 +118,29 @@ const scopeCte = (person: Person, q: Scope) => {
   )`
 }
 
-// PMI's universe. doc_terms only exists for docs naming at least one tracked person, so the
-// numerator's universe is that set; n.total and term_all must be restricted to it too, or the
-// denominator would count docs that can never contribute a term.
+// PMI's universe: doc_terms only exists for docs naming at least one tracked person, so the
+// numerator's universe is that set; n.total and term_all must be restricted to it too.
 const trackedCte = sql`
   tracked as (
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )`
 
-// One statement for what nodes, signature and stats used to take three. All three rebuilt the
-// same scope, about and tracked sets, and both term statements rebuilt the same global term
-// frequencies -- which docs/perf-baseline.md shows is the whole cost of the route, paid twice.
-// `materialized` is spelled out instead of left to the planner's single-reference inlining,
-// since computing each of these exactly once is the point of merging them.
-//
-// term_p is deliberately not kind-filtered: signature ignores kind by construction, and the
-// nodes filter is on a group key, so applying it after the aggregate selects the same rows.
-// The tone average is computed once and simply not projected into signature, which never had it.
-//
-// term_all stays unrestricted even though it only ever feeds an inner join on (term, kind)
-// against term_p: narrowing it to those candidates was measured and is slower here (issue #45).
-// It cuts the rows to aggregate from 70642 to 58519 on the benchmark corpus, but the planner
-// then reaches doc_terms through doc_terms_term_idx and merge-joins, trading an 883-buffer seq
-// scan for a 113524-buffer index scan, and the CTE goes from 247 ms to 379 ms. The person's
-// terms are the head of the distribution, so there is little to skip.
-//
-// sort_key carries the ordering expression as a column so json_agg reproduces exactly the order
-// the limit selected. Inside it, `pmi` is the unrounded value, as before: an output column name
-// stands alone in an order by, never inside an expression -- which is also why signature, whose
-// order by names `pmi` bare, still ranks on the rounded value.
-//
-// `kind` closes both order by clauses (issue #47). The group key is (term, kind), so one term
-// text can appear under several kinds -- and until now nothing ranked those against each other
-// when their count/pmi tied: the order was whatever the plan emitted, and which of them the
-// limit kept was arbitrary with it. Dropping the distinct below changes the plan, so the
-// tiebreak is spelled out rather than left to it.
-//
-// c_pt and c_t are count(*), not count(distinct doc_id) (issue #47). doc_terms' primary key
-// (doc_id, term, kind) already makes doc_id unique inside each (term, kind) group, and every
-// join below it preserves that: `about` is doc_persons filtered to one person_id, whose PK
-// (doc_id, person_id) leaves doc_id unique, joined to `scope` (docs.id, a primary key);
-// `tracked` is `scope` again; `docs d` joins on its own primary key. So no row can duplicate a
-// doc inside a group, and the distinct sort/hash was pure cost -- 270 ms to 152 ms on the
-// benchmark corpus, almost all of it term_all's, which drops a 3.9 MB quicksort by turning a
-// GroupAggregate into a HashAggregate (see docs/perf-baseline.md).
-// A person's own name words are already dropped as single terms by `t.term = any(exclude)`,
-// whose array is nameTokens(person). A phrase carrying one of them has to go for the same reason:
-// "lula da silva" and "jair bolsonaro" are not things said *about* the person, they are the
-// person. The overlap operator asks it of the phrase's words, so "flavio bolsonaro" leaves
-// Jair's map without ever being spelled out anywhere.
-//
-// `position(' ' in ...)` guards the split: the overwhelming majority of doc_terms rows are
-// single words, and they are already handled by the equality above, so they never pay for a
-// string_to_array. It is not merely an optimization -- without it this expression would
-// duplicate the equality check on every row of the largest table in the database.
+// One statement for nodes, signature and stats; `materialized` is spelled out rather than left
+// to the planner. term_p is not kind-filtered: signature ignores kind, and the nodes filter is
+// on a group key, so applying it after the aggregate selects the same rows. term_all stays
+// unrestricted even though it only feeds an inner join against term_p: narrowing it is slower
+// (index scan + merge-join vs seq scan). c_pt/c_t are count(*): doc_terms' PK makes doc_id
+// unique per (term, kind) group, so count(distinct) is pure cost. A person's own name
+// words are dropped by the exclude filter; phrases carrying them by namePhrase. `position(' ' in
+// ...)` guards the string_to_array split so single words (the vast majority) never pay for it.
 const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
 
 // compareQuery's flag for "this (term, kind) key is (or contains) that side's own name word":
-// the equality half namePhrase leaves to its caller's own where clause, plus the phrase
-// half, both against an arbitrary column (compareQuery evaluates this on the unioned key, not
-// on doc_terms.term), so it cannot reuse namePhrase's hardcoded `t.term`.
+// evaluated on the unioned key rather than on doc_terms.term, so it cannot reuse namePhrase.
 const isName = (col: Sql, names: string[]) =>
   sql`(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
+// Bare `pmi` in ORDER BY names the rounded output column; inside an expression it names the raw one.
 const graphQuery = (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
   const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
@@ -246,17 +199,8 @@ const graphQuery = (person: Person, q: GraphQuery) => {
     ), '[]'::json) as signature`
 }
 
-// count(*) rather than count(distinct a.doc_id) (issue #47): a row here is a (doc_id, a, b)
-// triple, and `kind || ':' || term` is injective over the three kinds Term allows
-// (hashtag/word/phrase -- none is a prefix of another up to a colon), so a group key (s, t)
-// pins exactly one doc_terms row for a and one for b per doc. doc_terms' PK makes each of
-// those unique, and `about` contributes one row per doc (doc_persons PK with person_id fixed).
-//
-// The order by is new. Nothing ever specified this statement's order: the distinct forced a
-// GroupAggregate that happened to emit (s, t) ascending, and count(*) lets the planner hash
-// instead. Spelling the sort out is what keeps the response identical rather than merely
-// equivalent, and it still wins -- 26.6 ms -> 22.0 ms on the benchmark corpus, since it now
-// sorts the 443 output rows instead of the 3744 input ones.
+// count(*): doc_terms' PK + about's PK (doc_persons with person_id fixed) make doc_id unique
+// inside each (s, t) group. Order by is spelled out rather than relying on plan emission order.
 const linksQuery = (person: Person, q: Scope, ids: string[]) => sql`
   with ${scopeCte(person, q)}
   select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(*)::int as count
@@ -267,13 +211,10 @@ const linksQuery = (person: Person, q: Scope, ids: string[]) => sql`
   group by 1, 2 having count(*) >= 2
   order by 1, 2`
 
-// Testimony per term, for the mask that colours the map (option a of the avaliação work): the
-// mean kikori score of the docs in `about` that carry this term, next to the person's own
-// mean over the same `about`, so the client can colour each word by its distance from the
-// person rather than from zero -- the name bias moves every text of one person the same
-// way, and centring on the person's mean cancels it. Its own statement, like linksQuery, and
-// for the same reason: the term list is the output of graphQuery, and it only runs when asked.
-// count(*) is one row per doc per term by doc_terms' PK, same argument as term_p's.
+// Per-term testimony means for the mask that colours the map: each term's mean score minus
+// the person's own mean over the same `about`, so the colour shows distance from the person
+// rather than from zero (cancels the name prior). Runs only when asked; count(*) is one row
+// per doc per term by doc_terms' PK.
 const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => sql`
   with ${scopeCte(person, q)},
   scored as (
@@ -301,21 +242,14 @@ const sourcesQuery = (person: Person, q: Scope) => sql`
   from docs d join about a on a.doc_id = d.id
   group by 1, 2 order by docs desc, domain limit 80`
 
-// Previously hardcoded 'all' here regardless of q.domain, silently ignoring a caller's
-// domain filter — fixed as a prerequisite for lean to have any effect on this route.
-// lean/basis are annotated per row from outlets.json regardless of whether q.lean
-// narrowed the scope: cheap, static, always-available metadata.
 export const sourcesFor = async (person: Person, q: GraphQuery) => {
   const { rows } = await run<SourceRow>(sourcesQuery(person, q))
   return rows.map((r) => ({ ...r, ...labelFor(r.domain) }))
 }
 
 // term/kind reuse the doc_terms (kind, term) index via exists, so a doc carrying the term
-// under two kinds (only possible with kind = 'all' or an unknown kind) is still counted/returned once.
-// An unrecognized kind falls back to 'all' here too, so callers that bypass parseDocsQuery still get that fallback.
-// Exported so a test can read the literal kind array back out of it and compare against
-// query.ts's KINDS, instead of re-typing a third copy that could silently drift from both
-// (issue #108's own postmortem on how 'theme' almost stayed out of sync here).
+// under two kinds is still counted/returned once. An unrecognized kind falls back to 'all'.
+// Exported so tests can compare the kind array against query.ts's KINDS without a third copy.
 const docsWhere = (term: string, kind: string) => sql`(
     ${term} = '' or exists (
       select 1 from doc_terms t where t.doc_id = d.id and t.term = ${term}
@@ -344,29 +278,9 @@ export const docsFor = async (person: Person, q: DocsQuery) => {
   return { total: count.rows[0].total, docs: docs.rows, outlets }
 }
 
-// Buckets count backward from now() in fixed bucket_days steps (i = 0 is the most
-// recent bucket, open-ended at 'infinity' rather than now(), so this never needs
-// date_trunc and sidesteps the ISO-week-vs-rolling-week ambiguity; bucket=week is a
-// rolling 7-day window, not a Monday-aligned one. The newest bucket has no upper
-// bound because scopeCte likewise has none on published_at: a future-dated doc
-// (source clock skew) still counts in docsFor's total, so it must land somewhere
-// here too, or the sum-of-buckets invariant breaks. The oldest bucket is clamped to
-// the window edge, so buckets exactly partition the same window docsFor uses for
-// the same params.
-//
-// The matching docs are counted once and then joined to the bucket series, instead of
-// joining the series to `about` and testing each doc against every bucket's range: that
-// cross join is |about| x |buckets| rows before the range filter cuts them, up to 365
-// buckets wide (issue #46).
-//
-// Each doc's bucket is therefore computed arithmetically, and the expression has to
-// reproduce the ranges above exactly. Bucket i is [now() - (i+1)*bucket_days,
-// now() - i*bucket_days), so a doc of age `a` days belongs to ceil(a / bucket_days) - 1:
-// a timestamp landing exactly on a boundary falls in the newer bucket, as the half-open
-// interval did. greatest(0, ...) puts future-dated docs (age <= 0) in the newest bucket,
-// which is what the open upper bound did. least(last_i, ...) is the oldest-edge clamp:
-// scopeCte already bounds age at `days`, so it only matters at the last bucket's exact
-// edge, where it keeps the doc inside the series rather than off the end of it.
+// Buckets count backward from now() in fixed steps; i = 0 is the most recent, open-ended so
+// future-dated docs land somewhere and the sum-of-buckets invariant holds. bucket=week is a
+// rolling 7-day window. Each doc's bucket: ceil(age / bucket_days) - 1; greatest/least clamp.
 const timelineQuery = (person: Person, q: TimelineQuery) => {
   const bucketDays = q.bucket === 'day' ? 1 : 7
   return sql`
@@ -401,21 +315,13 @@ const timelineQuery = (person: Person, q: TimelineQuery) => {
   order by b.bucket_start asc`
 }
 
-// Stays a bare array on purpose: lean narrows which docs count toward each bucket
-// (via the same resolveScope as every other route), but outlets/basis are not
-// surfaced here, since that would require wrapping this array in an object.
+// lean narrows which docs count toward each bucket via resolveScope, but outlets/basis are
+// not surfaced here since that would require wrapping the array in an object.
 export const timelineFor = async (person: Person, q: TimelineQuery) => (await run<TimelineRow>(timelineQuery(person, q))).rows
 
-// Cross-person on purpose: scopeCte's `about` scopes to a single person_id, which
-// does not fit a matrix spanning every tracked person, so this joins doc_persons/persons
-// directly instead. avg()/count() ignore SQL null automatically, so untoned (non-GDELT)
-// docs contribute nothing to either aggregate without a source/kind check.
-//
-// `tone is not null` is therefore free rather than a behaviour change (issue #47): it only
-// removes rows both aggregates already ignore, so avg and n are untouched, and a group can
-// only survive `count(d.tone) >= min` when min >= 1 (parseToneQuery's floor) if it still holds
-// at least one toned row. It cuts the rows joined and hashed from 3847 to 1748 on the
-// benchmark corpus, 22.5 ms -> 14.3 ms, with the same buffer count.
+// Cross-person: avg()/count() ignore SQL null, so untoned docs contribute nothing without a
+// source filter. `tone is not null` removes rows both aggregates already ignore, so counts are
+// unchanged; it only drops a group that holds no toned row.
 const toneQuery = (q: ToneQuery) => sql`
   select p.id as person_id, d.domain as domain,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as n
@@ -437,11 +343,9 @@ export const toneFor = async (q: ToneQuery) => {
   return { persons: people.rows, domains, cells: cells.rows }
 }
 
-// Scoped to one person, unlike toneQuery (cross-person by construction): testimony's
-// PK already carries person_id, so an inner join on (doc_id, person_id, method) can never
-// leak another person's score for a shared doc into this scope. The inner join to
-// doc_testimony (not left join) is what makes an unscored pair contribute nothing anywhere,
-// including no zero-n placeholder row, per the spec.
+// Scoped to one person: testimony's PK carries person_id, so the inner join on
+// (doc_id, person_id, method) never leaks another person's score for a shared doc.
+// Inner join (not left join) means an unscored pair contributes nothing anywhere.
 const testimonyScopeCte = (person: Person, q: TestimonyQuery) => sql`
   scope as (
     select d.source, d.domain, dt.score
@@ -453,22 +357,10 @@ const testimonyScopeCte = (person: Person, q: TestimonyQuery) => sql`
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
   )`
 
-// One statement for what overall, by_source and by_domain used to take three. All three
-// rebuilt the same scope join (doc_persons -> docs -> doc_testimony) and aggregated it at a
-// different level; GROUPING SETS walks that scope once and emits all three levels from a
-// single aggregate node. `materialized` is spelled out because the outer select reads the
-// result three times and computing it exactly once is the point.
-//
-// grouping(source)/grouping(domain) are what keep a subtotal apart from a genuine null: the
-// by_source subtotal carries domain = null, and so does a real (domain is null, source) group
-// -- the fixture has one. Selecting by `domain is null` alone would merge the two.
-//
-// The three level filters are deliberately asymmetric and stay exactly as they were: overall
-// has no count floor, by_source floors at 1 (a group whose scores are all null contributes no
-// row), and only by_domain sees the caller's min and drops null domains.
-//
-// json_agg carries its own order by, so the arrays come back in the order the split
-// statements' `order by` produced; the driver parses the json into the same row objects.
+// GROUPING SETS walks scope once for all three levels. `materialized` is spelled out since the
+// outer select reads it three times. grouping(source)/grouping(domain) distinguish a subtotal
+// from a genuine null. Level filters are asymmetric by design: overall has no floor, by_source
+// floors at 1, only by_domain sees the caller's min.
 const testimonySummaryQuery = (person: Person, q: TestimonyQuery) => sql`
   with ${testimonyScopeCte(person, q)},
   summary as materialized (
@@ -491,7 +383,6 @@ const testimonySummaryQuery = (person: Person, q: TestimonyQuery) => sql`
 type TestimonyOverallRow = { score: number | null; n: number }
 type TestimonyBySourceRow = { source: string; score: number; n: number }
 type TestimonyByDomainRow = { domain: string; source: string; score: number; n: number }
-// One row: overall as a json object, the two lists as json the driver already parses.
 type TestimonySummary = { overall: TestimonyOverallRow | null; by_source: TestimonyBySourceRow[]; by_domain: TestimonyByDomainRow[] }
 
 export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
@@ -505,15 +396,10 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
   }
 }
 
-// Two disjoint windows (recent, then baseline immediately before it), instead of
-// reusing scopeCte twice, so a doc is never double-counted into both windows.
-//
-// c_recent/c_baseline are count(*) (issue #47): same argument as graphQuery's term_p, with
-// recent_about/baseline_about in place of `about` -- doc_persons' PK with person_id fixed,
-// joined to a scope of docs.id, is one row per doc, and doc_terms' PK is one row per
-// (doc, term, kind). 13.5 ms -> 11.2 ms on the benchmark corpus. `kind` closes the order by
-// for the same reason it closes graphQuery's: (lift, term) does not separate two kinds of one
-// term text, and count(*) lets the planner pick a different arbitrary order than distinct did.
+// Two disjoint windows (recent, then the baseline immediately before it) so a doc is never
+// double-counted. c_recent/c_baseline are count(*) for the same reason as graphQuery's term_p.
+// `kind` closes the order by because (lift, term) alone does not break ties between two kinds
+// of one term text.
 const risingQuery = (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)
@@ -562,9 +448,7 @@ type CandidateRow = { name: string; count: number; sources: number; previous: nu
 type CandidateSampleRow = { name: string; id: number; source: string; text: string }
 export type Candidate = CandidateRow & { samples: Omit<CandidateSampleRow, 'name'>[] }
 
-// Cross-person by construction: candidates are names nobody tracks yet, so there is no
-// person_id to scope by. `previous` is the window of the same length right before this
-// one, so a caller can see what is rising without a second request.
+// Cross-person: candidates are names nobody tracks, so there is no person_id to scope by.
 const candidatesQuery = (q: CandidatesQuery) => sql`
   with recent as (
     select c.name, count(distinct c.doc_id)::int as count, count(distinct d.source)::int as sources
@@ -609,10 +493,8 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
   return { days: q.days, baseline: q.baseline, terms: rows, outlets }
 }
 
-// links stays a second statement on purpose: its `any(ids)` term list is the output of the
-// first one, so folding it in would mean recomputing the ranking to feed itself. It is also
-// the cheap half of the route (see docs/perf-baseline.md) and is skipped entirely when the
-// graph has no nodes.
+// links stays a second statement: its `any(ids)` term list is the output of the first one,
+// so folding it in would mean recomputing the ranking to feed itself.
 export const graphFor = async (person: Person, q: GraphQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
   const { rows } = await run<GraphAggregates>(graphQuery(person, q))
@@ -634,9 +516,8 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
   }
 }
 
-// Cross-person by construction, like toneSql: unlike scopeCte, `scope`/`tracked` here carry no
-// single person_id, since both sides share them (issue #93's cost-saving rationale -- the shared
-// PMI universe n/term_all is computed once, not once per side).
+// Cross-person: scope/tracked carry no single person_id; both sides share them so the shared
+// PMI universe (n, term_all) is computed once rather than once per side.
 const compareScopeCte = (q: CompareQuery) => {
   const { domain } = resolveScope(q.domain, q.lean)
   return sql`
@@ -651,19 +532,10 @@ const compareScopeCte = (q: CompareQuery) => {
   )`
 }
 
-// One side's about/term_p/scored/top-N CTEs, parameterized by the person and that person's
-// own nameTokens array -- inherently per-person, since a term can be A's own name and
-// legitimate vocabulary for B (spec §3), so these cannot be shared the way
-// scope/tracked/n/term_all are.
-//
-// Deliberately not capped by `limit` here: every term the person's docs carry in scope
-// gets an exact count/pmi/tone, with only the name-word exclusion applied, same as graphQuery's
-// term_p. `limit` only governs top_count/top_pmi, i.e. which keys enter the union below --
-// the exact figure for a unioned key is always looked up uncapped, in `scored_<side>`.
-//
-// Both top_count and top_pmi are computed for every call, per spec: dropping either would
-// silently exclude "loud but not sticky" or "rare but sticky" words from one side. pmi *
-// ln(1 + count) is sort=pmi's pinned formula (graphQuery), reused unchanged.
+// Per-person CTEs: a term can be A's own name and valid vocabulary for B, so these cannot be
+// shared. Not capped by `limit`: every term gets an exact figure; limit only governs which keys
+// enter the union. Both top_count and top_pmi are always computed to avoid silently excluding
+// "loud but not sticky" or "rare but sticky" words from either side.
 const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
   const names = nameTokens(person)
   const about = sql.raw(`about_${side}`)
@@ -696,16 +568,10 @@ const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
   )`
 }
 
-// `keys` is the union of up to four (term, kind) lists across both sides -- UNION (not UNION
-// ALL) dedupes on its own. `unioned` then looks up the exact, uncapped figure for every key on
-// each side via a left join, so a key selected only from the other side's lists comes back
-// null on this one, not a dropped row -- the whole point of the union (spec §3): a null must
-// be measured, never "outside the top list".
-//
-// is_name_a/is_name_b are computed against the key text directly (isName), not against
-// scored_a/scored_b: a term can be one side's own name word and therefore entirely absent
-// from that side's term_p (excluded there by construction), yet still need to read "name"
-// rather than null on this response.
+// `keys` dedupes the union; `unioned` looks up the exact figure via left join so a key absent
+// from one side comes back null rather than dropped — a null is a measured absence, not a gap.
+// is_name_a/is_name_b are computed on the key text: a term excluded from term_p must still read
+// "name" on the response.
 const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
   with ${compareScopeCte(q)},
   n as materialized (select count(*)::float8 as total from tracked),
@@ -743,9 +609,7 @@ const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
-// Not nested under /people/:id, like toneFor: it spans two specific people, neither of which
-// is "the" resource. Own function, not two graphFor calls: the shared PMI universe (n,
-// term_all) would otherwise be recomputed once per side, exactly the cost issue #93 avoids.
+// Not nested under /people/:id: spans two specific people, neither of which is "the" resource.
 export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   const { rows } = await run<CompareAggregates>(compareQuery(a, b, q))
   const { about_a, about_b, terms } = rows[0]
@@ -762,9 +626,8 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   }
 }
 
-// The exact builders the routes run, exported read-only so `pnpm bench` can put each one
-// through EXPLAIN (ANALYZE, BUFFERS) with representative parameters. Nothing here changes
-// what a route executes; it is the same function the handlers above call.
+// The exact builders the routes run, exported so `pnpm bench` can put each one through
+// EXPLAIN (ANALYZE, BUFFERS).
 export const queries = {
   graph: graphQuery,
   links: linksQuery,
@@ -780,9 +643,8 @@ export const queries = {
   compare: compareQuery,
 } as const
 
-// The text each builder emits. A builder numbers its placeholders by the statement's shape
-// alone, never by the values bound, so what a sample call renders is byte-for-byte what the
-// handler sends (test/graph.test.ts pins it), and a test can still read the SQL.
+// The text each builder emits. Numbering follows statement shape, not values, so what a
+// sample call renders is byte-for-byte what the handler sends (test/graph.test.ts pins it).
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
 const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0 }

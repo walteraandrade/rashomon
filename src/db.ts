@@ -11,21 +11,15 @@ export type Db = {
   close: () => Promise<void>
 }
 
-// Same shape as query.ts's `int` (default, floor, ceiling) without importing it: db.ts sits
-// below the query layer and must not depend on it. Exported so every knob that reads the
-// environment (pool size, statistics threshold, write batch sizes) clamps the same way.
-// It sits above poolConfig because `base` below calls poolConfig at module load.
+// Same shape as query.ts's `int` without importing it (db.ts is below the query layer).
 export const clampEnv = (v: string | undefined, d: number, lo: number, hi: number) => {
   const n = Number.parseInt(v ?? '', 10)
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
 }
 
-// Any sslmode in the URL would override the ssl option below, so it is stripped. A non-local
-// connection is verified against PG_SSL_CA, the server's CA certificate (PEM text), added to
-// Node's default trust store rather than replacing it: POSTGRES_URL from the Vercel Supabase
-// integration can point at the pooler host, not db.<ref>.supabase.co, and the pooler may serve
-// a publicly-signed certificate that PG_SSL_CA alone would fail to verify. Without PG_SSL_CA
-// set, poolConfig refuses to build a config rather than connect with an unverified chain.
+// sslmode stripped (would override ssl option). Non-local connections are verified against
+// PG_SSL_CA (the server's CA certificate, added to Node's default trust store). Without it,
+// poolConfig refuses to build a config rather than connect with an unverified chain.
 export const poolConfig = (url: string): pg.PoolConfig => {
   const parsed = new URL(url)
   parsed.searchParams.delete('sslmode')
@@ -58,15 +52,12 @@ const embedded = (dir: string): Db => {
   }
 }
 
-// A managed Postgres URL wins: it is the only shape that survives a read-only, short-lived
-// serverless filesystem. POSTGRES_URL is what the Vercel/Supabase integration injects.
-// Without either, PGlite runs embedded from DATA_DIR ('memory://' is the tests' database).
+// DATABASE_URL / POSTGRES_URL wins over embedded PGlite; 'memory://' for tests.
 const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
 
 const base: Db = url ? remote(url) : embedded(process.env.DATA_DIR ?? './data/pg')
 
-// With PERF unset this is the driver itself, untouched; PERF=1 swaps in a proxy that times
-// query/exec into the current request's counters (src/perf.ts).
+// PERF=1 swaps in a proxy that times query/exec into the current request's counters.
 export const db: Db = perfEnabled ? instrument(base) : base
 
 export const schema = `
@@ -135,25 +126,20 @@ export const schema = `
 
 export const migrate = () => db.exec(schema)
 
-// Table names cannot be bound as statement parameters, so the maintenance surface is this
-// fixed list and nothing a caller passes can widen it.
+// Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
 export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony'] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 
 // How many new docs an ingest must write before its statistics refresh is worth the pause.
 export const analyzeMinDocs = () => clampEnv(process.env.ANALYZE_MIN_DOCS, 200, 1, 1_000_000)
 
-// Targeted `analyze`, never a database-wide one, and never from a request: it is called only
-// by `pnpm ingest` and `pnpm reindex`, the processes that already own DATA_DIR. PGlite allows
-// a single process per directory, so a second maintenance process cannot exist while the
-// server is up; the policy is structural, not a lock.
+// Targeted analyze, never database-wide; only ingest and reindex call this (they own DATA_DIR).
 export const analyzeTables = async (tables: readonly AnalyzedTable[] = ANALYZED_TABLES) => {
   const targets = tables.filter((t) => ANALYZED_TABLES.includes(t))
   await targets.reduce<Promise<void>>(async (acc, t) => (await acc, void (await db.exec(`analyze ${t}`))), Promise.resolve())
   return targets
 }
 
-// Gate for the ingest path: a handful of new docs does not move the planner's estimates, so
-// only a large write pays for the refresh. Returns what it analyzed, so callers can log it.
+// A handful of new docs does not move the planner's estimates; skip if below the threshold.
 export const analyzeAfterWrite = async (written: number): Promise<readonly AnalyzedTable[]> =>
   written >= analyzeMinDocs() ? analyzeTables() : []

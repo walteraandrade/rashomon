@@ -1,13 +1,5 @@
-// The documents card (#docsDialog), shared by all three figures.
-//
-// It used to be private to figures/atlas.ts, which was fine while the atlas was the only thing
-// that could open it. It cannot stay there now that figure 2 opens an outlet's texts and figure
-// 3 opens a word's on both sides at once: each figure has its own sentence, so a card owned by
-// figure 1 would answer with figure 1's recorte and label it with figure 1's person -- a lie
-// whenever the sentences disagree. So the card lives here, knows nothing about any figure, and
-// takes everything it needs in the request: what to call itself, and one or two sides to fetch.
-//
-// It is still the only path to GET /docs, and still opens on a deliberate click alone.
+// #docsDialog, shared by all three figures. Knows nothing about any figure; takes kicker, title
+// and one or two sides in each request. The only path to GET /docs; opens on deliberate click only.
 
 import * as api from './api.js'
 import { paintDocs, paintDocsError, paintDocsHead, paintDocsLoading } from './render.js'
@@ -16,20 +8,16 @@ import { fromScope, readScope } from './state.js'
 export type DocsSide = { personId: string; personName: string; query: URLSearchParams; label?: string }
 export type DocsRequest = { kicker: string; title: string; sides: DocsSide[] }
 
-// Guarded, unlike the figures' own $: everything here runs after an await, and a page (or a
-// test) can have moved on by then. A missing document means there is nothing left to paint.
+// Guarded: everything here runs after an await; a missing element means the page moved on.
 const $ = (id: string): any => (typeof document === 'undefined' ? null : document.getElementById(id))
 
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
-// Below this width the card stops floating: a window the reader has to drag around a phone is
-// worse than the centred sheet, so there the dialog goes back to showModal().
+// Below FLOATING_MIN the card falls back to showModal() instead of floating.
 const FLOATING_MIN = 760
 const floating = () => typeof window !== 'undefined' && !!window.matchMedia?.(`(min-width: ${FLOATING_MIN}px)`).matches
 
-// Where the card sits while floating, in viewport pixels, plus what it is showing and in which
-// of its two shapes. The spot survives a close, so a reader who parked the card out of the way
-// finds it there again; it is clamped on every open in case the window shrank in between.
+// spot persists across closes so the card reopens where the reader left it.
 let spot: { x: number; y: number } | null = null
 let isFloating = false
 let request: DocsRequest | null = null
@@ -38,8 +26,7 @@ let controller: AbortController | null = null
 
 export const isOpen = () => !!$('docsDialog')?.open
 
-// Bumps the id every open and close, so a response that lands after the reader moved on is
-// dropped rather than painted over whatever is on screen now.
+// Bumps requestId so responses from prior opens are dropped.
 const cancel = () => {
   ++requestId
   controller?.abort()
@@ -64,8 +51,7 @@ const clamp = () => {
   dialog.style.top = `${spot.y}px`
 }
 
-// `wide` is the two-sided card: the ruler's reading needs room for two columns, so the floating
-// card grows rather than stacking them, which would have buried the comparison.
+// `wide` is the two-sided card for the ruler's two-column comparison.
 const show = (wide: boolean) => {
   const dialog = $('docsDialog')
   if (!dialog) return
@@ -80,10 +66,7 @@ const show = (wide: boolean) => {
   }
   if (!dialog.open) {
     if (float) {
-      // A <dialog> focuses its first control on open. For the modal that is right; for a card
-      // that floats over the figure while the reader goes on picking words it is not -- it would
-      // take the keyboard away from the map on every click. So the floating card gives focus
-      // straight back to whatever had it.
+      // Floating card returns focus to prevent stealing keyboard from the map on every click.
       const had = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null
       dialog.show?.()
       const now = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null
@@ -96,9 +79,7 @@ const show = (wide: boolean) => {
   if (float) clamp()
 }
 
-// Dragging by the head. Pointer capture keeps the moves coming when the cursor outruns the
-// card, and the grip is the head minus its close button, so that one control still takes its
-// own clicks.
+// Pointer capture keeps moves coming when the cursor outruns the card.
 const startDrag = (e: PointerEvent) => {
   const dialog = $('docsDialog')
   const target = e.target as Element | null
@@ -126,15 +107,13 @@ const startDrag = (e: PointerEvent) => {
   e.preventDefault()
 }
 
-// One side of the card: a memo hit paints straight from the scope, so re-opening the same word
-// after a sort change costs nothing. A miss shows the loading copy first.
+// Memo hit paints from scope; miss shows loading copy first.
 const fetchSide = async (side: DocsSide, signal: AbortSignal) => ({
   label: side.label ?? null,
   data: await fromScope('docs', side.personId + '?' + side.query, () => api.loadDocs(side.personId, side.query, signal)),
 })
 
-// The one path to GET /docs. `req.sides` is one entry for a single reading (a word, a person,
-// an outlet) and two for the ruler, which asks the same word of both people at once.
+// req.sides is one entry for a word/person/outlet, two for the ruler (both people at once).
 export const open = async (req: DocsRequest) => {
   if (!$('docs')) return
   const id = cancel()
@@ -153,13 +132,12 @@ export const open = async (req: DocsRequest) => {
   }
 }
 
-// Wired once, by app.ts, because the card is page-wide: the close button, the modal backdrop,
-// the grip, and the resize that swaps its shape when the window crosses FLOATING_MIN.
+// Wired once by app.ts: close button, backdrop, grip, and the resize that swaps floating shape.
 export const mountDocsCard = () => {
   const dialog = $('docsDialog')
   if (!dialog) return
   $('docsClose')?.addEventListener('click', () => close())
-  // A click on the backdrop lands on the dialog element itself, never on its children.
+  // Backdrop click lands on the dialog element itself, never on its children.
   dialog.addEventListener('click', (e: MouseEvent) => {
     if (e.target === dialog) close()
   })

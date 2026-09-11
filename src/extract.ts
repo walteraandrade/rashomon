@@ -1,16 +1,9 @@
 import type { Person, Phrases, RawDoc, Term } from './types.js'
 
-// The last three lines are the words a full article carries and a headline never did, added
-// when feeds started syndicating whole bodies (docs/sources-research.md, "Third pass"). Dates
-// are the bulk of it: `setembro` ranked 6th in Lula's atlas purely as a dateline, and the
-// weekday tokens climbed with it -- "terca-feira" tokenizes to `terca` plus `feira`.
-//
-// Five obvious-looking neighbours are deliberately absent, because a stopword also forbids a
-// phrase (see `holdsStopword`, and note phrases.ts measures adjacency *after* this set is
-// dropped): `segunda` would kill "segunda turma", the STF chamber; `marco` "marco aurelio";
-// `janeiro` "rio de janeiro"; `segundo` "segundo turno"; `dois` "dois irmaos das missoes".
-// Each was measured against the corpus rather than assumed -- the ones kept here cost at most
-// one junk phrase row apiece.
+// Five obvious neighbours are deliberately absent, because a stopword also forbids a phrase
+// (see `holdsStopword`): `segunda` would kill "segunda turma" (STF chamber); `marco` "marco
+// aurelio"; `janeiro` "rio de janeiro"; `segundo` "segundo turno"; `dois` "dois irmaos das
+// missoes".
 const stopwords = new Set(
   `a o e os as um uma uns umas de do da dos das em no na nos nas por para com sem sob sobre entre ate apos ante contra desde perante
    que quem qual quais onde quando como porque pois mas porem todavia contudo entao logo nem ou seja
@@ -45,9 +38,7 @@ export const hashtags = (text: string): Term[] =>
 const keepWord = (w: string) =>
   w.length >= 4 && !/^\d+$/.test(w) && !/(.)\1\1/.test(w) && !/^(ha|he|hu|hi|rs|ks)+$/.test(w) && !stopwords.has(w)
 
-// The kept tokens in reading order, with their repeats: `words` throws the order away, but
-// collocations are exactly what the order says, so both are built from this one tokenizer and
-// cannot disagree about what counts as a word.
+// Reading order is preserved so collocations match the adjacency wordPairs measures.
 export const contentWords = (text: string): string[] =>
   normalize(decodeEntities(text).replace(/https?:\/\/\S+/g, ' ').replace(/[#@]\S+/g, ' '))
     .split(/[^a-z0-9]+/)
@@ -55,10 +46,8 @@ export const contentWords = (text: string): string[] =>
 
 export const words = (text: string): Term[] => contentWords(text).map((term) => ({ term, kind: 'word' }))
 
-// The pairs a capitalized run already claims. Without this the two phrase paths would spell one
-// entity two ways -- "alexandre de moraes" from the run, "alexandre moraes" from the pair, since
-// "de" is a stopword -- and the map would carry both as separate terms. The run wins: it keeps
-// the particles, which is how anyone would write the name.
+// The pairs a capitalized run already claims, so a name is not spelled two ways ("alexandre
+// de moraes" from the run and "alexandre moraes" from the pair). The run wins.
 const namePairs = (text: string): Set<string> =>
   new Set(
     properNouns(text).flatMap(({ term }) => {
@@ -67,11 +56,9 @@ const namePairs = (text: string): Set<string> =>
     }),
   )
 
-// Adjacency is measured *after* stopwords are dropped, so "primeiro do turno" feeds the same
-// pair as "primeiro turno". A word pairs with null when it is the text's last, or when the pair
-// belongs to a name: either way the row still stands for that word's own occurrence, which is
-// the only reason the null row exists -- src/phrases.ts counts unigrams from the w1 column, so
-// suppressing a pair must never suppress the word.
+// Adjacency is measured after stopwords are dropped. A word gets a null w2 when it is the
+// text's last or when the pair belongs to a name; the null row still records that word's
+// occurrence (phrases.ts counts unigrams from the w1 column).
 export const wordPairs = (text: string): { w1: string; w2: string | null }[] => {
   const ws = contentWords(text)
   const named = namePairs(text)
@@ -99,33 +86,25 @@ const claimed = (ws: readonly string[], text: string, lexicon: Phrases): Set<num
     const needle = term.split(' ').filter(keepWord)
     for (const at of runsAt(ws, needle)) needle.forEach((_, j) => marks.add(at + j))
   }
-  // wordPairs has already nulled the pairs a capitalized run claims, so the two loops cannot
-  // disagree about who owns a position.
+  // Which pairs a name run claimed have already been nulled by wordPairs, so there is no overlap.
   wordPairs(text).forEach(({ w1, w2 }, i) => {
     if (w2 && lexicon.has(`${w1} ${w2}`)) marks.add(i), marks.add(i + 1)
   })
   return marks
 }
 
-// The words of a text that no phrase swallowed. Positional, not by word: a text saying
-// "a reforma avança; a reforma tributária passa" still yields "reforma" on its own, because one
-// of its two occurrences is outside the phrase. A word only leaves when every occurrence of it
-// in that text is inside a phrase -- doc_terms records presence, so that is exactly the question.
+// Words not swallowed by any phrase. Positional: "a reforma avança; a reforma tributária passa"
+// still yields "reforma" because one of its two occurrences is outside the phrase. A word only
+// leaves when every occurrence of it in the text is inside a phrase.
 export const standaloneWords = (text: string, lexicon: Phrases = new Set<string>()): Term[] => {
   const ws = contentWords(text)
   const marks = claimed(ws, text, lexicon)
   return ws.flatMap((term, i) => (marks.has(i) ? [] : [{ term, kind: 'word' as const }]))
 }
 
-// Proper nouns need no lexicon: capitalization is the writer's own mark that the run is one
-// name. Collocations need one, so a text yields none until `pnpm reindex` has built it.
-//
-// The phrase replaces its words rather than sitting beside them: "primeiro turno" is one thing
-// said, and letting it compete with "primeiro" and "turno" for the same map spends three slots
-// on one idea. The cost is that a word's document count now means "documents where it appears
-// at least once outside every phrase", which is why `pnpm reindex` has to be run whole after
-// the lexicon changes -- half the corpus on the old rule and half on the new one would make
-// the counts of both incomparable.
+// Proper nouns need no lexicon; collocations need one. A phrase replaces its words so
+// "primeiro turno" counts as one thing said, not three slots. A word's document count means
+// "documents where it appears at least once outside every phrase".
 export const terms = (text: string, extra: Term[] = [], lexicon: Phrases = new Set<string>()): Term[] =>
   uniq([...hashtags(text), ...standaloneWords(text, lexicon), ...properNouns(text), ...collocations(text, lexicon), ...extra], (t) => `${t.kind}:${t.term}`)
 
@@ -138,10 +117,8 @@ export const decodeEntities = (s: string) =>
 
 const aliasRe = (alias: string) => new RegExp(`(?<![a-z0-9])${escapeRe(normalize(alias))}(?![a-z0-9])`, 'g')
 
-// Longer aliases claim their span first, so "Flávio Bolsonaro" cannot also feed
-// the bare "Bolsonaro" alias of another person. Matched text is blanked out.
-// A person's `exclude` entries are aliases owned by nobody: "Ciro Nogueira" is
-// blanked before the bare "Ciro" of Ciro Gomes gets a look.
+// Longer aliases claim their span first, so "Flávio Bolsonaro" cannot also feed the bare
+// "Bolsonaro" alias of another person. `exclude` entries are aliases owned by nobody.
 export const personsMentioned = (text: string, persons: Person[]): Person[] => {
   const aliases = persons
     .flatMap((person) => [
@@ -174,12 +151,9 @@ export const domainOf = (uri: string | undefined): string | undefined => {
   }
 }
 
-// Candidate discovery (issue #32). Cheap and noisy on purpose: a run of two or more
-// capitalized words, particles allowed in between ("Alexandre de Moraes"), that does
-// not open a sentence, since the first word of a sentence is capitalized for grammar,
-// not because it is a name. Only . ! ? end a sentence: a colon, quote or dash breaks
-// a run but does not start a sentence, so "STF: Alexandre de Moraes manda" keeps Moraes.
-// gkg docs skip the heuristic and use the V1Persons column.
+// Cheap, noisy heuristic: a run of two or more capitalized words, particles allowed in between,
+// that does not open a sentence (the first word of a sentence is capitalized for grammar, not
+// because it is a name). gkg docs skip this and use the V1Persons column.
 const particles = new Set(['de', 'da', 'do', 'das', 'dos'])
 const sentenceSplit = /[.!?\n\r]+/
 const runBreakers = /[,:;|—–"“”«»()\[\]]/g
@@ -215,40 +189,32 @@ const tidy = (name: string) => normalize(name).replace(/\s+/g, ' ').trim()
 
 export const capitalizedRuns = (text: string): string[] => rawCapitalizedRuns(text).map(tidy)
 
-// Shouting is not capitalization. A post written entirely in capitals makes every word look
-// like a name, so one run swallows the sentence: "FALTAM 29 DIAS PARA LULA NO PRIMEIRO TURNO"
-// became a single "name", and since a phrase replaces its words that one run deleted every
-// word in the post. A run has to carry a lowercase letter somewhere to be a name here.
+// A run entirely in capitals is shouting, not a name: one all-caps post could swallow a whole
+// sentence as a single "name" and, since a phrase replaces its words, delete every word in it.
 const shouted = (run: string) => run === run.toUpperCase()
 
-// A name is short. Four words past the particles is already generous; a longer run is a
-// title-cased headline or a list of links, not a person or a place.
+// Four non-particle words is already generous; a longer run is a title-cased headline or a
+// list of links, not a name.
 const MAX_NAME_WORDS = 4
 
-// A capitalized stopword is grammar or page furniture, never part of a name: "PR Os",
-// "Brasil O", "Whatsapp Agora" are all runs the raw heuristic is happy to produce.
+// A capitalized stopword is grammar, never part of a name: "PR Os", "Brasil O", "Whatsapp Agora".
 const holdsStopword = (run: string) => tidy(run).split(' ').some((w) => !particles.has(w) && stopwords.has(w))
 
 // Same runs /candidates discovers, but read as terms rather than as people to track, and held
-// to a stricter bar than that queue is. /candidates is a human review list where noise costs a
-// glance; here a run becomes vocabulary *and* silences the words inside it, so the three guards
-// above are the price of that power. discoverNames still sees the raw runs.
-//
-// Untracked names are the point: "Alexandre de Moraes" is a phrase in the map whether or not
-// anyone ever adds him to seed.json. A person's own name is dropped per person, at query time,
-// by graph.ts's name-token filter -- not here, since one text can name several people.
+// to a stricter bar. /candidates is a human review list; here a run becomes vocabulary and
+// silences the words inside it. Untracked names are included: "Alexandre de Moraes" is a
+// phrase in the map whether or not he is in seed.json. A person's own name is dropped at
+// query time by graph.ts's name-token filter.
 export const properNouns = (text: string): Term[] =>
   rawCapitalizedRuns(text).flatMap((run) => {
-    // keepWord, so this counts exactly the words contentWords keeps: namePairs has to be able
-    // to find the run as a consecutive stretch of the token sequence, or it suppresses nothing.
+    // keepWord count matches contentWords so namePairs can find the run as a consecutive stretch.
     const words = tidy(run).split(' ').filter((w) => !particles.has(w) && keepWord(w))
     const usable = words.length >= 2 && words.length <= MAX_NAME_WORDS
     return usable && !shouted(run) && !holdsStopword(run) ? [{ term: tidy(run), kind: 'phrase' as const }] : []
   })
 
-// Names that already match an alias (or an `exclude` entry) exactly are not candidates:
-// seed.json stays the curated layer on top of discovery. Exact, not containment, so
-// "Michelle Bolsonaro" still surfaces while only a bare "Bolsonaro" is tracked.
+// Names that already match an alias or `exclude` entry exactly are not candidates: seed.json
+// stays the curated layer. Exact, not containment, so "Michelle Bolsonaro" still surfaces.
 export const discoverNames = (doc: Pick<RawDoc, 'source' | 'text' | 'extraNames'>, persons: Person[]): string[] => {
   const known = new Set(persons.flatMap((p) => [...p.aliases, ...(p.exclude ?? [])]).map((a) => normalize(a).replace(/\s+/g, ' ').trim()))
   const raw = doc.source === 'gkg' ? (doc.extraNames ?? []).map((n) => normalize(n).replace(/\s+/g, ' ').trim()) : capitalizedRuns(doc.text)

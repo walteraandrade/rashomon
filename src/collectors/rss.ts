@@ -3,18 +3,7 @@ import type { Collector, RawDoc, Source } from '../types.js'
 import { headers, headerLength, overLimit, readCapped, MAX_RESPONSE_BYTES } from '../http.js'
 import { decodeEntities, domainOf } from '../extract.js'
 
-// The politics section, not the outlet's front page, wherever one exists: only docs naming a
-// tracked person get doc_terms rows, so a general feed spends most of its items on nobody.
-// Measured 2026-09-09 (docs/sources-research.md): g1's front page returned 100 items, 18 of them
-// naming someone tracked, at 2607 chars each; the politics feed returned 100 items, 89 of them
-// naming someone, at 4392 chars -- it carries the article body, not just the headline. Folha's
-// 'em cima da hora' went from 26 to 77 items naming someone at the same length.
-//
-// The six below were added for `content:encoded`, the whole article a publisher syndicates on
-// purpose (docs/sources-research.md, "Third pass"). Four of them are the outlet's whole site
-// because that outlet publishes no politics feed at all -- each one checked and written down in
-// that same page, "Fourth pass". g1 and Folha's own sections fill `description` instead, which
-// `body()` already prefers when it is the longer of the two.
+// Politics sections where available; `content:encoded` feeds added for outlets that publish no politics section.
 const feeds = [
   'https://g1.globo.com/rss/g1/politica/',
   'https://feeds.folha.uol.com.br/poder/rss091.xml',
@@ -38,12 +27,7 @@ const asArray = <T>(x: T | T[] | undefined): T[] => (x === undefined ? [] : Arra
 const text = (v: unknown) => (typeof v === 'object' && v !== null ? String((v as any)['#text'] ?? '') : String(v ?? ''))
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-// `content:encoded` is the element a publisher uses to syndicate the whole article, and it is
-// the only place in this project a full body ever comes from: nothing here fetches an article
-// page. Nine of the feeds already collected fill it (see docs/sources.md), at 15x to 62x the
-// characters of `description`, and the experiment in docs/sources-research.md shows characters
-// per document is what moves the graph. `description` still wins when it is the longer of the
-// two, since some feeds put only a caption or an embed in `content:encoded`.
+// `content:encoded` is the full article body; description wins only when it is longer.
 export const body = (item: any) => {
   const encoded = stripHtml(item['content:encoded'])
   const description = stripHtml(item.description)

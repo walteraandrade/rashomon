@@ -11,9 +11,8 @@ const feeds = [
   'https://apublica.org/feed/',
   'https://www.aosfatos.org/noticias/feed/',
   'https://lupa.uol.com.br/feed',
-  // The only feed found on 2026-09-10 that still puts the article body in `description`
-  // (1949 chars a item against the family's 100-400), and the right-of-centre half of the
-  // corpus is the thin one. See docs/sources-research.md.
+  // Revista Oeste is the nicho feed that puts the article body in `description`.
+  // See docs/sources-research.md.
   'https://revistaoeste.com/feed/',
 ]
 

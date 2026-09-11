@@ -1,11 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-// Opt-in, read once at import: when PERF is unset `db` stays the bare PGlite instance and
-// no middleware is registered, so the disabled path costs nothing and cannot alter a payload.
+// Opt-in at import: when PERF is unset, db stays bare and no middleware is registered.
 export const perfEnabled = process.env.PERF === '1' || process.env.PERF === 'true'
 
-// The per-request log line is the noisy half of the instrumentation; PERF_LOG=0 keeps the
-// counters and headers while silencing it, which is how `pnpm bench` runs.
+// PERF_LOG=0 keeps counters and headers but silences the per-request line (used by pnpm bench).
 export const perfLogEnabled = perfEnabled && process.env.PERF_LOG !== '0'
 
 export type Counters = { sql: number; dbMs: number }
@@ -13,8 +11,7 @@ export type Measured<T> = { value: T; ms: number; sql: number; dbMs: number }
 
 const counters = new AsyncLocalStorage<Counters>()
 
-// No-op outside a measure() scope, so an instrumented db used by a script (ingest, bench
-// setup) never has to know whether a request is in flight.
+// No-op outside a measure() scope; scripts using an instrumented db need not know.
 const record = (ms: number) => {
   const current = counters.getStore()
   if (!current) return
@@ -42,8 +39,7 @@ const timed =
     }
   }
 
-// Only `query` and `exec` are wrapped, and they are bound to the raw target: PGlite keeps
-// state in private fields, which throw when reached through a proxy receiver.
+// query and exec bound to the raw target: PGlite's private fields throw through a proxy receiver.
 const TIMED = new Set(['query', 'exec'])
 
 export const instrument = <T extends object>(target: T): T =>
@@ -57,8 +53,7 @@ export const instrument = <T extends object>(target: T): T =>
 
 export type RequestPerf = { method: string; path: string; query: string; status: number } & Omit<Measured<unknown>, 'value'>
 
-// One JSON line per request. Carries the request line and timings only: never a row, a
-// response body or an environment value, so no document text and no secret can reach a log.
+// One JSON line per request: timings only, never document text or env values.
 export const perfLine = (r: RequestPerf) =>
   JSON.stringify({
     perf: 'request',

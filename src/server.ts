@@ -21,10 +21,7 @@ import {
 const port = Number(process.env.PORT ?? 3210)
 export const app = new Hono<{ Variables: { person: Person } }>()
 
-// Opt-in (PERF=1) and registered before every route so it wraps them all: one JSON line per
-// API request plus x-perf-* response headers with wall time, SQL statement count and time
-// awaited on PGlite. Headers only, never the body, so payloads stay byte-identical; when
-// PERF is unset this middleware does not exist.
+// PERF=1: one JSON line per request, x-perf-* headers; does not alter response bytes.
 if (perfEnabled)
   app.use('/api/*', async (c, next) => {
     const { ms, sql, dbMs } = await measure(next)
@@ -34,17 +31,14 @@ if (perfEnabled)
     if (perfLogEnabled) console.log(perfLine({ method: c.req.method, path: c.req.path, query: new URL(c.req.url).search.slice(1), status: c.res.status, ms, sql, dbMs }))
   })
 
-// The whole API is public, read-only and changes only when `pnpm push` copies a new local
-// database up, so a shared cache in front of it serves most reads without running a function
-// or touching Postgres. Registered before every /api route so it also covers the 404s.
+// Shared cache headers for every /api/* route, including 404s.
 app.use('/api/*', async (c, next) => {
   await next()
   c.header('cache-control', cacheControl({ method: c.req.method, path: c.req.path, status: c.res.status }))
 })
 
-// The same headers vercel.json sends from the CDN, so a page served by this process (pnpm dev,
-// any non-Vercel host) is not bare. Set after next() on c.res, because serveStatic builds its
-// own Response. Only the HTML entry points: the API and the assets stay untouched.
+// Security headers for HTML pages served by this process (set after next() so serveStatic's
+// own Response is already built).
 for (const path of HTML_PATHS)
   app.use(path, async (c, next) => {
     await next()
@@ -71,10 +65,7 @@ app.get('/api/people/:id/timeline', async (c) => c.json(await timelineFor(c.get(
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
 app.get('/api/people/:id/testimony', async (c) => c.json(await testimonyFor(c.get('person'), parseTestimonyQuery(c.req.query()))))
 
-// Not nested under /people/:id, like /api/tone and /api/candidates: it spans two specific
-// people, neither of which is "the" resource. `a` is resolved before `b`, so if both are
-// invalid the body cannot distinguish which -- the same granularity /people/:id/* already
-// gives for one id.
+// Not nested under /people/:id: spans two specific people.
 app.get('/api/compare', async (c) => {
   const aId = (c.req.query('a') ?? '').trim()
   const bId = (c.req.query('b') ?? '').trim()
@@ -87,17 +78,13 @@ app.get('/api/compare', async (c) => {
   return c.json(await compareFor(a, b, parseCompareQuery(c.req.query())))
 })
 
-// Not nested under /people/:id: it spans every tracked person at once.
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))
-
-// Names nobody tracks yet, ranked by document count; the human promotes them via seed.json.
 app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
 
 app.get('/', serveStatic({ path: './public/design-5.html' }))
 app.use('/*', serveStatic({ root: './public' }))
 
-// Guarded so importing `app` in tests (to call app.request(...) directly) never binds a
-// real port or migrates a real DATA_DIR; only running this file as the entrypoint (`pnpm dev`) does.
+// Importing `app` in tests never binds a port or migrates; only the entrypoint does.
 if (import.meta.url === `file://${process.argv[1]}`) {
   await migrate()
   serve({ fetch: app.fetch, port }, () => console.log(`http://localhost:${port}`))

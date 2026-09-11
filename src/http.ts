@@ -10,7 +10,7 @@ export type SlowResponse = { status: number; body: string }
 // Shared wire-size ceiling for every unbounded network read in the collector layer: slowGet
 // here (gdelt, camara, senado), gkg.ts's zip fetch and rss.ts's feed fetch. A literal, not
 // env-overridable -- see docs/sources.md for the measured GKG slot size this was picked
-// against (~13-14MB compressed, ~2.3x headroom, not the order of magnitude once assumed).
+// against (~13-14MB compressed, ~2.3x headroom).
 export const MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 
 /** Pure accept/reject boundary: does this running total already exceed the limit. */

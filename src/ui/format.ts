@@ -143,6 +143,8 @@ export const testimonyClass = (s: number | null | undefined): 'negativo' | 'neut
 
 // Colour by distance from person's mean: "texts carrying this word are harsher/kinder than
 // usual for this person". A term seen in fewer than MASK_MIN scored texts gets no colour.
+// MASK_SPAN is tighter than the model's ±2.5 class cut: one person's terms sit within ~1
+// point of her mean, so a ±2.5 ramp painted them all grey.
 export const MASK_MIN = 3
 export const MASK_SPAN = 1.5
 

@@ -41,6 +41,7 @@ export const json = async (url: string, signal?: AbortSignal): Promise<any> => {
   return response.json()
 }
 
+// app.ts fetches /api/people by hand so its import graph stays the three figures.
 export const loadPeople = (signal?: AbortSignal) => json('/api/people', signal)
 
 export const loadGraph = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>

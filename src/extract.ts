@@ -3,7 +3,7 @@ import type { Person, Phrases, RawDoc, Term } from './types.js'
 // Five obvious neighbours are deliberately absent, because a stopword also forbids a phrase
 // (see `holdsStopword`): `segunda` would kill "segunda turma" (STF chamber); `marco` "marco
 // aurelio"; `janeiro` "rio de janeiro"; `segundo` "segundo turno"; `dois` "dois irmaos das
-// missoes". Each was measured against the corpus.
+// missoes".
 const stopwords = new Set(
   `a o e os as um uma uns umas de do da dos das em no na nos nas por para com sem sob sobre entre ate apos ante contra desde perante
    que quem qual quais onde quando como porque pois mas porem todavia contudo entao logo nem ou seja
@@ -86,7 +86,7 @@ const claimed = (ws: readonly string[], text: string, lexicon: Phrases): Set<num
     const needle = term.split(' ').filter(keepWord)
     for (const at of runsAt(ws, needle)) needle.forEach((_, j) => marks.add(at + j))
   }
-// Which pairs a name run claimed have already been nulled by wordPairs, so there is no overlap.
+  // Which pairs a name run claimed have already been nulled by wordPairs, so there is no overlap.
   wordPairs(text).forEach(({ w1, w2 }, i) => {
     if (w2 && lexicon.has(`${w1} ${w2}`)) marks.add(i), marks.add(i + 1)
   })

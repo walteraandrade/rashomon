@@ -128,9 +128,9 @@ const trackedCte = sql`
 // One statement for nodes, signature and stats; `materialized` is spelled out rather than left
 // to the planner. term_p is not kind-filtered: signature ignores kind, and the nodes filter is
 // on a group key, so applying it after the aggregate selects the same rows. term_all stays
-// unrestricted even though it only feeds an inner join against term_p: narrowing it was measured
-// as slower (index scan + merge-join vs seq scan). c_pt/c_t are count(*): doc_terms' PK makes
-// doc_id unique per (term, kind) group, so count(distinct) was pure cost. A person's own name
+// unrestricted even though it only feeds an inner join against term_p: narrowing it is slower
+// (index scan + merge-join vs seq scan). c_pt/c_t are count(*): doc_terms' PK makes doc_id
+// unique per (term, kind) group, so count(distinct) is pure cost. A person's own name
 // words are dropped by the exclude filter; phrases carrying them by namePhrase. `position(' ' in
 // ...)` guards the string_to_array split so single words (the vast majority) never pay for it.
 const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
@@ -140,6 +140,7 @@ const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and str
 const isName = (col: Sql, names: string[]) =>
   sql`(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
+// Bare `pmi` in ORDER BY names the rounded output column; inside an expression it names the raw one.
 const graphQuery = (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
   const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
@@ -320,7 +321,7 @@ export const timelineFor = async (person: Person, q: TimelineQuery) => (await ru
 
 // Cross-person: avg()/count() ignore SQL null, so untoned docs contribute nothing without a
 // source filter. `tone is not null` removes rows both aggregates already ignore, so counts are
-// unchanged; it only lets a group survive the `count(d.tone) >= min` floor when min >= 1.
+// unchanged; it only drops a group that holds no toned row.
 const toneQuery = (q: ToneQuery) => sql`
   select p.id as person_id, d.domain as domain,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as n

@@ -43,8 +43,9 @@ import {
 } from './format.js'
 import { FONT_SANS, RULER_PAD, rulerLayout, routesFrom, swarm } from './layout.js'
 
-// Typed loosely on purpose: `dataset` and `classList` are visible without casting ~100 sites.
+// getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
+// Typed as HTMLElement so `dataset` and `classList` are visible without casting.
 const queryAll = (selector: string, root: any = document): NodeListOf<HTMLElement> => root.querySelectorAll(selector)
 
 // The only place that touches a <canvas>; layout.ts stays DOM-free and testable without it.
@@ -482,8 +483,6 @@ export const paintCandidatesError = (onRetry: () => void) => {
   $('candidateList').innerHTML = '<p class="note">Não foi possível carregar os candidatos. <button class="quiet-button" id="retryCandidates">Tentar novamente</button></p>'
   $('retryCandidates').addEventListener('click', onRetry)
 }
-
-// ---------- figure 3: the ruler ----------
 
 // `null` is structurally absent: a present-but-negative-PMI side still reads as "this word is
 // A's". When both are present, balance uses clamped-positive pulls against the raw combined

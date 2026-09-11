@@ -130,6 +130,7 @@ const outcome = (row: { inserted: boolean; took_incoming: boolean } | undefined)
   !row ? 'unchanged' : row.inserted ? 'inserted' : row.took_incoming ? 'enriched' : 'unchanged'
 
 // Clear terms when text is replaced: headline terms must not sum with the article's.
+// doc_persons is left alone: the headline already named them; the body only adds.
 const clearDerived = async (ids: readonly number[]) => {
   if (!ids.length) return
   await db.query(`delete from doc_terms where doc_id = any($1::int[])`, [ids])

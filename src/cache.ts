@@ -2,7 +2,7 @@ import { int } from './query.js'
 
 const HOUR = 3600
 
-// MAX_HOURS = one week; no env typo can pin a stale payload indefinitely.
+// No env typo can pin a stale payload indefinitely.
 const MAX_HOURS = 168
 
 export type CacheWindows = { static: number; rolling: number; trend: number; swr: number }

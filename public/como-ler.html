@@ -12,75 +12,64 @@
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="32" height="32">rashomon<span>.</span></a><nav><a href="/">atlas</a></nav></header>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="32" height="32">rashomon<span>.</span></a><nav><a class="help-link" href="/">atlas</a></nav></header>
 <main class="reading">
   <header class="masthead">
     <p class="eyebrow">Rashomon · guia</p>
     <h1 id="comoLerTitle">Como ler o rashomon</h1>
-    <p class="lede">O site junta textos que citam uma pessoa pública e mostra três gráficos sobre eles: o atlas de palavras, a avaliação por veículo e a régua que compara duas pessoas.</p>
+    <p class="lede">Três gráficos sobre os textos que citam uma pessoa. A chave embaixo de cada título é o gráfico. Esta página é a mesma chave, para mandar o link.</p>
   </header>
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
-    <p class="chapter-intro">Tudo vale só para o recorte escolhido na frase de cada gráfico: pessoa, período e fonte. Trocar o recorte troca todos os números desta página.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Como fazer uma análise</a><a href="#atlas">Gráfico 1 · Atlas</a><a href="#avaliacao">Gráfico 2 · Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Gráfico 3 · Comparar</a></nav>
+    <p class="chapter-intro">Tudo vale só para o recorte da frase: pessoa, período e fonte.</p>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a></nav>
     <div class="chapter-grid">
       <div id="analise">
         <h2>Como fazer uma análise</h2>
         <ol>
-          <li><b>Escolha uma pessoa.</b> O site junta textos que citam ela: posts do Bluesky, notícias, discursos na Câmara e no Senado.</li>
-          <li><b>Escolha o período e a fonte.</b> Isso é o recorte. Tudo que aparece depois vale só para esse recorte.</li>
-          <li><b>Olhe as palavras maiores.</b> Elas aparecem em mais textos junto do nome.</li>
-          <li><b>Clique numa palavra.</b> As linhas mostram outras palavras que estão nos mesmos textos, os números aparecem ao lado, e um cartão abre com os textos de verdade, para conferir. O cartão fica aberto enquanto você escolhe a próxima palavra, e pode ser arrastado pelo topo. Clicar na mesma palavra de novo fecha os dois.</li>
-          <li><b>Clique no nome no centro.</b> Abre o mesmo cartão, com os textos sobre a pessoa inteira, sem palavra nenhuma no meio. Na Lista, esse mesmo clique está na primeira linha.</li>
-          <li><b>O mesmo vale nos outros dois gráficos.</b> No gráfico 2, clicar num veículo abre os textos que <em>aquele veículo</em> escreveu — sem palavra nenhuma, é outra pergunta. No gráfico 3, clicar numa palavra da régua abre os textos das <em>duas</em> pessoas lado a lado, porque ali a palavra não é de nenhuma das duas sozinha.</li>
-          <li><b>Desça até a régua.</b> Ela mostra quais veículos falam da pessoa de um jeito mais hostil ou mais favorável que os outros. Toque numa bolinha para ver só as palavras daquele veículo.</li>
+          <li><b>Escolha uma pessoa</b>, o período e a fonte. Isso é o recorte.</li>
+          <li><b>Olhe as palavras maiores.</b> Clique numa para ler os textos. O cartão fica aberto na próxima escolha e arrasta pelo topo.</li>
+          <li><b>Clique no nome no centro</b> (na primeira linha da lista) para os textos da pessoa, sem palavra no meio.</li>
+          <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é.</li>
         </ol>
       </div>
       <div id="atlas">
         <h2>Gráfico 1 · Atlas de palavras</h2>
         <p>O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. As posições evitam colisões; elas não medem distância nem opinião.</p>
         <h3>Frequência</h3>
-        <p>Em quantos textos sobre a pessoa a palavra aparece. Uma palavra em 173 de 440 textos é grande no mapa. Frequência diz o que se fala muito.</p>
-        <h3>Expressões</h3>
-        <p>Algumas coisas só fazem sentido juntas. "Primeiro turno" não é "primeiro" mais "turno"; "Alexandre de Moraes" é uma pessoa, não três palavras. O mapa trata essas duas coisas como um termo só, chamado expressão.</p>
-        <p>Nomes próprios entram porque quem escreveu usou maiúscula: isso já é a marca de que o pedaço é um nome. Não vale para o nome que abre a frase, que é maiúsculo por gramática.</p>
-        <p>As outras expressões o próprio arquivo descobre. O site conta todos os pares de palavras vizinhas e pergunta: das vezes que a palavra mais rara do par apareceu, em quantas ela estava dentro deste par? "Turno" quase não tem outro lugar para estar, então "primeiro turno" vira expressão. "Dias" está em toda parte, então "faltam dias" não vira. O corte é 35% e no mínimo 5 aparições.</p>
-        <p>A expressão substitui as palavras dela. Onde o texto diz "primeiro turno", o mapa mostra só isso, e não mais "primeiro" e "turno" soltos. A palavra volta a contar sozinha nos textos em que ela aparece fora da expressão.</p>
-        <p>Por isso a contagem de uma palavra passa a significar: em quantos textos ela aparece pelo menos uma vez fora de qualquer expressão.</p>
-        <p>Pares que carregam o nome de alguém que o site acompanha ficam de fora: "Lula defende" não vira expressão, senão "defende" sumiria do mapa do Lula sem nada no lugar. Nome com mais de uma palavra continua entrando pela maiúscula.</p>
+        <p>Em quantos textos sobre a pessoa a palavra aparece. Frequência diz o que se fala muito.</p>
         <h3>Linha entre duas palavras</h3>
-        <p>As duas aparecem nos mesmos textos. Só isso. Não quer dizer apoio, causa ou opinião.</p>
+        <p>As duas aparecem nos mesmos textos. Só isso.</p>
         <h3>Tom</h3>
         <p>Só existe nos textos que vêm do GDELT. As outras fontes não têm tom, e o site não inventa um.</p>
         <h3>Cor</h3>
-        <p><b>Colorir por avaliação</b> pinta cada palavra do mapa, e vem ligado por padrão. A cor compara a nota média dos textos que têm a palavra com a média da pessoa no recorte, e não com o zero: assim o vício do nome some da conta. Vermelho: os textos com essa palavra são mais hostis que o normal para essa pessoa. Verde: mais favoráveis. Cinza: igual, ou menos de 3 textos avaliados. A cor resume dois números; ao clicar na palavra, os dois aparecem por extenso.</p>
+        <p><b>Colorir por avaliação</b> compara a nota média dos textos com a palavra com a média da pessoa no recorte, e não com o zero. Vermelho: mais hostil que o normal para essa pessoa. Verde: mais favorável. Cinza: igual, ou menos de 3 textos avaliados.</p>
+        <h3>Expressões</h3>
+        <p>Uma expressão é várias palavras como um termo só (“primeiro turno”, “Alexandre de Moraes”). Ela substitui as palavras que cobre. A contagem de uma palavra passa a ser: textos em que ela aparece pelo menos uma vez fora de qualquer expressão.</p>
       </div>
       <div id="avaliacao">
         <h2>Gráfico 2 · Avaliação por veículo</h2>
-        <p>Um modelo treinado para isto, o kikori, lê cada texto e dá uma nota de −10 a +10 para a pessoa citada. Até −2,5 conta como contra; de +2,5 para cima, a favor; no meio, neutro. Vale para todas as fontes, ao contrário do tom.</p>
-        <p>É uma opinião de máquina, e ela tem um vício conhecido: o nome da pessoa puxa a nota. A mesma frase hostil sai mais branda para uns e mais dura para outros. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
-        <p><b>A régua</b> faz essa comparação. Cada bolinha é um veículo na sua nota média; o tamanho é quantos textos ele tem; a linha vertical é a média da pessoa. Bolinhas longe uma da outra falam da mesma pessoa de jeitos diferentes. Só entram veículos com 3 ou mais textos avaliados.</p>
-        <p>Embaixo da régua, os mesmos números em lista: por fonte, por veículo, e a lista de todos os veículos do recorte com quantos textos cada um tem. Tocar num veículo restringe os dois gráficos a ele.</p>
+        <p>O kikori lê cada texto e dá uma nota de −10 a +10. Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes, ao contrário do tom.</p>
+        <p>O nome da pessoa puxa a nota. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
+        <p><b>A régua</b> põe cada veículo na sua nota média; o tamanho é quantos textos; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos avaliados.</p>
       </div>
       <div id="pmi">
         <h2>PMI</h2>
         <p>Frequência conta. PMI compara. Ele pergunta: essa palavra aparece com essa pessoa mais do que apareceria por acaso?</p>
-        <p>"presidente" aparece com todo político: frequência alta, PMI baixo. Uma palavra que aparece quase só com uma pessoa tem PMI alto. PMI mostra o que é típico dela.</p>
+        <p>“presidente” aparece com todo político: frequência alta, PMI baixo. Uma palavra quase só desta pessoa tem PMI alto.</p>
         <dl class="pmi-scale">
           <div><dt>0</dt><dd>igual ao acaso</dd></div>
           <div><dt>1</dt><dd>o dobro</dd></div>
           <div><dt>2</dt><dd>quatro vezes</dd></div>
           <div><dt>3</dt><dd>oito vezes</dd></div>
         </dl>
-        <p>Cada +1 dobra. Pode ser negativo: a palavra aparece menos com essa pessoa do que com as outras.</p>
-        <p><b>Por que "PMI ponderado"?</b> Uma palavra que apareceu em só 2 textos pode ter PMI enorme sem merecer. Então o tamanho no mapa usa PMI × ln(1 + documentos). Isso segura as palavras raras e deixa as frequentes subirem.</p>
+        <p>Cada +1 dobra. <b>PMI ponderado</b> segura a palavra rara: o tamanho usa PMI × ln(1 + documentos).</p>
       </div>
       <div id="comparar">
         <h2>Gráfico 3 · Régua entre duas pessoas</h2>
-        <p>Aqui a régua é feita das próprias palavras, escritas onde elas ficam, e não de bolinhas. A posição diz de quem a palavra é: numa ponta, ela só aparece com uma das duas pessoas; na outra ponta, só com a outra. No meio, a palavra é dividida: as duas usam mais ou menos igual.</p>
-        <p>O tamanho da letra é quantos documentos a palavra tem com as duas pessoas, somados. "Documentos" ou "PMI ponderado" na frase mudam só a posição, nunca o tamanho.</p>
-        <p>Cada pessoa entra com duas listas, as palavras mais frequentes e as mais grudentas, então a régua mostra mais palavras do que o número escolhido na frase. Palavra escrita ocupa espaço, e às vezes não cabe tudo sem uma cobrir a outra. As que ficaram de fora aparecem numa lista logo abaixo da régua, com o total escrito, e clicam igual às desenhadas.</p>
-        <p>A ponta é só para palavra que a outra pessoa não tem em documento nenhum. Se as duas têm a palavra, ela fica dentro da régua, mesmo que uma delas use muito mais. PMI negativo quer dizer que a palavra aparece <em>menos</em> perto daquela pessoa do que o acaso mandaria. Na posição, isso conta como zero, e não como um empurrão para a ponta contrária. Sem essa regra, uma palavra da qual o outro lado tem catorze documentos seria desenhada como se fosse exclusiva. O número exato dos dois lados continua na linha que aparece quando você clica na palavra.</p>
-        <p>O nome de uma das duas pessoas nunca vira palavra na régua dela mesma: contar "Lula" na régua do Lula não diria nada. Quantas palavras saíram por isso vem escrito embaixo da régua.</p>
+        <p>A posição diz de quem a palavra é. Numa ponta, só uma das duas pessoas a tem; no meio, a palavra é dividida.</p>
+        <p>O tamanho da letra é quantos documentos ela tem com as duas pessoas, somados. “Documentos” ou “PMI ponderado” na frase mudam só a posição, nunca o tamanho.</p>
+        <p>Se as duas têm a palavra, ela fica dentro da régua. PMI negativo conta como zero na posição, senão uma palavra exclusiva do outro lado seria desenhada como se fosse desta ponta.</p>
+        <p>As que não couberam sem cobrir outra ficam numa lista abaixo da régua, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
       </div>
     </div>
     <p class="chapter-foot"><span>Tom por termo, linhas do tempo e termos em alta continuam na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>

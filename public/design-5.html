@@ -12,17 +12,24 @@
 <link rel="stylesheet" href="atlas.css">
 </head>
 <body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="32" height="32">rashomon<span>.</span></a><div class="person-pick"></div><nav><a href="como-ler.html">como ler</a></nav></header>
+<a class="skip" href="#workspace">Ir ao atlas</a>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="32" height="32">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="help-link" href="como-ler.html">como ler</a></nav></header>
 <main>
   <header class="masthead">
     <p class="eyebrow">Rashomon · atlas</p>
     <h1>Quais palavras grudam num nome</h1>
-    <p class="lede">Posts, notícias e discursos que citam a mesma pessoa, lidos juntos. Escolha o recorte na frase de cada gráfico.</p>
+    <p class="lede">Posts, notícias e discursos que citam a mesma pessoa. A chave de cada gráfico ensina o gráfico. A frase embaixo escolhe o recorte.</p>
   </header>
   <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 1</span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"></b></h2></div>
-      <p class="figure-sub">As palavras que mais aparecem nos textos que citam a pessoa. O tamanho é a frequência ou o PMI; a cor compara a avaliação dos textos com a palavra à média da pessoa. Clique numa palavra para ver com quem ela anda e ler os textos dela; clique no nome no centro para ler os textos sobre a pessoa. <a href="como-ler.html#atlas">Como ler este gráfico</a>.</p>
+      <p class="figure-sub">Palavras nos textos que citam a pessoa. A posição só evita colisão. <a href="como-ler.html#atlas">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>frequência ou PMI, o que a frase escolhe</dd></div>
+        <div><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
+        <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
+      </dl>
       <div class="sentence">
         <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa"></select></span> nos <span class="pick"><select id="days" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="source" aria-label="Fonte"></select></span>, por <span class="pick"><select id="sort" aria-label="Tamanho por"><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option></select></span>. Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras"><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
         <p class="status-row"><span class="status" id="status" role="status"></span></p>
@@ -46,7 +53,12 @@
   <section class="figure testimony" id="testimony" aria-labelledby="testimonyTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 2</span><h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"></b></h2></div>
-      <p class="figure-sub">Cada bolinha é um veículo na nota média que o modelo kikori dá aos textos dele sobre a pessoa, de −10 (contra) a +10 (a favor). O tamanho é quantos textos. Compare veículos falando da mesma pessoa; nunca compare pessoas. <a href="como-ler.html#avaliacao">Como ler este gráfico</a>.</p>
+      <p class="figure-sub">Compare veículos falando da mesma pessoa. Nunca compare pessoas. <a href="como-ler.html#avaliacao">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt>Posição</dt><dd>nota kikori, de −10 contra a +10 a favor</dd></div>
+        <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
+        <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
+      </dl>
       <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)"></select></span> nos <span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)"></select></span>.</p></div>
     </header>
     <figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden></figure>
@@ -57,7 +69,13 @@
   <section class="figure compare" id="compare" aria-labelledby="compareTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 3</span><h2 id="compareTitle">Régua entre duas pessoas</h2></div>
-      <p class="figure-sub">As palavras dos dois lados, escritas na mesma régua. A posição diz de quem ela é mais; o tamanho da letra é quantos documentos ela tem com as duas pessoas, somados. <a href="como-ler.html#comparar">Como ler este gráfico</a>.</p>
+      <p class="figure-sub">A palavra escrita na régua nunca é de uma pessoa só. <a href="como-ler.html#comparar">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt>Posição</dt><dd>de quem a palavra é mais</dd></div>
+        <div><dt>Tamanho</dt><dd>documentos dos dois, somados</dd></div>
+        <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>de que lado ela pende</dd></div>
+        <div><dt>Clique</dt><dd>textos das duas pessoas, neste gráfico</dd></div>
+      </dl>
       <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A"></select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B"></select></span> nos <span class="pick"><select id="compareDays" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>, em <span class="pick"><select id="compareSource" aria-label="Fonte"></select></span>, por <span class="pick"><select id="compareMeasure" aria-label="Medida"></select></span>. Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras"></select></span> palavras por pessoa.</p></div>
     </header>
     <p class="status" id="compareStatus" role="status" hidden>Os dois lados mostram a mesma pessoa.</p>
@@ -69,6 +87,55 @@
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
   <div class="docs-dialog-head" id="docsGrip"><div><span class="eyebrow" id="docsKicker">Documentos</span><h2 id="docsTitle"></h2></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
   <div id="docs" aria-live="polite"></div>
+</dialog>
+<dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle">
+  <div class="help-dialog-head"><div><span class="eyebrow">Guia</span><h2 id="helpTitle">Como ler</h2></div><button id="helpClose" class="quiet-button" aria-label="Fechar o guia">Fechar</button></div>
+  <div class="help-body">
+    <p>Tudo vale só para o recorte da frase: pessoa, período, fonte.</p>
+    <div id="help-analise">
+      <h3>Uma análise</h3>
+      <ol>
+        <li>Escolha pessoa, período e fonte na frase.</li>
+        <li>Leia as palavras maiores. Clique numa para ver os textos.</li>
+        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é.</li>
+      </ol>
+    </div>
+    <div id="help-atlas">
+      <h3>Gráfico 1 · Atlas</h3>
+      <dl class="figure-key">
+        <div><dt>Tamanho</dt><dd>frequência ou PMI, o que a frase escolhe</dd></div>
+        <div><dt>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
+        <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
+      </dl>
+      <p>Cinza: igual à média, ou menos de 3 textos avaliados. Linha entre duas palavras: estão nos mesmos textos. Só isso.</p>
+      <p>Uma expressão é várias palavras como um termo só. Ela substitui as palavras que cobre; a contagem de uma palavra passa a ser os textos em que ela aparece fora de qualquer expressão.</p>
+      <p>Clique numa palavra abre os textos. No nome no centro, e na primeira linha da lista, abre os da pessoa. O cartão fica aberto na próxima escolha e arrasta pelo topo.</p>
+    </div>
+    <div id="help-pmi">
+      <h3>PMI</h3>
+      <p>Frequência conta. PMI pergunta se a palavra aparece mais do que apareceria por acaso. “presidente” é comum; uma palavra quase só desta pessoa tem PMI alto.</p>
+      <dl class="pmi-scale">
+        <div><dt>0</dt><dd>igual ao acaso</dd></div>
+        <div><dt>1</dt><dd>o dobro</dd></div>
+        <div><dt>2</dt><dd>quatro vezes</dd></div>
+        <div><dt>3</dt><dd>oito vezes</dd></div>
+      </dl>
+      <p>PMI ponderado segura a palavra rara: PMI × ln(1 + documentos).</p>
+    </div>
+    <div id="help-avaliacao">
+      <h3>Gráfico 2 · Avaliação</h3>
+      <p>O kikori dá uma nota de −10 a +10. Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes, ao contrário do tom. Nunca compare a nota de uma pessoa com a de outra: o nome puxa a nota.</p>
+      <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos.</p>
+    </div>
+    <div id="help-comparar">
+      <h3>Gráfico 3 · Régua</h3>
+      <p>A posição diz de quem a palavra é. O tamanho é documentos dos dois, somados. No meio, a palavra é dividida. Clique abre os textos das duas pessoas.</p>
+      <p>As que não couberam sem cobrir outra ficam numa lista abaixo, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
+    </div>
+    <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
+    <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>
+  </div>
 </dialog>
 <script type="module" src="./bundle.js"></script>
 <script defer src="/_vercel/insights/script.js"></script>

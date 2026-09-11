@@ -132,13 +132,14 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'api.ts': [],
       'layout.ts': ['./format.js'],
       'render.ts': ['./format.js', './layout.js'],
-      // The documents card belongs to no figure since all three open it, so it sits one layer
-      // above render.js and below figures/: it fetches, paints and owns #docsDialog.
+      // The documents card and the in-page guide belong to no figure; both sit next to the
+      // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
       'docs-card.ts': ['./api.js', './render.js', './state.js'],
+      'help.ts': [],
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './render.js', './state.js'],
       'figures/testimony.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
       'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
-      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/testimony.js', './figures/compare.js'],
+      'app.ts': ['./docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/testimony.js', './help.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected)) {

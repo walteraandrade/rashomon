@@ -1,16 +1,21 @@
 /* ============================================================================
    rashomon · type system
 
-   This site draws no borders and spends almost no colour. Every limit a reader
-   sees -- where a section starts, what is a title and what is a caption, which
-   number is the answer -- is drawn by type alone. Four dials do that work, and
-   nothing else is allowed to:
+   This site draws no borders. Every limit a reader sees -- where a section
+   starts, what is a title and what is a caption, which number is the answer --
+   is drawn by type. Colour is a second hierarchy, and it means something; it
+   never ranks a heading. Five dials do that work, and nothing else is allowed
+   to:
 
      1. FAMILY  League Spartan names a thing. Instrument Sans explains a thing.
      2. SIZE    One ramp, --t-*. A component never invents a size.
-     3. COLOUR  --ink says "read this", --muted says "this supports it",
-                --accent marks the one thing under the cursor or in focus.
+     3. COLOUR  --ink is "read this", --accent is the live thing, --hostile and
+                --favor are evaluation, --cmp-a/--cmp-b are who, --muted is
+                "this supports it". A heading that needed colour to be found
+                is a heading in the wrong place.
      4. SPACE   The gap above a heading IS its rank. More air, higher rank.
+     5. SURFACE --bg < --panel < --soft, tinted toward the accent hue. A figure
+                is --panel. Data hues stay on marks; they never tint a surface.
 
    The hierarchy, top to bottom:
 
@@ -22,22 +27,28 @@
      .sentence --t-lg    sans 500     ink    the sentence you can change
      p, li     --t-base  sans 400     ink    prose
      .figure-sub --t-sm  sans 400     muted  prose that supports a title
+     .figure-key dt --t-2xs display 500 ink  names an encoding
+     .figure-key dd --t-sm  sans 400  muted  what that encoding means
      .note,.meta --t-xs  sans 400     muted  captions, counts, footnotes
      .eyebrow  --t-2xs   display 500  muted  names the rank right below it
      dt / dd             see "definition pairs"
    ========================================================================= */
 
 :root {
-  --bg: #101010;
-  --panel: #181818;
-  --soft: #202020;
-  --line: #2c2c2c;
-  --ink: #f0f0f0;
-  --muted: #9c9c9c;
+  --bg: #131210;
+  --panel: #1c1b18;
+  --soft: #26241f;
+  --line: #3a372f;
+  --ink: #f4f1ea;
+  --muted: #a39e93;
   --accent: #e9e4d8;
-  --accent-ink: #141414;
+  --accent-ink: #14120f;
+  --hostile: #ff6b7d;
+  --favor: #7ee787;
   --green: #cfd6c8;
   --danger: #ef9a9a;
+  /* Quiet grey in the middle of every ramp: SCALE_MID in format.ts. Not --muted (chrome). */
+  --scale-mid: #8b909c;
   /* The ruler figure's own hue pair, one per side (issue #91): kept in step with format.js's
      balanceColor, whose ends resolve to these exact colours. */
   --cmp-a: #7fa8ff;
@@ -165,7 +176,10 @@ dd { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); color: var(
 .person-pick:empty { display: none; }
 .top nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-5); font-size: var(--t-sm); }
 .top nav a { color: var(--muted); text-decoration: none; }
-.top nav a:hover { color: var(--accent); }
+.top nav a:hover { color: var(--ink); }
+
+.skip { position: absolute; left: var(--gutter); top: 8px; z-index: 8; padding: var(--space-2) var(--space-3); background: var(--accent); color: var(--accent-ink); font-size: var(--t-sm); font-weight: 600; text-decoration: none; border-radius: 6px; transform: translateY(-120%); }
+.skip:focus { transform: none; }
 
 main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) var(--space-8); }
 
@@ -183,8 +197,8 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
 /* Each figure's sentence lives inside its own .figure-head, which is a two-column grid
    (title | subtitle); both figure heads wrap their sentence in the same .sentence div, so one
    rule spans it across both columns to read as its own row underneath them. */
-.figure-head > .sentence { grid-column: 1 / -1; margin-top: var(--space-1); }
-.sentence { margin-bottom: var(--space-1); }
+.figure-head > .sentence { grid-column: 1 / -1; margin-top: var(--space-5); }
+.sentence { margin-bottom: 0; }
 /* The sentence sits at lede rank but in sans 500 and full --ink: it is the one paragraph on the
    page a reader can edit, and it has to read as a control surface, not as a caption. Each
    control is a chip on the line -- a filled box with a chevron reads as "this changes", where a
@@ -203,7 +217,17 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 
 /* ---------- figures: one card per graph ---------- */
 .figure { margin-top: var(--space-7); padding: var(--space-5) var(--space-5) 18px; border-radius: 12px; background: var(--panel); }
-.figure-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-2) var(--space-7); align-items: end; padding-bottom: var(--space-4); margin-bottom: var(--space-4); }
+.figure-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-4) var(--space-7); align-items: end; padding-bottom: var(--space-5); margin-bottom: var(--space-5); }
+.figure-head > .figure-key { grid-column: 1 / -1; margin-top: var(--space-2); }
+
+/* The encoding, always on the figure: a named variant of dt/dd, compact so it sits under the
+   title without becoming a second essay. Swatches in the dt are the colour hierarchy teaching
+   itself -- the same ramps the marks use. */
+.figure-key { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-6); }
+.figure-key > div { min-width: 12ch; max-width: 28ch; }
+.figure-key dt { display: flex; align-items: center; font-family: var(--display); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--ink); }
+.figure-key dd { margin-top: var(--space-1); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: none; }
+.key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
 .figure-title h2 b { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: inherit; }
@@ -267,7 +291,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    word, or the mask would go blank exactly on the word the reader is looking at. */
 .map-svg.is-masked .word-button, .map-svg.is-masked .word-button.is-neighbor { --wc: var(--mask, var(--muted)); }
 .map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
-.mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, #ff6b7d, rgba(139, 144, 156, .5), #7ee787); }
+.mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--hostile), color-mix(in srgb, var(--scale-mid) 50%, transparent), var(--favor)); }
 .underline { stroke: var(--wc, var(--accent)); stroke-width: 1.5; opacity: 0; }
 .word-button.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
@@ -450,6 +474,33 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .empty { padding: 80px var(--space-5); text-align: center; color: var(--muted); font-size: var(--t-base); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
+/* ---------- the in-page guide ---------- */
+/* Same card language as the documents dialog, but this one is always a modal: it is a reading
+   surface, not a companion to a pick. The figure's own .figure-key already taught the encoding;
+   what lives here is the depth (PMI ladder, kikori's cut, the honesty notes). */
+.help-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(88vh, 900px); margin: auto; padding: 0; border: 0; border-radius: 14px; background: linear-gradient(var(--soft), var(--panel) 140px); color: var(--ink); display: none; flex-direction: column; }
+.help-dialog[open] { display: flex; animation: card-in .18s ease-out; }
+.help-dialog::backdrop { background: rgba(19, 18, 16, .72); }
+@media (prefers-reduced-motion: reduce) { .help-dialog[open] { animation: none; } }
+.help-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
+#helpClose { background: none; padding: 6px 0 6px var(--space-3); }
+#helpClose:hover { background: none; color: var(--ink); }
+#helpClose:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); border-radius: 6px; }
+.help-dialog-head h2 { font-size: var(--t-lg); margin-top: var(--space-1); }
+.help-body { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: var(--space-3) 22px var(--space-8); min-height: 120px; mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 36px), transparent); }
+.help-body > * { scroll-margin-top: var(--space-4); }
+/* Wrappers exist so scroll-into-view has a target. Space lives on the wrapper: an h3 is always
+   first-child of its div, so a :first-child zero on h3 collapses every heading. */
+.help-body > :first-child { margin-top: 0; }
+.help-body > div { margin-top: var(--space-7); }
+.help-body h3 { margin-top: 0; }
+.help-body p, .help-body ol, .help-body dl { margin-top: var(--space-3); }
+.help-body h3 + p, .help-body h3 + ol, .help-body h3 + dl, .help-body h3 + .figure-key { margin-top: var(--space-3); }
+.help-body .figure-key { margin-top: var(--space-3); }
+.help-body .pmi-scale { margin-top: var(--space-4); }
+.help-body .pmi-scale + p { margin-top: var(--space-4); }
+.help-foot { margin-top: var(--space-7); padding-bottom: var(--space-3); font-size: var(--t-xs); color: var(--muted); max-width: none; }
+
 /* ---------- candidates ---------- */
 .candidate .samples { padding-left: var(--space-3); }
 .candidate .doc .eyebrow { margin-bottom: var(--space-1); }
@@ -470,7 +521,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .chapter-nav { display: flex; flex-wrap: wrap; gap: var(--space-2) 22px; margin: var(--space-5) 0 var(--space-7); font-size: var(--t-sm); }
 .chapter-nav a { color: var(--muted); text-decoration: none; padding-bottom: 2px; }
 .chapter-nav a:hover { color: var(--accent); }
-.chapter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-7) var(--space-7); align-items: start; }
+.chapter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-7) var(--space-7); align-items: start; }
 .chapter-grid > div { scroll-margin-top: var(--space-5); }
 .chapter h2[id], .chapter h3[id] { scroll-margin-top: var(--space-5); }
 /* Inside the grid a column is narrow, so prose drops one step to --t-sm and stays muted: the

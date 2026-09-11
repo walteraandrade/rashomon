@@ -52,7 +52,7 @@ const backfillDomains = async (size: number) => {
   }
 }
 
-// Rows stored before the cap existed are cut with the same truncateText ingest uses.
+// Reindex cuts docs.text over MAX_DOC_CHARS with the same truncateText ingest uses.
 // `length(text)` is Postgres's character count; any row it selects does shrink.
 const capTexts = async (size: number) => {
   let capped = 0

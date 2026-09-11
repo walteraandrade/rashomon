@@ -44,9 +44,8 @@ const hasCentralDirectoryEnd = (bytes: Uint8Array): boolean => {
 
 /**
  * Unzips the first entry of a GKG zip, bounded at limitBytes of *decompressed* output. Network-free
- * and independently testable with a zip built via fflate's own zipSync. Replaces a single unzipSync
- * call: fflate's Unzip streams entry.ondata as decompression proceeds, so a decompression-bomb shape
- * is caught mid-stream, at the injected limit, rather than after the whole file is in memory.
+ * and independently testable with a zip built via fflate's own zipSync. Oversize is caught mid-stream
+ * at limitBytes.
  */
 export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYTES): Promise<SlotDownload> =>
   new Promise((resolve, reject) => {
@@ -55,7 +54,7 @@ export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYT
     let sawEntry = false
     let stopped = false
     unzip.onfile = (file) => {
-      if (sawEntry) return // first entry only, same semantics as the Object.values(files)[0] it replaces
+      if (sawEntry) return // first entry only
       sawEntry = true
       const chunks: Uint8Array[] = []
       let total = 0

@@ -7,8 +7,7 @@ import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery,
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
 const defaultTestimonyMethod = () => methods.onnx()
 
-// `:` is part of the charset because kikori scorer labels are `kikori:<dtype>` or
-// `kikori:<dtype>:<revision>`; without it the parser silently fell back to 'onnx'.
+// `:` is in the charset so `kikori:<dtype>` / `kikori:<dtype>:<revision>` parse as one token.
 const METHOD_TOKEN = /^[\w.:\/-]{1,128}$/
 
 export const int = (v: string | undefined, d: number, lo: number, hi: number) => {
@@ -31,8 +30,8 @@ export const DAYS = [7, 30, 365]
 export const snapDays = (v: string | undefined, d: number): number => snapTo(DAYS, v, d)
 
 // Every `limit` the page sends plus every route default. 1 is "just the top term" (used by
-// acceptance tests against the fixture); 200 is the old ceiling, still reachable by scripts.
-// A new value the page starts sending must be added here (test/query.test.ts checks).
+// acceptance tests against the fixture); 200 remains reachable by scripts. A new page value
+// must be added here (test/query.test.ts).
 export const LIMITS = [1, 5, 12, 18, 20, 24, 30, 40, 50, 60, 100, 200]
 
 // compare and rising cap at 100: each unioned key costs two exact figures instead of one.

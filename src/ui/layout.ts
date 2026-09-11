@@ -238,8 +238,6 @@ export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5)
     escape: (item, candidates) => Math.max(...candidates.map(Math.abs)) + item.r + gap,
   }).placed
 
-// ---------- figure 3: the ruler ----------
-
 export const RULER_PAD = 28
 // Words cannot shrink past 11px, so the ruler trades height for legibility before dropping.
 export const RULER_MAX_HEIGHT = 520

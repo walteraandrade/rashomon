@@ -72,7 +72,7 @@ export const corpus = (persons: Person[], o: CorpusOptions): RawDoc[] => {
     const length = 8 + Math.floor(rand() * 18)
     const body = Array.from({ length }, () => zipf(words, rand()))
     // Roughly a third of documents name a tracked person, matching the measured production
-    // ratio; the other two thirds keep their docs row and get no doc_terms (issue #52).
+    // ratio; the other two thirds keep their docs row and get no doc_terms.
     const named = rand() < 0.33
     const person = pick(persons, rand())
     const head = named ? pick(person.aliases, rand()) : ''

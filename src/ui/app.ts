@@ -2,6 +2,7 @@ import { mountDocsCard } from './docs-card.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountTestimony } from './figures/testimony.js'
+import { mountHelp } from './help.js'
 
 type Person = { id: string; name: string }
 // A `[key, bareKey | null]` pair names a different bare fallback or none (null).
@@ -70,8 +71,9 @@ export const boot = async () => {
   } catch (e) {
     peopleError = e
   }
-  // The documents card belongs to no figure, so the shell wires it once.
+  // The documents card and the guide belong to no figure, so the shell wires both once.
   mountDocsCard()
+  mountHelp()
   for (const figure of FIGURES) {
     const root = document.getElementById(figure.sectionId)
     if (!root) continue

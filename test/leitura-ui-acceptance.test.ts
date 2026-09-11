@@ -52,14 +52,19 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.doesNotMatch(html.replaceAll(VERCEL_INSIGHTS_TAG, ''), /<script/i, 'the reading page runs no JavaScript of its own')
   })
 
-  it('design-5.html no longer carries the chapter and links to the page from the header and from each figure', () => {
+  it('design-5.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
     const html = read('design-5.html')
     assert.doesNotMatch(html, /id="como-ler"/)
     // Issue #91: compare.html is deleted, the third figure lives on this page instead, so the
     // nav link now points at an in-page anchor rather than a separate file (AC15).
-    assert.match(html, /<nav><a href="como-ler\.html">como ler<\/a><\/nav>/, 'the header carries the one page the atlas is not')
+    assert.match(html, /<nav><a class="help-link" href="como-ler\.html">como ler<\/a><\/nav>/, 'the header still names the shareable guide')
     assert.match(html, /href="como-ler\.html#atlas"/)
     assert.match(html, /href="como-ler\.html#avaliacao"/)
+    assert.match(html, /id="helpDialog"/, 'the atlas intercepts those links into an in-page dialog')
+    for (const id of ['workspace', 'testimony', 'compare']) {
+      const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
+      assert.match(figure, /<dl class="figure-key">/, `${id} carries its own key`)
+    }
   })
 })
 
@@ -102,6 +107,10 @@ describe('the page is a sequence of graphs', () => {
     assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
     assert.match(html, /<span class="eyebrow">Gráfico 3<\/span><h2 id="compareTitle">/)
     assert.equal(html.match(/<p class="figure-sub">/g)?.length, 3)
+    for (const id of ['workspace', 'testimony', 'compare']) {
+      const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
+      assert.match(figure, /<dl class="figure-key">/, `${id} carries its own key`)
+    }
     assert.doesNotMatch(html, /class="side"/)
     // The atlas keeps its toolbar and its detail column inside its own figure.
     const atlas = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''

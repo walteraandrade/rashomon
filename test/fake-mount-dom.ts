@@ -217,6 +217,8 @@ const atlasIds = () => ({
   docsClose: new FakeBox('docsClose'),
   docsGrip: new FakeBox('docsGrip'),
   docsDialog: new FakeBox('docsDialog'),
+  helpDialog: new FakeBox('helpDialog'),
+  helpClose: new FakeBox('helpClose'),
   // The card's own three: #docs is what loadDocs checks for before it fetches at all, so a
   // harness without it would let every "picking a word asks for its texts" criterion pass by
   // never asking for anything.

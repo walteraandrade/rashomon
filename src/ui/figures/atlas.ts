@@ -286,6 +286,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $('viewport').hidden = mode !== 'map'
     $('columns').hidden = mode !== 'columns'
     $('atlasStrip').hidden = mode !== 'strip'
+    if (mode !== 'strip') $('stripHiddenNote').hidden = true
     // Colour is not optional in strip mode (it is the whole second dimension of the view), and
     // there is nothing to zoom: both controls are meaningless there.
     $('mask').hidden = mode === 'strip'
@@ -296,7 +297,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       if (!currentLayout || mode === 'map') drawCurrentMap()
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
       paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony })
-      if (mode === 'strip') paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value })
+      if (mode === 'strip') {
+        paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value })
+        paintCurrentSelection()
+      }
     } else {
       $('viewport').innerHTML = '<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'
       $('columns').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'

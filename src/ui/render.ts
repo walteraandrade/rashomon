@@ -586,16 +586,20 @@ export const paintTermStrip = ({
   }
   const { dots, domainMin, domainMax, ticks, x, half, height } = termStripLayout(nodes, personTestimony, width)
   const hiddenCount = nodes.length - dots.length
+  const overall = personTestimony?.score
+  const hasMean = overall !== null && overall !== undefined
   if (note) {
     note.hidden = hiddenCount === 0
-    note.textContent = hiddenCount ? `${hiddenCount} ${hiddenCount === 1 ? 'palavra deixada' : 'palavras deixadas'} de fora por terem menos de 3 textos avaliados.` : ''
+    note.textContent = hiddenCount
+      ? hasMean
+        ? `${hiddenCount} ${hiddenCount === 1 ? 'palavra deixada' : 'palavras deixadas'} de fora por ${hiddenCount === 1 ? 'ter' : 'terem'} menos de 3 textos avaliados.`
+        : `${hiddenCount} ${hiddenCount === 1 ? 'palavra deixada' : 'palavras deixadas'} de fora: esta pessoa não tem média de avaliação neste recorte.`
+      : ''
   }
   if (!dots.length) {
     strip.innerHTML = '<div class="empty">Nenhuma palavra com avaliação suficiente neste recorte.</div>'
     return
   }
-  const overall = personTestimony?.score
-  const hasMean = overall !== null && overall !== undefined
   const normalizedSearch = normalize(search)
   const tick = (s: number) => html`<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
   strip.innerHTML = html`${hasMean ? html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${((x(overall as number) - STRIP_PAD) / Math.max(1, width - 2 * STRIP_PAD)) * 100}%">média da pessoa ${signed(overall)}</span></div>` : ''}<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Palavras na régua da avaliação"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${ticks.map(tick)}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {

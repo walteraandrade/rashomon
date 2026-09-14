@@ -683,10 +683,11 @@ describe('risingFor (issue #3)', () => {
     assert.deepEqual(r, { days: 7, baseline: 30, terms: [], outlets: [], about: { recent: 0, baseline: 0 } })
   })
 
-  it('AC10: returns an empty terms array for an empty recent window', async () => {
+  it('AC10: returns an empty terms array for an empty recent window, but about.baseline still reflects the baseline docs', async () => {
     const r = await risingFor(lula, { ...risingBase, days: 1 })
     assert.deepEqual(r.terms, [])
     assert.equal(r.about.recent, 0)
+    assert.ok(r.about.baseline > 0, 'about.baseline must still count the baseline-window docs')
   })
 
   it('AC11: limit clamps the result size without altering the order', async () => {

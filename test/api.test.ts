@@ -20,6 +20,38 @@ const stubFetch = (ok: boolean, body: unknown) => {
   return calls
 }
 
+const stubFetchWithHeaders = (headers: Record<string, string>) => {
+  globalThis.fetch = (async () => ({ ok: true, status: 200, headers: new Headers(headers), json: async () => ({}) }) as Response) as typeof fetch
+}
+
+describe('json marks one api:<route> measure per completed call', () => {
+  it('names the measure after the route and keeps the cache and server-timing headers in its detail', async () => {
+    performance.clearMeasures()
+    stubFetchWithHeaders({ 'x-vercel-cache': 'HIT', 'server-timing': 'db;dur=3.1;desc="2 sql", app;dur=4' })
+    await json('/api/people/lula/graph?days=30')
+    const [entry] = performance.getEntriesByName('api:graph', 'measure') as PerformanceMeasure[]
+    assert.ok(entry, 'a completed call leaves an api:graph measure')
+    assert.ok(entry.duration >= 0)
+    assert.deepEqual(entry.detail, { url: '/api/people/lula/graph?days=30', status: 200, cache: 'HIT', server: 'db;dur=3.1;desc="2 sql", app;dur=4' })
+  })
+
+  it('records null for headers a stub or a plain server does not send', async () => {
+    performance.clearMeasures()
+    stubFetch(true, [])
+    await json('/api/compare?a=lula&b=bolsonaro')
+    const [entry] = performance.getEntriesByName('api:compare', 'measure') as PerformanceMeasure[]
+    assert.equal(entry.detail.cache, null)
+    assert.equal(entry.detail.server, null)
+  })
+
+  it('leaves no measure when the call fails', async () => {
+    performance.clearMeasures()
+    stubFetch(false, {})
+    await assert.rejects(json('/api/people/lula/docs?term=x'))
+    assert.deepEqual(performance.getEntriesByName('api:docs', 'measure'), [])
+  })
+})
+
 describe('endpoint', () => {
   it('URL-encodes the person id', () => {
     assert.equal(endpoint('tarcísio'), '/api/people/tarc%C3%ADsio')

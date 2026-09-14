@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
-import { instrument, measure, percentile, perfEnabled, perfLine, perfLogEnabled, round } from '../src/perf.js'
+import { instrument, measure, percentile, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from '../src/perf.js'
 import { app } from '../src/server.js'
 import { seed } from './fixture.js'
 import './close.js'
@@ -25,6 +25,7 @@ describe('instrumentation is opt-in', () => {
     assert.equal(res.headers.get('x-perf-total-ms'), null)
     assert.equal(res.headers.get('x-perf-db-ms'), null)
     assert.equal(res.headers.get('x-perf-sql-count'), null)
+    assert.equal(res.headers.get('server-timing'), null)
     const body = await res.json()
     assert.deepEqual(Object.keys(body as object).sort(), ['links', 'nodes', 'outlets', 'person', 'signature', 'stats'])
   })
@@ -93,6 +94,17 @@ describe('perfLine', () => {
     const line = perfLine({ method: 'GET', path: '/api/people/lula/docs', query: '', status: 200, ms: 1, dbMs: 1, sql: 1 })
     assert.ok(rows[0].text.length > 0)
     assert.ok(!line.includes(rows[0].text))
+  })
+})
+
+describe('serverTiming', () => {
+  it('renders db and app as Server-Timing metrics, two decimals, statement count as the description', () => {
+    assert.equal(serverTiming({ ms: 227.567, sql: 5, dbMs: 446.234 }), 'db;dur=446.23;desc="5 sql", app;dur=227.57')
+  })
+
+  it('parses back as two metrics the browser can read', () => {
+    const metrics = serverTiming({ ms: 12, sql: 0, dbMs: 0 }).split(', ').map((m) => m.split(';')[0])
+    assert.deepEqual(metrics, ['db', 'app'])
   })
 })
 

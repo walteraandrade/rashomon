@@ -1,3 +1,5 @@
+import { routeOf, span } from './perf.js'
+
 export const endpoint = (personId: string) => '/api/people/' + encodeURIComponent(personId)
 
 // word,hashtag,phrase — the full set. GDELT themes are no longer collected or served.
@@ -35,10 +37,18 @@ export const docsParams = ({ days, source, term = '', kind = 'all', domain = '',
   return q
 }
 
+// Test stubs hand back a bare object; a real Response always has headers.
+const headerOf = (response: Response, name: string) => response.headers?.get(name) ?? null
+
+// One `api:<route>` measure per completed call, carrying the two headers that place the
+// wait: `cache` (x-vercel-cache: HIT/MISS/STALE) and `server` (server-timing, PERF=1 only).
 export const json = async (url: string, signal?: AbortSignal): Promise<any> => {
+  const done = span('api:' + routeOf(url))
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error('HTTP ' + response.status)
-  return response.json()
+  const body = await response.json()
+  done({ url, status: response.status, cache: headerOf(response, 'x-vercel-cache'), server: headerOf(response, 'server-timing') })
+  return body
 }
 
 // app.ts fetches /api/people by hand so its import graph stays the three figures.

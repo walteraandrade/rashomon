@@ -5,6 +5,7 @@ import * as api from '../api.js'
 import { html, kinds, SOURCE_SEGMENTS, scoreName, sourceLabels, type Compare, type Measure } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintCompareDetail, paintCompareLoading, paintRuler, paintRulerError } from '../render.js'
+import { span } from '../perf.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
@@ -148,6 +149,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       if (data) root.classList.add('is-loading')
       else paintCompareLoading()
     }
+    const painted = span('figure:compare')
     try {
       const result = await fromScope('compare', key, () => api.loadCompare(params, (controller as AbortController).signal))
       if (id !== requestId) return
@@ -157,6 +159,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('compareStatus').hidden = result.a.person.id !== result.b.person.id
       root.classList.remove('is-loading')
       repaint()
+      painted({ query: key })
     } catch (e) {
       if (id === requestId && !aborted(e)) {
         data = null

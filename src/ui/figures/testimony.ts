@@ -4,6 +4,7 @@ import * as api from '../api.js'
 import { html, SOURCE_SEGMENTS, sourceLabels, type OutletRow, type Testimony } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { paintOutlets, paintOutletsError, paintOutletsLoading, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../render.js'
+import { span } from '../perf.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
@@ -75,11 +76,13 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       if (outletRows) $('outletList').classList.add('is-loading')
       else paintOutletsLoading()
     }
+    const painted = span('figure:outlets')
     try {
       const rows = await fromScope('sources', key, () => api.loadSources(person, params, signal))
       if (id !== requestId) return
       outletRows = rows
       repaint()
+      painted({ person, query: params.toString(), rows: rows.length })
     } catch (e) {
       if (id === requestId && !aborted(e)) paintOutletsError()
     }
@@ -95,12 +98,14 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
         $('strip').classList.add('is-loading')
       } else paintTestimonyLoading()
     }
+    const painted = span('figure:testimony')
     try {
       const data = await fromScope('testimony', key, () => api.loadTestimony(person, params, signal))
       if (id !== requestId) return
       testimony = data
       lastStripWidth = $('strip').clientWidth || 0
       repaint()
+      painted({ person, query: params.toString() })
     } catch (e) {
       if (id === requestId && !aborted(e)) {
         testimony = null

@@ -84,6 +84,8 @@ export type WeekQuery = {
   lean: string
   kind: string
   limit: number
+  // `testimony=1` adds a per-bucket kikori mean; absent by default, mirroring GraphQuery.method.
+  method?: string | null
 }
 
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
@@ -693,12 +695,13 @@ const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
-// Lower bound so docs_published_idx applies; the CASE folds future-dated docs into today, so no upper bound.
-const weekQuery = (person: Person, q: WeekQuery) => {
-  const exclude = nameTokens(person)
+// today/dates/scoped/kept: the BRT calendar-day scan both weekQuery and weekTestimonyQuery
+// share. Lower bound so docs_published_idx applies; the CASE folds future-dated docs into
+// today, so no upper bound. Shared rather than inlined twice, the way scopeCte is shared
+// across graph/links/sources/docs.
+const weekScopeCte = (q: WeekQuery) => {
   const { domain } = resolveScope(q.domain, q.lean)
   return sql`
-  with
   today as (
     select (now() at time zone 'America/Sao_Paulo')::date as today
   ),
@@ -721,7 +724,13 @@ const weekQuery = (person: Person, q: WeekQuery) => {
   ),
   kept as (
     select s.id, s.day from scoped s join dates dt on dt.day = s.day
-  ),
+  )`
+}
+
+const weekQuery = (person: Person, q: WeekQuery) => {
+  const exclude = nameTokens(person)
+  return sql`
+  with ${weekScopeCte(q)},
   about_days as (
     select k.day, count(*)::int as about
     from kept k
@@ -751,9 +760,42 @@ const weekQuery = (person: Person, q: WeekQuery) => {
   order by dt.day`
 }
 
-export const weekFor = async (person: Person, q: WeekQuery) => {
-  const { rows } = await run<{ start: Date; about: number; terms: { term: string; kind: string; count: number }[] }>(weekQuery(person, q))
-  return { days: q.days, tz: 'America/Sao_Paulo' as const, buckets: rows }
+// The day's kikori mean, mirroring termTestimonyQuery's relationship to graphQuery: one row
+// per calendar day with at least one non-null score, `kept` joined to doc_persons (the same
+// "about" match weekQuery's own about_days uses) and doc_testimony on (doc_id, person_id,
+// method), null scores excluded before the average. No `kind`: about/testimony describe docs
+// naming the person that day, not term co-occurrence, same reason about_days ignores it.
+const weekTestimonyQuery = (person: Person, q: WeekQuery, method: string) => sql`
+  with ${weekScopeCte(q)},
+  scored as (
+    select k.day, s.score
+    from kept k
+    join doc_persons dp on dp.doc_id = k.id and dp.person_id = ${person.id}
+    join doc_testimony s on s.doc_id = k.id and s.person_id = ${person.id} and s.method = ${method}
+    where s.score is not null
+  )
+  select dt.start, round(avg(sc.score)::numeric, 2)::float8 as score, count(sc.score)::int as n
+  from dates dt
+  left join scored sc on sc.day = dt.day
+  group by dt.start, dt.day
+  having count(sc.score) > 0
+  order by dt.day`
+
+type WeekBucketRow = { start: Date; about: number; terms: { term: string; kind: string; count: number }[] }
+// testimony is optional, not nullable-required: without `testimony=1` the key is absent
+// entirely (see the acceptance criterion this pins in test/graph.test.ts), not present as null.
+type WeekBucket = WeekBucketRow & { testimony?: { score: number; n: number } | null }
+
+export const weekFor = async (person: Person, q: WeekQuery): Promise<{ days: number; tz: 'America/Sao_Paulo'; buckets: WeekBucket[] }> => {
+  const { rows } = await run<WeekBucketRow>(weekQuery(person, q))
+  if (!q.method) return { days: q.days, tz: 'America/Sao_Paulo', buckets: rows }
+  const { rows: scored } = await run<{ start: Date; score: number; n: number }>(weekTestimonyQuery(person, q, q.method))
+  const byStart = new Map(scored.map((r) => [r.start.getTime(), { score: r.score, n: r.n }]))
+  return {
+    days: q.days,
+    tz: 'America/Sao_Paulo',
+    buckets: rows.map((b) => ({ ...b, testimony: byStart.get(b.start.getTime()) ?? null })),
+  }
 }
 
 // Not nested under /people/:id: spans two specific people, neither of which is "the" resource.
@@ -790,6 +832,7 @@ export const queries = {
   candidates: candidatesQuery,
   compare: compareQuery,
   week: weekQuery,
+  weekTestimony: weekTestimonyQuery,
 } as const
 
 // The text each builder emits. Numbering follows statement shape, not values, so what a
@@ -814,4 +857,5 @@ export const statements = {
   candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,
   compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
   week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
+  weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
 } as const

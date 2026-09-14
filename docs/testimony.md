@@ -1,6 +1,6 @@
 # Testimony (kikori)
 
-A second, source-agnostic signal beside GDELT's `tone`: how a document treats a person, scored -10..+10 by a pluggable scorer, stored in `doc_testimony` and never merged with `tone`. Served by [`/api/people/:id/testimony`](api.md#testimony) and, per node, by `graph?testimony=1`.
+A second, source-agnostic signal beside GDELT's `tone`: how a document treats a person, scored -10..+10 by a pluggable scorer, stored in `doc_testimony` and never merged with `tone`. Served by [`/api/people/:id/testimony`](api.md#testimony), per node by `graph?testimony=1`, and per day by [`week?testimony=1`](api.md#week) — the day's mean, with the same null-score exclusion and the same shared `method` default.
 
 ## Reading it on the page
 

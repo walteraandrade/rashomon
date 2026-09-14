@@ -237,4 +237,7 @@ export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
   limit: snapTo(LIMITS, q.limit, 8),
+  // Same gating as /graph (testimony=1 opts in), same label resolution as /testimony (charset
+  // check, then the shared default).
+  method: q.testimony === '1' ? (METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod()) : null,
 })

@@ -68,7 +68,16 @@ const zoneOffsetMinutes = (instant: Date, timeZone: string): number => {
 export const brtMidnightUtc = (day: string): Date => {
   const [y, m, d] = day.split('-').map(Number)
   const naive = Date.UTC(y, m - 1, d) // day's midnight, misread as if it were already UTC
-  return new Date(naive - zoneOffsetMinutes(new Date(naive), WEEK_TZ) * 60_000)
+  // Two candidates, because the offset in force at 00:00 UTC (21:00 the previous day in São
+  // Paulo) is not necessarily the one in force at that day's local midnight. On an ordinary day
+  // they are the same instant. On a DST boundary they straddle it -- the local midnight is then
+  // either ambiguous (clocks went back) or missing (clocks went forward), and Postgres resolves
+  // both cases to standard time, which is the later of the two. Taking the later one is what
+  // keeps this in step with `at time zone` on every historical Brazilian transition
+  // (test/query.test.ts pins them against the dates themselves).
+  const first = naive - zoneOffsetMinutes(new Date(naive), WEEK_TZ) * 60_000
+  const second = naive - zoneOffsetMinutes(new Date(first), WEEK_TZ) * 60_000
+  return new Date(Math.max(first, second))
 }
 
 // The day AFTER `day`, so a bucket's end is the next calendar day's own midnight rather than

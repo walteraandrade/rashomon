@@ -262,6 +262,24 @@ describe('parseWeekQuery (issue #147)', () => {
 describe('brtMidnightUtc (issue #147)', () => {
   it('derives the day\'s midnight from the tz database, not a hardcoded offset', () => {
     assert.equal(brtMidnightUtc('2026-09-14').toISOString(), '2026-09-14T03:00:00.000Z')
+    assert.equal(brtMidnightUtc('2026-01-01').toISOString(), '2026-01-01T03:00:00.000Z')
+  })
+
+  // Brazil has had no DST since 2019, so these are fixed history in the tz database, not dates
+  // that can drift. Each expected value is what `'<day>'::timestamp at time zone
+  // 'America/Sao_Paulo'` returns; test/graph.test.ts asserts that agreement against the database
+  // itself. A day inside DST is 02:00Z; a transition day resolves to standard time either way,
+  // because its local midnight is ambiguous (clocks back) or missing (clocks forward).
+  it('agrees with `at time zone` across Brazil\'s DST transitions', () => {
+    const expected: [string, string][] = [
+      ['2018-11-03', '2018-11-03T03:00:00.000Z'], // day before clocks went forward
+      ['2018-11-04', '2018-11-04T03:00:00.000Z'], // clocks forward; local midnight never happened
+      ['2018-11-05', '2018-11-05T02:00:00.000Z'], // inside DST
+      ['2019-02-16', '2019-02-16T02:00:00.000Z'], // still inside DST
+      ['2019-02-17', '2019-02-17T03:00:00.000Z'], // clocks back; local midnight happened twice
+      ['2019-02-18', '2019-02-18T03:00:00.000Z'], // after DST
+    ]
+    for (const [day, iso] of expected) assert.equal(brtMidnightUtc(day).toISOString(), iso, day)
   })
 })
 

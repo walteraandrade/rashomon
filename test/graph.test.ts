@@ -26,7 +26,7 @@ import {
   type WeekQuery,
 } from '../src/graph.js'
 import { resolveScope } from '../src/outlets.js'
-import { KINDS, parseQuery, parseSourceList } from '../src/query.js'
+import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query.js'
 import { inTransaction, insertDoc, upsertPersons } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
 import { futureDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
@@ -2324,5 +2324,24 @@ describe('docsFor day filter (issue #147)', () => {
     assert.deepEqual(Object.keys(open).sort(), Object.keys(sliced).sort())
     assert.deepEqual(Object.keys(open).sort(), ['docs', 'outlets', 'total'])
     if (open.docs[0] && sliced.docs[0]) assert.deepEqual(Object.keys(open.docs[0]).sort(), Object.keys(sliced.docs[0]).sort())
+  })
+})
+
+// The constraint behind src/query.ts's brtMidnightUtc: keepDay decides in JS whether a calendar
+// day overlaps the window, while docsDay and weekQuery resolve that same day in SQL through
+// `at time zone`. If the two ever disagree, a day at the window edge is admitted by one and
+// dropped by the other. Brazil has had no DST since 2019, so these transitions are fixed history.
+describe('brtMidnightUtc resolves the same instant as `at time zone` (issue #147)', () => {
+  const days = [
+    '2026-09-14', '2026-01-01', '2018-11-03', '2018-11-04', '2018-11-05',
+    '2019-02-16', '2019-02-17', '2019-02-18', '2017-10-15', '2017-02-19',
+    '2015-10-18', '2015-02-22', '2012-10-21', '2012-02-26',
+  ]
+
+  it('every ordinary day and every Brazilian DST transition in the tz database', async () => {
+    for (const day of days) {
+      const { rows } = await db.query<{ pg: Date }>(`select ('${day}'::timestamp at time zone 'America/Sao_Paulo') as pg`)
+      assert.equal(brtMidnightUtc(day).toISOString(), new Date(rows[0].pg).toISOString(), day)
+    }
   })
 })

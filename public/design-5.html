@@ -17,8 +17,8 @@
 <main>
   <header class="masthead">
     <p class="eyebrow">Rashomon · atlas</p>
-    <h1>Quais palavras grudam num nome</h1>
-    <p class="lede">Posts, notícias e discursos que citam a mesma pessoa. A chave de cada gráfico ensina o gráfico. A frase embaixo escolhe o recorte.</p>
+    <h1>A mesma pessoa, muitas versões</h1>
+    <p class="lede">Posts, notícias e discursos que citam um nome. Que palavras grudam nele, quem diz, com que tom, contra quem, e como isso muda de uma semana para a outra.</p>
   </header>
   <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
     <header class="figure-head">
@@ -63,7 +63,7 @@
       <div class="figure-title"><span class="eyebrow">Gráfico 2</span><h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"></b></h2></div>
       <p class="figure-sub">Compare veículos falando da mesma pessoa. Nunca compare pessoas. <a href="como-ler.html#avaliacao">Como ler</a>.</p>
       <dl class="figure-key">
-        <div><dt>Posição</dt><dd>nota automática, de −10 contra a +10 a favor</dd></div>
+        <div><dt>Posição</dt><dd>nota do kikori, um modelo treinado para ler se o texto é contra (−10) ou a favor (+10)</dd></div>
         <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
         <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
       </dl>
@@ -166,7 +166,7 @@
     </div>
     <div id="help-avaliacao">
       <h3>Gráfico 2 · Avaliação</h3>
-      <p>A nota não é de um jornalista nem do GDELT. Um programa do rashomon, o kikori, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes. Nunca compare a nota de uma pessoa com a de outra: o nome puxa a nota.</p>
+      <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes. Nunca compare a nota de uma pessoa com a de outra: o nome puxa a nota.</p>
       <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos.</p>
       <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara do mapa e da lista. É a mesma nota, não outra medida.</p>
     </div>

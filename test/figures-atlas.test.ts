@@ -564,3 +564,91 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     })
   })
 })
+
+// The pure inspect() sparkline markup lives in test/render.test.ts; these pin the wiring only
+// figures/atlas.ts owns: which request a pick makes, when none is made, and that a stale
+// response never overwrites a later pick.
+describe('issue #147 AC20: figure 1 fetches the inspector sparkline on its own fixed recorte', () => {
+  const nodes = [
+    { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } },
+    { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0.2, n: 8 } },
+  ]
+  const graph = () => ({ person: persons.map(({ id, name }) => ({ id, name }))[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } })
+  const pick = async (els: any, calls: string[], term: string) => {
+    els.modeColumns.fire('click')
+    const card = [...els.columns.querySelectorAll('[data-col]')].find((el: any) => el.dataset.col === term)
+    assert.ok(card, `columns must carry a card for ${term}`)
+    card.fire('click')
+    await flush()
+  }
+
+  it('picking a word requests /timeline with days=7&bucket=day for that term/kind, even when the atlas itself is set to days=365', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/graph': graph(), '/docs': { docs: [], total: 0 }, '/timeline': [] })
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.days.value = '365'
+      els.days.fire('change')
+      await flush()
+      calls.length = 0
+      await pick(els, calls, 'word:golpe')
+      const timelineUrl = calls.find((u) => u.includes('/timeline'))
+      assert.ok(timelineUrl, 'picking a word must request /timeline for the sparkline')
+      const qs = new URL(timelineUrl!, 'http://localhost').searchParams
+      assert.equal(qs.get('term'), 'golpe')
+      assert.equal(qs.get('kind'), 'word')
+      assert.equal(qs.get('days'), '7', 'the sparkline always asks for 7 rolling days, independent of the atlas days chip')
+      assert.equal(qs.get('bucket'), 'day')
+    })
+  })
+
+  it('no word in focus never requests /timeline: neither on initial load nor after clearing the selection', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/graph': graph(), '/docs': { docs: [], total: 0 }, '/timeline': [] })
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.ok(!calls.some((u) => u.includes('/timeline')), 'the initial load, with no selection, must not fetch a sparkline')
+      await pick(els, calls, 'word:golpe')
+      assert.ok(calls.some((u) => u.includes('/timeline')), 'sanity: picking a word does fetch one')
+      calls.length = 0
+      await pick(els, calls, 'word:golpe')
+      await flush()
+      assert.ok(!calls.some((u) => u.includes('/timeline')), 'clearing the selection (picking the same word again) must not fetch a new sparkline')
+    })
+  })
+
+  it('picking a different word before the first sparkline resolves discards the stale response', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      let resolveFirst: ((v: unknown) => void) | undefined
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graph(), '/docs': { docs: [], total: 0 } })
+      const realFetch = globalThis.fetch
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/timeline') && url.includes('golpe')) {
+          calls.push(url)
+          return new Promise((resolve) => {
+            resolveFirst = () => resolve(jsonResponse([{ bucket_start: '2026-09-08T00:00:00.000Z', count: 99 }]))
+          }) as unknown as Response
+        }
+        return realFetch(input as never)
+      }) as typeof fetch
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      await pick(els, calls, 'word:golpe')
+      assert.ok(!els.inspector.innerHTML.includes('spark-bar'), 'golpe\'s sparkline is still loading, no bars painted yet')
+      await pick(els, calls, 'word:reforma')
+      resolveFirst?.(undefined)
+      await flush()
+      assert.ok(!els.inspector.innerHTML.includes('99'), 'the stale golpe response must not paint once reforma is selected')
+    })
+  })
+})

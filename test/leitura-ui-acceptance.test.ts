@@ -310,3 +310,11 @@ describe('issue #149: markup for figure 1\'s third view, Avaliação', () => {
     assert.match(chapter, /não é uma segunda medida/i, 'explicitly rules out a second metric')
   })
 })
+
+describe("issue #147 §4: figure 5 (week) 'a refetch dims what is on screen'", () => {
+  it('#weekChart is dimmed by the same .figure.is-loading rule the other figures already use', () => {
+    const css = read('atlas.css')
+    const rule = css.match(/\.figure\.is-loading[^{]*\{[^}]*opacity[^}]*\}/)?.[0] ?? ''
+    assert.match(rule, /\.week-chart\b/, `.week-chart must be dimmed on refetch, the same as .viewport/.columns/.ruler; the rule found was: ${rule || '(none)'}`)
+  })
+})

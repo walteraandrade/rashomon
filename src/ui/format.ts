@@ -124,7 +124,7 @@ export const SCALE_MID = '#8b909c'
 const scaleColor = (value: number | null | undefined, span: number, fade = false) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return 'transparent'
   const x = Math.max(-span, Math.min(span, Number(value)))
-  const [from, to, k]: Ramp = x < 0 ? [hex('#ff6b7d'), hex(SCALE_MID), (x + span) / span] : [hex(SCALE_MID), hex('#7ee787'), x / span]
+  const [from, to, k]: Ramp = x < 0 ? [hex('#ff7a8a'), hex(SCALE_MID), (x + span) / span] : [hex(SCALE_MID), hex('#74dc86'), x / span]
   const rgb = mix(from, to, k)
   const strength = Math.abs(x) / span
   return fade && strength < 1 ? `rgba(${rgb},${(0.5 + 0.5 * strength).toFixed(2)})` : `rgb(${rgb})`

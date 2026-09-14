@@ -1,11 +1,12 @@
 import { label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term } from './format.js'
 
-// Must stay in sync with atlas.css's --sans / --display: canvas measurement needs literal
+// Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
-export const FONT_SANS = "'Instrument Sans', system-ui, sans-serif"
-export const FONT_DISPLAY = "'League Spartan', 'Instrument Sans', system-ui, sans-serif"
+export const FONT_SANS = "'IBM Plex Sans', system-ui, sans-serif"
+export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
+export const FONT_DISPLAY = "'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif"
 
-export const wrapLines = (measure: Measure, text: string, size: number, maxWidth: number, family = FONT_SANS, weight = 500): string[] => {
+export const wrapLines = (measure: Measure, text: string, size: number, maxWidth: number, family = FONT_MONO, weight = 500): string[] => {
   if (measure(text, size, family, weight) <= maxWidth) return [text]
   const units = Array.from(text)
   const lines: string[] = []

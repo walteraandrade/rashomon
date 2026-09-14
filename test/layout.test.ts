@@ -155,7 +155,7 @@ describe('routeGraph / routesFrom', () => {
 // criteria here are the reading ones -- no word covers another, nothing disappears in silence,
 // the ends still mean "zero on the other side".
 
-// 0.6em per character is close enough to Instrument Sans that a word's box is the right order
+// 0.6em per character is close enough to IBM Plex Mono that a word's box is the right order
 // of magnitude.
 const metrics = (text: string, size: number) => text.length * size * 0.6
 

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { FONT_DISPLAY, FONT_SANS } from '../src/ui/layout.js'
+import { FONT_DISPLAY, FONT_MONO } from '../src/ui/layout.js'
 import { SOURCE_SEGMENTS } from '../src/ui/format.js'
 import { VERCEL_INSIGHTS_TAG } from './pages.js'
 
@@ -99,13 +99,15 @@ describe('Leitura UI: the site explains itself on its own page', () => {
 describe('Leitura UI: one stylesheet, one type system', () => {
   it('atlas.css declares the two faces and layout.js measures text with the same families', () => {
     const css = read('atlas.css')
-    assert.match(css, /--sans:\s*'Instrument Sans'/)
-    assert.match(css, /--display:\s*'League Spartan'/)
-    assert.ok(FONT_SANS.startsWith("'Instrument Sans'"), 'canvas measurement must use the face the map is painted with')
-    assert.ok(FONT_DISPLAY.startsWith("'League Spartan'"), 'the centre name is measured with the display face')
+    assert.match(css, /--sans:\s*'IBM Plex Sans'/)
+    assert.match(css, /--mono:\s*'IBM Plex Mono'/)
+    assert.match(css, /--display:\s*'IBM Plex Sans Condensed'/)
+    assert.ok(FONT_MONO.startsWith("'IBM Plex Mono'"), 'canvas measurement must use the face the map is painted with')
+    assert.match(css, /\.map-svg \.word \{[^}]*var\(--mono\)/, 'the map paints words in the face layout.js measures them with')
+    assert.ok(FONT_DISPLAY.startsWith("'IBM Plex Sans Condensed'"), 'the centre name is measured with the display face')
     // compare.html is gone (issue #91): the ruler now lives on design-5.html, already in this
     // loop, so the deleted page's own slot is dropped rather than replaced.
-    for (const page of ['design-5.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=League\+Spartan[^"]*Instrument\+Sans/, `${page} loads both faces`)
+    for (const page of ['design-5.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*IBM\+Plex\+Sans\+Condensed/, `${page} loads the three faces`)
   })
 
   it('the mask and ruler swatches use SCALE_MID, not --muted', () => {

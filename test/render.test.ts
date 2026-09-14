@@ -5,7 +5,6 @@ import {
   STRIP_MIN_R,
   drawMap,
   inspect,
-  liftOfPerson,
   paintAtlasLoading,
   paintCandidates,
   paintColumns,
@@ -25,10 +24,16 @@ import {
   paintTestimony,
   paintTestimonyError,
   paintTestimonyLoading,
+  RARE_SHOWN,
+  hasShares,
+  liftBalance,
+  liftOfPerson,
+  rareRisers,
   paintWeek,
   paintWeekError,
   paintWeekLoading,
   risingRulerItems,
+  shareBalance,
   rulerTerms,
   stripLayout,
   stripRadius,
@@ -887,42 +892,76 @@ const risingTerm = (over: Partial<RisingTerm> = {}): RisingTerm => ({
   ...over,
 })
 
-describe('issue #151 AC10: risingRulerItems / liftOfPerson position by the person\'s own lift', () => {
-  const about = { recent: 10, baseline: 5 }
-  const days = 7
-  const baselineDays = 30
-  const liftPerson = liftOfPerson(about, days, baselineDays)
+describe('risingRulerItems / shareBalance position by the word\'s share of everything written about the person', () => {
+  // 40 word rows this week, 16 before: a word with 5 rows now and 1 (+1 smoothing → 2) before
+  // holds 1/8 of the words in both windows.
+  const about = { recent: 10, baseline: 5, words_recent: 40, words_baseline: 16 }
+  const byShare = (a: typeof about) => (t: RisingTerm) => shareBalance(t, a)
 
-  it('a term whose lift equals the person\'s own lift sits at the centre (balance === 0)', () => {
-    const items = risingRulerItems([risingTerm({ term: 'igual', lift: liftPerson })], liftPerson)
+  it('a term whose share is unchanged sits at the centre (balance === 0)', () => {
+    const items = risingRulerItems([risingTerm({ term: 'igual', count_recent_raw: 5, count_baseline_raw: 1 })], byShare(about))
     assert.equal(items[0].balance, 0)
   })
 
-  it('a term whose lift is 8x the person\'s own lift or higher clamps to the rightmost position (balance === 1)', () => {
-    const exactlyEight = risingRulerItems([risingTerm({ term: 'oito', lift: liftPerson * 8 })], liftPerson)
+  it('a share 8x bigger than before clamps to the rightmost position (balance === 1)', () => {
+    const exactlyEight = risingRulerItems([risingTerm({ term: 'oito', count_recent_raw: 40, count_baseline_raw: 1 })], byShare(about))
     assert.equal(exactlyEight[0].balance, 1, 'log2(8)/3 === 1 exactly')
-    const wellOver = risingRulerItems([risingTerm({ term: 'muito-mais', lift: liftPerson * 500 })], liftPerson)
+    const wellOver = risingRulerItems([risingTerm({ term: 'muito-mais', count_recent_raw: 40, count_baseline_raw: 0 })], byShare({ ...about, words_baseline: 5000 }))
     assert.equal(wellOver[0].balance, 1, 'anything past the clamp still reads as 1, never more')
   })
 
-  it('a term whose lift is 1/8th the person\'s own lift or lower clamps to the leftmost position (balance === -1)', () => {
-    const items = risingRulerItems([risingTerm({ term: 'oitavo', lift: liftPerson / 8 })], liftPerson)
-    assert.equal(items[0].balance, -1)
+  it('a share 8x smaller than before clamps to the leftmost position (balance === -1)', () => {
+    const items = risingRulerItems([risingTerm({ term: 'oitavo', count_recent_raw: 1, count_baseline_raw: 15 })], byShare({ ...about, words_recent: 64 }))
+    assert.equal(items[0].balance, -1, '1/64 now against 16/16 before, clamped at -1')
   })
 
-  it('liftOfPerson stays finite when about.baseline is 0, thanks to the same +1 smoothing used per term', () => {
-    const zeroBaseline = liftOfPerson({ recent: 5, baseline: 0 }, 7, 30)
-    assert.ok(Number.isFinite(zeroBaseline) && zeroBaseline > 0, `expected a finite positive lift, got ${zeroBaseline}`)
+  it('a corpus whose docs grew longer does not push a steady word right: shares, not doc counts', () => {
+    // Same 10 docs both weeks, but the recent ones carry 6x the words. A word in half the docs
+    // either week keeps its share only if the totals scale with it.
+    const grown = { recent: 10, baseline: 10, words_recent: 600, words_baseline: 100 }
+    const steady = risingRulerItems([risingTerm({ term: 'sempre', count_recent_raw: 30, count_baseline_raw: 4 })], byShare(grown))
+    assert.equal(steady[0].balance, 0)
+  })
+
+  it('stays finite with no baseline words at all: everything present is new, so it reads +1', () => {
+    const items = risingRulerItems([risingTerm({ term: 'novo', count_recent_raw: 3, count_baseline_raw: 0 })], byShare({ recent: 5, baseline: 0, words_recent: 9, words_baseline: 0 }))
+    assert.equal(items[0].balance, 1)
+    assert.equal(shareBalance({ count_recent_raw: 0, count_baseline_raw: 0 }, { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 }), 0)
   })
 
   it('combined is the raw recent+baseline doc count, independent of balance', () => {
-    const items = risingRulerItems([risingTerm({ term: 'soma', count_recent_raw: 12, count_baseline_raw: 3, lift: liftPerson })], liftPerson)
+    const items = risingRulerItems([risingTerm({ term: 'soma', count_recent_raw: 12, count_baseline_raw: 3 })], byShare(about))
     assert.equal(items[0].combined, 15)
+  })
+
+  // The pre-#164 rule, kept for a payload that predates `present`/`about.words_*`.
+  it('liftBalance / liftOfPerson: the fallback positions by the person\'s own lift and stays finite at baseline 0', () => {
+    const lp = liftOfPerson({ recent: 10, baseline: 5 }, 7, 30)
+    assert.equal(liftBalance({ lift: lp }, lp), 0)
+    assert.equal(liftBalance({ lift: lp * 8 }, lp), 1)
+    assert.equal(liftBalance({ lift: lp / 8 }, lp), -1)
+    const zero = liftOfPerson({ recent: 5, baseline: 0 }, 7, 30)
+    assert.ok(Number.isFinite(zero) && zero > 0)
+  })
+
+  it('hasShares is true only when present and both word totals arrived', () => {
+    const base = { days: 7, baseline: 30, terms: [], outlets: [], about: { recent: 1, baseline: 1 } }
+    assert.equal(hasShares(base), false)
+    assert.equal(hasShares({ ...base, present: [] }), false)
+    assert.equal(hasShares({ ...base, about: { recent: 1, baseline: 1, words_recent: 3, words_baseline: 2 } }), false)
+    assert.equal(hasShares({ ...base, present: [], about: { recent: 1, baseline: 1, words_recent: 3, words_baseline: 2 } }), true)
+  })
+
+  it('rareRisers: terms minus present, only lift > 1, in the order terms came', () => {
+    const present = [risingTerm({ term: 'a', lift: 4 }), risingTerm({ term: 'b', lift: 2 })]
+    const terms = [risingTerm({ term: 'a', lift: 4 }), risingTerm({ term: 'c', lift: 3 }), risingTerm({ term: 'b', lift: 2 }), risingTerm({ term: 'd', lift: 1.5 }), risingTerm({ term: 'e', lift: 1 }), risingTerm({ term: 'f', lift: 0.5 })]
+    assert.deepEqual(rareRisers(terms, present).map((t) => t.term), ['c', 'd'])
+    assert.deepEqual(rareRisers(terms, []).map((t) => t.term), ['a', 'c', 'b', 'd'], 'lift 1 and below never counts as rising')
   })
 })
 
 describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paintRisingLoading', () => {
-  const risingData = (terms: RisingTerm[], about = { recent: 8, baseline: 3 }): Rising => ({ days: 7, baseline: 30, terms, outlets: [], about })
+  const risingData = (present: RisingTerm[], about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }, terms: RisingTerm[] = present): Rising => ({ days: 7, baseline: 30, terms, present, outlets: [], about })
 
   it('AC13: an empty terms array paints "Nenhuma palavra neste recorte." inside #risingRuler', () => {
     withFakeDocument(['risingRuler'], (els) => {
@@ -942,6 +981,67 @@ describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paint
       assert.match(els.risingRuler.innerHTML, /data-term="diretor" data-kind="word"/)
       assert.match(els.risingRuler.innerHTML, /antes \(30 dias\)/)
       assert.match(els.risingRuler.innerHTML, /agora \(7 dias\)/)
+      assert.match(els.risingRuler.innerHTML, /Fatia menor que antes[\s\S]*mesma fatia[\s\S]*Fatia maior que antes/, 'the axis speaks of shares, not of the person\'s own pace')
+    })
+  })
+
+  it('the risers off the ruler (terms minus present, lift > 1) are listed after the overflow as clickable buttons, and alone they still paint', () => {
+    withFakeDocument(['risingRuler'], (els) => {
+      const present = [risingTerm({ term: 'diretor', kind: 'word', count_recent_raw: 12, count_baseline_raw: 1, lift: 2 })]
+      const terms = [
+        risingTerm({ term: 'sigilo', kind: 'word', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 }),
+        risingTerm({ term: 'vorcaro', kind: 'hashtag', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 }),
+        ...present,
+        risingTerm({ term: 'caiu', kind: 'word', count_recent_raw: 3, count_baseline_raw: 9, lift: 0.5 }),
+      ]
+      const { shown } = paintRisingRuler({ data: risingData(present, undefined, terms), metrics, selected: { term: 'sigilo', kind: 'word' }, onPick: () => {} })
+      assert.equal(shown, 1, 'only present words take a place on the ruler itself')
+      const html = els.risingRuler.innerHTML
+      assert.match(html, /ruler-rare/)
+      assert.match(html, /Fora da régua, 2 palavras com poucos textos na semana, mas mais que antes/)
+      assert.match(html, /<button class="quiet-button is-selected" data-term="sigilo" data-kind="word"/)
+      assert.match(html, /data-term="vorcaro" data-kind="hashtag"[^>]*>#vorcaro</)
+      assert.doesNotMatch(html, /data-term="caiu"/, 'a word whose lift is 1 or below did not rise and never makes the list')
+      assert.equal(html.match(/data-term="diretor"/g)?.length, 1, 'a ruled word is never listed again below')
+      assert.ok(html.indexOf('ruler-axis-labels') < html.indexOf('ruler-rare'), 'the list comes after the axis')
+      assert.doesNotMatch(html, /Nenhuma palavra neste recorte/)
+      paintRisingRuler({ data: risingData([], undefined, terms), metrics, selected: null, onPick: () => {} })
+      assert.match(els.risingRuler.innerHTML, /ruler-rare/, 'no present words but risers still paints the list')
+    })
+  })
+
+  it('shows only the first RARE_SHOWN (12) risers, in lift order, and says how many it left out', () => {
+    withFakeDocument(['risingRuler'], (els) => {
+      const present = [risingTerm({ term: 'comum', count_recent_raw: 20, lift: 1.2 })]
+      const risers = Array.from({ length: 30 }, (_, i) => risingTerm({ term: `rara${i}`, count_recent_raw: 3, count_baseline_raw: 0, lift: 40 - i }))
+      paintRisingRuler({ data: risingData(present, undefined, [...risers, ...present]), metrics, selected: null, onPick: () => {} })
+      const html = els.risingRuler.innerHTML
+      assert.equal(RARE_SHOWN, 12)
+      assert.equal(html.match(/data-term="rara\d+"/g)?.length, 12)
+      assert.match(html, /Fora da régua, 12 de 30 palavras/)
+      assert.match(html, /data-term="rara11"/)
+      assert.doesNotMatch(html, /data-term="rara12"/)
+      paintRisingRuler({ data: risingData(present, undefined, [...risers.slice(0, 3), ...present]), metrics, selected: null, onPick: () => {} })
+      assert.match(els.risingRuler.innerHTML, /Fora da régua, 3 palavras com/, 'no "de N" when nothing was left out')
+    })
+  })
+
+  // A /rising payload cached before `present`/`about.words_*` existed: the ruler must not paint
+  // NaN positions from `undefined` totals, so it falls back to the person-lift rule, with that
+  // rule's own axis prose and no list below.
+  it('a pre-present payload paints every word by the person-lift rule, finite positions, old axis, no risers list', () => {
+    withFakeDocument(['risingRuler'], (els) => {
+      const about = { recent: 10, baseline: 5 }
+      const lp = liftOfPerson(about, 7, 30)
+      const terms = [risingTerm({ term: 'igual', lift: lp }), risingTerm({ term: 'oito', lift: lp * 8 })]
+      const stale: Rising = { days: 7, baseline: 30, terms, outlets: [], about }
+      const { shown } = paintRisingRuler({ data: stale, metrics, selected: null, onPick: () => {} })
+      assert.equal(shown, 2)
+      const html = els.risingRuler.innerHTML
+      assert.doesNotMatch(html, /NaN/)
+      assert.match(html, /Mais devagar que a pessoa[\s\S]*no mesmo ritmo[\s\S]*Mais rápido que a pessoa/)
+      assert.doesNotMatch(html, /Fatia/)
+      assert.doesNotMatch(html, /ruler-rare/)
     })
   })
 

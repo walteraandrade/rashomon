@@ -23,7 +23,10 @@ export type CompareSide = { count: number; pmi: number; tone: number | null }
 export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null }
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
 export type RisingTerm = { term: string; kind: string; count_recent: number; count_baseline: number; count_recent_raw: number; count_baseline_raw: number; lift: number }
-export type Rising = { days: number; baseline: number; terms: RisingTerm[]; outlets: string[]; about: { recent: number; baseline: number } }
+// `present` and `about.words_*` are optional on the page side only: a payload cached before they
+// existed still has to paint something rather than NaN positions.
+export type RisingAbout = { recent: number; baseline: number; words_recent?: number; words_baseline?: number }
+export type Rising = { days: number; baseline: number; terms: RisingTerm[]; present?: RisingTerm[]; outlets: string[]; about: RisingAbout }
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }

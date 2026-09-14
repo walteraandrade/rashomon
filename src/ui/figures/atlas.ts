@@ -298,7 +298,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
       paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony })
       if (mode === 'strip') {
-        paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value })
+        paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value, width: $('atlasStrip').clientWidth || undefined })
         paintCurrentSelection()
       }
     } else {
@@ -358,6 +358,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('status').textContent = 'Não foi possível carregar dados reais.'
       $('viewport').hidden = false
       $('columns').hidden = true
+      $('atlasStrip').hidden = true
+      $('stripHiddenNote').hidden = true
       $('overflow').hidden = true
       $('legend').textContent = ''
       $('viewport').innerHTML = OUTAGE
@@ -401,6 +403,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('status').textContent = 'Não foi possível carregar dados reais.'
       $('viewport').hidden = false
       $('columns').hidden = true
+      $('atlasStrip').hidden = true
+      $('stripHiddenNote').hidden = true
       $('overflow').hidden = true
       $('legend').textContent = ''
       $('viewport').innerHTML = OUTAGE

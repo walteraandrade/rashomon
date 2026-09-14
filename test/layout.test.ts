@@ -384,4 +384,10 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     assert.deepEqual(once.overflow, twice.overflow)
     assert.equal(once.height, twice.height)
   })
+
+  it('a long word at the loudest size still fits the column width, never bleeding into the next day', () => {
+    const day = [term('presidente', 96), term('crise', 3)]
+    const [column] = weekLayout(measure, [day], 120)
+    for (const w of column.words) assert.ok(w.w <= 120 - 6 + 1e-6, `${w.term} at ${w.w}px overflows the 120px column`)
+  })
 })

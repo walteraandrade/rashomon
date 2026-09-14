@@ -48,7 +48,7 @@ import {
   weekDayIso,
   weekDayLabel,
 } from './format.js'
-import { FONT_MONO, RULER_PAD, rulerLayout, routesFrom, swarm, weekLayout, type RulerItem, type WeekColumnLayout } from './layout.js'
+import { FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, rulerLayout, routesFrom, swarm, weekLayout, type RulerItem, type WeekColumnLayout } from './layout.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
@@ -1033,8 +1033,6 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
 
 // Figure 5 (issue #147): one word mark per day, no colour hue (--wc stays --ink in atlas.css),
 // a data-day alongside data-term/data-kind since a rising-style word belongs to one day only.
-const WEEK_COLUMN_WIDTH = 120
-
 const weekWordMarkup = (
   d: { term: string; kind: string; count: number; text: string; x: number; y: number; size: number; w: number; h: number },
   centerX: number,
@@ -1092,7 +1090,7 @@ export const paintWeek = ({
   chart.hidden = false
   chart.classList.remove('is-loading')
   chart.setAttribute('aria-busy', 'false')
-  const layouts = weekLayout(metrics, data.buckets.map((b) => b.terms))
+  const layouts = weekLayout(metrics, data.buckets.map((b) => b.terms), width)
   chart.innerHTML = html`<div class="week-columns">${data.buckets.map((bucket, i) => weekColumnMarkup(bucket, layouts[i], width, selected))}</div>`
   for (const el of queryAll('[data-term]', chart)) {
     const pick = () => onPick(String(el.dataset.day), String(el.dataset.term), String(el.dataset.kind))

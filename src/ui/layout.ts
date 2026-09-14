@@ -296,8 +296,10 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
 export const WEEK_SIZE_MIN = 12
 const WEEK_SIZE_MAX = 24
 export const WEEK_MAX_HEIGHT = 240
+export const WEEK_COLUMN_WIDTH = 120
 const WEEK_GAP_X = 6
 const WEEK_GAP_Y = 3
+const WEEK_PAD_X = 6
 
 export type WeekColumnLayout<T> = {
   words: (T & { text: string; x: number; y: number; size: number; w: number; h: number })[]
@@ -306,15 +308,18 @@ export type WeekColumnLayout<T> = {
   height: number
 }
 
-const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[]): WeekColumnLayout<T> => {
+const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T> => {
   if (!terms.length) return { words: [], overflow: [], half: 30, height: 60 }
   const counts = terms.map((t) => t.count)
   const lo = Math.min(...counts)
   const hi = Math.max(...counts)
+  const maxWidth = Math.max(20, width - WEEK_PAD_X)
   const sized = terms.map((t) => {
     const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
-    const size = Math.round(WEEK_SIZE_MIN + (WEEK_SIZE_MAX - WEEK_SIZE_MIN) * fraction)
+    let size = Math.round(WEEK_SIZE_MIN + (WEEK_SIZE_MAX - WEEK_SIZE_MIN) * fraction)
     const text = label(t)
+    // A word wider than the column shrinks toward the floor rather than spilling into the next day.
+    while (size > WEEK_SIZE_MIN && measure(text, size) + 6 > maxWidth) size -= 1
     const w = measure(text, size) + 6
     return { ...t, text, x: 0, size, w, h: Math.round(size * 1.24) }
   })
@@ -331,4 +336,5 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[]): WeekColum
 
 // A day's own column is independent of its neighbours (align-items: start in atlas.css), so
 // each gets its own height rather than one shared across the week.
-export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][]): WeekColumnLayout<T>[] => days.map((terms) => weekColumn(measure, terms))
+export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T>[] =>
+  days.map((terms) => weekColumn(measure, terms, width))

@@ -124,6 +124,32 @@ throughput, peak RSS, peak heap and database size for an ingest and for two cons
 `pnpm bench` it refuses to open `./data/pg`. Knobs: `BENCH_WRITES_DOCS` (20000), `BENCH_WRITES_DATA_DIR`
 (`./data/bench-writes`), `BENCH_WRITES_DAYS`, `BENCH_WRITES_SEED`, `BENCH_WRITES_NOW`.
 
+## Graph aggregates
+
+`GET /api/people/:id/graph` is the one route whose cost is the window itself: PMI needs every tracked document in the recorte, so the live statement (`graphQuery`, `src/graph.ts`) scans the 30-day corpus on every request the CDN does not hold. Measured 2026-09-14 on production (Supabase's smallest compute, `work_mem` 2 MB, one parallel worker): 7.1 s of SQL for `lula`, 30 days; 1.6 s for 7 days; every buffer already in memory. The machine is the floor, not the plan.
+
+`pnpm aggregate` (`src/aggregate.ts`) folds that scan into three tables the route reads by primary key:
+
+| table | key | holds |
+| --- | --- | --- |
+| `graph_scopes` | `(days, source, person_id)` | `docs`, `tracked`, `about` counts and `built_at` |
+| `graph_terms_all` | `(days, source, term, kind)` | `c_t`, the PMI denominator over tracked docs |
+| `graph_terms` | `(days, source, person_id, term, kind)` | `c_pt`, `c_t` copied in, mean `tone` |
+
+Windows are `query.ts`'s `DAYS` (7, 30, 365) and sources are every entry of its `SOURCES` plus `all` — the same lists the parser snaps onto, imported, not copied — one row per person even when the window holds nothing, so an empty source never falls back to the scan. Scopes and terms are filled from the same person list (the argument, narrowed to the `persons` table for the foreign key), so a scope row always comes with that person's terms and zero rows can only mean "never built for this person". `graphFor` runs `graphFastQuery` when `precomputable(q)` holds (a window in `DAYS`, no `domain`, no `lean`, one `source`); zero rows send it to the live statement, and both render the same `nodes`, `signature` and `stats` byte for byte (`test/aggregate.test.ts` proves it on every recorte of the fixture, and that a person left out of a build falls back). `min`, `kind`, `sort` and `limit` are applied at read time, so the cache surface is unchanged. The person's own name words are dropped at build time with the same rule as the live statement.
+
+Only the `graph` statement is precomputed. With `testimony=1`, which the page always sends, `graphFor` still runs `linksQuery` and `termTestimonyQuery` live (0.35 s + 0.14 s measured on production the same day), so a `/graph` MISS goes from about 7 s to about half a second, not to zero. `/api/compare` (figure 3) has no aggregate at all.
+
+The build runs at the end of `pnpm ingest` and `pnpm reindex`, both of which own `DATA_DIR`, and in `warm.yml` as `pnpm aggregate --if-missing`, which builds only when `graph_scopes` is empty (the first production deploy after the tables appeared) and shares ingest's concurrency group so two builds never run on one database. One transaction per window (`delete` then `insert`, readers see the previous build until commit), one statement for the universe, one for the scopes, one per person for the terms. It is idempotent. After `pnpm push` run `pnpm aggregate` against the same `DATABASE_URL`, or the deployment answers from the live scan until the next scheduled ingest. The tables come from `pnpm migrate`, and `graphFastQuery` needs them to exist: run `pnpm migrate` against production before the deploy that ships this, as with any schema change.
+
+What changes in meaning: the window edge. The live statement cuts at `now()` when the request arrives; the tables cut at `now()` when the build ran, so between two ingests (six hours) a document at the tail of the window stays in a little longer than the live cut would keep it. Documents never enter or leave between builds anyway, since only ingest writes. `graph_scopes.built_at` records the cut. `test/aggregate.test.ts` pins that divergence: a doc inserted after a build shows on the live path only, and the next build makes the two agree again.
+
+## Warming the CDN
+
+A deployment empties Vercel's cache, and the first reader of every recorte pays the origin. `pnpm warm` (`src/warm.ts`) asks the site for the recortes the page requests by itself — `/api/people`, then `graph`, `sources` and `testimony` for every person in `seed.json` at 7 and 30 days, with `design-5.html`'s defaults (`sort=pmi`, `limit=18`, `source=all`) — built with the same functions `src/ui/api.ts` uses, so the querystring, and therefore the cache key, is the page's own. Every request carries `Pragma: no-cache` (and `Cache-Control: no-cache`): the CDN keeps `s-maxage=6h` + `stale-while-revalidate=24h` and the ingest cron is 6 h, so a plain GET after an ingest could HIT, or stale-serve, the pre-ingest payload and leave the origin untouched; with the header Vercel fetches the origin in the foreground and stores the answer (`x-vercel-cache: REVALIDATED`, or `MISS` on a cold key). A warm that reports mostly `HIT` is therefore a warm that did nothing. Two lanes, never a burst; it prints status and `x-vercel-cache` counts, p50/p95 and the five slowest paths with their `server-timing`, and exits non-zero on a 5xx or a failed fetch. `SITE_URL` overrides the target (default `https://rashomon-five.vercel.app`). `.github/workflows/ingest.yml` runs it after every ingest, and `.github/workflows/warm.yml` after every successful production deployment (`deployment_status`) or by hand (`gh workflow run warm.yml`), after `pnpm aggregate --if-missing` so a fresh database is never warmed through the live scan.
+
+Two limits, stated so nobody expects more. Vercel's cache is per region: a request from a GitHub runner fills the cache of the edge near that runner, not of `gru1`, so a reader in Brazil can still see a `MISS` the warm did not cover. And it warms nothing the page does not ask for on its own: the year, a source other than `all`, a `min` or `limit` a reader changed. The aggregates above are what make those misses cheap; the warm only makes the common ones free.
+
 ## Indexes and planner statistics
 
 `migrate()` is the whole schema: `create table if not exists` / `create index if not exists`, so it is
@@ -167,6 +193,8 @@ Adding the index to a database that predates it is the same one-off: `pnpm reind
 that calls `migrate()`) builds it, in about 100 ms per 8k rows, with the server stopped as usual.
 
 ## Performance baseline
+
+The benchmark builds the graph aggregates after generating its corpus, so `graph.*` scenarios run the precomputed path production runs; `graph.domain` and `graph.lean.left` stay on the live statement, and the gap between them is what the aggregates buy.
 
 Three separate things. Two are local only: opt-in instrumentation on the running API (`PERF=1`) and a benchmark that builds its own database (`pnpm bench`). One runs in every browser, production included: the User Timing marks the page records, which exist to be read next to Vercel's `x-vercel-cache` header.
 

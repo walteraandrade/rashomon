@@ -56,6 +56,10 @@ const generate = async () => {
   const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
   if (rows[0].n === DOCS && process.env.BENCH_RESET !== '1') {
     console.log(`dataset: reusing ${rows[0].n} docs in ${DATA_DIR}`)
+    // A corpus generated before the aggregates existed still needs them; the build is idempotent.
+    // Dynamic like db.js below: aggregate.js imports db.js, which reads DATA_DIR at import time.
+    const { buildGraphAggregates } = await import('./aggregate.js')
+    await buildGraphAggregates(persons)
     await db.close()
     return
   }
@@ -72,6 +76,9 @@ const generate = async () => {
      select doc_id, person_id, 'stub', round((((doc_id * 37 + length(person_id) * 11) % 200) - 100) / 10.0, 2)
      from doc_persons`,
   )
+  // Production answers /graph from these tables (built after every ingest); the bench must too.
+  const { buildGraphAggregates } = await import('./aggregate.js')
+  await buildGraphAggregates(persons)
   await db.exec(`analyze`)
   console.log(`dataset: built in ${Math.round((performance.now() - started) / 1000)}s`)
   await db.close()

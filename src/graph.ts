@@ -1,6 +1,7 @@
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
+import { DAYS } from './query.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
 
@@ -208,6 +209,58 @@ const graphQuery = (person: Person, q: GraphQuery) => {
       from signature_top
     ), '[]'::json) as signature`
 }
+
+// The same shape as graphQuery over the tables `pnpm aggregate` builds: one indexed range
+// per (days, source, person) instead of a scan of the window. Zero rows when that window
+// was never built, which is what sends graphFor to the live query. domain/lean never come
+// here: the aggregates know only days and a single source.
+const graphFastQuery = (person: Person, q: GraphQuery) => {
+  const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
+  return sql`
+  with s as (
+    select docs, tracked, about from graph_scopes where days = ${q.days} and source = ${q.source} and person_id = ${person.id}
+  ),
+  scored as (
+    select g.term, g.kind, g.c_pt as count, g.tone,
+      ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
+    from graph_terms g, s
+    where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}
+  ),
+  nodes_top as (
+    select term, kind, count,
+      round(pmi::numeric, 2)::float8 as pmi_rounded,
+      round(tone::numeric, 2)::float8 as tone_rounded,
+      ${sortKey} as sort_key
+    from scored
+    where count >= ${q.min} and (${q.kind} = 'all' or kind = any(string_to_array(${q.kind}, ',')))
+    order by ${sortKey} desc, term, kind
+    limit ${q.limit}
+  ),
+  signature_top as (
+    select term, kind, count, round(pmi::numeric, 2)::float8 as pmi
+    from scored, s
+    where count >= greatest(3, s.about * 0.05)
+    order by pmi desc, term, kind
+    limit 5
+  )
+  select
+    s.docs::int as docs,
+    s.about::int as about,
+    coalesce((
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)
+        order by sort_key desc, term, kind)
+      from nodes_top
+    ), '[]'::json) as nodes,
+    coalesce((
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi) order by pmi desc, term, kind)
+      from signature_top
+    ), '[]'::json) as signature
+  from s`
+}
+
+// A recorte the aggregates can hold: a built window, no domain, no lean, one source or all.
+export const precomputable = (q: Pick<GraphQuery, 'days' | 'domain' | 'lean' | 'source'>) =>
+  DAYS.includes(q.days) && q.domain === 'all' && q.lean === 'all' && !q.source.includes(',')
 
 // count(*): doc_terms' PK + about's PK (doc_persons with person_id fixed) make doc_id unique
 // inside each (s, t) group. Order by is spelled out rather than relying on plan emission order.
@@ -517,10 +570,19 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
 
 // links stays a second statement: its `any(ids)` term list is the output of the first one,
 // so folding it in would mean recomputing the ranking to feed itself.
+// Precomputed first, live when the window was never built (local dev before `pnpm aggregate`,
+// or a scope the tables cannot hold); both render the same shape. Zero rows means never built
+// for this person: scopesQuery and personTermsQuery fill from the same person list, so a
+// scope row always comes with that person's terms. Only this statement is precomputed;
+// linksQuery and termTestimonyQuery below still run live.
+const graphAggregates = async (person: Person, q: GraphQuery): Promise<GraphAggregates> => {
+  const fast = precomputable(q) ? (await run<GraphAggregates>(graphFastQuery(person, q))).rows[0] : undefined
+  return fast ?? (await run<GraphAggregates>(graphQuery(person, q))).rows[0]
+}
+
 export const graphFor = async (person: Person, q: GraphQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
-  const { rows } = await run<GraphAggregates>(graphQuery(person, q))
-  const { docs, about, nodes, signature } = rows[0]
+  const { docs, about, nodes, signature } = await graphAggregates(person, q)
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
   const links = ids.length ? await run<LinkRow>(linksQuery(person, q, ids)) : { rows: [] }
   const testimony = q.method ? (await run<TermTestimonyRow>(termTestimonyQuery(person, q, q.method, ids))).rows[0] : null
@@ -715,6 +777,7 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
 // EXPLAIN (ANALYZE, BUFFERS).
 export const queries = {
   graph: graphQuery,
+  graphFast: graphFastQuery,
   links: linksQuery,
   sources: sourcesQuery,
   docs: docsQuery,
@@ -738,6 +801,7 @@ const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'coun
 
 export const statements = {
   graph: queries.graph(samplePerson, sampleGraph).text,
+  graphFast: queries.graphFast(samplePerson, sampleGraph).text,
   links: queries.links(samplePerson, sampleScope, ['word:sample']).text,
   sources: queries.sources(samplePerson, sampleScope).text,
   docs: queries.docs(samplePerson, sampleDocs).text,

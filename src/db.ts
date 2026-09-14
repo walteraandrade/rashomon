@@ -122,12 +122,41 @@ export const schema = `
       w1 text not null,
       w2 text
     );
+    create table if not exists graph_scopes (
+      days int not null,
+      source text not null,
+      person_id text not null references persons(id) on delete cascade,
+      docs int not null,
+      tracked int not null,
+      about int not null,
+      built_at timestamptz not null default now(),
+      primary key (days, source, person_id)
+    );
+    create table if not exists graph_terms_all (
+      days int not null,
+      source text not null,
+      term text not null,
+      kind text not null,
+      c_t int not null,
+      primary key (days, source, term, kind)
+    );
+    create table if not exists graph_terms (
+      days int not null,
+      source text not null,
+      person_id text not null references persons(id) on delete cascade,
+      term text not null,
+      kind text not null,
+      c_pt int not null,
+      c_t int not null,
+      tone float8,
+      primary key (days, source, person_id, term, kind)
+    );
 `
 
 export const migrate = () => db.exec(schema)
 
 // Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
-export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony'] as const
+export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms_all', 'graph_terms'] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 
 // How many new docs an ingest must write before its statistics refresh is worth the pause.

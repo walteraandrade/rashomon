@@ -1,5 +1,6 @@
 import persons from '../seed.json' with { type: 'json' }
-import { analyzeAfterWrite, analyzeMinDocs, db, migrate } from './db.js'
+import { AGGREGATE_TABLES, buildGraphAggregates } from './aggregate.js'
+import { analyzeAfterWrite, analyzeMinDocs, analyzeTables, db, migrate } from './db.js'
 import { collectors, defaultSources } from './collectors/index.js'
 import { loadPhrases } from './phrases.js'
 import { insertDocs, pruneRemoved, upsertPersons } from './store.js'
@@ -36,6 +37,10 @@ const main = async () => {
       ? `analyzed ${analyzed.join(', ')} after ${written} new docs`
       : `skipped analyze: ${written} new docs below ANALYZE_MIN_DOCS=${analyzeMinDocs()}`,
   )
+  // The window moves even when nothing new was written, so the aggregates are rebuilt every run.
+  const aggregates = await buildGraphAggregates(persons)
+  await analyzeTables(AGGREGATE_TABLES)
+  console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
   await db.close()
 }
 

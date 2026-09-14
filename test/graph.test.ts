@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { before, after, describe, it } from 'node:test'
+import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import {
@@ -1330,6 +1331,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
   it('for every builder, with different values', () => {
     const built = {
       graph: queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 }),
+      graphFast: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 }),
       links: queries.links(lula, scope, ['word:a', 'word:b']),
       sources: queries.sources(lula, scope),
       docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
@@ -1526,12 +1528,20 @@ describe('shared graph aggregations (issue #45)', () => {
     assert.deepEqual(empty.links, [])
   })
 
-  it('runs one statement for stats, nodes and signature, plus links', async () => {
-    assert.equal(await countStatements(() => graphFor(lula, graphBase)), 2)
+  it('runs one probe of the aggregates, then one statement for stats, nodes and signature, plus links', async () => {
+    await db.query(`delete from graph_scopes`)
+    assert.equal(await countStatements(() => graphFor(lula, graphBase)), 3)
   })
 
-  it('runs a single statement when the graph has no node to link', async () => {
-    assert.equal(await countStatements(() => graphFor(nobody, graphBase)), 1)
+  it('runs the probe and the aggregate statement when the graph has no node to link', async () => {
+    await db.query(`delete from graph_scopes`)
+    assert.equal(await countStatements(() => graphFor(nobody, graphBase)), 2)
+  })
+
+  it('once the window is built, the probe is the statement: one for the aggregates, one for links', async () => {
+    await buildGraphAggregates(persons)
+    assert.equal(await countStatements(() => graphFor(lula, graphBase)), 2)
+    assert.equal(await countStatements(() => graphFor(lula, { ...graphBase, domain: 'example.org' })), 2, 'a domain is never precomputed: live statement plus links')
   })
 })
 

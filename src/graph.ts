@@ -273,23 +273,42 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
 export const precomputable = (q: Pick<GraphQuery, 'days' | 'domain' | 'lean' | 'source'>) =>
   DAYS.includes(q.days) && q.domain === 'all' && q.lean === 'all' && !q.source.includes(',')
 
-// count(*): doc_terms' PK + about's PK (doc_persons with person_id fixed) make doc_id unique
-// inside each (s, t) group. Order by is spelled out rather than relying on plan emission order.
-const linksQuery = (person: Person, q: Scope, ids: string[]) => sql`
-  with ${scopeCte(person, q)}
-  select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(*)::int as count
-  from doc_terms a
-  join doc_terms b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
-  join about x on x.doc_id = a.doc_id
-  where (a.kind || ':' || a.term) = any(${ids}::text[]) and (b.kind || ':' || b.term) = any(${ids}::text[])
+// The term list arrives as `kind:term` ids (what the route names a node) and is matched as
+// (kind, term) pairs: an expression like `kind || ':' || term = any(...)` has no index, and the
+// planner answered it with a parallel seq scan of doc_terms plus a Parallel Hash whose barrier
+// waited seconds on a CPU-starved instance (issue #163). Matching the pair lets doc_terms_term_idx
+// find each term's rows directly. count(*): doc_terms' PK + about's PK (doc_persons with
+// person_id fixed) make doc_id unique inside each (s, t) group. Order by is spelled out rather
+// than relying on plan emission order.
+const splitIds = (ids: string[]) => {
+  const at = ids.map((id) => id.indexOf(':'))
+  return { kinds: ids.map((id, i) => id.slice(0, at[i])), terms: ids.map((id, i) => id.slice(at[i] + 1)) }
+}
+
+const linksQuery = (person: Person, q: Scope, ids: string[]) => {
+  const { kinds, terms } = splitIds(ids)
+  return sql`
+  with ${scopeCte(person, q)},
+  hits as (
+    select t.doc_id, t.kind || ':' || t.term as id
+    from doc_terms t
+    join unnest(${kinds}::text[], ${terms}::text[]) as wanted(kind, term) on wanted.kind = t.kind and wanted.term = t.term
+    join about x on x.doc_id = t.doc_id
+  )
+  select a.id as s, b.id as t, count(*)::int as count
+  from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
   group by 1, 2 having count(*) >= 2
   order by 1, 2`
+}
 
 // Per-term testimony means for the mask that colours the map: each term's mean score minus
 // the person's own mean over the same `about`, so the colour shows distance from the person
 // rather than from zero (cancels the name prior). Runs only when asked; count(*) is one row
-// per doc per term by doc_terms' PK.
-const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => sql`
+// per doc per term by doc_terms' PK. The ids are matched as (kind, term) pairs for the same
+// reason as `linksQuery`: the concatenated expression has no index.
+const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => {
+  const { kinds, terms } = splitIds(ids)
+  return sql`
   with ${scopeCte(person, q)},
   scored as (
     select a.doc_id, dt.score
@@ -301,11 +320,13 @@ const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: strin
     coalesce((
       select json_agg(json_build_object('id', id, 'score', score, 'n', n) order by id) from (
         select t.kind || ':' || t.term as id, round(avg(s.score)::numeric, 2)::float8 as score, count(*)::int as n
-        from doc_terms t join scored s on s.doc_id = t.doc_id
-        where (t.kind || ':' || t.term) = any(${ids}::text[])
+        from doc_terms t
+        join unnest(${kinds}::text[], ${terms}::text[]) as wanted(kind, term) on wanted.kind = t.kind and wanted.term = t.term
+        join scored s on s.doc_id = t.doc_id
         group by 1
       ) x
     ), '[]'::json) as terms`
+}
 
 type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: { id: string; score: number; n: number }[] }
 

@@ -506,6 +506,131 @@ export const paintStrip = ({
   }
 }
 
+// Figure 1's third view (issue #149): each word positioned by its own kikori mean, not by
+// outlet. termMask is the single source of both eligibility and colour; a null return means
+// "too few scored texts, or no person mean to compare against" and the word is hidden, counted
+// only in the note. The domain is derived per recorte (unlike the fixed ±10 axis above) and
+// always includes the person's own score, so the dashed mean line never falls outside it.
+type StripDot = { id: string; term: string; kind: string; score: number; count: number; tone: string; x: number; r: number }
+
+export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony | undefined, width = 860) => {
+  const personScore = personTestimony?.score ?? null
+  const inner = Math.max(80, width - 2 * STRIP_PAD)
+  const eligible = nodes
+    .map((n) => ({ n, tone: termMask(n, personScore) }))
+    .filter((e): e is { n: Term; tone: string } => e.tone !== null)
+  if (!eligible.length)
+    return { dots: [] as (StripDot & { y: number })[], domainMin: -1, domainMax: 1, ticks: [-1, 0, 1], x: (s: number) => STRIP_PAD + inner / 2, half: 44, height: 88 }
+  const scores = eligible.map((e) => e.n.testimony!.score)
+  let domainMin = Math.floor(Math.min(...scores, personScore as number))
+  let domainMax = Math.ceil(Math.max(...scores, personScore as number))
+  if (domainMax - domainMin < 2) {
+    domainMin -= 1
+    domainMax += 1
+  }
+  // A float mean can sit a fraction of a unit from a floor/ceil edge (e.g. -3.97 next to a
+  // domainMin of -4) without ever equaling it; comparing the gap to a share of the span catches
+  // that near-miss the same way an exact match already caught the integer case.
+  const edgeGap = (domainMax - domainMin) * 0.03
+  if ((personScore as number) - domainMin < edgeGap) domainMin -= 1
+  if (domainMax - (personScore as number) < edgeGap) domainMax += 1
+  const span = domainMax - domainMin
+  const x = (s: number) => STRIP_PAD + ((Math.max(domainMin, Math.min(domainMax, s)) - domainMin) / span) * inner
+  const placed: StripDot[] = eligible.map((e) => ({
+    id: e.n.id,
+    term: e.n.term,
+    kind: e.n.kind,
+    score: e.n.testimony!.score,
+    count: e.n.count,
+    tone: e.tone,
+    x: x(e.n.testimony!.score),
+    r: stripRadius(e.n.count, width),
+  }))
+  // At a high word count the swarm can stack many rows; shrink the dots (never below
+  // STRIP_MIN_R) until the figure fits STRIP_MAX_HEIGHT, the same trade-off stripLayout
+  // already makes for figure 2's outlet strip.
+  const smallest = placed.reduce((m, d) => Math.min(m, d.r), Infinity)
+  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
+  let scale = 1
+  const attempt = (k: number) => {
+    const dots = swarm(placed.map((d) => ({ ...d, r: d.r * k })))
+    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
+    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
+  }
+  let fit = attempt(scale)
+  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
+    scale = Math.max(floor, scale * 0.92)
+    fit = attempt(scale)
+  }
+  const ticks: number[] = []
+  for (let t = domainMin; t <= domainMax; t++) ticks.push(t)
+  return { dots: fit.dots, domainMin, domainMax, ticks, x, half: fit.half, height: fit.half * 2 }
+}
+
+// Strip mode draws no links and has nothing to zoom, so its #legend names size and colour
+// instead of the map's copy about lines and zooming; colour reuses maskLegend because the
+// strip's dots are coloured by the same termMask the map and columns already use.
+export const stripLegend = (personTestimony?: PersonTestimony) =>
+  html`<span><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho = quantos textos</span><span>Tab + Enter para selecionar</span>${maskLegend(personTestimony)}`
+
+// Draws into #atlasStrip and #stripHiddenNote. Unlike paintStrip, size is by document count
+// (the same number the map and the columns already size by) and colour is termMask's mask
+// colour, not the tone-only ramp #testimony uses.
+export const paintTermStrip = ({
+  nodes,
+  personTestimony,
+  onChoose,
+  search = '',
+  width = 860,
+}: {
+  nodes: Term[]
+  personTestimony?: PersonTestimony
+  onChoose: (id: string) => void
+  search?: string
+  width?: number
+}) => {
+  const strip = $('atlasStrip')
+  const note = $('stripHiddenNote')
+  if (!nodes.length) {
+    strip.innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
+    if (note) note.hidden = true
+    return
+  }
+  const { dots, domainMin, domainMax, ticks, x, half, height } = termStripLayout(nodes, personTestimony, width)
+  const hiddenCount = nodes.length - dots.length
+  const overall = personTestimony?.score
+  const hasMean = overall !== null && overall !== undefined
+  if (note) {
+    note.hidden = hiddenCount === 0
+    note.textContent = hiddenCount
+      ? hasMean
+        ? `${hiddenCount} ${hiddenCount === 1 ? 'palavra deixada' : 'palavras deixadas'} de fora por ${hiddenCount === 1 ? 'ter' : 'terem'} menos de 3 textos avaliados.`
+        : `${hiddenCount} ${hiddenCount === 1 ? 'palavra deixada' : 'palavras deixadas'} de fora: esta pessoa não tem média de avaliação neste recorte.`
+      : ''
+  }
+  if (!dots.length) {
+    strip.innerHTML = '<div class="empty">Nenhuma palavra com avaliação suficiente neste recorte.</div>'
+    return
+  }
+  const normalizedSearch = normalize(search)
+  const tick = (s: number) => html`<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
+  strip.innerHTML = html`${hasMean ? html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${((x(overall as number) - STRIP_PAD) / Math.max(1, width - 2 * STRIP_PAD)) * 100}%">média da pessoa ${signed(overall)}</span></div>` : ''}<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Palavras na régua da avaliação"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${ticks.map(tick)}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {
+    const dim = normalizedSearch ? !matching({ term: d.term, kind: d.kind }, search) : false
+    return html`<g class="strip-dot ${dim ? 'is-dim' : ''}" data-node="${d.id}" style="--tone:${d.tone}" role="button" tabindex="0" aria-label="${d.term}, avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}"><title>${d.term} · avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`
+  })}</svg><div class="strip-axis-labels"><span>${signed(domainMin)} contra</span><span>${signed(domainMax)} a favor</span></div>`
+  for (const el of queryAll('[data-node]', strip)) {
+    const pick = () => onChoose(String(el.dataset.node))
+    el.addEventListener('click', pick)
+    el.addEventListener('keydown', (event) => {
+      const e = event as KeyboardEvent
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        pick()
+      }
+    })
+  }
+}
+
 export const paintDocsLoading = () => {
   const box = $('docs')
   if (!box) return

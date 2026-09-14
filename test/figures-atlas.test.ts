@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { narrowToSources, params, sourcesParams } from '../src/ui/api.js'
 import { createHandlers, docsQuery, mount, scopeKeys } from '../src/ui/figures/atlas.js'
+import { mountDocsCard } from '../src/ui/docs-card.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../src/ui/format.js'
 import { clearScopes, fromScope } from '../src/ui/state.js'
 import { persons, seed } from './fixture.js'
-import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
+import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 
 // src/ui/figures/atlas.ts, figure 1: its handler table (createHandlers), its request keys
@@ -54,7 +55,8 @@ describe('createHandlers: local repaints never reload, control changes do (issue
   })
 
   it('search, zoom and the view-mode buttons never ask for a reload', () => {
-    for (const name of ['search', 'zoomIn', 'zoomOut', 'zoomReset', 'modeMap', 'modeColumns'] as const) {
+    // issue #149 AC1: modeStrip is a local repaint the same way modeMap/modeColumns are.
+    for (const name of ['search', 'zoomIn', 'zoomOut', 'zoomReset', 'modeMap', 'modeColumns', 'modeStrip'] as const) {
       const { calls, handlers } = spies()
       handlers[name]()
       assert.ok(!calls.includes('load'), `${name} must stay a local repaint`)
@@ -341,12 +343,224 @@ describe('mount: colour by avaliação is the default', () => {
     })
   })
 
-  it('design-5.html has the toggle next to the view switch, pressed by default', () => {
-    assert.match(read('design-5.html'), /<button id="modeColumns" aria-pressed="false">Lista<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação<\/button>/)
+  // Issue #149 AC9: the segment gained a third button (Avaliação) between Lista and the
+  // toolbar's closing </div>, so the old two-button literal no longer matches.
+  it('design-5.html has the toggle next to the view switch, pressed by default (issue #149 AC9)', () => {
+    assert.match(
+      read('design-5.html'),
+      /<button id="modeColumns" aria-pressed="false">Lista<\/button><button id="modeStrip" aria-pressed="false">Avaliação<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação<\/button>/,
+    )
   })
 
   it("figures/atlas.ts's resize handling never reads or writes #strip, #testimonyList or #outletList (issue #92 AC13)", () => {
     const src = readFileSync(join(root, 'src', 'ui', 'figures', 'atlas.ts'), 'utf8')
     for (const id of ['strip', 'testimonyList', 'outletList']) assert.doesNotMatch(src, new RegExp(`\\$\\('${id}'\\)`), `figure 1 must not touch #${id}`)
+  })
+})
+
+// Issue #149: a third mode on figure 1, a beeswarm of a person's words positioned by their own
+// kikori mean. No new route, no new fetch: the strip paints from the graph already loaded.
+describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () => {
+  it('AC1: createHandlers exposes modeStrip, which calls setMode with "strip"', () => {
+    let arg: string | undefined
+    const h: any = createHandlers({ setMode: (m: string) => (arg = m) })
+    assert.equal(typeof h.modeStrip, 'function', "createHandlers' returned table must expose modeStrip, the same way it exposes modeMap/modeColumns")
+    h.modeStrip()
+    assert.equal(arg, 'strip')
+  })
+
+  it('AC5: modeStrip is a local repaint — shows #atlasStrip, hides #viewport/#columns/#mask/#zoomGroup, and issues no new request', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [
+        { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } },
+        { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0.2, n: 8 } },
+      ]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      const requestsBefore = calls.length
+      els.modeStrip.fire('click')
+      assert.equal(els.viewport.hidden, true, '#viewport must hide in strip mode')
+      assert.equal(els.columns.hidden, true, '#columns must hide in strip mode')
+      assert.equal(els.atlasStrip.hidden, false, '#atlasStrip must show in strip mode')
+      assert.equal(els.mask.hidden, true, 'the mask toggle is meaningless once colour is not optional')
+      assert.equal(els.zoomGroup.hidden, true, 'there is nothing to zoom in strip mode')
+      assert.equal(els.keyDefault.hidden, true, 'the default figure key hides in strip mode')
+      assert.equal(els.keyStrip.hidden, false, "the strip's own figure key shows instead")
+      assert.equal(calls.length, requestsBefore, 'switching to the strip view must not fetch anything new')
+
+      // issue #149 gap: switching back to map must hide the strip and its note again, not
+      // leave them shown underneath #viewport.
+      els.modeMap.fire('click')
+      assert.equal(els.atlasStrip.hidden, true, '#atlasStrip must hide again once map mode is picked')
+      assert.equal(els.stripHiddenNote.hidden, true, '#stripHiddenNote must hide again once map mode is picked')
+    })
+  })
+
+  it('issue #149 gap: a word selected before switching to strip keeps its is-selected mark on the strip circle', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [
+        { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } },
+        { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0.2, n: 8 } },
+      ]
+      const graph = { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph, '/docs': { docs: [], total: 0 } })
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeColumns.fire('click')
+      const card = [...els.columns.querySelectorAll('[data-col]')].find((el: any) => el.dataset.col === 'word:golpe')
+      assert.ok(card, 'the columns list must carry a card for golpe')
+      card.fire('click')
+      await flush()
+      els.modeStrip.fire('click')
+      const dot = [...els.atlasStrip.querySelectorAll('[data-node]')].find((el: any) => el.dataset.node === 'word:golpe')
+      assert.ok(dot, 'the strip must paint a circle for golpe')
+      assert.equal(dot.classes['is-selected'], true, 'the word selected before switching keeps its is-selected mark once the strip repaints')
+    })
+  })
+
+  it('AC6: a strip pick reuses the same handlers.pick(id) path drawMap and paintColumns use, and stays single-sided', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      const graph = { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph, '/docs': { docs: [], total: 0 } })
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      const dot = els.atlasStrip.querySelectorAll('[data-node]')[0]
+      assert.ok(dot, 'the strip must paint a clickable node for the eligible word')
+      dot.fire('click')
+      await flush()
+      const docsRequests = calls.filter((url) => url.includes('/docs?'))
+      assert.equal(docsRequests.length, 1, 'a strip pick asks for that word\'s documents, the same as a map/column pick')
+      assert.match(docsRequests[0], /term=golpe/)
+      assert.equal(els.docsDialog.open, true)
+      assert.equal(els.docsDialog.classes['is-wide'], false, 'a single word never opens the ruler\'s two-column layout')
+      assert.equal(els.docsTitle.textContent, 'golpe')
+    })
+  })
+
+  it('AC7: a click on empty space inside #atlasStrip releases the selection, the same way #viewport/#columns already do', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      const graph = { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph, '/docs': { docs: [], total: 0 } })
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      els.atlasStrip.querySelectorAll('[data-node]')[0].fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the pick opened the card')
+      els.atlasStrip.fire('click', { target: { closest: () => null } })
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'empty space inside the strip released the selection and closed the card')
+    })
+  })
+
+  it('#149: a failed reload while in strip mode hides #atlasStrip and #stripHiddenNote too, not just #viewport/#columns', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      assert.equal(els.atlasStrip.hidden, false, 'strip mode is showing before the reload fails')
+
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/graph')) throw new Error('network down')
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      els.person.value = people[1].id
+      els.person.fire('change')
+      await flush(200) // control changes debounce load() at 140ms
+
+      assert.equal(els.viewport.hidden, false, '#viewport shows the outage illustration')
+      assert.equal(els.columns.hidden, true, '#columns must stay hidden during the outage')
+      assert.equal(els.atlasStrip.hidden, true, '#atlasStrip must hide once the reload fails')
+      assert.equal(els.stripHiddenNote.hidden, true, '#stripHiddenNote must hide too')
+    })
+  })
+
+  it('#149: paintTermStrip is called with #atlasStrip\'s own measured width, not the 860 default', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.atlasStrip.clientWidth = 540
+      els.modeStrip.fire('click')
+      assert.match(els.atlasStrip.innerHTML, /viewBox="0 0 540 \d+"/, 'the svg viewBox must use #atlasStrip.clientWidth, not the 860 default')
+      assert.match(els.atlasStrip.innerHTML, /width="540"/, 'the svg width attribute must match #atlasStrip.clientWidth')
+      assert.doesNotMatch(els.atlasStrip.innerHTML, /width="860"/, 'must not fall back to the 860 default once a real width is measured')
+    })
+  })
+
+  it('issue #149 gap: #atlasStrip observes its own resize and repaints, like figure 2\'s #strip', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      // Capture the callback figures/atlas.js registers on #atlasStrip so the test can invoke a
+      // resize directly, the same discipline test/figures-testimony.test.ts uses for #strip.
+      const captured: { target: unknown; cb: () => void }[] = []
+      class CapturingResizeObserver {
+        cb: () => void
+        constructor(cb: () => void) {
+          this.cb = cb
+        }
+        observe(target: unknown) {
+          captured.push({ target, cb: this.cb })
+        }
+        disconnect() {}
+      }
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = CapturingResizeObserver
+      els.atlasStrip.clientWidth = 800
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      const firstMarkup = els.atlasStrip.innerHTML
+      assert.match(firstMarkup, /viewBox="0 0 800/, 'the strip must first paint at its own clientWidth')
+      const stripObserver = captured.find((c) => c.target === els.atlasStrip)
+      assert.ok(stripObserver, 'figures/atlas.js must observe #atlasStrip with its own ResizeObserver')
+      els.atlasStrip.clientWidth = 400
+      stripObserver!.cb()
+      const secondMarkup = els.atlasStrip.innerHTML
+      assert.notEqual(secondMarkup, firstMarkup, 'firing the ResizeObserver callback must repaint the strip')
+      assert.match(secondMarkup, /viewBox="0 0 400/, 'the repaint must use the new width')
+    })
+  })
+
+  it('issue #149 gap: #legend names the strip\'s own size/colour encoding in strip mode, not the map\'s link/zoom copy', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.match(els.legend.innerHTML, /zoom e rolagem/, 'map mode keeps its own legend copy')
+      els.modeStrip.fire('click')
+      assert.doesNotMatch(els.legend.innerHTML, /Linha = documentos em comum/, 'strip mode draws no links, so the link copy must go')
+      assert.doesNotMatch(els.legend.innerHTML, /zoom e rolagem/, 'strip mode has nothing to zoom, so the zoom copy must go')
+      assert.match(els.legend.innerHTML, /Tamanho = quantos textos/, 'strip mode names its own size encoding')
+    })
   })
 })

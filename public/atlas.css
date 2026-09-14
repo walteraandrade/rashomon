@@ -250,7 +250,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* A reload dims what is on screen instead of blanking it, so the column keeps its height and
    nothing below the map moves until the new map lands. First paint uses a ghost of the map,
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
-.workspace .viewport, .workspace .columns, .workspace .inspector,
+.workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
 .compare .ruler, .compare .detail, .rising .ruler, .rising .note { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
@@ -347,10 +347,18 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-dot .dot-halo { fill: transparent; }
 .strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 .strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
-.strip-dot.is-active .dot-face { fill-opacity: 1; }
-.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
+.strip-dot.is-active .dot-face, .strip-dot.is-selected .dot-face, .strip-dot.is-match .dot-face { fill-opacity: 1; }
+.strip-dot.is-active .dot-halo, .strip-dot.is-selected .dot-halo, .strip-dot.is-match .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
+/* Figure 1's own strip: a word that does not match the search dims, the same treatment
+   .column-card.is-dim already gets. */
+.strip-dot.is-dim { opacity: .35; }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
+
+/* Figure 1's own strip mode: same .strip skeleton, sitting beside #viewport/#columns
+   inside .canvas rather than as its own figure, so it needs its own outer spacing. */
+#atlasStrip { margin: var(--space-2) 0 var(--space-3); }
+#stripHiddenNote { margin: 0 0 var(--space-3); }
 
 .overflow { padding: 0 0 var(--space-5); }
 .overflow p { font-size: var(--t-sm); color: var(--muted); margin-bottom: var(--space-2); }

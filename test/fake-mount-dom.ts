@@ -8,8 +8,30 @@
 
 type Option = { value: string; textContent: string }
 
+// classList/attributes live here, not only on FakeBox, because paintSelection's is-selected
+// loop (render.ts, queryAll('[data-node]') with no root) walks the stub elements dataStubs()
+// returns below, the same way it would walk real elements document-wide.
 class Listenable {
   _listeners: Record<string, ((e?: unknown) => void)[]> = {}
+  classes: Record<string, boolean> = {}
+  attributes: Record<string, string> = {}
+  classList = {
+    toggle: (name: string, on?: boolean) => {
+      this.classes[name] = on ?? !this.classes[name]
+    },
+    add: (name: string) => {
+      this.classes[name] = true
+    },
+    remove: (name: string) => {
+      this.classes[name] = false
+    },
+  }
+  setAttribute(name: string, value: string) {
+    this.attributes[name] = value
+  }
+  getAttribute(name: string) {
+    return this.attributes[name] ?? null
+  }
   addEventListener(type: string, fn: (e?: unknown) => void) {
     ;(this._listeners[type] ??= []).push(fn)
   }
@@ -19,10 +41,10 @@ class Listenable {
   }
 }
 
-const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'data-col') =>
+const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'data-col' | 'data-node') =>
   [...html.matchAll(new RegExp(`${attr}="([^"]*)"`, 'g'))].map(([, value]) => {
     const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
-    stub.dataset = attr === 'data-domain' ? { domain: value } : attr === 'data-col' ? { col: value } : { stripDomain: value }
+    stub.dataset = attr === 'data-domain' ? { domain: value } : attr === 'data-col' ? { col: value } : attr === 'data-node' ? { node: value } : { stripDomain: value }
     return stub
   })
 
@@ -61,7 +83,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-person-docs'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -94,7 +116,7 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-person-docs') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
     const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : dataStubs(this.html, attr)
@@ -106,6 +128,7 @@ class FakeBox extends Listenable {
     if (selector === '[data-strip-domain]') return this.stubsFor('data-strip-domain')
     if (selector === '[data-term]') return this.stubsFor('data-term')
     if (selector === '[data-col]') return this.stubsFor('data-col')
+    if (selector === '[data-node]') return this.stubsFor('data-node')
     if (selector === '[data-person-docs]') return this.stubsFor('data-person-docs')
     return []
   }
@@ -209,6 +232,15 @@ const atlasIds = () => ({
   overflow: new FakeBox('overflow'),
   modeMap: new FakeBox('modeMap'),
   modeColumns: new FakeBox('modeColumns'),
+  // Issue #149: figure 1's third view, the kikori beeswarm strip, its own hidden-count note,
+  // the zoom control group (toggled off in strip mode) and the two figure-key blocks that
+  // swap with the mode.
+  modeStrip: new FakeBox('modeStrip'),
+  atlasStrip: new FakeBox('atlasStrip'),
+  stripHiddenNote: new FakeBox('stripHiddenNote'),
+  zoomGroup: new FakeBox('zoomGroup'),
+  keyDefault: new FakeBox('keyDefault'),
+  keyStrip: new FakeBox('keyStrip'),
   mask: new FakeBox('mask'),
   zoomIn: new FakeBox('zoomIn'),
   zoomOut: new FakeBox('zoomOut'),
@@ -303,7 +335,15 @@ export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]
     },
     removeEventListener: () => {},
     querySelector: () => null,
-    querySelectorAll: () => [],
+    // render.ts's paintSelection calls queryAll('[data-node]') with no root (defaulting to
+    // document) to toggle is-selected across every painted word, map/overflow/strip alike. A
+    // real document finds every match across the tree; drawMap's own two document-rooted
+    // wiring loops stay unsupported here (they need element.tagName, which these stubs never
+    // carry) since no criterion in this suite clicks a map word through that path.
+    querySelectorAll: (selector: string) => {
+      if (selector === '[data-node]') return [...els.viewport.querySelectorAll('[data-node]'), ...els.overflow.querySelectorAll('[data-node]'), ...els.atlasStrip.querySelectorAll('[data-node]')]
+      return []
+    },
     // render.js's createCanvasMeasure builds the injected `measure` layout.js's packers need;
     // figures/compare.js calls it on the first paint of the ruler (issue #99, words instead of
     // dots). It writes ctx.font, then reads measureText, so the stub has to remember the font

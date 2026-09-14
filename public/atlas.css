@@ -441,6 +441,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .metric + p, .inspector .eyebrow:first-child { margin-top: 0; }
 .score-highlight { color: var(--accent); font-weight: 600; }
 .empty-note { margin-top: var(--space-3); }
+/* Issue #147 AC20: the inspector's own 7-bar sparkline, one word's last 7 rolling days. No hue
+   of its own -- --ink / --soft only, the same pair a ghost already uses. */
+.sparkline { display: flex; align-items: flex-end; gap: 4px; height: 34px; margin: var(--space-2) 0 4px; }
+.spark-bar { width: 8px; height: var(--h); background: var(--ink); border-radius: 1px 1px 0 0; }
+.spark-ghost { width: 8px; height: 18px; }
 .related { margin: var(--space-2) 0 var(--space-5); }
 .related button { width: 100%; border: 0; background: none; display: flex; align-items: center; gap: var(--space-3); text-align: left; padding: 10px 0; font-family: var(--mono); font-size: var(--t-base); }
 .related button:hover span { color: var(--accent); }

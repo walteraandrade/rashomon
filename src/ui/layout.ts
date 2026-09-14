@@ -1,4 +1,4 @@
-import { label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term } from './format.js'
+import { label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
@@ -288,3 +288,47 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
   const used = Math.max(40, Math.ceil(reach) + 6)
   return { words: placed, overflow, x, half: used, height: used * 2, width }
 }
+
+// Figure 5 (issue #147): one column per calendar day, words stacked around a shared vertical
+// axis (x fixed at the column's own centre, 0) instead of spread along a balance axis, so
+// swarmBy's box clearance alone decides how far a word drifts from the loudest word that day.
+// No second packer -- same swarmBy rulerLayout already builds on.
+export const WEEK_SIZE_MIN = 12
+const WEEK_SIZE_MAX = 24
+export const WEEK_MAX_HEIGHT = 240
+const WEEK_GAP_X = 6
+const WEEK_GAP_Y = 3
+
+export type WeekColumnLayout<T> = {
+  words: (T & { text: string; x: number; y: number; size: number; w: number; h: number })[]
+  overflow: (T & { text: string; size: number })[]
+  half: number
+  height: number
+}
+
+const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[]): WeekColumnLayout<T> => {
+  if (!terms.length) return { words: [], overflow: [], half: 30, height: 60 }
+  const counts = terms.map((t) => t.count)
+  const lo = Math.min(...counts)
+  const hi = Math.max(...counts)
+  const sized = terms.map((t) => {
+    const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
+    const size = Math.round(WEEK_SIZE_MIN + (WEEK_SIZE_MAX - WEEK_SIZE_MIN) * fraction)
+    const text = label(t)
+    const w = measure(text, size) + 6
+    return { ...t, text, x: 0, size, w, h: Math.round(size * 1.24) }
+  })
+  const half = WEEK_MAX_HEIGHT / 2
+  const { placed, overflow } = swarmBy(sized, {
+    size: (d) => d.size,
+    reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + WEEK_GAP_X ? (p.h + item.h) / 2 + WEEK_GAP_Y : null),
+    fits: (item, y) => Math.abs(y) + item.h / 2 <= half,
+  })
+  const reach = placed.reduce((m, p) => Math.max(m, Math.abs(p.y) + p.h / 2), 0)
+  const used = Math.max(30, Math.ceil(reach) + 6)
+  return { words: placed, overflow, half: used, height: used * 2 }
+}
+
+// A day's own column is independent of its neighbours (align-items: start in atlas.css), so
+// each gets its own height rather than one shared across the week.
+export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][]): WeekColumnLayout<T>[] => days.map((terms) => weekColumn(measure, terms))

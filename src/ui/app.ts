@@ -3,8 +3,9 @@ import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountRising } from './figures/rising.js'
 import { mount as mountTestimony } from './figures/testimony.js'
+import { mount as mountWeek } from './figures/week.js'
 import { mountHelp } from './help.js'
-import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintRisingLoading, paintTestimonyLoading } from './render.js'
+import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintRisingLoading, paintTestimonyLoading, paintWeekLoading } from './render.js'
 import * as api from './api.js'
 
 type Person = { id: string; name: string }
@@ -34,6 +35,8 @@ const FIGURES: FigureEntry[] = [
     mount: mountCompare,
   },
   { id: 'rising', sectionId: 'rising', keys: ['person', 'source'], noticeId: 'risingAbout', mount: mountRising },
+  // days stays fixed at 7, never seeded: figure 5 has no period control (issue #147 §4).
+  { id: 'week', sectionId: 'week', keys: ['person', 'source', 'limit'], noticeId: 'weekNote', mount: mountWeek },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.
@@ -59,6 +62,7 @@ const paintBootLoading = () => {
   paintOutletsLoading()
   paintCompareLoading()
   paintRisingLoading()
+  paintWeekLoading()
 }
 
 export const boot = async () => {

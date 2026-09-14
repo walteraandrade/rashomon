@@ -24,6 +24,13 @@ export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' 
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
 export type RisingTerm = { term: string; kind: string; count_recent: number; count_baseline: number; count_recent_raw: number; count_baseline_raw: number; lift: number }
 export type Rising = { days: number; baseline: number; terms: RisingTerm[]; outlets: string[]; about: { recent: number; baseline: number } }
+export type WeekTerm = { term: string; kind: string; count: number }
+export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
+export type Week = { days: number; tz: string; buckets: WeekBucket[] }
+// The inspector's own 7-bar sparkline (issue #147): 'loading' paints a ghost, 'ready' the
+// counts /timeline returned, 'error' leaves the hole empty rather than inventing bars.
+export type SparklineState = 'loading' | 'ready' | 'error'
+export type Sparkline = { state: SparklineState; counts?: number[] }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 
@@ -54,6 +61,21 @@ export const normalize = (s: unknown) =>
     .replace(/\p{M}/gu, '')
     .toLowerCase()
     .trim()
+
+// /week's bucket.start is already a BRT calendar day's own midnight; both helpers read it back
+// through the same timezone rather than trusting the reader's local clock.
+const WEEK_TZ = 'America/Sao_Paulo'
+
+export const weekDayIso = (startIso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(startIso))
+
+// "seg 8": weekday abbreviation, no trailing period, plus the day of month. Never a year or
+// month, since every bucket is inside the last 7 (or 30/365) days.
+export const weekDayLabel = (startIso: string) => {
+  const d = new Date(startIso)
+  const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: WEEK_TZ, weekday: 'short' }).format(d).replace(/\.$/, '')
+  const day = new Intl.DateTimeFormat('pt-BR', { timeZone: WEEK_TZ, day: 'numeric' }).format(d)
+  return `${weekday} ${day}`
+}
 
 export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' }
 

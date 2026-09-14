@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { mountDocsCard } from '../src/ui/docs-card.js'
 import { mount as mountAtlas } from '../src/ui/figures/atlas.js'
 import { mount as mountCompare } from '../src/ui/figures/compare.js'
+import { mount as mountRising } from '../src/ui/figures/rising.js'
 import { mount as mountTestimony } from '../src/ui/figures/testimony.js'
 import { clearScopes } from '../src/ui/state.js'
 import { persons } from './fixture.js'
@@ -37,6 +38,13 @@ const compare = {
   b: { person: personB, docs: 8 },
   measure: 'count',
   terms: [{ term: 'reforma', kind: 'word', a: { count: 6, pmi: 1.2, score: 6 }, b: { count: 2, pmi: 0.4, score: 2 } }],
+}
+const rising = {
+  days: 7,
+  baseline: 30,
+  outlets: [],
+  about: { recent: 8, baseline: 3 },
+  terms: [{ term: 'reforma', kind: 'word', count_recent: 1.71, count_baseline: 0.03, count_recent_raw: 12, count_baseline_raw: 1, lift: 57 }],
 }
 
 const docsCalls = (calls: string[]) => calls.filter((url) => url.includes('/docs?'))
@@ -195,6 +203,65 @@ describe('figure 3: a word on the ruler opens both people at once', () => {
       await flush()
       assert.equal(els.docsDialog.open, true)
       mark().fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, false)
+    })
+  })
+})
+
+// Issue #151: figure 4's own word belongs to one person, not two, and always the recent 7-day
+// window — never the figure's own 30-day baseline it scores lift against.
+describe('issue #151 AC11/AC12: figure 4 (rising) opens one side, scoped to the last 7 days, and releases it the same way the other figures do', () => {
+  it('picking a word requests exactly one /docs call, for the tracked person, days=7, term=the word', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/rising': rising, '/docs': docs })
+      mountDocsCard()
+      mountRising(els.rising, { people, initial: { person: personA.id, source: 'gdelt' } })
+      await flush()
+      assert.equal(docsCalls(calls).length, 0, 'painting the figure asks for no documents')
+
+      els.risingRuler.querySelectorAll('[data-term]')[0].fire('click')
+      await flush()
+      const only = docsCalls(calls)
+      assert.equal(only.length, 1, 'a rising word belongs to one person, not two')
+      assert.match(only[0], new RegExp(`/people/${personA.id}/docs\\?`), "figure 4's own tracked person")
+      assert.match(only[0], /days=7\b/, 'always the recent window, never the figure\'s own 30-day baseline')
+      assert.match(only[0], /term=reforma/)
+      assert.match(only[0], /source=gdelt/, "the figure's own source scope travels with the pick")
+      assert.equal(els.docsDialog.open, true)
+      assert.equal(els.docsTitle.textContent, 'reforma')
+    })
+  })
+
+  it('picking the same word again closes the card', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/rising': rising, '/docs': docs })
+      mountDocsCard()
+      mountRising(els.rising, { people, initial: { person: personA.id } })
+      await flush()
+      const mark = () => els.risingRuler.querySelectorAll('[data-term]')[0]
+      mark().fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      mark().fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, false)
+    })
+  })
+
+  it('clicking empty space inside #rising releases the selection and closes the card', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/rising': rising, '/docs': docs })
+      mountDocsCard()
+      mountRising(els.rising, { people, initial: { person: personA.id } })
+      await flush()
+      els.risingRuler.querySelectorAll('[data-term]')[0].fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      els.risingRuler.fire('click', { target: { closest: () => null } })
       await flush()
       assert.equal(els.docsDialog.open, false)
     })

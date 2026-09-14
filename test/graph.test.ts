@@ -726,6 +726,63 @@ describe('risingFor (issue #3)', () => {
   })
 })
 
+// Issue #151's own acceptance criteria, independently pinned by number against the spec text
+// (§5) rather than assumed from the tests already sitting in the risingFor (issue #3) suite
+// above, which cover the same facts under issue #3's older AC numbering.
+describe('issue #151: /rising\'s about totals and raw counts', () => {
+  before(seed)
+
+  it('AC2: about carries integer recent/baseline doc totals, scoped like terms by source/domain/lean, not by kind', async () => {
+    const r = await risingFor(lula, risingBase)
+    assert.equal(Number.isInteger(r.about.recent), true)
+    assert.equal(Number.isInteger(r.about.baseline), true)
+    // Domain narrows about exactly as it narrows terms (kind does not, pinned separately below).
+    const domainScoped = await risingFor(lula, { ...risingBase, domain: 'g1.globo.com' })
+    assert.ok(domainScoped.about.recent <= r.about.recent)
+    assert.notDeepEqual(domainScoped.about, r.about)
+  })
+
+  it('AC3: count_recent_raw/count_baseline_raw are non-negative integers, and the rounded rate columns derive from them', async () => {
+    const r = await risingFor(lula, risingBase)
+    assert.ok(r.terms.length > 0, 'sanity: must have rows to make the check meaningful')
+    for (const t of r.terms) {
+      assert.equal(Number.isInteger(t.count_recent_raw) && t.count_recent_raw >= 0, true)
+      assert.equal(Number.isInteger(t.count_baseline_raw) && t.count_baseline_raw >= 0, true)
+      assert.equal(t.count_recent, Math.round((t.count_recent_raw / risingBase.days) * 100) / 100)
+      assert.equal(t.count_baseline, Math.round((t.count_baseline_raw / risingBase.baseline) * 100) / 100)
+    }
+  })
+
+  it('AC4: a person with no docs at all gets terms: [], about.recent: 0, about.baseline: 0', async () => {
+    const r = await risingFor(nobody, risingBase)
+    assert.deepEqual(r.terms, [])
+    assert.equal(r.about.recent, 0)
+    assert.equal(r.about.baseline, 0)
+  })
+
+  it('AC5: a person with docs only in the baseline window gets terms: [], about.recent: 0, and about.baseline reflects the baseline docs', async () => {
+    const r = await risingFor(lula, { ...risingBase, days: 1 })
+    assert.deepEqual(r.terms, [])
+    assert.equal(r.about.recent, 0)
+    assert.ok(r.about.baseline > 0)
+  })
+
+  it('AC6: min, kind, source, domain and lean keep filtering terms identically to before this change', async () => {
+    const at2 = await risingFor(lula, { ...risingBase, min: 2 })
+    const at3 = await risingFor(lula, { ...risingBase, min: 3 })
+    assert.ok(at2.terms.length > at3.terms.length, 'min still floors the raw recent count')
+    const hashtagOnly = await risingFor(lula, { ...risingBase, kind: 'hashtag' })
+    assert.ok(hashtagOnly.terms.every((t) => t.kind === 'hashtag'))
+  })
+
+  it('AC6: an unknown kind token filters terms to nothing while about still reflects the true window totals', async () => {
+    const bogus = await risingFor(lula, { ...risingBase, kind: 'bogus', days: 2000, baseline: 2000 })
+    const all = await risingFor(lula, { ...risingBase, days: 2000, baseline: 2000 })
+    assert.deepEqual(bogus.terms, [])
+    assert.deepEqual(bogus.about, all.about)
+  })
+})
+
 describe('timelineFor (issue #4)', () => {
   before(seed)
 

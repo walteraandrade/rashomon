@@ -271,8 +271,25 @@ describe('issue #92: the loading ghost shows before /api/people resolves', () =>
         assert.match(els.testimonyList.innerHTML, /Lendo a avaliação/)
         assert.equal(els.strip.hidden, false)
         assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
+        assert.equal(els.risingRuler.hidden, false, 'issue #151: figure 4 gets its own boot ghost too')
+        assert.match(els.risingRuler.innerHTML, /ruler-axis/)
         void booting
       })
+    })
+  })
+})
+
+describe('issue #151: figure 4 (rising) joins app.ts\'s bootstrap, same bare/prefixed convention as the other three', () => {
+  it('bare ?person= seeds risingPerson; rising.source overrides the source for figure 4 only', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony })
+      await withLocation(`?person=${personB.id}&rising.source=gdelt`, () => appModule.boot())
+      await flush()
+      assert.equal(els.risingPerson.value, personB.id, 'the bare person key seeds figure 4 too, same fallback figure 1/2 read')
+      const risingCall = calls.find((u) => u.includes('/rising'))
+      assert.ok(risingCall?.includes(`/people/${personB.id}/rising`), `figure 4 must ask about ${personB.id}: ${risingCall}`)
+      assert.match(risingCall!, /source=gdelt/)
     })
   })
 })

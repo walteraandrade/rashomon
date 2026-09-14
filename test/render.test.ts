@@ -1131,6 +1131,13 @@ describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', 
     })
   })
 
+  it('one listed word is named in the singular', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'pronunciamento', kind: 'word', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 84 })
+      assert.match(els.weekChart.innerHTML, /<div class="week-overflow"><p class="eyebrow">Não coube<\/p><button/)
+    })
+  })
+
   it('a wrapped phrase is one tspan per line inside one mark, still one data-term', () => {
     withFakeDocument(['weekChart', 'weekNote'], (els) => {
       paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'supremo tribunal federal', kind: 'phrase', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 145 })

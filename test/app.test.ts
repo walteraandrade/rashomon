@@ -302,3 +302,27 @@ describe('issue #151: figure 4 (rising) joins app.ts\'s bootstrap, same bare/pre
     })
   })
 })
+
+describe("issue #147: figure 5 (week) joins app.ts's bootstrap, same bare/prefixed convention, but bare days= never reaches it", () => {
+  it('bare ?person= seeds weekPerson; week.source=/week.limit= override figure 5 only; bare days= is ignored', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/api/people': people,
+        '/graph': emptyGraph(personA),
+        '/sources': [],
+        '/testimony': emptyTestimony,
+        '/week': { days: 7, tz: 'America/Sao_Paulo', buckets: [] },
+      })
+      await withLocation(`?person=${personB.id}&days=365&week.source=gdelt&week.limit=5`, () => appModule.boot())
+      await flush()
+      assert.equal(els.weekPerson.value, personB.id, 'the bare person key seeds figure 5 too')
+      assert.equal(els.weekLimit.value, '5', 'week.limit overrides figure 5 only')
+      const weekCall = calls.find((u) => u.includes('/week'))
+      assert.ok(weekCall?.includes(`/people/${personB.id}/week`), `figure 5 must ask about ${personB.id}: ${weekCall}`)
+      const qs = new URL(weekCall!, 'http://localhost').searchParams
+      assert.equal(qs.get('days'), '7', 'figure 5 always sends days=7; there is no days= control to seed, bare or otherwise')
+      assert.equal(qs.get('source'), 'gdelt')
+    })
+  })
+})

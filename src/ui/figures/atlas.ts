@@ -2,7 +2,7 @@
 // hands it a root element, so node:test can import the pieces without a document.
 
 import * as api from '../api.js'
-import { fmt, html, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type Measure, type Term } from '../format.js'
+import { fmt, html, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type Measure, type Sparkline, type Term } from '../format.js'
 import { centerLabel, pack } from '../layout.js'
 import {
   createCanvasMeasure,
@@ -166,6 +166,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let requestId = 0
   let controller: AbortController | null = null
   let candidateController: AbortController | null = null
+  let sparkline: Sparkline | undefined
+  let sparkController: AbortController | null = null
 
   const nextRequestId = () => ++requestId
   const currentRequestId = () => requestId
@@ -235,7 +237,29 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: graph?.person?.name ?? '', about: graph?.stats?.about, mask: getMask(), personTestimony: graph?.stats?.testimony })
 
   const paintCurrentInspector = () =>
-    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id) })
+    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id), sparkline })
+
+  // Figure 1's inspector sparkline (issue #147 AC20): the last 7 rolling days for the word in
+  // focus, independent of the atlas's own days chip. Person-in-focus never calls this.
+  const loadSparkline = (term: Term) => {
+    sparkController?.abort()
+    const control = new AbortController()
+    sparkController = control
+    sparkline = { state: 'loading' }
+    paintCurrentInspector()
+    api
+      .loadTimeline($('person').value, api.sparklineParams(term.term, term.kind, $('source').value), control.signal)
+      .then((rows: { bucket_start: string; count: number }[]) => {
+        if (control.signal.aborted || getSelected() !== term.id) return
+        sparkline = { state: 'ready', counts: rows.map((r) => r.count) }
+        paintCurrentInspector()
+      })
+      .catch((e) => {
+        if (control.signal.aborted || aborted(e) || getSelected() !== term.id) return
+        sparkline = { state: 'error' }
+        paintCurrentInspector()
+      })
+  }
 
   const drawCurrentMap = () => {
     const current = graph as Graph
@@ -250,8 +274,11 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     setSelected(id)
     docsCard.close()
     paintCurrentSelection()
-    paintCurrentInspector()
     const chosen = nodes.find((n) => n.id === id)
+    sparkController?.abort()
+    sparkline = undefined
+    if (chosen) loadSparkline(chosen)
+    else paintCurrentInspector()
     $('selectionNote').textContent = chosen ? `${label(chosen)} selecionado. Detalhes atualizados.` : 'Seleção limpa.'
     if (chosen) showDocs(chosen)
     else docsCard.close()
@@ -344,6 +371,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $('search').value = ''
     $('searchNote').textContent = ''
     $('selectionNote').textContent = ''
+    sparkController?.abort()
+    sparkline = undefined
   }
 
   const updateHeader = () => {

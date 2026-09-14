@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { candidatesQuery, compareParams, endpoint, json, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, narrowToSources, narrowToTestimony, params, sourcesParams, testimonyParams } from '../src/ui/api.js'
+import { candidatesQuery, compareParams, docsParams, endpoint, json, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -182,5 +182,47 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(qp.get('kind'), 'word,hashtag,phrase')
     assert.equal(qp.has('domain'), false)
     assert.equal(qp.has('lean'), false)
+  })
+})
+
+describe('issue #147: weekParams / loadWeek stay fixed at days=7', () => {
+  it('weekParams sends days=7, the full kind set, plus the chosen source and limit', () => {
+    const qp = weekParams({ source: 'gdelt', limit: '5' })
+    assert.equal(qp.toString(), new URLSearchParams({ days: '7', source: 'gdelt', kind: 'word,hashtag,phrase', limit: '5' }).toString())
+  })
+
+  it('loadWeek calls GET /api/people/:id/week', async () => {
+    const calls = stubFetch(true, {})
+    await loadWeek('lula', weekParams({ source: 'all', limit: '8' }))
+    assert.equal(calls[0].url, '/api/people/lula/week?' + weekParams({ source: 'all', limit: '8' }).toString())
+  })
+})
+
+describe('issue #147: docsParams accepts an optional day, appended only when non-empty', () => {
+  it('day is absent from the querystring by default and when explicitly empty', () => {
+    assert.equal(docsParams({ days: '7', source: 'all' }).has('day'), false)
+    assert.equal(docsParams({ days: '7', source: 'all', day: '' }).has('day'), false)
+  })
+
+  it('a non-empty day is set on the querystring, every other field untouched', () => {
+    const q = docsParams({ days: '7', source: 'gdelt', term: 'reforma', kind: 'word', day: '2026-09-08' })
+    assert.equal(q.get('day'), '2026-09-08')
+    assert.equal(q.get('term'), 'reforma')
+    assert.equal(q.get('kind'), 'word')
+    assert.equal(q.get('days'), '7')
+  })
+})
+
+describe('issue #147 AC20: sparklineParams / loadTimeline, the inspector sparkline', () => {
+  it('sparklineParams asks for 7 rolling days, bucketed by day, for one term/kind, on the atlas source', () => {
+    const qp = sparklineParams('reforma', 'word', 'bluesky')
+    assert.equal(qp.toString(), new URLSearchParams({ term: 'reforma', kind: 'word', days: '7', bucket: 'day', source: 'bluesky' }).toString())
+    assert.equal(sparklineParams('reforma', 'word').get('source'), 'all', 'no source given reads as every source, like the atlas default')
+  })
+
+  it('loadTimeline calls GET /api/people/:id/timeline', async () => {
+    const calls = stubFetch(true, [])
+    await loadTimeline('lula', sparklineParams('reforma', 'word'))
+    assert.equal(calls[0].url, '/api/people/lula/timeline?' + sparklineParams('reforma', 'word').toString())
   })
 })

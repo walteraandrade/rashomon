@@ -95,7 +95,7 @@ components:
 
 ## Overview
 
-A dark bench of instruments ("bancada"), not a dashboard and not a magazine. IBM Plex Sans Condensed names, in capitals; IBM Plex Sans explains; IBM Plex Mono measures: every number, label, chip, the sentence a reader edits, and every word drawn on a figure. The page is three figures under one h1, each on a `--panel` sheet with a 1px `--line` outline over a dot-grid ground. Rank is carried by weight, case and family at least as much as by size. Colour is a second hierarchy, reserved for meaning: the live control (amber), evaluation, and which side of a comparison a word belongs to. Help is a key on each figure plus a dialog that intercepts "como ler" so the reader never has to leave the graph.
+A dark bench of instruments ("bancada"), not a dashboard and not a magazine. IBM Plex Sans Condensed names, in capitals; IBM Plex Sans explains; IBM Plex Mono measures: every number, label, chip, the sentence a reader edits, and every word drawn on a figure. The page is five figures under one h1, each on a `--panel` sheet with a 1px `--line` outline over a dot-grid ground. Rank is carried by weight, case and family at least as much as by size. Colour is a second hierarchy, reserved for meaning: the live control (amber), evaluation, and which side of a comparison a word belongs to. Help is a key on each figure plus a dialog that intercepts "como ler" so the reader never has to leave the graph.
 
 ## Colors
 

@@ -40,11 +40,16 @@ import {
   type Rising,
   type RisingAbout,
   type RisingTerm,
+  type Sparkline,
   type Term,
   type Testimony,
   type TestimonyDomainRow,
+  type Week,
+  type WeekBucket,
+  weekDayIso,
+  weekDayLabel,
 } from './format.js'
-import { FONT_MONO, RULER_PAD, rulerLayout, routesFrom, swarm, type RulerItem } from './layout.js'
+import { FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, rulerLayout, routesFrom, swarm, weekLayout, type RulerItem, type WeekColumnLayout } from './layout.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
@@ -251,7 +256,29 @@ export const testimonyLine = (n: Term, person: PersonTestimony | undefined) => {
 const relatedButtons = (items: { node: Term; count?: number }[], sort: string, counts = true) =>
   items.map(({ node: n, count }) => html`<button data-related="${n.id}"><span>${label(n)}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`)
 
-// Paints the inspector. No fetch: documents open only on pick, not from here.
+const SPARK_BARS = 7
+const SPARK_HEIGHT = 34
+
+// Word-in-focus only (issue #147 AC20): seven rolling days, independent of the atlas's own
+// days chip, so the caption is explicit about what window it reads. 'error' leaves the hole
+// empty, no bars and no note (the spec's "hole stays empty"); 'loading' is a ghost of the same
+// seven bars.
+const sparklineMarkup = (spark?: Sparkline) => {
+  if (!spark) return ''
+  if (spark.state === 'error') return html`<div class="sparkline" aria-hidden="true"></div>`
+  const loading = spark.state === 'loading'
+  const counts = loading ? [] : (spark.counts ?? [])
+  const max = Math.max(1, ...counts)
+  const bars = Array.from({ length: SPARK_BARS }, (_, i) =>
+    loading
+      ? ghostBar('spark-ghost')
+      : html`<div class="spark-bar" style="--h:${Math.max(2, Math.round(((counts[i] ?? 0) / max) * SPARK_HEIGHT))}px"></div>`,
+  )
+  return html`<div class="sparkline${loading ? ' ghost-field' : ''}" role="img" aria-label="Documentos com esta palavra nos últimos 7 dias">${bars}</div><p class="note">Últimos 7 dias corridos, não o período escolhido acima.</p>`
+}
+
+// Paints the inspector. No fetch: documents (and the sparkline's own data) arrive already
+// resolved; a word in focus without `sparkline` simply omits it (the figure has not asked yet).
 export const inspect = ({
   graph,
   nodes,
@@ -260,6 +287,7 @@ export const inspect = ({
   sort,
   daysLabel,
   onChoose,
+  sparkline,
 }: {
   graph: Graph | null
   nodes: Term[]
@@ -268,13 +296,14 @@ export const inspect = ({
   sort: string
   daysLabel: string
   onChoose: (id: string) => void
+  sparkline?: Sparkline
 }) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML = html`<p class="eyebrow">A pessoa no centro</p><h3>${graph?.person?.name || ''}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p><p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
   } else {
     const related = relatedTo(nodes, links, n.id)
-    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>`
+    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}${sparklineMarkup(sparkline)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>`
   }
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {
@@ -1050,4 +1079,123 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
       ? html`<div><dt>${person.name}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
       : html`<div><dt>${person.name}</dt><dd class="empty-hint">nenhum documento</dd></div>`
   el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>`
+}
+
+// Figure 5 (issue #147): one word mark per day, no colour hue (--wc stays --ink in atlas.css),
+// a data-day alongside data-term/data-kind since a rising-style word belongs to one day only.
+const weekWordMarkup = (
+  d: { term: string; kind: string; count: number; text: string; x: number; y: number; size: number; w: number; h: number },
+  centerX: number,
+  half: number,
+  day: string,
+  isSelected: boolean,
+) =>
+  html`<g class="week-word ${isSelected ? 'is-selected' : ''}" transform="translate(${centerX + d.x},${half + d.y})" style="--size:${d.size}px" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.count)} documentos</title><rect class="week-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="week-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="week-text" text-anchor="middle" dominant-baseline="central">${d.text}</text></g>`
+
+// Size is the week's only encoding and a listed word has none, so the button carries the count.
+const weekOverflowMarkup = (
+  overflow: { term: string; kind: string; count: number; text: string }[],
+  day: string,
+  selected: { day: string; term: string; kind: string } | null,
+) =>
+  overflow.length
+    ? html`<div class="week-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} nesta coluna. Todas continuam clicáveis aqui:</p>${overflow.map((d) => {
+        const isSelected = !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
+        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia">${d.text}<b>${fmt(d.count)}</b></button>`
+      })}</div>`
+    : ''
+
+const weekColumnMarkup = (
+  bucket: WeekBucket,
+  layout: WeekColumnLayout<{ term: string; kind: string; count: number }>,
+  width: number,
+  selected: { day: string; term: string; kind: string } | null,
+) => {
+  const day = weekDayIso(bucket.start)
+  const dayLabel = weekDayLabel(bucket.start)
+  const isSelected = (d: { term: string; kind: string }) => !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
+  // A day with no words keeps only its number: the spec allows one sentence for the whole
+  // week (#weekNote), never a line per empty column.
+  const body = layout.words.length
+    ? html`<svg class="week-svg" viewBox="0 0 ${width} ${layout.height}" width="${width}" height="${layout.height}" role="group" aria-label="Palavras de ${dayLabel}">${layout.words.map((d) => weekWordMarkup(d, width / 2, layout.half, day, isSelected(d)))}</svg>`
+    : ''
+  return html`<div class="week-day"><dl class="stat"><div><dt>${dayLabel}</dt><dd>${fmt(bucket.about)}</dd></div></dl>${body}${weekOverflowMarkup(layout.overflow, day, selected)}</div>`
+}
+
+// Draws #weekChart and wires every word's click/keydown, in the svg and in each column's own
+// overflow list alike. #weekNote states the one empty-week sentence; an empty day shows its
+// number and nothing under it, never an invented mark.
+export const paintWeek = ({
+  data,
+  metrics,
+  selected,
+  onPick,
+  width = WEEK_COLUMN_WIDTH,
+}: {
+  data: Week
+  metrics: Measure
+  selected: { day: string; term: string; kind: string } | null
+  onPick: (day: string, term: string, kind: string) => void
+  width?: number
+}) => {
+  const chart = $('weekChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'false')
+  const layouts = weekLayout(metrics, data.buckets.map((b) => b.terms), width)
+  chart.innerHTML = html`<div class="week-columns">${data.buckets.map((bucket, i) => weekColumnMarkup(bucket, layouts[i], width, selected))}</div>`
+  for (const el of queryAll('[data-term]', chart)) {
+    const pick = () => onPick(String(el.dataset.day), String(el.dataset.term), String(el.dataset.kind))
+    el.addEventListener('click', pick)
+    // <g> elements need an explicit key handler; <button>s already handle Enter/Space.
+    if (String(el.tagName || '').toLowerCase() !== 'button')
+      el.addEventListener('keydown', (event) => {
+        const e = event as KeyboardEvent
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          pick()
+        }
+      })
+  }
+  const note = $('weekNote')
+  if (note) note.textContent = data.buckets.every((b) => !b.terms.length) ? 'Não há palavras suficientes nesta semana.' : ''
+}
+
+const WEEK_GHOST_WORDS: [number, number][] = [
+  [-30, 44],
+  [18, 78],
+  [-14, 112],
+]
+
+// A ghost of seven columns, one .stat placeholder and a few ghost marks each — never the word
+// "Carregando" (CLAUDE.md's rule for every figure's loading state).
+export const paintWeekLoading = () => {
+  const chart = $('weekChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'true')
+  const width = WEEK_COLUMN_WIDTH
+  const height = 150
+  chart.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="week-columns">${Array.from(
+    { length: 7 },
+    () =>
+      html`<div class="week-day">${ghostBar('ghost-line is-short')}<svg class="week-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${WEEK_GHOST_WORDS.map(
+        ([y, w]) => html`<rect class="ghost" x="${width / 2 - w / 2}" y="${height / 2 + y - 8}" width="${w}" height="16" rx="5"/>`,
+      )}</svg></div>`,
+  )}</div></div><p class="sr-only">Lendo a semana.</p>`
+  const note = $('weekNote')
+  if (note) note.textContent = ''
+}
+
+export const paintWeekError = () => {
+  const chart = $('weekChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'false')
+  chart.innerHTML = html`<p class="note">Não foi possível carregar a semana.</p>`
+  const note = $('weekNote')
+  if (note) note.textContent = ''
 }

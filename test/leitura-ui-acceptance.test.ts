@@ -136,20 +136,22 @@ describe('Leitura UI: one stylesheet, one type system', () => {
 })
 
 describe('the page is a sequence of graphs', () => {
-  it('design-5.html carries four figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
+  it('design-5.html carries five figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
     const html = read('design-5.html')
     const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
     // Issue #91 adds a third figure, the ruler comparing two people, after #testimony; issue
-    // #151 adds a fourth, the rising ruler, after #compare.
-    assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'rising'])
+    // #151 adds a fourth, the rising ruler, after #compare; issue #147 adds a fifth, the week,
+    // after #rising.
+    assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'rising', 'week'])
     // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
     // <b id="testimonyLabel"> in figure 2's own heading below.
     assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
     assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
     assert.match(html, /<span class="eyebrow">Gráfico 3<\/span><h2 id="compareTitle">/)
     assert.match(html, /<span class="eyebrow">Gráfico 4<\/span><h2 id="risingTitle">/)
-    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 4)
-    for (const id of ['workspace', 'testimony', 'compare', 'rising']) {
+    assert.match(html, /<span class="eyebrow">Gráfico 5<\/span><h2 id="weekTitle">/)
+    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 5)
+    for (const id of ['workspace', 'testimony', 'compare', 'rising', 'week']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
       // Issue #149 AC8 gave #workspace's default key an id="keyDefault" (a sibling id="keyStrip"
       // now follows it), so the match tolerates an id attribute rather than only the bare tag.
@@ -167,17 +169,35 @@ describe('the page is a sequence of graphs', () => {
     assert.doesNotMatch(html, /id="domainChip"/)
     // Issue #92 gave figure 2 its own sentence (person/days/source, 3 controls) alongside
     // figure 1's original five; issue #91 adds figure 3's own six (compareA/B/days/source/
-    // measure/limit); issue #151 adds figure 4's own two (risingPerson/risingSource) — the
-    // shared count is 16 now, split per figure below.
-    assert.equal(html.match(/<span class="pick">/g)?.length, 16)
+    // measure/limit); issue #151 adds figure 4's own two (risingPerson/risingSource); issue
+    // #147 adds figure 5's own three (weekPerson/weekSource/weekLimit) — the shared count is
+    // 19 now, split per figure below.
+    assert.equal(html.match(/<span class="pick">/g)?.length, 19)
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
     const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
     const rising = html.match(/id="rising"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.equal(workspace.match(/<span class="pick">/g)?.length, 5, "figure 1's sentence keeps its five controls")
     assert.equal(testimony.match(/<span class="pick">/g)?.length, 3, "figure 2's own sentence has person/days/source, no sort/limit")
     assert.equal(compare.match(/<span class="pick">/g)?.length, 6, "figure 3's own sentence has both people, days, source, measure and limit")
     assert.equal(rising.match(/<span class="pick">/g)?.length, 2, "figure 4's own sentence has only person and source; days/baseline/kind/limit/min stay fixed")
+    assert.equal(week.match(/<span class="pick">/g)?.length, 3, "figure 5's own sentence has person, source and limit; days stays fixed at 7, no period select")
+  })
+
+  // issue #147 AC17 (the automatable half; the seven-column render itself is manual): the
+  // week's own key names tamanho/posição/clique and, on purpose, no colour encoding.
+  it("issue #147 AC17: figure 5's key has no Cor row, unlike figure 4's", () => {
+    const html = read('design-5.html')
+    const dts = (chunk: string) =>
+      [...(chunk.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
+        m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim(),
+      )
+    const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.deepEqual(dts(week), ['Tamanho', 'Posição', 'Clique'])
+    assert.match(week, /<dt>Posição<\/dt><dd>só o dia; a altura na coluna não mede nada<\/dd>/, 'the key says the vertical position means nothing, so the swarm never reads as a ranking')
+    assert.match(week, /href="como-ler\.html#semana"/, 'the figure\'s own "Como ler" points at the #semana chapter')
+    assert.match(html, /id="help-semana"/, 'the in-page guide carries a matching chapter for that href to land on')
   })
 })
 
@@ -289,5 +309,24 @@ describe('issue #149: markup for figure 1\'s third view, Avaliação', () => {
     assert.match(chapter, /mesma régua/, 'ties it to the same kikori axis figure 2 already explains')
     assert.match(chapter, /mesma\s+(?:cor|máscara)/i, 'says the colour is the same mask, not a second metric')
     assert.match(chapter, /não é uma segunda medida/i, 'explicitly rules out a second metric')
+  })
+})
+
+describe("issue #147 §4: figure 5 (week) 'a refetch dims what is on screen'", () => {
+  it('#weekChart is dimmed by the same .figure.is-loading rule the other figures already use', () => {
+    const css = read('atlas.css')
+    const rule = css.match(/\.figure\.is-loading[^{]*\{[^}]*opacity[^}]*\}/)?.[0] ?? ''
+    assert.match(rule, /\.week-chart\b/, `.week-chart must be dimmed on refetch, the same as .viewport/.columns/.ruler; the rule found was: ${rule || '(none)'}`)
+  })
+})
+
+describe('issue #147, #148 review 1: the overflow list under a day column stays inside the column', () => {
+  it('a week overflow button wraps instead of inheriting .quiet-button\'s nowrap (validator round 2, 1)', () => {
+    const css = read('atlas.css')
+    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*white-space: normal/, 'a phrase button at 145px must wrap inside its column, never draw across the next day')
+    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*max-width: 100%/)
+    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*overflow-wrap: anywhere/)
+    assert.match(css, /\.week-overflow \{[^}]*min-width: 0/)
+    assert.match(css, /\.quiet-button \{[^}]*white-space: nowrap/, "the ruler's own overflow keeps the shared nowrap")
   })
 })

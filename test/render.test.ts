@@ -29,6 +29,9 @@ import {
   liftBalance,
   liftOfPerson,
   rareRisers,
+  paintWeek,
+  paintWeekError,
+  paintWeekLoading,
   risingRulerItems,
   shareBalance,
   rulerTerms,
@@ -38,7 +41,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { signed, termMask, type Compare, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { signed, termMask, type Compare, type CompareTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -78,6 +81,57 @@ const paint = (selected: string | null) =>
     inspect({ graph, nodes: [term], links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {} })
     return els.inspector.innerHTML
   })
+
+describe('issue #147 AC20: the inspector sparkline', () => {
+  const paintWithSpark = (sparkline?: Parameters<typeof inspect>[0]['sparkline']) =>
+    withFakeDocument(['inspector'], (els) => {
+      inspect({ graph, nodes: [term], links: [], selected: term.id, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, sparkline })
+      return els.inspector.innerHTML
+    })
+
+  it('a word in focus with no sparkline handed in paints none', () => {
+    assert.doesNotMatch(paintWithSpark(undefined), /sparkline/)
+  })
+
+  it('person-in-focus (no selection) never paints a sparkline, even if one is handed in', () => {
+    const html = withFakeDocument(['inspector'], (els) => {
+      inspect({ graph, nodes: [term], links: [], selected: null, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, sparkline: { state: 'ready', counts: [1, 2, 3, 4, 5, 6, 7] } })
+      return els.inspector.innerHTML
+    })
+    assert.doesNotMatch(html, /sparkline/)
+  })
+
+  it('"loading" paints a ghost of seven bars, never the word Carregando', () => {
+    const html = paintWithSpark({ state: 'loading' })
+    assert.match(html, /class="sparkline ghost-field"/)
+    assert.equal(html.match(/spark-ghost/g)?.length, 7)
+    assert.doesNotMatch(html, /Carregando/)
+  })
+
+  it('"ready" paints seven bars sized from the counts, tallest at the loudest day', () => {
+    const html = paintWithSpark({ state: 'ready', counts: [0, 1, 2, 10, 3, 0, 1] })
+    assert.equal(html.match(/spark-bar/g)?.length, 7)
+    const heights = [...html.matchAll(/--h:(\d+)px/g)].map((m) => Number(m[1]))
+    assert.equal(heights.length, 7)
+    assert.equal(heights[3], Math.max(...heights), 'the loudest day is the tallest bar')
+    assert.match(html, /Últimos 7 dias corridos/, 'the caption states this is a rolling window, not the atlas period')
+  })
+
+  it('"error" leaves the hole empty rather than inventing bars, and paints no note', () => {
+    const html = paintWithSpark({ state: 'error' })
+    assert.doesNotMatch(html, /spark-bar/)
+    assert.doesNotMatch(html, /spark-ghost/)
+    assert.match(html, /<div class="sparkline" aria-hidden="true"><\/div>/)
+    assert.doesNotMatch(html, /Não foi possível carregar/)
+    assert.doesNotMatch(html, /Últimos 7 dias/)
+  })
+
+  it('a failed sparkline never removes the inspector numbers that already painted', () => {
+    const html = paintWithSpark({ state: 'error' })
+    assert.match(html, /documentos/)
+    assert.match(html, /PMI bruto/)
+  })
+})
 
 describe('the inspector carries no documents button', () => {
   it('neither state emits one, and neither holds a docs container', () => {
@@ -1023,6 +1077,85 @@ describe('issue #151 AC15: paintRuler (compare, figure 3) keeps its own exported
       assert.match(els.compareRuler.innerHTML, /Só de Lula/)
       assert.match(els.compareRuler.innerHTML, /Só de Jair Bolsonaro/)
       assert.doesNotMatch(els.compareRuler.innerHTML, /antes \(30 dias\)|agora \(7 dias\)/, 'compare keeps its own end labels, not the rising ruler\'s')
+    })
+  })
+})
+
+describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', () => {
+  const weekBucket = (over: Partial<WeekBucket> = {}): WeekBucket => ({ start: '2026-09-08T03:00:00.000Z', about: 5, terms: [], ...over })
+  const weekData = (buckets: WeekBucket[]): Week => ({ days: 7, tz: 'America/Sao_Paulo', buckets })
+
+  it('paints one .week-day per bucket, oldest first, each with its own weekday label and about number', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      const buckets = Array.from({ length: 7 }, (_, i) => weekBucket({ start: `2026-09-0${i + 2}T03:00:00.000Z`, about: i, terms: i === 6 ? [{ term: 'reforma', kind: 'word', count: 3 }] : [] }))
+      paintWeek({ data: weekData(buckets), metrics, selected: null, onPick: () => {} })
+      assert.equal(els.weekChart.innerHTML.match(/class="week-day"/g)?.length, 7)
+      assert.match(els.weekChart.innerHTML, /class="stat"/)
+      assert.match(els.weekChart.innerHTML, /data-term="reforma" data-kind="word" data-day="2026-09-08"/)
+      assert.equal(els.weekChart.hidden, false)
+    })
+  })
+
+  it('an empty week (every terms array empty) keeps the seven about numbers and no marks, plus one note', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      const buckets = Array.from({ length: 7 }, (_, i) => weekBucket({ about: i + 1, terms: [] }))
+      paintWeek({ data: weekData(buckets), metrics, selected: null, onPick: () => {} })
+      assert.doesNotMatch(els.weekChart.innerHTML, /data-term=/)
+      for (let i = 1; i <= 7; i++) assert.match(els.weekChart.innerHTML, new RegExp(`<dd>${i}</dd>`))
+      assert.match(els.weekNote.textContent, /Não há palavras suficientes nesta semana\./)
+    })
+  })
+
+  it('a day with no surviving terms keeps its number and paints nothing under it: no mark, no per-day sentence', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ about: 4, terms: [] })]), metrics, selected: null, onPick: () => {} })
+      assert.match(els.weekChart.innerHTML, /<dd>4<\/dd>/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /data-term=/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /week-svg/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /<p/)
+    })
+  })
+
+  it('an overflow button carries the day count, since size is the only encoding and a listed word has none', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'supremo tribunal federal', kind: 'phrase', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 120 })
+      assert.match(els.weekChart.innerHTML, /<button class="quiet-button[^"]*" data-term="supremo tribunal federal"[^>]*>supremo tribunal federal<b>55<\/b><\/button>/)
+    })
+  })
+
+  it('every style="..." emitted is a --var override, never a hardcoded declaration', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'reforma', kind: 'word', count: 3 }] })]), metrics, selected: null, onPick: () => {} })
+      for (const value of inlineStyles(els.weekChart.innerHTML)) assert.ok(value.startsWith('--'), `paintWeek emitted style="${value}"`)
+    })
+  })
+
+  it('paintWeekLoading paints a ghost of seven columns, never the word Carregando', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeekLoading()
+      assert.match(els.weekChart.innerHTML, /ghost-field/)
+      assert.equal(els.weekChart.innerHTML.match(/class="week-day"/g)?.length, 7)
+      assert.doesNotMatch(els.weekChart.innerHTML, /Carregando/)
+      assert.equal(els.weekChart.getAttribute('aria-busy'), 'true')
+    })
+  })
+
+  it('every ghost mark sits inside its svg: y within [0, height], never above the label ghost (validator round 1, 3)', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeekLoading()
+      const height = Number(els.weekChart.innerHTML.match(/viewBox="0 0 \d+ (\d+)"/)?.[1])
+      assert.ok(height > 0)
+      const ys = [...els.weekChart.innerHTML.matchAll(/<rect class="ghost"[^>]*\sy="(-?[\d.]+)"[^>]*height="(\d+)"/g)].map((m) => [Number(m[1]), Number(m[2])])
+      assert.ok(ys.length >= 3, 'the ghost draws marks')
+      for (const [y, h] of ys) assert.ok(y >= 0 && y + h <= height, `ghost rect at y=${y} leaves the 0..${height} svg`)
+    })
+  })
+
+  it('paintWeekError paints the "could not load" note and clears the loading ghost', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeekError()
+      assert.match(els.weekChart.innerHTML, /Não foi possível carregar a semana/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /ghost-field/)
     })
   })
 })

@@ -17,11 +17,11 @@
   <header class="masthead">
     <p class="eyebrow">Rashomon · guia</p>
     <h1 id="comoLerTitle">Como ler o rashomon</h1>
-    <p class="lede">Quatro gráficos sobre os textos que citam uma pessoa. A chave embaixo de cada título é o gráfico. Esta página é a mesma chave, para mandar o link.</p>
+    <p class="lede">Cinco gráficos sobre os textos que citam uma pessoa. A chave embaixo de cada título é o gráfico. Esta página é a mesma chave, para mandar o link.</p>
   </header>
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
     <p class="chapter-intro">Tudo vale só para o recorte da frase: pessoa, período e fonte.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#em-alta">Em alta</a></nav>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#em-alta">Em alta</a><a href="#semana">A semana</a></nav>
     <div class="chapter-grid">
       <div id="analise">
         <h2>Como fazer uma análise</h2>
@@ -80,8 +80,21 @@
         <p>Embaixo da régua, as que subiram fora dela: palavras que não entraram entre as 40 mais presentes, mas que estão entre os 40 maiores lifts da semana e subiram de fato (lift acima de 1). Vêm da maior subida para a menor; a lista mostra até 12 e diz quantas ficaram de fora. Continuam clicáveis. Os dois números absolutos, quantos textos sobre a pessoa nos últimos 7 dias e nos 30 dias antes, também ficam escritos embaixo, junto com o total de pares texto-palavra de cada janela: o eixo relativo esconde essa conta.</p>
         <p>O tamanho da letra é quantos documentos a palavra tem nas duas janelas, somados. Clique abre os textos da última semana com aquela palavra.</p>
       </div>
+      <div id="semana">
+        <h2>Gráfico 5 · A semana</h2>
+        <p>Cada coluna é um dia do calendário, na hora de Brasília: o mais antigo à esquerda, hoje à direita. A palavra é a marca; não há linha, cor de avaliação nem comparação entre pessoas aqui.</p>
+        <h3>Tamanho</h3>
+        <p>Quantos documentos daquele dia têm a palavra. Uma palavra em vários dias aparece de novo em cada um, sem ligação entre as repetições.</p>
+        <h3>Posição</h3>
+        <p>Só o dia. Dentro da coluna a posição apenas evita que uma palavra cubra outra.</p>
+        <h3>O número do dia</h3>
+        <p>Junto do rótulo de cada dia, quantos documentos citam a pessoa naquele dia, mesmo quando nenhuma palavra sobrevive ao corte de nomes próprios. Um dia sem documentos aparece com esse número em zero, não some da semana.</p>
+        <h3>Clique</h3>
+        <p>Abre os textos daquele dia com aquela palavra.</p>
+        <p>O gráfico 1 tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do gráfico 1.</p>
+      </div>
     </div>
-    <p class="chapter-foot"><span>Tom por termo e linhas do tempo continuam na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>
+    <p class="chapter-foot"><span>Tom por termo continua na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>
   </section>
 </main>
 <script defer src="/_vercel/insights/script.js"></script>

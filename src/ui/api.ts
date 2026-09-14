@@ -28,12 +28,13 @@ export const narrowToTestimony = (graphParams: URLSearchParams) =>
 
 export const testimonyParams = (opts: GraphOpts) => narrowToTestimony(params(opts))
 
-// `domain` travels only when a figure names an outlet.
-export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; limit?: string }
+// `domain` travels only when a figure names an outlet; `day` only when figure 5 names a column.
+export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; limit?: string; day?: string }
 
-export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', limit = '5' }: DocsOpts) => {
+export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', limit = '5', day = '' }: DocsOpts) => {
   const q = new URLSearchParams({ days, source, term, kind, limit })
   if (domain) q.set('domain', domain)
+  if (day) q.set('day', day)
   return q
 }
 
@@ -89,3 +90,15 @@ export const risingParams = ({ source }: { source: string }) =>
 
 export const loadRising = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
   json(endpoint(personId) + '/rising?' + queryParams, signal)
+
+// days stays fixed at 7, never exposed as a control (issue #147 §4); limit is the only figure
+// value, kind the full atlas set.
+export const weekParams = ({ source, limit }: { source: string; limit: string }) => new URLSearchParams({ days: '7', source, kind: ATLAS_KINDS, limit })
+
+export const loadWeek = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/week?' + queryParams, signal)
+
+// Figure 1's inspector sparkline: the last 7 rolling days for one word, independent of the
+// atlas's own days chip (issue #147 AC20).
+export const sparklineParams = (term: string, kind: string, source = 'all') => new URLSearchParams({ term, kind, days: '7', bucket: 'day', source })
+
+export const loadTimeline = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/timeline?' + queryParams, signal)

@@ -528,8 +528,12 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
     domainMin -= 1
     domainMax += 1
   }
-  if (personScore === domainMin) domainMin -= 1
-  if (personScore === domainMax) domainMax += 1
+  // A float mean can sit a fraction of a unit from a floor/ceil edge (e.g. -3.97 next to a
+  // domainMin of -4) without ever equaling it; comparing the gap to a share of the span catches
+  // that near-miss the same way an exact match already caught the integer case.
+  const edgeGap = (domainMax - domainMin) * 0.03
+  if ((personScore as number) - domainMin < edgeGap) domainMin -= 1
+  if (domainMax - (personScore as number) < edgeGap) domainMax += 1
   const span = domainMax - domainMin
   const x = (s: number) => STRIP_PAD + ((Math.max(domainMin, Math.min(domainMax, s)) - domainMin) / span) * inner
   const placed: StripDot[] = eligible.map((e) => ({
@@ -562,6 +566,12 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
   for (let t = domainMin; t <= domainMax; t++) ticks.push(t)
   return { dots: fit.dots, domainMin, domainMax, ticks, x, half: fit.half, height: fit.half * 2 }
 }
+
+// Strip mode draws no links and has nothing to zoom, so its #legend names size and colour
+// instead of the map's copy about lines and zooming; colour reuses maskLegend because the
+// strip's dots are coloured by the same termMask the map and columns already use.
+export const stripLegend = (personTestimony?: PersonTestimony) =>
+  html`<span><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho = quantos textos</span><span>Tab + Enter para selecionar</span>${maskLegend(personTestimony)}`
 
 // Draws into #atlasStrip and #stripHiddenNote. Unlike paintStrip, size is by document count
 // (the same number the map and the columns already size by) and colour is termMask's mask

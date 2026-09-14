@@ -33,7 +33,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { termMask, type Compare, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { signed, termMask, type Compare, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -342,6 +342,24 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen when every word ties the mean: got [${layout.domainMin}, ${layout.domainMax}]`)
   })
 
+  // issue #149 gap: a float personScore (e.g. -3.97) can sit a hair from its floor/ceil edge
+  // (-4) without ever equaling it, so an exact-value guard misses it and the dashed mean line
+  // draws on the last slice of the axis.
+  it('issue #149 gap: a float person score near its domain edge still gets pushed off the edge', () => {
+    const floatPerson = { method: 'kikori:q8', score: -3.97, n: 200 }
+    const wide = [
+      { id: 'word:a', term: 'a', kind: 'word', count: 20, pmi: 1, testimony: { score: -1, n: 10 } },
+      { id: 'word:b', term: 'b', kind: 'word', count: 20, pmi: 1, testimony: { score: 2, n: 10 } },
+    ]
+    const layout = termStripLayout(wide, floatPerson, 860)
+    assert.ok(layout.domainMin < Math.floor(floatPerson.score), `domainMin must widen past the plain floor(-3.97) = -4: got ${layout.domainMin}`)
+    const overallX = layout.x(floatPerson.score)
+    const innerStart = 28 // STRIP_PAD, mirrored here since it is not exported
+    const span = layout.domainMax - layout.domainMin
+    const fraction = (overallX - innerStart) / (860 - 2 * innerStart)
+    assert.ok(fraction > 0.03, `the mean must sit clear of the left edge, got fraction=${fraction} (domain [${layout.domainMin}, ${layout.domainMax}], span ${span})`)
+  })
+
   // issue #149 gap: termStripLayout only reads the nodes array it is handed; it filters
   // eligibility with termMask but never applies any alias/own-name filtering of its own.
   it('issue #149 gap: termStripLayout consumes only the nodes array it is handed, never filtering by name', () => {
@@ -366,20 +384,27 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     )
   })
 
-  // issue #149 gap: at count >= 100 with 24 nodes (limit=24, the widest select option),
-  // the strip must still fit STRIP_MAX_HEIGHT by shrinking dots together.
-  it('issue #149 gap: 24 nodes with count >= 100 fit within STRIP_MAX_HEIGHT', () => {
+  // issue #149 gap: at count >= 100 with 24 nodes (limit=24, the widest select option), the
+  // strip must still fit STRIP_MAX_HEIGHT by shrinking dots together. All 24 sharing one score
+  // is the worst case for stacking (a spread-out score, like -5+(i%10) across 10 x-slots, never
+  // reaches STRIP_MAX_HEIGHT at all and so never exercises the while loop this pins).
+  it('issue #149 gap: 24 same-score nodes with count >= 100 force the shrink loop and still fit STRIP_MAX_HEIGHT', () => {
     const many = Array.from({ length: 24 }, (_, i) => ({
       id: `word:w${i}`,
       term: `w${i}`,
       kind: 'word',
       count: 100 + i,
       pmi: 1,
-      testimony: { score: -5 + (i % 10), n: 20 },
+      testimony: { score: -1, n: 20 },
     }))
+    const unshrunk = stripRadius(100, 860)
     const layout = termStripLayout(many, personTestimony, 860)
     assert.equal(layout.dots.length, 24)
     assert.ok(layout.height <= STRIP_MAX_HEIGHT, `height ${layout.height} must fit STRIP_MAX_HEIGHT (${STRIP_MAX_HEIGHT})`)
+    assert.ok(
+      (layout.dots[0] as { r: number }).r < unshrunk - 1e-6,
+      `the shrink loop must have run: dot radius ${(layout.dots[0] as { r: number }).r} must be smaller than the unshrunk ${unshrunk}`,
+    )
   })
 
   it('AC4: paintTermStrip draws one circle per eligible node, each with data-node and an inline --tone equal to termMask, none for an excluded node', () => {
@@ -396,14 +421,27 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     })
   })
 
+  it('AC2/AC3: the axis-end labels are signed domainMin/domainMax, not a fixed ±10', () => {
+    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
+      const layout = termStripLayout(stripNodes, personTestimony, 860)
+      paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
+      assert.ok(
+        els.atlasStrip.innerHTML.includes(`<div class="strip-axis-labels"><span>${signed(layout.domainMin)} contra</span><span>${signed(layout.domainMax)} a favor</span></div>`),
+        els.atlasStrip.innerHTML,
+      )
+    })
+  })
+
   it('AC4: the dashed mean line and its "média da pessoa" label only appear when the person has a score', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
       assert.match(els.atlasStrip.innerHTML, /média da pessoa/)
+      assert.match(els.atlasStrip.innerHTML, /<line class="strip-overall"/, 'a non-null score must also draw the dashed line, not just the label')
     })
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: stripNodes, personTestimony: { method: 'kikori', score: null, n: 0 }, onChoose: () => {}, width: 860 })
       assert.doesNotMatch(els.atlasStrip.innerHTML, /média da pessoa/, 'no person score, no mean line')
+      assert.doesNotMatch(els.atlasStrip.innerHTML, /<line class="strip-overall"/, 'no person score, no dashed line either')
     })
   })
 

@@ -511,4 +511,56 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
       assert.doesNotMatch(els.atlasStrip.innerHTML, /width="860"/, 'must not fall back to the 860 default once a real width is measured')
     })
   })
+
+  it('issue #149 gap: #atlasStrip observes its own resize and repaints, like figure 2\'s #strip', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      // Capture the callback figures/atlas.js registers on #atlasStrip so the test can invoke a
+      // resize directly, the same discipline test/figures-testimony.test.ts uses for #strip.
+      const captured: { target: unknown; cb: () => void }[] = []
+      class CapturingResizeObserver {
+        cb: () => void
+        constructor(cb: () => void) {
+          this.cb = cb
+        }
+        observe(target: unknown) {
+          captured.push({ target, cb: this.cb })
+        }
+        disconnect() {}
+      }
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = CapturingResizeObserver
+      els.atlasStrip.clientWidth = 800
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      const firstMarkup = els.atlasStrip.innerHTML
+      assert.match(firstMarkup, /viewBox="0 0 800/, 'the strip must first paint at its own clientWidth')
+      const stripObserver = captured.find((c) => c.target === els.atlasStrip)
+      assert.ok(stripObserver, 'figures/atlas.js must observe #atlasStrip with its own ResizeObserver')
+      els.atlasStrip.clientWidth = 400
+      stripObserver!.cb()
+      const secondMarkup = els.atlasStrip.innerHTML
+      assert.notEqual(secondMarkup, firstMarkup, 'firing the ResizeObserver callback must repaint the strip')
+      assert.match(secondMarkup, /viewBox="0 0 400/, 'the repaint must use the new width')
+    })
+  })
+
+  it('issue #149 gap: #legend names the strip\'s own size/colour encoding in strip mode, not the map\'s link/zoom copy', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.match(els.legend.innerHTML, /zoom e rolagem/, 'map mode keeps its own legend copy')
+      els.modeStrip.fire('click')
+      assert.doesNotMatch(els.legend.innerHTML, /Linha = documentos em comum/, 'strip mode draws no links, so the link copy must go')
+      assert.doesNotMatch(els.legend.innerHTML, /zoom e rolagem/, 'strip mode has nothing to zoom, so the zoom copy must go')
+      assert.match(els.legend.innerHTML, /Tamanho = quantos textos/, 'strip mode names its own size encoding')
+    })
+  })
 })

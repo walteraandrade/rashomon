@@ -15,6 +15,7 @@ import {
   paintColumns,
   paintSelection,
   paintTermStrip,
+  stripLegend,
 } from '../render.js'
 import * as docsCard from '../docs-card.js'
 import { span } from '../perf.js'
@@ -155,6 +156,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let mode = 'map'
   let currentLayout: Layout | null = null
   let lastMapWidth = 0
+  let lastStripWidth = 0
   let measure: Measure | null = null
   const layoutCache = new Map<string, Layout>()
   let selected: string | null = null
@@ -206,6 +208,18 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $('zoomReset').textContent = Math.round(getZoom() * 100) + '%'
     $('zoomOut').disabled = getZoom() <= 1
     $('zoomIn').disabled = getZoom() >= 2
+  }
+
+  // Own ResizeObserver, same as figures/testimony.ts's #strip: width is measured on mode
+  // switch, but a viewport resize while already in strip mode must repaint too, or the SVG's
+  // viewBox goes stale against `.strip-svg { width: 100% }` and radii/aspect drift.
+  const resizeStrip = () => {
+    if (mode !== 'strip' || !graph || !nodes.length) return
+    const width = $('atlasStrip').clientWidth
+    if (!width || width === lastStripWidth) return
+    lastStripWidth = width
+    paintTermStrip({ nodes, personTestimony: (graph as Graph).stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value, width })
+    paintCurrentSelection()
   }
 
   const setZoom = (value: number) => {
@@ -298,7 +312,9 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
       paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony })
       if (mode === 'strip') {
-        paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value, width: $('atlasStrip').clientWidth || undefined })
+        lastStripWidth = $('atlasStrip').clientWidth || 0
+        paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value, width: lastStripWidth || undefined })
+        $('legend').innerHTML = stripLegend(current.stats?.testimony)
         paintCurrentSelection()
       }
     } else {
@@ -473,6 +489,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $(id).addEventListener('click', (e: MouseEvent) => handlers.background(e.target as Element | null))
   document.addEventListener('keydown', handlers.keydown)
   new ResizeObserver(resizeMap).observe($('viewport'))
+  new ResizeObserver(resizeStrip).observe($('atlasStrip'))
   document.fonts?.ready?.then(() => {
     layoutCache.clear()
     if (graph && !busy) render()

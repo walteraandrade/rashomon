@@ -352,6 +352,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 
+/* Figure 1's own strip mode: same .strip skeleton, sitting beside #viewport/#columns
+   inside .canvas rather than as its own figure, so it needs its own outer spacing. */
+#atlasStrip { margin: var(--space-2) 0 var(--space-3); }
+#stripHiddenNote { margin: 0 0 var(--space-3); }
+
 .overflow { padding: 0 0 var(--space-5); }
 .overflow p { font-size: var(--t-sm); color: var(--muted); margin-bottom: var(--space-2); }
 .overflow button { margin: var(--space-1) 6px 0 0; }

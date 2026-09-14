@@ -528,6 +528,8 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
     domainMin -= 1
     domainMax += 1
   }
+  if (personScore === domainMin) domainMin -= 1
+  if (personScore === domainMax) domainMax += 1
   const span = domainMax - domainMin
   const x = (s: number) => STRIP_PAD + ((Math.max(domainMin, Math.min(domainMax, s)) - domainMin) / span) * inner
   const placed: StripDot[] = eligible.map((e) => ({
@@ -605,7 +607,7 @@ export const paintTermStrip = ({
   strip.innerHTML = html`${hasMean ? html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${((x(overall as number) - STRIP_PAD) / Math.max(1, width - 2 * STRIP_PAD)) * 100}%">média da pessoa ${signed(overall)}</span></div>` : ''}<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Palavras na régua da avaliação"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${ticks.map(tick)}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {
     const dim = normalizedSearch ? !matching({ term: d.term, kind: d.kind }, search) : false
     return html`<g class="strip-dot ${dim ? 'is-dim' : ''}" data-node="${d.id}" style="--tone:${d.tone}" role="button" tabindex="0" aria-label="${d.term}, avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}"><title>${d.term} · avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`
-  })}</svg><div class="strip-axis-labels"><span>${domainMin}</span><span>${domainMax}</span></div>`
+  })}</svg><div class="strip-axis-labels"><span>${signed(domainMin)} contra</span><span>${signed(domainMax)} a favor</span></div>`
   for (const el of queryAll('[data-node]', strip)) {
     const pick = () => onChoose(String(el.dataset.node))
     el.addEventListener('click', pick)

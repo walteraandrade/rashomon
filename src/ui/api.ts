@@ -81,3 +81,11 @@ export const compareParams = ({ a, b, days, source, limit }: { a: string; b: str
   new URLSearchParams({ a, b, days, source, limit, kind: ATLAS_KINDS })
 
 export const loadCompare = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/compare?' + queryParams, signal)
+
+// days/baseline/limit/min stay at the route's own defaults — the figure never exposes them —
+// sent explicitly so the figure keeps working the day the server default changes again.
+export const risingParams = ({ source }: { source: string }) =>
+  new URLSearchParams({ days: '7', baseline: '30', source, kind: ATLAS_KINDS, limit: '40', min: '3' })
+
+export const loadRising = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
+  json(endpoint(personId) + '/rising?' + queryParams, signal)

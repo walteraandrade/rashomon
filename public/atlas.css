@@ -252,10 +252,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
 .workspace .viewport, .workspace .columns, .workspace .inspector,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
-.compare .ruler, .compare .detail { transition: opacity .16s ease-out; }
+.compare .ruler, .compare .detail, .rising .ruler, .rising .note { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
-.figure.is-loading .ruler, .figure.is-loading .detail,
+.figure.is-loading .ruler, .figure.is-loading .detail, .rising.is-loading .note,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
@@ -588,7 +588,9 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .pmi-scale dd { font-family: var(--mono); font-size: var(--t-2xs); line-height: 1.35; }
 .chapter-foot { margin-top: var(--space-6); padding-top: var(--space-4); color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-5); max-width: none; }
 
-/* ---------- figure 3: the ruler (compare two people, issue #91) ---------- */
+/* ---------- the ruler (figure 3, compare two people, issue #91; figure 4, one person's own
+   before/now, issue #151) — one set of rules, since both figures draw a term on a -1..1 axis
+   with the same --cmp-a/--cmp-b pair, only the words at either end and axis prose differ. ---------- */
 .ruler { margin: 18px 0 0; padding: 6px 0 10px; }
 .ruler-end-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); padding-bottom: var(--space-1); }
 .ruler-end { font-weight: 600; overflow-wrap: anywhere; }

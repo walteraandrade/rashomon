@@ -1,9 +1,10 @@
 import { mountDocsCard } from './docs-card.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
+import { mount as mountRising } from './figures/rising.js'
 import { mount as mountTestimony } from './figures/testimony.js'
 import { mountHelp } from './help.js'
-import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintTestimonyLoading } from './render.js'
+import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintRisingLoading, paintTestimonyLoading } from './render.js'
 import * as api from './api.js'
 
 type Person = { id: string; name: string }
@@ -32,6 +33,7 @@ const FIGURES: FigureEntry[] = [
     noticeId: 'compareDetail',
     mount: mountCompare,
   },
+  { id: 'rising', sectionId: 'rising', keys: ['person', 'source'], noticeId: 'risingAbout', mount: mountRising },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.
@@ -56,6 +58,7 @@ const paintBootLoading = () => {
   paintTestimonyLoading()
   paintOutletsLoading()
   paintCompareLoading()
+  paintRisingLoading()
 }
 
 export const boot = async () => {

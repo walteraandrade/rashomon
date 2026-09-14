@@ -253,13 +253,15 @@ Two key forms, read in this order:
 | bare | `?days=7` | seeds every figure that has that control |
 | prefixed with the figure id | `?atlas.days=7` | seeds that figure only, and wins over the bare key |
 
-The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`) and
-`compare` (figure 3, `#compare`). Figure 1 reads `person`, `days`, `source`, `sort` and `limit`;
-figure 2 reads `person`, `days` and `source` — it has no sort or limit control, matching what
-`narrowToTestimony` and `narrowToSources` already drop. Figure 3 reads `a` (bare fallback
-`person`, same as figure 1 and 2's own `person` key), `b`, `days`, `source`, `limit` and
-`measure` — `b` and `measure` have no bare equivalent, since no other figure has a second
-person or a measure selector.
+The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
+`compare` (figure 3, `#compare`) and `rising` (figure 4, `#rising`). Figure 1 reads `person`,
+`days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
+sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
+Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
+`days`, `source`, `limit` and `measure` — `b` and `measure` have no bare equivalent, since no
+other figure has a second person or a measure selector. Figure 4 reads `person` and `source`
+only — its `days` (7), `baseline` (30), `kind` and `limit`/`min` are the route's own fixed
+values, sent explicitly by the figure and never seeded from the querystring.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

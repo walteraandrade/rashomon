@@ -37,11 +37,13 @@ import {
   type PersonRef,
   type PersonTestimony,
   type PlacedTerm,
+  type Rising,
+  type RisingTerm,
   type Term,
   type Testimony,
   type TestimonyDomainRow,
 } from './format.js'
-import { FONT_MONO, RULER_PAD, rulerLayout, routesFrom, swarm } from './layout.js'
+import { FONT_MONO, RULER_PAD, rulerLayout, routesFrom, swarm, type RulerItem } from './layout.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
@@ -630,6 +632,56 @@ const rulerOverflowMarkup = (
       })}</div>`
     : ''
 
+// Shared by figure 3 (compare) and figure 4 (rising): draws a ruler's end labels, SVG axis and
+// words, axis labels and overflow list, and wires click/keydown on every word. The two figures
+// differ only in which items they hand it and how they word the ends/axis/note — the packing
+// (`rulerLayout`) and the per-word markup are the same for both. `note` is figure-specific prose;
+// rising passes '' and says its own numbers in `#risingAbout` instead.
+const paintRulerBody = ({
+  elementId,
+  items,
+  metrics,
+  selected,
+  onPick,
+  width,
+  endA,
+  endB,
+  axisLabels,
+  ariaLabel,
+  note,
+}: {
+  elementId: string
+  items: RulerItem[]
+  metrics: Measure
+  selected: { term: string; kind: string } | null
+  onPick: (term: string, kind: string) => void
+  width: number
+  endA: string
+  endB: string
+  axisLabels: [string, string, string]
+  ariaLabel: string
+  note: ReturnType<typeof html> | string
+}) => {
+  const ruler = $(elementId)
+  const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
+  const tick = (b: number) => html`<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
+  ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${endA}</span><span class="ruler-end cmp-b">${endB}</span></div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="${ariaLabel}"><line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick)}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}</svg><div class="ruler-axis-labels"><span>${axisLabels[0]}</span><span>${axisLabels[1]}</span><span>${axisLabels[2]}</span></div>${note}${rulerOverflowMarkup(overflow, selected)}`
+  for (const el of queryAll('[data-term]', ruler)) {
+    const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
+    el.addEventListener('click', pick)
+    // <g> elements need an explicit key handler; <button>s already handle Enter/Space.
+    if (String(el.tagName || '').toLowerCase() !== 'button')
+      el.addEventListener('keydown', (event) => {
+        const e = event as KeyboardEvent
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          pick()
+        }
+      })
+  }
+  return { shown: words.length, overflowCount: overflow.length }
+}
+
 // One word per term written where it leans. `metrics` is the injected text measurer;
 // `measure` (documentos or PMI) only repositions words. Returns counts for the caller's notes.
 export const paintRuler = ({
@@ -663,23 +715,21 @@ export const paintRuler = ({
   ruler.hidden = false
   ruler.classList.remove('is-loading')
   ruler.setAttribute('aria-busy', 'false')
-  const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
-  const tick = (b: number) => html`<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
-  ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${personA.name}</span><span class="ruler-end cmp-b">${personB.name}</span></div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Régua comparando ${personA.name} e ${personB.name}"><line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick)}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}</svg><div class="ruler-axis-labels"><span>Só de ${personA.name}</span><span>dividida</span><span>Só de ${personB.name}</span></div><p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.</p>${rulerOverflowMarkup(overflow, selected)}`
-  for (const el of queryAll('[data-term]', ruler)) {
-    const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
-    el.addEventListener('click', pick)
-    // <g> elements need an explicit key handler; <button>s already handle Enter/Space.
-    if (String(el.tagName || '').toLowerCase() !== 'button')
-      el.addEventListener('keydown', (event) => {
-        const e = event as KeyboardEvent
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          pick()
-        }
-      })
-  }
-  return { hiddenCount, shown: words.length, overflowCount: overflow.length }
+  const note = html`<p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.</p>`
+  const { shown, overflowCount } = paintRulerBody({
+    elementId: 'compareRuler',
+    items,
+    metrics,
+    selected,
+    onPick,
+    width,
+    endA: personA.name,
+    endB: personB.name,
+    axisLabels: [`Só de ${personA.name}`, 'dividida', `Só de ${personB.name}`],
+    ariaLabel: `Régua comparando ${personA.name} e ${personB.name}`,
+    note,
+  })
+  return { hiddenCount, shown, overflowCount }
 }
 
 export const paintRulerError = () => {
@@ -688,6 +738,75 @@ export const paintRulerError = () => {
   ruler.classList.remove('is-loading')
   ruler.setAttribute('aria-busy', 'false')
   ruler.innerHTML = '<p class="note">Não foi possível carregar a comparação.</p>'
+}
+
+// balance = clamp(log2(word's lift / the person's own lift) / 3, -1, 1): a word right of centre
+// grew faster than the person herself, left slower, regardless of either's absolute size.
+// About.baseline's own +1 smoothing (already used server-side per term) keeps this finite even
+// when the person has no baseline docs at all.
+export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
+
+export type RisingItem = RulerItem & { lift: number }
+
+// combined = count_recent_raw + count_baseline_raw, the exact doc counts behind the rounded
+// rates, so a word's size on the ruler never compounds the server's own rounding.
+export const risingRulerItems = (terms: RisingTerm[], liftPerson: number): RisingItem[] =>
+  terms.map((t) => {
+    const ratio = liftPerson > 0 ? t.lift / liftPerson : t.lift > 0 ? Infinity : 1
+    return { term: t.term, kind: t.kind, lift: t.lift, balance: Math.max(-1, Math.min(1, Math.log2(ratio) / 3)), combined: t.count_recent_raw + t.count_baseline_raw }
+  })
+
+// Figure 4's own wrapper around the shared ruler body: "antes (30 dias)" / "agora (7 dias)" reuse
+// the compare ruler's --cmp-a/--cmp-b pair, and a word belongs to one person, so there is no
+// hiddenCount to report back.
+export const paintRisingRuler = ({
+  data,
+  metrics,
+  selected,
+  onPick,
+  width = 860,
+}: {
+  data: Rising
+  metrics: Measure
+  selected: { term: string; kind: string } | null
+  onPick: (term: string, kind: string) => void
+  width?: number
+}) => {
+  const ruler = $('risingRuler')
+  const liftPerson = liftOfPerson(data.about, data.days, data.baseline)
+  const items = risingRulerItems(data.terms, liftPerson)
+  if (!items.length) {
+    ruler.hidden = false
+    ruler.classList.remove('is-loading')
+    ruler.setAttribute('aria-busy', 'false')
+    ruler.innerHTML = '<p class="note">Nenhuma palavra neste recorte.</p>'
+    return { shown: 0, overflowCount: 0 }
+  }
+  ruler.hidden = false
+  ruler.classList.remove('is-loading')
+  ruler.setAttribute('aria-busy', 'false')
+  return paintRulerBody({
+    elementId: 'risingRuler',
+    items,
+    metrics,
+    selected,
+    onPick,
+    width,
+    endA: 'antes (30 dias)',
+    endB: 'agora (7 dias)',
+    axisLabels: ['Mais devagar que a pessoa', 'no mesmo ritmo', 'Mais rápido que a pessoa'],
+    ariaLabel: 'Régua de termos em alta',
+    note: '',
+  })
+}
+
+export const paintRisingRulerError = () => {
+  const ruler = $('risingRuler')
+  if (!ruler) return
+  ruler.hidden = false
+  ruler.classList.remove('is-loading')
+  ruler.setAttribute('aria-busy', 'false')
+  ruler.innerHTML = '<p class="note">Não foi possível carregar os termos em alta.</p>'
 }
 
 const RULER_GHOST_WORDS: [number, number, number, number][] = [
@@ -719,6 +838,28 @@ export const paintCompareLoading = () => {
   const detail = $('compareDetail')
   if (!detail) return
   detail.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostBar('ghost-title')}<dl class="detail-sides"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div></dl></div>`
+}
+
+// Figure 4's own boot/reload ghost: the same ruler geometry paintCompareLoading paints, inside
+// #risingRuler, no #risingAbout ghost — that line is cleared instead, since a two-number sentence
+// has no shape worth a ghost of its own.
+export const paintRisingLoading = () => {
+  const ruler = $('risingRuler')
+  if (!ruler) return
+  ruler.hidden = false
+  ruler.classList.remove('is-loading')
+  ruler.setAttribute('aria-busy', 'true')
+  const width = 860
+  const height = 88
+  const half = 44
+  const pad = 28
+  ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><line class="ruler-axis" x1="${pad}" x2="${width - pad}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(
+    (b) => html`<line class="ruler-tick" x1="${pad + ((b + 1) / 2) * (width - 2 * pad)}" x2="${pad + ((b + 1) / 2) * (width - 2 * pad)}" y1="${half - 5}" y2="${half + 5}"/>`,
+  )}${RULER_GHOST_WORDS.map(
+    ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
+  )}</svg></div><p class="sr-only">Lendo os termos em alta.</p>`
+  const about = $('risingAbout')
+  if (about) about.textContent = ''
 }
 
 // Selected word's numbers on both sides; a null side reads "nenhum documento" (measured zero).

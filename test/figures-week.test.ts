@@ -139,6 +139,50 @@ describe('issue #147: picking a word in a column opens the docs card with that c
       assert.equal(els.docsDialog.open, true, 'the atlas card must survive a change on #weekLimit')
     })
   })
+
+  it('a control change closes the card this figure opened', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/week': weekData([bucket()]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/week.js')
+      mount(els.week, { people, initial: { person: 'lula' } })
+      await flush()
+      const mark = [...els.weekChart.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      els.weekLimit.value = '5'
+      els.weekLimit.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'the week card closes with the pick it belongs to')
+    })
+  })
+
+  it('a week pick, then an atlas card over it, then #weekLimit: the atlas card survives (ownership, not `selected`)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/week': weekData([bucket()]), '/docs': { docs: [], total: 0 } })
+      const docsCard = await import('../src/ui/docs-card.js')
+      const { mount } = await import('../src/ui/figures/week.js')
+      mount(els.week, { people, initial: { person: 'lula' } })
+      await flush()
+      const mark = [...els.weekChart.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the week card is open')
+      assert.equal(docsCard.openedBy('week'), true)
+      docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+      await flush()
+      assert.equal(docsCard.openedBy('week'), false, 'the atlas now owns the card')
+      els.weekLimit.value = '5'
+      els.weekLimit.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, true, 'the atlas card must survive even though this figure still had a pick')
+      els.weekChart.fire('click', { target: { closest: () => null } })
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'a background click here releases nothing it does not own')
+    })
+  })
 })
 
 describe('issue #147 AC19: an empty week keeps the seven about numbers and paints no marks', () => {

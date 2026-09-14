@@ -1,5 +1,6 @@
-// #docsDialog, shared by all three figures. Knows nothing about any figure; takes kicker, title
-// and one or two sides in each request. The only path to GET /docs; opens on deliberate click only.
+// #docsDialog, shared by all five figures. Knows nothing about any figure; takes kicker, title
+// and one or two sides in each request, plus the opener's name so a figure can tell its own card
+// from another's. The only path to GET /docs; opens on deliberate click only.
 
 import * as api from './api.js'
 import { paintDocs, paintDocsError, paintDocsHead, paintDocsLoading } from './render.js'
@@ -7,7 +8,7 @@ import { span } from './perf.js'
 import { fromScope, readScope } from './state.js'
 
 export type DocsSide = { personId: string; personName: string; query: URLSearchParams; label?: string }
-export type DocsRequest = { kicker: string; title: string; sides: DocsSide[] }
+export type DocsRequest = { kicker: string; title: string; sides: DocsSide[]; owner?: string }
 
 // Guarded: everything here runs after an await; a missing element means the page moved on.
 const $ = (id: string): any => (typeof document === 'undefined' ? null : document.getElementById(id))
@@ -26,6 +27,10 @@ let requestId = 0
 let controller: AbortController | null = null
 
 export const isOpen = () => !!$('docsDialog')?.open
+
+// True while the open card is the one `owner` asked for: a figure's own pick may still be set
+// after another figure opened the card over it, so `selected` alone never says whose card it is.
+export const openedBy = (owner: string) => isOpen() && request?.owner === owner
 
 // Bumps requestId so responses from prior opens are dropped.
 const cancel = () => {

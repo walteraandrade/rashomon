@@ -19,6 +19,8 @@ export type PeopleError = unknown
 
 const $ = (id: string): any => document.getElementById(id)
 
+const OWNER = 'week'
+
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 const applySeed = (select: any, value: string | undefined) => {
@@ -66,14 +68,19 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     selected = selected && selected.day === day && selected.term === term && selected.kind === kind ? null : { day, term, kind }
     repaint()
     if (selected) showDocs(selected)
-    else docsCard.close()
+    else closeOwnCard()
+  }
+
+  // Never shuts a card another figure opened over this one's pick.
+  const closeOwnCard = () => {
+    if (docsCard.openedBy(OWNER)) docsCard.close()
   }
 
   const releaseSelection = () => {
     if (!selected) return
     selected = null
     repaint()
-    docsCard.close()
+    closeOwnCard()
   }
 
   const showDocs = (word: { day: string; term: string; kind: string }) => {
@@ -83,6 +90,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     // The card names the day, or its count contradicts the atlas for no visible reason.
     const day = bucket ? weekDayLabel(bucket.start) : word.day
     docsCard.open({
+      owner: OWNER,
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'} · ${day}`,
       title: word.term,
       sides: [
@@ -146,11 +154,11 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const debouncedLoad = debounce(load)
 
   // Closes the card only when this figure opened it: a control here must not shut a card the
-  // atlas or the ruler is showing.
+  // atlas or the ruler is showing (#148 review, 2).
   const onControlChange = () => {
     if (selected) {
       selected = null
-      docsCard.close()
+      closeOwnCard()
     }
     debouncedLoad()
   }

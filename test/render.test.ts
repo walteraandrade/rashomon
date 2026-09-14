@@ -117,11 +117,13 @@ describe('issue #147 AC20: the inspector sparkline', () => {
     assert.match(html, /Últimos 7 dias corridos/, 'the caption states this is a rolling window, not the atlas period')
   })
 
-  it('"error" leaves the hole empty rather than inventing bars', () => {
+  it('"error" leaves the hole empty rather than inventing bars, and paints no note', () => {
     const html = paintWithSpark({ state: 'error' })
     assert.doesNotMatch(html, /spark-bar/)
     assert.doesNotMatch(html, /spark-ghost/)
-    assert.match(html, /Não foi possível carregar os últimos 7 dias/)
+    assert.match(html, /<div class="sparkline" aria-hidden="true"><\/div>/)
+    assert.doesNotMatch(html, /Não foi possível carregar/)
+    assert.doesNotMatch(html, /Últimos 7 dias/)
   })
 
   it('a failed sparkline never removes the inspector numbers that already painted', () => {
@@ -1104,10 +1106,20 @@ describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', 
     })
   })
 
-  it('a day with about-docs but no surviving terms says so inline, without inventing a mark', () => {
+  it('a day with no surviving terms keeps its number and paints nothing under it: no mark, no per-day sentence', () => {
     withFakeDocument(['weekChart', 'weekNote'], (els) => {
       paintWeek({ data: weekData([weekBucket({ about: 4, terms: [] })]), metrics, selected: null, onPick: () => {} })
-      assert.match(els.weekChart.innerHTML, /Sem palavras sobrevivendo ao corte neste dia\./)
+      assert.match(els.weekChart.innerHTML, /<dd>4<\/dd>/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /data-term=/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /week-svg/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /<p/)
+    })
+  })
+
+  it('an overflow button carries the day count, since size is the only encoding and a listed word has none', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'supremo tribunal federal', kind: 'phrase', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 120 })
+      assert.match(els.weekChart.innerHTML, /<button class="quiet-button[^"]*" data-term="supremo tribunal federal"[^>]*>supremo tribunal federal<b>55<\/b><\/button>/)
     })
   })
 

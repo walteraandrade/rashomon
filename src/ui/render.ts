@@ -261,11 +261,11 @@ const SPARK_HEIGHT = 34
 
 // Word-in-focus only (issue #147 AC20): seven rolling days, independent of the atlas's own
 // days chip, so the caption is explicit about what window it reads. 'error' leaves the hole
-// empty rather than a fake flat line; 'loading' is a ghost of the same seven bars.
+// empty, no bars and no note (the spec's "hole stays empty"); 'loading' is a ghost of the same
+// seven bars.
 const sparklineMarkup = (spark?: Sparkline) => {
   if (!spark) return ''
-  if (spark.state === 'error')
-    return html`<div class="sparkline" aria-hidden="true"></div><p class="note">Não foi possível carregar os últimos 7 dias.</p>`
+  if (spark.state === 'error') return html`<div class="sparkline" aria-hidden="true"></div>`
   const loading = spark.state === 'loading'
   const counts = loading ? [] : (spark.counts ?? [])
   const max = Math.max(1, ...counts)
@@ -1092,15 +1092,16 @@ const weekWordMarkup = (
 ) =>
   html`<g class="week-word ${isSelected ? 'is-selected' : ''}" transform="translate(${centerX + d.x},${half + d.y})" style="--size:${d.size}px" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.count)} documentos</title><rect class="week-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="week-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="week-text" text-anchor="middle" dominant-baseline="central">${d.text}</text></g>`
 
+// Size is the week's only encoding and a listed word has none, so the button carries the count.
 const weekOverflowMarkup = (
-  overflow: { term: string; kind: string; text: string }[],
+  overflow: { term: string; kind: string; count: number; text: string }[],
   day: string,
   selected: { day: string; term: string; kind: string } | null,
 ) =>
   overflow.length
     ? html`<div class="week-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} nesta coluna. Todas continuam clicáveis aqui:</p>${overflow.map((d) => {
         const isSelected = !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
-        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" aria-pressed="${String(isSelected)}">${d.text}</button>`
+        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia">${d.text}<b>${fmt(d.count)}</b></button>`
       })}</div>`
     : ''
 
@@ -1113,15 +1114,17 @@ const weekColumnMarkup = (
   const day = weekDayIso(bucket.start)
   const dayLabel = weekDayLabel(bucket.start)
   const isSelected = (d: { term: string; kind: string }) => !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
+  // A day with no words keeps only its number: the spec allows one sentence for the whole
+  // week (#weekNote), never a line per empty column.
   const body = layout.words.length
     ? html`<svg class="week-svg" viewBox="0 0 ${width} ${layout.height}" width="${width}" height="${layout.height}" role="group" aria-label="Palavras de ${dayLabel}">${layout.words.map((d) => weekWordMarkup(d, width / 2, layout.half, day, isSelected(d)))}</svg>`
-    : html`<p class="empty-note">${bucket.about ? 'Sem palavras sobrevivendo ao corte neste dia.' : 'Sem documentos neste dia.'}</p>`
+    : ''
   return html`<div class="week-day"><dl class="stat"><div><dt>${dayLabel}</dt><dd>${fmt(bucket.about)}</dd></div></dl>${body}${weekOverflowMarkup(layout.overflow, day, selected)}</div>`
 }
 
 // Draws #weekChart and wires every word's click/keydown, in the svg and in each column's own
-// overflow list alike. #weekNote states the one empty-week sentence; a day with about-docs but
-// no surviving terms says so inline instead (weekColumnMarkup), never inventing a mark.
+// overflow list alike. #weekNote states the one empty-week sentence; an empty day shows its
+// number and nothing under it, never an invented mark.
 export const paintWeek = ({
   data,
   metrics,

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { buildGraphAggregates, SOURCES, WINDOWS } from '../src/aggregate.js'
+import { buildGraphAggregates, hasGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
-import { parseQuery } from '../src/query.js'
-import { persons, seed } from './fixture.js'
+import { DAYS, parseQuery, SOURCES } from '../src/query.js'
+import { insertDoc } from '../src/store.js'
+import { persons, seed, untrackedPerson } from './fixture.js'
 import './close.js'
 
 // src/aggregate.ts builds graph_scopes / graph_terms_all / graph_terms; graphFor answers
@@ -17,12 +18,15 @@ const live = async (person: typeof lula, query: ReturnType<typeof parseQuery>) =
 const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graphFast(person, query).text, queries.graphFast(person, query).values)).rows[0]
 
 describe('precomputable', () => {
-  it('holds one source or all, no domain, no lean', () => {
-    assert.equal(precomputable({ domain: 'all', lean: 'all', source: 'all' }), true)
-    assert.equal(precomputable({ domain: 'all', lean: 'all', source: 'rss' }), true)
-    assert.equal(precomputable({ domain: 'all', lean: 'all', source: 'rss,gkg' }), false)
-    assert.equal(precomputable({ domain: 'folha.uol.com.br', lean: 'all', source: 'all' }), false)
-    assert.equal(precomputable({ domain: 'all', lean: 'left', source: 'all' }), false)
+  it('holds a built window, one source or all, no domain, no lean', () => {
+    const base = { days: 30, domain: 'all', lean: 'all', source: 'all' }
+    assert.equal(precomputable(base), true)
+    assert.equal(precomputable({ ...base, source: 'rss' }), true)
+    assert.equal(precomputable({ ...base, source: 'rss,gkg' }), false)
+    assert.equal(precomputable({ ...base, domain: 'folha.uol.com.br' }), false)
+    assert.equal(precomputable({ ...base, lean: 'left' }), false)
+    for (const days of DAYS) assert.equal(precomputable({ ...base, days }), true)
+    assert.equal(precomputable({ ...base, days: 14 }), false, 'a window the build never writes is never probed')
   })
 })
 
@@ -31,9 +35,42 @@ describe('before a build', () => {
 
   it('the fast query yields no row and graphFor still answers from the live query', async () => {
     await db.query(`delete from graph_scopes`)
+    assert.equal(await hasGraphAggregates(), false)
     assert.equal(await fast(lula, q({})), undefined)
     const result = await graphFor(lula, q({}))
     assert.ok(result.stats.about > 0)
+  })
+})
+
+describe('a build for part of the people', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons.filter((p) => p.id !== 'lula'))
+  })
+
+  it('writes no scope row for the person left out, so graphFor falls back to the live query for her', async () => {
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes where person_id = 'lula'`)
+    assert.equal(rows[0].n, 0)
+    assert.equal(await fast(lula, q({})), undefined)
+    const expected = (await live(lula, q({}))) as { about: number; nodes: { term: string; count: number }[] }
+    const result = await graphFor(lula, q({}))
+    assert.ok(expected.about > 0 && expected.nodes.length > 0)
+    const bare = (nodes: { term: string; count: number }[]) => nodes.map(({ term, count }) => ({ term, count }))
+    assert.deepEqual({ about: result.stats.about, nodes: bare(result.nodes) }, { about: expected.about, nodes: bare(expected.nodes) })
+  })
+
+  it('a person in the list but not in the table gets no row either, and the build does not fail', async () => {
+    await buildGraphAggregates([...persons, untrackedPerson()])
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes where person_id = 'nao-cadastrado'`)
+    assert.equal(rows[0].n, 0)
+  })
+
+  it('a scope row always comes with its terms: every person with about > 0 has graph_terms rows', async () => {
+    const { rows } = await db.query<{ person_id: string }>(
+      `select s.person_id from graph_scopes s where s.about > 0
+         and not exists (select 1 from graph_terms t where t.days = s.days and t.source = s.source and t.person_id = s.person_id)`,
+    )
+    assert.deepEqual(rows, [])
   })
 })
 
@@ -45,7 +82,8 @@ describe('buildGraphAggregates', () => {
 
   it('writes one scope row per window, source and person, zero-doc sources included', async () => {
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
-    assert.equal(rows[0].n, WINDOWS.length * (SOURCES.length + 1) * persons.length)
+    assert.equal(rows[0].n, DAYS.length * (SOURCES.length + 1) * persons.length)
+    assert.equal(await hasGraphAggregates(), true)
     const { rows: empty } = await db.query<{ docs: number; about: number }>(`select docs, about from graph_scopes where days = 7 and source = 'senado' and person_id = 'lula'`)
     assert.deepEqual(empty[0], { docs: 0, about: 0 })
   })
@@ -99,7 +137,24 @@ describe('buildGraphAggregates', () => {
 
   it('reports counts and a duration', async () => {
     const report = await buildGraphAggregates(persons)
-    assert.deepEqual(report.windows, [...WINDOWS])
+    assert.deepEqual(report.windows, [...DAYS])
     assert.ok(report.scopes > 0 && report.terms > 0 && report.ms >= 0)
+  })
+
+  // The one semantic difference: the tables cut the window when the build ran, the live
+  // statement when the request arrives. A document written after the build is invisible to
+  // the fast path until the next build, and only then do the two agree again.
+  it('cuts the window at build time: a doc inserted after the build shows only on the live path until a rebuild', async () => {
+    await buildGraphAggregates(persons)
+    const before = await fast(lula, q({ min: '1' }))
+    await insertDoc({ source: 'rss', uri: 'https://example.org/after-build', text: 'Lula visita a fábrica de aeronaves', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
+    const liveAfter = await live(lula, q({ min: '1' }))
+    assert.deepEqual(await fast(lula, q({ min: '1' })), before, 'the fast path still renders the previous build')
+    assert.notDeepEqual(liveAfter, before, 'the live path already counts the new doc')
+    assert.equal((liveAfter as { about: number }).about, (before as { about: number }).about + 1)
+    await buildGraphAggregates(persons)
+    assert.deepEqual(await fast(lula, q({ min: '1' })), liveAfter)
+    await db.query(`delete from docs where uri = 'https://example.org/after-build'`)
+    await buildGraphAggregates(persons)
   })
 })

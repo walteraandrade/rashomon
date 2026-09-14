@@ -25,10 +25,14 @@ export const warmPaths = (people: Pick<Person, 'id'>[], days: readonly string[] 
 
 export type WarmResult = { path: string; status: number | null; cache: string | null; server: string | null; ms: number }
 
+// `Pragma: no-cache` makes Vercel's CDN fetch the origin and store the answer (REVALIDATED)
+// instead of serving, or stale-serving, the object the last ingest just made wrong.
+export const WARM_HEADERS = { accept: 'application/json', pragma: 'no-cache', 'cache-control': 'no-cache' } as const
+
 const one = async (site: string, path: string, fetchFn: typeof fetch): Promise<WarmResult> => {
   const started = performance.now()
   try {
-    const res = await fetchFn(site + path, { headers: { accept: 'application/json' } })
+    const res = await fetchFn(site + path, { headers: WARM_HEADERS })
     await res.arrayBuffer()
     return { path, status: res.status, cache: res.headers.get('x-vercel-cache'), server: res.headers.get('server-timing'), ms: performance.now() - started }
   } catch {

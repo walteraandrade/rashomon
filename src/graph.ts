@@ -1,6 +1,7 @@
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
+import { DAYS } from './query.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
 
@@ -257,8 +258,9 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
   from s`
 }
 
-// A recorte the aggregates can hold: no domain, no lean, one source or all.
-export const precomputable = (q: Pick<GraphQuery, 'domain' | 'lean' | 'source'>) => q.domain === 'all' && q.lean === 'all' && !q.source.includes(',')
+// A recorte the aggregates can hold: a built window, no domain, no lean, one source or all.
+export const precomputable = (q: Pick<GraphQuery, 'days' | 'domain' | 'lean' | 'source'>) =>
+  DAYS.includes(q.days) && q.domain === 'all' && q.lean === 'all' && !q.source.includes(',')
 
 // count(*): doc_terms' PK + about's PK (doc_persons with person_id fixed) make doc_id unique
 // inside each (s, t) group. Order by is spelled out rather than relying on plan emission order.
@@ -569,7 +571,10 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
 // links stays a second statement: its `any(ids)` term list is the output of the first one,
 // so folding it in would mean recomputing the ranking to feed itself.
 // Precomputed first, live when the window was never built (local dev before `pnpm aggregate`,
-// or a scope the tables cannot hold); both render the same shape.
+// or a scope the tables cannot hold); both render the same shape. Zero rows means never built
+// for this person: scopesQuery and personTermsQuery fill from the same person list, so a
+// scope row always comes with that person's terms. Only this statement is precomputed;
+// linksQuery and termTestimonyQuery below still run live.
 const graphAggregates = async (person: Person, q: GraphQuery): Promise<GraphAggregates> => {
   const fast = precomputable(q) ? (await run<GraphAggregates>(graphFastQuery(person, q))).rows[0] : undefined
   return fast ?? (await run<GraphAggregates>(graphQuery(person, q))).rows[0]

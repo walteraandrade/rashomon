@@ -2,15 +2,25 @@ name: warm
 
 # A deploy empties the CDN cache, so the first reader of every recorte would pay the origin
 # until the next ingest. This asks for the page's own recortes right after production is up.
+# Before asking, it builds the graph aggregates when the database has none (the first deploy
+# after the tables appeared): otherwise every warm GET would be the live 7 s statement.
+# Same concurrency group as ingest: two aggregate builds on one database would collide.
 on:
   deployment_status:
   workflow_dispatch:
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
 
 jobs:
   warm:
     if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PG_SSL_CA: ${{ secrets.PG_SSL_CA }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -19,6 +29,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: test -n "$DATABASE_URL" || { echo 'DATABASE_URL secret is missing'; exit 1; }
+      - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
+      - run: pnpm aggregate --if-missing
       - run: pnpm warm
         env:
           SITE_URL: https://rashomon-five.vercel.app

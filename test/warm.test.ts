@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { params, sourcesParams, testimonyParams } from '../src/ui/api.js'
-import { summary, warm, warmPaths, WARM_DAYS } from '../src/warm.js'
+import { summary, warm, WARM_HEADERS, warmPaths, WARM_DAYS } from '../src/warm.js'
 
 // src/warm.ts: the paths the page asks for by itself, requested once so the CDN holds them.
 // Never hits the network: fetch is injected.
@@ -20,6 +20,13 @@ describe('warmPaths', () => {
   })
 })
 
+describe('WARM_HEADERS', () => {
+  it('bypasses the CDN copy so the warm refetches the origin instead of confirming a stale HIT', () => {
+    assert.equal(WARM_HEADERS.pragma, 'no-cache')
+    assert.equal(WARM_HEADERS['cache-control'], 'no-cache')
+  })
+})
+
 describe('warm', () => {
   const stub = (status: number, cache: string) =>
     (async (url: string | URL | Request) => ({
@@ -31,9 +38,11 @@ describe('warm', () => {
 
   it('requests every path once against the site and keeps status, cache and server-timing', async () => {
     const seen: string[] = []
-    const fetchFn = ((url: string) => (seen.push(url), stub(200, 'MISS')(url))) as unknown as typeof fetch
+    const headers: unknown[] = []
+    const fetchFn = ((url: string, init: RequestInit) => (seen.push(url), headers.push(init.headers), stub(200, 'MISS')(url))) as unknown as typeof fetch
     const results = await warm('https://example.test', ['/a', '/b', '/c'], 2, fetchFn)
     assert.deepEqual(seen.sort(), ['https://example.test/a', 'https://example.test/b', 'https://example.test/c'])
+    assert.deepEqual(headers, Array(3).fill(WARM_HEADERS))
     assert.equal(results.length, 3)
     assert.deepEqual(results.map((r) => [r.status, r.cache, r.server]), Array(3).fill([200, 'MISS', 'db;dur=1;desc="1 sql", total;dur=2']))
   })

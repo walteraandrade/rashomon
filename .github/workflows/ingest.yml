@@ -40,7 +40,8 @@ jobs:
       - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
       - run: pnpm ingest ${{ inputs.sources }}
       # The ingest above rebuilt the graph aggregates; this asks the CDN for the page's own recortes
-      # so the first reader after it finds a HIT.
+      # with Pragma: no-cache, so the objects the ingest made stale are refetched and the first
+      # reader after it finds a HIT of the new build.
       - run: pnpm warm
         env:
           SITE_URL: https://rashomon-five.vercel.app

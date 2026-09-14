@@ -73,8 +73,9 @@ export const brtMidnightUtc = (day: string): Date => {
   // they are the same instant. On a DST boundary they straddle it -- the local midnight is then
   // either ambiguous (clocks went back) or missing (clocks went forward), and Postgres resolves
   // both cases to standard time, which is the later of the two. Taking the later one is what
-  // keeps this in step with `at time zone` on every historical Brazilian transition
-  // (test/query.test.ts pins them against the dates themselves).
+  // keeps this in step with `at time zone` on every Brazilian transition since 1950 (the one
+  // exception, 1950-04-16, fell back at 01:00 rather than midnight, so neither probe lands past
+  // it; keepDay only ever asks about dates inside a 7/30/365-day window, so it is unreachable).
   const first = naive - zoneOffsetMinutes(new Date(naive), WEEK_TZ) * 60_000
   const second = naive - zoneOffsetMinutes(new Date(first), WEEK_TZ) * 60_000
   return new Date(Math.max(first, second))

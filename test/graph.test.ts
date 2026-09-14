@@ -2368,13 +2368,36 @@ describe('docsFor day filter (issue #147)', () => {
 // `at time zone`. If the two ever disagree, a day at the window edge is admitted by one and
 // dropped by the other. Brazil has had no DST since 2019, so these transitions are fixed history.
 describe('brtMidnightUtc resolves the same instant as `at time zone` (issue #147)', () => {
-  const days = [
-    '2026-09-14', '2026-01-01', '2018-11-03', '2018-11-04', '2018-11-05',
-    '2019-02-16', '2019-02-17', '2019-02-18', '2017-10-15', '2017-02-19',
-    '2015-10-18', '2015-02-22', '2012-10-21', '2012-02-26',
-  ]
+  // The transition days are read out of the tz database rather than hand-listed, so this covers
+  // every one of them and cannot fall behind a tzdata update. 1951 is the floor: 1950-04-16 fell
+  // back at 01:00 rather than midnight, the one day in 1940-2100 where the two disagree, and it
+  // is unreachable because keepDay only ever asks about dates inside a 7/30/365-day window.
+  const ymd = (t: number) => new Date(t).toISOString().slice(0, 10)
+  const offsetAt = (t: number) =>
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', timeZoneName: 'longOffset' })
+      .formatToParts(new Date(t)).find((p) => p.type === 'timeZoneName')!.value
 
-  it('every ordinary day and every Brazilian DST transition in the tz database', async () => {
+  // Each transition day AND the day after it: a transition day itself resolves to standard time
+  // in both directions, so a hardcoded -03:00 would match every one of them. The day after a
+  // spring-forward is inside DST, at -02:00, which is what actually catches such a regression.
+  const transitions = () => {
+    const out: string[] = []
+    // Sampled at midday UTC, which is still the same calendar day in Sao Paulo; sampling at
+    // 00:00 UTC is 21:00 the day before there and reports every transition a day late.
+    let prev = offsetAt(Date.UTC(1951, 0, 1, 12))
+    for (let t = Date.UTC(1951, 0, 2, 12); t < Date.UTC(2100, 0, 1); t += 86_400_000) {
+      const now = offsetAt(t)
+      if (now !== prev) out.push(ymd(t), ymd(t + 86_400_000))
+      prev = now
+    }
+    return out
+  }
+
+  it('every Brazilian DST transition in the tz database since 1951, plus ordinary days', async () => {
+    const days = [...transitions(), '2026-09-14', '2026-01-01', '2019-07-15', '2000-06-30', '2019-01-15']
+    // Anchors, so a tz database that stopped carrying Brazil's history fails loudly here rather
+    // than reducing this test to the four ordinary days.
+    for (const anchor of ['2018-11-04', '2019-02-17']) assert.ok(days.includes(anchor), anchor)
     for (const day of days) {
       const { rows } = await db.query<{ pg: Date }>(`select ('${day}'::timestamp at time zone 'America/Sao_Paulo') as pg`)
       assert.equal(brtMidnightUtc(day).toISOString(), new Date(rows[0].pg).toISOString(), day)

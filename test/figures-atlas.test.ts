@@ -341,12 +341,67 @@ describe('mount: colour by avaliação is the default', () => {
     })
   })
 
-  it('design-5.html has the toggle next to the view switch, pressed by default', () => {
-    assert.match(read('design-5.html'), /<button id="modeColumns" aria-pressed="false">Lista<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação<\/button>/)
+  // Issue #149 AC9: the segment gained a third button (Avaliação) between Lista and the
+  // toolbar's closing </div>, so the old two-button literal no longer matches.
+  it('design-5.html has the toggle next to the view switch, pressed by default (issue #149 AC9)', () => {
+    assert.match(
+      read('design-5.html'),
+      /<button id="modeColumns" aria-pressed="false">Lista<\/button><button id="modeStrip" aria-pressed="false">Avaliação<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação<\/button>/,
+    )
   })
 
   it("figures/atlas.ts's resize handling never reads or writes #strip, #testimonyList or #outletList (issue #92 AC13)", () => {
     const src = readFileSync(join(root, 'src', 'ui', 'figures', 'atlas.ts'), 'utf8')
     for (const id of ['strip', 'testimonyList', 'outletList']) assert.doesNotMatch(src, new RegExp(`\\$\\('${id}'\\)`), `figure 1 must not touch #${id}`)
+  })
+})
+
+// Issue #149: a third mode on figure 1, a beeswarm of a person's words positioned by their own
+// kikori mean. No new route, no new fetch: the strip paints from the graph already loaded.
+describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () => {
+  it('AC1: createHandlers exposes modeStrip, which calls setMode with "strip"', () => {
+    let arg: string | undefined
+    const h: any = createHandlers({ setMode: (m: string) => (arg = m) })
+    assert.equal(typeof h.modeStrip, 'function', "createHandlers' returned table must expose modeStrip, the same way it exposes modeMap/modeColumns")
+    h.modeStrip()
+    assert.equal(arg, 'strip')
+  })
+
+  it('AC5: modeStrip is a local repaint — shows #atlasStrip, hides #viewport/#columns/#mask/#zoomGroup, and issues no new request', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [
+        { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } },
+        { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0.2, n: 8 } },
+      ]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      const requestsBefore = calls.length
+      els.modeStrip.fire('click')
+      assert.equal(els.viewport.hidden, true, '#viewport must hide in strip mode')
+      assert.equal(els.columns.hidden, true, '#columns must hide in strip mode')
+      assert.equal(els.atlasStrip.hidden, false, '#atlasStrip must show in strip mode')
+      assert.equal(els.mask.hidden, true, 'the mask toggle is meaningless once colour is not optional')
+      assert.equal(els.zoomGroup.hidden, true, 'there is nothing to zoom in strip mode')
+      assert.equal(els.keyDefault.hidden, true, 'the default figure key hides in strip mode')
+      assert.equal(els.keyStrip.hidden, false, "the strip's own figure key shows instead")
+      assert.equal(calls.length, requestsBefore, 'switching to the strip view must not fetch anything new')
+    })
+  })
+
+  it('AC6: a strip pick reuses the same handlers.pick(id) path drawMap and paintColumns use, and stays single-sided', () => {
+    const src = readFileSync(join(root, 'src', 'ui', 'figures', 'atlas.ts'), 'utf8')
+    const call = src.match(/paintTermStrip\(\{[\s\S]*?\}\)/)?.[0] ?? ''
+    assert.ok(call, 'figures/atlas.ts must call paintTermStrip when painting the strip')
+    assert.match(call, /onChoose:\s*\(id\)\s*=>\s*handlers\.pick\(id\)/, 'a strip circle must pick through the same handler drawMap/paintColumns use, so it opens #docsDialog with a single side (docsQuery, unchanged) and never the two-column .is-wide layout')
+  })
+
+  it('AC7: a click on empty space inside #atlasStrip releases the selection, the same way #viewport/#columns already do', () => {
+    const src = readFileSync(join(root, 'src', 'ui', 'figures', 'atlas.ts'), 'utf8')
+    const loop = src.match(/for \(const id of \[([^\]]*)\]\)\s*\n?\s*\$\(id\)\.addEventListener\('click', \(e: MouseEvent\) => handlers\.background/)
+    assert.ok(loop, 'must find the background-click wiring loop that already covers #viewport/#columns')
+    assert.match(loop![1], /'atlasStrip'/, "atlasStrip must join viewport/columns in that loop, or an empty-space click inside the strip would leave the selection standing")
   })
 })

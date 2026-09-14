@@ -63,14 +63,16 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.match(html, /id="helpDialog"/, 'the atlas intercepts those links into an in-page dialog')
     for (const id of ['workspace', 'testimony', 'compare']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
-      assert.match(figure, /<dl class="figure-key">/, `${id} carries its own key`)
+      // Issue #149 AC8 gave #workspace's default key an id="keyDefault" (a sibling id="keyStrip"
+      // now follows it), so the match tolerates an id attribute rather than only the bare tag.
+      assert.match(figure, /<dl class="figure-key"[^>]*>/, `${id} carries its own key`)
     }
   })
 
   it("figure 1's key on the page and in the dialog name the same encodings", () => {
     const html = read('design-5.html')
     const dts = (chunk: string) =>
-      [...(chunk.match(/<dl class="figure-key">[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
+      [...(chunk.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
         m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim(),
       )
     const figure = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
@@ -149,7 +151,9 @@ describe('the page is a sequence of graphs', () => {
     assert.equal(html.match(/<p class="figure-sub">/g)?.length, 4)
     for (const id of ['workspace', 'testimony', 'compare', 'rising']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
-      assert.match(figure, /<dl class="figure-key">/, `${id} carries its own key`)
+      // Issue #149 AC8 gave #workspace's default key an id="keyDefault" (a sibling id="keyStrip"
+      // now follows it), so the match tolerates an id attribute rather than only the bare tag.
+      assert.match(figure, /<dl class="figure-key"[^>]*>/, `${id} carries its own key`)
     }
     assert.doesNotMatch(html, /class="side"/)
     // The atlas keeps its toolbar and its detail column inside its own figure.
@@ -236,5 +240,54 @@ describe('every page finds what it names', () => {
     assert.match(chapter, /<b>Colorir por avaliação<\/b>/)
     assert.match(chapter, /com a média da pessoa no recorte, e não com o zero/)
     assert.match(chapter, /menos de 3 textos avaliados/)
+  })
+})
+
+describe('issue #149: markup for figure 1\'s third view, Avaliação', () => {
+  it('AC8: #modeStrip sits in the same segment as #modeMap/#modeColumns, and #keyDefault is unchanged', () => {
+    const html = read('design-5.html')
+    const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const segment = workspace.match(/<div class="segment"[^>]*role="group"[^>]*>[\s\S]*?<\/div>/)?.[0] ?? ''
+    assert.match(segment, /<button id="modeMap"/)
+    assert.match(segment, /<button id="modeColumns"/)
+    assert.match(segment, /<button id="modeStrip"[^>]*>Avaliação<\/button>/, 'the third button reads "Avaliação"')
+    // #keyDefault must stay the first <dl class="figure-key"> in #workspace, with exactly the
+    // four rows Tamanho/Cor/Posição/Clique, unchanged (test/leitura-ui-acceptance.test.ts:70-80
+    // relies on this order).
+    const firstKey = workspace.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? ''
+    assert.match(firstKey, /id="keyDefault"/)
+    const rows = [...firstKey.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim())
+    assert.deepEqual(rows, ['Tamanho', 'Cor', 'Posição', 'Clique'])
+  })
+
+  it('AC8: #keyStrip is a second, initially-hidden figure-key with the four Posição/Tamanho/Cor/Clique rows', () => {
+    const workspace = read('design-5.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const keyStrip = workspace.match(/<dl class="figure-key" id="keyStrip"[^>]*>[\s\S]*?<\/dl>/)?.[0]
+    assert.ok(keyStrip, '#workspace must carry a second <dl class="figure-key" id="keyStrip">')
+    assert.match(keyStrip!, /hidden/, '#keyStrip starts hidden: the default view is the map, not the strip')
+    const rows = [...keyStrip!.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim())
+    assert.deepEqual(rows, ['Posição', 'Tamanho', 'Cor', 'Clique'])
+    const dds = [...keyStrip!.matchAll(/<dd>([\s\S]*?)<\/dd>/g)].map((m) => m[1].trim())
+    assert.deepEqual(dds, [
+      'média da avaliação dos textos com a palavra',
+      'quantos textos',
+      'distância da média da pessoa',
+      'textos da palavra',
+    ])
+  })
+
+  it('AC10: every rule atlas.css added for #atlasStrip/#stripHiddenNote sizes type from the --t-* ramp, never a px literal', () => {
+    const css = read('atlas.css')
+    const block = css.match(/#atlasStrip[\s\S]*?#stripHiddenNote[^}]*\}/)?.[0] ?? ''
+    assert.ok(block, 'the new strip-mode rules must exist')
+    assert.doesNotMatch(block, /font(?:-size)?:\s*(?:\d+\s+)?\d+(?:\.\d+)?px/, 'no rule here may size type in px')
+  })
+
+  it('AC11: the reading guide states the strip positions words by the same kikori score the mask already colours by', () => {
+    const chapter = read('como-ler.html').match(/<div id="avaliacao">[\s\S]*?(?=<div id="pmi">)/)?.[0] ?? ''
+    assert.match(chapter, /modo\s*<b>Avaliação<\/b>\s*do gráfico 1/i, 'names the strip mode of figure 1')
+    assert.match(chapter, /mesma régua/, 'ties it to the same kikori axis figure 2 already explains')
+    assert.match(chapter, /mesma\s+(?:cor|máscara)/i, 'says the colour is the same mask, not a second metric')
+    assert.match(chapter, /não é uma segunda medida/i, 'explicitly rules out a second metric')
   })
 })

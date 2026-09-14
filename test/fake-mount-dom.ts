@@ -209,6 +209,15 @@ const atlasIds = () => ({
   overflow: new FakeBox('overflow'),
   modeMap: new FakeBox('modeMap'),
   modeColumns: new FakeBox('modeColumns'),
+  // Issue #149: figure 1's third view, the kikori beeswarm strip, its own hidden-count note,
+  // the zoom control group (toggled off in strip mode) and the two figure-key blocks that
+  // swap with the mode.
+  modeStrip: new FakeBox('modeStrip'),
+  atlasStrip: new FakeBox('atlasStrip'),
+  stripHiddenNote: new FakeBox('stripHiddenNote'),
+  zoomGroup: new FakeBox('zoomGroup'),
+  keyDefault: new FakeBox('keyDefault'),
+  keyStrip: new FakeBox('keyStrip'),
   mask: new FakeBox('mask'),
   zoomIn: new FakeBox('zoomIn'),
   zoomOut: new FakeBox('zoomOut'),

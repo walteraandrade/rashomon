@@ -2241,7 +2241,7 @@ describe('weekFor (issue #147)', () => {
     for (const row of rows) assert.deepEqual(Object.keys(row).sort(), ['bucket_start', 'count'])
   })
 
-  it('issue #147 review finding 7: scoped bounds published_at from below so the seq scan is avoided', () => {
+  it('issue #147: week scoped bounds published_at from below so docs_published_idx applies', () => {
     assert.match(statements.week, /where d\.published_at >=/)
   })
 })

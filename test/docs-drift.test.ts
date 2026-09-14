@@ -116,6 +116,16 @@ describe('documented facts per route', () => {
     assert.match(docsText, /"name"/)
     assert.match(docsText, /own name word/)
   })
+
+  it('/api/people/:id/week (issue #147 AC21/AC22): calendar days, BRT, about + per-day terms, rolling 6h cache', () => {
+    assert.match(docsText, /\/api\/people\/:id\/week/)
+    assert.match(docsText, /America\/Sao_Paulo/)
+    assert.match(docsText, /calendar day/)
+    assert.match(docsText, /not required to equal/)
+    assert.match(docsText, /optional.*`day`|`day` is optional/)
+    assert.match(docsText, /week.*rolling 6h|rolling 6h class/)
+    assert.doesNotMatch(docsText, /`week`[\s\S]{0,40}1h trend|trend class[\s\S]{0,40}`week`/)
+  })
 })
 
 describe('issue #112 AC12: docs/operations.md states the dependency and size facts', () => {

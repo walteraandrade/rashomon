@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
-import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor } from '../src/graph.js'
-import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery } from '../src/query.js'
+import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
+import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app } from '../src/server.js'
 import { withEnv } from './env.js'
@@ -32,20 +32,22 @@ describe('the routes answer their *For functions with the default parser (issue 
 
   it('graph, sources, docs, timeline, rising, tone and people', async () => {
     const id = 'tarcisio'
-    const [graphRes, sourcesRes, docsRes, timelineRes, risingRes, toneRes, peopleRes] = await Promise.all([
+    const [graphRes, sourcesRes, docsRes, timelineRes, weekRes, risingRes, toneRes, peopleRes] = await Promise.all([
       app.request(`/api/people/${id}/graph`),
       app.request(`/api/people/${id}/sources`),
       app.request(`/api/people/${id}/docs`),
       app.request(`/api/people/${id}/timeline`),
+      app.request(`/api/people/${id}/week`),
       app.request(`/api/people/${id}/rising`),
       app.request(`/api/tone`),
       app.request(`/api/people`),
     ])
-    const [graphBody, sourcesBody, docsBody, timelineBody, risingBody, toneBody, peopleBody] = await Promise.all([
+    const [graphBody, sourcesBody, docsBody, timelineBody, weekBody, risingBody, toneBody, peopleBody] = await Promise.all([
       graphRes.json(),
       sourcesRes.json(),
       docsRes.json(),
       timelineRes.json(),
+      weekRes.json(),
       risingRes.json(),
       toneRes.json(),
       peopleRes.json(),
@@ -63,6 +65,8 @@ describe('the routes answer their *For functions with the default parser (issue 
       (timelineBody as { count: number }[]).map((b) => b.count),
     )
     assert.equal(directTimeline.length, (timelineBody as unknown[]).length)
+    const directWeek = await weekFor(person, parseWeekQuery({}))
+    assert.deepEqual(JSON.parse(JSON.stringify(directWeek)), weekBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await risingFor(person, parseRisingQuery({})))), risingBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await toneFor(parseToneQuery({})))), toneBody)
     const { rows } = await db.query(`select id, name, aliases from persons order by name`)
@@ -122,6 +126,12 @@ describe('GET /api/people/:id/testimony (issue #21)', () => {
 
   it('AC2: an unknown id returns 404 with { error: "person not found" }, the same shape as every other /:id/* route', async () => {
     const res = await app.request('/api/people/does-not-exist/testimony')
+    assert.equal(res.status, 404)
+    assert.deepEqual(await res.json(), { error: 'person not found' })
+  })
+
+  it('issue #147 AC1: GET /api/people/nobody/week is the same 404', async () => {
+    const res = await app.request('/api/people/nobody/week')
     assert.equal(res.status, 404)
     assert.deepEqual(await res.json(), { error: 'person not found' })
   })

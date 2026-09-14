@@ -608,6 +608,8 @@ describe('risingFor (issue #3)', () => {
       kind: 'word',
       count_recent: rate(2, 7),
       count_baseline: rate(0, 30),
+      count_recent_raw: 2,
+      count_baseline_raw: 0,
       lift: lift(2, 7, 0, 30),
     })
     // "defende" appears once in doc /6 (day1, recent) and once in doc /17 (day31, baseline)
@@ -678,12 +680,13 @@ describe('risingFor (issue #3)', () => {
 
   it('AC10: returns an empty terms array for a person without docs', async () => {
     const r = await risingFor(nobody, risingBase)
-    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], outlets: [] })
+    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], outlets: [], about: { recent: 0, baseline: 0 } })
   })
 
   it('AC10: returns an empty terms array for an empty recent window', async () => {
     const r = await risingFor(lula, { ...risingBase, days: 1 })
     assert.deepEqual(r.terms, [])
+    assert.equal(r.about.recent, 0)
   })
 
   it('AC11: limit clamps the result size without altering the order', async () => {
@@ -692,6 +695,31 @@ describe('risingFor (issue #3)', () => {
     assert.equal(r.terms.length, 1)
     assert.equal(r.terms[0].term, 'reforma')
     assert.deepEqual(r.terms[0], full.terms[0])
+  })
+
+  // /1, /2, /6, /7, /38 name lula inside the last 7 days; /17 (day31) and /18 (day35) are its
+  // only baseline-window (8-37 days ago) docs -- /19 (day50) falls outside the 30-day baseline.
+  it('about.recent/about.baseline match a hand-counted distinct-doc total for lula', async () => {
+    const r = await risingFor(lula, risingBase)
+    assert.deepEqual(r.about, { recent: 5, baseline: 2 })
+  })
+
+  it('count_recent_raw/count_baseline_raw are consistent with the rounded rate columns', async () => {
+    const r = await risingFor(lula, risingBase)
+    assert.ok(r.terms.length > 0, 'sanity: must have rows to make the check meaningful')
+    for (const t of r.terms) {
+      assert.ok(Number.isInteger(t.count_recent_raw) && t.count_recent_raw >= 0)
+      assert.ok(Number.isInteger(t.count_baseline_raw) && t.count_baseline_raw >= 0)
+      assert.equal(t.count_recent, Math.round((t.count_recent_raw / risingBase.days) * 100) / 100)
+      assert.equal(t.count_baseline, Math.round((t.count_baseline_raw / risingBase.baseline) * 100) / 100)
+    }
+  })
+
+  it('about is unaffected by kind, unlike terms', async () => {
+    const all = await risingFor(lula, risingBase)
+    const hashtagOnly = await risingFor(lula, { ...risingBase, kind: 'hashtag' })
+    assert.deepEqual(hashtagOnly.about, all.about)
+    assert.notDeepEqual(hashtagOnly.terms, all.terms)
   })
 })
 
@@ -1647,6 +1675,8 @@ const referenceRisingSql = `
   select r.term, r.kind,
     round((r.c_recent / $2)::numeric, 2)::float8 as count_recent,
     round((coalesce(b.c_baseline, 0) / $3)::numeric, 2)::float8 as count_baseline,
+    r.c_recent::int as count_recent_raw,
+    coalesce(b.c_baseline, 0)::int as count_baseline_raw,
     round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift
   from recent_terms r left join baseline_terms b using (term, kind)
   where r.c_recent >= $8

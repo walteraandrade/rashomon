@@ -95,7 +95,16 @@ type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
 type GraphAggregates = Stats & { nodes: TermRow[]; signature: SignatureRow[] }
 type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
-type RisingRow = { term: string; kind: string; count_recent: number; count_baseline: number; lift: number }
+type RisingRow = {
+  term: string
+  kind: string
+  count_recent: number
+  count_baseline: number
+  count_recent_raw: number
+  count_baseline_raw: number
+  lift: number
+}
+type RisingAggregates = { about_recent: number; about_baseline: number; terms: RisingRow[] }
 type TimelineRow = { bucket_start: Date; count: number }
 type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
 type ToneListRow = { id: string; name: string }
@@ -509,15 +518,29 @@ const risingQuery = (person: Person, q: RisingQuery) => {
   recent_terms as (${termsOf(sql.raw('recent_about'), sql.raw('c_recent'))}
   ),
   baseline_terms as (${termsOf(sql.raw('baseline_about'), sql.raw('c_baseline'))}
+  ),
+  ranked as (
+    select r.term, r.kind,
+      round((r.c_recent / ${q.days})::numeric, 2)::float8 as count_recent,
+      round((coalesce(b.c_baseline, 0) / ${q.baseline})::numeric, 2)::float8 as count_baseline,
+      r.c_recent::int as count_recent_raw,
+      coalesce(b.c_baseline, 0)::int as count_baseline_raw,
+      round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
+    from recent_terms r left join baseline_terms b using (term, kind)
+    where r.c_recent >= ${q.min}
+    order by lift desc, term, kind
+    limit ${q.limit}
   )
-  select r.term, r.kind,
-    round((r.c_recent / ${q.days})::numeric, 2)::float8 as count_recent,
-    round((coalesce(b.c_baseline, 0) / ${q.baseline})::numeric, 2)::float8 as count_baseline,
-    round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
-  from recent_terms r left join baseline_terms b using (term, kind)
-  where r.c_recent >= ${q.min}
-  order by lift desc, term, kind
-  limit ${q.limit}`
+  select
+    (select count(*) from recent_about)::int as about_recent,
+    (select count(*) from baseline_about)::int as about_baseline,
+    coalesce((
+      select json_agg(json_build_object(
+        'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
+        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
+      ) order by lift desc, term, kind)
+      from ranked
+    ), '[]'::json) as terms`
 }
 
 export type CandidatesQuery = { days: number; min: number; limit: number }
@@ -566,8 +589,9 @@ export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number;
 
 export const risingFor = async (person: Person, q: RisingQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
-  const { rows } = await run<RisingRow>(risingQuery(person, q))
-  return { days: q.days, baseline: q.baseline, terms: rows, outlets }
+  const { rows } = await run<RisingAggregates>(risingQuery(person, q))
+  const { about_recent, about_baseline, terms } = rows[0]
+  return { days: q.days, baseline: q.baseline, terms, outlets, about: { recent: about_recent, baseline: about_baseline } }
 }
 
 // links stays a second statement: its `any(ids)` term list is the output of the first one,

@@ -123,6 +123,18 @@ describe('the routes answer their *For functions with the default parser (issue 
   })
 })
 
+describe('issue #151 AC1: /rising default limit is 40, not 20', () => {
+  before(seed)
+
+  it('a wide window with more than 20 matching terms and no limit param returns more than 20', async () => {
+    const res = await app.request('/api/people/lula/rising?days=365&min=1')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Awaited<ReturnType<typeof risingFor>>
+    assert.ok(body.terms.length > 20, `expected more than 20 terms, got ${body.terms.length}`)
+    assert.ok(body.terms.length <= 40)
+  })
+})
+
 describe('GET /api/people/:id/testimony (issue #21)', () => {
   before(seed)
 

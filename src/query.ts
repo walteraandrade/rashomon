@@ -184,7 +184,7 @@ export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQ
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
-  limit: snapTo(SMALL_LIMITS, q.limit, 20),
+  limit: snapTo(SMALL_LIMITS, q.limit, 40),
   min: snapTo(MINS, q.min, 3),
 })
 

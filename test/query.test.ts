@@ -418,7 +418,7 @@ type Q = Record<string, string | undefined>
 const intParsers: [string, (q: Q) => Record<string, unknown>, Record<string, [number, readonly number[]]>][] = [
   ['parseQuery', parseQuery, { limit: [40, LIMITS], min: [2, MINS] }],
   ['parseDocsQuery', parseDocsQuery, { limit: [50, LIMITS], offset: [0, OFFSETS] }],
-  ['parseRisingQuery', parseRisingQuery, { limit: [20, SMALL_LIMITS], min: [3, MINS], baseline: [30, BASELINES] }],
+  ['parseRisingQuery', parseRisingQuery, { limit: [40, SMALL_LIMITS], min: [3, MINS], baseline: [30, BASELINES] }],
   ['parseToneQuery', parseToneQuery, { min: [3, MINS] }],
   ['parseTestimonyQuery', parseTestimonyQuery, { min: [3, MINS] }],
   ['parseCandidatesQuery', parseCandidatesQuery, { limit: [50, LIMITS], min: [5, MINS] }],

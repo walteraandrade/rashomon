@@ -682,7 +682,7 @@ describe('risingFor (issue #3)', () => {
 
   it('AC10: returns an empty terms array for a person without docs', async () => {
     const r = await risingFor(nobody, risingBase)
-    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], outlets: [], about: { recent: 0, baseline: 0 } })
+    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], rare: [], outlets: [], about: { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 } })
   })
 
   it('AC10: returns an empty terms array for an empty recent window, but about.baseline still reflects the baseline docs', async () => {
@@ -704,7 +704,44 @@ describe('risingFor (issue #3)', () => {
   // only baseline-window (8-37 days ago) docs -- /19 (day50) falls outside the 30-day baseline.
   it('about.recent/about.baseline match a hand-counted distinct-doc total for lula', async () => {
     const r = await risingFor(lula, risingBase)
-    assert.deepEqual(r.about, { recent: 5, baseline: 2 })
+    assert.equal(r.about.recent, 5)
+    assert.equal(r.about.baseline, 2)
+  })
+
+  // words_* are the totals the page divides by, so they must equal the sum of the very counts
+  // it divides: with no limit and no floor, every recent term is served and adds up to
+  // words_recent; the same terms' baseline counts add up to words_baseline only when no
+  // baseline-only term exists, so that side is checked as an upper bound plus the hand count.
+  it('about.words_recent/about.words_baseline total the doc_terms rows behind the served terms', async () => {
+    const full = await risingFor(lula, { ...risingBase, limit: 100, min: 1 })
+    assert.deepEqual(full.rare, [], 'sanity: at limit 100 every fixture term fits in terms')
+    const recentSum = full.terms.reduce((n, t) => n + t.count_recent_raw, 0)
+    assert.equal(full.about.words_recent, recentSum)
+    const baselineSum = full.terms.reduce((n, t) => n + t.count_baseline_raw, 0)
+    assert.ok(full.about.words_baseline >= baselineSum, 'baseline-only terms count too')
+    // /17 (day31) and /18 (day35) are lula's baseline docs: "estabilidade fiscal" text, 4 rows each.
+    assert.equal(full.about.words_baseline, 8)
+    assert.equal(full.about.words_recent, 17)
+  })
+
+  it('terms are the most present recent terms, rare the highest lifts among the rest, never overlapping', async () => {
+    const r = await risingFor(lula, { ...risingBase, limit: 1 })
+    assert.equal(r.terms.length, 1)
+    assert.equal(r.terms[0].term, 'reforma', 'the word reforma is in every recent doc that qualifies; ties by lift keep it first')
+    assert.equal(r.rare.length, 1, 'rare is capped by the same limit')
+    assert.notEqual(`${r.rare[0].kind}:${r.rare[0].term}`, 'word:reforma')
+    const full = await risingFor(lula, { ...risingBase, limit: 100 })
+    const nextByLift = full.terms.filter((t) => !(t.kind === 'word' && t.term === 'reforma'))[0]
+    assert.deepEqual(r.rare[0], nextByLift, 'rare starts where terms stops, ordered by lift')
+    const three = await risingFor(lula, { ...risingBase, limit: 5 })
+    const inTerms = new Set(three.terms.map((t) => `${t.kind}:${t.term}`))
+    assert.ok(three.rare.every((t) => !inTerms.has(`${t.kind}:${t.term}`)))
+    const rareLifts = three.rare.map((t) => t.lift)
+    assert.deepEqual(rareLifts, [...rareLifts].sort((a, b) => b - a), 'rare is ordered by lift desc')
+    // A term present in more docs enters terms ahead of a term with a higher lift but fewer docs.
+    const present = three.terms.map((t) => t.count_recent_raw)
+    const rareCounts = three.rare.map((t) => t.count_recent_raw)
+    assert.ok(Math.min(...present) >= Math.max(...rareCounts), 'terms are picked by presence, not lift')
   })
 
   it('count_recent_raw/count_baseline_raw are consistent with the rounded rate columns', async () => {
@@ -718,10 +755,12 @@ describe('risingFor (issue #3)', () => {
     }
   })
 
-  it('about is unaffected by kind, unlike terms', async () => {
+  it('about.recent/about.baseline are unaffected by kind; about.words_* and terms are', async () => {
     const all = await risingFor(lula, risingBase)
     const hashtagOnly = await risingFor(lula, { ...risingBase, kind: 'hashtag' })
-    assert.deepEqual(hashtagOnly.about, all.about)
+    assert.equal(hashtagOnly.about.recent, all.about.recent)
+    assert.equal(hashtagOnly.about.baseline, all.about.baseline)
+    assert.ok(hashtagOnly.about.words_recent < all.about.words_recent, 'words_recent counts only the served kinds')
     assert.notDeepEqual(hashtagOnly.terms, all.terms)
   })
 })
@@ -779,7 +818,9 @@ describe('issue #151: /rising\'s about totals and raw counts', () => {
     const bogus = await risingFor(lula, { ...risingBase, kind: 'bogus', days: 2000, baseline: 2000 })
     const all = await risingFor(lula, { ...risingBase, days: 2000, baseline: 2000 })
     assert.deepEqual(bogus.terms, [])
-    assert.deepEqual(bogus.about, all.about)
+    assert.equal(bogus.about.recent, all.about.recent)
+    assert.equal(bogus.about.baseline, all.about.baseline)
+    assert.deepEqual([bogus.about.words_recent, bogus.about.words_baseline], [0, 0], 'no served kind, no words to share')
   })
 })
 

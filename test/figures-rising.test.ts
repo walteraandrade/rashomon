@@ -33,7 +33,7 @@ const risingTerm = (over: Partial<RisingTerm> = {}): RisingTerm => ({
   ...over,
 })
 
-const risingData = (terms: RisingTerm[], about = { recent: 8, baseline: 3 }): Rising => ({ days: 7, baseline: 30, terms, outlets: [], about })
+const risingData = (terms: RisingTerm[], about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }, rare: RisingTerm[] = []): Rising => ({ days: 7, baseline: 30, terms, rare, outlets: [], about })
 
 describe('AC1: figures/rising.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
@@ -97,7 +97,7 @@ describe('issue #151 AC13: an empty terms array paints the empty note and still 
   it('#risingRuler shows "Nenhuma palavra neste recorte." and #risingAbout names both window totals', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
-      routeFetch(calls, { '/rising': risingData([], { recent: 0, baseline: 12 }) })
+      routeFetch(calls, { '/rising': risingData([], { recent: 0, baseline: 12, words_recent: 0, words_baseline: 50 }) })
       const { mount } = await import('../src/ui/figures/rising.js')
       mount(els.rising, { people, initial: {} })
       await flush()

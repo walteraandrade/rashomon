@@ -38,6 +38,7 @@ import {
   type PersonTestimony,
   type PlacedTerm,
   type Rising,
+  type RisingAbout,
   type RisingTerm,
   type Term,
   type Testimony,
@@ -760,8 +761,9 @@ const rulerOverflowMarkup = (
 // Shared by figure 3 (compare) and figure 4 (rising): draws a ruler's end labels, SVG axis and
 // words, axis labels and overflow list, and wires click/keydown on every word. The two figures
 // differ only in which items they hand it and how they word the ends/axis/note — the packing
-// (`rulerLayout`) and the per-word markup are the same for both. `note` is figure-specific prose;
-// rising passes '' and says its own numbers in `#risingAbout` instead.
+// (`rulerLayout`) and the per-word markup are the same for both. `note` is figure-specific prose
+// between the axis and the overflow list; `tail` comes after that list. Rising says its own
+// numbers in `#risingAbout` and uses `tail` for its rare risers.
 const paintRulerBody = ({
   elementId,
   items,
@@ -774,6 +776,7 @@ const paintRulerBody = ({
   axisLabels,
   ariaLabel,
   note,
+  tail = '',
 }: {
   elementId: string
   items: RulerItem[]
@@ -786,11 +789,12 @@ const paintRulerBody = ({
   axisLabels: [string, string, string]
   ariaLabel: string
   note: ReturnType<typeof html> | string
+  tail?: ReturnType<typeof html> | string
 }) => {
   const ruler = $(elementId)
   const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
   const tick = (b: number) => html`<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
-  ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${endA}</span><span class="ruler-end cmp-b">${endB}</span></div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="${ariaLabel}"><line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick)}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}</svg><div class="ruler-axis-labels"><span>${axisLabels[0]}</span><span>${axisLabels[1]}</span><span>${axisLabels[2]}</span></div>${note}${rulerOverflowMarkup(overflow, selected)}`
+  ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${endA}</span><span class="ruler-end cmp-b">${endB}</span></div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="${ariaLabel}"><line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick)}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}</svg><div class="ruler-axis-labels"><span>${axisLabels[0]}</span><span>${axisLabels[1]}</span><span>${axisLabels[2]}</span></div>${note}${rulerOverflowMarkup(overflow, selected)}${tail}`
   for (const el of queryAll('[data-term]', ruler)) {
     const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
     el.addEventListener('click', pick)
@@ -865,21 +869,36 @@ export const paintRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar a comparação.</p>'
 }
 
-// balance = clamp(log2(word's lift / the person's own lift) / 3, -1, 1): a word right of centre
-// grew faster than the person herself, left slower, regardless of either's absolute size.
-// About.baseline's own +1 smoothing (already used server-side per term) keeps this finite even
-// when the person has no baseline docs at all.
-export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
+// balance = clamp(log2(share now / share before) / 3, -1, 1), where a share is the term's doc
+// count over every doc_terms row about the person in that window (about.words_*): a word right
+// of centre takes a bigger slice of what is written about her this week than it did before,
+// left a smaller one. Shares, not doc counts, so a corpus whose texts grew longer (more words
+// per doc) does not push every word right at once; the baseline's +1 is the server's own
+// smoothing, which keeps this finite. No baseline words at all means every word is new.
+export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingAbout) => {
+  if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
+  if (about.words_recent <= 0) return -1
+  const ratio = (t.count_recent_raw / about.words_recent) / ((t.count_baseline_raw + 1) / about.words_baseline)
+  return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
+}
 
 export type RisingItem = RulerItem & { lift: number }
 
 // combined = count_recent_raw + count_baseline_raw, the exact doc counts behind the rounded
 // rates, so a word's size on the ruler never compounds the server's own rounding.
-export const risingRulerItems = (terms: RisingTerm[], liftPerson: number): RisingItem[] =>
-  terms.map((t) => {
-    const ratio = liftPerson > 0 ? t.lift / liftPerson : t.lift > 0 ? Infinity : 1
-    return { term: t.term, kind: t.kind, lift: t.lift, balance: Math.max(-1, Math.min(1, Math.log2(ratio) / 3)), combined: t.count_recent_raw + t.count_baseline_raw }
-  })
+export const risingRulerItems = (terms: RisingTerm[], about: RisingAbout): RisingItem[] =>
+  terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: shareBalance(t, about), combined: t.count_recent_raw + t.count_baseline_raw }))
+
+// The rare risers: words too scarce for the ruler (the route's `rare`, outside its most present
+// `limit`) but whose share grew the most. Listed under the ruler as buttons that pick like any
+// other word, coloured by the same balance.
+const rareMarkup = (rare: RisingItem[], selected: { term: string; kind: string } | null) =>
+  rare.length
+    ? html`<div class="ruler-overflow ruler-rare"><p>${fmt(rare.length)} ${rare.length === 1 ? 'palavra rara que disparou' : 'palavras raras que dispararam'}: pouco presentes na semana, quase ausentes antes.</p>${rare.map((d) => {
+        const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
+        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${label(d)}</button>`
+      })}</div>`
+    : ''
 
 // Figure 4's own wrapper around the shared ruler body: "antes (30 dias)" / "agora (7 dias)" reuse
 // the compare ruler's --cmp-a/--cmp-b pair, and a word belongs to one person, so there is no
@@ -898,9 +917,9 @@ export const paintRisingRuler = ({
   width?: number
 }) => {
   const ruler = $('risingRuler')
-  const liftPerson = liftOfPerson(data.about, data.days, data.baseline)
-  const items = risingRulerItems(data.terms, liftPerson)
-  if (!items.length) {
+  const items = risingRulerItems(data.terms, data.about)
+  const rare = risingRulerItems(data.rare ?? [], data.about)
+  if (!items.length && !rare.length) {
     ruler.hidden = false
     ruler.classList.remove('is-loading')
     ruler.setAttribute('aria-busy', 'false')
@@ -919,9 +938,10 @@ export const paintRisingRuler = ({
     width,
     endA: 'antes (30 dias)',
     endB: 'agora (7 dias)',
-    axisLabels: ['Mais devagar que a pessoa', 'no mesmo ritmo', 'Mais rápido que a pessoa'],
+    axisLabels: ['Fatia menor que antes', 'mesma fatia', 'Fatia maior que antes'],
     ariaLabel: 'Régua de termos em alta',
     note: '',
+    tail: rareMarkup(rare, selected),
   })
 }
 

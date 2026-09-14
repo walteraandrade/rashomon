@@ -23,7 +23,8 @@ export type CompareSide = { count: number; pmi: number; tone: number | null }
 export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null }
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
 export type RisingTerm = { term: string; kind: string; count_recent: number; count_baseline: number; count_recent_raw: number; count_baseline_raw: number; lift: number }
-export type Rising = { days: number; baseline: number; terms: RisingTerm[]; outlets: string[]; about: { recent: number; baseline: number } }
+export type RisingAbout = { recent: number; baseline: number; words_recent: number; words_baseline: number }
+export type Rising = { days: number; baseline: number; terms: RisingTerm[]; rare: RisingTerm[]; outlets: string[]; about: RisingAbout }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 

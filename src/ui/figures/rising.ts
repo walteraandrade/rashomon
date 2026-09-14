@@ -3,7 +3,7 @@
 // 7-day window only, never the 30-day baseline, since a rising word belongs to one person.
 
 import * as api from '../api.js'
-import { fmt, html, kinds, SOURCE_SEGMENTS, sourceLabels, type Measure, type Rising } from '../format.js'
+import { fmt, html, kinds, SOURCE_SEGMENTS, sourceLabels, type Measure, type Rising, type RisingAbout } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintRisingLoading, paintRisingRuler, paintRisingRulerError } from '../render.js'
 import { span } from '../perf.js'
@@ -30,8 +30,8 @@ const resolvePerson = (people: Person[], seeded: string | undefined) =>
 
 // "keeps the absolute story visible" per the issue: the ruler's own axis is relative, so the
 // two window totals are printed as plain text next to it.
-const aboutLine = (about: { recent: number; baseline: number }) =>
-  `A pessoa: ${fmt(about.recent)} ${about.recent === 1 ? 'texto' : 'textos'} nos últimos 7 dias, ${fmt(about.baseline)} nos 30 dias antes.`
+const aboutLine = (about: RisingAbout) =>
+  `A pessoa: ${fmt(about.recent)} ${about.recent === 1 ? 'texto' : 'textos'} nos últimos 7 dias, ${fmt(about.baseline)} nos 30 dias antes; ${fmt(about.words_recent)} ${about.words_recent === 1 ? 'palavra' : 'palavras'} escritas sobre ela agora, ${fmt(about.words_baseline)} antes.`
 
 export const mount = (root: FigureRoot, { people, initial, peopleError = null }: { people: Person[]; initial: Seed; peopleError?: PeopleError }) => {
   let data: Rising | null = null

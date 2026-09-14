@@ -148,6 +148,14 @@ describe('documented facts per route', () => {
     // a bad day must read as "the whole window comes back", not just "behaves as it did" buried
     // mid-sentence -- a caller sending garbage gets everything, not nothing.
     assert.match(section, /window back, not zero docs/)
+
+    // V4 (PR #153 review): an earlier kept day is not exempt from the `days` window either --
+    // the oldest admissible date can come back partial. The caveat belongs in the same paragraph
+    // as the earlier-date rule, not buried among the invalid-value rules further down.
+    const firstPara = section.slice(0, section.indexOf('A value that is missing'))
+    assert.doesNotMatch(firstPara, /returns exactly the docs whose BRT date is that day/i, 'an earlier kept day must not be documented as an unconditional exact match')
+    assert.match(firstPara, /intersects the[\s\S]{0,20}window/i, 'the day/days window intersection caveat must sit with the earlier-date rule')
+    assert.match(firstPara, /oldest admissible date can[\s\S]{0,20}partial/i, 'the docs must say the oldest admissible date can come back partial')
   })
 })
 

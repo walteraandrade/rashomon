@@ -22,8 +22,12 @@ import {
   parseTestimonyQuery,
   parseTimelineQuery,
   parseToneQuery,
+  parseWeekQuery,
   snapDays,
   snapTo,
+  brtDate,
+  brtMidnightUtc,
+  calendarDay,
 } from '../src/query.js'
 import { candidatesQuery, compareParams, docsParams, params } from '../src/ui/api.js'
 import { withEnv } from './env.js'
@@ -230,6 +234,72 @@ describe('parseCompareQuery (issue #93)', () => {
   })
 })
 
+describe('parseWeekQuery (issue #147)', () => {
+  it('AC3/AC4: days default 7, limit default 8, both snap', () => {
+    assert.equal(parseWeekQuery({}).days, 7)
+    assert.equal(parseWeekQuery({ days: 'abc' }).days, 7)
+    assert.equal(parseWeekQuery({ days: '18' }).days, 7)
+    assert.equal(parseWeekQuery({ days: '30' }).days, 30)
+    assert.equal(parseWeekQuery({}).limit, 8)
+    assert.equal(LIMITS.includes(8), true)
+    assert.equal(parseWeekQuery({ limit: '1' }).limit, 1)
+    assert.equal(parseWeekQuery({ limit: '10' }).limit, 8)
+  })
+
+  // Parse-only: whether these parsed values actually reach weekFor and change its result is
+  // pinned in test/graph.test.ts's weekFor describe ("AC5: source, domain and lean each narrow
+  // about, not just kind"), which has the db fixture this test does not.
+  it('AC5: source/kind/domain/lean parse as on /graph', () => {
+    assert.equal(parseWeekQuery({ source: 'gnews,bogus' }).source, 'gnews')
+    assert.equal(parseWeekQuery({ source: 'bogus' }).source, 'all')
+    assert.equal(parseWeekQuery({ kind: 'theme' }).kind, 'all')
+    assert.equal(parseWeekQuery({ kind: 'word,hashtag' }).kind, 'word,hashtag')
+    assert.equal(parseWeekQuery({ domain: 'g1.globo.com,bogus host' }).domain, 'g1.globo.com')
+    assert.equal(parseWeekQuery({ lean: 'left,bogus' }).lean, 'left')
+  })
+})
+
+describe('brtMidnightUtc (issue #147)', () => {
+  it('derives the day\'s midnight from the tz database, not a hardcoded offset', () => {
+    assert.equal(brtMidnightUtc('2026-09-14').toISOString(), '2026-09-14T03:00:00.000Z')
+    assert.equal(brtMidnightUtc('2026-01-01').toISOString(), '2026-01-01T03:00:00.000Z')
+  })
+
+  // Brazil has had no DST since 2019, so these are fixed history in the tz database, not dates
+  // that can drift. Each expected value is what `'<day>'::timestamp at time zone
+  // 'America/Sao_Paulo'` returns; test/graph.test.ts asserts that agreement against the database
+  // itself. A day inside DST is 02:00Z; a transition day resolves to standard time either way,
+  // because its local midnight is ambiguous (clocks back) or missing (clocks forward).
+  it('agrees with `at time zone` across Brazil\'s DST transitions', () => {
+    const expected: [string, string][] = [
+      ['2018-11-03', '2018-11-03T03:00:00.000Z'], // day before clocks went forward
+      ['2018-11-04', '2018-11-04T03:00:00.000Z'], // clocks forward; local midnight never happened
+      ['2018-11-05', '2018-11-05T02:00:00.000Z'], // inside DST
+      ['2019-02-16', '2019-02-16T02:00:00.000Z'], // still inside DST
+      ['2019-02-17', '2019-02-17T03:00:00.000Z'], // clocks back; local midnight happened twice
+      ['2019-02-18', '2019-02-18T03:00:00.000Z'], // after DST
+    ]
+    for (const [day, iso] of expected) assert.equal(brtMidnightUtc(day).toISOString(), iso, day)
+  })
+})
+
+describe('parseDocsQuery.day (issue #147)', () => {
+  it('AC14: keeps an overlapping calendar day; malformed, out-of-window and future become empty', () => {
+    const today = brtDate()
+    assert.equal(parseDocsQuery({ day: today }).day, today)
+    const sep8 = parseDocsQuery({ day: '2026-09-08' }).day
+    assert.ok(sep8 === '2026-09-08' || sep8 === '', '2026-09-08 is kept only while it overlaps the snapped window')
+    assert.equal(parseDocsQuery({ day: '2026-02-31' }).day, '')
+    assert.equal(parseDocsQuery({ day: 'nope' }).day, '')
+    assert.equal(parseDocsQuery({}).day, '')
+    assert.equal(parseDocsQuery({ day: '2020-01-01' }).day, '')
+    assert.equal(calendarDay('2026-02-31'), '')
+    const nudge = new Date(`${today}T15:00:00.000Z`)
+    nudge.setUTCDate(nudge.getUTCDate() + 1)
+    assert.equal(parseDocsQuery({ day: brtDate(nudge) }).day, '')
+  })
+})
+
 describe('parseCandidatesQuery (issue #32)', () => {
   it('AC6: uses 7 / 5 / 50 as defaults', () => {
     assert.deepEqual(parseCandidatesQuery({}), { days: 7, min: 5, limit: 50 })
@@ -264,6 +334,7 @@ const dayParsers: [string, (q: Record<string, string | undefined>) => { days: nu
   ['parseTestimonyQuery', parseTestimonyQuery, 30],
   ['parseCandidatesQuery', parseCandidatesQuery, 7],
   ['parseCompareQuery', parseCompareQuery, 30],
+  ['parseWeekQuery', parseWeekQuery, 7],
 ]
 
 describe('days enumeration acceptance criteria (issue #111)', () => {
@@ -343,6 +414,7 @@ const intParsers: [string, (q: Q) => Record<string, unknown>, Record<string, [nu
   ['parseTestimonyQuery', parseTestimonyQuery, { min: [3, MINS] }],
   ['parseCandidatesQuery', parseCandidatesQuery, { limit: [50, LIMITS], min: [5, MINS] }],
   ['parseCompareQuery', parseCompareQuery, { limit: [40, SMALL_LIMITS] }],
+  ['parseWeekQuery', parseWeekQuery, { limit: [8, LIMITS] }],
 ]
 
 const numbers = (markup: string) => [...markup.matchAll(/<option[^>]*>(\d+)<\/option>|value="(\d+)"/g)].map((m) => Number(m[1] ?? m[2]))
@@ -399,6 +471,9 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
       ['limit', LIMITS, '0', 1],
       ['limit', LIMITS, '-3', 1],
       ['limit', LIMITS, '3', 1],
+      ['limit', LIMITS, '6', 5],
+      ['limit', LIMITS, '7', 8],
+      ['limit', LIMITS, '10', 8],
       ['limit', LIMITS, '37', 40],
       ['limit', LIMITS, '45', 40],
       ['limit', LIMITS, '46', 50],

@@ -15,6 +15,7 @@ import {
   testimonyFor,
   timelineFor,
   toneFor,
+  weekFor,
   type CompareQuery,
   type DocsQuery,
   type GraphQuery,
@@ -22,9 +23,10 @@ import {
   type TestimonyQuery,
   type TimelineQuery,
   type ToneQuery,
+  type WeekQuery,
 } from '../src/graph.js'
 import { resolveScope } from '../src/outlets.js'
-import { KINDS, parseQuery, parseSourceList } from '../src/query.js'
+import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query.js'
 import { inTransaction, insertDoc, upsertPersons } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
 import { futureDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
@@ -41,7 +43,7 @@ const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
 const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
-const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0 }
+const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0, day: '' }
 const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 20, min: 1 }
 const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
@@ -840,7 +842,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
 
   const totalFor = async (q: TimelineQuery) =>
-    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, limit: 500, offset: 0 })).total
+    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, limit: 500, offset: 0, day: '' })).total
 
   it('a doc exactly one bucket width old lands in the newest bucket, not the second', async () => {
     await withDocs([{ offset: '7 days' }], async () => {
@@ -1004,7 +1006,7 @@ describe('timelineFor: future-dated doc', () => {
   it('keeps the bucket-sum invariant against docsFor total when a doc is future-dated', async () => {
     const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all' } as const
     const rows = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
-    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0 })
+    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '' })
     assert.equal(total, 1, 'sanity: only the future doc falls inside this 30-day window')
     assert.equal(sumOf(rows), total)
   })
@@ -1330,8 +1332,8 @@ describe('statements render the same text the routes run (issue #131)', () => {
       graph: queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 }),
       links: queries.links(lula, scope, ['word:a', 'word:b']),
       sources: queries.sources(lula, scope),
-      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20 }),
-      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20 }),
+      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
+      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
       timeline: queries.timeline(lula, { ...scope, term: 'x', kind: 'phrase', bucket: 'week' }),
       rising: queries.rising(lula, { ...scope, baseline: 14, min: 1, limit: 5 }),
       tone: queries.tone({ days: 1, min: 1 }),
@@ -1339,6 +1341,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       termTestimony: queries.termTestimony(lula, scope, 'kikori', ['word:a']),
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),
       compare: queries.compare(lula, tarcisio, { ...scope, limit: 5 }),
+      week: queries.week(lula, { ...scope, limit: 8 }),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)
@@ -2143,5 +2146,280 @@ describe('testimony level asymmetries survive the merge (issue #48)', () => {
     assert.equal(typeof statements.testimonySummary, 'string')
     assert.ok(statements.testimonySummary.includes('grouping sets'))
     assert.ok(!Object.keys(statements).some((k) => k.startsWith('testimony') && k !== 'testimonySummary'))
+  })
+})
+
+const weekBase: WeekQuery = { days: 7, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 8 }
+
+const brtYmd = (value: Date | string) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+
+const todayBrt = () => brtYmd(new Date())
+
+describe('weekFor (issue #147)', () => {
+  before(seed)
+
+  it('AC2: default query is 7 BRT calendar days, oldest first, last bucket today', async () => {
+    const r = await weekFor(lula, weekBase)
+    assert.equal(r.days, 7)
+    assert.equal(r.tz, 'America/Sao_Paulo')
+    assert.equal(r.buckets.length, 7)
+    assert.equal(brtYmd(r.buckets[6].start), todayBrt())
+    for (let i = 1; i < 7; i++) {
+      assert.equal(new Date(r.buckets[i].start).getTime() - new Date(r.buckets[i - 1].start).getTime(), 86_400_000)
+    }
+    for (const b of r.buckets) assert.equal(new Date(b.start).getUTCHours(), 3)
+  })
+
+  it('AC3: days=7/30/365 change the bucket count; the page still sends 7', async () => {
+    assert.equal((await weekFor(lula, { ...weekBase, days: 7 })).buckets.length, 7)
+    assert.equal((await weekFor(lula, { ...weekBase, days: 30 })).buckets.length, 30)
+    assert.equal((await weekFor(lula, { ...weekBase, days: 365 })).buckets.length, 365)
+  })
+
+  it('AC4: limit clamps each day\'s terms, not about', async () => {
+    const one = await weekFor(lula, { ...weekBase, limit: 1 })
+    const full = await weekFor(lula, weekBase)
+    for (let i = 0; i < 7; i++) {
+      assert.ok(one.buckets[i].terms.length <= 1)
+      assert.equal(one.buckets[i].about, full.buckets[i].about)
+    }
+    assert.ok(full.buckets.some((b) => b.terms.length > 1), 'fixture Lula must have a day with several terms so limit=1 is a real clamp')
+  })
+
+  it('AC6: own-name words never appear', async () => {
+    const names = new Set(nameTokens(lula))
+    const r = await weekFor(lula, weekBase)
+    for (const b of r.buckets) for (const t of b.terms) {
+      assert.ok(!names.has(t.term), t.term)
+      assert.ok(!t.term.split(' ').some((w) => names.has(w)), t.term)
+    }
+  })
+
+  it('AC7: a BRT day with no about-docs is present with about 0 and empty terms', async () => {
+    const r = await weekFor(lula, weekBase)
+    const empty = r.buckets.filter((b) => b.about === 0)
+    assert.ok(empty.length >= 1)
+    for (const b of empty) assert.deepEqual(b.terms, [])
+  })
+
+  it('AC8: fixture Bolsonaro in the default week is seven zero buckets, not an error', async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    assert.equal(r.buckets.length, 7)
+    for (const b of r.buckets) {
+      assert.equal(b.about, 0)
+      assert.deepEqual(b.terms, [])
+    }
+  })
+
+  it('AC10: about is not filtered by kind', async () => {
+    const all = await weekFor(lula, weekBase)
+    const tags = await weekFor(lula, { ...weekBase, kind: 'hashtag' })
+    for (let i = 0; i < 7; i++) assert.equal(tags.buckets[i].about, all.buckets[i].about)
+    assert.ok(tags.buckets.every((b) => b.terms.every((t) => t.kind === 'hashtag')))
+  })
+
+  // The cross-route invariant issue #150's click depends on: each bucket's about must equal
+  // /docs?day=<that bucket's BRT date>'s total, for the same scope. lula's oldest bucket
+  // happens to be 0 (no about-doc there), which lets an off-by-one that empties the oldest
+  // bucket compare 0 === 0 unnoticed; tarcisio's oldest bucket is 1, so it is covered too.
+  // days:30 for tarcisio also runs this at a width the days:7 cases never reach, so a scan
+  // lower bound that only misbehaves past a week (e.g. `least(days - 1, ...)`) cannot hide
+  // behind days:7 passing everywhere.
+  it("issue #150: each bucket's about equals docsFor's total at day=<that bucket's BRT date>", async () => {
+    for (const { person, days } of [{ person: lula, days: 7 }, { person: tarcisio, days: 7 }, { person: tarcisio, days: 30 }]) {
+      const r = await weekFor(person, { ...weekBase, days })
+      for (const b of r.buckets) {
+        const day = brtYmd(b.start)
+        const { total } = await docsFor(person, { ...docsBase, days, day })
+        assert.equal(total, b.about, `${person.id} days=${days} ${day}`)
+      }
+    }
+  })
+
+  it("V2: tarcisio's oldest bucket (day 6) is not silently emptied by the scan lower bound", async () => {
+    const r = await weekFor(tarcisio, weekBase)
+    assert.equal(r.buckets[0].about, 1)
+  })
+
+  // AC5 in test/query.test.ts only proves parseWeekQuery *parses* source/domain/lean; this is
+  // where the parsed values are proven to actually reach weekFor and change its result.
+  it('AC5: source, domain and lean each narrow about, not just kind', async () => {
+    const sumAbout = (r: Awaited<ReturnType<typeof weekFor>>) => r.buckets.reduce((a, b) => a + b.about, 0)
+
+    const all = await weekFor(lula, weekBase)
+    const bluesky = await weekFor(lula, { ...weekBase, source: 'bluesky' })
+    assert.ok(sumAbout(bluesky) >= 1, 'fixture Lula must have at least one bluesky doc inside the default week')
+    assert.ok(sumAbout(bluesky) < sumAbout(all), 'source=bluesky must narrow the week\'s total about')
+
+    const wideWeek: WeekQuery = { ...weekBase, days: wide }
+    const allWide = await weekFor(bolsonaro, wideWeek)
+    const right = await weekFor(bolsonaro, { ...wideWeek, lean: 'right' })
+    assert.ok(right.buckets.length === allWide.buckets.length)
+    assert.ok(sumAbout(right) >= 1 && sumAbout(right) < sumAbout(allWide), 'lean=right must narrow the week\'s total about')
+
+    const domainOnly = await weekFor(bolsonaro, { ...wideWeek, domain: 'oantagonista.com.br' })
+    assert.ok(sumAbout(domainOnly) >= 1 && sumAbout(domainOnly) < sumAbout(allWide), 'domain must narrow the week\'s total about')
+  })
+
+  it('AC11: terms are ordered count desc, term asc, kind asc; two kinds are two rows', async () => {
+    const r = await weekFor(lula, { ...weekBase, limit: 40 })
+    const busy = r.buckets.find((bucket) => bucket.terms.length > 1)
+    assert.ok(busy)
+    const ranked: { term: string; kind: string; count: number }[] = busy.terms
+    for (let i = 1; i < ranked.length; i++) {
+      const prev = ranked[i - 1]
+      const next = ranked[i]
+      const ordered =
+        prev.count > next.count || (prev.count === next.count && (prev.term < next.term || (prev.term === next.term && prev.kind <= next.kind)))
+      assert.ok(ordered, `${prev.term}:${prev.kind} before ${next.term}:${next.kind}`)
+    }
+    const reforma = r.buckets.flatMap((b) => b.terms).filter((t) => t.term === 'reforma')
+    assert.ok(reforma.some((t) => t.kind === 'word'))
+    assert.ok(reforma.some((t) => t.kind === 'hashtag'))
+  })
+
+  it('AC12: /timeline stays a bare rolling array', async () => {
+    const rows = await timelineFor(lula, timelineBase)
+    assert.ok(Array.isArray(rows))
+    for (const row of rows) assert.deepEqual(Object.keys(row).sort(), ['bucket_start', 'count'])
+  })
+
+  it('issue #147: week scoped bounds published_at from below so docs_published_idx applies', () => {
+    assert.match(statements.week, /where d\.published_at >=/)
+  })
+})
+
+describe('weekFor: future-dated doc (issue #147)', () => {
+  before(async () => {
+    await seed()
+    await insertDoc(futureDoc, persons)
+  })
+  after(reseed)
+
+  it('AC9: a future-dated about-doc counts in today\'s bucket', async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    assert.equal(r.buckets[6].about, 1)
+    assert.ok(r.buckets[6].terms.some((t) => t.term === 'golpe'))
+    for (const b of r.buckets.slice(0, 6)) assert.equal(b.about, 0)
+  })
+
+  it('issue #147: /docs?day=today folds the same future-dated doc into today, matching /week\'s about', async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    const { total, docs } = await docsFor(bolsonaro, { ...docsBase, day: todayBrt() })
+    assert.equal(total, r.buckets[6].about)
+    // Pin the fold itself, not just the count coincidence: the future doc must actually be
+    // among the returned docs, and its own BRT date must still be in the future -- the query
+    // folds it into today's bucket, the doc's published_at does not move.
+    const folded = docs.find((d) => d.uri === futureDoc.uri)
+    assert.ok(folded, 'the future-dated doc must be returned by day=today, not merely counted')
+    assert.ok(brtYmd(folded!.published_at) > todayBrt(), 'the future doc\'s own BRT date stays in the future')
+  })
+})
+
+describe('weekFor: own-name phrase filter (issue #147)', () => {
+  const namePhraseUri = 'https://example.org/week-phrase-name'
+  const survivorUri = 'https://example.org/week-phrase-survivor'
+  before(async () => {
+    await seed()
+    // A capitalized run needs no lexicon rebuild (see test/reindex.test.ts): extract.ts finds
+    // "Jair Bolsonaro" as a phrase term straight from insertDoc, no `pnpm reindex` required.
+    await insertDoc(
+      { source: 'rss', uri: namePhraseUri, text: 'O deputado Jair Bolsonaro discursou hoje no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
+      persons,
+    )
+    // Names bolsonaro (so it is "about" him) and carries a capitalized run with none of his own
+    // name words in it: this phrase must survive namePhrase, proving the filter drops the
+    // person's own name specifically rather than every phrase in the window.
+    await insertDoc(
+      { source: 'rss', uri: survivorUri, text: 'Bolsonaro se reuniu com Alexandre de Moraes no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
+      persons,
+    )
+  })
+  after(reseed)
+
+  it('V3: sanity, the doc really carries a "jair bolsonaro" phrase term', async () => {
+    const { rows } = await db.query<{ n: number }>(
+      `select count(*)::int as n from doc_terms t join docs d on d.id = t.doc_id where t.kind = 'phrase' and t.term = 'jair bolsonaro' and d.uri = $1`,
+      [namePhraseUri],
+    )
+    assert.equal(rows[0].n, 1)
+  })
+
+  it("V3: /week drops a phrase carrying bolsonaro's own name from his own week", async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    for (const b of r.buckets) for (const t of b.terms) {
+      assert.ok(!t.term.split(' ').includes('bolsonaro'), `${t.kind}:${t.term} names the person, it is not said about them`)
+    }
+    // The doc's other phrase-free words still surface today, proving the doc was scored at all.
+    assert.ok(r.buckets[6].about >= 1)
+    // A phrase naming someone else survives: the filter targets bolsonaro's own name words,
+    // it does not drop every phrase in the window.
+    assert.ok(r.buckets[6].terms.some((t) => t.kind === 'phrase' && t.term === 'alexandre de moraes'))
+  })
+})
+
+describe('docsFor day filter (issue #147)', () => {
+  before(seed)
+
+  it('AC15: a kept day returns only docs on that BRT date; empty day matches today\'s /docs', async () => {
+    const open = await docsFor(lula, docsBase)
+    const blank = await docsFor(lula, { ...docsBase, day: '' })
+    assert.equal(blank.total, open.total)
+    const yesterday = brtYmd(new Date(Date.now() - 86_400_000))
+    const sliced = await docsFor(lula, { ...docsBase, day: yesterday })
+    assert.ok(sliced.docs.every((d) => brtYmd(d.published_at) === yesterday))
+    assert.ok(sliced.total <= open.total)
+    assert.ok(sliced.total >= 1, 'Lula\'s day1 cluster must land on yesterday BRT')
+  })
+
+  it('AC16: adding day does not add or remove fields on the /docs response', async () => {
+    const open = await docsFor(lula, docsBase)
+    const sliced = await docsFor(lula, { ...docsBase, day: brtYmd(new Date(Date.now() - 86_400_000)) })
+    assert.deepEqual(Object.keys(open).sort(), Object.keys(sliced).sort())
+    assert.deepEqual(Object.keys(open).sort(), ['docs', 'outlets', 'total'])
+    if (open.docs[0] && sliced.docs[0]) assert.deepEqual(Object.keys(open.docs[0]).sort(), Object.keys(sliced.docs[0]).sort())
+  })
+})
+
+// The constraint behind src/query.ts's brtMidnightUtc: keepDay decides in JS whether a calendar
+// day overlaps the window, while docsDay and weekQuery resolve that same day in SQL through
+// `at time zone`. If the two ever disagree, a day at the window edge is admitted by one and
+// dropped by the other. Brazil has had no DST since 2019, so these transitions are fixed history.
+describe('brtMidnightUtc resolves the same instant as `at time zone` (issue #147)', () => {
+  // The transition days are read out of the tz database rather than hand-listed, so this covers
+  // every one of them and cannot fall behind a tzdata update. 1951 is the floor: 1950-04-16 fell
+  // back at 01:00 rather than midnight, the one day in 1940-2100 where the two disagree, and it
+  // is unreachable because keepDay only ever asks about dates inside a 7/30/365-day window.
+  const ymd = (t: number) => new Date(t).toISOString().slice(0, 10)
+  // Hoisted: transitions() calls this ~54,000 times, and a fresh Intl.DateTimeFormat per call
+  // dominated the suite's runtime for no coverage gain over reusing one formatter.
+  const tzFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', timeZoneName: 'longOffset' })
+  const offsetAt = (t: number) => tzFormat.formatToParts(new Date(t)).find((p) => p.type === 'timeZoneName')!.value
+
+  // Each transition day AND the day after it: a transition day itself resolves to standard time
+  // in both directions, so a hardcoded -03:00 would match every one of them. The day after a
+  // spring-forward is inside DST, at -02:00, which is what actually catches such a regression.
+  const transitions = () => {
+    const out: string[] = []
+    // Sampled at midday UTC, which is still the same calendar day in Sao Paulo; sampling at
+    // 00:00 UTC is 21:00 the day before there and reports every transition a day late.
+    let prev = offsetAt(Date.UTC(1951, 0, 1, 12))
+    for (let t = Date.UTC(1951, 0, 2, 12); t < Date.UTC(2100, 0, 1); t += 86_400_000) {
+      const now = offsetAt(t)
+      if (now !== prev) out.push(ymd(t), ymd(t + 86_400_000))
+      prev = now
+    }
+    return out
+  }
+
+  it('every Brazilian DST transition in the tz database since 1951, plus ordinary days', async () => {
+    const days = [...transitions(), '2026-09-14', '2026-01-01', '2019-07-15', '2000-06-30', '2019-01-15']
+    // Anchors, so a tz database that stopped carrying Brazil's history fails loudly here rather
+    // than reducing this test to the four ordinary days.
+    for (const anchor of ['2018-11-04', '2019-02-17']) assert.ok(days.includes(anchor), anchor)
+    for (const day of days) {
+      const { rows } = await db.query<{ pg: Date }>(`select ('${day}'::timestamp at time zone 'America/Sao_Paulo') as pg`)
+      assert.equal(brtMidnightUtc(day).toISOString(), new Date(rows[0].pg).toISOString(), day)
+    }
   })
 })

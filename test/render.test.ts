@@ -1118,8 +1118,33 @@ describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', 
 
   it('an overflow button carries the day count, since size is the only encoding and a listed word has none', () => {
     withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'supremo tribunal federal', kind: 'phrase', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 120 })
-      assert.match(els.weekChart.innerHTML, /<button class="quiet-button[^"]*" data-term="supremo tribunal federal"[^>]*>supremo tribunal federal<b>55<\/b><\/button>/)
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'pronunciamento', kind: 'word', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 84 })
+      assert.match(els.weekChart.innerHTML, /<button class="quiet-button[^"]*" data-term="pronunciamento"[^>]*>pronunciamento<b>55<\/b><\/button>/)
+    })
+  })
+
+  it('the overflow list is named by one eyebrow line, never a sentence taller than the words it lists', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'pronunciamento', kind: 'word', count: 55 }, { term: 'constitucionalidade', kind: 'word', count: 40 }] })]), metrics, selected: null, onPick: () => {}, width: 84 })
+      assert.match(els.weekChart.innerHTML, /<div class="week-overflow"><p class="eyebrow">Não couberam<\/p><button/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /nesta coluna|clicáveis/)
+    })
+  })
+
+  it('one listed word is named in the singular', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'pronunciamento', kind: 'word', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 84 })
+      assert.match(els.weekChart.innerHTML, /<div class="week-overflow"><p class="eyebrow">Não coube<\/p><button/)
+    })
+  })
+
+  it('a wrapped phrase is one tspan per line inside one mark, still one data-term', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'supremo tribunal federal', kind: 'phrase', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 145 })
+      const marks = els.weekChart.innerHTML.match(/data-term="supremo tribunal federal"/g) ?? []
+      assert.equal(marks.length, 1, 'drawn, not listed')
+      assert.match(els.weekChart.innerHTML, /<text class="week-text"[^>]*><tspan x="0" y="[^"]+">supremo<\/tspan><tspan x="0" y="[^"]+">tribunal<\/tspan><tspan x="0" y="[^"]+">federal<\/tspan><\/text>/)
+      assert.doesNotMatch(els.weekChart.innerHTML, /week-overflow/)
     })
   })
 

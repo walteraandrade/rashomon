@@ -296,16 +296,18 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
 export const WEEK_SIZE_MIN = 12
 const WEEK_SIZE_MAX = 30
 // Columns are independent (align-items: start), so the cap only guards a runaway day: the
-// default limit (8) and the widest one the sentence offers (12) both fit at the ramp ceiling,
-// 12 * (30 * 1.24 + 3) is about 480.
+// widest limit the sentence offers (12) always fits, one-line words at the ramp ceiling
+// (12 * (30 * 1.24 + 3) is about 480) or wrapped phrases, whose lines weekColumn counts into
+// the cap, so a word is listed for height only past the 12th of its day.
 export const WEEK_MAX_HEIGHT = 480
+export const WEEK_MAX_TERMS = 12
 export const WEEK_COLUMN_WIDTH = 120
 const WEEK_GAP_X = 6
 const WEEK_GAP_Y = 3
 const WEEK_PAD_X = 6
 
 export type WeekColumnLayout<T> = {
-  words: (T & { text: string; x: number; y: number; size: number; w: number; h: number })[]
+  words: (T & { text: string; lines: string[]; x: number; y: number; size: number; w: number; h: number })[]
   overflow: (T & { text: string; size: number })[]
   half: number
   height: number
@@ -313,10 +315,25 @@ export type WeekColumnLayout<T> = {
 
 const weekMaxWidth = (width: number) => Math.max(20, width - WEEK_PAD_X)
 
-// The largest size at which a word still fits the column, down to the floor.
+// A phrase breaks at its spaces or after a hyphen, never inside a word: "supremo tribunal
+// federal" is three lines in a 145px column at a size that keeps "pronunciamento" out, and
+// "vice-presidente" is "vice-" over "presidente", the same breaks wrapLines prefers.
+// Greedy, first fit: a line takes pieces until the next one would not fit.
+const weekLines = (measure: Measure, text: string, size: number, maxWidth: number): string[] =>
+  text.split(/(?<=-)| /).reduce<string[]>((lines, piece) => {
+    const last = lines[lines.length - 1]
+    const joined = last === undefined ? piece : last.endsWith('-') ? last + piece : last + ' ' + piece
+    if (last !== undefined && measure(joined, size) + 6 <= maxWidth) lines[lines.length - 1] = joined
+    else lines.push(piece)
+    return lines
+  }, [])
+
+const weekLineWidth = (measure: Measure, lines: string[], size: number) => Math.max(...lines.map((line) => measure(line, size))) + 6
+
+// The largest size at which a word still fits the column once wrapped, down to the floor.
 const fitSize = (measure: Measure, text: string, maxWidth: number) => {
   let size = WEEK_SIZE_MAX
-  while (size > WEEK_SIZE_MIN && measure(text, size) + 6 > maxWidth) size--
+  while (size > WEEK_SIZE_MIN && weekLineWidth(measure, weekLines(measure, text, size, maxWidth), size) > maxWidth) size--
   return size
 }
 
@@ -329,14 +346,21 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
     // never a smaller size; a word wider than the column at its ramp size goes to overflow.
     const size = Math.round(WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction)
     const text = label(t)
-    const w = measure(text, size) + 6
-    return { ...t, text, x: 0, size, w, h: Math.round(size * 1.24) }
+    const lines = weekLines(measure, text, size, maxWidth)
+    const w = weekLineWidth(measure, lines, size)
+    return { ...t, text, lines, x: 0, size, w, h: Math.round(size * 1.24) * lines.length }
   })
-  const half = WEEK_MAX_HEIGHT / 2
-  // A word wider than the column at its nominal size is listed under the column, never drawn
-  // across the neighbouring day (#148 review, 1).
+  // A word wider than the column at its nominal size, even wrapped, is listed under the column,
+  // never drawn across the neighbouring day (#148 review, 1). The ceiling is the loudest
+  // words', so a long one-word term below them can land here at 145px ("presidente" next to
+  // "supremo tribunal federal"); lowering the ceiling for it would flatten the whole week.
   const tooWide = sized.filter((d) => d.w > maxWidth)
-  const { placed, overflow: unplaced } = swarmBy(sized.filter((d) => d.w <= maxWidth), {
+  const fitting = sized.filter((d) => d.w <= maxWidth)
+  // The stack alternates sides, so one side may carry up to one box more than the other.
+  const boxes = [...fitting].sort((a, b) => b.size - a.size).slice(0, WEEK_MAX_TERMS)
+  const budget = boxes.reduce((sum, d) => sum + d.h + WEEK_GAP_Y, 0) + (boxes[0]?.h ?? 0)
+  const half = Math.max(WEEK_MAX_HEIGHT, budget) / 2
+  const { placed, overflow: unplaced } = swarmBy(fitting, {
     size: (d) => d.size,
     reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + WEEK_GAP_X ? (p.h + item.h) / 2 + WEEK_GAP_Y : null),
     fits: (item, y) => Math.abs(y) + item.h / 2 <= half,

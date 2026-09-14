@@ -430,10 +430,54 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
   })
 
   it('a word wider than a narrow column even at the floor size is listed under the column, never drawn across the next day (#148 review, 1)', () => {
-    const day = [term('flavio bolsonaro', 96), term('crise', 3)]
+    const day = [term('pronunciamento', 96), term('crise', 3)]
     const [column] = weekLayout(measure, [day], 84)
-    assert.ok(!column.words.some((w) => w.term === 'flavio bolsonaro'), 'the phrase does not fit 84px at 12px and must not be placed')
-    assert.ok(column.overflow.some((w) => w.term === 'flavio bolsonaro'), 'it is still reachable in the overflow list')
+    assert.ok(!column.words.some((w) => w.term === 'pronunciamento'), 'one word cannot break, does not fit 84px at 12px and must not be placed')
+    assert.ok(column.overflow.some((w) => w.term === 'pronunciamento'), 'it is still reachable in the overflow list')
     for (const w of column.words) assert.ok(w.w <= 84 - 6 + 1e-6)
+  })
+
+  it('a phrase wraps at its spaces, never inside a word, and is placed as one box as tall as its lines', () => {
+    const day = [term('supremo tribunal federal', 96, 'phrase'), term('crise', 3)]
+    const [column] = weekLayout(measure, [day], 145)
+    const stf = column.words.find((w) => w.term === 'supremo tribunal federal')
+    assert.ok(stf, 'the phrase fits once wrapped and is drawn, not listed')
+    assert.deepEqual(stf!.lines, ['supremo', 'tribunal', 'federal'])
+    assert.equal(stf!.h, Math.round(stf!.size * 1.24) * 3)
+    assert.ok(stf!.w <= 145 - 6 + 1e-6, 'the box is as wide as its longest line')
+    assert.ok(stf!.size > WEEK_SIZE_MIN, 'the loudest word wraps at a size well above the floor instead of pulling the ceiling down')
+    assert.equal(column.overflow.length, 0)
+  })
+
+  it('a long one-word term below the loudest phrase is listed, not placed, since the ceiling is the loudest words\' and lowering it for every unwrappable word would flatten the week (#166 review, 1)', () => {
+    const day = [term('supremo tribunal federal', 96, 'phrase'), term('presidente', 90), term('crise', 3)]
+    const [column] = weekLayout(measure, [day], 145)
+    const stf = column.words.find((w) => w.term === 'supremo tribunal federal')!
+    assert.ok(stf.size > 20, `the wrapped phrase keeps the ceiling up, at ${stf.size}px`)
+    assert.ok(column.overflow.some((w) => w.term === 'presidente'), 'presidente does not fit at the size its count earns and is listed with its count')
+    assert.ok(!column.words.some((w) => w.term === 'presidente'))
+  })
+
+  it('twelve mixed phrases and words, the widest limit the sentence offers, all place at 145px and 159px: the height cap counts lines (#166 review, 2)', () => {
+    const day = [term('supremo tribunal federal', 96, 'phrase'), term('ministro da fazenda', 80, 'phrase'), term('primeiro turno', 70, 'phrase'), term('reforma tributaria', 60, 'phrase'), term('presidente', 50), term('governo', 45), term('congresso', 40), term('camara dos deputados', 35, 'phrase'), term('senado', 30), term('eleicao', 20), term('lei', 10), term('voto', 5)]
+    for (const width of [145, 159]) {
+      const [column] = weekLayout(measure, [day], width)
+      assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit at ${width}px`)
+      assert.equal(column.words.length, 12)
+      assert.ok(column.height > WEEK_MAX_HEIGHT, 'the column grows past the one-line cap instead of dropping the quietest words')
+    }
+  })
+
+  it('a hyphenated word breaks after its hyphen, the break wrapLines already prefers (#166 review, nit)', () => {
+    const [column] = weekLayout(measure, [[term('vice-presidente', 96), term('crise', 3)]], 145)
+    const vice = column.words.find((w) => w.term === 'vice-presidente')!
+    assert.deepEqual(vice.lines, ['vice-', 'presidente'])
+    assert.ok(vice.size > WEEK_SIZE_MIN + 2, `the ceiling stays up at ${vice.size}px instead of the one-line floor`)
+  })
+
+  it('a one-word line keeps every single word on one line: no wrap means lines is [text]', () => {
+    const [column] = weekLayout(measure, [[term('crise', 3)]], 145)
+    assert.deepEqual(column.words[0].lines, ['crise'])
+    assert.equal(column.words[0].h, Math.round(column.words[0].size * 1.24))
   })
 })

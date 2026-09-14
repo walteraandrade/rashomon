@@ -10,7 +10,7 @@ import { mountDocsCard } from '../src/ui/docs-card.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../src/ui/format.js'
 import { clearScopes, fromScope } from '../src/ui/state.js'
 import { persons, seed } from './fixture.js'
-import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
+import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 
 // src/ui/figures/atlas.ts, figure 1: its handler table (createHandlers), its request keys
@@ -465,6 +465,50 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
       els.atlasStrip.fire('click', { target: { closest: () => null } })
       await flush()
       assert.equal(els.docsDialog.open, false, 'empty space inside the strip released the selection and closed the card')
+    })
+  })
+
+  it('#149: a failed reload while in strip mode hides #atlasStrip and #stripHiddenNote too, not just #viewport/#columns', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      assert.equal(els.atlasStrip.hidden, false, 'strip mode is showing before the reload fails')
+
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/graph')) throw new Error('network down')
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      els.person.value = people[1].id
+      els.person.fire('change')
+      await flush(200) // control changes debounce load() at 140ms
+
+      assert.equal(els.viewport.hidden, false, '#viewport shows the outage illustration')
+      assert.equal(els.columns.hidden, true, '#columns must stay hidden during the outage')
+      assert.equal(els.atlasStrip.hidden, true, '#atlasStrip must hide once the reload fails')
+      assert.equal(els.stripHiddenNote.hidden, true, '#stripHiddenNote must hide too')
+    })
+  })
+
+  it('#149: paintTermStrip is called with #atlasStrip\'s own measured width, not the 860 default', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      routeFetch(calls, { '/graph': { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } } })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.atlasStrip.clientWidth = 540
+      els.modeStrip.fire('click')
+      assert.match(els.atlasStrip.innerHTML, /viewBox="0 0 540 \d+"/, 'the svg viewBox must use #atlasStrip.clientWidth, not the 860 default')
+      assert.match(els.atlasStrip.innerHTML, /width="540"/, 'the svg width attribute must match #atlasStrip.clientWidth')
+      assert.doesNotMatch(els.atlasStrip.innerHTML, /width="860"/, 'must not fall back to the 860 default once a real width is measured')
     })
   })
 })

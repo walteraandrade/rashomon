@@ -1493,10 +1493,32 @@ describe('statements render the same text the routes run (issue #131)', () => {
 
   // Issue #163: `kind || ':' || term = any($ids)` on doc_terms has no index, so the planner
   // scanned the whole table in parallel and stalled on the Parallel Hash barrier whenever the
-  // instance was short of CPU. The ids are matched as (kind, term) pairs instead.
+  // instance was short of CPU. The ids are matched as (kind, term) pairs instead, in `links` and
+  // in `termTestimony` alike: the join on `unnest` is pinned, and every spelling of the
+  // concatenated expression (`||`, `concat(`) or of two independent `any` filters (a cartesian
+  // product) is refused, in the filter and in the join condition alike.
+  const ids = ['word:a', 'phrase:primeiro turno', 'hashtag:lula2026']
+  const pairMatched = (text: string) => {
+    assert.ok(
+      text.includes("join unnest($") && /wanted\(kind, term\) on wanted\.kind = \w+\.kind and wanted\.term = \w+\.term/.test(text),
+      'doc_terms is joined to unnest(kinds, terms) on both columns',
+    )
+    assert.ok(!/(\|\|\s*':'\s*\|\||concat\()[^\n]*(=|in)\s*(any\s*)?\(/i.test(text), 'no concatenated expression is filtered or joined on')
+    assert.ok(!/\.kind\s*=\s*any\(/.test(text) && !/\.term\s*=\s*any\(/.test(text), 'kind and term are never filtered independently')
+  }
+
   it('links matches its ids as (kind, term) pairs, never as a concatenated expression', () => {
-    const q = queries.links(lula, scope, ['word:a', 'phrase:primeiro turno', 'hashtag:lula2026'])
-    assert.ok(!/\|\| ':' \|\| \w+\.term\) = any/.test(q.text), 'no expression filter on doc_terms')
+    const q = queries.links(lula, scope, ids)
+    pairMatched(q.text)
+    assert.deepEqual(q.values.slice(-2), [
+      ['word', 'phrase', 'hashtag'],
+      ['a', 'primeiro turno', 'lula2026'],
+    ])
+  })
+
+  it('termTestimony matches its ids the same way', () => {
+    const q = queries.termTestimony(lula, scope, 'kikori', ids)
+    pairMatched(q.text)
     assert.deepEqual(q.values.slice(-2), [
       ['word', 'phrase', 'hashtag'],
       ['a', 'primeiro turno', 'lula2026'],

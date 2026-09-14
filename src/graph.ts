@@ -304,8 +304,11 @@ const linksQuery = (person: Person, q: Scope, ids: string[]) => {
 // Per-term testimony means for the mask that colours the map: each term's mean score minus
 // the person's own mean over the same `about`, so the colour shows distance from the person
 // rather than from zero (cancels the name prior). Runs only when asked; count(*) is one row
-// per doc per term by doc_terms' PK.
-const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => sql`
+// per doc per term by doc_terms' PK. The ids are matched as (kind, term) pairs for the same
+// reason as `linksQuery`: the concatenated expression has no index.
+const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => {
+  const { kinds, terms } = splitIds(ids)
+  return sql`
   with ${scopeCte(person, q)},
   scored as (
     select a.doc_id, dt.score
@@ -317,11 +320,13 @@ const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: strin
     coalesce((
       select json_agg(json_build_object('id', id, 'score', score, 'n', n) order by id) from (
         select t.kind || ':' || t.term as id, round(avg(s.score)::numeric, 2)::float8 as score, count(*)::int as n
-        from doc_terms t join scored s on s.doc_id = t.doc_id
-        where (t.kind || ':' || t.term) = any(${ids}::text[])
+        from doc_terms t
+        join unnest(${kinds}::text[], ${terms}::text[]) as wanted(kind, term) on wanted.kind = t.kind and wanted.term = t.term
+        join scored s on s.doc_id = t.doc_id
         group by 1
       ) x
     ), '[]'::json) as terms`
+}
 
 type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: { id: string; score: number; n: number }[] }
 

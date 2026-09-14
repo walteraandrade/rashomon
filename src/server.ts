@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { cacheControl } from './cache.js'
+import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrate } from './db.js'
 import { candidatesFor, compareFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
@@ -37,7 +37,9 @@ if (perfEnabled)
 // Shared cache headers for every /api/* route, including 404s.
 app.use('/api/*', async (c, next) => {
   await next()
-  c.header('cache-control', cacheControl({ method: c.req.method, path: c.req.path, status: c.res.status }))
+  const control = cacheControl({ method: c.req.method, path: c.req.path, status: c.res.status })
+  c.header('cache-control', control)
+  if (control !== NO_STORE) c.header('vercel-cache-tag', CACHE_TAG)
 })
 
 // Security headers for HTML pages served by this process (set after next() so serveStatic's

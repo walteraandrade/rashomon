@@ -20,13 +20,6 @@ describe('warmPaths', () => {
   })
 })
 
-describe('WARM_HEADERS', () => {
-  it('bypasses the CDN copy so the warm refetches the origin instead of confirming a stale HIT', () => {
-    assert.equal(WARM_HEADERS.pragma, 'no-cache')
-    assert.equal(WARM_HEADERS['cache-control'], 'no-cache')
-  })
-})
-
 describe('warm', () => {
   const stub = (status: number, cache: string) =>
     (async (url: string | URL | Request) => ({

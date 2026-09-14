@@ -25,9 +25,9 @@ export const warmPaths = (people: Pick<Person, 'id'>[], days: readonly string[] 
 
 export type WarmResult = { path: string; status: number | null; cache: string | null; server: string | null; ms: number }
 
-// `Pragma: no-cache` makes Vercel's CDN fetch the origin and store the answer (REVALIDATED)
-// instead of serving, or stale-serving, the object the last ingest just made wrong.
-export const WARM_HEADERS = { accept: 'application/json', pragma: 'no-cache', 'cache-control': 'no-cache' } as const
+// A plain GET: no request header bypasses Vercel's CDN, so the workflows delete the `api`
+// tag first (CACHE_TAG in cache.ts) and this refills what the page asks for.
+export const WARM_HEADERS = { accept: 'application/json' } as const
 
 const one = async (site: string, path: string, fetchFn: typeof fetch): Promise<WarmResult> => {
   const started = performance.now()

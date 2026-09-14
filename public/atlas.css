@@ -659,7 +659,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-word:hover .week-hit, .week-word:focus-visible .week-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .week-word.is-selected .week-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
 .week-word.is-selected .week-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.week-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
+.week-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); min-width: 0; }
+/* The ruler's overflow keeps .quiet-button's nowrap; a week column is 145px at 1280px and a
+   phrase button must wrap inside it, never draw across the next day (#148 review, 1). */
+.week-overflow .quiet-button { white-space: normal; text-align: left; max-width: 100%; overflow-wrap: anywhere; }
 .week-overflow .quiet-button.is-selected { color: var(--ink); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); font-weight: 600; }
 #weekNote { margin-top: var(--space-3); }
 

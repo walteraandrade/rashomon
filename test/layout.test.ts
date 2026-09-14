@@ -393,18 +393,32 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     assert.equal(once.height, twice.height)
   })
 
-  it('a long word at the loudest size goes to overflow with its size intact, never shrunk to fit (validator round 1, 1)', () => {
+  it('the loudest word sets a week-wide ceiling so the largest count is never the one the column hides (validator round 2, 2)', () => {
     const day = [term('presidente', 96), term('candidato', 14), term('crise', 3)]
     const [column] = weekLayout(measure, [day], 120)
-    const nominal = (count: number) => Math.round(WEEK_SIZE_MIN + (30 - WEEK_SIZE_MIN) * ((count - 3) / (96 - 3)))
-    const presidente = column.overflow.find((w) => w.term === 'presidente')
-    assert.ok(presidente, 'presidente at 30px is wider than 120px and belongs in overflow, not shrunk into the column')
-    assert.equal(presidente.size, 30, 'overflow keeps the nominal size: tamanho = documentos naquele dia')
-    assert.ok(!column.words.some((w) => w.term === 'presidente'))
-    for (const w of column.words) {
-      assert.equal(w.size, nominal(w.count), `${w.term} placed at ${w.size}px, narrower than its nominal ${nominal(w.count)}px`)
-      assert.ok(w.w <= 120 - 6 + 1e-6, `${w.term} at ${w.w}px overflows the 120px column`)
+    const presidente = column.words.find((w) => w.term === 'presidente')
+    assert.ok(presidente, 'presidente leads the day and must be drawn in the column, not listed under it')
+    assert.ok(presidente.w <= 120 - 6 + 1e-6, `presidente at ${presidente.w}px overflows the 120px column`)
+    assert.equal(column.overflow.length, 0)
+    const byCount = [...column.words].sort((a, b) => b.count - a.count)
+    for (let i = 1; i < byCount.length; i++) {
+      assert.ok(byCount[i - 1].size > byCount[i].size, `${byCount[i - 1].term}@${byCount[i - 1].size} must be larger than ${byCount[i].term}@${byCount[i].size}`)
     }
+    assert.ok(presidente.size < 30, 'a 120px column cannot hold presidente at 30px, so the ceiling drops')
+    assert.equal(column.words.find((w) => w.term === 'crise')!.size, WEEK_SIZE_MIN, 'the floor never moves')
+  })
+
+  it('the ceiling only drops when the column forces it: the same day reaches 30px at 342px', () => {
+    const day = [term('presidente', 96), term('candidato', 14), term('crise', 3)]
+    const [column] = weekLayout(measure, [day], 342)
+    assert.equal(column.words.find((w) => w.term === 'presidente')!.size, 30)
+  })
+
+  it('the ceiling is shared by the whole week: a quiet day never outsizes the loud one whose word forced it down', () => {
+    const [loud, quiet] = weekLayout(measure, [[term('presidente', 96), term('crise', 3)], [term('lei', 60), term('voto', 3)]], 120)
+    const presidente = loud.words.find((w) => w.term === 'presidente')!
+    const lei = quiet.words.find((w) => w.term === 'lei')!
+    assert.ok(presidente.size > lei.size, `presidente:96@${presidente.size} must beat lei:60@${lei.size}`)
   })
 
   it('eight short words at mixed counts all place in a 159px column, none pushed out by the height cap (validator round 1, 2)', () => {

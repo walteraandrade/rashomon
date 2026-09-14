@@ -319,3 +319,14 @@ describe("issue #147 §4: figure 5 (week) 'a refetch dims what is on screen'", (
     assert.match(rule, /\.week-chart\b/, `.week-chart must be dimmed on refetch, the same as .viewport/.columns/.ruler; the rule found was: ${rule || '(none)'}`)
   })
 })
+
+describe('issue #147, #148 review 1: the overflow list under a day column stays inside the column', () => {
+  it('a week overflow button wraps instead of inheriting .quiet-button\'s nowrap (validator round 2, 1)', () => {
+    const css = read('atlas.css')
+    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*white-space: normal/, 'a phrase button at 145px must wrap inside its column, never draw across the next day')
+    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*max-width: 100%/)
+    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*overflow-wrap: anywhere/)
+    assert.match(css, /\.week-overflow \{[^}]*min-width: 0/)
+    assert.match(css, /\.quiet-button \{[^}]*white-space: nowrap/, "the ruler's own overflow keeps the shared nowrap")
+  })
+})

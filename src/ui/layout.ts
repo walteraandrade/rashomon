@@ -311,14 +311,23 @@ export type WeekColumnLayout<T> = {
   height: number
 }
 
-const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: number, lo: number, hi: number): WeekColumnLayout<T> => {
+const weekMaxWidth = (width: number) => Math.max(20, width - WEEK_PAD_X)
+
+// The largest size at which a word still fits the column, down to the floor.
+const fitSize = (measure: Measure, text: string, maxWidth: number) => {
+  let size = WEEK_SIZE_MAX
+  while (size > WEEK_SIZE_MIN && measure(text, size) + 6 > maxWidth) size--
+  return size
+}
+
+const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: number, lo: number, hi: number, top: number): WeekColumnLayout<T> => {
   if (!terms.length) return { words: [], overflow: [], half: 30, height: 60 }
-  const maxWidth = Math.max(20, width - WEEK_PAD_X)
+  const maxWidth = weekMaxWidth(width)
   const sized = terms.map((t) => {
     const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
-    // Nominal size only: "tamanho = documentos naquele dia" is the key's promise, so a word never
-    // shrinks to fit the column. One wider than the column goes to overflow at its true size.
-    const size = Math.round(WEEK_SIZE_MIN + (WEEK_SIZE_MAX - WEEK_SIZE_MIN) * fraction)
+    // One ramp for the week, its ceiling `top` shared by every column, so a larger count is
+    // never a smaller size; a word wider than the column at its ramp size goes to overflow.
+    const size = Math.round(WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction)
     const text = label(t)
     const w = measure(text, size) + 6
     return { ...t, text, x: 0, size, w, h: Math.round(size * 1.24) }
@@ -342,9 +351,18 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
 // each gets its own height rather than one shared across the week. The size ramp, though, is
 // one for the whole week: "tamanho = documentos naquele dia" must let a 3-doc word on a quiet
 // day read smaller than a 300-doc word on a loud one.
+//
+// The ceiling is the week's, not a word's: the loudest words (count === hi) set it to the
+// largest size at which they fit the column, so the largest value is never the one the column
+// hides (validator round 2, 2), and no per-word shrink can invert the ramp (round 1, 1). Same
+// move rulerLayout makes with its width-scaled `top`.
 export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T>[] => {
-  const counts = days.flat().map((t) => t.count)
+  const all = days.flat()
+  const counts = all.map((t) => t.count)
   const lo = counts.length ? Math.min(...counts) : 0
   const hi = counts.length ? Math.max(...counts) : 0
-  return days.map((terms) => weekColumn(measure, terms, width, lo, hi))
+  const maxWidth = weekMaxWidth(width)
+  const fits = all.filter((t) => t.count === hi).map((t) => fitSize(measure, label(t), maxWidth))
+  const top = Math.max(WEEK_SIZE_MIN + 2, Math.min(WEEK_SIZE_MAX, ...fits))
+  return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
 }

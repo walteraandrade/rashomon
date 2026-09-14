@@ -24,6 +24,7 @@ import {
   paintTestimony,
   paintTestimonyError,
   paintTestimonyLoading,
+  RARE_SHOWN,
   risingRulerItems,
   shareBalance,
   rulerTerms,
@@ -917,6 +918,19 @@ describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paint
       assert.doesNotMatch(html, /Nenhuma palavra neste recorte/)
       paintRisingRuler({ data: risingData([], undefined, rare), metrics, selected: null, onPick: () => {} })
       assert.match(els.risingRuler.innerHTML, /ruler-rare/, 'no present words but rare ones still paints the list')
+    })
+  })
+
+  it('shows only the first RARE_SHOWN (12) rare risers, in the order the route sent them', () => {
+    withFakeDocument(['risingRuler'], (els) => {
+      const rare = Array.from({ length: 40 }, (_, i) => risingTerm({ term: `rara${i}`, count_recent_raw: 3, count_baseline_raw: 0 }))
+      paintRisingRuler({ data: risingData([risingTerm()], undefined, rare), metrics, selected: null, onPick: () => {} })
+      const html = els.risingRuler.innerHTML
+      assert.equal(RARE_SHOWN, 12)
+      assert.equal(html.match(/data-term="rara\d+"/g)?.length, 12)
+      assert.match(html, /12 palavras raras que dispararam/)
+      assert.match(html, /data-term="rara11"/)
+      assert.doesNotMatch(html, /data-term="rara12"/)
     })
   })
 

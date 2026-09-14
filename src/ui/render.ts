@@ -891,14 +891,19 @@ export const risingRulerItems = (terms: RisingTerm[], about: RisingAbout): Risin
 
 // The rare risers: words too scarce for the ruler (the route's `rare`, outside its most present
 // `limit`) but whose share grew the most. Listed under the ruler as buttons that pick like any
-// other word, coloured by the same balance.
-const rareMarkup = (rare: RisingItem[], selected: { term: string; kind: string } | null) =>
-  rare.length
+// other word, coloured by the same balance. The route sends up to `limit` of them; the page
+// shows the first RARE_SHOWN so the list stays a line or two, not a wall.
+export const RARE_SHOWN = 12
+
+const rareMarkup = (all: RisingItem[], selected: { term: string; kind: string } | null) => {
+  const rare = all.slice(0, RARE_SHOWN)
+  return rare.length
     ? html`<div class="ruler-overflow ruler-rare"><p>${fmt(rare.length)} ${rare.length === 1 ? 'palavra rara que disparou' : 'palavras raras que dispararam'}: pouco presentes na semana, quase ausentes antes.</p>${rare.map((d) => {
         const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
         return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${label(d)}</button>`
       })}</div>`
     : ''
+}
 
 // Figure 4's own wrapper around the shared ruler body: "antes (30 dias)" / "agora (7 dias)" reuse
 // the compare ruler's --cmp-a/--cmp-b pair, and a word belongs to one person, so there is no

@@ -126,6 +126,29 @@ describe('documented facts per route', () => {
     assert.match(docsText, /^(?=.*\bweek\b)(?=.*rolling 6h).*$/im)
     assert.doesNotMatch(docsText, /`week`[\s\S]{0,40}1h trend|trend class[\s\S]{0,40}`week`/)
   })
+
+  it('docs/api.md documents the cross-route limit snap change caused by inserting 8 (issue #153)', () => {
+    const api = docPageText.get('docs/api.md') ?? ''
+    const section = api.slice(api.indexOf('## Enumerated integers'), api.indexOf('## Shared filters'))
+    assert.match(section, /not just `week`|every route that reads `LIMITS`/, 'the limit paragraph must say the snap change reaches every LIMITS route, not only week')
+    assert.match(section, /`\?limit=7`[\s\S]{0,60}reads as 8/, 'limit=7 now reading as 8 must be documented')
+    assert.match(section, /`\?limit=10`[\s\S]{0,120}read as 8/, 'limit=10 now reading as 8 must be documented')
+    assert.match(section, /\btie\b/, 'the tie-break that lands limit=10 on 8 rather than 12 must be stated')
+  })
+
+  it('docs/api.md states the day/published_at fold as one rule, not a self-contradiction (issue #153)', () => {
+    const api = docPageText.get('docs/api.md') ?? ''
+    const section = api.slice(api.indexOf('`day` is optional'), api.indexOf('## rising'))
+    assert.match(section, /counts as today/, 'the fold itself must still be documented')
+    assert.match(section, /`about`\s*equal to `\/docs\?day=/, 'the paragraph must say the fold is what keeps a /week bucket\'s about equal to /docs?day=\'s total')
+    // the bug this fixes: claiming, in the same breath as the fold, that a kept day
+    // unconditionally returns only docs whose BRT date is that day -- that cannot hold for
+    // day=today once the fold is also true.
+    assert.doesNotMatch(section, /only docs whose BRT date is that day are returned/)
+    // a bad day must read as "the whole window comes back", not just "behaves as it did" buried
+    // mid-sentence -- a caller sending garbage gets everything, not nothing.
+    assert.match(section, /window back, not zero docs/)
+  })
 })
 
 describe('issue #112 AC12: docs/operations.md states the dependency and size facts', () => {

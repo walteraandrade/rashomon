@@ -2222,13 +2222,16 @@ describe('weekFor (issue #147)', () => {
   // /docs?day=<that bucket's BRT date>'s total, for the same scope. lula's oldest bucket
   // happens to be 0 (no about-doc there), which lets an off-by-one that empties the oldest
   // bucket compare 0 === 0 unnoticed; tarcisio's oldest bucket is 1, so it is covered too.
+  // days:30 for tarcisio also runs this at a width the days:7 cases never reach, so a scan
+  // lower bound that only misbehaves past a week (e.g. `least(days - 1, ...)`) cannot hide
+  // behind days:7 passing everywhere.
   it("issue #150: each bucket's about equals docsFor's total at day=<that bucket's BRT date>", async () => {
-    for (const person of [lula, tarcisio]) {
-      const r = await weekFor(person, weekBase)
+    for (const { person, days } of [{ person: lula, days: 7 }, { person: tarcisio, days: 7 }, { person: tarcisio, days: 30 }]) {
+      const r = await weekFor(person, { ...weekBase, days })
       for (const b of r.buckets) {
         const day = brtYmd(b.start)
-        const { total } = await docsFor(person, { ...docsBase, days: 7, day })
-        assert.equal(total, b.about, `${person.id} ${day}`)
+        const { total } = await docsFor(person, { ...docsBase, days, day })
+        assert.equal(total, b.about, `${person.id} days=${days} ${day}`)
       }
     }
   })
@@ -2314,19 +2317,31 @@ describe('weekFor: future-dated doc (issue #147)', () => {
 })
 
 describe('weekFor: own-name phrase filter (issue #147)', () => {
+  const namePhraseUri = 'https://example.org/week-phrase-name'
+  const survivorUri = 'https://example.org/week-phrase-survivor'
   before(async () => {
     await seed()
     // A capitalized run needs no lexicon rebuild (see test/reindex.test.ts): extract.ts finds
     // "Jair Bolsonaro" as a phrase term straight from insertDoc, no `pnpm reindex` required.
     await insertDoc(
-      { source: 'rss', uri: 'https://example.org/week-phrase-name', text: 'O deputado Jair Bolsonaro discursou hoje no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
+      { source: 'rss', uri: namePhraseUri, text: 'O deputado Jair Bolsonaro discursou hoje no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
+      persons,
+    )
+    // Names bolsonaro (so it is "about" him) and carries a capitalized run with none of his own
+    // name words in it: this phrase must survive namePhrase, proving the filter drops the
+    // person's own name specifically rather than every phrase in the window.
+    await insertDoc(
+      { source: 'rss', uri: survivorUri, text: 'Bolsonaro se reuniu com Alexandre de Moraes no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
       persons,
     )
   })
   after(reseed)
 
   it('V3: sanity, the doc really carries a "jair bolsonaro" phrase term', async () => {
-    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase' and term = 'jair bolsonaro'`)
+    const { rows } = await db.query<{ n: number }>(
+      `select count(*)::int as n from doc_terms t join docs d on d.id = t.doc_id where t.kind = 'phrase' and t.term = 'jair bolsonaro' and d.uri = $1`,
+      [namePhraseUri],
+    )
     assert.equal(rows[0].n, 1)
   })
 
@@ -2337,6 +2352,9 @@ describe('weekFor: own-name phrase filter (issue #147)', () => {
     }
     // The doc's other phrase-free words still surface today, proving the doc was scored at all.
     assert.ok(r.buckets[6].about >= 1)
+    // A phrase naming someone else survives: the filter targets bolsonaro's own name words,
+    // it does not drop every phrase in the window.
+    assert.ok(r.buckets[6].terms.some((t) => t.kind === 'phrase' && t.term === 'alexandre de moraes'))
   })
 })
 
@@ -2373,9 +2391,10 @@ describe('brtMidnightUtc resolves the same instant as `at time zone` (issue #147
   // back at 01:00 rather than midnight, the one day in 1940-2100 where the two disagree, and it
   // is unreachable because keepDay only ever asks about dates inside a 7/30/365-day window.
   const ymd = (t: number) => new Date(t).toISOString().slice(0, 10)
-  const offsetAt = (t: number) =>
-    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', timeZoneName: 'longOffset' })
-      .formatToParts(new Date(t)).find((p) => p.type === 'timeZoneName')!.value
+  // Hoisted: transitions() calls this ~54,000 times, and a fresh Intl.DateTimeFormat per call
+  // dominated the suite's runtime for no coverage gain over reusing one formatter.
+  const tzFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', timeZoneName: 'longOffset' })
+  const offsetAt = (t: number) => tzFormat.formatToParts(new Date(t)).find((p) => p.type === 'timeZoneName')!.value
 
   // Each transition day AND the day after it: a transition day itself resolves to standard time
   // in both directions, so a hardcoded -03:00 would match every one of them. The day after a

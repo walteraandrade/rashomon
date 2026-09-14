@@ -132,24 +132,6 @@ describe('GET /api/people/:id/testimony (issue #21)', () => {
     assert.deepEqual(await res.json(), { error: 'person not found' })
   })
 
-  it('issue #147 AC1: GET /api/people/nobody/week is the same 404', async () => {
-    const res = await app.request('/api/people/nobody/week')
-    assert.equal(res.status, 404)
-    assert.deepEqual(await res.json(), { error: 'person not found' })
-  })
-
-  it('wires the querystring through parseWeekQuery end to end', async () => {
-    const res = await app.request('/api/people/lula/week?days=30&limit=1&kind=hashtag&source=gnews')
-    assert.equal(res.status, 200)
-    const body = (await res.json()) as Awaited<ReturnType<typeof weekFor>>
-    const person = { id: lula.id, name: lula.name, aliases: lula.aliases }
-    const expected = await weekFor(person, parseWeekQuery({ days: '30', limit: '1', kind: 'hashtag', source: 'gnews' }))
-    assert.deepEqual(JSON.parse(JSON.stringify(expected)), body)
-    // days=30 must reach the response's own `days` field, and 30 daily buckets back it up.
-    assert.equal(body.days, 30)
-    assert.equal(body.buckets.length, 30)
-  })
-
   it('AC2b: wires the querystring through parseTestimonyQuery end to end', async () => {
     const body = await testimony('?method=stub&min=2')
     // oglobo.globo.com/gdelt clears min=2 (scores 5, -1 -> avg 2, n=2), the same hand
@@ -165,6 +147,52 @@ describe('GET /api/people/:id/testimony (issue #21)', () => {
         { domain: 'oglobo.globo.com', source: 'gdelt', score: 2, n: 2 },
       ],
     )
+  })
+})
+
+describe('GET /api/people/:id/week (issue #147)', () => {
+  before(async () => {
+    await seed()
+    // Two hashtag-only mentions dated today: no literal word form, so they never compete with
+    // the day1 word terms, but they give kind=all a term on a day kind=word leaves empty --
+    // the control a dropped `kind` parameter needs to be caught.
+    await insertDoc(
+      { source: 'gnews', uri: 'https://g1.globo.com/week-kind-a', text: 'Lula é só isso #planalto', publishedAt: new Date().toISOString(), domain: 'g1.globo.com' },
+      persons,
+    )
+    await insertDoc(
+      { source: 'gnews', uri: 'https://g1.globo.com/week-kind-b', text: 'Lula outra vez isso #planalto', publishedAt: new Date().toISOString(), domain: 'g1.globo.com' },
+      persons,
+    )
+  })
+  after(reseed)
+
+  it('issue #147 AC1: GET /api/people/nobody/week is the same 404', async () => {
+    const res = await app.request('/api/people/nobody/week')
+    assert.equal(res.status, 404)
+    assert.deepEqual(await res.json(), { error: 'person not found' })
+  })
+
+  it('wires the querystring through parseWeekQuery end to end', async () => {
+    const res = await app.request('/api/people/lula/week?days=30&limit=1&kind=word&source=gnews')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Awaited<ReturnType<typeof weekFor>>
+    const person = { id: lula.id, name: lula.name, aliases: lula.aliases }
+    const expected = await weekFor(person, parseWeekQuery({ days: '30', limit: '1', kind: 'word', source: 'gnews' }))
+    assert.deepEqual(JSON.parse(JSON.stringify(expected)), body)
+    // days=30 must reach the response's own `days` field, and 30 daily buckets back it up.
+    assert.equal(body.days, 30)
+    assert.equal(body.buckets.length, 30)
+    // Control: limit actually reaches weekFor. lula's gnews word terms overflow limit=1 in at
+    // least one bucket, so raising it to 8 must change what the route returns.
+    const wider = await app.request('/api/people/lula/week?days=30&limit=8&kind=word&source=gnews')
+    const widerBody = await wider.json()
+    assert.notDeepEqual(widerBody, body)
+    // Control: kind actually reaches weekFor. Today's bucket carries only the hashtag-only
+    // '#planalto' mentions, so dropping kind to 'all' must surface a term there kind=word hides.
+    const allKinds = await app.request('/api/people/lula/week?days=30&limit=1&source=gnews')
+    const allKindsBody = await allKinds.json()
+    assert.notDeepEqual(allKindsBody, body)
   })
 })
 

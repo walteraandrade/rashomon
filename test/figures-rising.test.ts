@@ -33,7 +33,7 @@ const risingTerm = (over: Partial<RisingTerm> = {}): RisingTerm => ({
   ...over,
 })
 
-const risingData = (terms: RisingTerm[], about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }, rare: RisingTerm[] = []): Rising => ({ days: 7, baseline: 30, terms, rare, outlets: [], about })
+const risingData = (terms: RisingTerm[], about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }, present: RisingTerm[] = terms): Rising => ({ days: 7, baseline: 30, terms, present, outlets: [], about })
 
 describe('AC1: figures/rising.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
@@ -104,6 +104,21 @@ describe('issue #151 AC13: an empty terms array paints the empty note and still 
       assert.match(els.risingRuler.innerHTML, /Nenhuma palavra neste recorte\./)
       assert.match(els.risingAbout.textContent, /\b0\b/)
       assert.match(els.risingAbout.textContent, /\b12\b/)
+      assert.match(els.risingAbout.textContent, /0 pares texto-palavra agora, 50 antes/, 'words_* are doc_terms rows, named as pairs, never as words')
+    })
+  })
+
+  it('a payload without about.words_* says nothing about pairs instead of printing a zero', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/rising': { days: 7, baseline: 30, terms: [risingTerm({ term: 'antigo' })], outlets: [], about: { recent: 3, baseline: 12 } } })
+      const { mount } = await import('../src/ui/figures/rising.js')
+      mount(els.rising, { people, initial: {} })
+      await flush()
+      assert.match(els.risingAbout.textContent, /3 textos nos últimos 7 dias, 12 nos 30 dias antes\.$/)
+      assert.doesNotMatch(els.risingAbout.textContent, /par/)
+      assert.match(els.risingRuler.innerHTML, /data-term="antigo"/)
+      assert.doesNotMatch(els.risingRuler.innerHTML, /NaN/)
     })
   })
 })

@@ -682,7 +682,7 @@ describe('risingFor (issue #3)', () => {
 
   it('AC10: returns an empty terms array for a person without docs', async () => {
     const r = await risingFor(nobody, risingBase)
-    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], rare: [], outlets: [], about: { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 } })
+    assert.deepEqual(r, { days: 7, baseline: 30, terms: [], present: [], outlets: [], about: { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 } })
   })
 
   it('AC10: returns an empty terms array for an empty recent window, but about.baseline still reflects the baseline docs', async () => {
@@ -708,13 +708,13 @@ describe('risingFor (issue #3)', () => {
     assert.equal(r.about.baseline, 2)
   })
 
-  // words_* are the totals the page divides by, so they must equal the sum of the very counts
-  // it divides: with no limit and no floor, every recent term is served and adds up to
-  // words_recent; the same terms' baseline counts add up to words_baseline only when no
-  // baseline-only term exists, so that side is checked as an upper bound plus the hand count.
+  // words_* are the totals the page divides by, counted before `min` and `limit`: with no limit
+  // and no floor, every recent term is served and adds up to words_recent; the same terms'
+  // baseline counts add up to words_baseline only when no baseline-only term exists, so that
+  // side is checked as an upper bound plus the hand count.
   it('about.words_recent/about.words_baseline total the doc_terms rows behind the served terms', async () => {
     const full = await risingFor(lula, { ...risingBase, limit: 100, min: 1 })
-    assert.deepEqual(full.rare, [], 'sanity: at limit 100 every fixture term fits in terms')
+    assert.deepEqual(full.present, full.terms, 'sanity: at limit 100 every fixture term fits in both lists, in the same lift order')
     const recentSum = full.terms.reduce((n, t) => n + t.count_recent_raw, 0)
     assert.equal(full.about.words_recent, recentSum)
     const baselineSum = full.terms.reduce((n, t) => n + t.count_baseline_raw, 0)
@@ -724,24 +724,25 @@ describe('risingFor (issue #3)', () => {
     assert.equal(full.about.words_recent, 17)
   })
 
-  it('terms are the most present recent terms, rare the highest lifts among the rest, never overlapping', async () => {
-    const r = await risingFor(lula, { ...risingBase, limit: 1 })
-    assert.equal(r.terms.length, 1)
-    assert.equal(r.terms[0].term, 'reforma', 'the word reforma is in every recent doc that qualifies; ties by lift keep it first')
-    assert.equal(r.rare.length, 1, 'rare is capped by the same limit')
-    assert.notEqual(`${r.rare[0].kind}:${r.rare[0].term}`, 'word:reforma')
+  // `terms` keeps its pre-#164 contract (the `limit` highest lifts); `present` is the additive
+  // field: the `limit` most present recent terms, ordered by lift like `terms`.
+  it('present holds the most present recent terms, terms still the highest lifts, both ordered by lift', async () => {
     const full = await risingFor(lula, { ...risingBase, limit: 100 })
-    const nextByLift = full.terms.filter((t) => !(t.kind === 'word' && t.term === 'reforma'))[0]
-    assert.deepEqual(r.rare[0], nextByLift, 'rare starts where terms stops, ordered by lift')
-    const three = await risingFor(lula, { ...risingBase, limit: 5 })
-    const inTerms = new Set(three.terms.map((t) => `${t.kind}:${t.term}`))
-    assert.ok(three.rare.every((t) => !inTerms.has(`${t.kind}:${t.term}`)))
-    const rareLifts = three.rare.map((t) => t.lift)
-    assert.deepEqual(rareLifts, [...rareLifts].sort((a, b) => b - a), 'rare is ordered by lift desc')
-    // A term present in more docs enters terms ahead of a term with a higher lift but fewer docs.
-    const present = three.terms.map((t) => t.count_recent_raw)
-    const rareCounts = three.rare.map((t) => t.count_recent_raw)
-    assert.ok(Math.min(...present) >= Math.max(...rareCounts), 'terms are picked by presence, not lift')
+    assert.ok(full.terms.length > 5, 'sanity: the fixture must hold more terms than the limit below')
+    const one = await risingFor(lula, { ...risingBase, limit: 1 })
+    assert.equal(one.present.length, 1)
+    assert.equal(one.present[0].term, 'reforma', 'the word reforma is in every recent doc that qualifies; ties by lift keep it first')
+    const mostPresent = [...full.terms].sort((a, b) => b.count_recent_raw - a.count_recent_raw || b.lift - a.lift || a.term.localeCompare(b.term) || a.kind.localeCompare(b.kind))[0]
+    assert.deepEqual(one.present[0], mostPresent, 'present picks by count_recent_raw, not by lift')
+    assert.deepEqual(one.terms[0], full.terms[0], 'terms still picks by lift')
+    const five = await risingFor(lula, { ...risingBase, limit: 5 })
+    assert.equal(five.present.length, 5)
+    const presentCounts = five.present.map((t) => t.count_recent_raw)
+    const leftOut = full.terms.filter((t) => !five.present.some((p) => p.term === t.term && p.kind === t.kind))
+    assert.ok(Math.min(...presentCounts) >= Math.max(...leftOut.map((t) => t.count_recent_raw)), 'nothing left out is more present than what got in')
+    const lifts = five.present.map((t) => t.lift)
+    assert.deepEqual(lifts, [...lifts].sort((a, b) => b - a), 'present is ordered by lift desc')
+    assert.deepEqual(five.terms, full.terms.slice(0, 5), 'terms is the lift-ranked head, unchanged by present')
   })
 
   it('count_recent_raw/count_baseline_raw are consistent with the rounded rate columns', async () => {

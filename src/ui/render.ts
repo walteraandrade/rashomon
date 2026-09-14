@@ -869,16 +869,33 @@ export const paintRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar a comparação.</p>'
 }
 
+export type RisingShares = RisingAbout & { words_recent: number; words_baseline: number }
+
+// A payload cached before `present`/`about.words_*` existed must not paint NaN positions, so
+// the share rule applies only when both totals arrived; otherwise the ruler falls back to the
+// older person-lift rule below, with that rule's own axis prose.
+export const hasShares = (data: Rising): data is Rising & { present: RisingTerm[]; about: RisingShares } =>
+  Array.isArray(data.present) && Number.isFinite(data.about.words_recent) && Number.isFinite(data.about.words_baseline)
+
 // balance = clamp(log2(share now / share before) / 3, -1, 1), where a share is the term's doc
 // count over every doc_terms row about the person in that window (about.words_*): a word right
 // of centre takes a bigger slice of what is written about her this week than it did before,
 // left a smaller one. Shares, not doc counts, so a corpus whose texts grew longer (more words
 // per doc) does not push every word right at once; the baseline's +1 is the server's own
 // smoothing, which keeps this finite. No baseline words at all means every word is new.
-export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingAbout) => {
+export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingShares) => {
   if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
   if (about.words_recent <= 0) return -1
   const ratio = (t.count_recent_raw / about.words_recent) / ((t.count_baseline_raw + 1) / about.words_baseline)
+  return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
+}
+
+// The fallback rule: clamp(log2(word's lift / the person's own lift) / 3, -1, 1). About.baseline's
+// +1 smoothing (the server's own, per term) keeps this finite with no baseline docs at all.
+export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
+
+export const liftBalance = (t: { lift: number }, liftPerson: number) => {
+  const ratio = liftPerson > 0 ? t.lift / liftPerson : t.lift > 0 ? Infinity : 1
   return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
 }
 
@@ -886,23 +903,29 @@ export type RisingItem = RulerItem & { lift: number }
 
 // combined = count_recent_raw + count_baseline_raw, the exact doc counts behind the rounded
 // rates, so a word's size on the ruler never compounds the server's own rounding.
-export const risingRulerItems = (terms: RisingTerm[], about: RisingAbout): RisingItem[] =>
-  terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: shareBalance(t, about), combined: t.count_recent_raw + t.count_baseline_raw }))
+export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
+  terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
 
-// The rare risers: words too scarce for the ruler (the route's `rare`, outside its most present
-// `limit`) but whose share grew the most. Listed under the ruler as buttons that pick like any
-// other word, coloured by the same balance. The route sends up to `limit` of them; the page
-// shows the first RARE_SHOWN so the list stays a line or two, not a wall.
+// The risers off the ruler: the route's `terms` (the highest lifts) minus what `present` already
+// rules, and only those that actually rose (lift > 1, recent rate above the smoothed baseline
+// rate), in the route's own lift order. Listed under the ruler as buttons that pick like any
+// other word, coloured by the same share balance. The page shows the first RARE_SHOWN so the
+// list stays a line or two, and says how many it left out.
 export const RARE_SHOWN = 12
+
+export const rareRisers = (terms: RisingTerm[], present: RisingTerm[]) => {
+  const ruled = new Set(present.map((t) => `${t.kind}:${t.term}`))
+  return terms.filter((t) => t.lift > 1 && !ruled.has(`${t.kind}:${t.term}`))
+}
 
 const rareMarkup = (all: RisingItem[], selected: { term: string; kind: string } | null) => {
   const rare = all.slice(0, RARE_SHOWN)
-  return rare.length
-    ? html`<div class="ruler-overflow ruler-rare"><p>${fmt(rare.length)} ${rare.length === 1 ? 'palavra rara que disparou' : 'palavras raras que dispararam'}: pouco presentes na semana, quase ausentes antes.</p>${rare.map((d) => {
-        const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
-        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${label(d)}</button>`
-      })}</div>`
-    : ''
+  if (!rare.length) return ''
+  const count = all.length > rare.length ? `${fmt(rare.length)} de ${fmt(all.length)} palavras` : `${fmt(rare.length)} ${rare.length === 1 ? 'palavra' : 'palavras'}`
+  return html`<div class="ruler-overflow ruler-rare"><p>Fora da régua, ${count} com poucos textos na semana, mas mais que antes, da maior subida para a menor:</p>${rare.map((d) => {
+    const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
+    return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${label(d)}</button>`
+  })}</div>`
 }
 
 // Figure 4's own wrapper around the shared ruler body: "antes (30 dias)" / "agora (7 dias)" reuse
@@ -922,8 +945,10 @@ export const paintRisingRuler = ({
   width?: number
 }) => {
   const ruler = $('risingRuler')
-  const items = risingRulerItems(data.terms, data.about)
-  const rare = risingRulerItems(data.rare ?? [], data.about)
+  const shares = hasShares(data)
+  const balance = shares ? (t: RisingTerm) => shareBalance(t, data.about) : ((lp) => (t: RisingTerm) => liftBalance(t, lp))(liftOfPerson(data.about, data.days, data.baseline))
+  const items = risingRulerItems(shares ? data.present : data.terms, balance)
+  const rare = shares ? risingRulerItems(rareRisers(data.terms, data.present), balance) : []
   if (!items.length && !rare.length) {
     ruler.hidden = false
     ruler.classList.remove('is-loading')
@@ -943,7 +968,7 @@ export const paintRisingRuler = ({
     width,
     endA: 'antes (30 dias)',
     endB: 'agora (7 dias)',
-    axisLabels: ['Fatia menor que antes', 'mesma fatia', 'Fatia maior que antes'],
+    axisLabels: shares ? ['Fatia menor que antes', 'mesma fatia', 'Fatia maior que antes'] : ['Mais devagar que a pessoa', 'no mesmo ritmo', 'Mais rápido que a pessoa'],
     ariaLabel: 'Régua de termos em alta',
     note: '',
     tail: rareMarkup(rare, selected),

@@ -30,8 +30,13 @@ const resolvePerson = (people: Person[], seeded: string | undefined) =>
 
 // "keeps the absolute story visible" per the issue: the ruler's own axis is relative, so the
 // two window totals are printed as plain text next to it.
-const aboutLine = (about: RisingAbout) =>
-  `A pessoa: ${fmt(about.recent)} ${about.recent === 1 ? 'texto' : 'textos'} nos últimos 7 dias, ${fmt(about.baseline)} nos 30 dias antes; ${fmt(about.words_recent)} ${about.words_recent === 1 ? 'palavra' : 'palavras'} escritas sobre ela agora, ${fmt(about.words_baseline)} antes.`
+// words_* are doc_terms rows (text-word pairs), not words, and a payload from before they
+// existed simply says nothing about them rather than printing a zero.
+const aboutLine = (about: RisingAbout) => {
+  const docs = `A pessoa: ${fmt(about.recent)} ${about.recent === 1 ? 'texto' : 'textos'} nos últimos 7 dias, ${fmt(about.baseline)} nos 30 dias antes`
+  const pairs = Number.isFinite(about.words_recent) && Number.isFinite(about.words_baseline) ? `; ${fmt(about.words_recent)} ${about.words_recent === 1 ? 'par texto-palavra' : 'pares texto-palavra'} agora, ${fmt(about.words_baseline)} antes.` : '.'
+  return docs + pairs
+}
 
 export const mount = (root: FigureRoot, { people, initial, peopleError = null }: { people: Person[]; initial: Seed; peopleError?: PeopleError }) => {
   let data: Rising | null = null

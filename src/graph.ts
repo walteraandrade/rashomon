@@ -104,7 +104,7 @@ type RisingRow = {
   count_baseline_raw: number
   lift: number
 }
-type RisingAggregates = { about_recent: number; about_baseline: number; words_recent: number; words_baseline: number; terms: RisingRow[]; rare: RisingRow[] }
+type RisingAggregates = { about_recent: number; about_baseline: number; words_recent: number; words_baseline: number; terms: RisingRow[]; present: RisingRow[] }
 type TimelineRow = { bucket_start: Date; count: number }
 type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
 type ToneListRow = { id: string; name: string }
@@ -484,11 +484,12 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 
 // Two disjoint windows (recent, then the baseline immediately before it) so a doc is never
 // double-counted. c_recent/c_baseline are count(*) for the same reason as graphQuery's term_p.
-// `terms` are the `limit` most present terms of the recent window, ordered by lift: a set picked
-// by lift is the top of one tail and can only ever sit on one side of a ruler. `rare` is that
-// tail, the `limit` highest lifts among the terms `terms` left out. words_recent/words_baseline
-// total the same filtered doc_terms rows per window, so a caller can compare a term's share of
-// everything written about the person rather than its doc count, which a corpus that grows
+// `terms` are the `limit` highest lifts, as they always were. `present` are the `limit` most
+// present terms of the recent window, ordered by lift too: a set picked by lift is the top of
+// one tail and can only ever sit on one side of a ruler, so the page rules by `present` and
+// lists what `terms` adds beyond it. words_recent/words_baseline total the same filtered
+// doc_terms rows per window, before `min` and `limit`, so a caller can compare a term's share
+// of everything written about the person rather than its doc count, which a corpus that grows
 // text per doc inflates for every term at once. `kind` closes every order by because
 // (lift, term) alone does not break ties between two kinds of one term text.
 const risingQuery = (person: Person, q: RisingQuery) => {
@@ -534,12 +535,11 @@ const risingQuery = (person: Person, q: RisingQuery) => {
     from recent_terms r left join baseline_terms b using (term, kind)
     where r.c_recent >= ${q.min}
   ),
+  lifted as (
+    select * from ranked order by lift desc, term, kind limit ${q.limit}
+  ),
   present as (
     select * from ranked order by count_recent_raw desc, lift desc, term, kind limit ${q.limit}
-  ),
-  rare as (
-    select * from ranked where (term, kind) not in (select term, kind from present)
-    order by lift desc, term, kind limit ${q.limit}
   )
   select
     (select count(*) from recent_about)::int as about_recent,
@@ -551,15 +551,15 @@ const risingQuery = (person: Person, q: RisingQuery) => {
         'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
         'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
       ) order by lift desc, term, kind)
-      from present
+      from lifted
     ), '[]'::json) as terms,
     coalesce((
       select json_agg(json_build_object(
         'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
         'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
       ) order by lift desc, term, kind)
-      from rare
-    ), '[]'::json) as rare`
+      from present
+    ), '[]'::json) as present`
 }
 
 export type CandidatesQuery = { days: number; min: number; limit: number }
@@ -609,12 +609,12 @@ export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number;
 export const risingFor = async (person: Person, q: RisingQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
   const { rows } = await run<RisingAggregates>(risingQuery(person, q))
-  const { about_recent, about_baseline, words_recent, words_baseline, terms, rare } = rows[0]
+  const { about_recent, about_baseline, words_recent, words_baseline, terms, present } = rows[0]
   return {
     days: q.days,
     baseline: q.baseline,
     terms,
-    rare,
+    present,
     outlets,
     about: { recent: about_recent, baseline: about_baseline, words_recent, words_baseline },
   }

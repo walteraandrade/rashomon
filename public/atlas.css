@@ -637,6 +637,27 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #compareHiddenNote { margin: 10px 0 0; }
 #compareA, #compareB { font-family: var(--mono); }
 
+/* ---------- the week (figure 5, calendar days, issue #147) — seven columns, oldest at the
+   left; each column is a day head (the .stat pattern above: --accent label, ink number) and an
+   SVG swarm of that day's words, sized by that day's count, positioned only to avoid collision.
+   Same glow/hit/text triad as the atlas and the ruler; no --hostile/--favor/--cmp-a/--cmp-b
+   here, --ink only. ---------- */
+.week-chart { margin: 18px 0 0; padding: 6px 0 10px; }
+.week-columns { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.week-day { min-width: 0; }
+.week-day .stat { padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); margin-bottom: var(--space-2); }
+.week-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.week-word { cursor: pointer; outline: none; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.week-glow, .week-hit { fill: transparent; }
+.week-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
+.week-word:hover .week-glow, .week-word:focus-visible .week-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
+.week-word:hover .week-hit, .week-word:focus-visible .week-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
+.week-word.is-selected .week-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.week-word.is-selected .week-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
+.week-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
+.week-overflow .quiet-button.is-selected { color: var(--ink); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); font-weight: 600; }
+#weekNote { margin-top: var(--space-3); }
+
 /* ---------- the pet ---------- */
 /* The one raster on a site that otherwise draws every limit with type. It is allowed exactly
    where a graph is absent -- an empty recorte, an /api/people outage -- and never beside a

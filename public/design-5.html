@@ -107,6 +107,21 @@
     <figure class="ruler" id="risingRuler" aria-label="Régua de termos em alta" hidden></figure>
     <p class="note" id="risingAbout"></p>
   </section>
+
+  <section class="figure week" id="week" aria-labelledby="weekTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 5</span><h2 id="weekTitle">A semana</h2></div>
+      <p class="figure-sub">Quais palavras ocuparam cada dia dos últimos sete. <a href="como-ler.html#semana">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>documentos naquele dia</dd></div>
+        <div><dt>Posição</dt><dd>o dia</dd></div>
+        <div><dt>Clique</dt><dd>os textos daquele dia</dd></div>
+      </dl>
+      <div class="sentence"><p class="sentence-line">Na semana de <span class="pick"><select id="weekPerson" aria-label="Pessoa (semana)"></select></span>, em <span class="pick"><select id="weekSource" aria-label="Fonte (semana)"></select></span>, as palavras que mais ocuparam cada dia. Mostrar <span class="pick"><select id="weekLimit" aria-label="Quantidade de palavras por dia"><option>5</option><option selected>8</option><option>12</option></select></span> palavras por dia.</p></div>
+    </header>
+    <figure class="week-chart" id="weekChart" aria-label="Palavras da semana, uma coluna por dia" hidden></figure>
+    <p class="note" id="weekNote"></p>
+  </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
   <div class="docs-dialog-head" id="docsGrip"><div><span class="eyebrow" id="docsKicker">Documentos</span><h2 id="docsTitle"></h2></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
@@ -121,7 +136,7 @@
       <ol>
         <li>Escolha pessoa, período e fonte na frase.</li>
         <li>Leia as palavras maiores. Clique numa para ver os textos.</li>
-        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é. No 4, o que subiu mais rápido que a própria pessoa.</li>
+        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é. No 4, o que subiu mais rápido que a própria pessoa. No 5, em que dia da semana cada palavra apareceu.</li>
       </ol>
     </div>
     <div id="help-atlas">
@@ -163,6 +178,11 @@
       <h3>Gráfico 4 · Em alta</h3>
       <p>Cada palavra fica onde ela cresceu contra o próprio ritmo da pessoa, não contra zero. Ao centro, subiu no mesmo passo que a pessoa; à direita, mais rápido; à esquerda, mais devagar, ou caiu.</p>
       <p>Os dois números absolutos, textos nos últimos 7 dias e nos 30 dias antes, ficam escritos embaixo da régua: o eixo relativo esconde essa conta. Clique abre os textos da última semana com aquela palavra.</p>
+    </div>
+    <div id="help-semana">
+      <h3>Gráfico 5 · A semana</h3>
+      <p>Cada coluna é um dia, do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. O tamanho da palavra é quantos documentos daquele dia a têm; a posição é só o dia, não mede nada dentro da coluna. Uma palavra que aparece em vários dias repete em cada coluna, sem linha ligando uma à outra.</p>
+      <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte. Clique numa palavra abre os textos daquele dia com aquela palavra.</p>
     </div>
     <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
     <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>

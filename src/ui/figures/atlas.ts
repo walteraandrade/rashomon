@@ -14,6 +14,7 @@ import {
   paintCandidatesLoading,
   paintColumns,
   paintSelection,
+  paintTermStrip,
 } from '../render.js'
 import * as docsCard from '../docs-card.js'
 import { span } from '../perf.js'
@@ -103,6 +104,7 @@ export const createHandlers = ({
   },
   modeMap: () => setMode('map'),
   modeColumns: () => setMode('columns'),
+  modeStrip: () => setMode('strip'),
   mask: () => toggleMask(),
   control: (id: string) => () => {
     if (id === 'days') loadCandidates()
@@ -279,16 +281,27 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     if (previouslySelected === null || !ids.has(previouslySelected)) setSelected(null)
     $('modeMap').setAttribute('aria-pressed', String(mode === 'map'))
     $('modeColumns').setAttribute('aria-pressed', String(mode === 'columns'))
+    $('modeStrip').setAttribute('aria-pressed', String(mode === 'strip'))
     $('mask').setAttribute('aria-pressed', String(getMask()))
     $('viewport').hidden = mode !== 'map'
     $('columns').hidden = mode !== 'columns'
+    $('atlasStrip').hidden = mode !== 'strip'
+    // Colour is not optional in strip mode (it is the whole second dimension of the view), and
+    // there is nothing to zoom: both controls are meaningless there.
+    $('mask').hidden = mode === 'strip'
+    $('zoomGroup').hidden = mode === 'strip'
+    $('keyDefault').hidden = mode === 'strip'
+    $('keyStrip').hidden = mode !== 'strip'
     if (nodes.length) {
       if (!currentLayout || mode === 'map') drawCurrentMap()
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
       paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony })
+      if (mode === 'strip') paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value })
     } else {
       $('viewport').innerHTML = '<div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>'
       $('columns').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
+      $('atlasStrip').innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
+      $('stripHiddenNote').hidden = true
       $('legend').textContent = 'Sem dados para desenhar.'
       $('overflow').hidden = true
       currentLayout = null
@@ -440,6 +453,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('source').addEventListener('change', () => handlers.source(String($('source').value))())
   $('modeMap').addEventListener('click', handlers.modeMap)
   $('modeColumns').addEventListener('click', handlers.modeColumns)
+  $('modeStrip').addEventListener('click', handlers.modeStrip)
   $('mask').addEventListener('click', handlers.mask)
   for (const id of ['person', 'days', 'sort', 'limit']) $(id).addEventListener('change', handlers.control(id))
   $('search').addEventListener('input', handlers.search)
@@ -447,7 +461,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('zoomIn').addEventListener('click', handlers.zoomIn)
   $('zoomOut').addEventListener('click', handlers.zoomOut)
   $('zoomReset').addEventListener('click', handlers.zoomReset)
-  for (const id of ['viewport', 'columns'])
+  for (const id of ['viewport', 'columns', 'atlasStrip'])
     $(id).addEventListener('click', (e: MouseEvent) => handlers.background(e.target as Element | null))
   document.addEventListener('keydown', handlers.keydown)
   new ResizeObserver(resizeMap).observe($('viewport'))

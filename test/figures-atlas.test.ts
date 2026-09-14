@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { narrowToSources, params, sourcesParams } from '../src/ui/api.js'
 import { createHandlers, docsQuery, mount, scopeKeys } from '../src/ui/figures/atlas.js'
+import { mountDocsCard } from '../src/ui/docs-card.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../src/ui/format.js'
 import { clearScopes, fromScope } from '../src/ui/state.js'
 import { persons, seed } from './fixture.js'
@@ -391,17 +392,47 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     })
   })
 
-  it('AC6: a strip pick reuses the same handlers.pick(id) path drawMap and paintColumns use, and stays single-sided', () => {
-    const src = readFileSync(join(root, 'src', 'ui', 'figures', 'atlas.ts'), 'utf8')
-    const call = src.match(/paintTermStrip\(\{[\s\S]*?\}\)/)?.[0] ?? ''
-    assert.ok(call, 'figures/atlas.ts must call paintTermStrip when painting the strip')
-    assert.match(call, /onChoose:\s*\(id\)\s*=>\s*handlers\.pick\(id\)/, 'a strip circle must pick through the same handler drawMap/paintColumns use, so it opens #docsDialog with a single side (docsQuery, unchanged) and never the two-column .is-wide layout')
+  it('AC6: a strip pick reuses the same handlers.pick(id) path drawMap and paintColumns use, and stays single-sided', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      const graph = { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph, '/docs': { docs: [], total: 0 } })
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      const dot = els.atlasStrip.querySelectorAll('[data-node]')[0]
+      assert.ok(dot, 'the strip must paint a clickable node for the eligible word')
+      dot.fire('click')
+      await flush()
+      const docsRequests = calls.filter((url) => url.includes('/docs?'))
+      assert.equal(docsRequests.length, 1, 'a strip pick asks for that word\'s documents, the same as a map/column pick')
+      assert.match(docsRequests[0], /term=golpe/)
+      assert.equal(els.docsDialog.open, true)
+      assert.equal(els.docsDialog.classes['is-wide'], false, 'a single word never opens the ruler\'s two-column layout')
+      assert.equal(els.docsTitle.textContent, 'golpe')
+    })
   })
 
-  it('AC7: a click on empty space inside #atlasStrip releases the selection, the same way #viewport/#columns already do', () => {
-    const src = readFileSync(join(root, 'src', 'ui', 'figures', 'atlas.ts'), 'utf8')
-    const loop = src.match(/for \(const id of \[([^\]]*)\]\)\s*\n?\s*\$\(id\)\.addEventListener\('click', \(e: MouseEvent\) => handlers\.background/)
-    assert.ok(loop, 'must find the background-click wiring loop that already covers #viewport/#columns')
-    assert.match(loop![1], /'atlasStrip'/, "atlasStrip must join viewport/columns in that loop, or an empty-space click inside the strip would leave the selection standing")
+  it('AC7: a click on empty space inside #atlasStrip releases the selection, the same way #viewport/#columns already do', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]
+      const graph = { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph, '/docs': { docs: [], total: 0 } })
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeStrip.fire('click')
+      els.atlasStrip.querySelectorAll('[data-node]')[0].fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the pick opened the card')
+      els.atlasStrip.fire('click', { target: { closest: () => null } })
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'empty space inside the strip released the selection and closed the card')
+    })
   })
 })

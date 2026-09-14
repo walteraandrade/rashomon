@@ -258,14 +258,6 @@ describe('parseWeekQuery (issue #147)', () => {
     assert.equal(parseWeekQuery({ lean: 'left,bogus' }).lean, 'left')
   })
 
-  it('issue #150: method resolves like /testimony, gated by testimony=1 like /graph', () => {
-    assert.equal(parseWeekQuery({}).method, null)
-    assert.equal(parseWeekQuery({ testimony: '1', method: 'stub' }).method, 'stub')
-    assert.equal(parseWeekQuery({ testimony: '1' }).method, parseQuery({ testimony: '1' }).method)
-    assert.equal(parseWeekQuery({ testimony: '1', method: 'bad label!' }).method, parseWeekQuery({ testimony: '1' }).method)
-    assert.equal(parseWeekQuery({ testimony: 'yes', method: 'stub' }).method, null)
-  })
-
   it('AC2: method is null absent the flag, resolves to the shared default when testimony=1 with no method, echoes a valid method, falls back on an invalid one, and stays off on a non-"1" value', () => {
     assert.equal(parseWeekQuery({}).method, null)
     assert.equal(parseWeekQuery({ testimony: '1' }).method, parseQuery({ testimony: '1' }).method)

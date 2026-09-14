@@ -269,7 +269,7 @@ const docsWhere = (term: string, kind: string) => sql`(
 export const docsWhereSql = docsWhere('', 'all').text
 
 const docsDay = (day: string) =>
-  sql`(${day} = '' or (d.published_at at time zone 'America/Sao_Paulo')::date = nullif(${day}, '')::date)`
+  sql`(${day} = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif(${day}, '')::date)`
 
 const docsQuery = (person: Person, q: DocsQuery) => sql`
   with ${scopeCte(person, q)}
@@ -624,9 +624,7 @@ const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
-// scoped bounds published_at from below so docs_published_idx is used instead of a seq scan
-// (review finding #7): the window is days-1 Brazilian calendar days before today plus today
-// itself, and the CASE below folds a future-dated doc into today, so only a lower bound is needed.
+// Lower bound so docs_published_idx applies; the CASE folds future-dated docs into today, so no upper bound.
 const weekQuery = (person: Person, q: WeekQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)

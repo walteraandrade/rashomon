@@ -2259,6 +2259,12 @@ describe('weekFor: future-dated doc (issue #147)', () => {
     assert.ok(r.buckets[6].terms.some((t) => t.term === 'golpe'))
     for (const b of r.buckets.slice(0, 6)) assert.equal(b.about, 0)
   })
+
+  it('issue #147: /docs?day=today folds the same future-dated doc into today, matching /week\'s about', async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    const { total } = await docsFor(bolsonaro, { ...docsBase, day: todayBrt() })
+    assert.equal(total, r.buckets[6].about)
+  })
 })
 
 describe('docsFor day filter (issue #147)', () => {

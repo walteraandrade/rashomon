@@ -49,6 +49,7 @@ export const calendarDay = (v: string): string => {
 export const brtDate = (now = new Date()): string =>
   new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 
+// Brazil has had no DST since 2019, so São Paulo is UTC-3 year round; the SQL side reads the tz database instead.
 const brtMidnightUtc = (day: string) => new Date(`${day}T03:00:00.000Z`)
 
 export const dayOverlapsWindow = (day: string, days: number, now = new Date()): boolean => {

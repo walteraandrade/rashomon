@@ -68,7 +68,7 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. Each node also ca
 
 `GET /api/people/:id/docs?term=&kind=all&days=30&source=all&domain=all&lean=all&limit=50&offset=0&day=` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs, outlets }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings. `outlets` follows the same rule as `graph`'s.
 
-`day` is optional. A value matching `YYYY-MM-DD` that names a real calendar day in `America/Sao_Paulo` and overlaps the rolling `[now() - days, now()]` window is kept; anything else (missing, malformed, `2026-02-31`, a date entirely before the window, a future calendar date) becomes empty and the route behaves as it did. When kept, only docs whose BRT date is that day are returned. It intersects the existing `days` window; it does not replace it. The response fields do not change.
+`day` is optional. A value matching `YYYY-MM-DD` that names a real calendar day in `America/Sao_Paulo` and overlaps the rolling `[now() - days, now()]` window is kept; anything else (missing, malformed, `2026-02-31`, a date entirely before the window, a future calendar date) becomes empty and the route behaves as it did. When kept, only docs whose BRT date is that day are returned; a `published_at` after today in `America/Sao_Paulo` counts as today, as on `/week`. It intersects the existing `days` window; it does not replace it. The response fields do not change.
 
 ## rising
 

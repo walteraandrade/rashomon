@@ -123,7 +123,7 @@ describe('documented facts per route', () => {
     assert.match(docsText, /calendar day/)
     assert.match(docsText, /not required to equal/)
     assert.match(docsText, /optional.*`day`|`day` is optional/)
-    assert.match(docsText, /week.*rolling 6h|rolling 6h class/)
+    assert.match(docsText, /^(?=.*\bweek\b)(?=.*rolling 6h).*$/im)
     assert.doesNotMatch(docsText, /`week`[\s\S]{0,40}1h trend|trend class[\s\S]{0,40}`week`/)
   })
 })

@@ -268,6 +268,13 @@ const docsWhere = (term: string, kind: string) => sql`(
   )`
 export const docsWhereSql = docsWhere('', 'all').text
 
+// A doc's calendar day is published_at in America/Sao_Paulo, except a published_at after the
+// end of today BRT folds into today (the `least(...)`) -- so day=<today> also returns every
+// future-dated doc. The fold is deliberate: it is what makes /week's bucket.about for a day equal
+// this predicate's total for day=<that day> (issue #150). The predicate stays unconditionally
+// bound (day = '' or ...) rather than branching the query text on day === '', because
+// `statements` in this file pins each builder's rendered text to its SHAPE, not its values
+// (test/graph.test.ts "statements render the same text the routes run").
 const docsDay = (day: string) =>
   sql`(${day} = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif(${day}, '')::date)`
 

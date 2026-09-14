@@ -49,17 +49,49 @@ export const calendarDay = (v: string): string => {
 export const brtDate = (now = new Date()): string =>
   new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 
-// Brazil has had no DST since 2019, so São Paulo is UTC-3 year round; the SQL side reads the tz database instead.
-const brtMidnightUtc = (day: string) => new Date(`${day}T03:00:00.000Z`)
+// Minutes to ADD to a UTC instant to read its wall clock in `timeZone` (Date#getTimezoneOffset's
+// own sign convention). Read from the tz database via Intl, not assumed, so a rule change (e.g.
+// Brazil restoring DST) cannot make this drift from what the SQL side computes with `at time zone`.
+const zoneOffsetMinutes = (instant: Date, timeZone: string): number => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(instant)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value)
+  const wallAsUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  return (wallAsUtc - instant.getTime()) / 60_000
+}
+
+// JS and SQL must resolve the same midnight for a calendar day, since docsDay/weekQuery cast
+// published_at through `at time zone 'America/Sao_Paulo'`. Exported so test/query.test.ts can
+// pin the derived instant directly.
+export const brtMidnightUtc = (day: string): Date => {
+  const [y, m, d] = day.split('-').map(Number)
+  const naive = Date.UTC(y, m - 1, d) // day's midnight, misread as if it were already UTC
+  return new Date(naive - zoneOffsetMinutes(new Date(naive), WEEK_TZ) * 60_000)
+}
+
+// The day AFTER `day`, so a bucket's end is the next calendar day's own midnight rather than
+// start + 24h: a 23h or 25h DST day (were Brazil ever to restore it) would otherwise leak or
+// clip an hour of docs at the boundary.
+const nextCalendarDay = (day: string): string => {
+  const [y, m, d] = day.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + 1))
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
+}
 
 export const dayOverlapsWindow = (day: string, days: number, now = new Date()): boolean => {
   if (day > brtDate(now)) return false
   const start = brtMidnightUtc(day)
-  const end = new Date(start.getTime() + 86_400_000)
+  const end = brtMidnightUtc(nextCalendarDay(day))
   const windowStart = new Date(now.getTime() - days * 86_400_000)
   return start.getTime() <= now.getTime() && end.getTime() > windowStart.getTime()
 }
 
+// A malformed, future or out-of-window day resolves to '', which docsDay reads as "no day
+// filter" -- the request unfilters to the full window rather than to zero docs, the same
+// fallback-to-default convention every other parser here uses. Pinned by test/server.test.ts's
+// "day= unfilters on a bad value" tests.
 const keepDay = (raw: string | undefined, days: number): string => {
   const day = calendarDay(raw ?? '')
   return day && dayOverlapsWindow(day, days) ? day : ''

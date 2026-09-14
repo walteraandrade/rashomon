@@ -5,8 +5,9 @@ import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor
 import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app } from '../src/server.js'
+import { insertDoc } from '../src/store.js'
 import { withEnv } from './env.js'
-import { insertTestimony, persons, reseed, seed, seedCandidates } from './fixture.js'
+import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates } from './fixture.js'
 import './close.js'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -19,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 
 const [lula, tarcisio, bolsonaro] = persons
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const brtYmd = (value: Date | string) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 
 type Overall = { method: string; overall: { score: number | null; n: number } }
 const testimony = async (qs = '') => {
@@ -375,6 +377,57 @@ describe('GET /api/candidates (issue #32)', () => {
     assert.deepEqual(people.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
     const graph = await (await app.request('/api/people/lula/graph')).json() as { person: { id: string } }
     assert.equal(graph.person.id, 'lula')
+  })
+})
+
+// AC15 in test/graph.test.ts calls docsFor with an already-parsed DocsQuery, so a keepDay bug
+// that dropped a valid day would still pass there. These go through the HTTP layer, i.e.
+// through parseDocsQuery's keepDay, end to end.
+describe('GET /api/people/:id/docs day= (issue #147, AC15 end to end)', () => {
+  before(seed)
+
+  it('day=<yesterday BRT> returns only docs whose BRT date is that day', async () => {
+    const yesterday = brtYmd(new Date(Date.now() - 86_400_000))
+    const res = await app.request(`/api/people/lula/docs?day=${yesterday}`)
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { total: number; docs: { published_at: string }[] }
+    assert.ok(body.total >= 1, 'Lula\'s day1 cluster must land on yesterday BRT')
+    for (const d of body.docs) assert.equal(brtYmd(d.published_at), yesterday)
+  })
+})
+
+describe('GET /api/people/:id/docs day=today folds a future-dated doc (issue #147, issue #150)', () => {
+  before(async () => {
+    await seed()
+    await insertDoc(futureDoc, persons)
+  })
+  after(reseed)
+
+  it('day=<today BRT> includes the future-dated doc, whose own BRT date is still ahead', async () => {
+    const today = brtYmd(new Date())
+    const res = await app.request(`/api/people/bolsonaro/docs?day=${today}`)
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { total: number; docs: { uri: string; published_at: string }[] }
+    assert.ok(body.docs.some((d) => d.uri === futureDoc.uri))
+    for (const d of body.docs) assert.ok(brtYmd(d.published_at) >= today)
+  })
+})
+
+// keepDay's fallback (src/query.ts): a malformed, future or out-of-window day unfilters rather
+// than filtering to zero docs. Pinned here so that behaviour cannot change silently.
+describe('GET /api/people/:id/docs day= unfilters on a bad value (issue #147, keepDay)', () => {
+  before(seed)
+
+  it('an unparseable day returns the same total as no day at all', async () => {
+    const open = (await (await app.request('/api/people/lula/docs')).json()) as { total: number }
+    const bad = (await (await app.request('/api/people/lula/docs?day=nope')).json()) as { total: number }
+    assert.equal(bad.total, open.total)
+  })
+
+  it('a future day, out of every window, also unfilters', async () => {
+    const open = (await (await app.request('/api/people/lula/docs')).json()) as { total: number }
+    const future = (await (await app.request('/api/people/lula/docs?day=2099-01-01')).json()) as { total: number }
+    assert.equal(future.total, open.total)
   })
 })
 

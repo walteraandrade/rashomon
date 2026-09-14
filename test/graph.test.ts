@@ -2218,6 +2218,37 @@ describe('weekFor (issue #147)', () => {
     assert.ok(tags.buckets.every((b) => b.terms.every((t) => t.kind === 'hashtag')))
   })
 
+  // The cross-route invariant issue #150's click depends on: each bucket's about must equal
+  // /docs?day=<that bucket's BRT date>'s total, for the same scope.
+  it("issue #150: each bucket's about equals docsFor's total at day=<that bucket's BRT date>", async () => {
+    const r = await weekFor(lula, weekBase)
+    for (const b of r.buckets) {
+      const day = brtYmd(b.start)
+      const { total } = await docsFor(lula, { ...docsBase, days: 7, day })
+      assert.equal(total, b.about, day)
+    }
+  })
+
+  // AC5 in test/query.test.ts only proves parseWeekQuery *parses* source/domain/lean; this is
+  // where the parsed values are proven to actually reach weekFor and change its result.
+  it('AC5: source, domain and lean each narrow about, not just kind', async () => {
+    const sumAbout = (r: Awaited<ReturnType<typeof weekFor>>) => r.buckets.reduce((a, b) => a + b.about, 0)
+
+    const all = await weekFor(lula, weekBase)
+    const bluesky = await weekFor(lula, { ...weekBase, source: 'bluesky' })
+    assert.ok(sumAbout(bluesky) >= 1, 'fixture Lula must have at least one bluesky doc inside the default week')
+    assert.ok(sumAbout(bluesky) < sumAbout(all), 'source=bluesky must narrow the week\'s total about')
+
+    const wideWeek: WeekQuery = { ...weekBase, days: wide }
+    const allWide = await weekFor(bolsonaro, wideWeek)
+    const right = await weekFor(bolsonaro, { ...wideWeek, lean: 'right' })
+    assert.ok(right.buckets.length === allWide.buckets.length)
+    assert.ok(sumAbout(right) >= 1 && sumAbout(right) < sumAbout(allWide), 'lean=right must narrow the week\'s total about')
+
+    const domainOnly = await weekFor(bolsonaro, { ...wideWeek, domain: 'oantagonista.com.br' })
+    assert.ok(sumAbout(domainOnly) >= 1 && sumAbout(domainOnly) < sumAbout(allWide), 'domain must narrow the week\'s total about')
+  })
+
   it('AC11: terms are ordered count desc, term asc, kind asc; two kinds are two rows', async () => {
     const r = await weekFor(lula, { ...weekBase, limit: 40 })
     const busy = r.buckets.find((bucket) => bucket.terms.length > 1)
@@ -2262,8 +2293,14 @@ describe('weekFor: future-dated doc (issue #147)', () => {
 
   it('issue #147: /docs?day=today folds the same future-dated doc into today, matching /week\'s about', async () => {
     const r = await weekFor(bolsonaro, weekBase)
-    const { total } = await docsFor(bolsonaro, { ...docsBase, day: todayBrt() })
+    const { total, docs } = await docsFor(bolsonaro, { ...docsBase, day: todayBrt() })
     assert.equal(total, r.buckets[6].about)
+    // Pin the fold itself, not just the count coincidence: the future doc must actually be
+    // among the returned docs, and its own BRT date must still be in the future -- the query
+    // folds it into today's bucket, the doc's published_at does not move.
+    const folded = docs.find((d) => d.uri === futureDoc.uri)
+    assert.ok(folded, 'the future-dated doc must be returned by day=today, not merely counted')
+    assert.ok(brtYmd(folded!.published_at) > todayBrt(), 'the future doc\'s own BRT date stays in the future')
   })
 })
 

@@ -26,6 +26,7 @@ import {
   snapDays,
   snapTo,
   brtDate,
+  brtMidnightUtc,
   calendarDay,
 } from '../src/query.js'
 import { candidatesQuery, compareParams, docsParams, params } from '../src/ui/api.js'
@@ -245,6 +246,9 @@ describe('parseWeekQuery (issue #147)', () => {
     assert.equal(parseWeekQuery({ limit: '10' }).limit, 8)
   })
 
+  // Parse-only: whether these parsed values actually reach weekFor and change its result is
+  // pinned in test/graph.test.ts's weekFor describe ("AC5: source, domain and lean each narrow
+  // about, not just kind"), which has the db fixture this test does not.
   it('AC5: source/kind/domain/lean parse as on /graph', () => {
     assert.equal(parseWeekQuery({ source: 'gnews,bogus' }).source, 'gnews')
     assert.equal(parseWeekQuery({ source: 'bogus' }).source, 'all')
@@ -252,6 +256,12 @@ describe('parseWeekQuery (issue #147)', () => {
     assert.equal(parseWeekQuery({ kind: 'word,hashtag' }).kind, 'word,hashtag')
     assert.equal(parseWeekQuery({ domain: 'g1.globo.com,bogus host' }).domain, 'g1.globo.com')
     assert.equal(parseWeekQuery({ lean: 'left,bogus' }).lean, 'left')
+  })
+})
+
+describe('brtMidnightUtc (issue #147)', () => {
+  it('derives the day\'s midnight from the tz database, not a hardcoded offset', () => {
+    assert.equal(brtMidnightUtc('2026-09-14').toISOString(), '2026-09-14T03:00:00.000Z')
   })
 })
 

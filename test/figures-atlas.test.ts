@@ -55,7 +55,8 @@ describe('createHandlers: local repaints never reload, control changes do (issue
   })
 
   it('search, zoom and the view-mode buttons never ask for a reload', () => {
-    for (const name of ['search', 'zoomIn', 'zoomOut', 'zoomReset', 'modeMap', 'modeColumns'] as const) {
+    // issue #149 AC1: modeStrip is a local repaint the same way modeMap/modeColumns are.
+    for (const name of ['search', 'zoomIn', 'zoomOut', 'zoomReset', 'modeMap', 'modeColumns', 'modeStrip'] as const) {
       const { calls, handlers } = spies()
       handlers[name]()
       assert.ok(!calls.includes('load'), `${name} must stay a local repaint`)

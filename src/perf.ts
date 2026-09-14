@@ -68,6 +68,13 @@ export const perfLine = (r: RequestPerf) =>
 
 export const round = (n: number) => Math.round(n * 100) / 100
 
+// The same two timings as the x-perf-* headers, in the shape DevTools draws on the request's
+// Timing tab and PerformanceResourceTiming.serverTiming exposes to the page. `total` is the
+// route's wall-clock and `db` the sum awaited on statements: they overlap, and db > total on
+// a route that fans out.
+export const serverTiming = ({ ms, sql, dbMs }: Omit<Measured<unknown>, 'value'>) =>
+  `db;dur=${round(dbMs)};desc="${sql} sql", total;dur=${round(ms)}`
+
 export const percentile = (values: number[], p: number): number => {
   if (!values.length) return 0
   const sorted = [...values].sort((a, b) => a - b)

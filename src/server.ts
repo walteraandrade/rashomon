@@ -5,7 +5,7 @@ import { cacheControl } from './cache.js'
 import { db, migrate } from './db.js'
 import { candidatesFor, compareFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
-import { measure, perfEnabled, perfLine, perfLogEnabled, round } from './perf.js'
+import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
 import {
   parseCandidatesQuery,
@@ -22,13 +22,15 @@ import {
 const port = Number(process.env.PORT ?? 3210)
 export const app = new Hono<{ Variables: { person: Person } }>()
 
-// PERF=1: one JSON line per request, x-perf-* headers; does not alter response bytes.
+// PERF=1: one JSON line per request, x-perf-* and server-timing headers; does not alter
+// response bytes.
 if (perfEnabled)
   app.use('/api/*', async (c, next) => {
     const { ms, sql, dbMs } = await measure(next)
     c.header('x-perf-total-ms', String(round(ms)))
     c.header('x-perf-db-ms', String(round(dbMs)))
     c.header('x-perf-sql-count', String(sql))
+    c.header('server-timing', serverTiming({ ms, sql, dbMs }))
     if (perfLogEnabled) console.log(perfLine({ method: c.req.method, path: c.req.path, query: new URL(c.req.url).search.slice(1), status: c.res.status, ms, sql, dbMs }))
   })
 

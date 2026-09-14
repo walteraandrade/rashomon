@@ -3,6 +3,7 @@
 
 import * as api from './api.js'
 import { paintDocs, paintDocsError, paintDocsHead, paintDocsLoading } from './render.js'
+import { span } from './perf.js'
 import { fromScope, readScope } from './state.js'
 
 export type DocsSide = { personId: string; personName: string; query: URLSearchParams; label?: string }
@@ -123,10 +124,13 @@ export const open = async (req: DocsRequest) => {
   paintDocsHead({ kicker: req.kicker, title: req.title })
   show(req.sides.length > 1)
   if (!req.sides.every((side) => readScope('docs', side.personId + '?' + side.query))) paintDocsLoading()
+  const painted = span('figure:docs')
   try {
     const sides = await Promise.all(req.sides.map((side) => fetchSide(side, current.signal)))
     if (id !== requestId || !$('docs')) return
     paintDocs(sides)
+    // Two sides are two api:docs in Promise.all: this is max(api, api) + paint, not one subtraction.
+    painted({ sides: sides.length, urls: req.sides.map((side) => api.endpoint(side.personId) + '/docs?' + side.query).join(' ') })
   } catch (e) {
     if (id === requestId && !aborted(e) && $('docs')) paintDocsError(() => open(req))
   }

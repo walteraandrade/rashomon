@@ -16,6 +16,7 @@ import {
   paintSelection,
 } from '../render.js'
 import * as docsCard from '../docs-card.js'
+import { span } from '../perf.js'
 import { debounce, fromScope } from '../state.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
@@ -364,6 +365,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $('viewport').setAttribute('aria-busy', 'true')
     if (first) paintAtlasLoading()
     else root.classList.add('is-loading')
+    const painted = span('figure:atlas')
     try {
       const person = $('person').value
       const query = graphQuery()
@@ -374,6 +376,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('status').textContent = `${fmt(data.stats.about)} documentos sobre ${data.person.name} neste recorte.`
       updateHeader()
       render()
+      painted({ person, query: query.toString(), nodes: data.nodes.length })
     } catch (e) {
       if (id !== currentRequestId() || aborted(e)) return
       busy = false

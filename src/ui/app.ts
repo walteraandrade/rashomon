@@ -4,6 +4,7 @@ import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountTestimony } from './figures/testimony.js'
 import { mountHelp } from './help.js'
 import { paintAtlasLoading, paintCompareLoading, paintOutletsLoading, paintTestimonyLoading } from './render.js'
+import * as api from './api.js'
 
 type Person = { id: string; name: string }
 // A `[key, bareKey | null]` pair names a different bare fallback or none (null).
@@ -46,11 +47,7 @@ const seedFor = (figureId: string, keys: SeedKey[], search: string): Seed => {
   )
 }
 
-const loadPeople = async (): Promise<Person[]> => {
-  const res = await fetch('/api/people')
-  if (!res.ok) throw new Error('HTTP ' + res.status)
-  return res.json()
-}
+const loadPeople = (): Promise<Person[]> => api.loadPeople()
 
 const paintBootLoading = () => {
   const status = document.getElementById('status')

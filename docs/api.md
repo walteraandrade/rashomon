@@ -86,7 +86,7 @@ A value that is missing, malformed, not `YYYY-MM-DD`, not a real calendar day (`
 
 The span is today in BRT and the `days-1` calendar days before it, not `now() - interval`. A doc inside the rolling window of `/timeline` or `/docs` but on the eighth BRT date is out of `/week`. The sum of `about` is therefore not required to equal `/docs`'s `total` for the same `days`. No `tone`, no `pmi`, no `outlets`, no `lift`. `source` / `kind` / `domain` / `lean` parse as on `/graph` (comma lists); `kind` filters terms only. Cached with the rolling 6h class, not the 1h trend class.
 
-### `testimony=1`
+### `testimony=1` on `/week`
 
 `GET /api/people/:id/week?…&testimony=1` adds `testimony: { score, n } | null` to every bucket: the day's mean kikori score, over the same scope (`source`/`domain`/`lean`, not `kind` — testimony describes docs naming the person that day, not term co-occurrence) `about` already uses, docs with a null score excluded from both the mean and `n`. A day with no scored docs (whether `about` is 0 or every score is null) gets `testimony: null`, never `{ score: null, n: 0 }`. `method` resolves exactly as on `/testimony`: the same charset check, then the same shared default. Without `testimony=1` nothing is added and the response is byte-for-byte what it was — no `testimony` key on any bucket, not even `null`. No week-level or `stats`-level summary is added; the page already has the person's mean from `/graph`'s `stats.testimony` or from `/testimony`'s `overall`. `n` is returned raw, uncapped: the `MASK_MIN` floor is a client-side paint decision (`src/ui/format.ts`), not enforced here.
 

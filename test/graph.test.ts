@@ -30,7 +30,7 @@ import { resolveScope } from '../src/outlets.js'
 import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query.js'
 import { inTransaction, insertDoc, upsertPersons } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
-import { docsText } from './docs.js'
+import { docPageText } from './docs.js'
 import { futureDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
@@ -2342,9 +2342,35 @@ describe('weekFor testimony (issue #150 acceptance criteria)', () => {
 
   it('AC5: a bucket with about: 0 has testimony null', async () => {
     const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
-    const empty = r.buckets.find((b) => b.about === 0)
-    assert.ok(empty, 'fixture must contain an empty-about day within 30 days')
-    assert.equal(empty!.testimony, null)
+    // daysAgo(1) is day1: only the lula docs (g1.globo.com/1, valor.globo.com/6, gdeltproject.org/38)
+    // land there, none naming tarcisio, so about is 0 on that bucket.
+    const empty = bucketAt(r, 1)
+    assert.equal(empty.about, 0)
+    assert.equal(empty.testimony, null)
+  })
+
+  it('spec §3, "Null score": a day with docs but every score null resolves testimony to null, not { score: null, n: 0 }', async () => {
+    // Scoping to source=rss keeps only estadao.com.br/36 (stub score null) about tarcisio on
+    // daysAgo(7), excluding estadao.com.br/31 (gdelt, score 6) that shares the day. The `having
+    // count(sc.score) > 0` clause must drop this day from weekTestimonyQuery entirely, not
+    // surface it as a zero-count row, or byStart.get() would resolve { score: null, n: 0 }.
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, source: 'rss', method: 'stub' })
+    const day = bucketAt(r, 7)
+    assert.equal(day.about, 1)
+    assert.equal(day.testimony, null)
+  })
+
+  it('spec §3: the mean is scoped by source/domain/lean like about, never by kind', async () => {
+    // daysAgo(7)'s scored doc, estadao.com.br/31, is a gdelt doc with kind='word'/'phrase' terms
+    // extracted from it, but weekTestimonyQuery joins doc_testimony directly off `kept`, with no
+    // doc_terms/kind involvement at all — kind must be a no-op on the mean.
+    const withKind = await weekFor(tarcisio, { ...weekBase, days: 30, kind: 'word', method: 'stub' })
+    assert.deepEqual(bucketAt(withKind, 7).testimony, { score: 6, n: 1 })
+
+    // source='gdelt' keeps the scope containing the scored doc (a gdelt doc), so the mean must
+    // come through unchanged rather than being dropped by an accidental source/kind mixup.
+    const withSource = await weekFor(tarcisio, { ...weekBase, days: 30, source: 'gdelt', method: 'stub' })
+    assert.deepEqual(bucketAt(withSource, 7).testimony, { score: 6, n: 1 })
   })
 
   it('AC6: an unscored method resolves testimony to null on every bucket rather than raising', async () => {
@@ -2360,11 +2386,21 @@ describe('weekFor testimony (issue #150 acceptance criteria)', () => {
     assert.equal(a.text, statements.weekTestimony)
   })
 
-  it('AC8: docs state the flag, the per-bucket shape, the byte-for-byte-unchanged default and the shared method rule', () => {
-    assert.match(docsText, /week[^\n]*testimony=1/)
-    assert.match(docsText, /testimony:\s*\{\s*score,\s*n\s*\}\s*\|\s*null/)
-    assert.match(docsText, /byte-for-byte what it was/)
-    assert.match(docsText, /method.{0,40}resolves exactly as on.{0,10}\/testimony/)
+  it('AC8: docs/api.md states the flag, the per-bucket shape, the byte-for-byte-unchanged default and the shared method rule, all in the /week section', () => {
+    // Sliced from the `/week?...&testimony=1` anchor onward, so this can only pass against the
+    // /week subsection: /graph's own testimony=1 paragraph (docs/api.md, earlier in the file)
+    // separately repeats three of these same four facts, and docs/testimony.md's one-liner
+    // mentions "week?testimony=1" without the per-bucket shape, so neither can satisfy this on
+    // its own — deleting the /week subsection fails every assertion below.
+    const apiDocs = docPageText.get('docs/api.md') ?? ''
+    const anchor = apiDocs.indexOf('/api/people/:id/week?…&testimony=1')
+    assert.ok(anchor >= 0, 'docs/api.md must document /week?...&testimony=1')
+    const weekTestimonySection = apiDocs.slice(anchor)
+    assert.match(weekTestimonySection, /^\/api\/people\/:id\/week\?…&testimony=1/)
+    assert.match(weekTestimonySection, /testimony:\s*\{\s*score,\s*n\s*\}\s*\|\s*null/)
+    assert.match(weekTestimonySection, /every bucket/)
+    assert.match(weekTestimonySection, /byte-for-byte what it was/)
+    assert.match(weekTestimonySection, /method.{0,40}resolves exactly as on.{0,10}\/testimony/)
   })
 })
 

@@ -786,6 +786,11 @@ type WeekBucketRow = { start: Date; about: number; terms: { term: string; kind: 
 // entirely (see the acceptance criterion this pins in test/graph.test.ts), not present as null.
 type WeekBucket = WeekBucketRow & { testimony?: { score: number; n: number } | null }
 
+// Two round-trips, each with its own `today as (select now() ...)` CTE (weekScopeCte), so a
+// request straddling BRT midnight can see weekQuery and weekTestimonyQuery resolve `today` to
+// different dates: their `dates.start` values would then disagree, and the byStart lookup below
+// would miss the day that shifted rather than merge it. Inherent to running the mean as its own
+// builder (see weekTestimonyQuery's comment) rather than one statement; a narrow, once-a-day race.
 export const weekFor = async (person: Person, q: WeekQuery): Promise<{ days: number; tz: 'America/Sao_Paulo'; buckets: WeekBucket[] }> => {
   const { rows } = await run<WeekBucketRow>(weekQuery(person, q))
   if (!q.method) return { days: q.days, tz: 'America/Sao_Paulo', buckets: rows }

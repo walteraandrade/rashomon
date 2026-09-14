@@ -19,6 +19,12 @@ const apiCacheWindows = cacheWindows()
 
 export const NO_STORE = 'no-store'
 
+// Every cacheable /api response carries this tag, so one `vercel cache dangerously-delete
+// --tag api` (ingest.yml, warm.yml) drops every stored API object and nothing else before
+// the warm refills the page's defaults. Request headers (`Pragma`, `Cache-Control:
+// no-cache`) do not bypass Vercel's CDN; measured 2026-09-14, every variant was a HIT.
+export const CACHE_TAG = 'api'
+
 // rising and candidates default to days:7 and read as "lately" — shortest window.
 const TREND = new Set(['rising', 'candidates'])
 

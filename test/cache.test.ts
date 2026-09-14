@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { NO_STORE, cacheControl, cacheWindows } from '../src/cache.js'
+import { CACHE_TAG, NO_STORE, cacheControl, cacheWindows } from '../src/cache.js'
 import { app } from '../src/server.js'
 import { seed } from './fixture.js'
 import './close.js'
@@ -15,6 +15,21 @@ const header = async (url: string) => {
   const res = await app.request(url)
   return { status: res.status, cache: res.headers.get('cache-control') }
 }
+
+const tag = async (url: string) => (await app.request(url)).headers.get('vercel-cache-tag')
+
+describe('Vercel-Cache-Tag on /api reads', () => {
+  before(seed)
+
+  it('tags every cacheable response with CACHE_TAG, so one delete by tag drops them all', async () => {
+    for (const url of ['/api/people', '/api/people/lula/graph', '/api/people/lula/sources', '/api/compare?a=lula&b=bolsonaro']) assert.equal(await tag(url), CACHE_TAG, url)
+  })
+
+  it('tags nothing that is not stored', async () => {
+    assert.equal(await tag('/api/people/nobody/graph'), null)
+    assert.equal(await tag('/api/nope'), null)
+  })
+})
 
 describe('Cache-Control on /api reads', () => {
   before(seed)

@@ -28,6 +28,7 @@ jobs:
       BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
       BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
       GKG_SLOTS: 28
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -39,9 +40,14 @@ jobs:
       - run: test -n "$DATABASE_URL" || { echo 'DATABASE_URL secret is missing'; exit 1; }
       - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
       - run: pnpm ingest ${{ inputs.sources }}
-      # The ingest above rebuilt the graph aggregates; this asks the CDN for the page's own recortes
-      # with Pragma: no-cache, so the objects the ingest made stale are refetched and the first
-      # reader after it finds a HIT of the new build.
+      # Drops every stored /api object (the `api` tag, src/cache.ts) so the warm below refills
+      # them from the origin: no request header bypasses Vercel's CDN, and a plain GET after an
+      # ingest would only confirm the pre-ingest copy.
+      - run: test -n "$VERCEL_TOKEN" || { echo 'VERCEL_TOKEN secret is missing'; exit 1; }
+      - run: pnpm dlx vercel@59 cache dangerously-delete --tag api --yes --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_ORG_ID: team_JKYixYXuTf1hPPPIDJbDR75g
+          VERCEL_PROJECT_ID: prj_ICBXfo5zxV5UnC8wkMPbNKh0J2rT
       - run: pnpm warm
         env:
           SITE_URL: https://rashomon-five.vercel.app

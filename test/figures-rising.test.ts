@@ -119,7 +119,7 @@ describe('issue #151 AC14: a GET /rising failure paints the ruler error note and
       const { mount } = await import('../src/ui/figures/rising.js')
       mount(els.rising, { people, initial: {} })
       await flush()
-      assert.match(els.risingRuler.innerHTML, /Não foi possível carregar/)
+      assert.match(els.risingRuler.innerHTML, /Não foi possível carregar os termos em alta/)
       assert.doesNotMatch(els.risingRuler.innerHTML, /ghost-field/, 'the loading ghost must not survive a failed request')
     })
   })

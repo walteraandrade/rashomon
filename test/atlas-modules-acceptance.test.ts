@@ -142,7 +142,7 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
       // Issue #151 adds figure 4, the rising ruler: same shape as figures/compare.ts, imported by
       // nothing but app.ts, and reaching into no other figure's DOM.
-      'figures/rising.ts': ['./api.js', './docs-card.js', './format.js', './render.js', './state.js'],
+      'figures/rising.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
       'app.ts': ['./api.js', './docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/rising.js', './figures/testimony.js', './help.js', './render.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')

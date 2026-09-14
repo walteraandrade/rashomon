@@ -702,7 +702,7 @@ describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paint
       els.risingRuler.hidden = true
       paintRisingRulerError()
       assert.equal(els.risingRuler.hidden, false)
-      assert.match(els.risingRuler.innerHTML, /Não foi possível carregar/)
+      assert.match(els.risingRuler.innerHTML, /Não foi possível carregar os termos em alta/)
     })
   })
 

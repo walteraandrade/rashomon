@@ -6,6 +6,7 @@ import * as api from '../api.js'
 import { fmt, html, kinds, SOURCE_SEGMENTS, sourceLabels, type Measure, type Rising } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintRisingLoading, paintRisingRuler, paintRisingRulerError } from '../render.js'
+import { span } from '../perf.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
@@ -113,6 +114,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       if (data) root.classList.add('is-loading')
       else paintRisingLoading()
     }
+    const painted = span('figure:rising')
     try {
       const result = await fromScope('rising', key, () => api.loadRising(personId(), params, (controller as AbortController).signal))
       if (id !== requestId) return
@@ -121,6 +123,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       lastWidth = $('risingRuler').clientWidth || 0
       root.classList.remove('is-loading')
       repaint()
+      painted({ person: personId(), query: key })
     } catch (e) {
       if (id === requestId && !aborted(e)) {
         data = null

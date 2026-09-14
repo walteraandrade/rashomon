@@ -235,9 +235,18 @@ describe('issue #92: a failed GET /api/people is an outage, never an empty seed'
         assert.match(els.testimonyList.innerHTML, /id="testimonyRetry"/)
         assert.notEqual(els.testimonyList.textContent, 'Nenhuma pessoa cadastrada.')
 
+        assert.match(els.compareDetail.innerHTML, /Falha de rede ou base indispon[ií]vel/)
+        assert.match(els.compareDetail.innerHTML, /id="compareRetry"/)
+        assert.equal(els.compareRuler.hidden, true)
+
+        // Figure 4 has no retry of its own: same outage copy in #risingAbout, ruler hidden.
+        assert.equal(els.risingAbout.textContent, 'Falha de rede ou base indisponível.')
+        assert.equal(els.risingRuler.hidden, true)
+
         els.retry.fire('click')
         els.testimonyRetry.fire('click')
-        assert.equal(reloads.length, 2, 'both retry buttons must be wired to a real re-fetch')
+        els.compareRetry.fire('click')
+        assert.equal(reloads.length, 3, 'every retry button must be wired to a real re-fetch')
       })
     })
   })

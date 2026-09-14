@@ -41,7 +41,7 @@ import {
   type Testimony,
   type TestimonyDomainRow,
 } from './format.js'
-import { FONT_SANS, RULER_PAD, rulerLayout, routesFrom, swarm } from './layout.js'
+import { FONT_MONO, RULER_PAD, rulerLayout, routesFrom, swarm } from './layout.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
@@ -51,7 +51,7 @@ const queryAll = (selector: string, root: any = document): NodeListOf<HTMLElemen
 // The only place that touches a <canvas>; layout.ts stays DOM-free and testable without it.
 export const createCanvasMeasure = (): Measure => {
   const ctx = document.createElement('canvas').getContext('2d') as CanvasRenderingContext2D
-  return (text, size, family = FONT_SANS, weight = 500) => {
+  return (text, size, family = FONT_MONO, weight = 500) => {
     ctx.font = `${weight} ${size}px ${family}`
     const m = ctx.measureText(text)
     return Math.max(m.width, Math.abs(m.actualBoundingBoxLeft || 0) + Math.abs(m.actualBoundingBoxRight || 0))

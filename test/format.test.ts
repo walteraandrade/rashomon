@@ -232,8 +232,8 @@ describe('testimony helpers: testimonyClass, testimonyColor, testimonyPosition, 
     assert.equal(testimonyColor(-5), testimonyColor(-10), 'below -5 nothing gets redder')
     assert.equal(testimonyColor(5), testimonyColor(10))
     assert.notEqual(testimonyColor(-2), testimonyColor(2))
-    assert.equal(toneColor(-3), 'rgb(255,107,125)', 'the tone ramp is unchanged by the refactor')
-    assert.equal(toneColor(3), 'rgb(126,231,135)')
+    assert.equal(toneColor(-3), 'rgb(255,122,138)', 'the tone ramp ends on atlas.css --hostile')
+    assert.equal(toneColor(3), 'rgb(116,220,134)')
     assert.equal(toneColor(0), 'rgb(139,144,156)')
     assert.equal(toneColor(null), 'transparent')
   })
@@ -252,9 +252,9 @@ describe('testimony helpers: testimonyClass, testimonyColor, testimonyPosition, 
 describe('the mask colours: maskColor and termMask', () => {
   it('maskColor is translucent on the mean and opaque at the ends; the chip ramps stay opaque', () => {
     assert.equal(maskColor(0), 'rgba(139,144,156,0.50)')
-    assert.equal(maskColor(-0.75), 'rgba(197,126,141,0.75)', 'halfway: colour and alpha both halfway')
-    assert.equal(maskColor(-1.5), 'rgb(255,107,125)')
-    assert.equal(maskColor(9), 'rgb(126,231,135)')
+    assert.equal(maskColor(-0.75), 'rgba(197,133,147,0.75)', 'halfway: colour and alpha both halfway')
+    assert.equal(maskColor(-1.5), 'rgb(255,122,138)')
+    assert.equal(maskColor(9), 'rgb(116,220,134)')
     assert.equal(SCALE_MID, '#8b909c')
     assert.equal(testimonyColor(0), 'rgb(139,144,156)', 'a chip with dark text needs a solid background')
     assert.equal(toneColor(0), testimonyColor(0))

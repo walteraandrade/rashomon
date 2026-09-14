@@ -301,7 +301,7 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
 
   it('wordMarkup carries the --mask colour and the testimony in its title only when it has one', () => {
     const masked = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 } }), 'count', person.score))
-    assert.match(masked, /style="--size:20px;--mask:rgb\(255,107,125\)"/)
+    assert.match(masked, /style="--size:20px;--mask:rgb\(255,122,138\)"/)
     assert.match(masked, /· avaliação -4,9 em 12 textos<\/title>/)
     for (const value of inlineStyles(masked)) assert.ok(value.startsWith('--'))
     const bare = String(wordMarkup(placed({}), 'count', person.score))
@@ -317,7 +317,7 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
         { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, testimony: null },
       ]
       paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, personTestimony: person })
-      assert.match(els.columns.innerHTML, /data-col="word:a" style="--mask:rgb\(126,231,135\)">/, '+2.5 over the person: full green')
+      assert.match(els.columns.innerHTML, /data-col="word:a" style="--mask:rgb\(116,220,134\)">/, '+2.5 over the person: full green')
       assert.match(els.columns.innerHTML, /· avaliação \+0,1<\/span>/)
       assert.match(els.columns.innerHTML, /data-col="word:b"><span>/, 'no testimony, no style attribute')
     })

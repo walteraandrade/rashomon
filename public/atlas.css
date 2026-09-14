@@ -1,52 +1,56 @@
 /* ============================================================================
-   rashomon · type system
+   rashomon · type system ("bancada")
 
-   This site draws no borders. Every limit a reader sees -- where a section
-   starts, what is a title and what is a caption, which number is the answer --
-   is drawn by type. Colour is a second hierarchy, and it means something; it
-   never ranks a heading. Five dials do that work, and nothing else is allowed
-   to:
+   The site is an instrument that measures words, and it is dressed like one. Every limit a
+   reader sees -- where a section starts, what is a title and what is a caption, which number is
+   the answer -- is drawn by type, by a hairline, or by the dot grid the figures sit on. Colour
+   is a second hierarchy, and it means something; it never ranks a heading. Five dials do that
+   work, and nothing else is allowed to:
 
-     1. FAMILY  League Spartan names a thing. Instrument Sans explains a thing.
-     2. SIZE    One ramp, --t-*. A component never invents a size.
-     3. COLOUR  --ink is "read this", --accent is the live thing, --hostile and
-                --favor are evaluation, --cmp-a/--cmp-b are who, --muted is
-                "this supports it". A heading that needed colour to be found
-                is a heading in the wrong place.
-     4. SPACE   The gap above a heading IS its rank. More air, higher rank.
-     5. SURFACE --bg < --panel < --soft, tinted toward the accent hue. A figure
-                is --panel. Data hues stay on marks; they never tint a surface.
+     1. FAMILY  IBM Plex Sans Condensed names a thing, in capitals. IBM Plex Sans explains a
+                thing. IBM Plex Mono measures a thing: every number, every label, every word on a
+                figure, and the sentence a reader edits.
+     2. SIZE    One ramp, --t-*. A component never invents a size. Rank is carried at least as
+                much by weight, case and family as by size.
+     3. COLOUR  --ink is "read this", --accent (amber) is the live thing and the label marker,
+                --hostile and --favor are evaluation, --cmp-a/--cmp-b are who, --muted is
+                "this supports it". A heading that needed colour to be found is a heading in the
+                wrong place.
+     4. SPACE   Base 4px. The gap above a heading IS its rank. More air, higher rank.
+     5. SURFACE --bg (with its dot grid) < --panel < --soft. A figure is --panel with a 1px
+                --line outline: the one border the site draws, and it draws it on every figure
+                alike. Data hues stay on marks; they never tint a surface.
 
    The hierarchy, top to bottom:
 
-     h1        --t-mega  display 700  ink    what this page is        (once per page)
-     h2        --t-xl    display 700  ink    what this section is
-     h3        --t-lg    display 700  ink    what this block is
-     h4        --t-md    display 600  ink    one thing inside a block
-     .lede     --t-lg    sans 400     muted  the sentence under an h1
-     .sentence --t-lg    sans 500     ink    the sentence you can change
-     p, li     --t-base  sans 400     ink    prose
-     .figure-sub --t-sm  sans 400     muted  prose that supports a title
-     .figure-key dt --t-2xs display 500 ink  names an encoding
-     .figure-key dd --t-sm  sans 400  muted  what that encoding means
-     .note,.meta --t-xs  sans 400     muted  captions, counts, footnotes
-     .eyebrow  --t-2xs   display 500  muted  names the rank right below it
+     h1        --t-mega  display 700 caps  ink    what this page is        (once per page)
+     h2        --t-xl    display 700 caps  ink    what this section is
+     h3        --t-lg    display 600 caps  ink    what this block is
+     h4        --t-md    display 600 caps  ink    one thing inside a block
+     .lede     --t-base  mono 400          muted  the sentence under an h1
+     .sentence --t-base  mono 400          ink    the sentence you can change
+     p, li     --t-base  sans 400          ink    prose
+     .figure-sub --t-sm  mono 400          muted  prose that supports a title
+     .figure-key dt --t-2xs mono 500       accent names an encoding
+     .figure-key dd --t-sm  mono 400       muted  what that encoding means
+     .note,.meta --t-xs  sans 400          muted  captions, counts, footnotes
+     .eyebrow  --t-2xs   mono 500          muted  names the rank right below it, after a "//"
      dt / dd             see "definition pairs"
    ========================================================================= */
 
 :root {
-  --bg: #131210;
-  --panel: #1c1b18;
-  --soft: #26241f;
-  --line: #3a372f;
-  --ink: #f4f1ea;
-  --muted: #a39e93;
-  --accent: #e9e4d8;
-  --accent-ink: #14120f;
-  --hostile: #ff6b7d;
-  --favor: #7ee787;
-  --green: #cfd6c8;
-  --danger: #ef9a9a;
+  --bg: #0b0e0d;
+  --panel: #111615;
+  --soft: #1a2220;
+  --line: #243029;
+  --ink: #d6ded8;
+  --muted: #7b8a82;
+  --accent: #f0b429;
+  --accent-ink: #111411;
+  --hostile: #ff7a8a;
+  --favor: #74dc86;
+  --green: #b9cdc0;
+  --danger: #ff8a8a;
   /* Quiet grey in the middle of every ramp: SCALE_MID in format.ts. Not --muted (chrome). */
   --scale-mid: #8b909c;
   /* The ruler figure's own hue pair, one per side (issue #91): kept in step with format.js's
@@ -54,19 +58,21 @@
   --cmp-a: #7fa8ff;
   --cmp-b: #ff9d6b;
 
-  --sans: 'Instrument Sans', system-ui, sans-serif;
-  --display: 'League Spartan', 'Instrument Sans', system-ui, sans-serif;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --display: 'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* The ramp. Nine steps, ratio around 1.25, the top three fluid so a 375px phone and a 1440px
-     desktop read the same ranks rather than the same pixels. --t-micro is the floor and exists
-     for SVG labels only; nothing on this site is smaller. */
-  --t-mega: clamp(38px, 5.6vw, 68px);
-  --t-xl: clamp(26px, 3vw, 38px);
-  --t-lg: clamp(20px, 2.2vw, 26px);
-  --t-md: 19px;
-  --t-base: 16px;
-  --t-sm: 15px;
-  --t-xs: 14px;
+     desktop read the same ranks rather than the same pixels. The condensed display face is
+     narrow, so the top steps run smaller than a wide face would need. --t-micro is the floor and
+     exists for SVG labels only; nothing on this site is smaller. */
+  --t-mega: clamp(34px, 5vw, 58px);
+  --t-xl: clamp(24px, 2.8vw, 34px);
+  --t-lg: clamp(18px, 2vw, 23px);
+  --t-md: 17px;
+  --t-base: 15px;
+  --t-sm: 14px;
+  --t-xs: 13px;
   --t-2xs: 12px;
   --t-micro: 11px;
 
@@ -78,11 +84,11 @@
   --lh-body: 1.6;
   --lh-chip: 2;
 
-  /* League Spartan is drawn wide; big sizes need it pulled in, small labels need it pushed out. */
-  --tr-mega: -.035em;
-  --tr-xl: -.025em;
-  --tr-lg: -.015em;
-  --tr-label: .14em;
+  /* The condensed face is already tight; capitals need a little air, and mono labels need none. */
+  --tr-mega: -.02em;
+  --tr-xl: -.01em;
+  --tr-lg: 0;
+  --tr-label: .04em;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -103,7 +109,9 @@
 
 * { box-sizing: border-box; }
 html { overflow-x: hidden; scroll-behavior: smooth; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 400 var(--t-base)/var(--lh-body) var(--sans); overflow-x: hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* The dot grid is the bench the figures sit on. It lives on the page, never on a panel, so a
+   figure's own ground stays flat behind its marks. */
+body { margin: 0; background: var(--bg) radial-gradient(var(--line) .7px, transparent .8px) 0 0 / 16px 16px; color: var(--ink); font: 400 var(--t-base)/var(--lh-body) var(--sans); overflow-x: hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input, select { font: inherit; color: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
@@ -122,10 +130,10 @@ a:focus-visible { color: var(--accent); text-decoration: underline; text-decorat
 /* ---------- the elements, one fixed style each ---------- */
 /* Headings are the display family without exception, and they carry no colour of their own: a
    heading that needed --accent to be found is a heading in the wrong place. */
-h1, h2, h3, h4 { margin: 0; font-family: var(--display); color: var(--ink); text-wrap: balance; }
+h1, h2, h3, h4 { margin: 0; font-family: var(--display); color: var(--ink); text-wrap: balance; text-transform: uppercase; }
 h1 { font-size: var(--t-mega); font-weight: 700; line-height: var(--lh-tight); letter-spacing: var(--tr-mega); }
 h2 { font-size: var(--t-xl); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-xl); }
-h3 { font-size: var(--t-lg); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); }
+h3 { font-size: var(--t-lg); font-weight: 600; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); }
 h4 { font-size: var(--t-md); font-weight: 600; line-height: var(--lh-mid); }
 
 p, li { margin: 0; font-size: var(--t-base); line-height: var(--lh-body); }
@@ -140,45 +148,49 @@ b { font-weight: 600; color: var(--ink); }
 em { font-style: italic; }
 a { color: var(--accent); }
 small { font-size: var(--t-xs); color: var(--muted); }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; color: var(--ink); }
+code { font-family: var(--mono); font-size: .92em; color: var(--ink); }
 
-/* An eyebrow is the smallest type on the site and the only one that shouts in capitals. It never
-   stands alone: it names whatever sits directly under it, and it is what replaces a rule line. */
-.eyebrow, .stat dt { font-family: var(--display); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; text-transform: uppercase; letter-spacing: var(--tr-label); color: var(--muted); }
+/* An eyebrow is the smallest type on the site, set in mono like every other label. It never
+   stands alone: it names whatever sits directly under it, and it is what replaces a rule line.
+   The "//" is the label marker of the whole site, in the accent, so an eyebrow is found by its
+   mark and never by its colour. */
+.eyebrow, .stat dt { font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); color: var(--muted); }
+.eyebrow::before { content: '// '; color: var(--accent); }
 
 /* Supporting prose. Three ranks below body, each one step smaller and all of them muted, so the
    eye can skip every one of them and still get the page. */
-.lede { max-width: var(--measure-lede); font-size: var(--t-lg); line-height: var(--lh-mid); color: var(--muted); text-wrap: pretty; letter-spacing: var(--tr-lg); }
-.figure-sub, .chapter-intro { font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: var(--measure); text-wrap: pretty; }
+.lede { max-width: var(--measure-lede); font-family: var(--mono); font-size: var(--t-base); line-height: var(--lh-body); color: var(--muted); text-wrap: pretty; }
+.figure-sub, .chapter-intro { font-family: var(--mono); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: var(--measure); text-wrap: pretty; }
 .note, .meta, .empty-hint { font-size: var(--t-xs); line-height: var(--lh-body); color: var(--muted); }
 
 /* ---------- definition pairs ---------- */
 /* dt names, dd answers. The default is a real definition list: the term in display type, its
    explanation in sans underneath. */
 dl { margin: 0; }
-dt { font-family: var(--display); font-size: var(--t-md); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); color: var(--ink); }
+dt { font-family: var(--display); font-size: var(--t-md); font-weight: 600; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); text-transform: uppercase; color: var(--ink); }
 dd { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); }
 
 /* .stat is the one named exception, and it inverts the pair: a measurement is a number with a
    caption, not a term with a definition. So the dd becomes the headline and the dt drops to
    eyebrow rank underneath it -- same two elements, one variant with a name to learn. */
 .stat > div { display: flex; flex-direction: column-reverse; gap: var(--space-1); }
-.stat dd { font-family: var(--display); font-size: var(--t-lg); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat dd { font-family: var(--mono); font-size: var(--t-lg); font-weight: 500; line-height: var(--lh-snug); letter-spacing: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat dt { color: var(--accent); }
 
 /* ---------- header ---------- */
 .top { display: flex; align-items: center; gap: var(--space-5); padding: 18px var(--gutter); }
 /* Margin, not gap: gap would also push the accent dot away from the word. */
 /* The mark shares its rank with an h3: the site's name is a peer of a block title, under the
    page's own h1, which is the point of having an h1 at all. */
-.brand { display: inline-flex; align-items: center; font-family: var(--display); font-size: var(--t-lg); font-weight: 800; line-height: 1; letter-spacing: var(--tr-lg); color: var(--ink); text-decoration: none; flex: 0 0 auto; }
-.brand img { width: 32px; height: 32px; margin-right: var(--space-3); flex: 0 0 auto; }
-.brand span { color: var(--accent); }
+.brand { display: inline-flex; align-items: center; font-family: var(--mono); font-size: var(--t-base); font-weight: 600; line-height: 1; color: var(--accent); text-decoration: none; flex: 0 0 auto; }
+.brand img { width: 28px; height: 28px; margin-right: var(--space-3); flex: 0 0 auto; }
+.brand span { color: var(--ink); }
 .person-pick:empty { display: none; }
-.top nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-5); font-size: var(--t-sm); }
+.top nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-5); font-family: var(--mono); font-size: var(--t-sm); }
 .top nav a { color: var(--muted); text-decoration: none; }
 .top nav a:hover { color: var(--ink); }
 
-.skip { position: absolute; left: var(--gutter); top: 8px; z-index: 8; padding: var(--space-2) var(--space-3); background: var(--accent); color: var(--accent-ink); font-size: var(--t-sm); font-weight: 600; text-decoration: none; border-radius: 6px; transform: translateY(-120%); }
+.skip { position: absolute; left: var(--gutter); top: 8px; z-index: 8; padding: var(--space-2) var(--space-3); background: var(--accent); color: var(--accent-ink); font-size: var(--t-sm); font-weight: 600; text-decoration: none; border-radius: 2px; transform: translateY(-120%); }
 .skip:focus { transform: none; }
 
 main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) var(--space-8); }
@@ -193,7 +205,7 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
 /* ---------- the sentence that controls each figure's own recorte ---------- */
 /* Figure 1's stats badge, next to its title -- same spot and voice as #testimonyLabel next to
    #testimonyTitle: no colour of its own, so .figure-title h2 b's accent wins on both. */
-#atlasStats { font-size: var(--t-xs); font-weight: 500; white-space: nowrap; margin-left: var(--space-2); letter-spacing: 0; }
+#atlasStats { font-size: var(--t-sm); font-weight: 500; white-space: nowrap; margin-left: var(--space-2); letter-spacing: 0; }
 /* Each figure's sentence lives inside its own .figure-head, which is a two-column grid
    (title | subtitle); both figure heads wrap their sentence in the same .sentence div, so one
    rule spans it across both columns to read as its own row underneath them. */
@@ -204,19 +216,19 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
    control is a chip on the line -- a filled box with a chevron reads as "this changes", where a
    bare underline read as a link. A <select> ignores line-height for its own box, so the chip
    gets an explicit height; the sentence's line-height is what keeps daylight between lines. */
-.sentence-line { font-size: var(--t-lg); line-height: var(--lh-chip); font-weight: 500; max-width: 1120px; letter-spacing: var(--tr-lg); }
+.sentence-line { font-family: var(--mono); font-size: var(--t-base); line-height: var(--lh-chip); font-weight: 400; max-width: 1120px; }
 .pick { display: inline-block; position: relative; max-width: 100%; vertical-align: baseline; margin: 0; }
 /* The chevron is drawn in CSS so it follows --accent; a data-URI SVG cannot read a token. */
 .pick::after { content: ''; position: absolute; right: .55em; top: 50%; width: .32em; height: .32em; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
-.pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 0; border-radius: .4em; padding: 0 1.25em 0 .5em; height: 1.55em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.55em; font-weight: 600; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s; }
-.pick select:hover { background-color: var(--line); color: var(--ink); }
+.pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 1px solid var(--line); border-radius: 2px; padding: 0 1.25em 0 .5em; height: 1.6em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.5em; font-weight: 500; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s, border-color .12s; }
+.pick select:hover { background-color: var(--line); border-color: var(--muted); color: var(--ink); }
 select option { background: var(--panel); color: var(--ink); font-size: var(--t-base); }
 .status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); min-height: 22px; }
-.status { font-size: var(--t-sm); color: var(--muted); }
+.status { font-family: var(--mono); font-size: var(--t-sm); color: var(--muted); }
 .status.error { color: var(--danger); }
 
 /* ---------- figures: one card per graph ---------- */
-.figure { margin-top: var(--space-7); padding: var(--space-5) var(--space-5) 18px; border-radius: 12px; background: var(--panel); }
+.figure { margin-top: var(--space-7); padding: var(--space-5) var(--space-5) 18px; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); }
 .figure-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-4) var(--space-7); align-items: end; padding-bottom: var(--space-5); margin-bottom: var(--space-5); }
 .figure-head > .figure-key { grid-column: 1 / -1; margin-top: var(--space-2); }
 
@@ -225,9 +237,9 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    itself -- the same ramps the marks use. */
 .figure-key { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-6); }
 .figure-key > div { min-width: 12ch; max-width: 28ch; }
-.figure-key dt { display: flex; align-items: center; font-family: var(--display); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--ink); }
-.figure-key dd { margin-top: var(--space-1); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: none; }
-.key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
+.figure-key dt { display: flex; align-items: center; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: none; color: var(--accent); }
+.figure-key dd { margin-top: var(--space-1); font-family: var(--mono); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: none; }
+.key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
 .figure-title h2 b { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: inherit; }
@@ -248,26 +260,26 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
 .search { flex: 1 1 220px; }
-.search input { width: 100%; background: var(--bg); border: 0; border-radius: 6px; min-height: 40px; padding: var(--space-2) var(--space-3); font-size: var(--t-sm); }
+.search input { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 2px; min-height: 40px; padding: var(--space-2) var(--space-3); font-family: var(--mono); font-size: var(--t-sm); }
 .search input::placeholder { color: var(--muted); }
-.segment { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border-radius: 999px; padding: 3px; background: var(--bg); }
-.segment button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 7px var(--space-4); font-size: var(--t-xs); }
+.segment { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--line); border-radius: 2px; padding: 2px; background: var(--bg); }
+.segment button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); border-radius: 2px; padding: 6px var(--space-4); font-family: var(--mono); font-size: var(--t-xs); }
 .segment button[aria-pressed="true"], .segment button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .zoom { display: flex; align-items: center; gap: 6px; }
 .zoom button { width: 34px; height: 34px; padding: 0; font-size: var(--t-md); }
 .zoom #zoomReset { width: 56px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; }
-.quiet-button { background: var(--soft); border: 0; padding: 7px var(--space-3); border-radius: 6px; color: var(--muted); font-size: var(--t-xs); white-space: nowrap; }
+.quiet-button { background: var(--soft); border: 0; padding: 7px var(--space-3); border-radius: 2px; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .quiet-button:hover { color: var(--ink); background: var(--line); }
 .quiet-button.toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
 .mobile-hint { display: none; margin: var(--space-2) 0; color: var(--muted); font-size: var(--t-xs); }
-.search-note { color: var(--accent); font-size: var(--t-xs); padding-top: var(--space-2); min-height: 24px; }
+.search-note { color: var(--accent); font-family: var(--mono); font-size: var(--t-xs); padding-top: var(--space-2); min-height: 24px; }
 
 .viewport { overflow: auto; min-height: 360px; scrollbar-color: var(--line) var(--bg); }
 .map-stage { width: fit-content; margin: auto; }
 .map-svg { display: block; width: var(--map-width, auto); height: auto; }
 /* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
    point of the graph. The family and weight are still fixed here, like everywhere else. */
-.map-svg .word { font-family: var(--sans); font-weight: 500; fill: var(--wc); font-size: var(--size); }
+.map-svg .word { font-family: var(--mono); font-weight: 500; fill: var(--wc); font-size: var(--size); }
 /* --wc is the word's own colour, resolved once per state on the group so the hit box can borrow
    it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
    nearly transparent, so it says "this one" without competing with what the colour means. */
@@ -297,7 +309,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    word, or the mask would go blank exactly on the word the reader is looking at. */
 .map-svg.is-masked .word-button, .map-svg.is-masked .word-button.is-neighbor { --wc: var(--mask, var(--muted)); }
 .map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
-.mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 4px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--hostile), color-mix(in srgb, var(--scale-mid) 50%, transparent), var(--favor)); }
+.mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--hostile), color-mix(in srgb, var(--scale-mid) 50%, transparent), var(--favor)); }
 .underline { stroke: var(--wc, var(--accent)); stroke-width: 1.5; opacity: 0; }
 .word-button.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
@@ -306,14 +318,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .center-label { cursor: pointer; }
 .center-hit { fill: transparent; }
 .center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
-.micro { fill: var(--muted); font-family: var(--display); font-size: var(--t-micro); font-weight: 600; letter-spacing: var(--tr-label); text-transform: uppercase; }
-.center-note { fill: var(--muted); font-family: var(--sans); font-size: var(--t-xs); }
+.micro { fill: var(--muted); font-family: var(--mono); font-size: var(--t-micro); font-weight: 500; letter-spacing: var(--tr-label); }
+.center-note { fill: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
-.boundary { fill: none; stroke: var(--line); stroke-width: 1; }
+.boundary { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
 .halo-in { stop-color: var(--accent); stop-opacity: .045; }
 .halo-out { stop-color: var(--accent); stop-opacity: 0; }
 
-.legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; color: var(--muted); font-size: var(--t-xs); }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 .type-scale { display: inline-flex; align-items: baseline; gap: 5px; margin-right: var(--space-2); color: var(--ink); }
 .type-scale span:first-child { font-size: var(--t-2xs); }
 .type-scale span:last-child { font-size: var(--t-lg); }
@@ -321,7 +333,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 
 .strip { margin: 0; padding: 6px 0 10px; }
 .strip-mean-row { position: relative; height: 22px; margin-top: var(--space-3); }
-.strip-mean { position: absolute; left: clamp(0px, var(--pos, 50%), 100%); transform: translateX(clamp(-100%, -50%, 0%)); font-size: var(--t-2xs); color: var(--accent); white-space: nowrap; }
+.strip-mean { position: absolute; left: clamp(0px, var(--pos, 50%), 100%); transform: translateX(clamp(-100%, -50%, 0%)); font-family: var(--mono); font-size: var(--t-2xs); color: var(--accent); white-space: nowrap; }
 .strip-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .strip-axis { stroke: var(--line); stroke-width: 2; }
 .strip-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
@@ -337,7 +349,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
 .strip-dot.is-active .dot-face { fill-opacity: 1; }
 .strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
-.strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
+.strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 
 .overflow { padding: 0 0 var(--space-5); }
@@ -350,20 +362,20 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* Each card gets a ground of its own: the metadata line and the word under it are one thing,
    and with no card behind them a reader on a three-column grid ties the line to the wrong word.
    A very light wash rather than a border, so eighteen of these do not read as a table. */
-.column-card { border: 0; padding: var(--space-3) var(--space-4); border-radius: 10px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.column-card { border: 0; padding: var(--space-3) var(--space-4); border-radius: 2px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 /* Same rule as the map: the ground behind the card carries hover and pick, in the card's own
    colour, and the word on it never gets repainted. */
 .column-card:hover { background: color-mix(in srgb, var(--wc-soft) 12%, var(--soft)); }
 .column-card.is-selected { background: color-mix(in srgb, var(--wc-soft) 24%, var(--soft)); }
 /* The word carries the card, so it sits at h3 rank in sans -- the list is the map's other face
    and the map writes its words in sans too. */
-.column-card strong { display: block; font-size: var(--t-lg); font-weight: 500; letter-spacing: -.02em; line-height: var(--lh-snug); overflow-wrap: anywhere; margin-top: var(--space-1); }
-.column-card span { display: block; color: var(--muted); font-size: var(--t-xs); }
+.column-card strong { display: block; font-family: var(--mono); font-size: var(--t-lg); font-weight: 500; letter-spacing: 0; line-height: var(--lh-snug); overflow-wrap: anywhere; margin-top: var(--space-1); }
+.column-card span { display: block; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 .column-card.is-dim { opacity: .35; }
 /* The list is the map without its centre, so the person gets the head of it: full width, above
    the words, saying the same two things the centre of the map says. */
-.column-person { grid-column: 1 / -1; padding: var(--space-3) var(--space-4); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--soft)); cursor: pointer; }
-.column-person span { display: block; font-family: var(--display); font-size: var(--t-2xs); font-weight: 500; text-transform: uppercase; letter-spacing: var(--tr-label); color: var(--muted); }
+.column-person { grid-column: 1 / -1; padding: var(--space-3) var(--space-4); border-radius: 2px; background: color-mix(in srgb, var(--accent) 7%, var(--soft)); cursor: pointer; }
+.column-person span { display: block; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); color: var(--muted); }
 .column-person strong { display: block; margin-top: var(--space-1); font-family: var(--display); font-size: var(--t-lg); font-weight: 700; color: var(--accent); letter-spacing: var(--tr-lg); overflow-wrap: anywhere; }
 .column-person:hover { background: color-mix(in srgb, var(--accent) 13%, var(--soft)); }
 .column-card strong { color: var(--wc); }
@@ -372,11 +384,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* ---------- the lists under the strip ---------- */
 .outlets { min-width: 0; padding-top: var(--space-1); }
 .outlets > .eyebrow { display: flex; align-items: center; gap: var(--space-2); padding: 0 0 6px; }
-.outlets .eyebrow b { color: var(--accent); text-transform: none; letter-spacing: 0; font-family: var(--sans); font-size: var(--t-sm); font-weight: 500; overflow-wrap: anywhere; }
+.outlets .eyebrow b { color: var(--accent); letter-spacing: 0; font-size: var(--t-sm); font-weight: 500; overflow-wrap: anywhere; }
 /* The one outlet list: as many columns as the figure is wide, so 80 outlets are a scrollable
    block of a few hundred pixels rather than a screen and a half of single-file rows. */
 .outlet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 var(--space-6); max-height: 210px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-#outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: var(--space-4); font-size: var(--t-sm); color: var(--muted); }
+#outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: var(--space-4); font-family: var(--mono); font-size: var(--t-sm); color: var(--muted); }
 .outlet { transition: background-color .16s ease-out, color .16s ease-out; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: var(--space-1) 0; font-size: var(--t-xs); color: inherit; }
 .outlet:hover { color: var(--accent); }
 /* The focused outlet sits on a wash of its own avaliação colour, the same one its chip on the
@@ -385,10 +397,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .outlet.is-active { color: var(--ink); background: color-mix(in srgb, var(--tone, var(--muted)) 18%, transparent); }
 .outlet .d { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outlet .n { color: var(--muted); font-variant-numeric: tabular-nums; }
-.outlet .t { min-width: 40px; text-align: center; border-radius: 4px; padding: 2px 5px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
+.outlet .t { min-width: 40px; text-align: center; border-radius: 2px; padding: 2px 5px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
 .outlet .t:empty { visibility: hidden; }
 .outlets .note { margin: var(--space-3) 0 0; }
-.testimony-lists { min-width: 0; font-size: var(--t-sm); color: var(--muted); }
+.testimony-lists { min-width: 0; font-family: var(--mono); font-size: var(--t-sm); color: var(--muted); }
 
 /* Figure 2's answer: one stat pair, the number at h2 rank because it is what the whole figure is
    for, and its name in eyebrow type underneath. The reading in words follows as a caption. */
@@ -403,11 +415,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    four numbers, and the strip above already carries the shape of the distribution. Inside a chip
    the pair goes back upright -- name first, number after -- because the row is read sideways. */
 .source-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: 2px 0 var(--space-1); }
-.source-chip { display: inline-flex; align-items: center; gap: var(--space-2); background: var(--soft); border-radius: 999px; padding: 5px 6px 5px var(--space-3); }
-.source-chip dt { font-family: var(--sans); font-size: var(--t-xs); font-weight: 600; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ink); }
-.source-chip dd { display: inline-flex; align-items: center; gap: var(--space-2); font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.source-chip { display: inline-flex; align-items: center; gap: var(--space-2); background: var(--soft); border: 1px solid var(--line); border-radius: 2px; padding: 4px 6px 4px var(--space-3); }
+.source-chip dt { font-family: var(--mono); font-size: var(--t-xs); font-weight: 500; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.source-chip dd { display: inline-flex; align-items: center; gap: var(--space-2); font-family: var(--mono); font-size: var(--t-xs); font-weight: 400; letter-spacing: 0; color: var(--muted); }
 .source-chip .n { font-variant-numeric: tabular-nums; }
-.source-chip .t { min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 6px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
+.source-chip .t { min-width: 40px; text-align: center; border-radius: 2px; padding: 2px 6px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
 .source-chip .t:empty { display: none; }
 
 /* ---------- the atlas inspector ---------- */
@@ -422,19 +434,18 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .score-highlight { color: var(--accent); font-weight: 600; }
 .empty-note { margin-top: var(--space-3); }
 .related { margin: var(--space-2) 0 var(--space-5); }
-.related button { width: 100%; border: 0; background: none; display: flex; align-items: center; gap: var(--space-3); text-align: left; padding: 10px 0; font-size: var(--t-md); }
+.related button { width: 100%; border: 0; background: none; display: flex; align-items: center; gap: var(--space-3); text-align: left; padding: 10px 0; font-family: var(--mono); font-size: var(--t-base); }
 .related button:hover span { color: var(--accent); }
 .related span { flex: 1; overflow-wrap: anywhere; }
 .related b { font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; font-size: var(--t-sm); }
-.docs-summary { margin: 0 0 6px; color: var(--muted); font-size: var(--t-xs); }
+.docs-summary { margin: 0 0 6px; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 /* ---------- the documents modal ---------- */
 /* Documents are fetched only when this opens (issue: the main page must never GET /docs on its
    own), and they scroll inside the dialog so a long text never grows the page. A dialog is its
    own document to a reader, so its title is an h2 and not a continuation of the page's ranks. */
-/* The ground is a little lighter at the top than at the bottom, which is what stops a card this
-   size from reading as a flat slab cut out of the page. No line anywhere: the split between the
-   head and the texts is space, like every other split on this site. */
-.docs-dialog { width: min(720px, calc(100vw - 32px)); max-height: min(85vh, 900px); margin: auto; padding: 0; border: 0; border-radius: 14px; background: linear-gradient(var(--soft), var(--panel) 120px); color: var(--ink); display: none; flex-direction: column; }
+/* A flat panel with the same hairline every figure carries: the card is one more instrument on
+   the bench, not a sheet lifted off it. The split between the head and the texts is space. */
+.docs-dialog { width: min(720px, calc(100vw - 32px)); max-height: min(85vh, 900px); margin: auto; padding: 0; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); color: var(--ink); display: none; flex-direction: column; }
 .docs-dialog[open] { display: flex; animation: card-in .18s ease-out; }
 .docs-dialog::backdrop { background: rgba(0, 0, 0, .62); }
 @keyframes card-in {
@@ -452,7 +463,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #docsClose { background: none; padding: 6px 0 6px var(--space-3); }
 #docsClose:hover { background: none; color: var(--ink); }
 /* Reached by keyboard it still has to say so; it says it the way every other control does. */
-#docsClose:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); border-radius: 6px; }
+#docsClose:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); border-radius: 2px; }
 /* Wide screens get the card, not the sheet: it floats over the figure, leaves the map readable
    behind it, stays open while the reader picks the next word, and is dragged by its own head.
    `left`/`top` arrive from the drag; until then the card sits where this rule puts it. */
@@ -473,11 +484,12 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .docs-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-5); }
 /* The column's own header, not the domain line each document carries. */
 .docs-side-name { margin-bottom: var(--space-2); color: var(--ink); }
+.doc .eyebrow, .docs-side-name { font-family: var(--mono); }
 .docs-dialog.is-floating.is-wide { width: min(660px, calc(100vw - 32px)); }
 @media (max-width: 560px) { .docs-columns { grid-template-columns: 1fr; } }
 .doc { padding: var(--space-3) 0; }
 .doc p { margin: 6px 0; color: var(--ink); font-size: var(--t-sm); }
-.doc a { font-size: var(--t-xs); }
+.doc a { font-family: var(--mono); font-size: var(--t-xs); }
 .empty { padding: 80px var(--space-5); text-align: center; color: var(--muted); font-size: var(--t-base); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
@@ -491,7 +503,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   display: block;
   background: color-mix(in srgb, var(--ink) 28%, var(--soft));
   fill: color-mix(in srgb, var(--ink) 36%, var(--soft));
-  border-radius: 6px;
+  border-radius: 2px;
 }
 .ghost-kicker { width: 9em; height: .7em; }
 .ghost-title { width: 10em; height: 1.35em; margin: 10px 0 18px; }
@@ -499,7 +511,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ghost-stat.is-xl { width: 2.4em; height: 1.6em; }
 .ghost-line { width: 36ch; max-width: 100%; height: .7em; margin: 0 0 var(--space-3); }
 .ghost-line.is-short { width: 22ch; }
-.ghost-chip { width: 8.5em; height: 1.5em; border-radius: 999px; }
+.ghost-chip { width: 8.5em; height: 1.5em; border-radius: 2px; }
 .ghost-name { width: 7em; height: .85em; }
 .ghost-doc-kicker { width: 6em; height: .65em; margin-bottom: 6px; }
 .ghost-doc-line { width: 100%; height: .7em; margin: 6px 0; }
@@ -517,14 +529,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* Same card language as the documents dialog, but this one is always a modal: it is a reading
    surface, not a companion to a pick. The figure's own .figure-key already taught the encoding;
    what lives here is the depth (PMI ladder, kikori's cut, the honesty notes). */
-.help-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(88vh, 900px); margin: auto; padding: 0; border: 0; border-radius: 14px; background: linear-gradient(var(--soft), var(--panel) 140px); color: var(--ink); display: none; flex-direction: column; }
+.help-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(88vh, 900px); margin: auto; padding: 0; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); color: var(--ink); display: none; flex-direction: column; }
 .help-dialog[open] { display: flex; animation: card-in .18s ease-out; }
-.help-dialog::backdrop { background: rgba(19, 18, 16, .72); }
+.help-dialog::backdrop { background: rgba(11, 14, 13, .74); }
 @media (prefers-reduced-motion: reduce) { .help-dialog[open] { animation: none; } }
 .help-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
 #helpClose { background: none; padding: 6px 0 6px var(--space-3); }
 #helpClose:hover { background: none; color: var(--ink); }
-#helpClose:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); border-radius: 6px; }
+#helpClose:focus-visible { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); border-radius: 2px; }
 .help-dialog-head h2 { font-size: var(--t-lg); margin-top: var(--space-1); }
 .help-body { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: var(--space-3) 22px var(--space-8); min-height: 120px; mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 36px), transparent); }
 .help-body > * { scroll-margin-top: var(--space-4); }
@@ -538,7 +550,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .help-body .figure-key { margin-top: var(--space-3); }
 .help-body .pmi-scale { margin-top: var(--space-4); }
 .help-body .pmi-scale + p { margin-top: var(--space-4); }
-.help-foot { margin-top: var(--space-7); padding-bottom: var(--space-3); font-size: var(--t-xs); color: var(--muted); max-width: none; }
+.help-foot { margin-top: var(--space-7); padding-bottom: var(--space-3); font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); max-width: none; }
 
 /* ---------- candidates ---------- */
 .candidate .samples { padding-left: var(--space-3); }
@@ -557,7 +569,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .chapter :where(h2, h3, h4):first-child { margin-top: 0; }
 .chapter :where(p, ol, ul, dl) { margin-top: var(--space-3); }
 .chapter :where(h2, h3, h4) + :where(p, ol, ul, dl) { margin-top: var(--space-2); }
-.chapter-nav { display: flex; flex-wrap: wrap; gap: var(--space-2) 22px; margin: var(--space-5) 0 var(--space-7); font-size: var(--t-sm); }
+.chapter-nav { display: flex; flex-wrap: wrap; gap: var(--space-2) 22px; margin: var(--space-5) 0 var(--space-7); font-family: var(--mono); font-size: var(--t-sm); }
 .chapter-nav a { color: var(--muted); text-decoration: none; padding-bottom: 2px; }
 .chapter-nav a:hover { color: var(--accent); }
 .chapter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-7) var(--space-7); align-items: start; }
@@ -571,14 +583,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* The PMI ladder is the site's one true definition list: a value, then what it means. It uses
    the default dt/dd style, which is the whole reason that default exists. */
 .pmi-scale { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin: var(--space-3) 0 var(--space-4); max-width: 440px; }
-.pmi-scale > div { background: var(--panel); border-radius: 6px; padding: 10px var(--space-3); }
-.pmi-scale dt { font-size: var(--t-lg); color: var(--accent); margin-bottom: var(--space-1); font-variant-numeric: tabular-nums; }
-.pmi-scale dd { font-size: var(--t-2xs); line-height: 1.35; }
-.chapter-foot { margin-top: var(--space-6); padding-top: var(--space-4); color: var(--muted); font-size: var(--t-xs); display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-5); max-width: none; }
+.pmi-scale > div { background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 10px var(--space-3); }
+.pmi-scale dt { font-family: var(--mono); font-size: var(--t-lg); font-weight: 500; color: var(--accent); margin-bottom: var(--space-1); font-variant-numeric: tabular-nums; }
+.pmi-scale dd { font-family: var(--mono); font-size: var(--t-2xs); line-height: 1.35; }
+.chapter-foot { margin-top: var(--space-6); padding-top: var(--space-4); color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-5); max-width: none; }
 
 /* ---------- figure 3: the ruler (compare two people, issue #91) ---------- */
 .ruler { margin: 18px 0 0; padding: 6px 0 10px; }
-.ruler-end-row { display: flex; justify-content: space-between; font-size: var(--t-xs); padding-bottom: var(--space-1); }
+.ruler-end-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); padding-bottom: var(--space-1); }
 .ruler-end { font-weight: 600; overflow-wrap: anywhere; }
 .ruler-end.cmp-a { color: var(--cmp-a); }
 .ruler-end.cmp-b { color: var(--cmp-b); }
@@ -590,7 +602,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    the word on hover or on a pick would have hidden the one thing this figure draws. */
 .ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .ruler-glow, .ruler-hit { fill: transparent; }
-.ruler-text { font-family: var(--sans); font-weight: 600; font-size: var(--size); fill: var(--wc); }
+.ruler-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
 .ruler-word:hover .ruler-glow, .ruler-word:focus-visible .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
 .ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .ruler-word.is-selected .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
@@ -600,20 +612,20 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }
 .ruler-overflow .quiet-button:hover { color: var(--ink); }
 .ruler-overflow .quiet-button.is-selected { color: var(--cmp, var(--ink)); background: color-mix(in srgb, var(--cmp, var(--muted)) 22%, var(--soft)); font-weight: 600; }
-.ruler-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-size: var(--t-xs); color: var(--muted); }
+.ruler-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .ruler .note { margin-top: var(--space-3); }
 /* The detail line: the word at h4 rank because it is the subject of the line, then one stat pair
    per person. Both sides keep the same shape whether the number is real or missing. */
 .detail { margin: 18px 0 0; min-height: 26px; }
-.detail .term { display: block; font-family: var(--display); font-size: var(--t-md); font-weight: 700; line-height: var(--lh-mid); letter-spacing: var(--tr-lg); color: var(--ink); }
+.detail .term { display: block; font-family: var(--mono); font-size: var(--t-md); font-weight: 500; line-height: var(--lh-mid); color: var(--ink); }
 .detail-sides { display: flex; flex-wrap: wrap; gap: var(--space-1) 22px; margin-top: var(--space-1); }
 .detail-sides > div { min-width: 0; }
-.detail-sides dt { font-family: var(--sans); font-size: var(--t-xs); font-weight: 600; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ink); overflow-wrap: anywhere; }
-.detail-sides dd { font-size: var(--t-xs); color: var(--muted); }
+.detail-sides dt { font-family: var(--mono); font-size: var(--t-xs); font-weight: 500; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ink); overflow-wrap: anywhere; }
+.detail-sides dd { font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .detail-sides dd b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .detail-sides dd.empty-hint { color: var(--muted); font-style: italic; }
 #compareHiddenNote { margin: 10px 0 0; }
-#compareA, #compareB { font-family: var(--display); }
+#compareA, #compareB { font-family: var(--mono); }
 
 /* ---------- the pet ---------- */
 /* The one raster on a site that otherwise draws every limit with type. It is allowed exactly

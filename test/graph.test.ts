@@ -671,11 +671,13 @@ describe('risingFor (issue #3)', () => {
 
   // Issue #108: 'theme' left the recognized kind set, so a term keyed by literal kind='theme'
   // now matches nothing, exactly like any other kind no doc_terms row ever carries.
-  it('kind=theme behaves exactly as any other unrecognized kind token: filtered to nothing', async () => {
+  it('kind=theme behaves exactly as any other unrecognized kind token: filtered to nothing, but about is untouched', async () => {
     const theme = await risingFor(lula, { ...risingBase, kind: 'theme', days: 2000, baseline: 2000 })
     const bogus = await risingFor(lula, { ...risingBase, kind: 'bogus', days: 2000, baseline: 2000 })
     assert.deepEqual(theme.terms, [])
     assert.deepEqual(bogus.terms, [])
+    assert.ok(theme.about.recent > 0, 'about must still count docs even when kind matches no term')
+    assert.deepEqual(theme.about, bogus.about)
   })
 
   it('AC10: returns an empty terms array for a person without docs', async () => {

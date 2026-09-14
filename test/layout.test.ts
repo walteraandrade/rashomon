@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, centerLabel, pack, packPass, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, wrapLines } from '../src/ui/layout.js'
+import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, centerLabel, pack, packPass, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
 
@@ -333,6 +333,53 @@ describe('swarm / swarmBy / rulerLayout: one beeswarm skeleton, two shapes (issu
     const { items } = rulerTerms(corpus(), 'count')
     const once = rulerLayout(metrics, items, 860)
     const twice = rulerLayout(metrics, items, 860)
+    assert.deepEqual(once.words, twice.words)
+    assert.deepEqual(once.overflow, twice.overflow)
+    assert.equal(once.height, twice.height)
+  })
+})
+
+describe('weekLayout (issue #147): one column per day, built on swarmBy, same overflow contract as rulerLayout', () => {
+  const term = (t: string, count: number, kind = 'word') => ({ term: t, kind, count })
+
+  it('returns one column per day, in the order given', () => {
+    const days = [[term('reforma', 4)], [], [term('eleicao', 2), term('pauta', 5)]]
+    const columns = weekLayout(measure, days)
+    assert.equal(columns.length, 3)
+    assert.equal(columns[1].words.length, 0, 'an empty day is an empty column, not dropped')
+  })
+
+  it('every word in a day is either placed or listed as overflow, never lost', () => {
+    const day = Array.from({ length: 40 }, (_, i) => term(`palavradodiaaaaaaaaaaaaaaaaaa${i}`, 40 - i))
+    const [column] = weekLayout(measure, [day])
+    assert.ok(column.overflow.length > 0, 'this many words cannot fit one column')
+    assert.equal(column.words.length + column.overflow.length, day.length)
+    for (const w of column.words) assert.ok(w.size >= WEEK_SIZE_MIN, `${w.term} at ${w.size}px is under the floor`)
+    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20, 'the column trades overflow for height, not an unbounded column')
+  })
+
+  it('two placed words in the same day never overlap vertically', () => {
+    const day = [term('reforma', 10), term('pauta', 8), term('eleicao', 6), term('governo', 4)]
+    const [column] = weekLayout(measure, [day])
+    for (let i = 0; i < column.words.length; i++)
+      for (let j = i + 1; j < column.words.length; j++) {
+        const a = column.words[i]
+        const b = column.words[j]
+        assert.ok(Math.abs(a.y - b.y) >= (a.h + b.h) / 2 - 1e-6, `${a.term} and ${b.term} overlap vertically`)
+      }
+  })
+
+  it('the loudest word of the day sizes larger than the quietest', () => {
+    const [column] = weekLayout(measure, [[term('grande', 20), term('pequena', 1)]])
+    const big = column.words.find((w) => w.term === 'grande')!
+    const small = column.words.find((w) => w.term === 'pequena')!
+    assert.ok(big.size > small.size)
+  })
+
+  it('is deterministic: the same day packs to the same picture', () => {
+    const day = [term('reforma', 10), term('pauta', 8), term('eleicao', 6)]
+    const once = weekLayout(measure, [day])[0]
+    const twice = weekLayout(measure, [day])[0]
     assert.deepEqual(once.words, twice.words)
     assert.deepEqual(once.overflow, twice.overflow)
     assert.equal(once.height, twice.height)

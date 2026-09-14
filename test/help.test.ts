@@ -116,6 +116,18 @@ describe('help.ts: como-ler.html clicks stay on the atlas', () => {
     })
   })
 
+  it('issue #147: a plain click on como-ler.html#semana opens the dialog at figure 5\'s section', () => {
+    withHelpDom(({ dialog, listeners, scrolled }) => {
+      mountHelp()
+      const click = listeners.find((l) => l.type === 'click')
+      assert.ok(click, 'mountHelp listens on document')
+      const event = fire(click.fn, 'como-ler.html#semana')
+      assert.equal(event.defaultPrevented, true)
+      assert.equal(dialog.open, true)
+      assert.deepEqual(scrolled, ['help-semana'], 'semana must resolve, not fall through to the top of the dialog')
+    })
+  })
+
   it('modifier-click, target=_blank and data-leave still go to the page', () => {
     withHelpDom(({ dialog, listeners }) => {
       mountHelp()

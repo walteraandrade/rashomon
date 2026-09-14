@@ -52,11 +52,14 @@ const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'da
 // data-kind), unlike the single-attribute stubs above, so onPick(term, kind) reads both off
 // one click. Since issue #99 a mark is either a <g> holding the word or, for a word the strip
 // could not fit, a <button> in the overflow list; both are wired by the same painter loop and
-// both must be reachable here, or a criterion about the list would pass vacuously.
+// both must be reachable here, or a criterion about the list would pass vacuously. Figure 5's
+// marks (issue #147) carry a third attribute, data-day, since a word there belongs to one
+// calendar day; captured into dataset.day when present, left off (as the other figures' marks
+// are) otherwise.
 const dataTermStubs = (html: string) =>
-  [...html.matchAll(/<(?:g|button)[^>]*\bdata-term="([^"]*)"[^>]*\bdata-kind="([^"]*)"[^>]*>/g)].map(([, term, kind]) => {
+  [...html.matchAll(/<(?:g|button)[^>]*\bdata-term="([^"]*)"[^>]*\bdata-kind="([^"]*)"(?:[^>]*\bdata-day="([^"]*)")?[^>]*>/g)].map(([, term, kind, day]) => {
     const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
-    stub.dataset = { term, kind }
+    stub.dataset = day === undefined ? { term, kind } : { term, kind, day }
     return stub
   })
 
@@ -317,7 +320,22 @@ const risingIds = () => ({
   risingAbout: new FakeBox('risingAbout'),
 })
 
-export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds> & ReturnType<typeof risingIds>
+// Figure 5 (issue #147): its own person/source/limit selects, the chart host and its note. No
+// days control — the figure always sends days=7.
+const weekIds = () => ({
+  week: new FakeBox('week'),
+  weekPerson: new FakeSelect('weekPerson'),
+  weekSource: new FakeSelect('weekSource'),
+  weekLimit: new FakeSelect('weekLimit', [
+    { value: '5', text: '5' },
+    { value: '8', text: '8', selected: true },
+    { value: '12', text: '12' },
+  ]),
+  weekChart: new FakeBox('weekChart'),
+  weekNote: new FakeBox('weekNote'),
+})
+
+export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds> & ReturnType<typeof risingIds> & ReturnType<typeof weekIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -326,7 +344,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // browser-shaped `Option` constructor, runs `fn`, then restores every global this touched —
 // same discipline as fake-dom.ts's withFakeDocument, extended to what a real mount() needs.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fakeDocument = {
     getElementById: (id: string) => (els as unknown as Record<string, unknown>)[id] ?? null,

@@ -1490,6 +1490,18 @@ describe('statements render the same text the routes run (issue #131)', () => {
     const q = queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 })
     assert.equal((q.text.match(/\$\d+/g) ?? []).length, q.values.length)
   })
+
+  // Issue #163: `kind || ':' || term = any($ids)` on doc_terms has no index, so the planner
+  // scanned the whole table in parallel and stalled on the Parallel Hash barrier whenever the
+  // instance was short of CPU. The ids are matched as (kind, term) pairs instead.
+  it('links matches its ids as (kind, term) pairs, never as a concatenated expression', () => {
+    const q = queries.links(lula, scope, ['word:a', 'phrase:primeiro turno', 'hashtag:lula2026'])
+    assert.ok(!/\|\| ':' \|\| \w+\.term\) = any/.test(q.text), 'no expression filter on doc_terms')
+    assert.deepEqual(q.values.slice(-2), [
+      ['word', 'phrase', 'hashtag'],
+      ['a', 'primeiro turno', 'lula2026'],
+    ])
+  })
 })
 
 // ---------------------------------------------------------------------------------------------

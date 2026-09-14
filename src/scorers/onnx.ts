@@ -65,9 +65,14 @@ const model = () => {
   return hit
 }
 
-export const onnx: Scorer = async (text, person) => {
+// The window is measured with the model's own tokenizer against the budget pairIds leaves for the
+// text, so the cut in pairIds is only a guard: the mention is inside whatever the text's density.
+export const onnx: Scorer = async (text, person, persons) => {
   if (!text.trim()) return null
   const m = await model()
-  const encoded = pairIds(m.ids(person.name), m.ids(scoredText(text, person.aliases)), m.contract.max_length, m.cls, m.sep)
+  const personIds = m.ids(person.name)
+  const budget = m.contract.max_length - personIds.length - 3
+  const window = scoredText(text, person, persons, (s) => m.ids(s).length <= budget)
+  const encoded = pairIds(personIds, m.ids(window), m.contract.max_length, m.cls, m.sep)
   return scoreFromLogits(await m.run(encoded), m.contract.labels)
 }

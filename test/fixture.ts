@@ -16,6 +16,9 @@ const day1 = daysAgo(1)
 
 export const collidingUri = 'https://example.org/40'
 
+const filler = (n: number, from = 0) => Array.from({ length: n }, (_, i) => `zzz${from + i}`).join(' ')
+export const longText = `Jair Bolsonaro ${filler(300)} Lula ${filler(120, 300)}`
+
 export const docs: RawDoc[] = [
   { source: 'gnews', uri: 'https://g1.globo.com/1', text: 'Lula anuncia reforma tributária #reforma', publishedAt: day1, domain: 'g1.globo.com' },
   { source: 'bluesky', uri: 'at://did:plc:x/post/2', text: 'Lula e Tarcísio disputam a eleição', publishedAt: daysAgo(2), domain: 'ana.bsky.social' },
@@ -184,6 +187,12 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://testcorp.example/52', text: 'Lula tambem fala sobre termdiluido no plano', publishedAt: daysAgo(3601), domain: 'testcorp.example' },
   { source: 'rss', uri: 'https://testcorp.example/53', text: 'Lula reitera termdiluido no debate', publishedAt: daysAgo(3602), domain: 'testcorp.example' },
   { source: 'rss', uri: 'https://testcorp.example/54', text: 'Lula insiste em termdiluido na entrevista', publishedAt: daysAgo(3603), domain: 'testcorp.example' },
+  // doc 55: the one text in the fixture longer than kikori's budget (issue #154), dated 3700+
+  // days ago, past every window any other suite opens (3603, docs 49-54). Its filler words carry
+  // a tripled letter, which contentWords drops, so it adds no term, no phrase and no candidate:
+  // only two doc_persons rows, bolsonaro from the head and lula from past the 2000th character,
+  // so export-docs can show each person her own window, neither of them the text.
+  { source: 'juridico', uri: 'https://noticias.stf.jus.br/55', text: longText, publishedAt: daysAgo(3700), domain: 'noticias.stf.jus.br' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

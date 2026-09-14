@@ -117,9 +117,14 @@ export const decodeEntities = (s: string) =>
 
 export const aliasRe = (alias: string) => new RegExp(`(?<![a-z0-9])${escapeRe(normalize(alias))}(?![a-z0-9])`, 'g')
 
-// Longer aliases claim their span first, so "Flávio Bolsonaro" cannot also feed the bare
-// "Bolsonaro" alias of another person. `exclude` entries are aliases owned by nobody.
-export const personsMentioned = (text: string, persons: Person[]): Person[] => {
+export type Span = { start: number; end: number }
+
+// Every alias span in a normalized text, keyed by person id. Longer aliases claim their span
+// first, so "Flávio Bolsonaro" cannot also feed the bare "Bolsonaro" alias of another person;
+// `exclude` entries claim spans that belong to nobody. Offsets index `norm`, which normalize()
+// may have made shorter than the original text. Tagging (personsMentioned) and the scorer's
+// window (src/scorers/window.ts) both find mentions here, so they can never disagree.
+export const aliasSpans = (norm: string, persons: Person[]): Map<string, Span[]> => {
   const aliases = persons
     .flatMap((person) => [
       ...person.aliases.map((alias) => ({ id: person.id, alias })),
@@ -127,14 +132,21 @@ export const personsMentioned = (text: string, persons: Person[]): Person[] => {
     ])
     .map(({ id, alias }) => ({ id, re: aliasRe(alias), length: normalize(alias).length }))
     .sort((a, b) => b.length - a.length)
-  const { found } = aliases.reduce(
-    ({ rest, found }, { id, re }) => {
-      const blanked = rest.replace(re, (m) => ' '.repeat(m.length))
-      return blanked === rest || !id ? { rest: blanked, found } : { rest: blanked, found: new Set([...found, id]) }
-    },
-    { rest: normalize(text), found: new Set<string>() },
+  const spans = new Map<string, Span[]>()
+  aliases.reduce(
+    (rest, { id, re }) =>
+      rest.replace(re, (m, offset: number) => {
+        if (id) spans.set(id, [...(spans.get(id) ?? []), { start: offset, end: offset + m.length }])
+        return ' '.repeat(m.length)
+      }),
+    norm,
   )
-  return persons.filter((p) => found.has(p.id))
+  return spans
+}
+
+export const personsMentioned = (text: string, persons: Person[]): Person[] => {
+  const spans = aliasSpans(normalize(text), persons)
+  return persons.filter((p) => spans.has(p.id))
 }
 
 export const mentions = (text: string, person: Person) => personsMentioned(text, [person]).length > 0

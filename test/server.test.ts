@@ -138,6 +138,18 @@ describe('GET /api/people/:id/testimony (issue #21)', () => {
     assert.deepEqual(await res.json(), { error: 'person not found' })
   })
 
+  it('wires the querystring through parseWeekQuery end to end', async () => {
+    const res = await app.request('/api/people/lula/week?days=30&limit=1&kind=hashtag&source=gnews')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Awaited<ReturnType<typeof weekFor>>
+    const person = { id: lula.id, name: lula.name, aliases: lula.aliases }
+    const expected = await weekFor(person, parseWeekQuery({ days: '30', limit: '1', kind: 'hashtag', source: 'gnews' }))
+    assert.deepEqual(JSON.parse(JSON.stringify(expected)), body)
+    // days=30 must reach the response's own `days` field, and 30 daily buckets back it up.
+    assert.equal(body.days, 30)
+    assert.equal(body.buckets.length, 30)
+  })
+
   it('AC2b: wires the querystring through parseTestimonyQuery end to end', async () => {
     const body = await testimony('?method=stub&min=2')
     // oglobo.globo.com/gdelt clears min=2 (scores 5, -1 -> avg 2, n=2), the same hand

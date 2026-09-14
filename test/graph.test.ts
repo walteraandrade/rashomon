@@ -2219,14 +2219,23 @@ describe('weekFor (issue #147)', () => {
   })
 
   // The cross-route invariant issue #150's click depends on: each bucket's about must equal
-  // /docs?day=<that bucket's BRT date>'s total, for the same scope.
+  // /docs?day=<that bucket's BRT date>'s total, for the same scope. lula's oldest bucket
+  // happens to be 0 (no about-doc there), which lets an off-by-one that empties the oldest
+  // bucket compare 0 === 0 unnoticed; tarcisio's oldest bucket is 1, so it is covered too.
   it("issue #150: each bucket's about equals docsFor's total at day=<that bucket's BRT date>", async () => {
-    const r = await weekFor(lula, weekBase)
-    for (const b of r.buckets) {
-      const day = brtYmd(b.start)
-      const { total } = await docsFor(lula, { ...docsBase, days: 7, day })
-      assert.equal(total, b.about, day)
+    for (const person of [lula, tarcisio]) {
+      const r = await weekFor(person, weekBase)
+      for (const b of r.buckets) {
+        const day = brtYmd(b.start)
+        const { total } = await docsFor(person, { ...docsBase, days: 7, day })
+        assert.equal(total, b.about, `${person.id} ${day}`)
+      }
     }
+  })
+
+  it("V2: tarcisio's oldest bucket (day 6) is not silently emptied by the scan lower bound", async () => {
+    const r = await weekFor(tarcisio, weekBase)
+    assert.equal(r.buckets[0].about, 1)
   })
 
   // AC5 in test/query.test.ts only proves parseWeekQuery *parses* source/domain/lean; this is
@@ -2301,6 +2310,33 @@ describe('weekFor: future-dated doc (issue #147)', () => {
     const folded = docs.find((d) => d.uri === futureDoc.uri)
     assert.ok(folded, 'the future-dated doc must be returned by day=today, not merely counted')
     assert.ok(brtYmd(folded!.published_at) > todayBrt(), 'the future doc\'s own BRT date stays in the future')
+  })
+})
+
+describe('weekFor: own-name phrase filter (issue #147)', () => {
+  before(async () => {
+    await seed()
+    // A capitalized run needs no lexicon rebuild (see test/reindex.test.ts): extract.ts finds
+    // "Jair Bolsonaro" as a phrase term straight from insertDoc, no `pnpm reindex` required.
+    await insertDoc(
+      { source: 'rss', uri: 'https://example.org/week-phrase-name', text: 'O deputado Jair Bolsonaro discursou hoje no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
+      persons,
+    )
+  })
+  after(reseed)
+
+  it('V3: sanity, the doc really carries a "jair bolsonaro" phrase term', async () => {
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase' and term = 'jair bolsonaro'`)
+    assert.equal(rows[0].n, 1)
+  })
+
+  it("V3: /week drops a phrase carrying bolsonaro's own name from his own week", async () => {
+    const r = await weekFor(bolsonaro, weekBase)
+    for (const b of r.buckets) for (const t of b.terms) {
+      assert.ok(!t.term.split(' ').includes('bolsonaro'), `${t.kind}:${t.term} names the person, it is not said about them`)
+    }
+    // The doc's other phrase-free words still surface today, proving the doc was scored at all.
+    assert.ok(r.buckets[6].about >= 1)
   })
 })
 

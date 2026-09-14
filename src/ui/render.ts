@@ -1083,23 +1083,30 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
 
 // Figure 5 (issue #147): one word mark per day, no colour hue (--wc stays --ink in atlas.css),
 // a data-day alongside data-term/data-kind since a rising-style word belongs to one day only.
+// A wrapped phrase is one tspan per line, centred on the box: the box is d.h tall, so line i
+// of n sits at (i - (n - 1) / 2) line heights from the middle.
 const weekWordMarkup = (
-  d: { term: string; kind: string; count: number; text: string; x: number; y: number; size: number; w: number; h: number },
+  d: { term: string; kind: string; count: number; text: string; lines: string[]; x: number; y: number; size: number; w: number; h: number },
   centerX: number,
   half: number,
   day: string,
   isSelected: boolean,
-) =>
-  html`<g class="week-word ${isSelected ? 'is-selected' : ''}" transform="translate(${centerX + d.x},${half + d.y})" style="--size:${d.size}px" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.count)} documentos</title><rect class="week-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="week-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="week-text" text-anchor="middle" dominant-baseline="central">${d.text}</text></g>`
+) => {
+  const lineHeight = d.h / d.lines.length
+  const text = d.lines.map((line, i) => html`<tspan x="0" y="${(i - (d.lines.length - 1) / 2) * lineHeight}">${line}</tspan>`)
+  return html`<g class="week-word ${isSelected ? 'is-selected' : ''}" transform="translate(${centerX + d.x},${half + d.y})" style="--size:${d.size}px" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.count)} documentos</title><rect class="week-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}" rx="8"/><rect class="week-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}" rx="5"/><text class="week-text" text-anchor="middle" dominant-baseline="central">${text}</text></g>`
+}
 
 // Size is the week's only encoding and a listed word has none, so the button carries the count.
+// One eyebrow line names the list; a 145px column turns a sentence into three lines, taller
+// than the words it explains, and the guide (como-ler.html#semana) already says why they are here.
 const weekOverflowMarkup = (
   overflow: { term: string; kind: string; count: number; text: string }[],
   day: string,
   selected: { day: string; term: string; kind: string } | null,
 ) =>
   overflow.length
-    ? html`<div class="week-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} nesta coluna. Todas continuam clicáveis aqui:</p>${overflow.map((d) => {
+    ? html`<div class="week-overflow"><p class="eyebrow">${overflow.length === 1 ? 'Não coube' : 'Não couberam'}</p>${overflow.map((d) => {
         const isSelected = !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
         return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia">${d.text}<b>${fmt(d.count)}</b></button>`
       })}</div>`

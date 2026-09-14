@@ -305,7 +305,7 @@ const WEEK_GAP_Y = 3
 const WEEK_PAD_X = 6
 
 export type WeekColumnLayout<T> = {
-  words: (T & { text: string; x: number; y: number; size: number; w: number; h: number })[]
+  words: (T & { text: string; lines: string[]; x: number; y: number; size: number; w: number; h: number })[]
   overflow: (T & { text: string; size: number })[]
   half: number
   height: number
@@ -313,10 +313,23 @@ export type WeekColumnLayout<T> = {
 
 const weekMaxWidth = (width: number) => Math.max(20, width - WEEK_PAD_X)
 
-// The largest size at which a word still fits the column, down to the floor.
+// A phrase breaks at its spaces, never inside a word: "supremo tribunal federal" is three lines
+// in a 145px column at a size that keeps "pronunciamento" out, since one word cannot break.
+// Greedy, first fit: a line takes words until the next one would not fit.
+const weekLines = (measure: Measure, text: string, size: number, maxWidth: number): string[] =>
+  text.split(' ').reduce<string[]>((lines, word) => {
+    const last = lines[lines.length - 1]
+    if (last !== undefined && measure(last + ' ' + word, size) + 6 <= maxWidth) lines[lines.length - 1] = last + ' ' + word
+    else lines.push(word)
+    return lines
+  }, [])
+
+const weekLineWidth = (measure: Measure, lines: string[], size: number) => Math.max(...lines.map((line) => measure(line, size))) + 6
+
+// The largest size at which a word still fits the column once wrapped, down to the floor.
 const fitSize = (measure: Measure, text: string, maxWidth: number) => {
   let size = WEEK_SIZE_MAX
-  while (size > WEEK_SIZE_MIN && measure(text, size) + 6 > maxWidth) size--
+  while (size > WEEK_SIZE_MIN && weekLineWidth(measure, weekLines(measure, text, size, maxWidth), size) > maxWidth) size--
   return size
 }
 
@@ -329,12 +342,13 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
     // never a smaller size; a word wider than the column at its ramp size goes to overflow.
     const size = Math.round(WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction)
     const text = label(t)
-    const w = measure(text, size) + 6
-    return { ...t, text, x: 0, size, w, h: Math.round(size * 1.24) }
+    const lines = weekLines(measure, text, size, maxWidth)
+    const w = weekLineWidth(measure, lines, size)
+    return { ...t, text, lines, x: 0, size, w, h: Math.round(size * 1.24) * lines.length }
   })
   const half = WEEK_MAX_HEIGHT / 2
-  // A word wider than the column at its nominal size is listed under the column, never drawn
-  // across the neighbouring day (#148 review, 1).
+  // A word wider than the column at its nominal size, even wrapped, is listed under the column,
+  // never drawn across the neighbouring day (#148 review, 1).
   const tooWide = sized.filter((d) => d.w > maxWidth)
   const { placed, overflow: unplaced } = swarmBy(sized.filter((d) => d.w <= maxWidth), {
     size: (d) => d.size,

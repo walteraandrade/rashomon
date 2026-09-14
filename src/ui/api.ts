@@ -99,6 +99,6 @@ export const loadWeek = (personId: string, queryParams: URLSearchParams, signal?
 
 // Figure 1's inspector sparkline: the last 7 rolling days for one word, independent of the
 // atlas's own days chip (issue #147 AC20).
-export const sparklineParams = (term: string, kind: string) => new URLSearchParams({ term, kind, days: '7', bucket: 'day' })
+export const sparklineParams = (term: string, kind: string, source = 'all') => new URLSearchParams({ term, kind, days: '7', bucket: 'day', source })
 
 export const loadTimeline = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/timeline?' + queryParams, signal)

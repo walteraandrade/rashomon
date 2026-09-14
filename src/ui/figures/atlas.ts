@@ -248,7 +248,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     sparkline = { state: 'loading' }
     paintCurrentInspector()
     api
-      .loadTimeline($('person').value, api.sparklineParams(term.term, term.kind), control.signal)
+      .loadTimeline($('person').value, api.sparklineParams(term.term, term.kind, $('source').value), control.signal)
       .then((rows: { bucket_start: string; count: number }[]) => {
         if (control.signal.aborted || getSelected() !== term.id) return
         sparkline = { state: 'ready', counts: rows.map((r) => r.count) }

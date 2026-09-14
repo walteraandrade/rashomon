@@ -294,7 +294,7 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
 // swarmBy's box clearance alone decides how far a word drifts from the loudest word that day.
 // No second packer -- same swarmBy rulerLayout already builds on.
 export const WEEK_SIZE_MIN = 12
-const WEEK_SIZE_MAX = 24
+const WEEK_SIZE_MAX = 30
 export const WEEK_MAX_HEIGHT = 240
 export const WEEK_COLUMN_WIDTH = 120
 const WEEK_GAP_X = 6
@@ -308,11 +308,8 @@ export type WeekColumnLayout<T> = {
   height: number
 }
 
-const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T> => {
+const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: number, lo: number, hi: number): WeekColumnLayout<T> => {
   if (!terms.length) return { words: [], overflow: [], half: 30, height: 60 }
-  const counts = terms.map((t) => t.count)
-  const lo = Math.min(...counts)
-  const hi = Math.max(...counts)
   const maxWidth = Math.max(20, width - WEEK_PAD_X)
   const sized = terms.map((t) => {
     const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
@@ -324,17 +321,27 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width = WE
     return { ...t, text, x: 0, size, w, h: Math.round(size * 1.24) }
   })
   const half = WEEK_MAX_HEIGHT / 2
-  const { placed, overflow } = swarmBy(sized, {
+  // A word still wider than the column at the floor size is listed under the column, never
+  // drawn across the neighbouring day (#148 review, 1).
+  const tooWide = sized.filter((d) => d.w > maxWidth)
+  const { placed, overflow: unplaced } = swarmBy(sized.filter((d) => d.w <= maxWidth), {
     size: (d) => d.size,
     reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + WEEK_GAP_X ? (p.h + item.h) / 2 + WEEK_GAP_Y : null),
     fits: (item, y) => Math.abs(y) + item.h / 2 <= half,
   })
   const reach = placed.reduce((m, p) => Math.max(m, Math.abs(p.y) + p.h / 2), 0)
   const used = Math.max(30, Math.ceil(reach) + 6)
+  const overflow = [...unplaced, ...tooWide].sort((a, b) => b.count - a.count)
   return { words: placed, overflow, half: used, height: used * 2 }
 }
 
 // A day's own column is independent of its neighbours (align-items: start in atlas.css), so
-// each gets its own height rather than one shared across the week.
-export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T>[] =>
-  days.map((terms) => weekColumn(measure, terms, width))
+// each gets its own height rather than one shared across the week. The size ramp, though, is
+// one for the whole week: "tamanho = documentos naquele dia" must let a 3-doc word on a quiet
+// day read smaller than a 300-doc word on a loud one.
+export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T>[] => {
+  const counts = days.flat().map((t) => t.count)
+  const lo = counts.length ? Math.min(...counts) : 0
+  const hi = counts.length ? Math.max(...counts) : 0
+  return days.map((terms) => weekColumn(measure, terms, width, lo, hi))
+}

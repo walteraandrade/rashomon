@@ -376,6 +376,14 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     assert.ok(big.size > small.size)
   })
 
+  it('sizes on one ramp for the whole week: a loud word on a loud day outsizes the loudest word of a quiet day (#148 review, 5)', () => {
+    const [quiet, loud] = weekLayout(measure, [[term('crise', 3), term('pauta', 1)], [term('lei', 300), term('governo', 100)]])
+    const quietTop = quiet.words.find((w) => w.term === 'crise')!
+    const loudTop = loud.words.find((w) => w.term === 'lei')!
+    assert.ok(loudTop.size > quietTop.size, `${loudTop.size}px should beat ${quietTop.size}px`)
+    assert.ok(loudTop.size >= 28, 'the loudest word of the week reaches the ruler ceiling, not a 24px cap')
+  })
+
   it('is deterministic: the same day packs to the same picture', () => {
     const day = [term('reforma', 10), term('pauta', 8), term('eleicao', 6)]
     const once = weekLayout(measure, [day])[0]
@@ -389,5 +397,13 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     const day = [term('presidente', 96), term('crise', 3)]
     const [column] = weekLayout(measure, [day], 120)
     for (const w of column.words) assert.ok(w.w <= 120 - 6 + 1e-6, `${w.term} at ${w.w}px overflows the 120px column`)
+  })
+
+  it('a word wider than a narrow column even at the floor size is listed under the column, never drawn across the next day (#148 review, 1)', () => {
+    const day = [term('flavio bolsonaro', 96), term('crise', 3)]
+    const [column] = weekLayout(measure, [day], 84)
+    assert.ok(!column.words.some((w) => w.term === 'flavio bolsonaro'), 'the phrase does not fit 84px at 12px and must not be placed')
+    assert.ok(column.overflow.some((w) => w.term === 'flavio bolsonaro'), 'it is still reachable in the overflow list')
+    for (const w of column.words) assert.ok(w.w <= 84 - 6 + 1e-6)
   })
 })

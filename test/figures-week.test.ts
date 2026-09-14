@@ -106,6 +106,39 @@ describe('issue #147: picking a word in a column opens the docs card with that c
       assert.equal(els.docsDialog.open, false, 'clicking the same word again releases the pick and closes the card')
     })
   })
+
+  it('the card kicker names the calendar day, so its count never contradicts the atlas silently (#148 review, 3)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/week': weekData([bucket({ start: '2026-09-08T03:00:00.000Z', terms: [{ term: 'reforma', kind: 'word', count: 4 }] })]) })
+      const { mount } = await import('../src/ui/figures/week.js')
+      mount(els.week, { people, initial: { person: 'lula' } })
+      await flush()
+      const mark = [...els.weekChart.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark!.fire('click')
+      await flush()
+      assert.match(String(els.docsKicker.textContent), /palavra/)
+      assert.match(String(els.docsKicker.textContent), /ter\.? 8/, 'the kicker carries the weekday and day of month of the column')
+    })
+  })
+
+  it('a control change on this figure never closes a card another figure opened (#148 review, 2)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/week': weekData([bucket()]), '/docs': { docs: [], total: 0 } })
+      const docsCard = await import('../src/ui/docs-card.js')
+      const { mount } = await import('../src/ui/figures/week.js')
+      mount(els.week, { people, initial: { person: 'lula' } })
+      await flush()
+      docsCard.open({ kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      els.weekLimit.value = '5'
+      els.weekLimit.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, true, 'the atlas card must survive a change on #weekLimit')
+    })
+  })
 })
 
 describe('issue #147 AC19: an empty week keeps the seven about numbers and paints no marks', () => {

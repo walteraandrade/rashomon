@@ -605,6 +605,22 @@ describe('issue #147 AC20: figure 1 fetches the inspector sparkline on its own f
     })
   })
 
+  it('the sparkline counts the atlas source, so its bars and the inspector number agree (#148 review, 4)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/graph': graph(), '/docs': { docs: [], total: 0 }, '/timeline': [] })
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      mountDocsCard()
+      mount(els.workspace, { people, initial: { source: 'bluesky' } })
+      await flush()
+      calls.length = 0
+      await pick(els, calls, 'word:golpe')
+      const timelineUrl = calls.find((u) => u.includes('/timeline'))
+      assert.ok(timelineUrl)
+      assert.equal(new URL(timelineUrl!, 'http://localhost').searchParams.get('source'), 'bluesky')
+    })
+  })
+
   it('no word in focus never requests /timeline: neither on initial load nor after clearing the selection', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()

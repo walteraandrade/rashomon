@@ -255,7 +255,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .compare .ruler, .compare .detail, .rising .ruler, .rising .note { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
-.figure.is-loading .ruler, .figure.is-loading .detail, .rising.is-loading .note,
+.figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
@@ -697,4 +697,5 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   .chapter-grid { grid-template-columns: 1fr; }
   .pmi-scale { grid-template-columns: repeat(2, 1fr); }
   .chapter-foot { flex-direction: column; }
+  .week-columns { grid-template-columns: 1fr; }
 }

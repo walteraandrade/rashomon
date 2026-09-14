@@ -144,7 +144,7 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       // nothing but app.ts, and reaching into no other figure's DOM.
       'figures/rising.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
       // Issue #147 adds figure 5, the week: same shape again, imported by nothing but app.ts.
-      'figures/week.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
+      'figures/week.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
       'app.ts': ['./api.js', './docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/rising.js', './figures/testimony.js', './figures/week.js', './help.js', './render.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')

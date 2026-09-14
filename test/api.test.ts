@@ -214,9 +214,10 @@ describe('issue #147: docsParams accepts an optional day, appended only when non
 })
 
 describe('issue #147 AC20: sparklineParams / loadTimeline, the inspector sparkline', () => {
-  it('sparklineParams asks for 7 rolling days, bucketed by day, for one term/kind', () => {
-    const qp = sparklineParams('reforma', 'word')
-    assert.equal(qp.toString(), new URLSearchParams({ term: 'reforma', kind: 'word', days: '7', bucket: 'day' }).toString())
+  it('sparklineParams asks for 7 rolling days, bucketed by day, for one term/kind, on the atlas source', () => {
+    const qp = sparklineParams('reforma', 'word', 'bluesky')
+    assert.equal(qp.toString(), new URLSearchParams({ term: 'reforma', kind: 'word', days: '7', bucket: 'day', source: 'bluesky' }).toString())
+    assert.equal(sparklineParams('reforma', 'word').get('source'), 'all', 'no source given reads as every source, like the atlas default')
   })
 
   it('loadTimeline calls GET /api/people/:id/timeline', async () => {

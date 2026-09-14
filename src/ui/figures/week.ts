@@ -3,9 +3,10 @@
 // with one side — the tracked person, that column's calendar day and that word.
 
 import * as api from '../api.js'
-import { html, kinds, SOURCE_SEGMENTS, sourceLabels, type Week } from '../format.js'
+import { html, kinds, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintWeek, paintWeekError, paintWeekLoading } from '../render.js'
+import { WEEK_COLUMN_WIDTH } from '../layout.js'
 import { span } from '../perf.js'
 import { debounce, fromScope, readScope } from '../state.js'
 
@@ -34,7 +35,17 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let requestId = 0
   let controller: AbortController | null = null
   let metrics: ReturnType<typeof createCanvasMeasure> | null = null
+  let columnWidth = WEEK_COLUMN_WIDTH
   const measured = () => (metrics ??= createCanvasMeasure())
+
+  // The svg is drawn at the column's real width so type is never scaled: a 12px word is 12px
+  // at 1280px and at 390px (where atlas.css stacks the days). The grid decides the width, not
+  // the content (minmax(0, 1fr)), so one .week-day is the measure.
+  const measureColumn = () => {
+    const day = $('weekChart')?.querySelector?.('.week-day')
+    const width = day?.clientWidth
+    return width ? Math.floor(width) : columnWidth
+  }
 
   const personId = () => $('weekPerson').value
   const source = () => $('weekSource').value
@@ -42,7 +53,12 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const repaint = () => {
     if (!data) return
-    paintWeek({ data, metrics: measured(), selected, onPick: pick })
+    paintWeek({ data, metrics: measured(), selected, onPick: pick, width: columnWidth })
+    const width = measureColumn()
+    if (width !== columnWidth) {
+      columnWidth = width
+      paintWeek({ data, metrics: measured(), selected, onPick: pick, width: columnWidth })
+    }
   }
 
   // Selecting is a toggle; the overflow list's own buttons carry the same data-day/term/kind.
@@ -63,8 +79,11 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const showDocs = (word: { day: string; term: string; kind: string }) => {
     const id = personId()
     const person = people.find((p) => p.id === id)
+    const bucket = data?.buckets.find((b) => weekDayIso(b.start) === word.day)
+    // The card names the day, or its count contradicts the atlas for no visible reason.
+    const day = bucket ? weekDayLabel(bucket.start) : word.day
     docsCard.open({
-      kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
+      kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'} · ${day}`,
       title: word.term,
       sides: [
         {
@@ -126,19 +145,20 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const debouncedLoad = debounce(load)
 
+  // Closes the card only when this figure opened it: a control here must not shut a card the
+  // atlas or the ruler is showing.
   const onControlChange = () => {
-    selected = null
-    docsCard.close()
+    if (selected) {
+      selected = null
+      docsCard.close()
+    }
     debouncedLoad()
   }
 
+  // Escape releases this figure's own pick (and the card it opened); the atlas already owns
+  // "Escape closes whatever card is open".
   const onKeydown = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return
-    if (docsCard.isOpen()) {
-      docsCard.close()
-      return
-    }
-    releaseSelection()
+    if (e.key === 'Escape') releaseSelection()
   }
 
   $('weekSource').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
@@ -153,6 +173,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('weekLimit').addEventListener('change', onControlChange)
   $('weekChart').addEventListener('click', (e: MouseEvent) => background(e.target as Element | null))
   document.addEventListener('keydown', onKeydown)
+  if (typeof ResizeObserver !== 'undefined')
+    new ResizeObserver(() => {
+      if (data && measureColumn() !== columnWidth) repaint()
+    }).observe($('weekChart'))
 
   load()
 }

@@ -295,7 +295,10 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
 // No second packer -- same swarmBy rulerLayout already builds on.
 export const WEEK_SIZE_MIN = 12
 const WEEK_SIZE_MAX = 30
-export const WEEK_MAX_HEIGHT = 240
+// Columns are independent (align-items: start), so the cap only guards a runaway day: the
+// default limit (8) and the widest one the sentence offers (12) both fit at the ramp ceiling,
+// 12 * (30 * 1.24 + 3) is about 480.
+export const WEEK_MAX_HEIGHT = 480
 export const WEEK_COLUMN_WIDTH = 120
 const WEEK_GAP_X = 6
 const WEEK_GAP_Y = 3
@@ -313,16 +316,16 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
   const maxWidth = Math.max(20, width - WEEK_PAD_X)
   const sized = terms.map((t) => {
     const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
-    let size = Math.round(WEEK_SIZE_MIN + (WEEK_SIZE_MAX - WEEK_SIZE_MIN) * fraction)
+    // Nominal size only: "tamanho = documentos naquele dia" is the key's promise, so a word never
+    // shrinks to fit the column. One wider than the column goes to overflow at its true size.
+    const size = Math.round(WEEK_SIZE_MIN + (WEEK_SIZE_MAX - WEEK_SIZE_MIN) * fraction)
     const text = label(t)
-    // A word wider than the column shrinks toward the floor rather than spilling into the next day.
-    while (size > WEEK_SIZE_MIN && measure(text, size) + 6 > maxWidth) size -= 1
     const w = measure(text, size) + 6
     return { ...t, text, x: 0, size, w, h: Math.round(size * 1.24) }
   })
   const half = WEEK_MAX_HEIGHT / 2
-  // A word still wider than the column at the floor size is listed under the column, never
-  // drawn across the neighbouring day (#148 review, 1).
+  // A word wider than the column at its nominal size is listed under the column, never drawn
+  // across the neighbouring day (#148 review, 1).
   const tooWide = sized.filter((d) => d.w > maxWidth)
   const { placed, overflow: unplaced } = swarmBy(sized.filter((d) => d.w <= maxWidth), {
     size: (d) => d.size,

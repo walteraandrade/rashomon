@@ -1129,7 +1129,7 @@ export const paintWeekLoading = () => {
     { length: 7 },
     () =>
       html`<div class="week-day">${ghostBar('ghost-line is-short')}<svg class="week-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${WEEK_GHOST_WORDS.map(
-        ([y, w]) => html`<rect class="ghost" x="${width / 2 - w / 2}" y="${y}" width="${w}" height="16" rx="5"/>`,
+        ([y, w]) => html`<rect class="ghost" x="${width / 2 - w / 2}" y="${height / 2 + y - 8}" width="${w}" height="16" rx="5"/>`,
       )}</svg></div>`,
   )}</div></div><p class="sr-only">Lendo a semana.</p>`
   const note = $('weekNote')
@@ -1142,7 +1142,7 @@ export const paintWeekError = () => {
   chart.hidden = false
   chart.classList.remove('is-loading')
   chart.setAttribute('aria-busy', 'false')
-  chart.innerHTML = '<p class="note">Não foi possível carregar a semana.</p>'
+  chart.innerHTML = html`<p class="note">Não foi possível carregar a semana.</p>`
   const note = $('weekNote')
   if (note) note.textContent = ''
 }

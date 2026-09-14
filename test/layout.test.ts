@@ -393,10 +393,26 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     assert.equal(once.height, twice.height)
   })
 
-  it('a long word at the loudest size still fits the column width, never bleeding into the next day', () => {
-    const day = [term('presidente', 96), term('crise', 3)]
+  it('a long word at the loudest size goes to overflow with its size intact, never shrunk to fit (validator round 1, 1)', () => {
+    const day = [term('presidente', 96), term('candidato', 14), term('crise', 3)]
     const [column] = weekLayout(measure, [day], 120)
-    for (const w of column.words) assert.ok(w.w <= 120 - 6 + 1e-6, `${w.term} at ${w.w}px overflows the 120px column`)
+    const nominal = (count: number) => Math.round(WEEK_SIZE_MIN + (30 - WEEK_SIZE_MIN) * ((count - 3) / (96 - 3)))
+    const presidente = column.overflow.find((w) => w.term === 'presidente')
+    assert.ok(presidente, 'presidente at 30px is wider than 120px and belongs in overflow, not shrunk into the column')
+    assert.equal(presidente.size, 30, 'overflow keeps the nominal size: tamanho = documentos naquele dia')
+    assert.ok(!column.words.some((w) => w.term === 'presidente'))
+    for (const w of column.words) {
+      assert.equal(w.size, nominal(w.count), `${w.term} placed at ${w.size}px, narrower than its nominal ${nominal(w.count)}px`)
+      assert.ok(w.w <= 120 - 6 + 1e-6, `${w.term} at ${w.w}px overflows the 120px column`)
+    }
+  })
+
+  it('eight short words at mixed counts all place in a 159px column, none pushed out by the height cap (validator round 1, 2)', () => {
+    const day = [term('governo', 67), term('reforma', 40), term('pauta', 31), term('eleicao', 20), term('crise', 12), term('lei', 8), term('voto', 5), term('urna', 3)]
+    const [column] = weekLayout(measure, [day], 159)
+    assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit`)
+    assert.equal(column.words.length, 8)
+    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20)
   })
 
   it('a word wider than a narrow column even at the floor size is listed under the column, never drawn across the next day (#148 review, 1)', () => {

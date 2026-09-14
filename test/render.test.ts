@@ -1028,6 +1028,17 @@ describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', 
     })
   })
 
+  it('every ghost mark sits inside its svg: y within [0, height], never above the label ghost (validator round 1, 3)', () => {
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      paintWeekLoading()
+      const height = Number(els.weekChart.innerHTML.match(/viewBox="0 0 \d+ (\d+)"/)?.[1])
+      assert.ok(height > 0)
+      const ys = [...els.weekChart.innerHTML.matchAll(/<rect class="ghost"[^>]*\sy="(-?[\d.]+)"[^>]*height="(\d+)"/g)].map((m) => [Number(m[1]), Number(m[2])])
+      assert.ok(ys.length >= 3, 'the ghost draws marks')
+      for (const [y, h] of ys) assert.ok(y >= 0 && y + h <= height, `ghost rect at y=${y} leaves the 0..${height} svg`)
+    })
+  })
+
   it('paintWeekError paints the "could not load" note and clears the loading ghost', () => {
     withFakeDocument(['weekChart', 'weekNote'], (els) => {
       paintWeekError()

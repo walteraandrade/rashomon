@@ -642,7 +642,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #compareHiddenNote { margin: 10px 0 0; }
 #compareA, #compareB { font-family: var(--mono); }
 
-/* ---------- the week (figure 5, calendar days, issue #147) — seven columns, oldest at the
+/* ---------- the week (figure 5, calendar days, issue #147): seven columns, oldest at the
    left; each column is a day head (the .stat pattern above: --accent label, ink number) and an
    SVG swarm of that day's words, sized by that day's count, positioned only to avoid collision.
    Same glow/hit/text triad as the atlas and the ruler; no --hostile/--favor/--cmp-a/--cmp-b

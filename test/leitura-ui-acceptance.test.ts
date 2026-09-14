@@ -195,6 +195,7 @@ describe('the page is a sequence of graphs', () => {
       )
     const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.deepEqual(dts(week), ['Tamanho', 'Posição', 'Clique'])
+    assert.match(week, /<dt>Posição<\/dt><dd>só o dia; a altura na coluna não mede nada<\/dd>/, 'the key says the vertical position means nothing, so the swarm never reads as a ranking')
     assert.match(week, /href="como-ler\.html#semana"/, 'the figure\'s own "Como ler" points at the #semana chapter')
     assert.match(html, /id="help-semana"/, 'the in-page guide carries a matching chapter for that href to land on')
   })

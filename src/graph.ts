@@ -104,7 +104,7 @@ type RisingRow = {
   count_baseline_raw: number
   lift: number
 }
-type RisingAggregates = { about_recent: number; about_baseline: number; terms: RisingRow[] }
+type RisingAggregates = { about_recent: number; about_baseline: number; words_recent: number; words_baseline: number; terms: RisingRow[]; present: RisingRow[] }
 type TimelineRow = { bucket_start: Date; count: number }
 type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
 type ToneListRow = { id: string; name: string }
@@ -484,8 +484,14 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 
 // Two disjoint windows (recent, then the baseline immediately before it) so a doc is never
 // double-counted. c_recent/c_baseline are count(*) for the same reason as graphQuery's term_p.
-// `kind` closes the order by because (lift, term) alone does not break ties between two kinds
-// of one term text.
+// `terms` are the `limit` highest lifts, as they always were. `present` are the `limit` most
+// present terms of the recent window, ordered by lift too: a set picked by lift is the top of
+// one tail and can only ever sit on one side of a ruler, so the page rules by `present` and
+// lists what `terms` adds beyond it. words_recent/words_baseline total the same filtered
+// doc_terms rows per window, before `min` and `limit`, so a caller can compare a term's share
+// of everything written about the person rather than its doc count, which a corpus that grows
+// text per doc inflates for every term at once. `kind` closes every order by because
+// (lift, term) alone does not break ties between two kinds of one term text.
 const risingQuery = (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)
@@ -528,19 +534,32 @@ const risingQuery = (person: Person, q: RisingQuery) => {
       round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
     from recent_terms r left join baseline_terms b using (term, kind)
     where r.c_recent >= ${q.min}
-    order by lift desc, term, kind
-    limit ${q.limit}
+  ),
+  lifted as (
+    select * from ranked order by lift desc, term, kind limit ${q.limit}
+  ),
+  present as (
+    select * from ranked order by count_recent_raw desc, lift desc, term, kind limit ${q.limit}
   )
   select
     (select count(*) from recent_about)::int as about_recent,
     (select count(*) from baseline_about)::int as about_baseline,
+    (select coalesce(sum(c_recent), 0) from recent_terms)::int as words_recent,
+    (select coalesce(sum(c_baseline), 0) from baseline_terms)::int as words_baseline,
     coalesce((
       select json_agg(json_build_object(
         'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
         'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
       ) order by lift desc, term, kind)
-      from ranked
-    ), '[]'::json) as terms`
+      from lifted
+    ), '[]'::json) as terms,
+    coalesce((
+      select json_agg(json_build_object(
+        'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
+        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
+      ) order by lift desc, term, kind)
+      from present
+    ), '[]'::json) as present`
 }
 
 export type CandidatesQuery = { days: number; min: number; limit: number }
@@ -590,8 +609,15 @@ export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number;
 export const risingFor = async (person: Person, q: RisingQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
   const { rows } = await run<RisingAggregates>(risingQuery(person, q))
-  const { about_recent, about_baseline, terms } = rows[0]
-  return { days: q.days, baseline: q.baseline, terms, outlets, about: { recent: about_recent, baseline: about_baseline } }
+  const { about_recent, about_baseline, words_recent, words_baseline, terms, present } = rows[0]
+  return {
+    days: q.days,
+    baseline: q.baseline,
+    terms,
+    present,
+    outlets,
+    about: { recent: about_recent, baseline: about_baseline, words_recent, words_baseline },
+  }
 }
 
 // links stays a second statement: its `any(ids)` term list is the output of the first one,

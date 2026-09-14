@@ -157,6 +157,12 @@ describe('documented facts per route', () => {
     assert.match(firstPara, /intersects the[\s\S]{0,20}window/i, 'the day/days window intersection caveat must sit with the earlier-date rule')
     assert.match(firstPara, /oldest admissible date can[\s\S]{0,20}partial/i, 'the docs must say the oldest admissible date can come back partial')
   })
+
+  it('/api/people/:id/rising (issue #151): about object and the raised default limit', () => {
+    assert.match(docsText, /`about`/, 'the docs must name the about field')
+    assert.match(docsText, /about\.recent|about\.baseline|recent.*baseline document totals|recent\/baseline/i, 'the docs must say about carries the person\'s own recent/baseline document totals')
+    assert.match(docsText, /rising[\s\S]{0,400}\*\*40\*\*|\*\*40\*\*[\s\S]{0,400}rising/i, 'the docs must state rising\'s default limit is now 40')
+  })
 })
 
 describe('PR #153 review: docs/operations.md cache-surface and staleness paragraphs', () => {

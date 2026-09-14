@@ -5,6 +5,7 @@ import {
   STRIP_MIN_R,
   drawMap,
   inspect,
+  liftOfPerson,
   paintAtlasLoading,
   paintCandidates,
   paintColumns,
@@ -14,19 +15,23 @@ import {
   paintDocsHead,
   paintDocsLoading,
   paintOutletsLoading,
+  paintRisingLoading,
+  paintRisingRuler,
+  paintRisingRulerError,
   paintRuler,
   paintSelection,
   paintStrip,
   paintTestimony,
   paintTestimonyError,
   paintTestimonyLoading,
+  risingRulerItems,
   rulerTerms,
   stripLayout,
   stripRadius,
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import type { Compare, CompareTerm } from '../src/ui/format.js'
+import type { Compare, CompareTerm, Rising, RisingTerm } from '../src/ui/format.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -617,6 +622,111 @@ describe('loading ghosts hold each figure\'s silhouette, with no invented words'
       assert.match(els.docs.innerHTML, /Lendo os documentos/)
       assert.equal(els.docs.getAttribute('aria-busy'), 'true')
       assert.doesNotMatch(els.outletList.innerHTML + els.compareRuler.innerHTML + els.docs.innerHTML, /Carregando/)
+    })
+  })
+})
+
+// issue #151: figure 4's own pure pre-layout step, checked directly (per the issue's own test
+// plan) against the exports rather than against painted markup.
+const risingTerm = (over: Partial<RisingTerm> = {}): RisingTerm => ({
+  term: 'x',
+  kind: 'word',
+  count_recent: 1,
+  count_baseline: 1,
+  count_recent_raw: 1,
+  count_baseline_raw: 1,
+  lift: 1,
+  ...over,
+})
+
+describe('issue #151 AC10: risingRulerItems / liftOfPerson position by the person\'s own lift', () => {
+  const about = { recent: 10, baseline: 5 }
+  const days = 7
+  const baselineDays = 30
+  const liftPerson = liftOfPerson(about, days, baselineDays)
+
+  it('a term whose lift equals the person\'s own lift sits at the centre (balance === 0)', () => {
+    const items = risingRulerItems([risingTerm({ term: 'igual', lift: liftPerson })], liftPerson)
+    assert.equal(items[0].balance, 0)
+  })
+
+  it('a term whose lift is 8x the person\'s own lift or higher clamps to the rightmost position (balance === 1)', () => {
+    const exactlyEight = risingRulerItems([risingTerm({ term: 'oito', lift: liftPerson * 8 })], liftPerson)
+    assert.equal(exactlyEight[0].balance, 1, 'log2(8)/3 === 1 exactly')
+    const wellOver = risingRulerItems([risingTerm({ term: 'muito-mais', lift: liftPerson * 500 })], liftPerson)
+    assert.equal(wellOver[0].balance, 1, 'anything past the clamp still reads as 1, never more')
+  })
+
+  it('a term whose lift is 1/8th the person\'s own lift or lower clamps to the leftmost position (balance === -1)', () => {
+    const items = risingRulerItems([risingTerm({ term: 'oitavo', lift: liftPerson / 8 })], liftPerson)
+    assert.equal(items[0].balance, -1)
+  })
+
+  it('liftOfPerson stays finite when about.baseline is 0, thanks to the same +1 smoothing used per term', () => {
+    const zeroBaseline = liftOfPerson({ recent: 5, baseline: 0 }, 7, 30)
+    assert.ok(Number.isFinite(zeroBaseline) && zeroBaseline > 0, `expected a finite positive lift, got ${zeroBaseline}`)
+  })
+
+  it('combined is the raw recent+baseline doc count, independent of balance', () => {
+    const items = risingRulerItems([risingTerm({ term: 'soma', count_recent_raw: 12, count_baseline_raw: 3, lift: liftPerson })], liftPerson)
+    assert.equal(items[0].combined, 15)
+  })
+})
+
+describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paintRisingLoading', () => {
+  const risingData = (terms: RisingTerm[], about = { recent: 8, baseline: 3 }): Rising => ({ days: 7, baseline: 30, terms, outlets: [], about })
+
+  it('AC13: an empty terms array paints "Nenhuma palavra neste recorte." inside #risingRuler', () => {
+    withFakeDocument(['risingRuler'], (els) => {
+      const { shown, overflowCount } = paintRisingRuler({ data: risingData([]), metrics, selected: null, onPick: () => {} })
+      assert.equal(shown, 0)
+      assert.equal(overflowCount, 0)
+      assert.match(els.risingRuler.innerHTML, /Nenhuma palavra neste recorte\./)
+      assert.equal(els.risingRuler.hidden, false, 'the empty note is shown, not hidden behind the loading flag')
+    })
+  })
+
+  it('paints one word per term, with the same data-term/data-kind pair the click handler reads', () => {
+    withFakeDocument(['risingRuler'], (els) => {
+      const terms = [risingTerm({ term: 'diretor', kind: 'word', lift: 40, count_recent_raw: 12, count_baseline_raw: 1 })]
+      const { shown } = paintRisingRuler({ data: risingData(terms), metrics, selected: null, onPick: () => {} })
+      assert.equal(shown, 1)
+      assert.match(els.risingRuler.innerHTML, /data-term="diretor" data-kind="word"/)
+      assert.match(els.risingRuler.innerHTML, /antes \(30 dias\)/)
+      assert.match(els.risingRuler.innerHTML, /agora \(7 dias\)/)
+    })
+  })
+
+  it('AC14: paintRisingRulerError paints the "could not load" note', () => {
+    withFakeDocument(['risingRuler'], (els) => {
+      els.risingRuler.hidden = true
+      paintRisingRulerError()
+      assert.equal(els.risingRuler.hidden, false)
+      assert.match(els.risingRuler.innerHTML, /Não foi possível carregar os termos em alta/)
+    })
+  })
+
+  it('paintRisingLoading paints a ruler ghost, not the word Carregando, and stays mute on #risingAbout', () => {
+    withFakeDocument(['risingRuler', 'risingAbout'], (els) => {
+      els.risingAbout.textContent = 'A pessoa: 8 textos nos últimos 7 dias, 3 nos 30 dias antes.'
+      paintRisingLoading()
+      assert.match(els.risingRuler.innerHTML, /ruler-axis/)
+      assert.doesNotMatch(els.risingRuler.innerHTML, /Carregando/)
+      assert.equal(els.risingRuler.getAttribute('aria-busy'), 'true')
+      assert.equal(els.risingAbout.textContent, '', 'the ghost clears the previous two-number sentence rather than leaving it stale')
+    })
+  })
+})
+
+describe('issue #151 AC15: paintRuler (compare, figure 3) keeps its own exported shape after the shared paintRulerBody extraction', () => {
+  it('still returns hiddenCount/shown/overflowCount and paints #compareRuler exactly as before', () => {
+    withFakeDocument(['compareRuler'], (els) => {
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: side(5, 1), b: null }]
+      const result = paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
+      assert.deepEqual(Object.keys(result).sort(), ['hiddenCount', 'overflowCount', 'shown'].sort())
+      assert.match(els.compareRuler.innerHTML, /Só de Lula/)
+      assert.match(els.compareRuler.innerHTML, /Só de Jair Bolsonaro/)
+      assert.doesNotMatch(els.compareRuler.innerHTML, /antes \(30 dias\)|agora \(7 dias\)/, 'compare keeps its own end labels, not the rising ruler\'s')
     })
   })
 })

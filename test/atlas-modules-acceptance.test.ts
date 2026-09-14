@@ -140,7 +140,10 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
       'figures/testimony.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
       'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
-      'app.ts': ['./api.js', './docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/testimony.js', './help.js', './render.js'],
+      // Issue #151 adds figure 4, the rising ruler: same shape as figures/compare.ts, imported by
+      // nothing but app.ts, and reaching into no other figure's DOM.
+      'figures/rising.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
+      'app.ts': ['./api.js', './docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/rising.js', './figures/testimony.js', './help.js', './render.js'],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected)) {
@@ -183,6 +186,17 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     for (const name of ['outlet', 'zoom', 'layoutCache', 'mask', 'getController', 'setController', 'getMask', 'setMask']) assert.equal(name in state, false, `state.js must not export ${name}: it is figure-private now`)
     const testimony = await import('../src/ui/figures/testimony.js')
     assert.deepEqual(Object.keys(testimony), ['mount'], 'figures/testimony.js exposes only mount; outlet/zoom/layoutCache/mask/request-id bookkeeping stay local')
+  })
+
+  it('issue #151 AC16: figures/rising.js is importable outside a browser, exports exactly mount, and is absent from every other figure\'s import list', async () => {
+    assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
+    const rising = await import('../src/ui/figures/rising.js')
+    assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/rising.js must not touch document at import time')
+    assert.deepEqual(Object.keys(rising), ['mount'])
+    assert.equal(typeof rising.mount, 'function')
+    for (const other of ['figures/atlas.ts', 'figures/testimony.ts', 'figures/compare.ts'])
+      assert.ok(!importsOf(moduleSource(other)).some((spec) => spec.includes('rising')), `${other} must not import figures/rising.js`)
+    assert.ok(!importsOf(moduleSource('figures/rising.ts')).some((spec) => spec.includes('atlas') || spec.includes('testimony') || spec.includes('compare')), 'figures/rising.ts must not import another figure')
   })
 })
 

@@ -235,9 +235,18 @@ describe('issue #92: a failed GET /api/people is an outage, never an empty seed'
         assert.match(els.testimonyList.innerHTML, /id="testimonyRetry"/)
         assert.notEqual(els.testimonyList.textContent, 'Nenhuma pessoa cadastrada.')
 
+        assert.match(els.compareDetail.innerHTML, /Falha de rede ou base indispon[ií]vel/)
+        assert.match(els.compareDetail.innerHTML, /id="compareRetry"/)
+        assert.equal(els.compareRuler.hidden, true)
+
+        // Figure 4 has no retry of its own: same outage copy in #risingAbout, ruler hidden.
+        assert.equal(els.risingAbout.textContent, 'Falha de rede ou base indisponível.')
+        assert.equal(els.risingRuler.hidden, true)
+
         els.retry.fire('click')
         els.testimonyRetry.fire('click')
-        assert.equal(reloads.length, 2, 'both retry buttons must be wired to a real re-fetch')
+        els.compareRetry.fire('click')
+        assert.equal(reloads.length, 3, 'every retry button must be wired to a real re-fetch')
       })
     })
   })
@@ -271,8 +280,25 @@ describe('issue #92: the loading ghost shows before /api/people resolves', () =>
         assert.match(els.testimonyList.innerHTML, /Lendo a avaliação/)
         assert.equal(els.strip.hidden, false)
         assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
+        assert.equal(els.risingRuler.hidden, false, 'issue #151: figure 4 gets its own boot ghost too')
+        assert.match(els.risingRuler.innerHTML, /ruler-axis/)
         void booting
       })
+    })
+  })
+})
+
+describe('issue #151: figure 4 (rising) joins app.ts\'s bootstrap, same bare/prefixed convention as the other three', () => {
+  it('bare ?person= seeds risingPerson; rising.source overrides the source for figure 4 only', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony })
+      await withLocation(`?person=${personB.id}&rising.source=gdelt`, () => appModule.boot())
+      await flush()
+      assert.equal(els.risingPerson.value, personB.id, 'the bare person key seeds figure 4 too, same fallback figure 1/2 read')
+      const risingCall = calls.find((u) => u.includes('/rising'))
+      assert.ok(risingCall?.includes(`/people/${personB.id}/rising`), `figure 4 must ask about ${personB.id}: ${risingCall}`)
+      assert.match(risingCall!, /source=gdelt/)
     })
   })
 })

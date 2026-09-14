@@ -208,7 +208,7 @@ Three separate things. Two are local only: opt-in instrumentation on the running
 
 Vercel does not set `PERF`, so a deployment answers with no `server-timing` and the page's `detail.server` reads `null` there: production gets each call's duration and `x-vercel-cache`, nothing about the database. To see the split in production, set `PERF=1` and `PERF_LOG=0` on the Vercel project (headers only, no stdout line, at the cost of the query proxy on every request). Either way the headers are cached with the body, so on an `x-vercel-cache: HIT` the `server-timing` you read is the origin's cost when the entry was filled, not this request's.
 
-**Page marks.** `src/ui/perf.ts` records User Timing measures in every browser, with no flag: one `api:<route>` per finished API call (`api:graph`, `api:sources`, `api:testimony`, `api:compare`, `api:docs`, `api:people`), whose `detail` carries the URL, the status and the `x-vercel-cache` and `server-timing` headers, and one `figure:<name>` per figure from the request to the paint (`figure:atlas`, `figure:outlets`, `figure:testimony`, `figure:compare`, `figure:docs`). A failed call is recorded with its status (a slow 500 is a wait worth seeing); only an aborted or superseded request leaves no entry. A hit on the page's own 20 s memo (`fromScope`) records the `api:<route>` pair too, with `cache: "memory"` and a duration near zero, so a figure's measure always has the call it followed. This repo never posts the entries anywhere; they live in the tab. Vercel Web Analytics is a script on the same page and can read the same timeline. Read them in DevTools > Performance (the Timings track) or from the console:
+**Page marks.** `src/ui/perf.ts` records User Timing measures in every browser, with no flag: one `api:<route>` per finished API call (`api:graph`, `api:sources`, `api:testimony`, `api:compare`, `api:rising`, `api:docs`, `api:people`), whose `detail` carries the URL, the status and the `x-vercel-cache` and `server-timing` headers, and one `figure:<name>` per figure from the request to the paint (`figure:atlas`, `figure:outlets`, `figure:testimony`, `figure:compare`, `figure:rising`, `figure:docs`). A failed call is recorded with its status (a slow 500 is a wait worth seeing); only an aborted or superseded request leaves no entry. A hit on the page's own 20 s memo (`fromScope`) records the `api:<route>` pair too, with `cache: "memory"` and a duration near zero, so a figure's measure always has the call it followed. This repo never posts the entries anywhere; they live in the tab. Vercel Web Analytics is a script on the same page and can read the same timeline. Read them in DevTools > Performance (the Timings track) or from the console:
 
 ```js
 performance.getEntriesByType('measure').map((e) => [e.name, Math.round(e.duration), e.detail.cache, e.detail.server])
@@ -253,13 +253,15 @@ Two key forms, read in this order:
 | bare | `?days=7` | seeds every figure that has that control |
 | prefixed with the figure id | `?atlas.days=7` | seeds that figure only, and wins over the bare key |
 
-The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`) and
-`compare` (figure 3, `#compare`). Figure 1 reads `person`, `days`, `source`, `sort` and `limit`;
-figure 2 reads `person`, `days` and `source` — it has no sort or limit control, matching what
-`narrowToTestimony` and `narrowToSources` already drop. Figure 3 reads `a` (bare fallback
-`person`, same as figure 1 and 2's own `person` key), `b`, `days`, `source`, `limit` and
-`measure` — `b` and `measure` have no bare equivalent, since no other figure has a second
-person or a measure selector.
+The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
+`compare` (figure 3, `#compare`) and `rising` (figure 4, `#rising`). Figure 1 reads `person`,
+`days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
+sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
+Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
+`days`, `source`, `limit` and `measure` — `b` and `measure` have no bare equivalent, since no
+other figure has a second person or a measure selector. Figure 4 reads `person` and `source`
+only — its `days` (7), `baseline` (30), `kind` and `limit`/`min` are the route's own fixed
+values, sent explicitly by the figure and never seeded from the querystring.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

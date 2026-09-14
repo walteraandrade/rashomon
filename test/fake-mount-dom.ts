@@ -275,7 +275,17 @@ const compareIds = () => ({
   compareRetry: new FakeBox('compareRetry'),
 })
 
-export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds>
+// Figure 4 (issue #151): its own person/source selects, ruler host and about line. No days,
+// baseline, kind, limit or min control — those stay fixed, sent explicitly by the figure.
+const risingIds = () => ({
+  rising: new FakeBox('rising'),
+  risingPerson: new FakeSelect('risingPerson'),
+  risingSource: new FakeSelect('risingSource'),
+  risingRuler: new FakeBox('risingRuler'),
+  risingAbout: new FakeBox('risingAbout'),
+})
+
+export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds> & ReturnType<typeof risingIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -284,7 +294,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // browser-shaped `Option` constructor, runs `fn`, then restores every global this touched —
 // same discipline as fake-dom.ts's withFakeDocument, extended to what a real mount() needs.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fakeDocument = {
     getElementById: (id: string) => (els as unknown as Record<string, unknown>)[id] ?? null,

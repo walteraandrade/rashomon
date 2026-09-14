@@ -8,8 +8,30 @@
 
 type Option = { value: string; textContent: string }
 
+// classList/attributes live here, not only on FakeBox, because paintSelection's is-selected
+// loop (render.ts, queryAll('[data-node]') with no root) walks the stub elements dataStubs()
+// returns below, the same way it would walk real elements document-wide.
 class Listenable {
   _listeners: Record<string, ((e?: unknown) => void)[]> = {}
+  classes: Record<string, boolean> = {}
+  attributes: Record<string, string> = {}
+  classList = {
+    toggle: (name: string, on?: boolean) => {
+      this.classes[name] = on ?? !this.classes[name]
+    },
+    add: (name: string) => {
+      this.classes[name] = true
+    },
+    remove: (name: string) => {
+      this.classes[name] = false
+    },
+  }
+  setAttribute(name: string, value: string) {
+    this.attributes[name] = value
+  }
+  getAttribute(name: string) {
+    return this.attributes[name] ?? null
+  }
   addEventListener(type: string, fn: (e?: unknown) => void) {
     ;(this._listeners[type] ??= []).push(fn)
   }
@@ -313,7 +335,15 @@ export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]
     },
     removeEventListener: () => {},
     querySelector: () => null,
-    querySelectorAll: () => [],
+    // render.ts's paintSelection calls queryAll('[data-node]') with no root (defaulting to
+    // document) to toggle is-selected across every painted word, map/overflow/strip alike. A
+    // real document finds every match across the tree; drawMap's own two document-rooted
+    // wiring loops stay unsupported here (they need element.tagName, which these stubs never
+    // carry) since no criterion in this suite clicks a map word through that path.
+    querySelectorAll: (selector: string) => {
+      if (selector === '[data-node]') return [...els.viewport.querySelectorAll('[data-node]'), ...els.overflow.querySelectorAll('[data-node]'), ...els.atlasStrip.querySelectorAll('[data-node]')]
+      return []
+    },
     // render.js's createCanvasMeasure builds the injected `measure` layout.js's packers need;
     // figures/compare.js calls it on the first paint of the ruler (issue #99, words instead of
     // dots). It writes ctx.font, then reads measureText, so the stub has to remember the font

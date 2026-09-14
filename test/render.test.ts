@@ -21,6 +21,7 @@ import {
   paintRuler,
   paintSelection,
   paintStrip,
+  paintTermStrip,
   paintTestimony,
   paintTestimonyError,
   paintTestimonyLoading,
@@ -28,10 +29,11 @@ import {
   rulerTerms,
   stripLayout,
   stripRadius,
+  termStripLayout,
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import type { Compare, CompareTerm, Rising, RisingTerm } from '../src/ui/format.js'
+import { termMask, type Compare, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -301,10 +303,7 @@ describe('stripLayout / paintStrip: the outlets on the axis', () => {
 })
 
 // Issue #149: figure 1's third view is a beeswarm strip keyed by each word's own kikori mean,
-// coloured the same way termMask already colours the map and the columns. termStripLayout and
-// paintTermStrip do not exist as of this suite (only the markup landed, in atlas.css/design-5.html);
-// these tests read src/ui/render.js dynamically so a missing export fails cleanly, test by test,
-// instead of crashing every test in this file at import time.
+// coloured the same way termMask already colours the map and the columns.
 describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikori axis', () => {
   const personTestimony = { method: 'kikori:q8', score: -1, n: 200 }
   const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }
@@ -315,14 +314,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
   const missing = { id: 'word:missing', term: 'ausente', kind: 'word', count: 5, pmi: 0.6 } // testimony: undefined
   const stripNodes = [golpe, reforma, agenda, rare, unscored, missing]
 
-  // termStripLayout/paintTermStrip do not exist in src/ui/render.ts yet, so the module is
-  // imported dynamically and typed `any`: a static `import { termStripLayout } from ...`
-  // would trip Node's ESM export check and crash every test in this file at load time.
-  const renderModule = async (): Promise<any> => import('../src/ui/render.js')
-
-  it('AC2: only the nodes termMask accepts are included, and x is monotonic non-decreasing in score', async () => {
-    const { termStripLayout } = await renderModule()
-    assert.equal(typeof termStripLayout, 'function', 'render.ts must export termStripLayout(nodes, personTestimony, width)')
+  it('AC2: only the nodes termMask accepts are included, and x is monotonic non-decreasing in score', () => {
     const layout = termStripLayout(stripNodes, personTestimony, 860)
     const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
     assert.deepEqual(ids, new Set(['word:golpe', 'word:reforma', 'word:agenda']), 'rare (n<3), unscored (testimony: null) and missing (testimony: undefined) must be excluded')
@@ -330,21 +322,18 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     for (let i = 1; i < byScore.length; i++) assert.ok(byScore[i].x >= byScore[i - 1].x, 'x must never decrease as score increases')
   })
 
-  it('AC2: excludes every node when the person has no eligible score (stats.testimony absent or its score null/undefined)', async () => {
-    const { termStripLayout } = await renderModule()
+  it('AC2: excludes every node when the person has no eligible score (stats.testimony absent or its score null/undefined)', () => {
     assert.equal(termStripLayout(stripNodes, { method: 'kikori', score: null, n: 0 }, 860).dots.length, 0, 'a null person score')
     assert.equal(termStripLayout(stripNodes, undefined, 860).dots.length, 0, 'an absent stats.testimony')
   })
 
-  it('AC3: the domain widens to at least 2 with exactly one eligible word', async () => {
-    const { termStripLayout } = await renderModule()
+  it('AC3: the domain widens to at least 2 with exactly one eligible word', () => {
     const layout = termStripLayout([golpe], personTestimony, 860)
     assert.equal(layout.dots.length, 1)
     assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen for a single point: got [${layout.domainMin}, ${layout.domainMax}]`)
   })
 
-  it('AC3: the domain widens when every eligible word ties the person mean', async () => {
-    const { termStripLayout } = await renderModule()
+  it('AC3: the domain widens when every eligible word ties the person mean', () => {
     const tied = [
       { id: 'word:a', term: 'a', kind: 'word', count: 5, pmi: 1, testimony: { score: -1, n: 4 } },
       { id: 'word:b', term: 'b', kind: 'word', count: 6, pmi: 1, testimony: { score: -1, n: 5 } },
@@ -353,22 +342,61 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen when every word ties the mean: got [${layout.domainMin}, ${layout.domainMax}]`)
   })
 
-  it('AC4: paintTermStrip draws one circle per eligible node, each with data-node and an inline --tone, none for an excluded node', async () => {
-    const { paintTermStrip } = await renderModule()
-    assert.equal(typeof paintTermStrip, 'function', 'render.ts must export paintTermStrip')
+  // issue #149 gap: termStripLayout only reads the nodes array it is handed; it filters
+  // eligibility with termMask but never applies any alias/own-name filtering of its own.
+  it('issue #149 gap: termStripLayout consumes only the nodes array it is handed, never filtering by name', () => {
+    const layout = termStripLayout([golpe], personTestimony, 860)
+    const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
+    assert.deepEqual(ids, new Set(['word:golpe']), 'a node absent from the given array never appears, regardless of what it is named')
+    // A node shaped like a tracked person's own name: real alias filtering happens upstream
+    // in graphFor, so it never reaches here in production, but termStripLayout itself must
+    // apply no such rule — an eligible node it is handed is drawn regardless of its term.
+    const ownName = { id: 'word:lula', term: 'lula', kind: 'word', count: 30, pmi: 1, testimony: { score: -0.5, n: 5 } }
+    const withOwnName = termStripLayout([golpe, ownName], personTestimony, 860)
+    assert.deepEqual(
+      new Set(withOwnName.dots.map((d: { id: string }) => d.id)),
+      new Set(['word:golpe', 'word:lula']),
+      'termStripLayout draws every eligible node handed to it, with no alias/own-name filtering of its own',
+    )
+    const full = termStripLayout(stripNodes, personTestimony, 860)
+    assert.deepEqual(
+      new Set(full.dots.map((d: { id: string }) => d.id)),
+      new Set(['word:golpe', 'word:reforma', 'word:agenda']),
+      'every eligible node handed in appears; termStripLayout applies no filter beyond termMask',
+    )
+  })
+
+  // issue #149 gap: at count >= 100 with 24 nodes (limit=24, the widest select option),
+  // the strip must still fit STRIP_MAX_HEIGHT by shrinking dots together.
+  it('issue #149 gap: 24 nodes with count >= 100 fit within STRIP_MAX_HEIGHT', () => {
+    const many = Array.from({ length: 24 }, (_, i) => ({
+      id: `word:w${i}`,
+      term: `w${i}`,
+      kind: 'word',
+      count: 100 + i,
+      pmi: 1,
+      testimony: { score: -5 + (i % 10), n: 20 },
+    }))
+    const layout = termStripLayout(many, personTestimony, 860)
+    assert.equal(layout.dots.length, 24)
+    assert.ok(layout.height <= STRIP_MAX_HEIGHT, `height ${layout.height} must fit STRIP_MAX_HEIGHT (${STRIP_MAX_HEIGHT})`)
+  })
+
+  it('AC4: paintTermStrip draws one circle per eligible node, each with data-node and an inline --tone equal to termMask, none for an excluded node', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
       const markup = els.atlasStrip.innerHTML
       const drawn = [...markup.matchAll(/data-node="([^"]+)"/g)].map((m) => m[1])
       assert.deepEqual(new Set(drawn), new Set(['word:golpe', 'word:reforma', 'word:agenda']))
       for (const id of ['word:rare', 'word:unscored', 'word:missing']) assert.ok(!drawn.includes(id), `${id} must not be drawn`)
-      assert.match(markup, /data-node="word:golpe"[^>]*--tone:/, 'each circle carries an inline --tone, termMask\'s return value')
+      // issue #149 gap: --tone must equal termMask's own return value, not merely be present.
+      const tone = markup.match(/data-node="word:golpe"[^>]*--tone:([^"]+)"/)?.[1]
+      assert.equal(tone, termMask(golpe, personTestimony.score), "the emitted --tone must equal termMask(node, personScore)'s return value")
       for (const value of inlineStyles(markup)) assert.ok(value.startsWith('--'), `paintTermStrip emitted style="${value}"`)
     })
   })
 
-  it('AC4: the dashed mean line and its "média da pessoa" label only appear when the person has a score', async () => {
-    const { paintTermStrip } = await renderModule()
+  it('AC4: the dashed mean line and its "média da pessoa" label only appear when the person has a score', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
       assert.match(els.atlasStrip.innerHTML, /média da pessoa/)
@@ -379,8 +407,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     })
   })
 
-  it('AC4: an empty recorte and a recorte with zero eligible words each get their own empty message', async () => {
-    const { paintTermStrip } = await renderModule()
+  it('AC4: an empty recorte and a recorte with zero eligible words each get their own empty message', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: [], personTestimony, onChoose: () => {}, width: 860 })
       assert.match(els.atlasStrip.innerHTML, /Nenhum termo neste recorte\./)
@@ -391,8 +418,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     })
   })
 
-  it('AC4: the hidden-count note reports 0 (hidden), 1 (singular) and N excluded words', async () => {
-    const { paintTermStrip } = await renderModule()
+  it('AC4: the hidden-count note reports 0 (hidden), 1 (singular) and N excluded words', () => {
     const noteText = (els: Record<string, { innerHTML: string; textContent: string }>) => String(els.stripHiddenNote.innerHTML) + String(els.stripHiddenNote.textContent)
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: [golpe, reforma, agenda], personTestimony, onChoose: () => {}, width: 860 })
@@ -407,6 +433,27 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
       paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
       assert.equal(els.stripHiddenNote.hidden, false)
       assert.match(noteText(els), /3 palavras deixadas de fora/, 'plural at N excluded words')
+    })
+  })
+
+  // issue #149 gap: pins the exact wording of both hidden-note variants, singular and plural,
+  // for the two reasons a word is excluded — no eligible person mean, and too few scored texts.
+  it('issue #149 gap: hidden-note wording is pinned for both exclusion reasons, singular and plural', () => {
+    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
+      paintTermStrip({ nodes: [golpe], personTestimony: { method: 'kikori', score: null, n: 0 }, onChoose: () => {}, width: 860 })
+      assert.equal(els.stripHiddenNote.textContent, '1 palavra deixada de fora: esta pessoa não tem média de avaliação neste recorte.')
+    })
+    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
+      paintTermStrip({ nodes: [golpe, reforma], personTestimony: { method: 'kikori', score: null, n: 0 }, onChoose: () => {}, width: 860 })
+      assert.equal(els.stripHiddenNote.textContent, '2 palavras deixadas de fora: esta pessoa não tem média de avaliação neste recorte.')
+    })
+    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
+      paintTermStrip({ nodes: [golpe, rare], personTestimony, onChoose: () => {}, width: 860 })
+      assert.equal(els.stripHiddenNote.textContent, '1 palavra deixada de fora por ter menos de 3 textos avaliados.')
+    })
+    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
+      paintTermStrip({ nodes: [golpe, rare, unscored], personTestimony, onChoose: () => {}, width: 860 })
+      assert.equal(els.stripHiddenNote.textContent, '2 palavras deixadas de fora por terem menos de 3 textos avaliados.')
     })
   })
 })

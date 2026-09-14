@@ -390,6 +390,37 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
       assert.equal(els.keyDefault.hidden, true, 'the default figure key hides in strip mode')
       assert.equal(els.keyStrip.hidden, false, "the strip's own figure key shows instead")
       assert.equal(calls.length, requestsBefore, 'switching to the strip view must not fetch anything new')
+
+      // issue #149 gap: switching back to map must hide the strip and its note again, not
+      // leave them shown underneath #viewport.
+      els.modeMap.fire('click')
+      assert.equal(els.atlasStrip.hidden, true, '#atlasStrip must hide again once map mode is picked')
+      assert.equal(els.stripHiddenNote.hidden, true, '#stripHiddenNote must hide again once map mode is picked')
+    })
+  })
+
+  it('issue #149 gap: a word selected before switching to strip keeps its is-selected mark on the strip circle', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [
+        { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } },
+        { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0.2, n: 8 } },
+      ]
+      const graph = { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph, '/docs': { docs: [], total: 0 } })
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeColumns.fire('click')
+      const card = [...els.columns.querySelectorAll('[data-col]')].find((el: any) => el.dataset.col === 'word:golpe')
+      assert.ok(card, 'the columns list must carry a card for golpe')
+      card.fire('click')
+      await flush()
+      els.modeStrip.fire('click')
+      const dot = [...els.atlasStrip.querySelectorAll('[data-node]')].find((el: any) => el.dataset.node === 'word:golpe')
+      assert.ok(dot, 'the strip must paint a circle for golpe')
+      assert.equal(dot.classes['is-selected'], true, 'the word selected before switching keeps its is-selected mark once the strip repaints')
     })
   })
 

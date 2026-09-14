@@ -328,6 +328,53 @@ describe('GET /graph?testimony=1', () => {
   })
 })
 
+// `testimony=1` on GET /api/people/:id/week: the day's kikori mean, mirroring /graph's own flag.
+describe('GET /week?testimony=1 (issue #150)', () => {
+  before(seed)
+
+  const week = async (qs: string) => {
+    const res = await app.request(`/api/people/tarcisio/week?${qs}`)
+    assert.equal(res.status, 200)
+    return res.json()
+  }
+  const bucketAt = (body: { buckets: { start: string; testimony?: { score: number; n: number } | null }[] }, day: string) =>
+    body.buckets.find((b) => brtYmd(b.start) === day)!
+
+  it('is off by default: no bucket carries a testimony field', async () => {
+    const body = await week('days=30')
+    for (const b of body.buckets) assert.equal('testimony' in b, false)
+  })
+
+  it('averages the stub scores of the docs behind each day', async () => {
+    const body = await week('days=30&testimony=1&method=stub')
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000)
+    assert.deepEqual(bucketAt(body, brtYmd(daysAgo(7))).testimony, { score: 6, n: 1 })
+    assert.deepEqual(bucketAt(body, brtYmd(daysAgo(6))).testimony, { score: 4, n: 1 })
+  })
+
+  it('an unscored method answers nulls, not an error', async () => {
+    const body = await week('days=30&testimony=1&method=nobody:ever')
+    assert.equal(body.buckets.length, 30)
+    for (const b of body.buckets) assert.equal(b.testimony, null)
+  })
+
+  it('AC1: no bucket carries a testimony key across query-parameter combinations when the flag is absent', async () => {
+    const qs = ['days=30', 'days=30&source=gdelt', 'days=30&domain=estadao.com.br', 'days=30&lean=right', 'days=30&kind=word', 'days=30&limit=40']
+    for (const q of qs) {
+      const body = await week(q)
+      for (const b of body.buckets) assert.equal('testimony' in b, false)
+    }
+  })
+
+  it('AC6: an unscored method answers a 200 with testimony null on every bucket, not a 4xx', async () => {
+    const res = await app.request('/api/people/tarcisio/week?days=30&testimony=1&method=nobody:ever')
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    assert.ok(body.buckets.length > 0)
+    for (const b of body.buckets) assert.equal(b.testimony, null)
+  })
+})
+
 describe('GET /api/compare (issue #93)', () => {
   before(seed)
 

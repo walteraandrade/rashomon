@@ -30,6 +30,7 @@ import { resolveScope } from '../src/outlets.js'
 import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query.js'
 import { inTransaction, insertDoc, upsertPersons } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
+import { docsText } from './docs.js'
 import { futureDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
@@ -1344,6 +1345,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),
       compare: queries.compare(lula, tarcisio, { ...scope, limit: 5 }),
       week: queries.week(lula, { ...scope, limit: 8 }),
+      weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)
@@ -2296,6 +2298,112 @@ describe('weekFor (issue #147)', () => {
 
   it('issue #147: week scoped bounds published_at from below so docs_published_idx applies', () => {
     assert.match(statements.week, /where d\.published_at >=/)
+  })
+})
+
+describe('weekFor testimony (issue #150)', () => {
+  before(seed)
+
+  const bucketAt = (r: Awaited<ReturnType<typeof weekFor>>, days: number) => r.buckets.find((b) => brtYmd(b.start) === brtYmd(daysAgo(days)))!
+
+  it('is off by default: no bucket carries a testimony field', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30 })
+    for (const b of r.buckets) assert.equal('testimony' in b, false)
+  })
+
+  it('averages the stub scores of the docs behind each day, excluding null scores', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
+    // daysAgo(7) holds estadao.com.br/31 (stub score 6) and estadao.com.br/36 (stub score null).
+    assert.deepEqual(bucketAt(r, 7).testimony, { score: 6, n: 1 })
+    // daysAgo(6) holds estadao.com.br/30 (stub score 4), the only scored doc that day.
+    assert.deepEqual(bucketAt(r, 6).testimony, { score: 4, n: 1 })
+  })
+
+  it('a day with no about-docs has testimony null', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
+    const empty = r.buckets.find((b) => b.about === 0)
+    assert.ok(empty)
+    assert.equal(empty!.testimony, null)
+  })
+
+  it('an unscored method answers null on every bucket, not an error', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'nobody:ever' })
+    assert.equal(r.buckets.length, 30)
+    for (const b of r.buckets) assert.equal(b.testimony, null)
+  })
+
+  it('exports the merged statement, and only it, for the benchmark', () => {
+    assert.equal(typeof statements.weekTestimony, 'string')
+    assert.ok(statements.weekTestimony.includes('doc_testimony'))
+    assert.ok(!Object.keys(statements).some((k) => k.startsWith('week') && k !== 'week' && k !== 'weekTestimony'))
+  })
+
+  it('issue #150: docs state the flag, the per-bucket shape, the unchanged default and the shared method rule', () => {
+    assert.match(docsText, /\/api\/people\/:id\/week.*testimony=1/)
+    assert.match(docsText, /testimony:\s*\{\s*score,\s*n\s*\}\s*\|\s*null/)
+    assert.match(docsText, /byte-for-byte what it was/)
+    assert.match(docsText, /`method` resolves exactly as on `\/testimony`/)
+  })
+})
+
+describe('issue #150 acceptance criteria: testimony=1 on /week', () => {
+  before(seed)
+
+  const bucketAt = (r: Awaited<ReturnType<typeof weekFor>>, days: number) => r.buckets.find((b) => brtYmd(b.start) === brtYmd(daysAgo(days)))!
+
+  it('AC1: weekFor omits the testimony key on every bucket when the flag is absent, across parameter combinations', async () => {
+    const combos: WeekQuery[] = [
+      { ...weekBase },
+      { ...weekBase, days: 30 },
+      { ...weekBase, source: 'gdelt' },
+      { ...weekBase, domain: 'estadao.com.br' },
+      { ...weekBase, lean: 'right' },
+      { ...weekBase, kind: 'word' },
+      { ...weekBase, limit: 40 },
+    ]
+    for (const q of combos) {
+      const r = await weekFor(tarcisio, q)
+      for (const b of r.buckets) assert.equal('testimony' in b, false)
+    }
+  })
+
+  it('AC3: the daysAgo(7) bucket averages only the non-null stub score, excluding the null-scored doc sharing that day', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
+    // estadao.com.br/31 (stub score 6) and estadao.com.br/36 (stub score null) both fall on daysAgo(7).
+    assert.deepEqual(bucketAt(r, 7).testimony, { score: 6, n: 1 })
+  })
+
+  it('AC4: the daysAgo(6) bucket averages its single scored doc', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
+    // estadao.com.br/30, stub score 4, is the only scored doc that day.
+    assert.deepEqual(bucketAt(r, 6).testimony, { score: 4, n: 1 })
+  })
+
+  it('AC5: a bucket with about: 0 has testimony null', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
+    const empty = r.buckets.find((b) => b.about === 0)
+    assert.ok(empty, 'fixture must contain an empty-about day within 30 days')
+    assert.equal(empty!.testimony, null)
+  })
+
+  it('AC6: an unscored method resolves testimony to null on every bucket rather than raising', async () => {
+    const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'nobody:ever' })
+    assert.equal(r.buckets.length, 30)
+    for (const b of r.buckets) assert.equal(b.testimony, null)
+  })
+
+  it("AC7: weekTestimonyQuery's rendered text is identical across calls with different days, source and method", () => {
+    const a = queries.weekTestimony(tarcisio, { ...weekBase, days: 7, source: 'all', limit: 8 }, 'stub')
+    const b = queries.weekTestimony(tarcisio, { ...weekBase, days: 90, source: 'gdelt', limit: 40 }, 'kikori:q8')
+    assert.equal(a.text, b.text)
+    assert.equal(a.text, statements.weekTestimony)
+  })
+
+  it('AC8: docs state the flag, the per-bucket shape, the byte-for-byte-unchanged default and the shared method rule', () => {
+    assert.match(docsText, /week[^\n]*testimony=1/)
+    assert.match(docsText, /testimony:\s*\{\s*score,\s*n\s*\}\s*\|\s*null/)
+    assert.match(docsText, /byte-for-byte what it was/)
+    assert.match(docsText, /method.{0,40}resolves exactly as on.{0,10}\/testimony/)
   })
 })
 

@@ -243,6 +243,8 @@ describe('kikori fixtures (real model)', { skip: dtypes.length === 0 && 'set KIK
     it(`${dtype} scores every fixture within ${tolerance[dtype]} of ${expected[dtype]}`, async () => {
       process.env.TESTIMONY_DTYPE = dtype
       const diffs: { person: string; got: number; want: number }[] = []
+      // aliases: [] on purpose. The expected scores were computed on the head cut; with an alias
+      // the long fixtures would take the mention window (issue #154) and kikori re-cuts them.
       for (const f of fixtures) {
         const got = await scorers.onnx(f.text, { id: f.person, name: f.person, aliases: [] })
         assert.ok(typeof got === 'number')

@@ -1,5 +1,6 @@
 import type { Scorer } from '../types.js'
 import { dtype, modelRevision, type Dtype } from './method.js'
+import { scoredText } from './window.js'
 
 type Contract = { max_length: number; labels: string[] }
 type Encoded = { input_ids: number[]; token_type_ids: number[] }
@@ -67,6 +68,6 @@ const model = () => {
 export const onnx: Scorer = async (text, person) => {
   if (!text.trim()) return null
   const m = await model()
-  const encoded = pairIds(m.ids(person.name), m.ids(text), m.contract.max_length, m.cls, m.sep)
+  const encoded = pairIds(m.ids(person.name), m.ids(scoredText(text, person.aliases)), m.contract.max_length, m.cls, m.sep)
   return scoreFromLogits(await m.run(encoded), m.contract.labels)
 }

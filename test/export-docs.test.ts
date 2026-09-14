@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
 import { exportLines } from '../src/export-docs.js'
+import { SCORED_CHARS } from '../src/scorers/window.js'
 import { collidingUri, seed } from './fixture.js'
 import './close.js'
 
@@ -14,10 +15,23 @@ describe('exportLines', () => {
     assert.equal(rows.length, Number(countRows[0].n))
     for (const r of rows) {
       const parsed = JSON.parse(JSON.stringify(r))
-      assert.deepEqual(Object.keys(parsed).sort(), ['domain', 'id', 'persons', 'published_at', 'source', 'text', 'tone', 'uri'])
+      assert.deepEqual(Object.keys(parsed).sort(), ['domain', 'id', 'persons', 'published_at', 'source', 'text', 'tone', 'uri', 'windows'])
       assert.ok(Array.isArray(parsed.persons))
       for (const p of parsed.persons) assert.equal(typeof p, 'string')
     }
+  })
+
+  it('carries one window per mentioned person, the text the scorer sends (issue #154)', async () => {
+    const rows = await exportLines()
+    for (const r of rows) {
+      assert.deepEqual(Object.keys(r.windows).sort(), [...r.persons].sort())
+      for (const [id, w] of Object.entries(r.windows)) {
+        assert.ok(w.length <= SCORED_CHARS || w === r.text, id)
+        assert.ok(r.text.includes(w), `${id}: window is not a slice of the text`)
+      }
+    }
+    const withMatch = rows.find((r) => r.persons.length > 0)
+    assert.ok(withMatch)
   })
 
   it('orders rows by id ascending', async () => {

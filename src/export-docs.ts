@@ -1,4 +1,5 @@
 import { db, migrate } from './db.js'
+import { scoredText } from './scorers/window.js'
 
 export type ExportedDoc = {
   id: number
@@ -9,7 +10,12 @@ export type ExportedDoc = {
   uri: string
   tone: number | null
   persons: string[]
+  // Per tracked person mentioned, the text the scorer sends (src/scorers/window.ts): kikori
+  // trains on `windows[person]`, never on `text`, so it learns the text production shows it.
+  windows: Record<string, string>
 }
+
+type Aliases = { id: string; aliases: string[] }
 
 const exportSql = `
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone,
@@ -21,7 +27,14 @@ const exportSql = `
 
 // Pure line-generation, separate from main()'s stdout/db wiring, so tests can assert on
 // the shape without spawning the script or touching process.stdout.
-export const exportLines = async (): Promise<ExportedDoc[]> => (await db.query<ExportedDoc>(exportSql)).rows
+export const exportLines = async (): Promise<ExportedDoc[]> => {
+  const aliases = new Map((await db.query<Aliases>('select id, aliases from persons')).rows.map((p) => [p.id, p.aliases]))
+  const { rows } = await db.query<Omit<ExportedDoc, 'windows'>>(exportSql)
+  return rows.map((r) => ({
+    ...r,
+    windows: Object.fromEntries(r.persons.map((id) => [id, scoredText(r.text, aliases.get(id) ?? [])])),
+  }))
+}
 
 const main = async () => {
   await migrate()

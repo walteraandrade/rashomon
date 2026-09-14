@@ -115,7 +115,7 @@ export const decodeEntities = (s: string) =>
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
     .replace(/&(\w+);/g, (m, n) => entities[n] ?? m)
 
-const aliasRe = (alias: string) => new RegExp(`(?<![a-z0-9])${escapeRe(normalize(alias))}(?![a-z0-9])`, 'g')
+export const aliasRe = (alias: string) => new RegExp(`(?<![a-z0-9])${escapeRe(normalize(alias))}(?![a-z0-9])`, 'g')
 
 // Longer aliases claim their span first, so "Flávio Bolsonaro" cannot also feed the bare
 // "Bolsonaro" alias of another person. `exclude` entries are aliases owned by nobody.

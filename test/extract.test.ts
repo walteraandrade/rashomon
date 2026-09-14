@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import seed from '../seed.json' with { type: 'json' }
 import { readFileSync } from 'node:fs'
 import {
+  aliasSpans,
   capitalizedRuns,
   collocations,
   contentWords,
@@ -65,6 +66,28 @@ describe('mentions', () => {
   it('does not match inside other words or partial aliases', () => {
     assert.ok(!mentions('preço do leite subiu', leite))
     assert.ok(!mentions('lulista convicto', lula))
+  })
+})
+
+// The one matcher tagging and the scorer's window (issue #154) share.
+describe('aliasSpans', () => {
+  const spans = (text: string) =>
+    Object.fromEntries([...aliasSpans(normalize(text), seed)].map(([id, s]) => [id, s.map(({ start, end }) => normalize(text).slice(start, end))]))
+
+  it('gives every person the spans her aliases claim, longest alias first, in normalized offsets', () => {
+    assert.deepEqual(spans('Flávio Bolsonaro defende Bolsonaro'), { 'flavio-bolsonaro': ['flavio bolsonaro'], bolsonaro: ['bolsonaro'] })
+    assert.deepEqual(aliasSpans(normalize('Flávio Bolsonaro defende Bolsonaro'), seed).get('bolsonaro'), [{ start: 25, end: 34 }])
+    assert.deepEqual(spans('Lula, Lula e LULA'), { lula: ['lula', 'lula', 'lula'] })
+  })
+
+  it('gives an excluded name to nobody', () => {
+    assert.deepEqual(spans('Ciro Nogueira e Ciro Gomes'), { ciro: ['ciro gomes'] })
+    assert.deepEqual(spans('Ciro Nogueira'), {})
+  })
+
+  it('is what personsMentioned tags from', () => {
+    const text = 'Vinicius de Moraes e Alexandre de Moraes, com Flávio Bolsonaro'
+    assert.deepEqual(Object.keys(spans(text)).sort(), personsMentioned(text, seed).map((p) => p.id).sort())
   })
 })
 

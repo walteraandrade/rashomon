@@ -27,7 +27,7 @@ pnpm dev       # http://localhost:3210
 | `pnpm purge <source>` | delete one source's docs for a clean re-fetch |
 | `pnpm purge themes` | clear GDELT's stored theme terms, the `extra_terms` column and pre-revision `kikori:q8`-style testimony rows |
 | `pnpm migrate` / `pnpm push` | create the schema on a managed Postgres, then copy a local PGlite into it |
-| `pnpm export-docs` | dump every doc as one JSON line, for kikori's training set |
+| `pnpm export-docs` | dump every doc as one JSON line, with the per-person text the scorer sees, for kikori's training set |
 | `pnpm bench` / `pnpm bench:writes` | read and write baselines against their own synthetic database |
 | `pnpm typecheck` / `pnpm test` | `tsc`, and `node --test` against an in-memory database |
 

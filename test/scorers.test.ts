@@ -6,8 +6,12 @@ import { fileURLToPath } from 'node:url'
 import { methods, scorers } from '../src/scorers/index.js'
 import { methods as methodsFromMethod, modelRevision } from '../src/scorers/method.js'
 import { onnx, pairIds, scoreFromLogits } from '../src/scorers/onnx.js'
+import seedJson from '../seed.json' with { type: 'json' }
+import type { Person } from '../src/types.js'
 import fixtures from './kikori-fixtures.json' with { type: 'json' }
 import { withEnv } from './env.js'
+
+const seed = seedJson as Person[]
 
 // src/scorers/*: the kikori encoding and score formula, the method label, and the module split
 // (issue #112) that keeps the request-serving path away from the model loader. pnpm score itself
@@ -243,8 +247,15 @@ describe('kikori fixtures (real model)', { skip: dtypes.length === 0 && 'set KIK
     it(`${dtype} scores every fixture within ${tolerance[dtype]} of ${expected[dtype]}`, async () => {
       process.env.TESTIMONY_DTYPE = dtype
       const diffs: { person: string; got: number; want: number }[] = []
+      // Each fixture scores as its seed.json person, real aliases and all, so the long fixtures
+      // take the mention window (issue #154). The fixtures are the published revision's own
+      // (kikori's fixtures.json for d03d7853); the eight long ones carry scores recomputed on
+      // the window with that export's fp32 and int8 ONNX on 2026-09-14, the short ones the
+      // numbers kikori shipped.
       for (const f of fixtures) {
-        const got = await scorers.onnx(f.text, { id: f.person, name: f.person, aliases: [] })
+        const person = seed.find((p) => p.name === f.person)
+        assert.ok(person, `${f.person} is not in seed.json`)
+        const got = await scorers.onnx(f.text, person, seed)
         assert.ok(typeof got === 'number')
         diffs.push({ person: f.person, got, want: f[expected[dtype]] })
       }

@@ -1,3 +1,4 @@
+import seedJson from '../seed.json' with { type: 'json' }
 import { db, migrate } from './db.js'
 import { methods, scorers } from './scorers/index.js'
 // Direct, not through scorers/index.js: method.ts has no imports, so nothing it exports pulls in the model loader.
@@ -18,12 +19,16 @@ const unscoredSql = `
   )`
 
 // No migrate()/db.close() here: test/score.test.ts calls this against the shared in-memory fixture.
-export const scoreAll = async (method: string, scorer: Scorer): Promise<number> => {
+// `persons` is the tracked list, seed.json in production: it carries `exclude`, which the persons
+// table does not, and the scorer's window needs every alias to land on the right mention. A pair
+// whose person has left the list scores on the row's own aliases.
+export const scoreAll = async (method: string, scorer: Scorer, persons: Person[]): Promise<number> => {
+  const byId = new Map(persons.map((p) => [p.id, p]))
   const { rows } = await db.query<Pair>(unscoredSql, [method])
   await rows.reduce<Promise<void>>(async (acc, r) => {
     await acc
-    const person: Person = { id: r.id, name: r.name, aliases: r.aliases }
-    const score = await scorer(r.text, person)
+    const person = byId.get(r.person_id) ?? { id: r.id, name: r.name, aliases: r.aliases }
+    const score = await scorer(r.text, person, persons)
     await db.query(
       `insert into doc_testimony (doc_id, person_id, method, score) values ($1, $2, $3, $4)
        on conflict (doc_id, person_id, method) do nothing`,
@@ -48,7 +53,7 @@ const main = async () => {
   // resolveRun before migrate(): a refused run must not have touched the database.
   const { scorer, method } = resolveRun(process.env.TESTIMONY_SCORER ?? 'onnx')
   await migrate()
-  const n = await scoreAll(method, scorer)
+  const n = await scoreAll(method, scorer, seedJson as Person[])
   console.log(`scored ${n} pairs as ${method}`)
   await db.close()
 }

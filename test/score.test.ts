@@ -19,18 +19,18 @@ describe('scoreAll', () => {
     const before = Number(await countRows('stub-fresh'))
     assert.equal(before, 0)
     const pairsTotal = (await db.query<{ n: string }>(`select count(*) as n from doc_persons`)).rows[0].n
-    const scored = await scoreAll('stub-fresh', scorers.stub)
+    const scored = await scoreAll('stub-fresh', scorers.stub, persons)
     assert.equal(scored, Number(pairsTotal))
     assert.equal(Number(await countRows('stub-fresh')), Number(pairsTotal))
 
-    const again = await scoreAll('stub-fresh', scorers.stub)
+    const again = await scoreAll('stub-fresh', scorers.stub, persons)
     assert.equal(again, 0, 'a second call with no new docs/persons must score zero additional pairs')
     assert.equal(Number(await countRows('stub-fresh')), Number(pairsTotal))
   })
 
   it('is deterministic: the same (text, person) always yields the same score', async () => {
-    const score = await scorers.stub('Tarcísio discute geopolítica durante evento internacional', persons[1])
-    const scoreAgain = await scorers.stub('Tarcísio discute geopolítica durante evento internacional', persons[1])
+    const score = await scorers.stub('Tarcísio discute geopolítica durante evento internacional', persons[1], persons)
+    const scoreAgain = await scorers.stub('Tarcísio discute geopolítica durante evento internacional', persons[1], persons)
     assert.equal(score, scoreAgain)
   })
 
@@ -42,7 +42,7 @@ describe('scoreAll', () => {
     const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])
     await db.query(`insert into doc_persons values ($1, $2) on conflict do nothing`, [rows[0].id, persons[0].id])
 
-    const scored = await scoreAll('stub-empty', scorers.stub)
+    const scored = await scoreAll('stub-empty', scorers.stub, persons)
     assert.ok(scored >= 1)
     const row = await db.query<{ score: number | null }>(
       `select score from doc_testimony where doc_id = $1 and person_id = $2 and method = 'stub-empty'`,
@@ -50,7 +50,7 @@ describe('scoreAll', () => {
     )
     assert.equal(row.rows[0].score, null)
 
-    const again = await scoreAll('stub-empty', scorers.stub)
+    const again = await scoreAll('stub-empty', scorers.stub, persons)
     assert.equal(again, 0, 'the null-scored pair must not be retried')
   })
 })
@@ -60,9 +60,9 @@ describe('scoreAll across methods', () => {
 
   it('re-scores pairs whose only row is from another method (placeholder `onnx` never satisfies `kikori:q8`)', async () => {
     const pairsTotal = Number((await db.query<{ n: string }>(`select count(*) as n from doc_persons`)).rows[0].n)
-    await scoreAll('onnx', scorers.stub)
+    await scoreAll('onnx', scorers.stub, persons)
     assert.equal(Number(await countRows('onnx')), pairsTotal)
-    const scored = await scoreAll('kikori:q8', scorers.stub)
+    const scored = await scoreAll('kikori:q8', scorers.stub, persons)
     assert.equal(scored, pairsTotal)
     assert.equal(Number(await countRows('onnx')), pairsTotal, 'the old rows stay untouched')
     assert.equal(Number(await countRows('kikori:q8')), pairsTotal)
@@ -127,9 +127,9 @@ describe('a revision change re-scores every pair and leaves the old rows readabl
     const [first, second] = [await labelFor(REV), await labelFor(OTHER)]
     assert.notEqual(first, second, 'a revision change must produce a distinct method label')
 
-    assert.equal(await scoreAll(first, scorers.stub), pairs)
+    assert.equal(await scoreAll(first, scorers.stub, persons), pairs)
     assert.equal(
-      await scoreAll(second, scorers.stub),
+      await scoreAll(second, scorers.stub, persons),
       pairs,
       'the second revision must re-score every pair, not just the ones added since the first run',
     )

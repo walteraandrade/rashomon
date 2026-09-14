@@ -17,4 +17,6 @@ export type Term = { term: string; kind: 'hashtag' | 'word' | 'phrase' }
 // ('primeiro turno'). The lexicon of the latter is built by `pnpm reindex` (src/phrases.ts)
 // and passed back into extraction, so ingest and reindex tag the same pairs.
 export type Phrases = ReadonlySet<string>
-export type Scorer = (text: string, person: Person) => Promise<number | null>
+// `persons` is every tracked person: the window around the mention (src/scorers/window.ts) needs
+// the other aliases that claim a span first, and the person's own `exclude` names.
+export type Scorer = (text: string, person: Person, persons: Person[]) => Promise<number | null>

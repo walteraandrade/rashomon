@@ -519,7 +519,8 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
   const eligible = nodes
     .map((n) => ({ n, tone: termMask(n, personScore) }))
     .filter((e): e is { n: Term; tone: string } => e.tone !== null)
-  if (!eligible.length) return { dots: [] as (StripDot & { y: number })[], domainMin: -1, domainMax: 1, ticks: [-1, 0, 1], x: (s: number) => STRIP_PAD + inner / 2 }
+  if (!eligible.length)
+    return { dots: [] as (StripDot & { y: number })[], domainMin: -1, domainMax: 1, ticks: [-1, 0, 1], x: (s: number) => STRIP_PAD + inner / 2, half: 44, height: 88 }
   const scores = eligible.map((e) => e.n.testimony!.score)
   let domainMin = Math.floor(Math.min(...scores, personScore as number))
   let domainMax = Math.ceil(Math.max(...scores, personScore as number))
@@ -539,10 +540,25 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
     x: x(e.n.testimony!.score),
     r: stripRadius(e.n.count, width),
   }))
-  const dots = swarm(placed)
+  // At a high word count the swarm can stack many rows; shrink the dots (never below
+  // STRIP_MIN_R) until the figure fits STRIP_MAX_HEIGHT, the same trade-off stripLayout
+  // already makes for figure 2's outlet strip.
+  const smallest = placed.reduce((m, d) => Math.min(m, d.r), Infinity)
+  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
+  let scale = 1
+  const attempt = (k: number) => {
+    const dots = swarm(placed.map((d) => ({ ...d, r: d.r * k })))
+    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
+    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
+  }
+  let fit = attempt(scale)
+  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
+    scale = Math.max(floor, scale * 0.92)
+    fit = attempt(scale)
+  }
   const ticks: number[] = []
   for (let t = domainMin; t <= domainMax; t++) ticks.push(t)
-  return { dots, domainMin, domainMax, ticks, x }
+  return { dots: fit.dots, domainMin, domainMax, ticks, x, half: fit.half, height: fit.half * 2 }
 }
 
 // Draws into #atlasStrip and #stripHiddenNote. Unlike paintStrip, size is by document count
@@ -568,7 +584,7 @@ export const paintTermStrip = ({
     if (note) note.hidden = true
     return
   }
-  const { dots, domainMin, domainMax, ticks, x } = termStripLayout(nodes, personTestimony, width)
+  const { dots, domainMin, domainMax, ticks, x, half, height } = termStripLayout(nodes, personTestimony, width)
   const hiddenCount = nodes.length - dots.length
   if (note) {
     note.hidden = hiddenCount === 0
@@ -578,9 +594,6 @@ export const paintTermStrip = ({
     strip.innerHTML = '<div class="empty">Nenhuma palavra com avaliação suficiente neste recorte.</div>'
     return
   }
-  const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
-  const half = Math.max(44, Math.ceil(reach) + 6)
-  const height = half * 2
   const overall = personTestimony?.score
   const hasMean = overall !== null && overall !== undefined
   const normalizedSearch = normalize(search)

@@ -347,8 +347,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-dot .dot-halo { fill: transparent; }
 .strip-dot:hover .dot-halo, .strip-dot:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 .strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
-.strip-dot.is-active .dot-face { fill-opacity: 1; }
-.strip-dot.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
+.strip-dot.is-active .dot-face, .strip-dot.is-selected .dot-face { fill-opacity: 1; }
+.strip-dot.is-active .dot-halo, .strip-dot.is-selected .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
+/* Figure 1's own strip: a word that does not match the search dims, the same treatment
+   .column-card.is-dim already gets. */
+.strip-dot.is-dim { opacity: .35; }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 

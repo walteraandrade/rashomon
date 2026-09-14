@@ -1,3 +1,5 @@
+import { memoHit } from './perf.js'
+
 // Bounded TTL memo of successful API responses, one bucket per scope so a sort change does
 // not evict the outlet list. Only resolved values are written. Shared across figures: every
 // key embeds the person id and full querystring, so two figures never collide.
@@ -39,10 +41,14 @@ export const writeScope = (scope: string, key: string, value: unknown, now = Dat
 export const clearScopes = () => scopes.clear()
 
 // Uses a fresh entry when available; only memoizes a resolved value, so an error or abort
-// leaves the bucket untouched.
+// leaves the bucket untouched. Scopes carry their route's name (graph, sources, testimony,
+// compare, docs), so a hit records the `api:<route>` entry the network would have.
 export const fromScope = async <T>(scope: string, key: string, fetcher: () => Promise<T>): Promise<T> => {
   const hit = readScope(scope, key)
-  if (hit) return hit.value as T
+  if (hit) {
+    memoHit(scope, key)
+    return hit.value as T
+  }
   return writeScope(scope, key, await fetcher()) as T
 }
 

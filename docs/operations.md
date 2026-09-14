@@ -168,23 +168,34 @@ that calls `migrate()`) builds it, in about 100 ms per 8k rows, with the server 
 
 ## Performance baseline
 
-Three separate things: opt-in instrumentation on the running API, User Timing marks the page always records, and a benchmark that builds its own database and reports numbers. All local, free and offline.
+Three separate things. Two are local only: opt-in instrumentation on the running API (`PERF=1`) and a benchmark that builds its own database (`pnpm bench`). One runs in every browser, production included: the User Timing marks the page records, which exist to be read next to Vercel's `x-vercel-cache` header.
 
-**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms`, `x-perf-sql-count` and `server-timing` (`db;dur=446.2;desc="5 sql", app;dur=227.6`, the same two numbers in the shape DevTools draws on a request's Timing tab), plus one JSON line on stdout:
+**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms`, `x-perf-sql-count` and `server-timing` (`db;dur=446.2;desc="5 sql", total;dur=227.6`, the same two numbers in the shape DevTools draws on a request's Timing tab), plus one JSON line on stdout:
 
 ```json
 {"perf":"request","method":"GET","path":"/api/people/lula/graph","query":"days=30","status":200,"ms":227.6,"db_ms":446.2,"sql":5}
 ```
 
-`sql` counts statements sent to PGlite during the request and `db_ms` sums the time awaited on them, so a route that fans out with `Promise.all` reports more `db_ms` than `ms`; the difference is the concurrency. The line carries the request line and timings only — never a row, a response body or an environment value — so no document text and no credential can reach a log. `PERF_LOG=0` keeps the counters and headers and silences the line. Headers are additive: response bodies are byte-identical with and without `PERF`. On Vercel the headers are cached with the body, so on an `x-vercel-cache: HIT` the `server-timing` you read is the origin's cost when the entry was filled, not this request's.
+`sql` counts statements sent to PGlite during the request and `db_ms` sums the time awaited on them, so a route that fans out with `Promise.all` reports more `db_ms` than `ms`; the difference is the concurrency. The line carries the request line and timings only — never a row, a response body or an environment value — so no document text and no credential can reach a log. `PERF_LOG=0` keeps the counters and headers and silences the line. Headers are additive: response bodies are byte-identical with and without `PERF`. In `server-timing`, `total` is the route's wall-clock and `db` the sum awaited on statements; they overlap, so `db` longer than `total` is the fan-out, not a bug, and `total` is never "everything but the database".
 
-**Page marks.** `src/ui/perf.ts` records User Timing measures in every browser, with no flag: one `api:<route>` per completed API call (`api:graph`, `api:sources`, `api:testimony`, `api:compare`, `api:docs`, `api:people`), whose `detail` carries the URL, the status and the `x-vercel-cache` and `server-timing` headers, and one `figure:<name>` per figure from the request to the paint (`figure:atlas`, `figure:outlets`, `figure:testimony`, `figure:compare`, `figure:docs`). A superseded or aborted request leaves no entry. Read them in DevTools > Performance (the Timings track) or from the console:
+Vercel does not set `PERF`, so a deployment answers with no `server-timing` and the page's `detail.server` reads `null` there: production gets each call's duration and `x-vercel-cache`, nothing about the database. To see the split in production, set `PERF=1` and `PERF_LOG=0` on the Vercel project (headers only, no stdout line, at the cost of the query proxy on every request). Either way the headers are cached with the body, so on an `x-vercel-cache: HIT` the `server-timing` you read is the origin's cost when the entry was filled, not this request's.
+
+**Page marks.** `src/ui/perf.ts` records User Timing measures in every browser, with no flag: one `api:<route>` per finished API call (`api:graph`, `api:sources`, `api:testimony`, `api:compare`, `api:docs`, `api:people`), whose `detail` carries the URL, the status and the `x-vercel-cache` and `server-timing` headers, and one `figure:<name>` per figure from the request to the paint (`figure:atlas`, `figure:outlets`, `figure:testimony`, `figure:compare`, `figure:docs`). A failed call is recorded with its status (a slow 500 is a wait worth seeing); only an aborted or superseded request leaves no entry. A hit on the page's own 20 s memo (`fromScope`) records the `api:<route>` pair too, with `cache: "memory"` and a duration near zero, so a figure's measure always has the call it followed. This repo never posts the entries anywhere; they live in the tab. Vercel Web Analytics is a script on the same page and can read the same timeline. Read them in DevTools > Performance (the Timings track) or from the console:
 
 ```js
 performance.getEntriesByType('measure').map((e) => [e.name, Math.round(e.duration), e.detail.cache, e.detail.server])
 ```
 
-Placing a wait is subtraction: `figure:atlas` minus `api:graph` is layout and paint; `api:graph` minus the `app` metric in `server-timing` is network, cold start and connection; the `db` metric is SQL. A `MISS` next to a long `api:*` says the CDN, not the query, is where the time went. Nothing is sent anywhere: the entries live in the tab and die with it.
+Placing a wait is a decision keyed on the `api:*` entry's `detail.cache`, never a single subtraction:
+
+| `detail.cache` | what the `api:*` duration is | what to read |
+| --- | --- | --- |
+| `memory` | the page's own memo, ~0 | `figure − api` is layout and paint; nothing else to place |
+| `HIT` | the CDN answering | short is the CDN working; ignore `server` (it is the origin fill, not this request) |
+| `MISS` / `STALE` | the origin: cold start, connection, SQL, transfer | with `server`: `db` is SQL, `api − total` is network, cold start and connection; without it, only the total is known |
+| `null` | no CDN in front (local `pnpm dev`) | with `PERF=1`: same split as `MISS` |
+
+`figure − api` is layout and paint on every row. The one exception is `figure:docs` with two sides (the ruler): two `api:docs` run in `Promise.all`, so the figure is `max(api, api) + paint`, and `detail.urls` names both.
 
 **Benchmark.** `pnpm bench` generates a deterministic synthetic corpus (`src/bench-corpus.ts`, fixed seed) into its own `DATA_DIR`, replays every scenario in `src/bench-scenarios.ts` (graph, sources, docs, timeline, week, tone, testimony, rising, candidates, people) and writes `docs/perf-baseline.md`: environment, table sizes, cold and warm p50/p95 per scenario, statements per request, and `EXPLAIN (ANALYZE, BUFFERS)` for each statement the routes run. No network, no external API, no paid tooling.
 

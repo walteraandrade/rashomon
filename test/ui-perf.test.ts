@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { beforeEach, describe, it } from 'node:test'
-import { measures, routeOf, span } from '../src/ui/perf.js'
+import { measures, memoHit, routeOf, span } from '../src/ui/perf.js'
 
 // src/ui/perf.ts: User Timing marks for the page. No DOM, no network. Durations are never
 // asserted beyond non-negativity; the shape of the entries is the contract.
@@ -23,6 +23,20 @@ describe('span', () => {
     assert.deepEqual(performance.getEntriesByName('figure:compare', 'measure'), [])
   })
 
+  it('never throws, so instrumentation cannot turn a painted figure into an outage', () => {
+    const original = performance.measure
+    performance.measure = (() => {
+      throw new TypeError('measure exploded')
+    }) as typeof performance.measure
+    try {
+      const done = span('figure:atlas')
+      assert.doesNotThrow(() => done({ person: 'lula' }))
+      assert.ok(done() >= 0)
+    } finally {
+      performance.measure = original
+    }
+  })
+
   it('defaults the detail to an empty object', () => {
     span('figure:docs')()
     const [entry] = performance.getEntriesByName('figure:docs', 'measure') as PerformanceMeasure[]
@@ -37,6 +51,16 @@ describe('routeOf', () => {
     assert.equal(routeOf('/api/compare?a=lula&b=bolsonaro'), 'compare')
     assert.equal(routeOf('/api/people'), 'people')
     assert.equal(routeOf(''), '')
+  })
+})
+
+describe('memoHit', () => {
+  beforeEach(() => performance.clearMeasures())
+
+  it('records the api:<route> pair a memo hit would otherwise skip, marked as memory', () => {
+    memoHit('graph', 'lula?days=30')
+    const [entry] = performance.getEntriesByName('api:graph', 'measure') as PerformanceMeasure[]
+    assert.deepEqual(entry.detail, { url: 'lula?days=30', status: null, cache: 'memory', server: null })
   })
 })
 

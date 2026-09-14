@@ -14,7 +14,11 @@ describe('issue #43 AC2: the memo is bounded, short-lived and never caches a fai
       return { rows: calls }
     }
     assert.deepEqual(await fromScope('sources', 'k', fetcher), { rows: 1 })
+    performance.clearMeasures()
     assert.deepEqual(await fromScope('sources', 'k', fetcher), { rows: 1 })
+    // The hit still leaves the api:<route> entry, so figure − api stays a paint.
+    const [hit] = performance.getEntriesByName('api:sources', 'measure') as PerformanceMeasure[]
+    assert.equal(hit.detail.cache, 'memory')
     assert.equal(calls, 1)
   })
 

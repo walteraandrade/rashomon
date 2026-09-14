@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
 import { instrument, measure, percentile, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from '../src/perf.js'
@@ -98,13 +99,34 @@ describe('perfLine', () => {
 })
 
 describe('serverTiming', () => {
-  it('renders db and app as Server-Timing metrics, two decimals, statement count as the description', () => {
-    assert.equal(serverTiming({ ms: 227.567, sql: 5, dbMs: 446.234 }), 'db;dur=446.23;desc="5 sql", app;dur=227.57')
+  it('renders db and total as Server-Timing metrics, two decimals, statement count as the description', () => {
+    // db > total is a fan-out, not a bug: the two overlap, so the metric is `total`, never `app`.
+    assert.equal(serverTiming({ ms: 227.567, sql: 5, dbMs: 446.234 }), 'db;dur=446.23;desc="5 sql", total;dur=227.57')
   })
 
   it('parses back as two metrics the browser can read', () => {
     const metrics = serverTiming({ ms: 12, sql: 0, dbMs: 0 }).split(', ').map((m) => m.split(';')[0])
-    assert.deepEqual(metrics, ['db', 'app'])
+    assert.deepEqual(metrics, ['db', 'total'])
+  })
+
+  // perfEnabled is read once at import, so the on state needs its own process: an
+  // in-memory database, migrate, one request, the header on stdout.
+  it('PERF=1 sets server-timing on an API response through the middleware, on a 404 too', () => {
+    const script = `
+      const { migrate } = await import('./src/db.ts')
+      const { app } = await import('./src/server.ts')
+      await migrate()
+      const res = await app.request('/api/people/nobody/graph?days=30')
+      console.log(JSON.stringify({ status: res.status, header: res.headers.get('server-timing') }))
+    `
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+      env: { ...process.env, PERF: '1', PERF_LOG: '0', DATA_DIR: 'memory://' },
+      encoding: 'utf8',
+    })
+    assert.equal(child.status, 0, child.stderr)
+    const out = JSON.parse(child.stdout.trim().split('\n').pop() as string) as { status: number; header: string }
+    assert.equal(out.status, 404)
+    assert.match(out.header, /^db;dur=\d+(\.\d+)?;desc="\d+ sql", total;dur=\d+(\.\d+)?$/)
   })
 })
 

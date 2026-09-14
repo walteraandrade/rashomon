@@ -44,11 +44,34 @@ describe('json marks one api:<route> measure per completed call', () => {
     assert.equal(entry.detail.server, null)
   })
 
-  it('leaves no measure when the call fails', async () => {
+  it('records a failed call with its status and no body, since a slow 500 is a wait worth seeing', async () => {
     performance.clearMeasures()
     stubFetch(false, {})
     await assert.rejects(json('/api/people/lula/docs?term=x'))
-    assert.deepEqual(performance.getEntriesByName('api:docs', 'measure'), [])
+    const [entry] = performance.getEntriesByName('api:docs', 'measure') as PerformanceMeasure[]
+    assert.equal(entry.detail.status, 500)
+    assert.equal(entry.detail.cache, null)
+  })
+
+  it('records a network failure with a null status', async () => {
+    performance.clearMeasures()
+    globalThis.fetch = (async () => {
+      throw new Error('network down')
+    }) as typeof fetch
+    await assert.rejects(json('/api/people/lula/sources?days=30'))
+    const [entry] = performance.getEntriesByName('api:sources', 'measure') as PerformanceMeasure[]
+    assert.equal(entry.detail.status, null)
+  })
+
+  it('leaves no measure when the call is aborted', async () => {
+    performance.clearMeasures()
+    const controller = new AbortController()
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      controller.abort()
+      throw Object.assign(new Error('aborted'), { name: (init?.signal as AbortSignal).reason?.name ?? 'AbortError' })
+    }) as typeof fetch
+    await assert.rejects(json('/api/compare?a=lula&b=bolsonaro', controller.signal))
+    assert.deepEqual(performance.getEntriesByName('api:compare', 'measure'), [])
   })
 })
 

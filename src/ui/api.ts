@@ -40,18 +40,22 @@ export const docsParams = ({ days, source, term = '', kind = 'all', domain = '',
 // Test stubs hand back a bare object; a real Response always has headers.
 const headerOf = (response: Response, name: string) => response.headers?.get(name) ?? null
 
-// One `api:<route>` measure per completed call, carrying the two headers that place the
-// wait: `cache` (x-vercel-cache: HIT/MISS/STALE) and `server` (server-timing, PERF=1 only).
+// One `api:<route>` measure per finished call, success or failure, carrying the two headers
+// that place the wait: `cache` (x-vercel-cache: HIT/MISS/STALE) and `server` (server-timing,
+// PERF=1 only). Only an abort leaves no entry; a slow 500 is a wait worth seeing.
 export const json = async (url: string, signal?: AbortSignal): Promise<any> => {
   const done = span('api:' + routeOf(url))
-  const response = await fetch(url, { signal })
-  if (!response.ok) throw new Error('HTTP ' + response.status)
-  const body = await response.json()
-  done({ url, status: response.status, cache: headerOf(response, 'x-vercel-cache'), server: headerOf(response, 'server-timing') })
-  return body
+  let response: Response | null = null
+  try {
+    response = await fetch(url, { signal })
+    if (!response.ok) throw new Error('HTTP ' + response.status)
+    return await response.json()
+  } finally {
+    if (!signal?.aborted)
+      done({ url, status: response?.status ?? null, cache: response ? headerOf(response, 'x-vercel-cache') : null, server: response ? headerOf(response, 'server-timing') : null })
+  }
 }
 
-// app.ts fetches /api/people by hand so its import graph stays the three figures.
 export const loadPeople = (signal?: AbortSignal) => json('/api/people', signal)
 
 export const loadGraph = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>

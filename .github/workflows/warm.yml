@@ -1,0 +1,24 @@
+name: warm
+
+# A deploy empties the CDN cache, so the first reader of every recorte would pay the origin
+# until the next ingest. This asks for the page's own recortes right after production is up.
+on:
+  deployment_status:
+  workflow_dispatch:
+
+jobs:
+  warm:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm warm
+        env:
+          SITE_URL: https://rashomon-five.vercel.app

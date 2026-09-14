@@ -7,6 +7,8 @@
     "dev": "tsx src/server.ts",
     "build": "esbuild src/ui/app.ts --bundle --minify --format=esm --target=es2022 --outfile=public/bundle.js --log-level=warning",
     "reindex": "tsx src/reindex.ts",
+    "aggregate": "tsx src/aggregate.ts",
+    "warm": "tsx src/warm.ts",
     "purge": "tsx src/purge.ts",
     "score": "tsx src/score.ts",
     "export-docs": "tsx src/export-docs.ts",

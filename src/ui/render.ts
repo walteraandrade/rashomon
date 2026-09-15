@@ -455,7 +455,7 @@ export const paintTestimonyLoading = () => {
   const half = 48
   strip.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="strip-mean-row"></div>${frame(
     { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}` },
-    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map((s) => ({ x: STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD) })), cls: 'strip' })}${STRIP_GHOST_DOTS.map(([x, r]) => html`<circle class="ghost" cx="${x}" cy="${half}" r="${r}"/>`)}`,
+    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map((s) => STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD)), cls: 'strip' })}${STRIP_GHOST_DOTS.map(([x, r]) => html`<circle class="ghost" cx="${x}" cy="${half}" r="${r}"/>`)}`,
   )}<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div></div>`
 }
 
@@ -523,7 +523,7 @@ export const paintStrip = ({
   strip.setAttribute('aria-busy', 'false')
   strip.innerHTML = html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>${frame(
     { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel: 'Veículos na régua da avaliação, de −10 a +10' },
-    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map((s) => ({ x: x(s) })), cls: 'strip' })}<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>${dots.map(
+    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map(x), cls: 'strip' })}<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>${dots.map(
       (d) =>
         html`<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${d.domain}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${d.domain}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
     )}`,
@@ -653,7 +653,7 @@ export const paintTermStrip = ({
   const normalizedSearch = normalize(search)
   strip.innerHTML = html`${hasMean ? html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${((x(overall as number) - STRIP_PAD) / Math.max(1, width - 2 * STRIP_PAD)) * 100}%">média da pessoa ${signed(overall)}</span></div>` : ''}${frame(
     { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel: 'Palavras na régua da avaliação' },
-    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: ticks.map((s) => ({ x: x(s) })), cls: 'strip' })}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {
+    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: ticks.map(x), cls: 'strip' })}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {
       const dim = normalizedSearch ? !matching({ term: d.term, kind: d.kind }, search) : false
       return html`<g class="strip-dot ${dim ? 'is-dim' : ''}" data-node="${d.id}" style="--tone:${d.tone}" role="button" tabindex="0" aria-label="${d.term}, avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}"><title>${d.term} · avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`
     })}`,
@@ -837,7 +837,7 @@ const paintRulerBody = ({
   const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
   ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${endA}</span><span class="ruler-end cmp-b">${endB}</span></div>${frame(
     { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel },
-    html`${axis({ x0: RULER_PAD, x1: width - RULER_PAD, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => ({ x: x(b) })), cls: 'ruler' })}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}`,
+    html`${axis({ x0: RULER_PAD, x1: width - RULER_PAD, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map(x), cls: 'ruler' })}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}`,
   )}<div class="ruler-axis-labels"><span>${axisLabels[0]}</span><span>${axisLabels[1]}</span><span>${axisLabels[2]}</span></div>${note}${rulerOverflowMarkup(overflow, selected)}${tail}`
   for (const el of queryAll('[data-term]', ruler)) {
     const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
@@ -1050,7 +1050,7 @@ export const paintCompareLoading = () => {
     const pad = 28
     ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div>${frame(
       { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}` },
-      html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => ({ x: pad + ((b + 1) / 2) * (width - 2 * pad) })), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
+      html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => pad + ((b + 1) / 2) * (width - 2 * pad)), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
         ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
       )}`,
     )}</div><p class="sr-only">Lendo a régua.</p>`
@@ -1075,7 +1075,7 @@ export const paintRisingLoading = () => {
   const pad = 28
   ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div>${frame(
     { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}` },
-    html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => ({ x: pad + ((b + 1) / 2) * (width - 2 * pad) })), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
+    html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => pad + ((b + 1) / 2) * (width - 2 * pad)), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
       ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
     )}`,
   )}</div><p class="sr-only">Lendo os termos em alta.</p>`

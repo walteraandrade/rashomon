@@ -206,13 +206,6 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
 })
 
 describe('issue #170: SVG frame/axis/overflow-list extracted into src/ui/marks.ts', () => {
-  it('AC1: marks.ts exists and exports frame, axis and overflowList', async () => {
-    const marks = await import('../src/ui/marks.js')
-    assert.equal(typeof marks.frame, 'function', 'marks.ts must export frame')
-    assert.equal(typeof marks.axis, 'function', 'marks.ts must export axis')
-    assert.equal(typeof marks.overflowList, 'function', 'marks.ts must export overflowList')
-  })
-
   it('AC6: the loading ghosts build their frame/axis by calling marks.ts, not a literal <svg or <line class="…-axis"', () => {
     const src = moduleSource('render.ts')
     assert.match(src, /from\s+['"]\.\/marks\.js['"]/, 'render.ts must import from ./marks.js')
@@ -220,10 +213,9 @@ describe('issue #170: SVG frame/axis/overflow-list extracted into src/ui/marks.t
     assert.match(src, /\baxis\s*\(/, 'render.ts must call axis(...) rather than writing every axis <line> literal by hand')
   })
 
-  it('AC7: render.ts writes no more than one literal <svg per figure family, and no literal axis <line> class at all', () => {
+  it('AC7: render.ts writes no literal <svg opening and no literal axis <line> class at all', () => {
     const src = moduleSource('render.ts')
-    const svgLiterals = (src.match(/<svg\b/g) || []).length
-    assert.ok(svgLiterals <= 4, `render.ts still writes ${svgLiterals} literal <svg openings; the frame() builder in marks.ts should collapse the live/ghost pairs down to one per figure family (atlas/strip/ruler/week)`)
+    assert.equal((src.match(/<svg\b/g) || []).length, 0, 'render.ts must open every <svg> through marks.ts\'s frame(), never write the tag itself')
     assert.equal((src.match(/<line class="[^"]*-axis"/g) || []).length, 0, 'render.ts must build the axis line through marks.ts\'s axis(), never write <line class="…-axis"> itself')
   })
 
@@ -251,21 +243,6 @@ describe('issue #170: SVG frame/axis/overflow-list extracted into src/ui/marks.t
       assert.doesNotMatch(body, /<line class="[^"]*-axis"/, `${name} must not write a literal axis <line> itself`)
     }
     for (const name of ghostsWithAxis) assert.match(bodyOf(name), /\baxis\s*\(/, `${name} must build its axis via marks.ts's axis(...)`)
-  })
-})
-
-// Issue #170 AC5: paintRuler's own exported-shape test already exists (issue #151's describe
-// block, in render.test.ts, unmodified). paintWeek and paintTermStrip need the same guarantee:
-// both are still exported with their pre-refactor names and still paint the markup their own
-// (pre-existing, issue #147/#149) test suites pin -- this test only asserts the export surface;
-// the byte-identical markup is what AC4's diff-against-master check in render.test.ts covers.
-describe('issue #170 AC5: paintWeek and paintTermStrip keep their exported shape after the marks.ts extraction', () => {
-  it('render.ts still exports paintWeek, paintWeekLoading, paintWeekError, paintTermStrip and termStripLayout as functions', () => {
-    assert.equal(typeof renderModule.paintWeek, 'function')
-    assert.equal(typeof renderModule.paintWeekLoading, 'function')
-    assert.equal(typeof renderModule.paintWeekError, 'function')
-    assert.equal(typeof renderModule.paintTermStrip, 'function')
-    assert.equal(typeof renderModule.termStripLayout, 'function')
   })
 })
 

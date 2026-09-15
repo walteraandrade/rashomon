@@ -14,6 +14,12 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 // directly, the way the issue's own test plan asks for.
 
 describe('issue #170: marks.ts pure SVG builders', () => {
+  it('AC1: marks.ts exports frame, axis and overflowList as functions', () => {
+    assert.equal(typeof frame, 'function')
+    assert.equal(typeof axis, 'function')
+    assert.equal(typeof overflowList, 'function')
+  })
+
   describe('frame', () => {
     it('AC: a frame carries role/aria-label when given, and omits them when not', () => {
       const withLabel = String(frame({ cls: 'ruler-svg', width: 100, height: 40, viewBox: '0 0 100 40', role: 'group', ariaLabel: 'Palavras na régua' }, html``))
@@ -37,13 +43,13 @@ describe('issue #170: marks.ts pure SVG builders', () => {
 
   describe('axis', () => {
     it('AC: renders exactly one tick per entry in ticks, at the class name cls passes in, plus one axis line', () => {
-      const out = String(axis({ x0: 0, x1: 100, y: 20, ticks: [{ x: 0 }, { x: 50 }, { x: 100 }], cls: 'ruler' }))
+      const out = String(axis({ x0: 0, x1: 100, y: 20, ticks: [0, 50, 100], cls: 'ruler' }))
       assert.equal((out.match(/class="ruler-axis"/g) || []).length, 1, 'exactly one axis line')
       assert.equal((out.match(/class="ruler-tick"/g) || []).length, 3, 'one tick per entry in ticks')
     })
 
     it('a different cls prefix produces differently-named classes, since atlas.css selects on them', () => {
-      const out = String(axis({ x0: 0, x1: 100, y: 20, ticks: [{ x: 0 }], cls: 'strip' }))
+      const out = String(axis({ x0: 0, x1: 100, y: 20, ticks: [0], cls: 'strip' }))
       assert.match(out, /class="strip-axis"/)
       assert.match(out, /class="strip-tick"/)
       assert.doesNotMatch(out, /ruler-axis|ruler-tick/)

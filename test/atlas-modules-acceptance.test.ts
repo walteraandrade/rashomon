@@ -115,8 +115,8 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
 })
 
 describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actually hold', () => {
-  it('layout.js, format.js, state.js, perf.js and api.js never touch the document', () => {
-    for (const file of ['layout.ts', 'format.ts', 'state.ts', 'perf.ts', 'api.ts'])
+  it('layout.js, format.js, state.js, perf.js, api.js and marks.js never touch the document', () => {
+    for (const file of ['layout.ts', 'format.ts', 'state.ts', 'perf.ts', 'api.ts', 'marks.ts'])
       assert.ok(!/\bdocument\b/.test(moduleSource(file)), `${file} must stay DOM-free so it is importable under node:test`)
   })
 
@@ -132,7 +132,10 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'perf.ts': [],
       'api.ts': ['./perf.js'],
       'layout.ts': ['./format.js'],
-      'render.ts': ['./format.js', './layout.js'],
+      // Issue #170 extracts the SVG frame/axis/overflow-list builders render.ts hand-wrote
+      // once per figure into their own DOM-free module, imported only by render.ts.
+      'marks.ts': ['./format.js'],
+      'render.ts': ['./format.js', './layout.js', './marks.js'],
       // The documents card and the in-page guide belong to no figure; both sit next to the
       // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
       'docs-card.ts': ['./api.js', './perf.js', './render.js', './state.js'],
@@ -199,6 +202,47 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     for (const other of ['figures/atlas.ts', 'figures/testimony.ts', 'figures/compare.ts'])
       assert.ok(!importsOf(moduleSource(other)).some((spec) => spec.includes('rising')), `${other} must not import figures/rising.js`)
     assert.ok(!importsOf(moduleSource('figures/rising.ts')).some((spec) => spec.includes('atlas') || spec.includes('testimony') || spec.includes('compare')), 'figures/rising.ts must not import another figure')
+  })
+})
+
+describe('issue #170: SVG frame/axis/overflow-list extracted into src/ui/marks.ts', () => {
+  it('AC6: the loading ghosts build their frame/axis by calling marks.ts, not a literal <svg or <line class="…-axis"', () => {
+    const src = moduleSource('render.ts')
+    assert.match(src, /from\s+['"]\.\/marks\.js['"]/, 'render.ts must import from ./marks.js')
+    assert.match(src, /\bframe\s*\(/, 'render.ts must call frame(...) rather than writing every <svg literal by hand')
+    assert.match(src, /\baxis\s*\(/, 'render.ts must call axis(...) rather than writing every axis <line> literal by hand')
+  })
+
+  it('AC7: render.ts writes no literal <svg opening and no literal axis <line> class at all', () => {
+    const src = moduleSource('render.ts')
+    assert.equal((src.match(/<svg\b/g) || []).length, 0, 'render.ts must open every <svg> through marks.ts\'s frame(), never write the tag itself')
+    assert.equal((src.match(/<line class="[^"]*-axis"/g) || []).length, 0, 'render.ts must build the axis line through marks.ts\'s axis(), never write <line class="…-axis"> itself')
+  })
+
+  // AC6 named each ghost painter individually (paintAtlasLoading, the strip ghost inside
+  // paintTestimonyLoading, paintCompareLoading, paintRisingLoading, paintWeekLoading). The
+  // test above only checks that frame(/axis( appear *somewhere* in render.ts; this one scopes
+  // the check to each named function's own body, so a ghost that regressed to a hand-written
+  // <svg literal (while some other painter still called marks.ts) would not slip through.
+  it('AC6: each named ghost painter calls frame(/axis( inside its own body, never a literal <svg or axis <line>', () => {
+    const src = moduleSource('render.ts')
+    const bodyOf = (name: string) => {
+      const start = src.indexOf(`export const ${name} = `)
+      assert.ok(start >= 0, `render.ts must still export ${name}`)
+      const next = src.indexOf('\nexport const ', start + 1)
+      return src.slice(start, next >= 0 ? next : undefined)
+    }
+    // Every ghost has a frame; only the ones drawing an axis (testimony/compare/rising, not
+    // the map or the week columns) are asked to call axis( too.
+    const ghostsWithAxis = ['paintTestimonyLoading', 'paintCompareLoading', 'paintRisingLoading']
+    const ghostsFrameOnly = ['paintAtlasLoading', 'paintWeekLoading']
+    for (const name of [...ghostsWithAxis, ...ghostsFrameOnly]) {
+      const body = bodyOf(name)
+      assert.match(body, /\bframe\s*\(/, `${name} must build its <svg> via marks.ts's frame(...)`)
+      assert.doesNotMatch(body, /<svg\b/, `${name} must not write a literal <svg itself`)
+      assert.doesNotMatch(body, /<line class="[^"]*-axis"/, `${name} must not write a literal axis <line> itself`)
+    }
+    for (const name of ghostsWithAxis) assert.match(bodyOf(name), /\baxis\s*\(/, `${name} must build its axis via marks.ts's axis(...)`)
   })
 })
 

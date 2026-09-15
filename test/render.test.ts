@@ -1184,3 +1184,17 @@ describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', 
     })
   })
 })
+
+// Issue #170 AC5: paintRuler's exported shape is already pinned by issue #151's block above.
+// paintWeek and paintTermStrip need the same guarantee after the marks.ts extraction: still
+// exported under their pre-refactor names, still painting the markup issue #147/#149's suites
+// in this file pin.
+describe('issue #170 AC5: paintWeek and paintTermStrip keep their exported shape after the marks.ts extraction', () => {
+  it('render.ts still exports paintWeek, paintWeekLoading, paintWeekError, paintTermStrip and termStripLayout as functions', () => {
+    assert.equal(typeof paintWeek, 'function')
+    assert.equal(typeof paintWeekLoading, 'function')
+    assert.equal(typeof paintWeekError, 'function')
+    assert.equal(typeof paintTermStrip, 'function')
+    assert.equal(typeof termStripLayout, 'function')
+  })
+})

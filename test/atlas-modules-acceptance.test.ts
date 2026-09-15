@@ -115,8 +115,8 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
 })
 
 describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actually hold', () => {
-  it('layout.js, format.js, state.js, perf.js and api.js never touch the document', () => {
-    for (const file of ['layout.ts', 'format.ts', 'state.ts', 'perf.ts', 'api.ts'])
+  it('layout.js, format.js, state.js, perf.js, api.js and marks.js never touch the document', () => {
+    for (const file of ['layout.ts', 'format.ts', 'state.ts', 'perf.ts', 'api.ts', 'marks.ts'])
       assert.ok(!/\bdocument\b/.test(moduleSource(file)), `${file} must stay DOM-free so it is importable under node:test`)
   })
 
@@ -132,7 +132,10 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'perf.ts': [],
       'api.ts': ['./perf.js'],
       'layout.ts': ['./format.js'],
-      'render.ts': ['./format.js', './layout.js'],
+      // Issue #170 extracts the SVG frame/axis/overflow-list builders render.ts hand-wrote
+      // once per figure into their own DOM-free module, imported only by render.ts.
+      'marks.ts': ['./format.js'],
+      'render.ts': ['./format.js', './layout.js', './marks.js'],
       // The documents card and the in-page guide belong to no figure; both sit next to the
       // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
       'docs-card.ts': ['./api.js', './perf.js', './render.js', './state.js'],
@@ -199,6 +202,29 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     for (const other of ['figures/atlas.ts', 'figures/testimony.ts', 'figures/compare.ts'])
       assert.ok(!importsOf(moduleSource(other)).some((spec) => spec.includes('rising')), `${other} must not import figures/rising.js`)
     assert.ok(!importsOf(moduleSource('figures/rising.ts')).some((spec) => spec.includes('atlas') || spec.includes('testimony') || spec.includes('compare')), 'figures/rising.ts must not import another figure')
+  })
+})
+
+describe('issue #170: SVG frame/axis/overflow-list extracted into src/ui/marks.ts', () => {
+  it('AC1: marks.ts exists and exports frame, axis and overflowList', async () => {
+    const marks = await import('../src/ui/marks.js')
+    assert.equal(typeof marks.frame, 'function', 'marks.ts must export frame')
+    assert.equal(typeof marks.axis, 'function', 'marks.ts must export axis')
+    assert.equal(typeof marks.overflowList, 'function', 'marks.ts must export overflowList')
+  })
+
+  it('AC6: the loading ghosts build their frame/axis by calling marks.ts, not a literal <svg or <line class="…-axis"', () => {
+    const src = moduleSource('render.ts')
+    assert.match(src, /from\s+['"]\.\/marks\.js['"]/, 'render.ts must import from ./marks.js')
+    assert.match(src, /\bframe\s*\(/, 'render.ts must call frame(...) rather than writing every <svg literal by hand')
+    assert.match(src, /\baxis\s*\(/, 'render.ts must call axis(...) rather than writing every axis <line> literal by hand')
+  })
+
+  it('AC7: render.ts writes no more than one literal <svg per figure family, and no literal axis <line> class at all', () => {
+    const src = moduleSource('render.ts')
+    const svgLiterals = (src.match(/<svg\b/g) || []).length
+    assert.ok(svgLiterals <= 4, `render.ts still writes ${svgLiterals} literal <svg openings; the frame() builder in marks.ts should collapse the live/ghost pairs down to one per figure family (atlas/strip/ruler/week)`)
+    assert.equal((src.match(/<line class="[^"]*-axis"/g) || []).length, 0, 'render.ts must build the axis line through marks.ts\'s axis(), never write <line class="…-axis"> itself')
   })
 })
 

@@ -50,6 +50,7 @@ import {
   weekDayLabel,
 } from './format.js'
 import { FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, rulerLayout, routesFrom, swarm, weekLayout, type RulerItem, type WeekColumnLayout } from './layout.js'
+import { axis, frame, overflowList } from './marks.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
@@ -114,7 +115,8 @@ export const drawMap = ({
 }) => {
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
-  $('viewport').innerHTML = html`<div class="map-stage"><svg class="map-svg" viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a ${personName}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>`
+  const mapBody = html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text>`
+  $('viewport').innerHTML = html`<div class="map-stage">${frame({ cls: 'map-svg', viewBox: '-430 -402 860 804', ariaLabel: `Mapa de palavras associadas a ${personName}` }, mapBody)}</div>`
   $('overflow').hidden = mode !== 'map' || !overflow.length
   $('overflow').innerHTML = overflow.length
     ? html`<p>${overflow.length} ${overflow.length === 1 ? 'termo não coube' : 'termos não couberam'} sem reduzir a legibilidade. Todos continuam selecionáveis aqui:</p>${overflow.map((n) => html`<button class="quiet-button" data-node="${n.id}">${label(n)}</button>`)}`
@@ -373,9 +375,12 @@ export const paintAtlasLoading = () => {
   const viewport = $('viewport')
   if (!viewport) return
   viewport.setAttribute('aria-busy', 'true')
-  viewport.innerHTML = html`<div class="map-stage" aria-hidden="true"><svg class="map-svg" viewBox="-430 -402 860 804"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g class="ghost-field">${ATLAS_GHOST_WORDS.map(
-    ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="6"/>`,
-  )}<rect class="ghost" x="-72" y="-26" width="144" height="52" rx="10"/></g></svg></div>`
+  viewport.innerHTML = html`<div class="map-stage" aria-hidden="true">${frame(
+    { cls: 'map-svg', viewBox: '-430 -402 860 804' },
+    html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g class="ghost-field">${ATLAS_GHOST_WORDS.map(
+      ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="6"/>`,
+    )}<rect class="ghost" x="-72" y="-26" width="144" height="52" rx="10"/></g>`,
+  )}</div>`
   const inspector = $('inspector')
   if (!inspector) return
   inspector.innerHTML = html`<div class="ghost-field" aria-hidden="true"><p class="eyebrow">${ghostBar('ghost-kicker')}</p>${ghostBar('ghost-title')}<dl class="metric stat"><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div></dl>${ghostBar('ghost-line')}${ghostBar('ghost-line is-short')}</div>`
@@ -448,9 +453,10 @@ export const paintTestimonyLoading = () => {
   const width = 860
   const height = 96
   const half = 48
-  strip.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="strip-mean-row"></div><svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(
-    (s) => html`<line class="strip-tick" x1="${STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD)}" x2="${STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD)}" y1="${half - 5}" y2="${half + 5}"/>`,
-  )}${STRIP_GHOST_DOTS.map(([x, r]) => html`<circle class="ghost" cx="${x}" cy="${half}" r="${r}"/>`)}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div></div>`
+  strip.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="strip-mean-row"></div>${frame(
+    { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}` },
+    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map((s) => ({ x: STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD) })), cls: 'strip' })}${STRIP_GHOST_DOTS.map(([x, r]) => html`<circle class="ghost" cx="${x}" cy="${half}" r="${r}"/>`)}`,
+  )}<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div></div>`
 }
 
 export const paintTestimonyError = () => {
@@ -515,11 +521,13 @@ export const paintStrip = ({
   strip.hidden = false
   strip.classList.remove('is-loading')
   strip.setAttribute('aria-busy', 'false')
-  const tick = (s: number) => html`<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
-  strip.innerHTML = html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div><svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Veículos na régua da avaliação, de −10 a +10"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${[-10, -5, 0, 5, 10].map(tick)}<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>${dots.map(
-    (d) =>
-      html`<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${d.domain}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${d.domain}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
-  )}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui${domain === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>`
+  strip.innerHTML = html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>${frame(
+    { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel: 'Veículos na régua da avaliação, de −10 a +10' },
+    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map((s) => ({ x: x(s) })), cls: 'strip' })}<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>${dots.map(
+      (d) =>
+        html`<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${d.domain}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${d.domain}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
+    )}`,
+  )}<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui${domain === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>`
   for (const el of queryAll('[data-strip-domain]', strip)) {
     const pick = () => {
       const d = el.dataset.stripDomain
@@ -643,11 +651,13 @@ export const paintTermStrip = ({
     return
   }
   const normalizedSearch = normalize(search)
-  const tick = (s: number) => html`<line class="strip-tick" x1="${x(s)}" x2="${x(s)}" y1="${half - 5}" y2="${half + 5}"/>`
-  strip.innerHTML = html`${hasMean ? html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${((x(overall as number) - STRIP_PAD) / Math.max(1, width - 2 * STRIP_PAD)) * 100}%">média da pessoa ${signed(overall)}</span></div>` : ''}<svg class="strip-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="Palavras na régua da avaliação"><line class="strip-axis" x1="${STRIP_PAD}" x2="${width - STRIP_PAD}" y1="${half}" y2="${half}"/>${ticks.map(tick)}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {
-    const dim = normalizedSearch ? !matching({ term: d.term, kind: d.kind }, search) : false
-    return html`<g class="strip-dot ${dim ? 'is-dim' : ''}" data-node="${d.id}" style="--tone:${d.tone}" role="button" tabindex="0" aria-label="${d.term}, avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}"><title>${d.term} · avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`
-  })}</svg><div class="strip-axis-labels"><span>${signed(domainMin)} contra</span><span>${signed(domainMax)} a favor</span></div>`
+  strip.innerHTML = html`${hasMean ? html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${((x(overall as number) - STRIP_PAD) / Math.max(1, width - 2 * STRIP_PAD)) * 100}%">média da pessoa ${signed(overall)}</span></div>` : ''}${frame(
+    { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel: 'Palavras na régua da avaliação' },
+    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: ticks.map((s) => ({ x: x(s) })), cls: 'strip' })}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {
+      const dim = normalizedSearch ? !matching({ term: d.term, kind: d.kind }, search) : false
+      return html`<g class="strip-dot ${dim ? 'is-dim' : ''}" data-node="${d.id}" style="--tone:${d.tone}" role="button" tabindex="0" aria-label="${d.term}, avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}"><title>${d.term} · avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`
+    })}`,
+  )}<div class="strip-axis-labels"><span>${signed(domainMin)} contra</span><span>${signed(domainMax)} a favor</span></div>`
   for (const el of queryAll('[data-node]', strip)) {
     const pick = () => onChoose(String(el.dataset.node))
     el.addEventListener('click', pick)
@@ -780,12 +790,15 @@ const rulerOverflowMarkup = (
   overflow: { term: string; kind: string; text: string; balance: number }[],
   selected: { term: string; kind: string } | null,
 ) =>
-  overflow.length
-    ? html`<div class="ruler-overflow"><p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:</p>${overflow.map((d) => {
-        const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
-        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${d.text}</button>`
-      })}</div>`
-    : ''
+  overflowList({
+    items: overflow,
+    cls: 'ruler',
+    intro: html`<p>${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:</p>`,
+    renderItem: (d) => {
+      const isSelected = !!selected && selected.term === d.term && selected.kind === d.kind
+      return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" aria-pressed="${String(isSelected)}" style="--cmp:${balanceColor(d.balance)}">${d.text}</button>`
+    },
+  })
 
 // Shared by figure 3 (compare) and figure 4 (rising): draws a ruler's end labels, SVG axis and
 // words, axis labels and overflow list, and wires click/keydown on every word. The two figures
@@ -822,8 +835,10 @@ const paintRulerBody = ({
 }) => {
   const ruler = $(elementId)
   const { words, overflow, x, half, height } = rulerLayout(metrics, items, width)
-  const tick = (b: number) => html`<line class="ruler-tick" x1="${x(b)}" x2="${x(b)}" y1="${half - 5}" y2="${half + 5}"/>`
-  ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${endA}</span><span class="ruler-end cmp-b">${endB}</span></div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group" aria-label="${ariaLabel}"><line class="ruler-axis" x1="${RULER_PAD}" x2="${width - RULER_PAD}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(tick)}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}</svg><div class="ruler-axis-labels"><span>${axisLabels[0]}</span><span>${axisLabels[1]}</span><span>${axisLabels[2]}</span></div>${note}${rulerOverflowMarkup(overflow, selected)}${tail}`
+  ruler.innerHTML = html`<div class="ruler-end-row"><span class="ruler-end cmp-a">${endA}</span><span class="ruler-end cmp-b">${endB}</span></div>${frame(
+    { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel },
+    html`${axis({ x0: RULER_PAD, x1: width - RULER_PAD, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => ({ x: x(b) })), cls: 'ruler' })}${words.map((d) => rulerWordMarkup(d, half, !!selected && selected.term === d.term && selected.kind === d.kind))}`,
+  )}<div class="ruler-axis-labels"><span>${axisLabels[0]}</span><span>${axisLabels[1]}</span><span>${axisLabels[2]}</span></div>${note}${rulerOverflowMarkup(overflow, selected)}${tail}`
   for (const el of queryAll('[data-term]', ruler)) {
     const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
     el.addEventListener('click', pick)
@@ -1033,11 +1048,12 @@ export const paintCompareLoading = () => {
     const height = 88
     const half = 44
     const pad = 28
-    ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><line class="ruler-axis" x1="${pad}" x2="${width - pad}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(
-      (b) => html`<line class="ruler-tick" x1="${pad + ((b + 1) / 2) * (width - 2 * pad)}" x2="${pad + ((b + 1) / 2) * (width - 2 * pad)}" y1="${half - 5}" y2="${half + 5}"/>`,
-    )}${RULER_GHOST_WORDS.map(
-      ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
-    )}</svg></div><p class="sr-only">Lendo a régua.</p>`
+    ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div>${frame(
+      { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}` },
+      html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => ({ x: pad + ((b + 1) / 2) * (width - 2 * pad) })), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
+        ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
+      )}`,
+    )}</div><p class="sr-only">Lendo a régua.</p>`
   }
   const detail = $('compareDetail')
   if (!detail) return
@@ -1057,11 +1073,12 @@ export const paintRisingLoading = () => {
   const height = 88
   const half = 44
   const pad = 28
-  ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div><svg class="ruler-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><line class="ruler-axis" x1="${pad}" x2="${width - pad}" y1="${half}" y2="${half}"/>${[-1, -0.5, 0, 0.5, 1].map(
-    (b) => html`<line class="ruler-tick" x1="${pad + ((b + 1) / 2) * (width - 2 * pad)}" x2="${pad + ((b + 1) / 2) * (width - 2 * pad)}" y1="${half - 5}" y2="${half + 5}"/>`,
-  )}${RULER_GHOST_WORDS.map(
-    ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
-  )}</svg></div><p class="sr-only">Lendo os termos em alta.</p>`
+  ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div>${frame(
+    { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}` },
+    html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => ({ x: pad + ((b + 1) / 2) * (width - 2 * pad) })), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
+      ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
+    )}`,
+  )}</div><p class="sr-only">Lendo os termos em alta.</p>`
   const about = $('risingAbout')
   if (about) about.textContent = ''
 }
@@ -1106,12 +1123,15 @@ const weekOverflowMarkup = (
   day: string,
   selected: { day: string; term: string; kind: string } | null,
 ) =>
-  overflow.length
-    ? html`<div class="week-overflow"><p class="eyebrow">${overflow.length === 1 ? 'Não coube' : 'Não couberam'}</p>${overflow.map((d) => {
-        const isSelected = !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
-        return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia">${d.text}<b>${fmt(d.count)}</b></button>`
-      })}</div>`
-    : ''
+  overflowList({
+    items: overflow,
+    cls: 'week',
+    intro: html`<p class="eyebrow">${overflow.length === 1 ? 'Não coube' : 'Não couberam'}</p>`,
+    renderItem: (d) => {
+      const isSelected = !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
+      return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia">${d.text}<b>${fmt(d.count)}</b></button>`
+    },
+  })
 
 const weekColumnMarkup = (
   bucket: WeekBucket,
@@ -1125,7 +1145,10 @@ const weekColumnMarkup = (
   // A day with no words keeps only its number: the spec allows one sentence for the whole
   // week (#weekNote), never a line per empty column.
   const body = layout.words.length
-    ? html`<svg class="week-svg" viewBox="0 0 ${width} ${layout.height}" width="${width}" height="${layout.height}" role="group" aria-label="Palavras de ${dayLabel}">${layout.words.map((d) => weekWordMarkup(d, width / 2, layout.half, day, isSelected(d)))}</svg>`
+    ? frame(
+        { cls: 'week-svg', width, height: layout.height, viewBox: `0 0 ${width} ${layout.height}`, role: 'group', ariaLabel: `Palavras de ${dayLabel}` },
+        html`${layout.words.map((d) => weekWordMarkup(d, width / 2, layout.half, day, isSelected(d)))}`,
+      )
     : ''
   return html`<div class="week-day"><dl class="stat"><div><dt>${dayLabel}</dt><dd>${fmt(bucket.about)}</dd></div></dl>${body}${weekOverflowMarkup(layout.overflow, day, selected)}</div>`
 }
@@ -1189,9 +1212,12 @@ export const paintWeekLoading = () => {
   chart.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="week-columns">${Array.from(
     { length: 7 },
     () =>
-      html`<div class="week-day">${ghostBar('ghost-line is-short')}<svg class="week-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${WEEK_GHOST_WORDS.map(
-        ([y, w]) => html`<rect class="ghost" x="${width / 2 - w / 2}" y="${height / 2 + y - 8}" width="${w}" height="16" rx="5"/>`,
-      )}</svg></div>`,
+      html`<div class="week-day">${ghostBar('ghost-line is-short')}${frame(
+        { cls: 'week-svg', width, height, viewBox: `0 0 ${width} ${height}` },
+        html`${WEEK_GHOST_WORDS.map(
+          ([y, w]) => html`<rect class="ghost" x="${width / 2 - w / 2}" y="${height / 2 + y - 8}" width="${w}" height="16" rx="5"/>`,
+        )}`,
+      )}</div>`,
   )}</div></div><p class="sr-only">Lendo a semana.</p>`
   const note = $('weekNote')
   if (note) note.textContent = ''

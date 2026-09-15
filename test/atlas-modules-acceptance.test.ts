@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -225,6 +226,68 @@ describe('issue #170: SVG frame/axis/overflow-list extracted into src/ui/marks.t
     const svgLiterals = (src.match(/<svg\b/g) || []).length
     assert.ok(svgLiterals <= 4, `render.ts still writes ${svgLiterals} literal <svg openings; the frame() builder in marks.ts should collapse the live/ghost pairs down to one per figure family (atlas/strip/ruler/week)`)
     assert.equal((src.match(/<line class="[^"]*-axis"/g) || []).length, 0, 'render.ts must build the axis line through marks.ts\'s axis(), never write <line class="…-axis"> itself')
+  })
+
+  // AC6 named each ghost painter individually (paintAtlasLoading, the strip ghost inside
+  // paintTestimonyLoading, paintCompareLoading, paintRisingLoading, paintWeekLoading). The
+  // test above only checks that frame(/axis( appear *somewhere* in render.ts; this one scopes
+  // the check to each named function's own body, so a ghost that regressed to a hand-written
+  // <svg literal (while some other painter still called marks.ts) would not slip through.
+  it('AC6: each named ghost painter calls frame(/axis( inside its own body, never a literal <svg or axis <line>', () => {
+    const src = moduleSource('render.ts')
+    const bodyOf = (name: string) => {
+      const start = src.indexOf(`export const ${name} = `)
+      assert.ok(start >= 0, `render.ts must still export ${name}`)
+      const next = src.indexOf('\nexport const ', start + 1)
+      return src.slice(start, next >= 0 ? next : undefined)
+    }
+    // Every ghost has a frame; only the ones drawing an axis (testimony/compare/rising, not
+    // the map or the week columns) are asked to call axis( too.
+    const ghostsWithAxis = ['paintTestimonyLoading', 'paintCompareLoading', 'paintRisingLoading']
+    const ghostsFrameOnly = ['paintAtlasLoading', 'paintWeekLoading']
+    for (const name of [...ghostsWithAxis, ...ghostsFrameOnly]) {
+      const body = bodyOf(name)
+      assert.match(body, /\bframe\s*\(/, `${name} must build its <svg> via marks.ts's frame(...)`)
+      assert.doesNotMatch(body, /<svg\b/, `${name} must not write a literal <svg itself`)
+      assert.doesNotMatch(body, /<line class="[^"]*-axis"/, `${name} must not write a literal axis <line> itself`)
+    }
+    for (const name of ghostsWithAxis) assert.match(bodyOf(name), /\baxis\s*\(/, `${name} must build its axis via marks.ts's axis(...)`)
+  })
+})
+
+// Issue #170 AC5: paintRuler's own exported-shape test already exists (issue #151's describe
+// block, in render.test.ts, unmodified). paintWeek and paintTermStrip need the same guarantee:
+// both are still exported with their pre-refactor names and still paint the markup their own
+// (pre-existing, issue #147/#149) test suites pin -- this test only asserts the export surface;
+// the byte-identical markup is what AC4's diff-against-master check in render.test.ts covers.
+describe('issue #170 AC5: paintWeek and paintTermStrip keep their exported shape after the marks.ts extraction', () => {
+  it('render.ts still exports paintWeek, paintWeekLoading, paintWeekError, paintTermStrip and termStripLayout as functions', () => {
+    assert.equal(typeof renderModule.paintWeek, 'function')
+    assert.equal(typeof renderModule.paintWeekLoading, 'function')
+    assert.equal(typeof renderModule.paintWeekError, 'function')
+    assert.equal(typeof renderModule.paintTermStrip, 'function')
+    assert.equal(typeof renderModule.termStripLayout, 'function')
+  })
+})
+
+// Issue #170 AC10: the refactor's own diff discipline. src/server.ts, src/graph.ts,
+// src/extract.ts, src/query.ts, test/fixture.ts and public/design-5.html must stay untouched,
+// and the touched set is otherwise a short, named list.
+describe('issue #170 AC10: the diff stays inside the files the spec names', () => {
+  it('git diff against master touches only the allowed files', () => {
+    let changed: string[]
+    try {
+      changed = execFileSync('git', ['diff', '--name-only', 'master...HEAD'], { cwd: root, encoding: 'utf8' })
+        .split('\n')
+        .filter(Boolean)
+    } catch {
+      return // no master ref reachable in this checkout; nothing to compare against
+    }
+    const forbidden = ['src/server.ts', 'src/graph.ts', 'src/extract.ts', 'src/query.ts', 'test/fixture.ts', 'public/design-5.html']
+    for (const path of forbidden) assert.ok(!changed.includes(path), `${path} must stay untouched by issue #170`)
+    const allowed = new Set(['CLAUDE.md', 'public/bundle.js', 'src/ui/marks.ts', 'src/ui/render.ts', 'test/atlas-modules-acceptance.test.ts', 'test/render.test.ts', 'test/marks.test.ts'])
+    const unexpected = changed.filter((path) => !allowed.has(path))
+    assert.deepEqual(unexpected, [], `the spec's AC10 lists an exact allowed file set; these are outside it: ${unexpected.join(', ')}`)
   })
 })
 

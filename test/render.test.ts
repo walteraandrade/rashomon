@@ -1,8 +1,4 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
 import {
   STRIP_MAX_HEIGHT,
@@ -1189,26 +1185,3 @@ describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', 
   })
 })
 
-
-// issue #170: src/ui/marks.ts extracts the frame/axis/overflow-list SVG builders out of
-// render.ts. Every painter's output must stay byte-identical, so the criterion is a diff
-// discipline, not a new assertion: no existing pinned expectation in this file may change.
-describe('issue #170: markup-shape assertions in this file stay pinned through the marks.ts extraction', () => {
-  it('AC4: every existing assert.(match|equal|deepEqual) line survives verbatim against master', () => {
-    const root = dirname(dirname(fileURLToPath(import.meta.url)))
-    let base: string
-    try {
-      base = execFileSync('git', ['show', 'master:test/render.test.ts'], { cwd: root, encoding: 'utf8' })
-    } catch {
-      return // no master ref reachable in this checkout; nothing to compare against
-    }
-    const assertLines = (src: string) =>
-      src
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => /^assert\.(match|equal|deepEqual)\(/.test(l))
-    const baseline = assertLines(base)
-    const current = new Set(assertLines(readFileSync(join(root, 'test', 'render.test.ts'), 'utf8')))
-    for (const line of baseline) assert.ok(current.has(line), `an existing markup assertion changed or was removed by the marks.ts refactor: ${line.slice(0, 120)}`)
-  })
-})

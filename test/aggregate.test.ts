@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { buildGraphAggregates, hasGraphAggregates } from '../src/aggregate.js'
+import { buildGraphAggregates, hasGraphAggregates, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
-import { DAYS, parseQuery, SOURCES } from '../src/query.js'
+import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
 import { insertDoc } from '../src/store.js'
 import { persons, seed, untrackedPerson } from './fixture.js'
 import './close.js'
@@ -156,5 +156,41 @@ describe('buildGraphAggregates', () => {
     assert.deepEqual(await fast(lula, q({ min: '1' })), liveAfter)
     await db.query(`delete from docs where uri = 'https://example.org/after-build'`)
     await buildGraphAggregates(persons)
+  })
+})
+
+// graph_terms is not the person's whole term list: per (source, kind) the build keeps the top
+// TOP rows of each ordering the route can ask for, so a request under that ceiling reads what
+// the live statement would, and the table stops growing with the corpus (it reached 544 MB,
+// five times doc_terms, and filled the production disk). A lower ceiling shows the cut.
+describe('the ceiling on graph_terms', () => {
+  const count = async () => (await db.query<{ n: number }>(`select count(*)::int as n from graph_terms`)).rows[0].n
+
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  it('TOP is the largest limit the route accepts', () => {
+    assert.equal(TOP, Math.max(...LIMITS))
+  })
+
+  it('a lower ceiling keeps fewer rows and still renders the live response for every recorte under it', async () => {
+    const full = await count()
+    const top = 5
+    await buildGraphAggregates(persons, DAYS, top)
+    assert.ok((await count()) < full, 'the ceiling cut rows')
+    const limits = LIMITS.filter((l) => l <= top)
+    for (const person of persons)
+      for (const days of DAYS)
+        for (const sort of ['count', 'pmi'])
+          for (const min of MINS)
+            for (const kind of ['all', 'word', 'phrase,hashtag'])
+              for (const limit of limits) {
+                const query = q({ days: String(days), sort, min: String(min), kind, limit: String(limit) })
+                assert.deepEqual(await fast(person, query), await live(person, query), `${person.id} ${JSON.stringify({ days, sort, min, kind, limit })}`)
+              }
+    await buildGraphAggregates(persons)
+    assert.equal(await count(), full)
   })
 })

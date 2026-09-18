@@ -1,7 +1,7 @@
 import seedJson from '../seed.json' with { type: 'json' }
 import { db, migrate } from './db.js'
 import { nameTokens } from './extract.js'
-import { DAYS, SOURCES } from './query.js'
+import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
 import { sql } from './sql.js'
 import { inTransaction } from './store.js'
 import type { Person } from './types.js'
@@ -48,9 +48,23 @@ const scopesQuery = (days: number, persons: Pick<Person, 'id'>[]) => sql`
   left join u on u.source = w.source
   left join ab on ab.source = w.source and ab.person_id = p.id`
 
+// The most rows any /graph can ask for. The build keeps, per (source, kind), the top `TOP`
+// rows of every ordering the route can request: by count, and by pmi * ln(1 + count) once
+// for each `min` in MINS. Below that ceiling the fast query's own `order by ... limit` reads
+// exactly what the live statement would, because a top-K over a union of kinds is inside the
+// union of each kind's top-K, and a `count >= min` filter is a prefix of the by-count order.
+export const TOP = Math.max(...LIMITS)
+
 // Same exclusion as graphQuery's term_p: the person's own name words, and phrases carrying one.
-const personTermsQuery = (days: number, person: Person) => {
+// `pmi` is spelled exactly as graphFastQuery spells it, so the ranks here order the same floats
+// the read orders. The signature keeps its own five: top pmi among count >= max(3, 5% of about).
+const personTermsQuery = (days: number, person: Person, top = TOP) => {
   const exclude = nameTokens(person)
+  const byPmi = (m: number) => sql.raw(`by_pmi_${m}`)
+  const ranks = MINS.map(
+    (m) => sql`row_number() over (partition by source, kind, c_pt >= ${m} order by pmi * ln(1 + c_pt) desc, term, kind) as ${byPmi(m)}`,
+  )
+  const kept = MINS.map((m) => sql`(c_pt >= ${m} and ${byPmi(m)} <= ${top})`)
   return sql`
   with ${windowScope(days)},
   about as (
@@ -62,23 +76,40 @@ const personTermsQuery = (days: number, person: Person) => {
     where not (t.term = any(${exclude}::text[]))
       and not (position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${exclude}::text[])
     group by grouping sets ((a.source, t.term, t.kind), (t.term, t.kind))
+  ),
+  scored as (
+    select p.source, p.term, p.kind, p.c_pt, ta.c_t, p.tone, gs.about,
+      ln((p.c_pt::float8 * gs.tracked::float8) / (gs.about::float8 * ta.c_t::float8)) / ln(2) as pmi
+    from p
+    join graph_terms_all ta on ta.days = ${days}::int and ta.source = p.source and ta.term = p.term and ta.kind = p.kind
+    join graph_scopes gs on gs.days = ${days}::int and gs.source = p.source and gs.person_id = ${person.id}
+  ),
+  ranked as (
+    select source, term, kind, c_pt, c_t, tone, about,
+      row_number() over (partition by source, kind order by c_pt desc, term, kind) as by_count,
+      ${sql.join(ranks)},
+      row_number() over (partition by source, c_pt >= greatest(3, about * 0.05) order by pmi desc, term, kind) as by_signature
+    from scored
   )
   insert into graph_terms (days, source, person_id, term, kind, c_pt, c_t, tone)
-  select ${days}::int, p.source, ${person.id}, p.term, p.kind, p.c_pt, ta.c_t, p.tone
-  from p join graph_terms_all ta on ta.days = ${days}::int and ta.source = p.source and ta.term = p.term and ta.kind = p.kind`
+  select ${days}::int, source, ${person.id}, term, kind, c_pt, c_t, tone
+  from ranked
+  where by_count <= ${top}
+    or ${sql.join(kept, '\n    or ')}
+    or (c_pt >= greatest(3, about * 0.05) and by_signature <= 5)`
 }
 
 const run = (q: { text: string; values: unknown[] }) => db.query(q.text, q.values)
 
 // One window per transaction: readers see the previous build until the new one commits.
-const buildWindow = (days: number, persons: Person[]) =>
+const buildWindow = (days: number, persons: Person[], top: number) =>
   inTransaction(async () => {
     await db.query(`delete from graph_terms where days = $1`, [days])
     await db.query(`delete from graph_terms_all where days = $1`, [days])
     await db.query(`delete from graph_scopes where days = $1`, [days])
     await run(universeQuery(days))
     await run(scopesQuery(days, persons))
-    await persons.reduce<Promise<void>>(async (acc, p) => (await acc, void (await run(personTermsQuery(days, p)))), Promise.resolve())
+    await persons.reduce<Promise<void>>(async (acc, p) => (await acc, void (await run(personTermsQuery(days, p, top)))), Promise.resolve())
   })
 
 export type AggregateReport = { windows: number[]; scopes: number; terms: number; ms: number }
@@ -88,10 +119,11 @@ export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms_all', 'graph_terms
 
 // Rebuilds the three window tables from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
+// `top` is the per-ordering ceiling (TOP in production; tests lower it to see the cut).
 // Never analyzes: maintenance belongs to the process that owns DATA_DIR.
-export const buildGraphAggregates = async (persons: Person[], windows: readonly number[] = DAYS): Promise<AggregateReport> => {
+export const buildGraphAggregates = async (persons: Person[], windows: readonly number[] = DAYS, top = TOP): Promise<AggregateReport> => {
   const started = performance.now()
-  await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons))), Promise.resolve())
+  await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons, top))), Promise.resolve())
   const { rows: s } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
   const { rows: t } = await db.query<{ n: number }>(`select count(*)::int as n from graph_terms`)
   return { windows: [...windows], scopes: s[0].n, terms: t[0].n, ms: performance.now() - started }

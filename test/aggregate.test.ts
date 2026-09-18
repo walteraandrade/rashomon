@@ -74,6 +74,38 @@ describe('a build for part of the people', () => {
   })
 })
 
+describe('graph_terms emptied under a full graph_scopes', () => {
+  const bare = (nodes: { term: string; count: number }[]) => nodes.map(({ term, count }) => ({ term, count }))
+
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+    await db.query(`delete from graph_terms`)
+  })
+
+  it('the scope row survives, so a bare scope check would call the build done', async () => {
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes where person_id = 'lula' and about > 0`)
+    assert.ok(rows[0].n > 0)
+  })
+
+  it('hasGraphAggregates says false, so --if-missing rebuilds instead of skipping', async () => {
+    assert.equal(await hasGraphAggregates(), false)
+  })
+
+  it('the fast query yields no row and graphFor answers from the live query, never an empty graph', async () => {
+    assert.equal(await fast(lula, q({})), undefined)
+    const expected = (await live(lula, q({}))) as { about: number; nodes: { term: string; count: number }[] }
+    const result = await graphFor(lula, q({}))
+    assert.ok(expected.nodes.length > 0)
+    assert.deepEqual({ about: result.stats.about, nodes: bare(result.nodes) }, { about: expected.about, nodes: bare(expected.nodes) })
+  })
+
+  it('a scope with about = 0 still answers fast: no terms to miss', async () => {
+    const row = await fast(lula, q({ source: 'senado' }))
+    assert.deepEqual(row && { about: row.about, nodes: row.nodes }, { about: 0, nodes: [] })
+  })
+})
+
 describe('buildGraphAggregates', () => {
   before(async () => {
     await seed()

@@ -129,11 +129,15 @@ export const buildGraphAggregates = async (persons: Person[], windows: readonly 
   return { windows: [...windows], scopes: s[0].n, terms: t[0].n, ms: performance.now() - started }
 }
 
-// True once any window has been built. `pnpm aggregate --if-missing` (warm.yml, after a
-// deploy) uses it to skip the build when the last ingest already left the tables full.
+// True once any window has been built, in all three tables. `pnpm aggregate --if-missing`
+// (warm.yml, after a deploy) uses it to skip the build when the last ingest already left the
+// tables full. Scopes alone do not count: graph_terms was emptied by hand under a full
+// graph_scopes once (2026-09-18) and the skip kept the site blank until the next ingest.
 export const hasGraphAggregates = async (): Promise<boolean> => {
-  const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
-  return rows[0].n > 0
+  const { rows } = await db.query<{ built: boolean }>(
+    `select ${AGGREGATE_TABLES.map((t) => `exists (select 1 from ${t})`).join(' and ')} as built`,
+  )
+  return rows[0].built
 }
 
 export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery }

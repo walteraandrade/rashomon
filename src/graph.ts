@@ -223,13 +223,18 @@ const graphQuery = (person: Person, q: GraphQuery) => {
 
 // The same shape as graphQuery over the tables `pnpm aggregate` builds: one indexed range
 // per (days, source, person) instead of a scan of the window. Zero rows when that window
-// was never built, which is what sends graphFor to the live query. domain/lean never come
-// here: the aggregates know only days and a single source.
+// was never built, which is what sends graphFor to the live query. A scope row alone is not
+// a build: graph_terms can be emptied under it (the 2026-09-18 truncate, a build that died
+// mid-window), so a scope with about > 0 and no term rows also yields zero rows rather than
+// an empty graph. domain/lean never come here: the aggregates know only days and a single source.
 const graphFastQuery = (person: Person, q: GraphQuery) => {
   const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
   return sql`
   with s as (
-    select docs, tracked, about from graph_scopes where days = ${q.days} and source = ${q.source} and person_id = ${person.id}
+    select docs, tracked, about from graph_scopes
+    where days = ${q.days} and source = ${q.source} and person_id = ${person.id}
+      and (about = 0 or exists (
+        select 1 from graph_terms g where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}))
   ),
   scored as (
     select g.term, g.kind, g.c_pt as count, g.tone,
@@ -645,9 +650,9 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
 // so folding it in would mean recomputing the ranking to feed itself.
 // Precomputed first, live when the window was never built (local dev before `pnpm aggregate`,
 // or a scope the tables cannot hold); both render the same shape. Zero rows means never built
-// for this person: scopesQuery and personTermsQuery fill from the same person list, so a
-// scope row always comes with that person's terms. Only this statement is precomputed;
-// linksQuery and termTestimonyQuery below still run live.
+// for this person, or built and since emptied: the fast query refuses a scope row whose
+// graph_terms are missing. Only this statement is precomputed; linksQuery and
+// termTestimonyQuery below still run live.
 const graphAggregates = async (person: Person, q: GraphQuery): Promise<GraphAggregates> => {
   const fast = precomputable(q) ? (await run<GraphAggregates>(graphFastQuery(person, q))).rows[0] : undefined
   return fast ?? (await run<GraphAggregates>(graphQuery(person, q))).rows[0]

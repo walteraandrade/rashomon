@@ -7,6 +7,7 @@ import { app } from '../src/server.js'
 import { seed } from './fixture.js'
 import { clearScopes } from '../src/ui/state.js'
 import { compareParams } from '../src/ui/api.js'
+import { SMALL_LIMITS } from '../src/query.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Compare, CompareTerm } from '../src/ui/format.js'
@@ -54,6 +55,21 @@ describe('compareParams matches calling /api/compare directly', () => {
       assert.equal(viaHelper.status, 200)
       assert.deepEqual(await viaHelper.json(), await viaDirect.json())
     }
+  })
+})
+
+describe('the limit control only offers values the route accepts', () => {
+  it('#compareLimit is filled at mount with options from SMALL_LIMITS', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/compare': compareData([]) })
+      const { mount } = await import('../src/ui/figures/compare.js')
+      mount(els.compare, { people, initial: {} })
+      await flush()
+      const offered = els.compareLimit.options.map((o) => Number(o.value))
+      assert.ok(offered.length >= 3)
+      for (const v of offered) assert.ok(SMALL_LIMITS.includes(v), `compare offers limit=${v}`)
+    })
   })
 })
 

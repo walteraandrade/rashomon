@@ -436,9 +436,8 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     const offered = numbers(atlas)
     assert.ok(offered.length >= 3)
     for (const v of offered) assert.ok(LIMITS.includes(v), `atlas offers limit=${v}`)
-    // The compareLimit select is src/ui source text, not public/ markup, so that half of this
-    // check lives in test/docs-drift.test.ts (the file allowed to read src/ui directly) as
-    // "the compare limit select only offers values from SMALL_LIMITS".
+    // The compareLimit select is built by figures/compare.ts at mount, so its half of this
+    // check is a mount test in test/figures-compare.test.ts.
 
     const graph = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     assert.ok(MINS.includes(Number(graph.get('min'))), 'the graph request sends a min in MINS')

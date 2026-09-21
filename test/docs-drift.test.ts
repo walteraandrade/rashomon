@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectors, defaultSources } from '../src/collectors/index.js'
-import { SMALL_LIMITS, SOURCES } from '../src/query.js'
+import { SOURCES } from '../src/query.js'
 import { docPageText, docPages, docsText, sourceTable } from './docs.js'
 import './close.js'
 
@@ -248,14 +248,6 @@ describe('docs facts', () => {
     assert.match(apiTs, /ATLAS_KINDS = 'word,hashtag,phrase'/)
   })
 
-  it('the compare limit select only offers values from SMALL_LIMITS', () => {
-    const compare = readFileSync(join(root, 'src/ui/figures/compare.ts'), 'utf8')
-    const options = compare.match(/\$\('compareLimit'\)\.innerHTML = html`\$\{\[([^\]]+)\]/)?.[1]
-    assert.ok(options, 'compare.ts should build the compareLimit options from a literal list')
-    const offered = [...options.matchAll(/'(\d+)'/g)].map((m) => Number(m[1]))
-    assert.ok(offered.length >= 3)
-    for (const v of offered) assert.ok(SMALL_LIMITS.includes(v), `compare offers limit=${v}`)
-  })
 })
 
 // Issue #175: the test suite dropped test/atlas-modules-acceptance.test.ts (split into

@@ -347,13 +347,4 @@ describe('the test suite stays behaviour-first: no source-scanning pins, no issu
     }
     assert.deepEqual(offenders, [], 'no describe(...)/it(...) label may start with AC<digit> or "issue #"')
   })
-
-  it('test/atlas-modules-acceptance.test.ts no longer exists: its content moved to this file or was deleted outright', () => {
-    assert.deepEqual(testFileNames().filter((f) => f === 'atlas-modules-acceptance.test.ts'), [])
-  })
-
-  it('this file imports nothing from the old, now-deleted acceptance file, so it stays runnable on its own', () => {
-    const imports = importsOf(testFileSource('invariants.test.ts'))
-    assert.ok(!imports.some((spec) => spec.includes('atlas-modules')), 'invariants.test.ts must not import the deleted file')
-  })
 })

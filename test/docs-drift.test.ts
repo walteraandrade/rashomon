@@ -257,3 +257,34 @@ describe('docs facts', () => {
     for (const v of offered) assert.ok(SMALL_LIMITS.includes(v), `compare offers limit=${v}`)
   })
 })
+
+// Issue #175: the test suite dropped test/atlas-modules-acceptance.test.ts (split into
+// test/invariants.test.ts) and the "issue number in the title" labeling rule it used to
+// follow. Both CLAUDE.md and docs/factory.md described that file and that rule by name, so
+// a drift check here keeps the prose in step with the file layout it describes.
+describe('CLAUDE.md and docs/factory.md describe the current test-file layout, not the deleted one', () => {
+  it('CLAUDE.md no longer names the deleted test/atlas-modules-acceptance.test.ts', () => {
+    const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
+    assert.doesNotMatch(claude, /atlas-modules-acceptance/, 'CLAUDE.md must not name the deleted test file')
+  })
+
+  it('docs/factory.md no longer names the deleted test/atlas-modules-acceptance.test.ts', () => {
+    assert.doesNotMatch(docsText, /atlas-modules-acceptance/, 'docs/factory.md must not name the deleted test file')
+  })
+
+  it("CLAUDE.md's test/ bullet says a test asserts on output or behaviour, and scopes source-reading to test/invariants.test.ts", () => {
+    const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
+    const bullet = /^-\s*`test\/`\s*node:test suites\.[^\n]*/m.exec(claude)?.[0]
+    assert.ok(bullet, "CLAUDE.md must still carry a `test/` bullet")
+    assert.match(bullet!, /asserts on output or behaviour/i, 'the test/ bullet must state that a test asserts on output or behaviour')
+    assert.match(bullet!, /invariants\.test\.ts/, 'the test/ bullet must scope source-reading to a repo-wide invariant named in test/invariants.test.ts')
+  })
+
+  it("docs/factory.md no longer instructs putting the issue number in a test label's title", () => {
+    assert.doesNotMatch(docsText, /with the issue number in its title/i, "docs/factory.md must not instruct an issue number in a test label's title any more")
+  })
+
+  it('docs/factory.md lists invariants.test.ts, not atlas-modules-acceptance.test.ts, among the cross-cutting test files', () => {
+    assert.match(docsText, /\binvariants\b/, 'docs/factory.md must list invariants.test.ts among the cross-cutting files')
+  })
+})

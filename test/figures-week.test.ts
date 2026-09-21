@@ -26,7 +26,7 @@ const bucket = (over: Partial<WeekBucket> = {}): WeekBucket => ({ start: '2026-0
 
 const weekData = (buckets: WeekBucket[]): Week => ({ days: 7, tz: 'America/Sao_Paulo', buckets })
 
-describe('AC1: figures/week.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
+describe('figures/week.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
   const mod = await import('../src/ui/figures/week.js')
   it('does not touch document at import time', () => {
@@ -38,7 +38,7 @@ describe('AC1: figures/week.js is importable outside a browser, touches document
   })
 })
 
-describe('issue #147 §4: weekParams stays fixed at days=7', () => {
+describe('weekParams stays fixed at days=7', () => {
   it('sends days=7, the full kind set, plus the chosen source and limit', () => {
     const qp = weekParams({ source: 'gdelt', limit: '5' })
     assert.equal(qp.get('days'), '7')
@@ -48,7 +48,7 @@ describe('issue #147 §4: weekParams stays fixed at days=7', () => {
   })
 })
 
-describe('issue #147 (mount): fetches /week with the figure own fixed recorte', () => {
+describe('(mount): fetches /week with the figure own fixed recorte', () => {
   it('requests days=7 plus the selected person, source and limit', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -80,7 +80,7 @@ describe('issue #147 (mount): fetches /week with the figure own fixed recorte', 
   })
 })
 
-describe('issue #147: picking a word in a column opens the docs card with that column own day', () => {
+describe('picking a word in a column opens the docs card with that column own day', () => {
   it('sends day=<column BRT date> plus days=7, the term, kind and source to /docs; releasing closes the card', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -185,7 +185,7 @@ describe('issue #147: picking a word in a column opens the docs card with that c
   })
 })
 
-describe('issue #147 AC19: an empty week keeps the seven about numbers and paints no marks', () => {
+describe('an empty week keeps the seven about numbers and paints no marks', () => {
   it('#weekChart shows no data-term marks and #weekNote states there are not enough words', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -201,7 +201,7 @@ describe('issue #147 AC19: an empty week keeps the seven about numbers and paint
   })
 })
 
-describe('issue #147: a GET /week failure paints the chart error note and never leaves the loading ghost on screen', () => {
+describe('a GET /week failure paints the chart error note and never leaves the loading ghost on screen', () => {
   it('rejects the request; the ghost is replaced by the error note', async () => {
     await withFiguresDom(async (els) => {
       clearScopes()

@@ -30,7 +30,7 @@ const compareData = (terms: CompareTerm[], a = personA, b = personB): Compare =>
   terms,
 })
 
-describe('AC1: figures/compare.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
+describe('figures/compare.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
   const mod = await import('../src/ui/figures/compare.js')
   it('does not touch document at import time', () => {
@@ -42,7 +42,7 @@ describe('AC1: figures/compare.js is importable outside a browser, touches docum
   })
 })
 
-describe('AC3: compareParams matches calling /api/compare directly', () => {
+describe('compareParams matches calling /api/compare directly', () => {
   it('produces the same body as calling /api/compare with kind=word,hashtag,phrase and no domain/lean', async () => {
     await seed()
     for (const [qp, direct] of [
@@ -57,7 +57,7 @@ describe('AC3: compareParams matches calling /api/compare directly', () => {
   })
 })
 
-describe('AC8: the hidden-name note is absent when the count is zero, present with the exact count otherwise', () => {
+describe('the hidden-name note is absent when the count is zero, present with the exact count otherwise', () => {
   // AC8 says the note is "absent from the DOM when the hidden-name count is 0 (or the
   // equivalent painted note)". design-5.html ships the element and figures/compare.js toggles
   // `hidden` and empties its text, which is the second reading: nothing is announced, and a
@@ -90,7 +90,7 @@ describe('AC8: the hidden-name note is absent when the count is zero, present wi
   })
 })
 
-describe('AC9: shows the same-person notice only when a === b', () => {
+describe('shows the same-person notice only when a === b', () => {
   it('the static markup carries the exact same-person string', () => {
     assert.match(design5(), /<p class="status" id="compareStatus" role="status" hidden>Os dois lados mostram a mesma pessoa\.<\/p>/)
   })
@@ -118,7 +118,7 @@ describe('AC9: shows the same-person notice only when a === b', () => {
   })
 })
 
-describe('AC10: clicking a dot fills the detail line, including "nenhum documento" for the null side', () => {
+describe('clicking a dot fills the detail line, including "nenhum documento" for the null side', () => {
   it('clicking a rendered dot names both people, "nenhum documento" for the null side', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -136,7 +136,7 @@ describe('AC10: clicking a dot fills the detail line, including "nenhum document
   })
 })
 
-describe('AC10: clicking the same dot again, or empty ruler space, clears the selection', () => {
+describe('clicking the same dot again, or empty ruler space, clears the selection', () => {
   it('clicking the same dot again returns the detail line to its empty hint', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -192,7 +192,7 @@ const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promis
 // document, keeps that guard false for this whole file.
 const appModule = await import('../src/ui/app.js')
 
-describe("AC9 bootstrap: a === b's resolution contract, from the querystring down to /api/compare", () => {
+describe("bootstrap: a === b's resolution contract, from the querystring down to /api/compare", () => {
   it('initial: { a: "lula", b: "lula" } sends a=lula&b=lula to /api/compare', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -251,7 +251,7 @@ describe("AC9 bootstrap: a === b's resolution contract, from the querystring dow
   })
 })
 
-describe('AC11: changing a compare control refetches only compare, and vice versa', () => {
+describe('changing a compare control refetches only compare, and vice versa', () => {
   const controlCases: [string, string][] = [
     ['compareA', 'bolsonaro'],
     ['compareB', 'lula'],
@@ -361,7 +361,7 @@ describe('AC11: changing a compare control refetches only compare, and vice vers
   })
 })
 
-describe('AC12: no word rendered by the ruler ever opens #docsDialog', () => {
+describe('no word rendered by the ruler ever opens #docsDialog', () => {
   it('figures/compare.js never wires docsDialog (a comment may still name it as documentation)', () => {
     const src = readFileSync(join(root, 'src', 'ui', 'figures', 'compare.ts'), 'utf8')
     const code = src
@@ -372,7 +372,7 @@ describe('AC12: no word rendered by the ruler ever opens #docsDialog', () => {
   })
 })
 
-describe('AC13: design-5.html carries the third figure card', () => {
+describe('design-5.html carries the third figure card', () => {
   it('a <section class="figure ..." id="compare"> exists after #testimony, with eyebrow "Gráfico 3" and the six sentence controls', () => {
     const html = design5()
     const testimonyIdx = html.indexOf('id="testimony"')
@@ -387,7 +387,7 @@ describe('AC13: design-5.html carries the third figure card', () => {
   })
 })
 
-describe('AC14: public/compare.html no longer exists', () => {
+describe('public/compare.html no longer exists', () => {
   it('the file is gone from the repository', () => {
     assert.ok(!existsSync(join(root, 'public', 'compare.html')))
   })
@@ -408,7 +408,7 @@ describe('the header carries no in-page link to the ruler', () => {
   })
 })
 
-describe('AC16: como-ler.html explains the ruler under #comparar', () => {
+describe('como-ler.html explains the ruler under #comparar', () => {
   it('carries an anchor id="comparar" explaining position, area and the middle pile', () => {
     const html = comoLer()
     assert.match(html, /id="comparar"/)

@@ -166,7 +166,7 @@ describe('graphFor', () => {
 describe('signature (issue #6)', () => {
   before(seed)
 
-  it('AC1: default 30-day scope for lula yields exactly the reforma signature, at the count floor of max(3, 5% of about)', async () => {
+  it('default 30-day scope for lula yields exactly the reforma signature, at the count floor of max(3, 5% of about)', async () => {
     const g = await graphFor(lula, graphBase)
     // issue #6's spec-pinned 0.58 became 1.49 when docs /36 and /38 widened n.total to 14 and np
     // to 5; issue #52 then removed doc /4 (names nobody tracked, so it carries no terms) from
@@ -175,14 +175,14 @@ describe('signature (issue #6)', () => {
     assert.equal(g.signature[0].pmi, 1.38)
   })
 
-  it('AC2: signature never contains one of the person own name tokens', async () => {
+  it('signature never contains one of the person own name tokens', async () => {
     const excluded = new Set(nameTokens(lula))
     const g = await graphFor(lula, { ...graphBase, days: 2000 })
     assert.ok(g.signature.length > 0, 'sanity: this scope should surface signature terms')
     for (const row of g.signature) assert.ok(!excluded.has(row.term), `${row.term} is a name token and must be excluded`)
   })
 
-  it('AC3: signature is unaffected by kind, min, limit and sort', async () => {
+  it('signature is unaffected by kind, min, limit and sort', async () => {
     const a = await graphFor(lula, graphBase)
     const b = await graphFor(lula, { ...graphBase, kind: 'hashtag', min: 10, limit: 1, sort: 'pmi' })
     const c = await graphFor(lula, { ...graphBase, kind: 'phrase', min: 1, limit: 200, sort: 'pmi' })
@@ -191,7 +191,7 @@ describe('signature (issue #6)', () => {
     assert.deepEqual(c.signature, a.signature)
   })
 
-  it('AC4: signature never exceeds 5 entries and drops extra ties instead of padding', async () => {
+  it('signature never exceeds 5 entries and drops extra ties instead of padding', async () => {
     const g = await graphFor(lula, { ...graphBase, days: 2000 })
     assert.equal(g.signature.length, 5, 'exactly 5 of the equally-qualifying terms must survive the fixed cap')
     const terms = g.signature.map((s) => s.term)
@@ -211,13 +211,13 @@ describe('signature (issue #6)', () => {
     assert.ok(!terms.includes('seguranca'), 'a lower-alphabet equally-qualifying term must be dropped by the fixed limit 5, not silently kept')
   })
 
-  it('AC5: signature is empty for a person with stats.about === 0', async () => {
+  it('signature is empty for a person with stats.about === 0', async () => {
     const g = await graphFor(nobody, graphBase)
     assert.equal(g.stats.about, 0)
     assert.deepEqual(g.signature, [])
   })
 
-  it('AC6: signature orders by pmi desc, ties broken by term ascending', async () => {
+  it('signature orders by pmi desc, ties broken by term ascending', async () => {
     const g = await graphFor(lula, { ...graphBase, days: 1000 })
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others;
     // 25 docs sit in this window, of which doc /4 names nobody tracked and is outside pmi's
@@ -242,7 +242,7 @@ describe('signature (issue #6)', () => {
 describe('multi-source filtering (issue #8)', () => {
   before(seed)
 
-  it('AC1: a comma-separated list counts only docs whose source is in the list', async () => {
+  it('a comma-separated list counts only docs whose source is in the list', async () => {
     const g = await graphFor(lula, { ...graphBase, source: 'gnews,rss,gkg' })
     // hand-counted from the fixture: within the default 30-day window, gnews has docs /1,/6
     // (about lula) and /3 (not about lula); rss has /4 (not about lula), /7, /36 (about tarcisio);
@@ -251,7 +251,7 @@ describe('multi-source filtering (issue #8)', () => {
     assert.equal(g.stats.about, 4)
   })
 
-  it('AC1: sourcesFor and docsFor agree with the same hand-counted scope', async () => {
+  it('sourcesFor and docsFor agree with the same hand-counted scope', async () => {
     const rows = await sourcesFor(lula, { ...graphBase, source: 'gnews,rss,gkg' })
     assert.equal(rows.reduce((acc, r) => acc + r.docs, 0), 4)
     assert.ok(rows.every((r) => r.source === 'gnews' || r.source === 'rss' || r.source === 'gkg'))
@@ -260,7 +260,7 @@ describe('multi-source filtering (issue #8)', () => {
     assert.ok(found.every((d) => d.source === 'gnews' || d.source === 'rss' || d.source === 'gkg'))
   })
 
-  it('AC2: an unknown token is silently dropped, same result as the valid token alone', async () => {
+  it('an unknown token is silently dropped, same result as the valid token alone', async () => {
     const withBogus = await graphFor(lula, { ...graphBase, source: 'gnews,bogus' })
     const gnewsOnly = await graphFor(lula, { ...graphBase, source: 'gnews' })
     assert.equal(gnewsOnly.stats.about, 2)
@@ -270,19 +270,19 @@ describe('multi-source filtering (issue #8)', () => {
     assert.equal(totalBogus, totalGnews)
   })
 
-  it('AC3: every token invalid normalizes (via parseSourceList) to "all"', async () => {
+  it('every token invalid normalizes (via parseSourceList) to "all"', async () => {
     const normalized = await graphFor(lula, { ...graphBase, source: parseSourceList('bogus1,bogus2') })
     const all = await graphFor(lula, { ...graphBase, source: 'all' })
     assert.deepEqual(normalized, all)
   })
 
-  it('AC4: an empty source normalizes (via parseSourceList) to "all"', async () => {
+  it('an empty source normalizes (via parseSourceList) to "all"', async () => {
     const normalized = await graphFor(lula, { ...graphBase, source: parseSourceList('') })
     const all = await graphFor(lula, { ...graphBase, source: 'all' })
     assert.deepEqual(normalized, all)
   })
 
-  it('AC5: a single valid token behaves exactly like before this change', async () => {
+  it('a single valid token behaves exactly like before this change', async () => {
     const bs = await graphFor(lula, { ...graphBase, source: 'bluesky' })
     assert.equal(bs.stats.about, 1)
     // doc /2 (bluesky) is the only bluesky doc about lula in the window.
@@ -291,7 +291,7 @@ describe('multi-source filtering (issue #8)', () => {
     assert.equal(found[0]?.uri, 'at://did:plc:x/post/2')
   })
 
-  it('AC7: mixing a GDELT and a non-GDELT source yields tone only for terms carried by the gkg doc', async () => {
+  it('mixing a GDELT and a non-GDELT source yields tone only for terms carried by the gkg doc', async () => {
     const g = await graphFor(lula, { ...graphBase, source: 'gnews,rss,gkg' })
     // "parceria" and "assina" only appear in doc /38 (gkg, tone 0.6); "reforma" only appears in gnews/rss docs
     assert.equal(g.nodes.find((n) => n.term === 'parceria')?.tone, 0.6)
@@ -299,7 +299,7 @@ describe('multi-source filtering (issue #8)', () => {
     assert.equal(g.nodes.find((n) => n.term === 'reforma')?.tone, null)
   })
 
-  it('AC7: source without gkg never surfaces a tone', async () => {
+  it('source without gkg never surfaces a tone', async () => {
     const g = await graphFor(lula, { ...graphBase, source: 'gnews,rss' })
     assert.equal(g.nodes.find((n) => n.term === 'reforma')?.tone, null)
     assert.equal(g.nodes.find((n) => n.term === 'assina'), undefined, 'assina only exists in the gkg doc')
@@ -310,7 +310,7 @@ describe('senado source (issue #25)', () => {
   before(seed)
   after(reseed)
 
-  it('AC8: source=senado for a person with no senado docs returns an empty, stats.docs===0 graph', async () => {
+  it('source=senado for a person with no senado docs returns an empty, stats.docs===0 graph', async () => {
     // stats.docs is the person-agnostic scope count, so the window must stay narrower than the
     // fixture's senado doc (dated ~3200 days ago) or scope itself would stop being empty
     const g = await graphFor(tarcisio, { ...graphBase, source: 'senado' })
@@ -362,13 +362,13 @@ const wideDocs: DocsQuery = { ...docsBase, days: wide }
 describe('lean filtering (issue #26)', () => {
   before(seed)
 
-  it('AC3: domain=cartacapital.com.br,poder360.com.br behaves as an OR across both domains', async () => {
+  it('domain=cartacapital.com.br,poder360.com.br behaves as an OR across both domains', async () => {
     const { total, docs: found } = await docsFor(bolsonaro, { ...wideDocs, domain: 'cartacapital.com.br,poder360.com.br' })
     assert.equal(total, 2)
     assert.deepEqual(found.map((d) => d.domain).sort(), ['cartacapital.com.br', 'poder360.com.br'])
   })
 
-  it('AC5: lean=right scopes to outlets.json right-labeled domains and excludes an unlabeled domain', async () => {
+  it('lean=right scopes to outlets.json right-labeled domains and excludes an unlabeled domain', async () => {
     const g = await graphFor(bolsonaro, { ...wideBase, lean: 'right' })
     assert.equal(g.stats.docs, 1)
     assert.equal(g.stats.about, 1)
@@ -387,13 +387,13 @@ describe('lean filtering (issue #26)', () => {
     assert.ok(!found.some((d) => d.domain === 'example.org'), 'example.org is unlabeled, must be excluded')
   })
 
-  it('AC12: a domain absent from outlets.json, requested via lean alone, is excluded rather than defaulted to center', async () => {
+  it('a domain absent from outlets.json, requested via lean alone, is excluded rather than defaulted to center', async () => {
     // only poder360.com.br (doc /37, day 35) is labeled center; example.org must never be swept in
     const { total } = await docsFor(bolsonaro, { ...wideDocs, lean: 'center' })
     assert.equal(total, 1)
   })
 
-  it('AC6: domain and lean intersect; an empty intersection returns zero docs, not all', async () => {
+  it('domain and lean intersect; an empty intersection returns zero docs, not all', async () => {
     // oantagonista.com.br satisfies domain but is labeled right, not left -> excluded
     const excluded = await docsFor(bolsonaro, { ...wideDocs, domain: 'oantagonista.com.br', lean: 'left' })
     assert.deepEqual(excluded, { total: 0, docs: [], outlets: [] })
@@ -406,7 +406,7 @@ describe('lean filtering (issue #26)', () => {
     assert.deepEqual(g.links, [])
   })
 
-  it('AC8: outlets is empty when lean is unset and populated with basis when lean narrows the scope', async () => {
+  it('outlets is empty when lean is unset and populated with basis when lean narrows the scope', async () => {
     const plain = await graphFor(bolsonaro, wideBase)
     assert.deepEqual(plain.outlets, [])
     assert.deepEqual((await docsFor(bolsonaro, wideDocs)).outlets, [])
@@ -424,7 +424,7 @@ describe('lean filtering (issue #26)', () => {
     assert.deepEqual(sorted(leanDocs.outlets), sorted(scoped.outlets))
   })
 
-  it('AC7/AC9: sourcesFor filters by domain (regression) and annotates every row with lean/basis', async () => {
+  it('sourcesFor filters by domain (regression) and annotates every row with lean/basis', async () => {
     const unfiltered = await sourcesFor(bolsonaro, wideBase)
     const filtered = await sourcesFor(bolsonaro, { ...wideBase, domain: 'oantagonista.com.br' })
     assert.ok(unfiltered.length > filtered.length, 'domain filter must actually shrink the row set')
@@ -458,7 +458,7 @@ describe('lean filtering (issue #26)', () => {
     assert.equal(golpeRight?.count_baseline, 0, 'doc 42 is left-labeled, so lean=right must empty the baseline half')
   })
 
-  it('AC10: timelineFor stays a bare {bucket_start,count}[] array and still narrows by lean', async () => {
+  it('timelineFor stays a bare {bucket_start,count}[] array and still narrows by lean', async () => {
     const q: TimelineQuery = { ...timelineBase, days: wide, lean: 'right' }
     const rows = await timelineFor(bolsonaro, q)
     assert.ok(Array.isArray(rows))
@@ -474,7 +474,7 @@ describe('lean filtering (issue #26)', () => {
 describe('docsFor', () => {
   before(seed)
 
-  it('AC1,AC2: returns every doc about the person in the window, newest first, ties broken by id desc, when no term is given', async () => {
+  it('returns every doc about the person in the window, newest first, ties broken by id desc, when no term is given', async () => {
     const { total, docs: found } = await docsFor(lula, docsBase)
     // widened by doc /38 (gkg, day1, issue #8's press-vs-network fixture)
     assert.equal(total, 5)
@@ -486,42 +486,42 @@ describe('docsFor', () => {
     }
   })
 
-  it('AC3: filters by term and kind, matching normalized tokens exactly', async () => {
+  it('filters by term and kind, matching normalized tokens exactly', async () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, term: 'reforma', kind: 'word' })
     assert.equal(total, 3)
     assert.equal(found.length, 3)
   })
 
-  it('AC4: falls back to matching every kind when kind is unknown', async () => {
+  it('falls back to matching every kind when kind is unknown', async () => {
     const { total } = await docsFor(lula, { ...docsBase, term: 'reforma', kind: 'bogus' })
     assert.equal(total, 3)
   })
 
   // Issue #108: 'theme' left the recognized kind set, so it must fall back exactly like any
   // other unrecognized token, not like a known-but-empty subset.
-  it('AC4: kind=theme falls back to matching every kind, same as kind=bogus', async () => {
+  it('kind=theme falls back to matching every kind, same as kind=bogus', async () => {
     const { total } = await docsFor(lula, { ...docsBase, term: 'reforma', kind: 'theme' })
     assert.equal(total, 3)
   })
 
-  it('AC5: widens with the window', async () => {
+  it('widens with the window', async () => {
     // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const { total, docs: found } = await docsFor(lula, { ...docsBase, days: 365 })
     assert.equal(total, 9)
     assert.equal(found.length, 9)
   })
 
-  it('AC6: filters by source', async () => {
+  it('filters by source', async () => {
     const { total } = await docsFor(lula, { ...docsBase, source: 'bluesky' })
     assert.equal(total, 1)
   })
 
-  it('AC7: filters by domain', async () => {
+  it('filters by domain', async () => {
     const { total } = await docsFor(lula, { ...docsBase, domain: 'g1.globo.com' })
     assert.equal(total, 1)
   })
 
-  it('AC8: paginates with limit and offset while total reflects the full match count, stable across a tied timestamp', async () => {
+  it('paginates with limit and offset while total reflects the full match count, stable across a tied timestamp', async () => {
     // two of the three reforma docs share the exact same published_at in the fixture, on purpose
     const q = { ...docsBase, term: 'reforma', kind: 'word', limit: 1 }
     const first = await docsFor(lula, { ...q, offset: 0 })
@@ -534,36 +534,36 @@ describe('docsFor', () => {
     assert.equal(ids.size, 2, 'union of the two pages must not repeat or skip a doc')
   })
 
-  it('AC9: never returns a tone for non-GDELT sources', async () => {
+  it('never returns a tone for non-GDELT sources', async () => {
     const { docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss,bluesky' })
     assert.ok(found.every((d) => d.tone === null))
   })
 
-  it('AC9: returns a tone for gkg docs', async () => {
+  it('returns a tone for gkg docs', async () => {
     const { docs: found } = await docsFor(lula, { ...docsBase, source: 'gkg' })
     assert.equal(found.length, 1)
     assert.equal(found[0].tone, 0.6)
   })
 
-  it('AC10: returns an empty result for a person without matching docs', async () => {
+  it('returns an empty result for a person without matching docs', async () => {
     const { total, docs: found } = await docsFor(nobody, docsBase)
     assert.equal(total, 0)
     assert.deepEqual(found, [])
   })
 
-  it('AC10: returns an empty result for an empty window', async () => {
+  it('returns an empty result for an empty window', async () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, days: 1 })
     assert.equal(total, 0)
     assert.deepEqual(found, [])
   })
 
-  it('issue #8: a comma-separated source list returns only docs whose source is in the list', async () => {
+  it('a comma-separated source list returns only docs whose source is in the list', async () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss' })
     assert.equal(total, 3)
     assert.ok(found.every((d) => d.source === 'gnews' || d.source === 'rss'))
   })
 
-  it('issue #8: adding gkg to the list includes the gkg doc', async () => {
+  it('adding gkg to the list includes the gkg doc', async () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss,gkg' })
     assert.equal(total, 4)
     assert.ok(found.some((d) => d.source === 'gkg'))
@@ -582,7 +582,7 @@ describe('risingFor (issue #3)', () => {
   const lift = (cRecent: number, days: number, cBaseline: number, baseline: number) =>
     Math.round(((cRecent / days) / ((cBaseline + 1) / baseline)) * 100) / 100
 
-  it('AC2: sorts terms by lift desc, ties by term', async () => {
+  it('sorts terms by lift desc, ties by term', async () => {
     const r = await risingFor(lula, risingBase)
     assert.equal(r.days, 7)
     assert.equal(r.baseline, 30)
@@ -600,7 +600,7 @@ describe('risingFor (issue #3)', () => {
     )
   })
 
-  it('AC3,AC4: count_recent, count_baseline and lift match the pinned formula', async () => {
+  it('count_recent, count_baseline and lift match the pinned formula', async () => {
     const r = await risingFor(lula, risingBase)
     // "tributaria" appears in docs /1 and /6 (both day1, in the recent window) and in no doc in the 8-37 day baseline
     assert.deepEqual(rnode(r, 'word:tributaria'), {
@@ -619,7 +619,7 @@ describe('risingFor (issue #3)', () => {
     assert.equal(defende?.lift, lift(1, 7, 1, 30))
   })
 
-  it('AC5: a term absent from the baseline outranks a term present in it at a comparable recent rate', async () => {
+  it('a term absent from the baseline outranks a term present in it at a comparable recent rate', async () => {
     const r = await risingFor(lula, risingBase)
     // "anuncia" and "defende" both have exactly 1 recent-window doc; "anuncia" has none in the
     // baseline, "defende" has 1 (doc /17, day31's "estabilidade" text also carries "defende")
@@ -631,14 +631,14 @@ describe('risingFor (issue #3)', () => {
     assert.ok((anuncia?.lift ?? 0) > (defende?.lift ?? 0))
   })
 
-  it('AC6: a term with an unchanged daily rate has lift exactly 1', async () => {
+  it('a term with an unchanged daily rate has lift exactly 1', async () => {
     const r = await risingFor(lula, { ...risingBase, days: 40, baseline: 40 })
     // "estabilidade"/"fiscal" have 2 mentions in the last 40 days (day31, day35) and 1 in the 40 days before (day50)
     assert.equal(rnode(r, 'word:estabilidade')?.lift, 1)
     assert.equal(rnode(r, 'word:fiscal')?.lift, 1)
   })
 
-  it('AC7: min filters on the raw recent count', async () => {
+  it('min filters on the raw recent count', async () => {
     const at2 = await risingFor(lula, { ...risingBase, min: 2 })
     assert.ok(rnode(at2, 'word:tributaria'))
     assert.equal(rnode(at2, 'word:anuncia'), undefined, '"anuncia" has a raw recent count of 1')
@@ -646,14 +646,14 @@ describe('risingFor (issue #3)', () => {
     assert.equal(rnode(at3, 'word:tributaria'), undefined)
   })
 
-  it('AC8: never lists the person name as a rising term', async () => {
+  it('never lists the person name as a rising term', async () => {
     const excluded = new Set(nameTokens(lula))
     const r = await risingFor(lula, { ...risingBase, days: 2000, baseline: 2000 })
     assert.ok(r.terms.length > 0, 'sanity: wide window must yield rows to make the check meaningful')
     for (const t of r.terms) assert.ok(!excluded.has(t.term), `${t.term} is a name token and must be excluded`)
   })
 
-  it('AC9: kind, source and domain filter both windows identically', async () => {
+  it('kind, source and domain filter both windows identically', async () => {
     const hashtagOnly = await risingFor(lula, { ...risingBase, kind: 'hashtag' })
     assert.ok(hashtagOnly.terms.length > 0)
     assert.ok(hashtagOnly.terms.every((t) => t.kind === 'hashtag'))
@@ -680,19 +680,19 @@ describe('risingFor (issue #3)', () => {
     assert.deepEqual(theme.about, bogus.about)
   })
 
-  it('AC10: returns an empty terms array for a person without docs', async () => {
+  it('returns an empty terms array for a person without docs', async () => {
     const r = await risingFor(nobody, risingBase)
     assert.deepEqual(r, { days: 7, baseline: 30, terms: [], present: [], outlets: [], about: { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 } })
   })
 
-  it('AC10: returns an empty terms array for an empty recent window, but about.baseline still reflects the baseline docs', async () => {
+  it('returns an empty terms array for an empty recent window, but about.baseline still reflects the baseline docs', async () => {
     const r = await risingFor(lula, { ...risingBase, days: 1 })
     assert.deepEqual(r.terms, [])
     assert.equal(r.about.recent, 0)
     assert.ok(r.about.baseline > 0, 'about.baseline must still count the baseline-window docs')
   })
 
-  it('AC11: limit clamps the result size without altering the order', async () => {
+  it('limit clamps the result size without altering the order', async () => {
     const full = await risingFor(lula, { ...risingBase, limit: 100 })
     const r = await risingFor(lula, { ...risingBase, limit: 1 })
     assert.equal(r.terms.length, 1)
@@ -769,10 +769,10 @@ describe('risingFor (issue #3)', () => {
 // Issue #151's own acceptance criteria, independently pinned by number against the spec text
 // (§5) rather than assumed from the tests already sitting in the risingFor (issue #3) suite
 // above, which cover the same facts under issue #3's older AC numbering.
-describe('issue #151: /rising\'s about totals and raw counts', () => {
+describe('/rising\'s about totals and raw counts', () => {
   before(seed)
 
-  it('AC2: about carries integer recent/baseline doc totals, scoped like terms by source/domain/lean, not by kind', async () => {
+  it('about carries integer recent/baseline doc totals, scoped like terms by source/domain/lean, not by kind', async () => {
     const r = await risingFor(lula, risingBase)
     assert.equal(Number.isInteger(r.about.recent), true)
     assert.equal(Number.isInteger(r.about.baseline), true)
@@ -782,7 +782,7 @@ describe('issue #151: /rising\'s about totals and raw counts', () => {
     assert.notDeepEqual(domainScoped.about, r.about)
   })
 
-  it('AC3: count_recent_raw/count_baseline_raw are non-negative integers, and the rounded rate columns derive from them', async () => {
+  it('count_recent_raw/count_baseline_raw are non-negative integers, and the rounded rate columns derive from them', async () => {
     const r = await risingFor(lula, risingBase)
     assert.ok(r.terms.length > 0, 'sanity: must have rows to make the check meaningful')
     for (const t of r.terms) {
@@ -793,21 +793,21 @@ describe('issue #151: /rising\'s about totals and raw counts', () => {
     }
   })
 
-  it('AC4: a person with no docs at all gets terms: [], about.recent: 0, about.baseline: 0', async () => {
+  it('a person with no docs at all gets terms: [], about.recent: 0, about.baseline: 0', async () => {
     const r = await risingFor(nobody, risingBase)
     assert.deepEqual(r.terms, [])
     assert.equal(r.about.recent, 0)
     assert.equal(r.about.baseline, 0)
   })
 
-  it('AC5: a person with docs only in the baseline window gets terms: [], about.recent: 0, and about.baseline reflects the baseline docs', async () => {
+  it('a person with docs only in the baseline window gets terms: [], about.recent: 0, and about.baseline reflects the baseline docs', async () => {
     const r = await risingFor(lula, { ...risingBase, days: 1 })
     assert.deepEqual(r.terms, [])
     assert.equal(r.about.recent, 0)
     assert.ok(r.about.baseline > 0)
   })
 
-  it('AC6: min, kind, source, domain and lean keep filtering terms identically to before this change', async () => {
+  it('min, kind, source, domain and lean keep filtering terms identically to before this change', async () => {
     const at2 = await risingFor(lula, { ...risingBase, min: 2 })
     const at3 = await risingFor(lula, { ...risingBase, min: 3 })
     assert.ok(at2.terms.length > at3.terms.length, 'min still floors the raw recent count')
@@ -815,7 +815,7 @@ describe('issue #151: /rising\'s about totals and raw counts', () => {
     assert.ok(hashtagOnly.terms.every((t) => t.kind === 'hashtag'))
   })
 
-  it('AC6: an unknown kind token filters terms to nothing while about still reflects the true window totals', async () => {
+  it('an unknown kind token filters terms to nothing while about still reflects the true window totals', async () => {
     const bogus = await risingFor(lula, { ...risingBase, kind: 'bogus', days: 2000, baseline: 2000 })
     const all = await risingFor(lula, { ...risingBase, days: 2000, baseline: 2000 })
     assert.deepEqual(bogus.terms, [])
@@ -830,7 +830,7 @@ describe('timelineFor (issue #4)', () => {
 
   const golpe = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all', lean: 'all' } as const
 
-  it('AC1: returns ceil(days/bucket_days) buckets, oldest first, for the default window', async () => {
+  it('returns ceil(days/bucket_days) buckets, oldest first, for the default window', async () => {
     const rows = await timelineFor(lula, timelineBase)
     assert.equal(rows.length, 5)
     for (const r of rows) assert.ok('bucket_start' in r && 'count' in r)
@@ -839,7 +839,7 @@ describe('timelineFor (issue #4)', () => {
     }
   })
 
-  it('AC2: bucket counts sum to the equivalent docsFor total', async () => {
+  it('bucket counts sum to the equivalent docsFor total', async () => {
     const rows = await timelineFor(lula, timelineBase)
     const { total } = await docsFor(lula, { ...docsBase, limit: 200 })
     assert.equal(total, 5, 'sanity: known fixture total for lula in the default window')
@@ -851,7 +851,7 @@ describe('timelineFor (issue #4)', () => {
     assert.equal(sumOf(scoped), golpeTotal)
   })
 
-  it('AC3: zero-count buckets are present, not omitted', async () => {
+  it('zero-count buckets are present, not omitted', async () => {
     const rows = await timelineFor(bolsonaro, { ...timelineBase, ...golpe })
     assert.equal(rows.length, 306, 'ceil(2140/7)')
     // doc /23 (2139 days ago) lands in the oldest (edge-clamped) bucket -> row 0
@@ -866,7 +866,7 @@ describe('timelineFor (issue #4)', () => {
     assert.deepEqual(rows.filter((r) => r.count > 0).map((r) => r.count).sort((a, b) => b - a), [2, 1, 1])
   })
 
-  it('AC4: day buckets split what a week bucket merges', async () => {
+  it('day buckets split what a week bucket merges', async () => {
     const day = await timelineFor(bolsonaro, { ...golpe, bucket: 'day' })
     const week = await timelineFor(bolsonaro, { ...golpe, bucket: 'week' })
     assert.equal(day.length, 2140)
@@ -874,7 +874,7 @@ describe('timelineFor (issue #4)', () => {
     assert.deepEqual(week.filter((r) => r.count > 0).map((r) => r.count).sort((a, b) => b - a), [2, 1, 1])
   })
 
-  it('AC5: without a term, kind has no effect and every doc about the person counts', async () => {
+  it('without a term, kind has no effect and every doc about the person counts', async () => {
     const q = { ...timelineBase, term: '', days: 2151 }
     const withHashtagKind = await timelineFor(bolsonaro, { ...q, kind: 'hashtag' })
     const withThemeKind = await timelineFor(bolsonaro, { ...q, kind: 'theme' })
@@ -886,7 +886,7 @@ describe('timelineFor (issue #4)', () => {
     assert.equal(sumOf(withAllKind), 6)
   })
 
-  it('AC6: an unrecognized kind still matches the term under any kind', async () => {
+  it('an unrecognized kind still matches the term under any kind', async () => {
     const bogus = await timelineFor(bolsonaro, { ...timelineBase, ...golpe, kind: 'bogus' })
     const all = await timelineFor(bolsonaro, { ...timelineBase, ...golpe, kind: 'all' })
     assert.equal(sumOf(bogus), 4)
@@ -895,18 +895,18 @@ describe('timelineFor (issue #4)', () => {
 
   // Issue #108: 'theme' left the recognized kind set, so kind=theme must fall back the same
   // way kind=bogus already does, not behave like a known-but-empty subset.
-  it('AC6: kind=theme still matches the term under any kind, same as kind=bogus', async () => {
+  it('kind=theme still matches the term under any kind, same as kind=bogus', async () => {
     const theme = await timelineFor(bolsonaro, { ...timelineBase, ...golpe, kind: 'theme' })
     assert.equal(sumOf(theme), 4)
   })
 
-  it('AC7: a person without docs gets every bucket at zero', async () => {
+  it('a person without docs gets every bucket at zero', async () => {
     const rows = await timelineFor(nobody, timelineBase)
     assert.equal(rows.length, 5)
     assert.ok(rows.every((r) => r.count === 0))
   })
 
-  it('AC8: an empty window still returns a full, zero-filled bucket list', async () => {
+  it('an empty window still returns a full, zero-filled bucket list', async () => {
     const rows = await timelineFor(bolsonaro, timelineBase)
     assert.equal(rows.length, 5)
     assert.ok(rows.every((r) => r.count === 0))
@@ -916,7 +916,7 @@ describe('timelineFor (issue #4)', () => {
     assert.equal(one[0].count, 0)
   })
 
-  it('AC9: source and domain narrow counts the same way they narrow docsFor', async () => {
+  it('source and domain narrow counts the same way they narrow docsFor', async () => {
     const bySource = await timelineFor(bolsonaro, { ...timelineBase, ...golpe, source: 'gnews' })
     const byDomain = await timelineFor(bolsonaro, { ...timelineBase, ...golpe, domain: 'oantagonista.com.br' })
     const byMiss = await timelineFor(bolsonaro, { ...timelineBase, ...golpe, source: 'bluesky' })
@@ -927,7 +927,7 @@ describe('timelineFor (issue #4)', () => {
     assert.ok(byMissDomain.every((r) => r.count === 0))
   })
 
-  it('AC12: no bucket row ever carries a tone field', async () => {
+  it('no bucket row ever carries a tone field', async () => {
     const rows = await timelineFor(bolsonaro, { ...timelineBase, ...golpe })
     assert.ok(rows.length > 0)
     assert.ok(rows.every((r) => !('tone' in r)))
@@ -1150,12 +1150,12 @@ describe('toneFor (issue #5)', () => {
   const cell = (r: Awaited<ReturnType<typeof toneFor>>, personId: string, domain: string) =>
     r.cells.find((c) => c.person_id === personId && c.domain === domain)
 
-  it('AC1: the response has exactly the keys persons, domains, cells', async () => {
+  it('the response has exactly the keys persons, domains, cells', async () => {
     const r = await toneFor(toneBase)
     assert.deepEqual(Object.keys(r).sort(), ['cells', 'domains', 'persons'])
   })
 
-  it('AC4: lists every tracked person regardless of toned docs, ordered by name, shaped { id, name }', async () => {
+  it('lists every tracked person regardless of toned docs, ordered by name, shaped { id, name }', async () => {
     const r = await toneFor(toneBase)
     assert.deepEqual(r.persons.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
     for (const p of r.persons) assert.deepEqual(Object.keys(p).sort(), ['id', 'name'])
@@ -1163,7 +1163,7 @@ describe('toneFor (issue #5)', () => {
     assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)))
   })
 
-  it('AC5: drops person/domain pairs below min', async () => {
+  it('drops person/domain pairs below min', async () => {
     const r = await toneFor(toneBase)
     // folha.uol.com.br has exactly 1 toned tarcisio doc, oglobo.globo.com has 2: both below the default min=3
     assert.equal(cell(r, 'tarcisio', 'folha.uol.com.br'), undefined)
@@ -1171,7 +1171,7 @@ describe('toneFor (issue #5)', () => {
     assert.ok(!r.cells.some((c) => c.n < toneBase.min), 'no surfaced cell may carry n below the threshold')
   })
 
-  it('AC6: includes pairs at or above min with the correct average and count', async () => {
+  it('includes pairs at or above min with the correct average and count', async () => {
     const r = await toneFor(toneBase)
     // estadao.com.br has 3 toned tarcisio docs (-2, -1, 0), averaging to -1
     assert.deepEqual(cell(r, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', tone: -1, n: 3 })
@@ -1193,7 +1193,7 @@ describe('toneFor (issue #5)', () => {
     assert.deepEqual(cell(r, 'bolsonaro', 'poder360.com.br'), { person_id: 'bolsonaro', domain: 'poder360.com.br', tone: 0.4, n: 1 })
   })
 
-  it('AC7: has no cells for a person without toned docs, who still appears in persons', async () => {
+  it('has no cells for a person without toned docs, who still appears in persons', async () => {
     const r = await toneFor(toneBase)
     assert.ok(!r.cells.some((c) => c.person_id === 'lula'))
     assert.ok(!r.cells.some((c) => c.person_id === 'bolsonaro'))
@@ -1208,14 +1208,14 @@ describe('toneFor (issue #5)', () => {
     assert.deepEqual([...r.domains].sort(), r.domains, 'domains must be sorted')
   })
 
-  it('AC9: lowers the threshold when min is set explicitly', async () => {
+  it('lowers the threshold when min is set explicitly', async () => {
     const atDefault = await toneFor(toneBase)
     assert.equal(cell(atDefault, 'tarcisio', 'oglobo.globo.com'), undefined)
     const lowered = await toneFor({ ...toneBase, min: 2 })
     assert.deepEqual(cell(lowered, 'tarcisio', 'oglobo.globo.com'), { person_id: 'tarcisio', domain: 'oglobo.globo.com', tone: 0.75, n: 2 })
   })
 
-  it('AC8: ignores docs without a domain, even when one alone clears min', async () => {
+  it('ignores docs without a domain, even when one alone clears min', async () => {
     // doc /35 has no domain but a tone of -3 about tarcisio; it must never surface a
     // null/empty domain even at a min low enough to admit a lone toned doc
     const r = await toneFor({ ...toneBase, min: 1 })
@@ -1248,7 +1248,7 @@ describe('testimonyFor (issue #21)', () => {
     assert.deepEqual(r.by_domain, [{ domain: 'estadao.com.br', source: 'gdelt', score: 4, n: 3 }])
   })
 
-  it('AC6: excludes a null-scored doc from n and the average at every level', async () => {
+  it('excludes a null-scored doc from n and the average at every level', async () => {
     // doc /36 shares tarcisio+estadao.com.br+the default window with docs 30-32, but is
     // scored null; if count(score)/avg(score) were swapped for count(*)/coalesce(score,0)
     // the estadao.com.br cell would silently become { score: 3, n: 4 }
@@ -1257,7 +1257,7 @@ describe('testimonyFor (issue #21)', () => {
     assert.equal(r.overall.n, 6, 'the null-scored doc must not inflate n')
   })
 
-  it('AC4: drops a domain below min from by_domain but keeps it in overall/by_source, and surfaces it once min is lowered', async () => {
+  it('drops a domain below min from by_domain but keeps it in overall/by_source, and surfaces it once min is lowered', async () => {
     // oglobo.globo.com has 2 non-null tarcisio scores (5, -1): below the default min=3
     const r = await testimonyFor(tarcisio, testimonyBase)
     assert.equal(byDomain(r, 'oglobo.globo.com'), undefined)
@@ -1266,7 +1266,7 @@ describe('testimonyFor (issue #21)', () => {
     assert.deepEqual(byDomain(lowered, 'oglobo.globo.com'), { domain: 'oglobo.globo.com', source: 'gdelt', score: 2, n: 2 })
   })
 
-  it('AC5: never groups a domain-less doc into by_domain, at any min, but keeps it in overall/by_source', async () => {
+  it('never groups a domain-less doc into by_domain, at any min, but keeps it in overall/by_source', async () => {
     // doc /35 (example.org, tarcisio, score -8) has no domain; the -8 is baked into the 1.33
     // average, proving it was counted
     const r = await testimonyFor(tarcisio, { ...testimonyBase, min: 1 })
@@ -1274,7 +1274,7 @@ describe('testimonyFor (issue #21)', () => {
     assert.deepEqual(bySource(r, 'gdelt'), { source: 'gdelt', score: 1.33, n: 6 })
   })
 
-  it('AC7: keeps a shared doc independent per person: no cross-leak', async () => {
+  it('keeps a shared doc independent per person: no cross-leak', async () => {
     // doc /37 (poder360.com.br) scores tarcisio +7, bolsonaro -7; sits at day 35, so days:90 is needed
     const wide: TestimonyQuery = { days: 90, source: 'all', method: 'stub', min: 1 }
     const t = await testimonyFor(tarcisio, wide)
@@ -1287,7 +1287,7 @@ describe('testimonyFor (issue #21)', () => {
     assert.deepEqual(t.overall, { score: 2.14, n: 7 })
   })
 
-  it('AC8: excludes docs outside the days window; widening includes them', async () => {
+  it('excludes docs outside the days window; widening includes them', async () => {
     const narrow = await testimonyFor(tarcisio, testimonyBase)
     assert.equal(byDomain(narrow, 'poder360.com.br'), undefined)
     const wide = await testimonyFor(tarcisio, { ...testimonyBase, days: 90, min: 1 })
@@ -1299,7 +1299,7 @@ describe('testimonyFor (issue #21)', () => {
     assert.deepEqual(widerDays.overall, { score: Math.round(((6 + 3 - 2) / 3) * 100) / 100, n: 3 })
   })
 
-  it('AC8/AC9: excludes docs outside the source filter, with parseSourceList grammar; widening includes them', async () => {
+  it('excludes docs outside the source filter, with parseSourceList grammar; widening includes them', async () => {
     // lula: g1.globo.com/1 (gnews, score 6) and gdeltproject.org/38 (gkg, score 3), both day1
     const onlyGkg = await testimonyFor(lula, { ...testimonyBase, source: 'gkg' })
     assert.deepEqual(onlyGkg.overall, { score: 3, n: 1 })
@@ -1313,7 +1313,7 @@ describe('testimonyFor (issue #21)', () => {
     assert.deepEqual((await testimonyFor(lula, { ...testimonyBase, source: 'gnews,gkg' })).overall, all.overall)
   })
 
-  it('AC3: returns the all-empty shape for an unknown/never-scored method, and for a source with no scored doc', async () => {
+  it('returns the all-empty shape for an unknown/never-scored method, and for a source with no scored doc', async () => {
     const r = await testimonyFor(tarcisio, { ...testimonyBase, method: 'never-inserted-method' })
     assert.deepEqual(r, { method: 'never-inserted-method', overall: { score: null, n: 0 }, by_source: [], by_domain: [] })
     // lula has zero bluesky-sourced testimony rows in the fixture
@@ -1327,7 +1327,7 @@ describe('compareFor (issue #93)', () => {
 
   const term = (r: Awaited<ReturnType<typeof compareFor>>, t: string, kind = 'word') => r.terms.find((x) => x.term === t && x.kind === kind)
 
-  it('AC6: returns an exact figure for a term only one side has, and null, not a zero object, for the other', async () => {
+  it('returns an exact figure for a term only one side has, and null, not a zero object, for the other', async () => {
     // bolsonaro has zero docs in the default 30-day window (its docs sit 2100+ days out),
     // so "reforma" (lula-only in that window) must carry a real object on a
     const r = await compareFor(lula, bolsonaro, compareBase)
@@ -1336,7 +1336,7 @@ describe('compareFor (issue #93)', () => {
     assert.notDeepEqual(term(r, 'reforma')!.b, { count: 0, pmi: 0, tone: null })
   })
 
-  it("AC7: symmetrically, a term only tarcisio's docs carry reads real for a and null for b", async () => {
+  it("symmetrically, a term only tarcisio's docs carry reads real for a and null for b", async () => {
     const g = await graphFor(tarcisio, { ...graphBase, limit: 200 })
     const n = g.nodes.find((x) => x.term === 'geopolitica' && x.kind === 'word')!
     assert.ok(n, 'fixture assumption: tarcisio has a "geopolitica" word node lula never mentions')
@@ -1345,7 +1345,7 @@ describe('compareFor (issue #93)', () => {
     assert.equal(term(r, 'geopolitica')!.b, null)
   })
 
-  it('AC8: marks a side\'s own name word as "name" while the other side may still have a real figure', async () => {
+  it('marks a side\'s own name word as "name" while the other side may still have a real figure', async () => {
     // doc /2 ("Lula e Tarcísio disputam a eleição") gives lula's own docs the word "tarcisio"
     // as ordinary vocabulary, while it is tarcisio's own name word
     const r = await compareFor(tarcisio, lula, compareBase)
@@ -1354,7 +1354,7 @@ describe('compareFor (issue #93)', () => {
     assert.deepEqual(row.b, { count: 1, pmi: -1.79, tone: null })
   })
 
-  it("AC5: matches graphFor's about for the same query, on both sides", async () => {
+  it("matches graphFor's about for the same query, on both sides", async () => {
     const gLula = await graphFor(lula, parseQuery({}))
     const gBolsonaro = await graphFor(bolsonaro, parseQuery({}))
     const r = await compareFor(lula, bolsonaro, compareBase)
@@ -1363,14 +1363,14 @@ describe('compareFor (issue #93)', () => {
     assert.ok(r.a.about > 0)
   })
 
-  it("AC9: matches graphFor's count/pmi/tone for an overlapping term", async () => {
+  it("matches graphFor's count/pmi/tone for an overlapping term", async () => {
     const g = await graphFor(lula, parseQuery({}))
     const n = g.nodes.find((x) => x.term === 'reforma' && x.kind === 'word')!
     const r = await compareFor(lula, bolsonaro, compareBase)
     assert.deepEqual(term(r, 'reforma')!.a, { count: n.count, pmi: n.pmi, tone: n.tone })
   })
 
-  it('AC10: returns identical a/b values when a === b', async () => {
+  it('returns identical a/b values when a === b', async () => {
     // "name" entries never actually surface here: a person's own name words are excluded from
     // term_p before the top-count/top-pmi selection runs (compareSideCte), so when a and b are
     // the same person, both sides' four selection lists are built from the same name-excluded
@@ -1380,7 +1380,7 @@ describe('compareFor (issue #93)', () => {
     for (const t of r.terms) assert.deepEqual(t.a, t.b)
   })
 
-  it('AC11: applies both the count-ranked and pmi-ranked selection per side', async () => {
+  it('applies both the count-ranked and pmi-ranked selection per side', async () => {
     // at limit=1, tarcisio's own top-count term ("geopolitica") differs from bolsonaro's
     // top-pmi term ("alianca", shared doc /37), so the union must carry both
     const r = await compareFor(tarcisio, bolsonaro, { ...compareBase, days: 365, limit: 1 })
@@ -1389,7 +1389,7 @@ describe('compareFor (issue #93)', () => {
     assert.ok(r.terms.some((t) => t.term === 'alianca'))
   })
 
-  it('AC11: limit=1 unions both selections of one side too, not just each side\'s single best term', async () => {
+  it('limit=1 unions both selections of one side too, not just each side\'s single best term', async () => {
     // scoped to a domain used by no other fixture doc: bolsonaro's own top-count term
     // ("termdiluido", count 3, diluted pmi because lula also uses it) genuinely differs from
     // bolsonaro's own top-pmi term ("cita", count 1, exclusive)
@@ -1403,7 +1403,7 @@ describe('compareFor (issue #93)', () => {
     assert.ok(r.terms.some((t) => t.term === gPmi.nodes[0]!.term), 'the pmi-ranked top-1 must survive the union')
   })
 
-  it('AC12: orders terms by term asc then kind asc', async () => {
+  it('orders terms by term asc then kind asc', async () => {
     // "reforma" is both a hashtag and a word for lula in the default window
     const r = await compareFor(lula, bolsonaro, compareBase)
     const idx = r.terms.map((t) => `${t.term}:${t.kind}`)
@@ -1417,7 +1417,7 @@ describe('compareFor (issue #93)', () => {
     assert.ok(r.terms.some((t) => t.term === 'reforma' && t.kind === 'word'))
   })
 
-  it('AC13: returns an empty terms list and about: 0 outside any docs window', async () => {
+  it('returns an empty terms list and about: 0 outside any docs window', async () => {
     const r = await compareFor(lula, bolsonaro, { ...compareBase, domain: 'doesnotexist.example' })
     assert.deepEqual(r.terms, [])
     assert.equal(r.a.about, 0)
@@ -2336,7 +2336,7 @@ const todayBrt = () => brtYmd(new Date())
 describe('weekFor (issue #147)', () => {
   before(seed)
 
-  it('AC2: default query is 7 BRT calendar days, oldest first, last bucket today', async () => {
+  it('default query is 7 BRT calendar days, oldest first, last bucket today', async () => {
     const r = await weekFor(lula, weekBase)
     assert.equal(r.days, 7)
     assert.equal(r.tz, 'America/Sao_Paulo')
@@ -2348,13 +2348,13 @@ describe('weekFor (issue #147)', () => {
     for (const b of r.buckets) assert.equal(new Date(b.start).getUTCHours(), 3)
   })
 
-  it('AC3: days=7/30/365 change the bucket count; the page still sends 7', async () => {
+  it('days=7/30/365 change the bucket count; the page still sends 7', async () => {
     assert.equal((await weekFor(lula, { ...weekBase, days: 7 })).buckets.length, 7)
     assert.equal((await weekFor(lula, { ...weekBase, days: 30 })).buckets.length, 30)
     assert.equal((await weekFor(lula, { ...weekBase, days: 365 })).buckets.length, 365)
   })
 
-  it('AC4: limit clamps each day\'s terms, not about', async () => {
+  it('limit clamps each day\'s terms, not about', async () => {
     const one = await weekFor(lula, { ...weekBase, limit: 1 })
     const full = await weekFor(lula, weekBase)
     for (let i = 0; i < 7; i++) {
@@ -2364,7 +2364,7 @@ describe('weekFor (issue #147)', () => {
     assert.ok(full.buckets.some((b) => b.terms.length > 1), 'fixture Lula must have a day with several terms so limit=1 is a real clamp')
   })
 
-  it('AC6: own-name words never appear', async () => {
+  it('own-name words never appear', async () => {
     const names = new Set(nameTokens(lula))
     const r = await weekFor(lula, weekBase)
     for (const b of r.buckets) for (const t of b.terms) {
@@ -2373,14 +2373,14 @@ describe('weekFor (issue #147)', () => {
     }
   })
 
-  it('AC7: a BRT day with no about-docs is present with about 0 and empty terms', async () => {
+  it('a BRT day with no about-docs is present with about 0 and empty terms', async () => {
     const r = await weekFor(lula, weekBase)
     const empty = r.buckets.filter((b) => b.about === 0)
     assert.ok(empty.length >= 1)
     for (const b of empty) assert.deepEqual(b.terms, [])
   })
 
-  it('AC8: fixture Bolsonaro in the default week is seven zero buckets, not an error', async () => {
+  it('fixture Bolsonaro in the default week is seven zero buckets, not an error', async () => {
     const r = await weekFor(bolsonaro, weekBase)
     assert.equal(r.buckets.length, 7)
     for (const b of r.buckets) {
@@ -2389,7 +2389,7 @@ describe('weekFor (issue #147)', () => {
     }
   })
 
-  it('AC10: about is not filtered by kind', async () => {
+  it('about is not filtered by kind', async () => {
     const all = await weekFor(lula, weekBase)
     const tags = await weekFor(lula, { ...weekBase, kind: 'hashtag' })
     for (let i = 0; i < 7; i++) assert.equal(tags.buckets[i].about, all.buckets[i].about)
@@ -2403,7 +2403,7 @@ describe('weekFor (issue #147)', () => {
   // days:30 for tarcisio also runs this at a width the days:7 cases never reach, so a scan
   // lower bound that only misbehaves past a week (e.g. `least(days - 1, ...)`) cannot hide
   // behind days:7 passing everywhere.
-  it("issue #150: each bucket's about equals docsFor's total at day=<that bucket's BRT date>", async () => {
+  it("each bucket's about equals docsFor's total at day=<that bucket's BRT date>", async () => {
     for (const { person, days } of [{ person: lula, days: 7 }, { person: tarcisio, days: 7 }, { person: tarcisio, days: 30 }]) {
       const r = await weekFor(person, { ...weekBase, days })
       for (const b of r.buckets) {
@@ -2421,7 +2421,7 @@ describe('weekFor (issue #147)', () => {
 
   // AC5 in test/query.test.ts only proves parseWeekQuery *parses* source/domain/lean; this is
   // where the parsed values are proven to actually reach weekFor and change its result.
-  it('AC5: source, domain and lean each narrow about, not just kind', async () => {
+  it('source, domain and lean each narrow about, not just kind', async () => {
     const sumAbout = (r: Awaited<ReturnType<typeof weekFor>>) => r.buckets.reduce((a, b) => a + b.about, 0)
 
     const all = await weekFor(lula, weekBase)
@@ -2439,7 +2439,7 @@ describe('weekFor (issue #147)', () => {
     assert.ok(sumAbout(domainOnly) >= 1 && sumAbout(domainOnly) < sumAbout(allWide), 'domain must narrow the week\'s total about')
   })
 
-  it('AC11: terms are ordered count desc, term asc, kind asc; two kinds are two rows', async () => {
+  it('terms are ordered count desc, term asc, kind asc; two kinds are two rows', async () => {
     const r = await weekFor(lula, { ...weekBase, limit: 40 })
     const busy = r.buckets.find((bucket) => bucket.terms.length > 1)
     assert.ok(busy)
@@ -2456,13 +2456,13 @@ describe('weekFor (issue #147)', () => {
     assert.ok(reforma.some((t) => t.kind === 'hashtag'))
   })
 
-  it('AC12: /timeline stays a bare rolling array', async () => {
+  it('/timeline stays a bare rolling array', async () => {
     const rows = await timelineFor(lula, timelineBase)
     assert.ok(Array.isArray(rows))
     for (const row of rows) assert.deepEqual(Object.keys(row).sort(), ['bucket_start', 'count'])
   })
 
-  it('issue #147: week scoped bounds published_at from below so docs_published_idx applies', () => {
+  it('week scoped bounds published_at from below so docs_published_idx applies', () => {
     assert.match(statements.week, /where d\.published_at >=/)
   })
 })
@@ -2478,7 +2478,7 @@ describe('weekFor testimony (issue #150 acceptance criteria)', () => {
     assert.ok(!Object.keys(statements).some((k) => k.startsWith('week') && k !== 'week' && k !== 'weekTestimony'))
   })
 
-  it('AC1: weekFor omits the testimony key on every bucket when the flag is absent, across parameter combinations', async () => {
+  it('weekFor omits the testimony key on every bucket when the flag is absent, across parameter combinations', async () => {
     const combos: WeekQuery[] = [
       { ...weekBase },
       { ...weekBase, days: 30 },
@@ -2494,19 +2494,19 @@ describe('weekFor testimony (issue #150 acceptance criteria)', () => {
     }
   })
 
-  it('AC3: the daysAgo(7) bucket averages only the non-null stub score, excluding the null-scored doc sharing that day', async () => {
+  it('the daysAgo(7) bucket averages only the non-null stub score, excluding the null-scored doc sharing that day', async () => {
     const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
     // estadao.com.br/31 (stub score 6) and estadao.com.br/36 (stub score null) both fall on daysAgo(7).
     assert.deepEqual(bucketAt(r, 7).testimony, { score: 6, n: 1 })
   })
 
-  it('AC4: the daysAgo(6) bucket averages its single scored doc', async () => {
+  it('the daysAgo(6) bucket averages its single scored doc', async () => {
     const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
     // estadao.com.br/30, stub score 4, is the only scored doc that day.
     assert.deepEqual(bucketAt(r, 6).testimony, { score: 4, n: 1 })
   })
 
-  it('AC5: a bucket with about: 0 has testimony null', async () => {
+  it('a bucket with about: 0 has testimony null', async () => {
     const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'stub' })
     // daysAgo(1) is day1: only the lula docs (g1.globo.com/1, valor.globo.com/6, gdeltproject.org/38)
     // land there, none naming tarcisio, so about is 0 on that bucket.
@@ -2539,20 +2539,20 @@ describe('weekFor testimony (issue #150 acceptance criteria)', () => {
     assert.deepEqual(bucketAt(withSource, 7).testimony, { score: 6, n: 1 })
   })
 
-  it('AC6: an unscored method resolves testimony to null on every bucket rather than raising', async () => {
+  it('an unscored method resolves testimony to null on every bucket rather than raising', async () => {
     const r = await weekFor(tarcisio, { ...weekBase, days: 30, method: 'nobody:ever' })
     assert.equal(r.buckets.length, 30)
     for (const b of r.buckets) assert.equal(b.testimony, null)
   })
 
-  it("AC7: weekTestimonyQuery's rendered text is identical across calls with different days, source and method", () => {
+  it("weekTestimonyQuery's rendered text is identical across calls with different days, source and method", () => {
     const a = queries.weekTestimony(tarcisio, { ...weekBase, days: 7, source: 'all', limit: 8 }, 'stub')
     const b = queries.weekTestimony(tarcisio, { ...weekBase, days: 90, source: 'gdelt', limit: 40 }, 'kikori:q8')
     assert.equal(a.text, b.text)
     assert.equal(a.text, statements.weekTestimony)
   })
 
-  it('AC8: docs/api.md states the flag, the per-bucket shape, the byte-for-byte-unchanged default and the shared method rule, all in the /week section', () => {
+  it('docs/api.md states the flag, the per-bucket shape, the byte-for-byte-unchanged default and the shared method rule, all in the /week section', () => {
     // Sliced from the `/week?...&testimony=1` anchor onward, so this can only pass against the
     // /week subsection: /graph's own testimony=1 paragraph (docs/api.md, earlier in the file)
     // separately repeats three of these same four facts, and docs/testimony.md's one-liner
@@ -2577,14 +2577,14 @@ describe('weekFor: future-dated doc (issue #147)', () => {
   })
   after(reseed)
 
-  it('AC9: a future-dated about-doc counts in today\'s bucket', async () => {
+  it('a future-dated about-doc counts in today\'s bucket', async () => {
     const r = await weekFor(bolsonaro, weekBase)
     assert.equal(r.buckets[6].about, 1)
     assert.ok(r.buckets[6].terms.some((t) => t.term === 'golpe'))
     for (const b of r.buckets.slice(0, 6)) assert.equal(b.about, 0)
   })
 
-  it('issue #147: /docs?day=today folds the same future-dated doc into today, matching /week\'s about', async () => {
+  it('/docs?day=today folds the same future-dated doc into today, matching /week\'s about', async () => {
     const r = await weekFor(bolsonaro, weekBase)
     const { total, docs } = await docsFor(bolsonaro, { ...docsBase, day: todayBrt() })
     assert.equal(total, r.buckets[6].about)
@@ -2642,7 +2642,7 @@ describe('weekFor: own-name phrase filter (issue #147)', () => {
 describe('docsFor day filter (issue #147)', () => {
   before(seed)
 
-  it('AC15: a kept day returns only docs on that BRT date; empty day matches today\'s /docs', async () => {
+  it('a kept day returns only docs on that BRT date; empty day matches today\'s /docs', async () => {
     const open = await docsFor(lula, docsBase)
     const blank = await docsFor(lula, { ...docsBase, day: '' })
     assert.equal(blank.total, open.total)
@@ -2653,7 +2653,7 @@ describe('docsFor day filter (issue #147)', () => {
     assert.ok(sliced.total >= 1, 'Lula\'s day1 cluster must land on yesterday BRT')
   })
 
-  it('AC16: adding day does not add or remove fields on the /docs response', async () => {
+  it('adding day does not add or remove fields on the /docs response', async () => {
     const open = await docsFor(lula, docsBase)
     const sliced = await docsFor(lula, { ...docsBase, day: brtYmd(new Date(Date.now() - 86_400_000)) })
     assert.deepEqual(Object.keys(open).sort(), Object.keys(sliced).sort())

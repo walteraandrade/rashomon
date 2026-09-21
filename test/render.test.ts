@@ -82,7 +82,7 @@ const paint = (selected: string | null) =>
     return els.inspector.innerHTML
   })
 
-describe('issue #147 AC20: the inspector sparkline', () => {
+describe('the inspector sparkline', () => {
   const paintWithSpark = (sparkline?: Parameters<typeof inspect>[0]['sparkline']) =>
     withFakeDocument(['inspector'], (els) => {
       inspect({ graph, nodes: [term], links: [], selected: term.id, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, sparkline })
@@ -373,7 +373,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
   const missing = { id: 'word:missing', term: 'ausente', kind: 'word', count: 5, pmi: 0.6 } // testimony: undefined
   const stripNodes = [golpe, reforma, agenda, rare, unscored, missing]
 
-  it('AC2: only the nodes termMask accepts are included, and x is monotonic non-decreasing in score', () => {
+  it('only the nodes termMask accepts are included, and x is monotonic non-decreasing in score', () => {
     const layout = termStripLayout(stripNodes, personTestimony, 860)
     const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
     assert.deepEqual(ids, new Set(['word:golpe', 'word:reforma', 'word:agenda']), 'rare (n<3), unscored (testimony: null) and missing (testimony: undefined) must be excluded')
@@ -381,18 +381,18 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     for (let i = 1; i < byScore.length; i++) assert.ok(byScore[i].x >= byScore[i - 1].x, 'x must never decrease as score increases')
   })
 
-  it('AC2: excludes every node when the person has no eligible score (stats.testimony absent or its score null/undefined)', () => {
+  it('excludes every node when the person has no eligible score (stats.testimony absent or its score null/undefined)', () => {
     assert.equal(termStripLayout(stripNodes, { method: 'kikori', score: null, n: 0 }, 860).dots.length, 0, 'a null person score')
     assert.equal(termStripLayout(stripNodes, undefined, 860).dots.length, 0, 'an absent stats.testimony')
   })
 
-  it('AC3: the domain widens to at least 2 with exactly one eligible word', () => {
+  it('the domain widens to at least 2 with exactly one eligible word', () => {
     const layout = termStripLayout([golpe], personTestimony, 860)
     assert.equal(layout.dots.length, 1)
     assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen for a single point: got [${layout.domainMin}, ${layout.domainMax}]`)
   })
 
-  it('AC3: the domain widens when every eligible word ties the person mean', () => {
+  it('the domain widens when every eligible word ties the person mean', () => {
     const tied = [
       { id: 'word:a', term: 'a', kind: 'word', count: 5, pmi: 1, testimony: { score: -1, n: 4 } },
       { id: 'word:b', term: 'b', kind: 'word', count: 6, pmi: 1, testimony: { score: -1, n: 5 } },
@@ -404,7 +404,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
   // issue #149 gap: a float personScore (e.g. -3.97) can sit a hair from its floor/ceil edge
   // (-4) without ever equaling it, so an exact-value guard misses it and the dashed mean line
   // draws on the last slice of the axis.
-  it('issue #149 gap: a float person score near its domain edge still gets pushed off the edge', () => {
+  it('gap: a float person score near its domain edge still gets pushed off the edge', () => {
     const floatPerson = { method: 'kikori:q8', score: -3.97, n: 200 }
     const wide = [
       { id: 'word:a', term: 'a', kind: 'word', count: 20, pmi: 1, testimony: { score: -1, n: 10 } },
@@ -421,7 +421,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
 
   // issue #149 gap: termStripLayout only reads the nodes array it is handed; it filters
   // eligibility with termMask but never applies any alias/own-name filtering of its own.
-  it('issue #149 gap: termStripLayout consumes only the nodes array it is handed, never filtering by name', () => {
+  it('gap: termStripLayout consumes only the nodes array it is handed, never filtering by name', () => {
     const layout = termStripLayout([golpe], personTestimony, 860)
     const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
     assert.deepEqual(ids, new Set(['word:golpe']), 'a node absent from the given array never appears, regardless of what it is named')
@@ -447,7 +447,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
   // strip must still fit STRIP_MAX_HEIGHT by shrinking dots together. All 24 sharing one score
   // is the worst case for stacking (a spread-out score, like -5+(i%10) across 10 x-slots, never
   // reaches STRIP_MAX_HEIGHT at all and so never exercises the while loop this pins).
-  it('issue #149 gap: 24 same-score nodes with count >= 100 force the shrink loop and still fit STRIP_MAX_HEIGHT', () => {
+  it('gap: 24 same-score nodes with count >= 100 force the shrink loop and still fit STRIP_MAX_HEIGHT', () => {
     const many = Array.from({ length: 24 }, (_, i) => ({
       id: `word:w${i}`,
       term: `w${i}`,
@@ -466,7 +466,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     )
   })
 
-  it('AC4: paintTermStrip draws one circle per eligible node, each with data-node and an inline --tone equal to termMask, none for an excluded node', () => {
+  it('paintTermStrip draws one circle per eligible node, each with data-node and an inline --tone equal to termMask, none for an excluded node', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
       const markup = els.atlasStrip.innerHTML
@@ -480,7 +480,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     })
   })
 
-  it('AC2/AC3: the axis-end labels are signed domainMin/domainMax, not a fixed ±10', () => {
+  it('the axis-end labels are signed domainMin/domainMax, not a fixed ±10', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       const layout = termStripLayout(stripNodes, personTestimony, 860)
       paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
@@ -491,7 +491,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     })
   })
 
-  it('AC4: the dashed mean line and its "média da pessoa" label only appear when the person has a score', () => {
+  it('the dashed mean line and its "média da pessoa" label only appear when the person has a score', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
       assert.match(els.atlasStrip.innerHTML, /média da pessoa/)
@@ -504,7 +504,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     })
   })
 
-  it('AC4: an empty recorte and a recorte with zero eligible words each get their own empty message', () => {
+  it('an empty recorte and a recorte with zero eligible words each get their own empty message', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: [], personTestimony, onChoose: () => {}, width: 860 })
       assert.match(els.atlasStrip.innerHTML, /Nenhum termo neste recorte\./)
@@ -515,7 +515,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
     })
   })
 
-  it('AC4: the hidden-count note reports 0 (hidden), 1 (singular) and N excluded words', () => {
+  it('the hidden-count note reports 0 (hidden), 1 (singular) and N excluded words', () => {
     const noteText = (els: Record<string, { innerHTML: string; textContent: string }>) => String(els.stripHiddenNote.innerHTML) + String(els.stripHiddenNote.textContent)
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: [golpe, reforma, agenda], personTestimony, onChoose: () => {}, width: 860 })
@@ -535,7 +535,7 @@ describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikor
 
   // issue #149 gap: pins the exact wording of both hidden-note variants, singular and plural,
   // for the two reasons a word is excluded — no eligible person mean, and too few scored texts.
-  it('issue #149 gap: hidden-note wording is pinned for both exclusion reasons, singular and plural', () => {
+  it('gap: hidden-note wording is pinned for both exclusion reasons, singular and plural', () => {
     withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
       paintTermStrip({ nodes: [golpe], personTestimony: { method: 'kikori', score: null, n: 0 }, onChoose: () => {}, width: 860 })
       assert.equal(els.stripHiddenNote.textContent, '1 palavra deixada de fora: esta pessoa não tem média de avaliação neste recorte.')
@@ -962,10 +962,10 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
   })
 })
 
-describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paintRisingLoading', () => {
+describe('paintRisingRuler / paintRisingRulerError / paintRisingLoading', () => {
   const risingData = (present: RisingTerm[], about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }, terms: RisingTerm[] = present): Rising => ({ days: 7, baseline: 30, terms, present, outlets: [], about })
 
-  it('AC13: an empty terms array paints "Nenhuma palavra neste recorte." inside #risingRuler', () => {
+  it('an empty terms array paints "Nenhuma palavra neste recorte." inside #risingRuler', () => {
     withFakeDocument(['risingRuler'], (els) => {
       const { shown, overflowCount } = paintRisingRuler({ data: risingData([]), metrics, selected: null, onPick: () => {} })
       assert.equal(shown, 0)
@@ -1047,7 +1047,7 @@ describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paint
     })
   })
 
-  it('AC14: paintRisingRulerError paints the "could not load" note', () => {
+  it('paintRisingRulerError paints the "could not load" note', () => {
     withFakeDocument(['risingRuler'], (els) => {
       els.risingRuler.hidden = true
       paintRisingRulerError()
@@ -1068,7 +1068,7 @@ describe('issue #151 AC13/AC14: paintRisingRuler / paintRisingRulerError / paint
   })
 })
 
-describe('issue #151 AC15: paintRuler (compare, figure 3) keeps its own exported shape after the shared paintRulerBody extraction', () => {
+describe('paintRuler (compare, figure 3) keeps its own exported shape after the shared paintRulerBody extraction', () => {
   it('still returns hiddenCount/shown/overflowCount and paints #compareRuler exactly as before', () => {
     withFakeDocument(['compareRuler'], (els) => {
       const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: side(5, 1), b: null }]
@@ -1081,7 +1081,7 @@ describe('issue #151 AC15: paintRuler (compare, figure 3) keeps its own exported
   })
 })
 
-describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', () => {
+describe('paintWeek / paintWeekLoading / paintWeekError, figure 5', () => {
   const weekBucket = (over: Partial<WeekBucket> = {}): WeekBucket => ({ start: '2026-09-08T03:00:00.000Z', about: 5, terms: [], ...over })
   const weekData = (buckets: WeekBucket[]): Week => ({ days: 7, tz: 'America/Sao_Paulo', buckets })
 
@@ -1189,7 +1189,7 @@ describe('issue #147: paintWeek / paintWeekLoading / paintWeekError, figure 5', 
 // paintWeek and paintTermStrip need the same guarantee after the marks.ts extraction: still
 // exported under their pre-refactor names, still painting the markup issue #147/#149's suites
 // in this file pin.
-describe('issue #170 AC5: paintWeek and paintTermStrip keep their exported shape after the marks.ts extraction', () => {
+describe('paintWeek and paintTermStrip keep their exported shape after the marks.ts extraction', () => {
   it('render.ts still exports paintWeek, paintWeekLoading, paintWeekError, paintTermStrip and termStripLayout as functions', () => {
     assert.equal(typeof paintWeek, 'function')
     assert.equal(typeof paintWeekLoading, 'function')

@@ -20,7 +20,7 @@ const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`..
 // a real socket (AC5).
 
 describe('poolConfig', () => {
-  it('AC1: returns ssl undefined for a local host (localhost), with or without PG_SSL_CA', async () => {
+  it('returns ssl undefined for a local host (localhost), with or without PG_SSL_CA', async () => {
     await withEnv({ PG_SSL_CA: undefined }, () => {
       assert.equal(poolConfig('postgres://user:pw@localhost:5432/db').ssl, undefined)
     })
@@ -29,7 +29,7 @@ describe('poolConfig', () => {
     })
   })
 
-  it('AC1: returns ssl undefined for a local host (127.0.0.1), with or without PG_SSL_CA', async () => {
+  it('returns ssl undefined for a local host (127.0.0.1), with or without PG_SSL_CA', async () => {
     await withEnv({ PG_SSL_CA: undefined }, () => {
       assert.equal(poolConfig('postgres://user:pw@127.0.0.1:5432/db').ssl, undefined)
     })
@@ -38,7 +38,7 @@ describe('poolConfig', () => {
     })
   })
 
-  it('AC2: strips sslmode from a local url, keeping other params', async () => {
+  it('strips sslmode from a local url, keeping other params', async () => {
     await withEnv({ PG_SSL_CA: undefined }, () => {
       const { connectionString } = poolConfig('postgres://user:pw@localhost:5432/db?sslmode=require&x=1')
       assert.doesNotMatch(String(connectionString), /sslmode/)
@@ -46,7 +46,7 @@ describe('poolConfig', () => {
     })
   })
 
-  it('AC2: strips sslmode from a non-local url, keeping other params', async () => {
+  it('strips sslmode from a non-local url, keeping other params', async () => {
     await withEnv({ PG_SSL_CA: 'fake-ca-pem' }, () => {
       const { connectionString } = poolConfig('postgres://user:pw@db.example.com:5432/db?sslmode=require&x=1')
       assert.doesNotMatch(String(connectionString), /sslmode/)
@@ -54,7 +54,7 @@ describe('poolConfig', () => {
     })
   })
 
-  it('AC3: returns a verified ssl config for a non-local host when PG_SSL_CA is set, using the value verbatim', async () => {
+  it('returns a verified ssl config for a non-local host when PG_SSL_CA is set, using the value verbatim', async () => {
     const ca = '-----BEGIN CERTIFICATE-----\r\nfake\nmulti\nline\n-----END CERTIFICATE-----\n'
     await withEnv({ PG_SSL_CA: ca }, () => {
       const config = poolConfig('postgres://user:pw@db.example.com:5432/db')
@@ -78,7 +78,7 @@ describe('poolConfig', () => {
     })
   })
 
-  it('AC4: throws synchronously naming PG_SSL_CA when unset for a non-local host', async () => {
+  it('throws synchronously naming PG_SSL_CA when unset for a non-local host', async () => {
     await withEnv({ PG_SSL_CA: undefined }, () => {
       assert.throws(() => poolConfig('postgres://user:pw@db.example.com:5432/db'), (err: unknown) => {
         assert.ok(err instanceof Error)
@@ -88,7 +88,7 @@ describe('poolConfig', () => {
     })
   })
 
-  it('AC4: throws synchronously naming PG_SSL_CA when empty for a non-local host', async () => {
+  it('throws synchronously naming PG_SSL_CA when empty for a non-local host', async () => {
     await withEnv({ PG_SSL_CA: '' }, () => {
       assert.throws(() => poolConfig('postgres://user:pw@db.example.com:5432/db'), /PG_SSL_CA/)
     })
@@ -104,7 +104,7 @@ describe('poolConfig', () => {
     )
   })
 
-  it('AC6: importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset', () => {
+  it('importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset', () => {
     // This test file already imports src/db.ts above, under the test environment's
     // DATA_DIR=memory:// with no DATABASE_URL/POSTGRES_URL. That import already happened
     // without throwing (or the whole suite would already have failed to start), regardless
@@ -115,7 +115,7 @@ describe('poolConfig', () => {
     assert.equal(typeof poolConfig, 'function')
   })
 
-  it('AC7: src/push.ts sets no independent ssl key, so it inherits poolConfig unchanged', () => {
+  it('src/push.ts sets no independent ssl key, so it inherits poolConfig unchanged', () => {
     const src = readRepoFile('src/push.ts')
     const poolCall = /new pg\.Pool\(\{([^;]*?)\}\)/.exec(src)
     assert.ok(poolCall, 'expected src/push.ts to construct a pg.Pool')
@@ -123,7 +123,7 @@ describe('poolConfig', () => {
     assert.match(poolCall[1], /poolConfig\(url\)/)
   })
 
-  it('AC8: the docs state that a non-local connection requires PG_SSL_CA, a PEM CA certificate, and fails closed without it', () => {
+  it('the docs state that a non-local connection requires PG_SSL_CA, a PEM CA certificate, and fails closed without it', () => {
     assert.match(docsText, /PG_SSL_CA/)
     assert.match(docsText, /CA certificate/i)
     assert.match(docsText, /PEM/i)
@@ -131,18 +131,18 @@ describe('poolConfig', () => {
     assert.doesNotMatch(docsText, /PG_SSL_INSECURE/)
   })
 
-  it('AC9: the docs state PG_SSL_CA must be set in Vercel before a deploy against a non-local database, alongside DATABASE_URL/POSTGRES_URL', () => {
+  it('the docs state PG_SSL_CA must be set in Vercel before a deploy against a non-local database, alongside DATABASE_URL/POSTGRES_URL', () => {
     assert.match(docsText, /PG_SSL_CA[\s\S]{0,400}Vercel/i)
     assert.match(docsText, /PG_SSL_CA[\s\S]{0,200}(DATABASE_URL|POSTGRES_URL)|(DATABASE_URL|POSTGRES_URL)[\s\S]{0,200}PG_SSL_CA/)
   })
 
-  it('AC10: .github/workflows/ingest.yml passes PG_SSL_CA from a repository secret alongside DATABASE_URL', () => {
+  it('.github/workflows/ingest.yml passes PG_SSL_CA from a repository secret alongside DATABASE_URL', () => {
     const workflow = readRepoFile('.github/workflows/ingest.yml')
     assert.match(workflow, /DATABASE_URL:\s*\$\{\{\s*secrets\.DATABASE_URL\s*\}\}/)
     assert.match(workflow, /PG_SSL_CA:\s*\$\{\{\s*secrets\.PG_SSL_CA\s*\}\}/)
   })
 
-  it('AC12: the comment above poolConfig describes CA verification, not an unverified connection', () => {
+  it('the comment above poolConfig describes CA verification, not an unverified connection', () => {
     const src = readRepoFile('src/db.ts')
     const [, comment] = /((?:\/\/[^\n]*\n)+)export const poolConfig/.exec(src) ?? []
     assert.ok(comment, 'expected a comment block directly above poolConfig')
@@ -176,7 +176,7 @@ describe('read indexes and planner statistics (issue #44)', () => {
     assert.deepEqual(names, ['doc_persons_person_idx', 'doc_persons_pkey'])
   })
 
-  it('issue #21 AC1: doc_testimony has exactly doc_id/person_id/method/score, that primary key and the person/method index', async () => {
+  it('doc_testimony has exactly doc_id/person_id/method/score, that primary key and the person/method index', async () => {
     const cols = (
       await db.query<{ column_name: string; is_nullable: string }>(
         `select column_name, is_nullable from information_schema.columns where table_name = 'doc_testimony'`,

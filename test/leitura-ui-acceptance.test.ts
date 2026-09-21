@@ -187,7 +187,7 @@ describe('the page is a sequence of graphs', () => {
 
   // issue #147 AC17 (the automatable half; the seven-column render itself is manual): the
   // week's own key names tamanho/posição/clique and, on purpose, no colour encoding.
-  it("issue #147 AC17: figure 5's key has no Cor row, unlike figure 4's", () => {
+  it("figure 5's key has no Cor row, unlike figure 4's", () => {
     const html = read('design-5.html')
     const dts = (chunk: string) =>
       [...(chunk.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
@@ -201,7 +201,7 @@ describe('the page is a sequence of graphs', () => {
   })
 })
 
-describe('issue #92 AC10/AC11: the sentence and the stats badge moved into each figure', () => {
+describe('the sentence and the stats badge moved into each figure', () => {
   it('#stats no longer lives in header.top; #atlasStats lives in #workspace instead', () => {
     const html = read('design-5.html')
     const header = html.match(/<header class="top">[\s\S]*?<\/header>/)?.[0] ?? ''
@@ -263,8 +263,8 @@ describe('every page finds what it names', () => {
   })
 })
 
-describe('issue #149: markup for figure 1\'s third view, Avaliação', () => {
-  it('AC8: #modeStrip sits in the same segment as #modeMap/#modeColumns, and #keyDefault is unchanged', () => {
+describe('markup for figure 1\'s third view, Avaliação', () => {
+  it('#modeStrip sits in the same segment as #modeMap/#modeColumns, and #keyDefault is unchanged', () => {
     const html = read('design-5.html')
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const segment = workspace.match(/<div class="segment"[^>]*role="group"[^>]*>[\s\S]*?<\/div>/)?.[0] ?? ''
@@ -280,7 +280,7 @@ describe('issue #149: markup for figure 1\'s third view, Avaliação', () => {
     assert.deepEqual(rows, ['Tamanho', 'Cor', 'Posição', 'Clique'])
   })
 
-  it('AC8: #keyStrip is a second, initially-hidden figure-key with the four Posição/Tamanho/Cor/Clique rows', () => {
+  it('#keyStrip is a second, initially-hidden figure-key with the four Posição/Tamanho/Cor/Clique rows', () => {
     const workspace = read('design-5.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const keyStrip = workspace.match(/<dl class="figure-key" id="keyStrip"[^>]*>[\s\S]*?<\/dl>/)?.[0]
     assert.ok(keyStrip, '#workspace must carry a second <dl class="figure-key" id="keyStrip">')
@@ -296,14 +296,14 @@ describe('issue #149: markup for figure 1\'s third view, Avaliação', () => {
     ])
   })
 
-  it('AC10: every rule atlas.css added for #atlasStrip/#stripHiddenNote sizes type from the --t-* ramp, never a px literal', () => {
+  it('every rule atlas.css added for #atlasStrip/#stripHiddenNote sizes type from the --t-* ramp, never a px literal', () => {
     const css = read('atlas.css')
     const block = css.match(/#atlasStrip[\s\S]*?#stripHiddenNote[^}]*\}/)?.[0] ?? ''
     assert.ok(block, 'the new strip-mode rules must exist')
     assert.doesNotMatch(block, /font(?:-size)?:\s*(?:\d+\s+)?\d+(?:\.\d+)?px/, 'no rule here may size type in px')
   })
 
-  it('AC11: the reading guide states the strip positions words by the same kikori score the mask already colours by', () => {
+  it('the reading guide states the strip positions words by the same kikori score the mask already colours by', () => {
     const chapter = read('como-ler.html').match(/<div id="avaliacao">[\s\S]*?(?=<div id="pmi">)/)?.[0] ?? ''
     assert.match(chapter, /modo\s*<b>Avaliação<\/b>\s*do gráfico 1/i, 'names the strip mode of figure 1')
     assert.match(chapter, /mesma régua/, 'ties it to the same kikori axis figure 2 already explains')
@@ -312,7 +312,7 @@ describe('issue #149: markup for figure 1\'s third view, Avaliação', () => {
   })
 })
 
-describe("issue #147 §4: figure 5 (week) 'a refetch dims what is on screen'", () => {
+describe("figure 5 (week) 'a refetch dims what is on screen'", () => {
   it('#weekChart is dimmed by the same .figure.is-loading rule the other figures already use', () => {
     const css = read('atlas.css')
     const rule = css.match(/\.figure\.is-loading[^{]*\{[^}]*opacity[^}]*\}/)?.[0] ?? ''
@@ -320,7 +320,7 @@ describe("issue #147 §4: figure 5 (week) 'a refetch dims what is on screen'", (
   })
 })
 
-describe('issue #147, #148 review 1: the overflow list under a day column stays inside the column', () => {
+describe('the overflow list under a day column stays inside the column', () => {
   it('a week overflow button wraps instead of inheriting .quiet-button\'s nowrap (validator round 2, 1)', () => {
     const css = read('atlas.css')
     assert.match(css, /\.week-overflow \.quiet-button \{[^}]*white-space: normal/, 'a phrase button at 145px must wrap inside its column, never draw across the next day')

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectors, defaultSources } from '../src/collectors/index.js'
-import { SOURCES } from '../src/query.js'
+import { SMALL_LIMITS, SOURCES } from '../src/query.js'
 import { docPageText, docPages, docsText, sourceTable } from './docs.js'
 import './close.js'
 
@@ -180,17 +180,17 @@ describe('PR #153 review: docs/operations.md cache-surface and staleness paragra
   })
 })
 
-describe('issue #112 AC12: docs/operations.md states the dependency and size facts', () => {
-  it('AC12: @huggingface/transformers is documented as required only by pnpm score and shipped as optional', () => {
+describe('docs/operations.md states the dependency and size facts', () => {
+  it('@huggingface/transformers is documented as required only by pnpm score and shipped as optional', () => {
     assert.match(docsText, /@huggingface\/transformers[\s\S]{0,80}required only by[\s\S]{0,20}pnpm score/, 'operations docs must say the package is required only by pnpm score')
     assert.match(docsText, /optionalDependencies/, 'operations docs must say it ships as an optional dependency')
   })
 
-  it('AC12: the deployed /api function is documented as excluded from the import graph that reaches the model loader', () => {
+  it('the deployed /api function is documented as excluded from the import graph that reaches the model loader', () => {
     assert.match(docsText, /deployed[\s\S]{0,20}\/api[\s\S]{0,120}never reaches the model loader/i)
   })
 
-  it('AC12: the measured before/after size of .vercel/output/functions/api/index.func is recorded, and after is smaller', () => {
+  it('the measured before/after size of .vercel/output/functions/api/index.func is recorded, and after is smaller', () => {
     assert.match(docsText, /index\.func/, 'the docs must name the measured artifact')
     const bytes = [...docsText.matchAll(/before this split,[\s\S]{0,80}?was\s+([\d,]+)\s+bytes[\s\S]{0,200}?after,\s+it is\s+([\d,]+)\s+bytes/g)]
     assert.equal(bytes.length, 1, 'the docs must record one before/after size pair for index.func, in prose next to each other')
@@ -201,15 +201,15 @@ describe('issue #112 AC12: docs/operations.md states the dependency and size fac
   })
 })
 
-describe('issue #108 docs facts', () => {
-  it("AC17: kind's documented accepted values are exactly hashtag, word and phrase, never theme", () => {
+describe('docs facts', () => {
+  it("kind's documented accepted values are exactly hashtag, word and phrase, never theme", () => {
     const m = /`kind`:\s*([^.\n]*)/.exec(docsText)
     assert.ok(m, 'no page documents what values `kind` accepts')
     const values = [...m![1].matchAll(/`(\w+)`/g)].map((x) => x[1]).sort()
     assert.deepEqual(values, ['hashtag', 'phrase', 'word'], "docs/api.md's kind line must list exactly hashtag, word and phrase")
   })
 
-  it('AC17: pnpm purge themes is documented, and what it clears is documented alongside it', () => {
+  it('pnpm purge themes is documented, and what it clears is documented alongside it', () => {
     const idx = docsText.indexOf('purge themes')
     assert.ok(idx > -1, 'no page documents `pnpm purge themes`')
     const around = docsText.slice(Math.max(0, idx - 200), idx + 400)
@@ -217,7 +217,7 @@ describe('issue #108 docs facts', () => {
     assert.match(around, /kikori:q8/, 'the purge themes docs must mention the pre-revision kikori:q8-style testimony rows it clears')
   })
 
-  it('AC17: the docs say public/index.html is gone, not a reachable legacy UI', () => {
+  it('the docs say public/index.html is gone, not a reachable legacy UI', () => {
     const idx = docsText.indexOf('index.html')
     assert.ok(idx > -1, 'no page mentions public/index.html at all')
     const around = docsText.slice(Math.max(0, idx - 80), idx + 160)
@@ -225,26 +225,35 @@ describe('issue #108 docs facts', () => {
     assert.match(around, /(gone|removed|deleted|no longer)/i, 'docs must say index.html is gone')
   })
 
-  it('AC18: CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
+  it('CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     assert.doesNotMatch(claude, /theme codes[^\n]*(stay|remain) in the API/i, 'CLAUDE.md must not describe theme codes staying in the API any more')
     assert.doesNotMatch(claude, /`kind`[^\n]*`theme`/, 'CLAUDE.md must not list theme as a kind value')
   })
 
-  it('AC18: CLAUDE.md no longer describes public/index.html as reachable legacy UI', () => {
+  it('CLAUDE.md no longer describes public/index.html as reachable legacy UI', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     assert.doesNotMatch(claude, /index\.html[^\n]*reachable/i, 'CLAUDE.md must not describe index.html as reachable')
     assert.doesNotMatch(claude, /legacy UI, reachable only by name/i)
   })
 
-  it("AC19: src/ui/api.ts's ATLAS_KINDS comment no longer claims theme codes stay in the API or show on atlas-legacy.html", () => {
+  it("src/ui/api.ts's ATLAS_KINDS comment no longer claims theme codes stay in the API or show on atlas-legacy.html", () => {
     const apiTs = readFileSync(join(root, 'src/ui/api.ts'), 'utf8')
     assert.doesNotMatch(apiTs, /stay in the API/i)
     assert.doesNotMatch(apiTs, /atlas-legacy\.html/)
   })
 
-  it('AC19: ATLAS_KINDS itself is unchanged', () => {
+  it('ATLAS_KINDS itself is unchanged', () => {
     const apiTs = readFileSync(join(root, 'src/ui/api.ts'), 'utf8')
     assert.match(apiTs, /ATLAS_KINDS = 'word,hashtag,phrase'/)
+  })
+
+  it('the compare limit select only offers values from SMALL_LIMITS', () => {
+    const compare = readFileSync(join(root, 'src/ui/figures/compare.ts'), 'utf8')
+    const options = compare.match(/\$\('compareLimit'\)\.innerHTML = html`\$\{\[([^\]]+)\]/)?.[1]
+    assert.ok(options, 'compare.ts should build the compareLimit options from a literal list')
+    const offered = [...options.matchAll(/'(\d+)'/g)].map((m) => Number(m[1]))
+    assert.ok(offered.length >= 3)
+    for (const v of offered) assert.ok(SMALL_LIMITS.includes(v), `compare offers limit=${v}`)
   })
 })

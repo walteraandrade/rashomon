@@ -36,7 +36,7 @@ import { withEnv } from './env.js'
 // onto, and which tokens the list parsers keep.
 
 describe('parseSourceList (issue #8)', () => {
-  it('AC6: falls back to "all" for undefined, empty, "all" and an unknown token', () => {
+  it('falls back to "all" for undefined, empty, "all" and an unknown token', () => {
     assert.equal(parseSourceList(undefined), 'all')
     assert.equal(parseSourceList(''), 'all')
     assert.equal(parseSourceList('all'), 'all')
@@ -44,17 +44,17 @@ describe('parseSourceList (issue #8)', () => {
     assert.equal(parseSourceList('bogus1,bogus2'), 'all')
   })
 
-  it('AC6: keeps a single valid token as-is, unknown tokens dropped silently', () => {
+  it('keeps a single valid token as-is, unknown tokens dropped silently', () => {
     assert.equal(parseSourceList('gnews'), 'gnews')
     assert.equal(parseSourceList('gnews,bogus'), 'gnews')
   })
 
-  it('AC6: joins and dedupes valid tokens', () => {
+  it('joins and dedupes valid tokens', () => {
     assert.equal(parseSourceList('gnews,rss'), 'gnews,rss')
     assert.equal(parseSourceList('gnews,rss,gnews'), 'gnews,rss')
   })
 
-  it('AC6: matches the enum case-sensitively and trims whitespace around each token', () => {
+  it('matches the enum case-sensitively and trims whitespace around each token', () => {
     assert.equal(parseSourceList('GNEWS'), 'all', 'uppercase must not match the lowercase enum')
     assert.equal(parseSourceList('gnews, rss'), 'gnews,rss')
     assert.equal(parseSourceList(' gnews , rss '), 'gnews,rss')
@@ -112,7 +112,7 @@ describe('parseRisingQuery/parseTimelineQuery source', () => {
 })
 
 describe('parseLeanList / parseDomainList (issue #26)', () => {
-  it('AC4: parseLeanList accepts comma-separated left/right/center, drops unknown tokens, falls back to all', () => {
+  it('parseLeanList accepts comma-separated left/right/center, drops unknown tokens, falls back to all', () => {
     assert.equal(parseLeanList('left'), 'left')
     assert.equal(parseLeanList('left,right'), 'left,right')
     assert.equal(parseLeanList('right,center'), 'right,center')
@@ -123,7 +123,7 @@ describe('parseLeanList / parseDomainList (issue #26)', () => {
     assert.equal(parseLeanList('left,left'), 'left')
   })
 
-  it('AC2/AC3: parseDomainList keeps a single host, joins a list, dedupes, falls back to all', () => {
+  it('parseDomainList keeps a single host, joins a list, dedupes, falls back to all', () => {
     assert.equal(parseDomainList('a.com'), 'a.com')
     assert.equal(parseDomainList('a.com,b.com'), 'a.com,b.com')
     assert.equal(parseDomainList('a.com,a.com,a.com'), 'a.com')
@@ -134,7 +134,7 @@ describe('parseLeanList / parseDomainList (issue #26)', () => {
     assert.equal(parseDomainList('a.com,BAD SPACE!'), 'a.com')
   })
 
-  it('AC11: parseQuery/parseDocsQuery/parseRisingQuery/parseTimelineQuery all thread domain-list and lean through', () => {
+  it('parseQuery/parseDocsQuery/parseRisingQuery/parseTimelineQuery all thread domain-list and lean through', () => {
     assert.equal(parseQuery({ domain: 'a.com,b.com', lean: 'left,right' }).domain, 'a.com,b.com')
     assert.equal(parseQuery({ domain: 'a.com,b.com', lean: 'left,right' }).lean, 'left,right')
     assert.equal(parseDocsQuery({ lean: 'center' }).lean, 'center')
@@ -144,7 +144,7 @@ describe('parseLeanList / parseDomainList (issue #26)', () => {
 })
 
 describe('parseToneQuery (issue #5)', () => {
-  it("AC3: min defaults to 3 and snaps to MINS, independent of GraphQuery.min's default of 2", () => {
+  it("min defaults to 3 and snaps to MINS, independent of GraphQuery.min's default of 2", () => {
     assert.equal(parseToneQuery({}).min, 3)
     assert.equal(parseToneQuery({ min: 'nope' }).min, 3)
     assert.notEqual(parseToneQuery({}).min, 2, 'must not silently copy GraphQuery.min default of 2')
@@ -154,7 +154,7 @@ describe('parseToneQuery (issue #5)', () => {
     assert.equal(parseToneQuery({ min: '7' }).min, 5)
   })
 
-  it('AC2: days defaults to 30 and snaps to an allowed window', () => {
+  it('days defaults to 30 and snaps to an allowed window', () => {
     assert.equal(parseToneQuery({}).days, 30)
     assert.equal(parseToneQuery({ days: 'nope' }).days, 30)
     assert.equal(parseToneQuery({ days: '0' }).days, 7)
@@ -164,7 +164,7 @@ describe('parseToneQuery (issue #5)', () => {
 })
 
 describe('parseTestimonyQuery (issue #21)', () => {
-  it('AC10: days defaults to 30 and snaps to an allowed window', () => {
+  it('days defaults to 30 and snaps to an allowed window', () => {
     assert.equal(parseTestimonyQuery({}).days, 30)
     assert.equal(parseTestimonyQuery({ days: 'nope' }).days, 30)
     assert.equal(parseTestimonyQuery({ days: '0' }).days, 7)
@@ -172,7 +172,7 @@ describe('parseTestimonyQuery (issue #21)', () => {
     assert.equal(parseTestimonyQuery({ days: '9999' }).days, 365)
   })
 
-  it('AC10: min defaults to 3 and snaps to MINS, as its own literal', () => {
+  it('min defaults to 3 and snaps to MINS, as its own literal', () => {
     assert.equal(parseTestimonyQuery({}).min, 3)
     assert.equal(parseTestimonyQuery({ min: 'nope' }).min, 3)
     assert.equal(parseTestimonyQuery({ min: '0' }).min, 1)
@@ -200,7 +200,7 @@ describe('parseTestimonyQuery (issue #21)', () => {
       assert.equal(parseTestimonyQuery({ method: 'bad!' }).method, 'kikori:fp32')
     }))
 
-  it('AC9: source reuses parseSourceList', () => {
+  it('source reuses parseSourceList', () => {
     assert.equal(parseTestimonyQuery({}).source, 'all')
     assert.equal(parseTestimonyQuery({ source: 'gnews,bogus' }).source, 'gnews')
     assert.equal(parseTestimonyQuery({ source: 'not-a-real-source' }).source, 'all')
@@ -235,7 +235,7 @@ describe('parseCompareQuery (issue #93)', () => {
 })
 
 describe('parseWeekQuery (issue #147)', () => {
-  it('AC3/AC4: days default 7, limit default 8, both snap', () => {
+  it('days default 7, limit default 8, both snap', () => {
     assert.equal(parseWeekQuery({}).days, 7)
     assert.equal(parseWeekQuery({ days: 'abc' }).days, 7)
     assert.equal(parseWeekQuery({ days: '18' }).days, 7)
@@ -249,7 +249,7 @@ describe('parseWeekQuery (issue #147)', () => {
   // Parse-only: whether these parsed values actually reach weekFor and change its result is
   // pinned in test/graph.test.ts's weekFor describe ("AC5: source, domain and lean each narrow
   // about, not just kind"), which has the db fixture this test does not.
-  it('AC5: source/kind/domain/lean parse as on /graph', () => {
+  it('source/kind/domain/lean parse as on /graph', () => {
     assert.equal(parseWeekQuery({ source: 'gnews,bogus' }).source, 'gnews')
     assert.equal(parseWeekQuery({ source: 'bogus' }).source, 'all')
     assert.equal(parseWeekQuery({ kind: 'theme' }).kind, 'all')
@@ -258,7 +258,7 @@ describe('parseWeekQuery (issue #147)', () => {
     assert.equal(parseWeekQuery({ lean: 'left,bogus' }).lean, 'left')
   })
 
-  it('AC2: method is null absent the flag, resolves to the shared default when testimony=1 with no method, echoes a valid method, falls back on an invalid one, and stays off on a non-"1" value', () => {
+  it('method is null absent the flag, resolves to the shared default when testimony=1 with no method, echoes a valid method, falls back on an invalid one, and stays off on a non-"1" value', () => {
     assert.equal(parseWeekQuery({}).method, null)
     assert.equal(parseWeekQuery({ testimony: '1' }).method, parseQuery({ testimony: '1' }).method)
     assert.ok(parseWeekQuery({ testimony: '1' }).method)
@@ -293,7 +293,7 @@ describe('brtMidnightUtc (issue #147)', () => {
 })
 
 describe('parseDocsQuery.day (issue #147)', () => {
-  it('AC14: keeps an overlapping calendar day; malformed, out-of-window and future become empty', () => {
+  it('keeps an overlapping calendar day; malformed, out-of-window and future become empty', () => {
     const today = brtDate()
     assert.equal(parseDocsQuery({ day: today }).day, today)
     const sep8 = parseDocsQuery({ day: '2026-09-08' }).day
@@ -310,11 +310,11 @@ describe('parseDocsQuery.day (issue #147)', () => {
 })
 
 describe('parseCandidatesQuery (issue #32)', () => {
-  it('AC6: uses 7 / 5 / 50 as defaults', () => {
+  it('uses 7 / 5 / 50 as defaults', () => {
     assert.deepEqual(parseCandidatesQuery({}), { days: 7, min: 5, limit: 50 })
   })
 
-  it('AC6: snaps out-of-range values to the nearest allowed one and falls back on garbage', () => {
+  it('snaps out-of-range values to the nearest allowed one and falls back on garbage', () => {
     assert.deepEqual(parseCandidatesQuery({ days: '9999', min: '0', limit: '-3' }), { days: 365, min: 1, limit: 1 })
     assert.deepEqual(parseCandidatesQuery({ days: '0', min: '0', limit: '-3' }), { days: 7, min: 1, limit: 1 })
     assert.deepEqual(parseCandidatesQuery({ days: 'abc', min: '2000', limit: '999' }), { days: 7, min: 5, limit: 200 })
@@ -347,7 +347,7 @@ const dayParsers: [string, (q: Record<string, string | undefined>) => { days: nu
 ]
 
 describe('days enumeration acceptance criteria (issue #111)', () => {
-  it('AC1: the allowed windows are exactly the ones every <select> in design-5.html offers', () => {
+  it('the allowed windows are exactly the ones every <select> in design-5.html offers', () => {
     const page = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
     const selects = [...page.matchAll(/<select id="(days|testimonyDays|compareDays)"[\s\S]*?<\/select>/g)]
     assert.equal(selects.length, 3, 'design-5.html should carry one days select per figure')
@@ -357,7 +357,7 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
     }
   })
 
-  it('AC2: every parser that reads days keeps its own default when days is absent or non-numeric', () => {
+  it('every parser that reads days keeps its own default when days is absent or non-numeric', () => {
     for (const [name, parse, fallback] of dayParsers) {
       assert.equal(parse({}).days, fallback, name)
       assert.equal(parse({ days: 'abc' }).days, fallback, name)
@@ -366,13 +366,13 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
     }
   })
 
-  it('AC3: an allowed window travels through every parser unchanged', () => {
+  it('an allowed window travels through every parser unchanged', () => {
     for (const [name, parse] of dayParsers) {
       for (const d of DAYS) assert.equal(parse({ days: String(d) }).days, d, `${name} days=${d}`)
     }
   })
 
-  it('AC4: any other value snaps to the nearest allowed window, ties to the shorter one', () => {
+  it('any other value snaps to the nearest allowed window, ties to the shorter one', () => {
     // 18.5 is the midpoint of 7 and 30; 197.5 the midpoint of 30 and 365.
     const cases: [string, number][] = [
       ['1', 7],
@@ -391,17 +391,17 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
     }
   })
 
-  it('AC5: the whole reachable surface is DAYS, so days cannot bust the cache', () => {
+  it('the whole reachable surface is DAYS, so days cannot bust the cache', () => {
     const reached = new Set<number>()
     for (let n = -1000; n <= 1000; n++) reached.add(snapDays(String(n), 30))
     assert.deepEqual([...reached].sort((a, b) => a - b), DAYS)
   })
 
-  it('AC6: snapDays never returns a value outside DAYS for a numeric input', () => {
+  it('snapDays never returns a value outside DAYS for a numeric input', () => {
     for (const v of ['3', '12', '90', '180', '366', '1e6', '30.9', '  45  ']) assert.ok(DAYS.includes(snapDays(v, 30)))
   })
 
-  it('AC7: docs/api.md documents the enumeration and every window in it', () => {
+  it('docs/api.md documents the enumeration and every window in it', () => {
     const api = readFileSync(new URL('../docs/api.md', import.meta.url), 'utf8')
     const section = api.slice(api.indexOf('## The window (`days`)'), api.indexOf('## Shared filters'))
     assert.ok(section.length, 'docs/api.md has no section about the window')
@@ -429,20 +429,16 @@ const intParsers: [string, (q: Q) => Record<string, unknown>, Record<string, [nu
 const numbers = (markup: string) => [...markup.matchAll(/<option[^>]*>(\d+)<\/option>|value="(\d+)"/g)].map((m) => Number(m[1] ?? m[2]))
 
 describe('parameter enumeration acceptance criteria (issue #127)', () => {
-  it('AC1: every limit the page sends is a member of LIMITS', () => {
+  it('every limit the page sends is a member of LIMITS', () => {
     const page = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
     const atlas = page.match(/<select id="limit"[\s\S]*?<\/select>/)?.[0]
     assert.ok(atlas, 'design-5.html should carry the atlas limit select')
     const offered = numbers(atlas)
     assert.ok(offered.length >= 3)
     for (const v of offered) assert.ok(LIMITS.includes(v), `atlas offers limit=${v}`)
-
-    const compare = readFileSync(new URL('../src/ui/figures/compare.ts', import.meta.url), 'utf8')
-    const options = compare.match(/\$\('compareLimit'\)\.innerHTML = html`\$\{\[([^\]]+)\]/)?.[1]
-    assert.ok(options, 'compare.ts should build the compareLimit options from a literal list')
-    const compareOffered = [...options.matchAll(/'(\d+)'/g)].map((m) => Number(m[1]))
-    assert.ok(compareOffered.length >= 3)
-    for (const v of compareOffered) assert.ok(SMALL_LIMITS.includes(v), `compare offers limit=${v}`)
+    // The compareLimit select is src/ui source text, not public/ markup, so that half of this
+    // check lives in test/docs-drift.test.ts (the file allowed to read src/ui directly) as
+    // "the compare limit select only offers values from SMALL_LIMITS".
 
     const graph = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     assert.ok(MINS.includes(Number(graph.get('min'))), 'the graph request sends a min in MINS')
@@ -456,7 +452,7 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     assert.ok(SMALL_LIMITS.includes(Number(cmp.get('limit'))))
   })
 
-  it('AC2: every parser keeps its own default when the parameter is absent or non-numeric, and every default is in its set', () => {
+  it('every parser keeps its own default when the parameter is absent or non-numeric, and every default is in its set', () => {
     for (const [name, parse, fields] of intParsers) {
       for (const [field, [fallback, set]] of Object.entries(fields)) {
         assert.equal(parse({})[field], fallback, `${name}.${field}`)
@@ -467,7 +463,7 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     }
   })
 
-  it('AC3: an allowed value travels through every parser unchanged', () => {
+  it('an allowed value travels through every parser unchanged', () => {
     for (const [name, parse, fields] of intParsers) {
       for (const [field, [, set]] of Object.entries(fields)) {
         for (const v of set) assert.equal(parse({ [field]: String(v) })[field], v, `${name} ${field}=${v}`)
@@ -475,7 +471,7 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     }
   })
 
-  it('AC4: any other value snaps to the nearest allowed one, ties to the smaller', () => {
+  it('any other value snaps to the nearest allowed one, ties to the smaller', () => {
     const cases: [string, readonly number[], string, number][] = [
       ['limit', LIMITS, '0', 1],
       ['limit', LIMITS, '-3', 1],
@@ -509,7 +505,7 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     assert.equal(parseCandidatesQuery({ limit: '999' }).limit, 200)
   })
 
-  it('AC5: the whole reachable surface of each parameter is its set, so none can bust the cache', () => {
+  it('the whole reachable surface of each parameter is its set, so none can bust the cache', () => {
     const reach = (set: readonly number[]) => {
       const reached = new Set<number>()
       for (let n = -1000; n <= 1000; n++) reached.add(snapTo(set, String(n), set[0]))
@@ -529,7 +525,7 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     }
   })
 
-  it('AC6: the sets are ascending, and SMALL_LIMITS is LIMITS capped at 100 (rising and compare, issue #93)', () => {
+  it('the sets are ascending, and SMALL_LIMITS is LIMITS capped at 100 (rising and compare, issue #93)', () => {
     for (const set of [LIMITS, SMALL_LIMITS, MINS, BASELINES, OFFSETS]) {
       assert.deepEqual([...set], [...set].sort((a, b) => a - b))
       assert.equal(new Set(set).size, set.length)
@@ -542,11 +538,11 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     for (const o of OFFSETS) assert.equal(o % 50, 0)
   })
 
-  it('AC7: snapDays is snapTo over DAYS, so the two enumerations cannot drift apart', () => {
+  it('snapDays is snapTo over DAYS, so the two enumerations cannot drift apart', () => {
     for (const v of ['-5', '0', '18', '19', '197', '198', '9999', 'abc', undefined]) assert.equal(snapDays(v, 30), snapTo(DAYS, v, 30))
   })
 
-  it('AC8: docs/api.md names every value of every set', () => {
+  it('docs/api.md names every value of every set', () => {
     const api = readFileSync(new URL('../docs/api.md', import.meta.url), 'utf8')
     const start = api.indexOf('## Enumerated integers')
     assert.ok(start >= 0, 'docs/api.md has no section about the enumerated integers')

@@ -347,21 +347,21 @@ describe('doc_candidates written by insertDoc (issue #32)', () => {
   const candidatesOf = async (uri: string) =>
     (await db.query<{ name: string }>(`select c.name from doc_candidates c join docs d on d.id = c.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.name)
 
-  it('AC4: stores the discovered names of a heuristic doc', async () => {
+  it('stores the discovered names of a heuristic doc', async () => {
     assert.deepEqual(await candidatesOf('at://did:plc:x/post/c3'), ['hugo motta', 'renan calheiros'])
   })
 
-  it('AC4: stores the column names of a gkg doc, overlay applied, text ignored', async () => {
+  it('stores the column names of a gkg doc, overlay applied, text ignored', async () => {
     assert.deepEqual(await candidatesOf('https://folha.uol.com.br/c4'), ['hugo motta'])
   })
 
-  it('AC4: does not rewrite candidates when the same uri arrives again', async () => {
+  it('does not rewrite candidates when the same uri arrives again', async () => {
     const again = await insertDoc({ source: 'rss', uri: 'https://example.org/c1', text: 'Outro texto com Renan Calheiros', publishedAt: now() }, persons)
     assert.equal(again, false)
     assert.deepEqual(await candidatesOf('https://example.org/c1'), ['hugo motta'])
   })
 
-  it('AC4: keeps the existing fixture docs free of candidates that match a tracked alias', async () => {
+  it('keeps the existing fixture docs free of candidates that match a tracked alias', async () => {
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_candidates where name in ('lula', 'tarcisio', 'bolsonaro', 'jair bolsonaro', 'luiz inacio')`)
     assert.equal(rows[0].n, 0)
   })

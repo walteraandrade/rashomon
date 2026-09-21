@@ -10,11 +10,11 @@ import { docs } from './fixture.js'
 // must short-circuit before calling sequential/slowGet at all (CLAUDE.md: no external
 // calls in tests). A hung/failed request would time the test out rather than resolve fast.
 describe('senado collector (issue #25)', () => {
-  it('AC2: returns [] for an empty person list, no request made', async () => {
+  it('returns [] for an empty person list, no request made', async () => {
     assert.deepEqual(await senado([]), [])
   })
 
-  it('AC2: returns [] when every person lacks senadoId, no request made', async () => {
+  it('returns [] when every person lacks senadoId, no request made', async () => {
     const persons: Person[] = [
       { id: 'lula', name: 'Lula', aliases: ['Lula'] },
       { id: 'tarcisio', name: 'Tarcísio', aliases: ['Tarcísio'], exclude: ['C'] },
@@ -25,7 +25,7 @@ describe('senado collector (issue #25)', () => {
     assert.ok(Date.now() - start < 1000, 'must short-circuit before any request, not merely resolve an empty batch')
   })
 
-  it('AC1: Source includes "senado" and Person carries an optional senadoId (compile-time, pinned at runtime too)', () => {
+  it('Source includes "senado" and Person carries an optional senadoId (compile-time, pinned at runtime too)', () => {
     const source: Source = 'senado'
     const withId: Person = { id: 'x', name: 'X', aliases: [], senadoId: '123' }
     const withoutId: Person = { id: 'y', name: 'Y', aliases: [] }
@@ -34,7 +34,7 @@ describe('senado collector (issue #25)', () => {
     assert.equal(withoutId.senadoId, undefined)
   })
 
-  it('AC3: every mapped RawDoc is built with source: "senado" and never sets tone (source text, no network mock)', () => {
+  it('every mapped RawDoc is built with source: "senado" and never sets tone (source text, no network mock)', () => {
     // CLAUDE.md forbids hitting external APIs from tests, so this is read as source text
     const source = readFileSync(new URL('../src/collectors/senado.ts', import.meta.url), 'utf8')
     assert.match(source, /source:\s*'senado'/, 'RawDoc mapping must set source: "senado"')
@@ -42,12 +42,12 @@ describe('senado collector (issue #25)', () => {
     assert.match(source, /person\.senadoId/, 'must key the request off person.senadoId')
   })
 
-  it('AC4: collectors/index.ts registers senado in the collectors map and in defaultSources', () => {
+  it('collectors/index.ts registers senado in the collectors map and in defaultSources', () => {
     assert.equal(typeof collectors.senado, 'function')
     assert.ok(defaultSources.includes('senado'), 'senado must be a default, not opt-in, source')
   })
 
-  it('AC6: the fixture carries exactly one senado doc, dated past every pinned window in the suite', () => {
+  it('the fixture carries exactly one senado doc, dated past every pinned window in the suite', () => {
     const senadoDocs = docs.filter((d) => d.source === 'senado')
     assert.equal(senadoDocs.length, 1)
     const ageDays = (Date.now() - new Date(senadoDocs[0].publishedAt).getTime()) / 86_400_000
@@ -56,7 +56,7 @@ describe('senado collector (issue #25)', () => {
     assert.doesNotMatch(senadoDocs[0].text.replace(/^[^:]+:\s*/, ''), /Alcolumbre/i)
   })
 
-  it('AC9: seed.json grants senadoId to exactly flavio-bolsonaro (5894) and alcolumbre (3830), no other entry', () => {
+  it('seed.json grants senadoId to exactly flavio-bolsonaro (5894) and alcolumbre (3830), no other entry', () => {
     const seedJson = JSON.parse(readFileSync(new URL('../seed.json', import.meta.url), 'utf8')) as (Person & { senadoId?: string })[]
     const withSenadoId = seedJson.filter((p) => p.senadoId !== undefined)
     assert.deepEqual(

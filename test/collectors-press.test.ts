@@ -14,7 +14,7 @@ const FAMILIES = ['juridico', 'oficial', 'nicho'] as const
 // test/figures-atlas.test.ts and the docs in test/docs-drift.test.ts.
 
 describe('press collectors — AC2', () => {
-  it('AC2: collectors registers juridico/oficial/nicho as functions, and defaultSources includes all three', () => {
+  it('collectors registers juridico/oficial/nicho as functions, and defaultSources includes all three', () => {
     for (const family of FAMILIES) {
       assert.equal(typeof collectors[family], 'function', `${family} must be a registered collector`)
       assert.ok(defaultSources.includes(family), `${family} must ship in defaultSources per the reversed opt-in decision`)

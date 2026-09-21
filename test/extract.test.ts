@@ -135,7 +135,7 @@ describe('personsMentioned', () => {
     assert.deepEqual(ids('Alexandre de Moraes ouve Vinicius de Moraes'), ['moraes'])
   })
 
-  it('issue #25: tags the speaking senator on a senado doc via its bare name-prefix, with no source-specific branch involved', () => {
+  it('tags the speaking senator on a senado doc via its bare name-prefix, with no source-specific branch involved', () => {
     // mirrors src/collectors/senado.ts's `${person.name}: ${TextoResumo}` convention; the
     // resumo body itself never names Alcolumbre, so the tag only lands via the prefix
     assert.deepEqual(

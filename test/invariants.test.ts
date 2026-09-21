@@ -4,19 +4,18 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
-import * as renderModule from '../src/ui/render.js'
-import { paintCandidates, paintOutlets, wordMarkup } from '../src/ui/render.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
+import { paintCandidates, paintDocs, paintOutlets, wordMarkup } from '../src/ui/render.js'
 
-// Independent verification of issue #37's acceptance criteria, written from the issue text
-// and CLAUDE.md's module contract rather than from the builder's own modules. What has a
-// module surface is imported and called; what is only observable over HTTP is requested from
-// the app. design-5.html is read only to assert what it must NOT contain (a <style> block, an
-// inline style=, an inline script) -- never to extract behaviour from it.
+// Repo-wide invariants: shapes the whole codebase must hold, not one issue's acceptance
+// criteria. A block here checks a structural rule (an import graph, a module boundary, a
+// markup-escaping discipline) by importing and calling the real modules or by reading source
+// text for a repo-wide pattern -- never by asserting that one function calls another by name.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const testDir = join(root, 'test')
 const jsDir = join(root, 'src', 'ui')
-// Issue #92 adds src/ui/figures/*.ts: the walk must see that subdirectory too, so a new
+// src/ui/figures/*.ts sits one level deeper: the walk must see that subdirectory too, so a new
 // figure module is never invisible to the import-graph test or the "every module is served"
 // check below.
 const jsFiles = (dir = jsDir, prefix = ''): string[] =>
@@ -25,53 +24,28 @@ const jsFiles = (dir = jsDir, prefix = ''): string[] =>
   )
 const moduleSource = (name: string) => readFileSync(join(jsDir, name), 'utf8')
 const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
+const testFileNames = () => readdirSync(testDir).filter((f) => f.endsWith('.test.ts'))
+const testFileSource = (name: string) => readFileSync(join(testDir, name), 'utf8')
 
 // Both quote styles and both shapes: a cycle written as `from "./render.js"`, or as a
 // multi-line `import {\n ... \n} from './render.js'`, must not slip through and pass vacuously.
 const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 
-describe('issue #37 AC1: the split page still serves the same atlas over the same routes', () => {
-  it('GET / answers 200 and the one script it needs is served as JavaScript', async () => {
-    assert.equal((await app.request('/')).status, 200)
-    // The modules are TypeScript under src/ui now: a browser cannot run them, so the bundle is
-    // the only script public/ ships, and the sources must not be reachable over HTTP at all.
-    const bundle = await app.request('/bundle.js')
-    assert.equal(bundle.status, 200)
-    assert.match(bundle.headers.get('content-type') ?? '', /javascript/)
+describe('public/ serves every file it ships and nothing under src/ui', () => {
+  it('every file left in public/ answers 200 by name', async () => {
+    for (const entry of readdirSync(join(root, 'public'), { withFileTypes: true })) {
+      if (entry.isDirectory()) continue
+      const res = await app.request(`/${entry.name}`)
+      assert.equal(res.status, 200, `public/${entry.name} is shipped but not reachable`)
+    }
+  })
+
+  it('no TypeScript source under src/ui is reachable at /js/<file>: only the built bundle is served', async () => {
     for (const file of jsFiles()) assert.equal((await app.request(`/js/${file}`)).status, 404, `/js/${file} must not be served`)
-    const css = await app.request('/atlas.css')
-    assert.equal(css.status, 200)
-    assert.match(css.headers.get('content-type') ?? '', /text\/css/)
-  })
-
-  it('api.js builds exactly the documented endpoints, with the same defaults the page used before the split', async () => {
-    const { candidatesQuery, endpoint, params, sourcesParams } = await import('../src/ui/api.js')
-    assert.equal(endpoint('lula'), '/api/people/lula')
-    const p = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
-    // `kind` is the one default that moved since the split: the atlas names the three kinds it
-    // wants instead of asking for all of them.
-    assert.equal(p.toString(), new URLSearchParams({ days: '30', sort: 'count', limit: '18', min: '2', source: 'all', kind: 'word,hashtag,phrase', testimony: '1' }).toString())
-    // No route ever hears about an outlet any more, the /sources call least of all.
-    assert.equal(sourcesParams({ days: '30', sort: 'count', limit: '18', source: 'all' }).has('domain'), false)
-    assert.equal(candidatesQuery({ days: '7' }).toString(), new URLSearchParams({ days: '7', min: '3', limit: '30' }).toString())
-  })
-
-  it('the docs panel narrows the graph querystring to one term and five rows', async () => {
-    const { docsQuery } = await import('../src/ui/figures/atlas.js')
-    const { params } = await import('../src/ui/api.js')
-    const base = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
-    const forTerm = docsQuery(base, { id: 'reforma', term: 'reforma', kind: 'word', count: 4, pmi: 1 })
-    assert.equal(forTerm.get('term'), 'reforma')
-    assert.equal(forTerm.get('kind'), 'word')
-    assert.equal(forTerm.get('limit'), '5')
-    assert.equal(forTerm.get('days'), '30', 'the rest of the recorte must survive untouched')
-    const forPerson = docsQuery(base, null)
-    assert.equal(forPerson.get('term'), '')
-    assert.equal(forPerson.get('kind'), 'all')
   })
 })
 
-describe('issue #37 AC2: design-5.html carries no styles and no logic of its own', () => {
+describe('design-5.html carries no styles and no logic of its own', () => {
   it('has no <style> block, no inline style= and no inline script body', () => {
     const html = design5()
     assert.doesNotMatch(html, /<style[\s>]/i, 'every rule belongs in public/atlas.css')
@@ -92,7 +66,7 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
         .filter((value) => !value.trimStart().startsWith('--'))
         .map((value) => `${file}: style="${value}"`),
     )
-    assert.deepEqual(offenders, [], 'issue #37 moves inline style= into atlas.css classes; only --var overrides for genuinely dynamic values may stay')
+    assert.deepEqual(offenders, [], 'inline style= only ever belongs to a --var override for a genuinely dynamic value; everything else lives in atlas.css')
   })
 
   it('the markup the painters actually emit carries only --var overrides', () => {
@@ -114,7 +88,7 @@ describe('issue #37 AC2: design-5.html carries no styles and no logic of its own
   })
 })
 
-describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actually hold', () => {
+describe('the module boundaries CLAUDE.md declares actually hold', () => {
   it('layout.js, format.js, state.js, perf.js, api.js and marks.js never touch the document', () => {
     for (const file of ['layout.ts', 'format.ts', 'state.ts', 'perf.ts', 'api.ts', 'marks.ts'])
       assert.ok(!/\bdocument\b/.test(moduleSource(file)), `${file} must stay DOM-free so it is importable under node:test`)
@@ -125,15 +99,15 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     assert.ok(!/\bdocument\b/.test(moduleSource('api.ts')), 'api.js fetches; it must not render')
   })
 
-  it('AC2: the import graph is acyclic and matches the documented direction, including src/ui/figures/', () => {
+  it('the import graph is acyclic and matches the documented direction, including src/ui/figures/', () => {
     const expected: Record<string, string[]> = {
       'format.ts': [],
       'state.ts': ['./perf.js'],
       'perf.ts': [],
       'api.ts': ['./perf.js'],
       'layout.ts': ['./format.js'],
-      // Issue #170 extracts the SVG frame/axis/overflow-list builders render.ts hand-wrote
-      // once per figure into their own DOM-free module, imported only by render.ts.
+      // The SVG frame/axis/overflow-list builders render.ts once hand-wrote per figure live in
+      // their own DOM-free module, imported only by render.ts.
       'marks.ts': ['./format.js'],
       'render.ts': ['./format.js', './layout.js', './marks.js'],
       // The documents card and the in-page guide belong to no figure; both sit next to the
@@ -143,10 +117,10 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
       'figures/testimony.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
       'figures/compare.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
-      // Issue #151 adds figure 4, the rising ruler: same shape as figures/compare.ts, imported by
-      // nothing but app.ts, and reaching into no other figure's DOM.
+      // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
+      // app.ts, and reaching into no other figure's DOM.
       'figures/rising.ts': ['./api.js', './docs-card.js', './format.js', './perf.js', './render.js', './state.js'],
-      // Issue #147 adds figure 5, the week: same shape again, imported by nothing but app.ts.
+      // Figure 5, the week: same shape again, imported by nothing but app.ts.
       'figures/week.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
       'app.ts': ['./api.js', './docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/rising.js', './figures/testimony.js', './figures/week.js', './help.js', './render.js'],
     }
@@ -165,7 +139,7 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     assert.deepEqual(importsOf(`import {\n  a,\n  b,\n} from "./state.js"`), ['./state.js'])
   })
 
-  it('AC3: app.js is importable outside a browser and exposes exactly one export, boot', async () => {
+  it('app.js is importable outside a browser and exposes exactly one export, boot', async () => {
     const previous = (globalThis as { document?: unknown }).document
     assert.equal(previous, undefined, 'this suite must run with no document, or the import guard proves nothing')
     const module = await import('../src/ui/app.js')
@@ -173,7 +147,7 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     assert.equal(typeof module.boot, 'function')
   })
 
-  it('AC1: public/js/figures/atlas.js and figures/testimony.js are importable outside a browser too', async () => {
+  it('figures/atlas.js and figures/testimony.js are importable outside a browser too', async () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
     const atlas = await import('../src/ui/figures/atlas.js')
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/atlas.js must not touch document at import time')
@@ -183,7 +157,7 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     assert.equal(typeof testimony.mount, 'function')
   })
 
-  it('AC4: figures/atlas.js and state.js export exactly what the split promises, no more', async () => {
+  it('figures/atlas.js and state.js export exactly what the split promises, no more', async () => {
     const atlas = await import('../src/ui/figures/atlas.js')
     assert.deepEqual(Object.keys(atlas).sort(), ['createHandlers', 'docsQuery', 'layoutKey', 'mount', 'scopeKeys'].sort())
     const state = await import('../src/ui/state.js')
@@ -192,66 +166,14 @@ describe('issue #37 AC3/Layout: the module boundaries CLAUDE.md declares actuall
     const testimony = await import('../src/ui/figures/testimony.js')
     assert.deepEqual(Object.keys(testimony), ['mount'], 'figures/testimony.js exposes only mount; outlet/zoom/layoutCache/mask/request-id bookkeeping stay local')
   })
-
-  it('issue #151 AC16: figures/rising.js is importable outside a browser, exports exactly mount, and is absent from every other figure\'s import list', async () => {
-    assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
-    const rising = await import('../src/ui/figures/rising.js')
-    assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/rising.js must not touch document at import time')
-    assert.deepEqual(Object.keys(rising), ['mount'])
-    assert.equal(typeof rising.mount, 'function')
-    for (const other of ['figures/atlas.ts', 'figures/testimony.ts', 'figures/compare.ts'])
-      assert.ok(!importsOf(moduleSource(other)).some((spec) => spec.includes('rising')), `${other} must not import figures/rising.js`)
-    assert.ok(!importsOf(moduleSource('figures/rising.ts')).some((spec) => spec.includes('atlas') || spec.includes('testimony') || spec.includes('compare')), 'figures/rising.ts must not import another figure')
-  })
 })
 
-describe('issue #170: SVG frame/axis/overflow-list extracted into src/ui/marks.ts', () => {
-  it('AC6: the loading ghosts build their frame/axis by calling marks.ts, not a literal <svg or <line class="…-axis"', () => {
-    const src = moduleSource('render.ts')
-    assert.match(src, /from\s+['"]\.\/marks\.js['"]/, 'render.ts must import from ./marks.js')
-    assert.match(src, /\bframe\s*\(/, 'render.ts must call frame(...) rather than writing every <svg literal by hand')
-    assert.match(src, /\baxis\s*\(/, 'render.ts must call axis(...) rather than writing every axis <line> literal by hand')
-  })
-
-  it('AC7: render.ts writes no literal <svg opening and no literal axis <line> class at all', () => {
-    const src = moduleSource('render.ts')
-    assert.equal((src.match(/<svg\b/g) || []).length, 0, 'render.ts must open every <svg> through marks.ts\'s frame(), never write the tag itself')
-    assert.equal((src.match(/<line class="[^"]*-axis"/g) || []).length, 0, 'render.ts must build the axis line through marks.ts\'s axis(), never write <line class="…-axis"> itself')
-  })
-
-  // AC6 named each ghost painter individually (paintAtlasLoading, the strip ghost inside
-  // paintTestimonyLoading, paintCompareLoading, paintRisingLoading, paintWeekLoading). The
-  // test above only checks that frame(/axis( appear *somewhere* in render.ts; this one scopes
-  // the check to each named function's own body, so a ghost that regressed to a hand-written
-  // <svg literal (while some other painter still called marks.ts) would not slip through.
-  it('AC6: each named ghost painter calls frame(/axis( inside its own body, never a literal <svg or axis <line>', () => {
-    const src = moduleSource('render.ts')
-    const bodyOf = (name: string) => {
-      const start = src.indexOf(`export const ${name} = `)
-      assert.ok(start >= 0, `render.ts must still export ${name}`)
-      const next = src.indexOf('\nexport const ', start + 1)
-      return src.slice(start, next >= 0 ? next : undefined)
-    }
-    // Every ghost has a frame; only the ones drawing an axis (testimony/compare/rising, not
-    // the map or the week columns) are asked to call axis( too.
-    const ghostsWithAxis = ['paintTestimonyLoading', 'paintCompareLoading', 'paintRisingLoading']
-    const ghostsFrameOnly = ['paintAtlasLoading', 'paintWeekLoading']
-    for (const name of [...ghostsWithAxis, ...ghostsFrameOnly]) {
-      const body = bodyOf(name)
-      assert.match(body, /\bframe\s*\(/, `${name} must build its <svg> via marks.ts's frame(...)`)
-      assert.doesNotMatch(body, /<svg\b/, `${name} must not write a literal <svg itself`)
-      assert.doesNotMatch(body, /<line class="[^"]*-axis"/, `${name} must not write a literal axis <line> itself`)
-    }
-    for (const name of ghostsWithAxis) assert.match(bodyOf(name), /\baxis\s*\(/, `${name} must build its axis via marks.ts's axis(...)`)
-  })
-})
-
-// Issue #132: markup reaches innerHTML only through format.ts's html tag, so escaping is the
-// tag's job and never a painter's discipline. The scan below walks each module's source with
-// a small tokenizer (comments, quoted strings, regex literals, nested `${}`) and reports every
-// template literal whose literal text looks like markup (`<tag`, `</tag`) yet is not tagged
-// `html`. A regex over the raw file could not tell an inner untagged template from the tagged
-// one that wraps it, and this is exactly the place a forgotten escape would hide.
+// Markup reaches innerHTML only through format.ts's html tag, so escaping is the tag's job and
+// never a painter's discipline. The scan below walks each module's source with a small
+// tokenizer (comments, quoted strings, regex literals, nested `${}`) and reports every template
+// literal whose literal text looks like markup (`<tag`, `</tag`) yet is not tagged `html`. A
+// regex over the raw file could not tell an inner untagged template from the tagged one that
+// wraps it, and this is exactly the place a forgotten escape would hide.
 type TemplateLiteral = { line: number; tagged: boolean; text: string }
 
 export const templateLiterals = (source: string): TemplateLiteral[] => {
@@ -352,7 +274,7 @@ export const templateLiterals = (source: string): TemplateLiteral[] => {
 
 const looksLikeMarkup = (text: string) => /<\/?[a-zA-Z]/.test(text)
 
-describe('issue #132: markup reaches innerHTML only through the html tag', () => {
+describe('markup reaches innerHTML only through the html tag', () => {
   it('the template scanner sees nesting, comments, strings and regex literals', () => {
     const found = templateLiterals("const a = html`<p>${x ? `<b>${y}</b>` : ''}</p>` // `<i>`\nconst r = /['\"`]/g\nconst s = '`<u>`'\nconst t = `plain ${'<'}`")
     assert.deepEqual(found.map((t) => [t.line, t.tagged, looksLikeMarkup(t.text)]), [[1, false, true], [1, true, true], [4, false, false]])
@@ -383,7 +305,6 @@ describe('issue #132: markup reaches innerHTML only through the html tag', () =>
 
   it('the html tag escapes what a painter forgets to: a document text with markup stays text', () => {
     withFakeDocument(['docs'], (els) => {
-      const { paintDocs } = renderModule
       paintDocs([{ label: null, data: { total: 1, docs: [{ source: 'rss', domain: 'x.com', text: '<img src=x onerror=alert(1)>', uri: 'https://x.com/a' }] } }])
       assert.doesNotMatch(els.docs.innerHTML, /<img/)
       assert.match(els.docs.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/)
@@ -391,12 +312,39 @@ describe('issue #132: markup reaches innerHTML only through the html tag', () =>
   })
 })
 
-describe('issue #37 AC4: public/ only holds files that are served on purpose', () => {
-  it('every file left in public/ answers 200 by name', async () => {
-    for (const entry of readdirSync(join(root, 'public'), { withFileTypes: true })) {
-      if (entry.isDirectory()) continue
-      const res = await app.request(`/${entry.name}`)
-      assert.equal(res.status, 200, `public/${entry.name} is shipped but not reachable`)
+// The two structural rules a rewrite could quietly violate: a test proves behaviour by calling
+// the real code, not by pattern-matching another module's source text for its own
+// implementation choices (which function it calls, how many literal tags it writes), and no
+// label announces "which issue" instead of "what this checks". Self-checking here, rather than
+// only in code review, so the next PR that adds a pin or an issue-numbered label fails its own
+// build instead of drifting back.
+describe('the test suite stays behaviour-first: no source-scanning pins, no issue-numbered labels', () => {
+  it('no test file regex-scans another module\'s source for a specific call, a literal tag count, or an export body pulled out by string search', () => {
+    // Built by concatenation, not written as a literal, so this file's own occurrence of the
+    // pattern (right here) never trips the scan over itself.
+    const forbidden = [['frame', String.raw`\s*\(`].join(''), ['axis', String.raw`\s*\(`].join(''), ['<svg\\b', '/g'].join(''), ['export const ', '${name}'].join('')]
+    for (const file of testFileNames()) {
+      if (file === 'invariants.test.ts') continue
+      const src = testFileSource(file)
+      for (const pattern of forbidden) assert.ok(!src.includes(pattern), `${file} must not contain the forbidden pin ${JSON.stringify(pattern)}`)
     }
+  })
+
+  it('only invariants.test.ts, bundle-freshness.test.ts and docs-drift.test.ts read src/ui source text', () => {
+    const allowed = new Set(['invariants.test.ts', 'bundle-freshness.test.ts', 'docs-drift.test.ts'])
+    const readsSource = /moduleSource\(|readFileSync\([^)]*src\/ui/
+    for (const file of testFileNames()) {
+      if (allowed.has(file)) continue
+      assert.ok(!readsSource.test(testFileSource(file)), `${file} must not read src/ui source text directly`)
+    }
+  })
+
+  it('no describe or it label opens with an AC number or "issue #"', () => {
+    const offenders: string[] = []
+    for (const file of testFileNames()) {
+      const src = testFileSource(file)
+      for (const m of src.matchAll(/^\s*(?:describe|it)\(\s*['"](AC[0-9]|issue #)[^'"]*['"]/gm)) offenders.push(`${file}: ${m[0].trim()}`)
+    }
+    assert.deepEqual(offenders, [], 'no describe(...)/it(...) label may start with AC<digit> or "issue #"')
   })
 })

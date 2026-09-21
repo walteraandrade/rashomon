@@ -35,7 +35,7 @@ const risingTerm = (over: Partial<RisingTerm> = {}): RisingTerm => ({
 
 const risingData = (terms: RisingTerm[], about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }, present: RisingTerm[] = terms): Rising => ({ days: 7, baseline: 30, terms, present, outlets: [], about })
 
-describe('AC1: figures/rising.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
+describe('figures/rising.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
   const mod = await import('../src/ui/figures/rising.js')
   it('does not touch document at import time', () => {
@@ -47,7 +47,7 @@ describe('AC1: figures/rising.js is importable outside a browser, touches docume
   })
 })
 
-describe('issue #151 §4: risingParams stays fixed at the route\'s own defaults', () => {
+describe('risingParams stays fixed at the route\'s own defaults', () => {
   it('sends days=7, baseline=30, kind=word,hashtag,phrase, limit=40, min=3, plus the chosen source', () => {
     const qp = risingParams({ source: 'gdelt' })
     assert.equal(qp.get('days'), '7')
@@ -59,7 +59,7 @@ describe('issue #151 §4: risingParams stays fixed at the route\'s own defaults'
   })
 })
 
-describe("issue #151 AC10 (mount): fetches /rising with the figure's own fixed recorte", () => {
+describe("(mount): fetches /rising with the figure's own fixed recorte", () => {
   it('requests the fixed days/baseline/kind/limit/min plus the selected person and source', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -93,7 +93,7 @@ describe("issue #151 AC10 (mount): fetches /rising with the figure's own fixed r
   })
 })
 
-describe('issue #151 AC13: an empty terms array paints the empty note and still renders about.recent/about.baseline', () => {
+describe('an empty terms array paints the empty note and still renders about.recent/about.baseline', () => {
   it('#risingRuler shows "Nenhuma palavra neste recorte." and #risingAbout names both window totals', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -123,7 +123,7 @@ describe('issue #151 AC13: an empty terms array paints the empty note and still 
   })
 })
 
-describe('issue #151 AC14: a GET /rising failure paints the ruler error note and never leaves the loading ghost on screen', () => {
+describe('a GET /rising failure paints the ruler error note and never leaves the loading ghost on screen', () => {
   it('rejects the request; the ghost is replaced by the error note', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()

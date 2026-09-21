@@ -56,11 +56,11 @@ const parseCsp = (csp: string): Map<string, string[]> => {
 }
 
 describe('security headers (vercel.json)', () => {
-  it('AC1: vercel.json has no top-level routes key', () => {
+  it('vercel.json has no top-level routes key', () => {
     assert.equal('routes' in vercelConfig, false)
   })
 
-  it('AC2: rewrites replaces routes with the same two src/dest pairs, renamed, and no explicit filesystem handle', () => {
+  it('rewrites replaces routes with the same two src/dest pairs, renamed, and no explicit filesystem handle', () => {
     assert.ok(Array.isArray(vercelConfig.rewrites), 'rewrites must be a top-level array')
     assert.equal(vercelConfig.rewrites.length, 2)
 
@@ -98,14 +98,14 @@ describe('security headers (vercel.json)', () => {
     }
   })
 
-  it('AC3: $schema, framework, buildCommand and outputDirectory are unchanged', () => {
+  it('$schema, framework, buildCommand and outputDirectory are unchanged', () => {
     assert.equal(vercelConfig.$schema, 'https://openapi.vercel.sh/vercel.json')
     assert.equal(vercelConfig.framework, null)
     assert.equal(vercelConfig.buildCommand, null)
     assert.equal(vercelConfig.outputDirectory, null)
   })
 
-  it('AC4: headers[] resolves to exactly the three HTML entry points', () => {
+  it('headers[] resolves to exactly the three HTML entry points', () => {
     assert.ok(Array.isArray(vercelConfig.headers), 'headers must be a top-level array')
     const rules: HeadersRule[] = vercelConfig.headers
     for (const path of REQUIRED_PATHS) {
@@ -120,7 +120,7 @@ describe('security headers (vercel.json)', () => {
     }
   })
 
-  it('AC5-AC7: CSP, nosniff, referrer-policy and permissions-policy apply to every HTML entry point', () => {
+  it('CSP, nosniff, referrer-policy and permissions-policy apply to every HTML entry point', () => {
     const rules: HeadersRule[] = vercelConfig.headers
     for (const path of REQUIRED_PATHS) {
       const headers = resolveHeaders(rules, path)
@@ -150,7 +150,7 @@ describe('security headers (vercel.json)', () => {
     }
   })
 
-  it('AC5-AC6: script-src and style-src token sets, isolated from directive order', () => {
+  it('script-src and style-src token sets, isolated from directive order', () => {
     const rules: HeadersRule[] = vercelConfig.headers
     for (const path of REQUIRED_PATHS) {
       const headers = resolveHeaders(rules, path)
@@ -168,12 +168,12 @@ describe('security headers (vercel.json)', () => {
     }
   })
 
-  it('AC8: the analytics tag Vercel serves is same-origin and therefore CSP-covered', () => {
+  it('the analytics tag Vercel serves is same-origin and therefore CSP-covered', () => {
     assert.match(VERCEL_INSIGHTS, /^\//)
     assert.doesNotMatch(VERCEL_INSIGHTS, /^https?:/)
   })
 
-  it('AC10: the docs state the CSP forbids inline/eval scripts and allows inline styles for the per-value overrides', () => {
+  it('the docs state the CSP forbids inline/eval scripts and allows inline styles for the per-value overrides', () => {
     // the two facts: no inline/eval scripts, and inline styles are allowed for --size/--tone
     assert.match(
       docsText,

@@ -104,6 +104,17 @@ describe('documented facts per collector', () => {
     assert.match(docsText, /retr(y|ies|ied)/i)
     assert.match(docsText, /(without being marked done|not.*marked done|skipped)/i)
   })
+
+  it('gkg names a download timeout distinct from every other collector\'s request timeout, and from the byte caps', () => {
+    assert.match(docsText, /GKG_DOWNLOAD_TIMEOUT_MS/, 'the docs must name the gkg download timeout literal')
+    assert.match(docsText, /300\s*000\s*ms|5\s*min/i, 'the docs must state the gkg download timeout value')
+    assert.match(docsText, /REQUEST_TIMEOUT_MS/, 'the docs must name the request timeout every other collector carries')
+    assert.match(docsText, /distinct from|not.*REQUEST_TIMEOUT_MS|different from/i, 'the docs must say the two timeouts are distinct')
+  })
+
+  it('every collector\'s network read is timeout-bounded, not only gdelt/camara/senado/bluesky', () => {
+    assert.match(docsText, /every collector's network read is.{0,20}timeout-bounded/i)
+  })
 })
 
 describe('documented facts per route', () => {

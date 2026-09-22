@@ -27,6 +27,16 @@ const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8'
 const testFileNames = () => readdirSync(testDir).filter((f) => f.endsWith('.test.ts'))
 const testFileSource = (name: string) => readFileSync(join(testDir, name), 'utf8')
 
+// Every .ts file under src/, walked recursively -- used only for the node:https check below,
+// which is a repo-wide constraint (the whole collector layer runs on Effect's HttpClient) and
+// not one module's own text.
+const srcDir = join(root, 'src')
+const srcFiles = (dir = srcDir, prefix = ''): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? srcFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.ts') ? [`${prefix}${entry.name}`] : [],
+  )
+const srcSource = (name: string) => readFileSync(join(srcDir, name), 'utf8')
+
 // Both quote styles and both shapes: a cycle written as `from "./render.js"`, or as a
 // multi-line `import {\n ... \n} from './render.js'`, must not slip through and pass vacuously.
 const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
@@ -346,5 +356,11 @@ describe('the test suite stays behaviour-first: no source-scanning pins, no issu
       for (const m of src.matchAll(/^\s*(?:describe|it)\(\s*['"`](AC[0-9]|issue #)/gm)) offenders.push(`${file}: ${m[0].trim()}`)
     }
     assert.deepEqual(offenders, [], 'no describe(...)/it(...) label may start with AC<digit> or "issue #"')
+  })
+})
+
+describe('the collector layer runs on Effect\'s HttpClient, not node:https', () => {
+  it('no file under src/ imports node:https', () => {
+    for (const file of srcFiles()) assert.doesNotMatch(srcSource(file), /from\s+['"]node:https['"]|require\(['"]node:https['"]\)/, `${file} must not import node:https`)
   })
 })

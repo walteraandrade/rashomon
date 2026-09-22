@@ -1,5 +1,7 @@
+import { Console, Effect } from 'effect'
+import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, Person, RawDoc } from '../types.js'
-import { sequential, sleep, slowGet } from '../http.js'
+import { getBytes, runWithFetch } from '../http.js'
 
 const base = 'https://legis.senado.leg.br/dadosabertos/senador'
 const pauseMs = 500
@@ -17,19 +19,19 @@ const discursosUrl = (senadoId: string) => {
   return url
 }
 
-const log = (msg: string) => console.log(`[senado] ${msg}`)
-
 type Pronunciamento = { UrlTexto?: string; TextoResumo?: string; DataPronunciamento?: string }
 
-const fetchPronunciamentos = async (senadoId: string): Promise<Pronunciamento[]> => {
-  const { status, body } = await slowGet(discursosUrl(senadoId))
-  if (!body.trim().startsWith('{')) throw new Error(`senado ${status}: ${body.trim().slice(0, 80)}`)
-  const parsed = JSON.parse(body) as {
-    DiscursosParlamentar?: { Parlamentar?: { Pronunciamentos?: { Pronunciamento?: Pronunciamento | Pronunciamento[] } } }
-  }
-  const raw = parsed.DiscursosParlamentar?.Parlamentar?.Pronunciamentos?.Pronunciamento ?? []
-  return Array.isArray(raw) ? raw : [raw]
-}
+const fetchPronunciamentos = (senadoId: string): Effect.Effect<Pronunciamento[], Error, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const { status, body } = yield* getBytes(discursosUrl(senadoId))
+    const text = new TextDecoder().decode(body)
+    if (!text.trim().startsWith('{')) return yield* Effect.fail(new Error(`senado ${status}: ${text.trim().slice(0, 80)}`))
+    const parsed = JSON.parse(text) as {
+      DiscursosParlamentar?: { Parlamentar?: { Pronunciamentos?: { Pronunciamento?: Pronunciamento | Pronunciamento[] } } }
+    }
+    const raw = parsed.DiscursosParlamentar?.Parlamentar?.Pronunciamentos?.Pronunciamento ?? []
+    return Array.isArray(raw) ? raw : [raw]
+  })
 
 // Anchored at both ends: rejects an absent date and a future 'YYYY-MM-DD HH:MM:SS' variant alike,
 // so toIso never runs on an unparseable value and PGlite never sees a bare 'T00:00:00Z'.
@@ -44,17 +46,24 @@ export const toRawDoc = (person: Person, p: Pronunciamento): RawDoc => ({
   domain: 'senado.leg.br',
 })
 
-const collectPerson = async (person: Person): Promise<RawDoc[]> => {
-  const pronunciamentos = await fetchPronunciamentos(person.senadoId!).catch(
-    (e: Error) => (console.error(`[senado] ${person.id}: ${e.message}`), []),
-  )
-  log(`${person.id}: ${pronunciamentos.length} pronunciamentos`)
-  await sleep(pauseMs)
-  return pronunciamentos.filter(hasUsableDate).map((p) => toRawDoc(person, p))
-}
+const collectPerson = (person: Person): Effect.Effect<RawDoc[], never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const pronunciamentos = yield* fetchPronunciamentos(person.senadoId!).pipe(
+      Effect.catch((e) => Console.error(`[senado] ${person.id}: ${e.message}`).pipe(Effect.as([] as Pronunciamento[]))),
+    )
+    yield* Console.log(`[senado] ${person.id}: ${pronunciamentos.length} pronunciamentos`)
+    yield* Effect.sleep(pauseMs)
+    return pronunciamentos.filter(hasUsableDate).map((p) => toRawDoc(person, p))
+  })
 
-export const senado: Collector = async (persons) => {
-  const tracked = persons.filter((p): p is Person & { senadoId: string } => Boolean(p.senadoId))
-  if (!tracked.length) return []
-  return (await sequential(tracked, collectPerson)).flat()
-}
+// Zero requests when no tracked person carries a senadoId: the filter runs before
+// Effect.forEach ever needs the HttpClient service.
+export const collect = (persons: Person[]): Effect.Effect<RawDoc[], never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const tracked = persons.filter((p): p is Person & { senadoId: string } => Boolean(p.senadoId))
+    if (!tracked.length) return []
+    const docs = yield* Effect.forEach(tracked, collectPerson)
+    return docs.flat()
+  })
+
+export const senado: Collector = (persons) => runWithFetch(collect(persons))

@@ -60,6 +60,7 @@ Two numbers, two different questions. **Frequência** is how many documents carr
 | [Operations](docs/operations.md) | environment, deploy, write batching, indexes, benchmarks, HTTP caching |
 | [Performance baseline](docs/perf-baseline.md) | the committed output of `pnpm bench` |
 | [Factory](docs/factory.md) | the spec → build → PR pipeline feature work goes through |
+| [Agent cost](docs/agent-cost/README.md) | what an agent spends on a small UI change, measured on three commits (#176) |
 
 ## Layout
 

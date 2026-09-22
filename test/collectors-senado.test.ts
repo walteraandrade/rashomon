@@ -94,15 +94,17 @@ describe('senado collector', () => {
       yield* tick(pauseMs)
       const inner = yield* Fiber.await(fiber)
       const errors = yield* TestConsole.errorLines
-      return { inner, errors: errors.map(String) }
+      const logs = yield* TestConsole.logLines
+      return { inner, errors: errors.map(String), logs: logs.map(String) }
     })
-    const { inner, errors } = await runProgram(program, fetchFn)
+    const { inner, errors, logs } = await runProgram(program, fetchFn)
     assert.ok(Exit.isSuccess(inner))
     if (Exit.isSuccess(inner)) assert.deepEqual(inner.value, [])
     assert.equal(fetchFn.calls.filter((c) => c.url.pathname.includes('/111/')).length, 1)
     assert.equal(fetchFn.calls.filter((c) => c.url.pathname.includes('/222/')).length, 1)
     assert.equal(errors.length, 1)
     assert.match(errors[0], /^\[senado\] a: senado 500: <html>not json<\/html>$/)
+    assert.ok(logs.includes('[senado] a: 0 pronunciamentos'))
   })
 
   it('collectors/index.ts registers senado in the collectors map and in defaultSources', () => {

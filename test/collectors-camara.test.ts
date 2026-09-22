@@ -79,10 +79,15 @@ describe('camara collector', () => {
         assert.equal(fetchFn.calls.length, 3, 'retries at exactly a further 8 000ms')
 
         yield* tick(2_000) // drains the final pacing pause so the fiber settles
-        return yield* Fiber.await(fiber)
+        const inner = yield* Fiber.await(fiber)
+        const logs = yield* TestConsole.logLines
+        return { inner, logs: logs.map(String) }
       })
-      const exit = await runProgram(program, fetchFn)
-      assert.ok(Exit.isSuccess(exit))
+      const { inner, logs } = await runProgram(program, fetchFn)
+      assert.ok(Exit.isSuccess(inner))
+      assert.ok(logs.includes('[camara] 123: 429, retrying in 4s (attempt 1/3)'))
+      assert.ok(logs.includes('[camara] 123: 500, retrying in 8s (attempt 2/3)'))
+      assert.ok(logs.includes('[camara] dep: 0 speeches'))
     })
 
     it('a fourth consecutive 429 fails that person, logged, and the next person still gets its own request', async () => {

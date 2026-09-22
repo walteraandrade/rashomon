@@ -62,10 +62,15 @@ describe('gdelt collector', () => {
         assert.equal(fetchFn.calls.length, 3, 'retries at exactly a further 44 000ms')
 
         yield* tick(rateLimitMs) // drains the final pacing pause so the fiber settles
-        return yield* Fiber.await(fiber)
+        const inner = yield* Fiber.await(fiber)
+        const logs = yield* TestConsole.logLines
+        return { inner, logs: logs.map(String) }
       })
-      const exit = await runProgram(program, fetchFn)
-      assert.ok(Exit.isSuccess(exit))
+      const { inner, logs } = await runProgram(program, fetchFn)
+      assert.ok(Exit.isSuccess(inner))
+      assert.ok(logs.includes('[gdelt] ana: request 1/4 (connect takes ~15s)'))
+      assert.ok(logs.includes('[gdelt] ana: 429 rate limited, waiting 22s'))
+      assert.ok(logs.includes('[gdelt] ana: 0 articles'))
     })
 
     it('a non-JSON body fails with "gdelt <status>: <head>", logged, and the next person still gets its own request', async () => {

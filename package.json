@@ -20,6 +20,8 @@
     "push": "tsx src/push.ts"
   },
   "dependencies": {
+    "@effect/sql-pg": "4.0.0-rc.117",
+    "@effect/sql-pglite": "4.0.0-rc.117",
     "@electric-sql/pglite": "^0.5.8",
     "@hono/node-server": "^2.1.1",
     "effect": "4.0.0-rc.117",

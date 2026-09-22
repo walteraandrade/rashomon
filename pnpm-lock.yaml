@@ -12,6 +12,12 @@ importers:
 
   .:
     dependencies:
+      '@effect/sql-pg':
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)
+      '@effect/sql-pglite':
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117)
       '@electric-sql/pglite':
         specifier: ^0.5.8
         version: 0.5.8
@@ -55,6 +61,16 @@ importers:
         version: 4.2.0(@types/node@26.4.1)
 
 packages:
+
+  '@effect/sql-pg@4.0.0-rc.117':
+    resolution: {integrity: sha512-UQwKoulwVUQ5w4/lMonKf02VbMqZTrhgZXEreOWlTNNNVPYjlBZKBJNJmLPKZMHPMlHHltKjoi504uT/N9S2aQ==}
+    peerDependencies:
+      effect: ^4.0.0-rc.117
+
+  '@effect/sql-pglite@4.0.0-rc.117':
+    resolution: {integrity: sha512-3tuqVBkZrLkt1VqUCVHgrDlUtPJPT6JHCSchvTZ2pwabi9RtzRqXrUogmk5yGMHxs27HboNQ0IZlXkpeDKADng==}
+    peerDependencies:
+      effect: ^4.0.0-rc.117
 
   '@electric-sql/pglite@0.5.8':
     resolution: {integrity: sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q==}
@@ -796,6 +812,15 @@ packages:
     engines: {node: '>=0.4'}
 
 snapshots:
+
+  '@effect/sql-pg@4.0.0-rc.117(effect@4.0.0-rc.117)':
+    dependencies:
+      effect: 4.0.0-rc.117
+
+  '@effect/sql-pglite@4.0.0-rc.117(effect@4.0.0-rc.117)':
+    dependencies:
+      '@electric-sql/pglite': 0.5.8
+      effect: 4.0.0-rc.117
 
   '@electric-sql/pglite@0.5.8': {}
 

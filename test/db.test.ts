@@ -1,4 +1,6 @@
+import { Duration } from 'effect'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import tls from 'node:tls'
@@ -94,14 +96,20 @@ describe('poolConfig', () => {
     })
   })
 
-  it('PG_POOL_MAX: unset, abc, 0 and 500 give 3, 3, 1 and 20', async () => {
+  it('PG_POOL_MAX: unset, abc, 0 and 500 give 3, 3, 1 and 20 on maxConnections (PgPoolConfig\'s own field name)', async () => {
     const url = 'postgres://user:pw@localhost:5432/db'
     const cases: [string | undefined, number][] = [[undefined, 3], ['abc', 3], ['0', 1], ['500', 20]]
     await cases.reduce<Promise<void>>(
       (acc, [value, expected]) =>
-        acc.then(() => withEnv({ PG_POOL_MAX: value }, () => assert.equal(poolConfig(url).max, expected))),
+        acc.then(() => withEnv({ PG_POOL_MAX: value }, () => assert.equal(poolConfig(url).maxConnections, expected))),
       Promise.resolve(),
     )
+  })
+
+  it('connectTimeout resolves to 10 seconds', async () => {
+    await withEnv({ PG_SSL_CA: undefined }, () => {
+      assert.equal(Duration.toMillis(poolConfig('postgres://user:pw@localhost:5432/db').connectTimeout), 10_000)
+    })
   })
 
   it('importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset', () => {
@@ -303,5 +311,28 @@ describe('maintenance stays out of the request path (issue #44)', () => {
       .filter((f) => !owners.includes(f.slice(root.length)))
       .filter((f) => /analyzeTables|analyzeAfterWrite|`\s*analyze\b/i.test(readFileSync(f, 'utf8')))
     assert.deepEqual(offenders, [], 'maintenance must run only in the process that owns DATA_DIR')
+  })
+})
+
+describe('db (issue #184)', () => {
+  before(seed)
+
+  it('answers a trivial query through the PGlite layer, on memory://', async () => {
+    const { rows } = await db.query<{ n: number }>(`select 1::int as n`)
+    assert.deepEqual(rows, [{ n: 1 }])
+  })
+
+  it('with PERF=1, query and exec are still instrumented: the returned object still exposes them as plain functions', () => {
+    const script = `
+      const { db } = await import('./src/db.ts')
+      console.log(JSON.stringify({ query: typeof db.query, exec: typeof db.exec, close: typeof db.close }))
+    `
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+      env: { ...process.env, PERF: '1', PERF_LOG: '0', DATA_DIR: 'memory://' },
+      encoding: 'utf8',
+    })
+    assert.equal(child.status, 0, child.stderr)
+    const shape = JSON.parse(child.stdout.trim().split('\n').pop() as string) as { query: string; exec: string; close: string }
+    assert.deepEqual(shape, { query: 'function', exec: 'function', close: 'function' })
   })
 })

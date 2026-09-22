@@ -50,21 +50,23 @@ describe('bounded write batches (issue #50)', () => {
   })
 
   it('spends one transaction and a handful of statements per group of documents', async () => {
-    // begin + 4 upserts + 1 doc_persons batch + 1 doc_terms batch + commit.
-    assert.equal(await statements(() => insertDocs(docs(4, 'group'), persons, 4)), 8)
+    // 4 upserts + 1 doc_persons batch + 1 doc_terms batch. The transaction itself (begin/commit,
+    // or a savepoint for a nested one) runs through the SqlClient driver's own connection, not
+    // through db.exec, so it never reaches this counter.
+    assert.equal(await statements(() => insertDocs(docs(4, 'group'), persons, 4)), 6)
     // Same documents with the row bound at 1, which is what the old per-row path cost:
-    // begin + 4 upserts + 4 person rows + 8 term rows + commit.
+    // 4 upserts + 4 person rows + 8 term rows.
     process.env.WRITE_BATCH_ROWS = '1'
     const unbatched = await statements(() => insertDocs(docs(4, 'unbatched'), persons, 4))
     delete process.env.WRITE_BATCH_ROWS
-    assert.equal(unbatched, 18)
+    assert.equal(unbatched, 16)
   })
 
   it('grows its statement count with the number of groups, not with the number of documents', async () => {
     const one = await statements(() => insertDocs(docs(8, 'one-group'), persons, 8))
     const four = await statements(() => insertDocs(docs(8, 'four-groups'), persons, 2))
-    assert.equal(one, 12)
-    assert.equal(four, 4 * 6)
+    assert.equal(one, 10)
+    assert.equal(four, 4 * 4)
   })
 
   it('reindexes in a fixed number of statements per page, whatever the corpus size', async () => {

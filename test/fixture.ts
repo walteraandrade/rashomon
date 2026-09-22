@@ -324,7 +324,10 @@ export const seed = () =>
   (ready ??= (async () => {
     if (process.env.DATA_DIR !== 'memory://') throw new Error('tests must run with DATA_DIR=memory://')
     await migrate()
-    await db.exec(`delete from doc_terms; delete from doc_persons; delete from docs; delete from persons; delete from phrases; delete from phrase_stage;`)
+    // One statement per db.exec call: @effect/sql-pg/@effect/sql-pglite's `unsafe` uses the
+    // extended query protocol, which parses one statement at a time (src/db.ts's migrate() splits
+    // the schema the same way).
+    for (const table of ['doc_terms', 'doc_persons', 'docs', 'persons', 'phrases', 'phrase_stage']) await db.exec(`delete from ${table}`)
     await upsertPersons(persons)
     for (const d of docs) await insertDoc(d, persons)
     await seedTestimony()

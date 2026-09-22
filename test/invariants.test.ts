@@ -364,3 +364,10 @@ describe('the collector layer runs on Effect\'s HttpClient, not node:https', () 
     for (const file of srcFiles()) assert.doesNotMatch(srcSource(file), /from\s+['"]node:https['"]|require\(['"]node:https['"]\)/, `${file} must not import node:https`)
   })
 })
+
+describe('collectors on Effect, drop the Promise helpers (issue #183)', () => {
+  it('no file under src/ imports node:https, and collectors-press.test.ts is gone (issue #183 AC3)', () => {
+    for (const file of srcFiles()) assert.doesNotMatch(srcSource(file), /from\s+['"]node:https['"]|require\(['"]node:https['"]\)/, `${file} must not import node:https`)
+    assert.ok(!testFileNames().includes('collectors-press.test.ts'), 'collectors-press.test.ts must be deleted, its facts folded into collectors-rss.test.ts')
+  })
+})

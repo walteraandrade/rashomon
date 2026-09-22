@@ -164,3 +164,77 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
     assert.ok((doc?.text.length ?? 0) > 400)
   })
 })
+
+describe('collectors on Effect, drop the Promise helpers (issue #183)', () => {
+  it('juridico, oficial and nicho each fetch their own distinct hardcoded feed list, every doc stamped with the family source and never a tone (issue #183 AC4)', async () => {
+    const seen = new Map<string, Set<string>>()
+    const stub = (name: string) =>
+      fakeFetch((c) => {
+        const set = seen.get(name) ?? new Set<string>()
+        set.add(c.url.href)
+        seen.set(name, set)
+        return new Response(rssBody(), { status: 200 })
+      })
+    const cases: [string, Effect.Effect<any[], unknown, any>][] = [
+      ['juridico', collectJuridico],
+      ['oficial', collectOficial],
+      ['nicho', collectNicho],
+    ]
+    for (const [name, collect] of cases) {
+      const fetchFn = stub(name)
+      const exit = await runTest(collect, fetchFn)
+      assert.ok(Exit.isSuccess(exit))
+      assert.ok(exit.value.length > 0, `${name} must fetch at least one feed`)
+      for (const doc of exit.value) {
+        assert.equal(doc.source, name)
+        assert.equal('tone' in doc, false)
+      }
+    }
+    const [juridicoUrls, oficialUrls, nichoUrls] = ['juridico', 'oficial', 'nicho'].map((n) => [...(seen.get(n) ?? new Set())].sort().join('|'))
+    assert.ok(juridicoUrls && oficialUrls && nichoUrls, 'each family must actually issue requests')
+    assert.equal(new Set([juridicoUrls, oficialUrls, nichoUrls]).size, 3, 'each family must fetch its own distinct feed list, not another\'s')
+  })
+
+  it('a declared content-length over the cap fails before any byte is read, and a body that grows past the cap while streaming fails and cancels the stream (issue #183 AC5)', async () => {
+    let readDeclared = false
+    const declaredStream = new ReadableStream<Uint8Array>({ pull: () => void (readDeclared = true) }, { highWaterMark: 0 })
+    const declaredFetch = fakeFetch(() => new Response(declaredStream, { status: 200, headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) } }))
+    const declaredError = failureOf(await runTest(fetchFeed('rss')('https://example.org/big'), declaredFetch))
+    assert.ok(declaredError instanceof ResponseTooLarge)
+    assert.equal(declaredError.stage, 'declared')
+    assert.equal(readDeclared, false, 'must not read any byte once the declared length is over the cap')
+
+    // Four chunks, not two: the first two sum to exactly MAX_RESPONSE_BYTES (not over, the
+    // check is strict >), the third tips it over -- with a fourth still queued and unread, so
+    // the underlying stream is still 'readable' (not already closed) when getBytes cancels it,
+    // proving a genuine cancellation rather than a no-op on an already-drained stream.
+    let cancelled = false
+    const half = Math.floor(MAX_RESPONSE_BYTES / 2)
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(half))
+        controller.enqueue(new Uint8Array(MAX_RESPONSE_BYTES - half))
+        controller.enqueue(new Uint8Array([1]))
+        controller.enqueue(new Uint8Array([1]))
+        controller.close()
+      },
+      cancel: () => void (cancelled = true),
+    })
+    const streamingFetch = fakeFetch(() => new Response(stream, { status: 200 }))
+    const streamingError = failureOf(await runTest(fetchFeed('rss')('https://example.org/stream'), streamingFetch))
+    assert.ok(streamingError instanceof ResponseTooLarge)
+    assert.equal(streamingError.stage, 'streaming')
+    assert.equal(cancelled, true, 'the stream must be cancelled once the running total exceeds the cap, no partial body kept')
+  })
+
+  it('one failing feed among several fails the whole run and interrupts the in-flight siblings (issue #183 AC6)', async () => {
+    const fetchFn = fakeFetch((c) => (c.url.href === 'https://fails.example/' ? new Response('boom', { status: 500 }) : hanging(c)))
+    const run = Effect.forEach(['https://fails.example/', 'https://sibling-a.example/', 'https://sibling-b.example/'], fetchFeed('rss'), { concurrency: 'unbounded' })
+    const exit = await runTest(run, fetchFn)
+    assert.ok(Exit.isFailure(exit))
+    for (const url of ['https://sibling-a.example/', 'https://sibling-b.example/']) {
+      const call = fetchFn.calls.find((c) => c.url.href === url)
+      assert.ok(call === undefined || call.signal.aborted === true, `${url} must either never fire or be interrupted once the run fails`)
+    }
+  })
+})

@@ -170,3 +170,38 @@ describe('senado collector', () => {
     assert.ok(Date.now() - start < 1000, 'must short-circuit before any request, not merely resolve an empty batch')
   })
 })
+
+describe('senado as a typed Effect on Effect\'s HttpClient (issue #183)', () => {
+  it('exactly one request per person carrying senadoId, zero for a person without one; a failure for one person is logged and the next person\'s request still runs (issue #183 AC9)', async () => {
+    const withId: Person = { id: 'has-id', name: 'Has Id', aliases: ['Has Id'], senadoId: '7001' }
+    const withoutId: Person = { id: 'no-id', name: 'No Id', aliases: ['No Id'] }
+    const okBody = JSON.stringify({ DiscursosParlamentar: { Parlamentar: { Pronunciamentos: {} } } })
+    const okFetch = fakeFetch(() => new Response(okBody, { status: 200 }))
+    const okExit = await runTest(drain(collect([withoutId, withId]), pauseMs), okFetch)
+    assert.ok(Exit.isSuccess(okExit))
+    assert.ok(Exit.isSuccess(okExit.value.exit))
+    assert.equal(okFetch.calls.length, 1)
+    assert.match(okFetch.calls[0].url.pathname, /\/7001\//)
+
+    const failing: Person = { id: 'failing', name: 'Failing', aliases: ['Failing'], senadoId: '7002' }
+    const continuing: Person = { id: 'continuing', name: 'Continuing', aliases: ['Continuing'], senadoId: '7003' }
+    const failFetch = fakeFetch((c) =>
+      c.url.pathname.includes('/7002/') ? new Response('<html>error</html>', { status: 503 }) : new Response(okBody, { status: 200 }),
+    )
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([failing, continuing]))
+      yield* tick()
+      yield* tick(pauseMs)
+      yield* tick(pauseMs)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program, failFetch)
+    assert.ok(Exit.isSuccess(inner))
+    assert.equal(failFetch.calls.filter((c) => c.url.pathname.includes('/7002/')).length, 1)
+    assert.equal(failFetch.calls.filter((c) => c.url.pathname.includes('/7003/')).length, 1, 'the next person must still make its own request')
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[senado\] failing: senado 503:/)
+  })
+})

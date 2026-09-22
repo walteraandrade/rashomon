@@ -116,3 +116,62 @@ describe('camara collector', () => {
     })
   })
 })
+
+describe('camara retry/backoff as a typed Effect (issue #183)', () => {
+  it('a person without camaraId makes zero requests (issue #183 AC7)', async () => {
+    const noId: Person = { id: 'no-id', name: 'No Id', aliases: ['No Id'] }
+    const fetchFn = fakeFetch(() => {
+      throw new Error('must never be called')
+    })
+    const docs = await runProgram(collect([noId]), fetchFn)
+    assert.deepEqual(docs, [])
+    assert.equal(fetchFn.calls.length, 0)
+  })
+
+  it('429 then 500 then 200 makes exactly three requests, waiting exactly 4 000ms then 8 000ms; a fourth consecutive 429 fails that person and the next person still gets its own request (issue #183 AC7)', async () => {
+    const retried = dep('retried', '901')
+    let n = 0
+    const retriedFetch = fakeFetch(() => {
+      n++
+      if (n === 1) return new Response('rate limited', { status: 429 })
+      if (n === 2) return new Response('server error', { status: 500 })
+      return json({ dados: [] })
+    })
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([retried]))
+      yield* tick()
+      yield* tick(4_000)
+      assert.equal(retriedFetch.calls.length, 2, 'second attempt must fire at exactly 4 000ms')
+      yield* tick(8_000)
+      assert.equal(retriedFetch.calls.length, 3, 'third attempt must fire at exactly a further 8 000ms')
+      yield* tick(2_000)
+      return yield* Fiber.await(fiber)
+    })
+    const exit = await runTest(program, retriedFetch)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(retriedFetch.calls.length, 3)
+
+    const exhausted = dep('exhausted', '902')
+    const b = dep('sibling', '903')
+    const exhaustedFetch = fakeFetch((c) => (c.url.pathname.includes('/902/') ? new Response('slow down', { status: 429 }) : json({ dados: [] })))
+    const program2 = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([exhausted, b]))
+      yield* tick()
+      yield* tick(4_000)
+      yield* tick(8_000)
+      yield* tick(12_000)
+      yield* tick(2_000)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program2, exhaustedFetch)
+    assert.ok(Exit.isSuccess(inner))
+    const exhaustedCalls = exhaustedFetch.calls.filter((c) => c.url.pathname.includes('/902/'))
+    assert.equal(exhaustedCalls.length, 4, 'one initial attempt plus three retries, then gives up')
+    const siblingCalls = exhaustedFetch.calls.filter((c) => c.url.pathname.includes('/903/'))
+    assert.equal(siblingCalls.length, 1, 'the next person must still make its own request')
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[camara\] exhausted: camara 429:/)
+  })
+})

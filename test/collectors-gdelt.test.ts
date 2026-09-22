@@ -98,3 +98,51 @@ describe('gdelt collector', () => {
     })
   })
 })
+
+describe('gdelt retry/backoff as a typed Effect (issue #183)', () => {
+  it('429 then 429 then 200 makes exactly three requests, waiting exactly 22 000ms then 44 000ms; a non-JSON body fails with "gdelt <status>: <head>" (issue #183 AC8)', async () => {
+    const clara: Person = { id: 'clara', name: 'Clara Nunes', aliases: ['Clara Nunes'] }
+    let n = 0
+    const fetchFn = fakeFetch(() => {
+      n++
+      if (n <= 2) return new Response('slow down', { status: 429 })
+      return new Response(JSON.stringify({ articles: [] }), { status: 200 })
+    })
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([clara]))
+      yield* tick()
+      assert.equal(fetchFn.calls.length, 1)
+      yield* tick(22_000)
+      assert.equal(fetchFn.calls.length, 2, 'second attempt must fire at exactly 22 000ms')
+      yield* tick(44_000)
+      assert.equal(fetchFn.calls.length, 3, 'third attempt must fire at exactly a further 44 000ms')
+      yield* tick(rateLimitMs)
+      return yield* Fiber.await(fiber)
+    })
+    const exit = await runTest(program, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(fetchFn.calls.length, 3)
+
+    const other: Person = { id: 'other', name: 'Other Person', aliases: ['Other Person'] }
+    const brokenFetch = fakeFetch((c) =>
+      c.url.searchParams.get('query')?.includes('Clara')
+        ? new Response('not json at all', { status: 500 })
+        : new Response(JSON.stringify({ articles: [] }), { status: 200 }),
+    )
+    const program2 = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([clara, other]))
+      yield* tick()
+      yield* tick(rateLimitMs)
+      yield* tick(rateLimitMs)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program2, brokenFetch)
+    assert.ok(Exit.isSuccess(inner))
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[gdelt\] clara: gdelt 500: not json at all$/)
+    const otherCalls = brokenFetch.calls.filter((c) => c.url.searchParams.get('query')?.includes('Other'))
+    assert.equal(otherCalls.length, 1, 'the next person must still make its own request')
+  })
+})

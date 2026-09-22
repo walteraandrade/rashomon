@@ -269,3 +269,71 @@ describe('collect() skips an oversize slot without marking gkg_files, and the ru
     assert.ok(log.some((l) => l === `[gkg] ${okSlot}: 1 portuguese docs`))
   })
 })
+
+describe('download() driven through the FetchHttpClient.Fetch seam, no fetchImpl parameter (issue #183)', () => {
+  const slot = '20260915000000'
+
+  it('takes only a slot argument and resolves every SlotDownload outcome: missing, declared-oversize, streaming-oversize and ok (issue #183 AC10)', async () => {
+    assert.equal(download.length, 1, 'download must take exactly one argument, the slot, no fetchImpl parameter')
+
+    const missingFetch = fakeFetch(() => new Response(null, { status: 404 }))
+    const missingExit = await runTest(download(slot), missingFetch)
+    assert.ok(Exit.isSuccess(missingExit))
+    assert.deepEqual(missingExit.value, { status: 'missing' })
+
+    const declared = MAX_RESPONSE_BYTES + 10
+    const declaredStream = new ReadableStream<Uint8Array>({ pull: () => {} }, { highWaterMark: 0 })
+    const declaredFetch = fakeFetch(() => new Response(declaredStream, { status: 200, headers: { 'content-length': String(declared) } }))
+    const declaredExit = await runTest(download(slot), declaredFetch)
+    assert.ok(Exit.isSuccess(declaredExit))
+    assert.deepEqual(declaredExit.value, { status: 'oversize', stage: 'compressed', bytes: declared, limit: MAX_RESPONSE_BYTES })
+
+    const bigChunk = new Uint8Array(MAX_RESPONSE_BYTES)
+    const streamingFetch = fakeFetch(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(bigChunk)
+              controller.enqueue(new Uint8Array([9]))
+              controller.close()
+            },
+          }),
+          { status: 200 },
+        ),
+    )
+    const streamingExit = await runTest(download(slot), streamingFetch)
+    assert.ok(Exit.isSuccess(streamingExit))
+    assert.deepEqual(streamingExit.value, { status: 'oversize', stage: 'compressed', bytes: MAX_RESPONSE_BYTES + 1, limit: MAX_RESPONSE_BYTES })
+
+    const csv = 'domain\turl\ttitle\n'
+    const zip = zipSync({ 'entry.csv': strToU8(csv) })
+    const okFetch = fakeFetch(() => new Response(zip, { status: 200 }))
+    const okExit = await runTest(download(slot), okFetch)
+    assert.ok(Exit.isSuccess(okExit))
+    assert.deepEqual(okExit.value, { status: 'ok', csv })
+  })
+
+  it('GKG_DOWNLOAD_TIMEOUT_MS is 300 000ms, distinct from REQUEST_TIMEOUT_MS: latestSlot is cut at REQUEST_TIMEOUT_MS, download at GKG_DOWNLOAD_TIMEOUT_MS (issue #183 AC11)', async () => {
+    assert.equal(GKG_DOWNLOAD_TIMEOUT_MS, 300_000)
+    assert.notEqual(GKG_DOWNLOAD_TIMEOUT_MS, REQUEST_TIMEOUT_MS)
+
+    const latestFetch = fakeFetch(hanging)
+    const latestExit = await runTest(drain(latestSlot, REQUEST_TIMEOUT_MS), latestFetch)
+    assert.ok(Exit.isSuccess(latestExit))
+    assert.equal(latestExit.value.elapsedMs, REQUEST_TIMEOUT_MS)
+    assert.equal(latestFetch.calls[0].signal.aborted, true)
+
+    const downloadFetch = fakeFetch(hanging)
+    const downloadExit = await runTest(drain(download(slot), GKG_DOWNLOAD_TIMEOUT_MS), downloadFetch)
+    assert.ok(Exit.isSuccess(downloadExit))
+    assert.equal(downloadExit.value.elapsedMs, GKG_DOWNLOAD_TIMEOUT_MS)
+    assert.equal(downloadFetch.calls[0].signal.aborted, true)
+  })
+
+  it('latestSlot fails with a message matching "gkg: cannot read lastupdate-translation.txt" when no slot pattern is present in the body (issue #183 AC12)', async () => {
+    const fetchFn = fakeFetch(() => new Response('unexpected maintenance page', { status: 200 }))
+    const error = failureOf(await runTest(latestSlot, fetchFn))
+    assert.match(String(error), /gkg: cannot read lastupdate-translation\.txt/)
+  })
+})

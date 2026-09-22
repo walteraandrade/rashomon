@@ -131,3 +131,26 @@ describe('getBytes request size guard', () => {
     assert.equal(fetchFn.calls[0].signal.aborted, true)
   })
 })
+
+describe('the collector layer\'s Effect-only export surface (issue #183)', () => {
+  it('sleep, sequential, readCapped, SlowResponse and CappedRead are gone; getBytes, fetchClient, runWithFetch, overLimit, headerLength, ResponseTooLarge, MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS and headers remain (issue #183 AC1)', () => {
+    for (const name of ['sleep', 'sequential', 'readCapped', 'SlowResponse', 'CappedRead']) {
+      assert.equal(name in http, false, `${name} must no longer be exported by src/http.ts`)
+    }
+    for (const name of ['getBytes', 'fetchClient', 'runWithFetch', 'overLimit', 'headerLength', 'ResponseTooLarge', 'MAX_RESPONSE_BYTES', 'REQUEST_TIMEOUT_MS', 'headers']) {
+      assert.equal(name in http, true, `${name} must still be exported by src/http.ts`)
+    }
+  })
+
+  it('getBytes cuts a never-resolving fetch at an explicit, non-default timeoutMs, aborting the underlying request (issue #183 AC2)', async () => {
+    const url = 'https://example.test/ac2'
+    const timeoutMs = 12_345
+    const fetchFn = fakeFetch(hanging)
+    const exit = await runTest(drain(getBytes(url, MAX_RESPONSE_BYTES, timeoutMs), timeoutMs), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const { exit: inner, elapsedMs } = exit.value
+    assert.ok(Cause.isTimeoutError(failureOf(inner)), 'a timeoutMs cutoff must fail as a TimeoutError')
+    assert.equal(elapsedMs, timeoutMs, 'must be cut at exactly the given timeoutMs, not REQUEST_TIMEOUT_MS')
+    assert.equal(fetchFn.calls[0].signal.aborted, true, 'the fetch call must be aborted, not merely abandoned')
+  })
+})

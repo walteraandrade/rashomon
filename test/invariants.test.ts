@@ -343,7 +343,7 @@ describe('the test suite stays behaviour-first: no source-scanning pins, no issu
     const offenders: string[] = []
     for (const file of testFileNames()) {
       const src = testFileSource(file)
-      for (const m of src.matchAll(/^\s*(?:describe|it)\(\s*['"](AC[0-9]|issue #)[^'"]*['"]/gm)) offenders.push(`${file}: ${m[0].trim()}`)
+      for (const m of src.matchAll(/^\s*(?:describe|it)\(\s*['"`](AC[0-9]|issue #)/gm)) offenders.push(`${file}: ${m[0].trim()}`)
     }
     assert.deepEqual(offenders, [], 'no describe(...)/it(...) label may start with AC<digit> or "issue #"')
   })

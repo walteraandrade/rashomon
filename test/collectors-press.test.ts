@@ -22,9 +22,9 @@ describe('press collectors — AC2', () => {
   })
 })
 
-describe('press collectors — AC3', () => {
+describe('every press family delegates fetching and parsing to fetchFeed', () => {
   for (const family of FAMILIES) {
-    it(`AC3: src/collectors/${family}.ts imports fetchFeed and has no bespoke fetch/XML parsing`, () => {
+    it(`src/collectors/${family}.ts imports fetchFeed and has no bespoke fetch/XML parsing`, () => {
       const src = readRepoFile(`src/collectors/${family}.ts`)
       assert.match(src, /from '\.\/rss\.js'/, `${family}.ts must import fetchFeed from ./rss.js`)
       assert.match(src, /\bfetchFeed\(/)
@@ -35,7 +35,7 @@ describe('press collectors — AC3', () => {
   }
 })
 
-describe('press collectors — AC4', () => {
+describe('every press family stamps its own source and never a tone', () => {
   // Unlike camara/senado, juridico/oficial/nicho have no camaraId/senadoId-style gate: they
   // always fetch every feed regardless of the persons argument, so there is no early-return
   // branch that lets [] resolve without a network call. Per the spec's own fallback for this
@@ -44,7 +44,7 @@ describe('press collectors — AC4', () => {
   // senado-independent-acceptance.test.ts's AC3 technique (reading the file rather than mocking
   // a live fetch).
   for (const family of FAMILIES) {
-    it(`AC4: ${family}.ts builds every RawDoc with source: '${family}' via fetchFeed('${family}')`, () => {
+    it(`${family}.ts builds every RawDoc with source: '${family}' via fetchFeed('${family}')`, () => {
       const src = readRepoFile(`src/collectors/${family}.ts`)
       assert.match(src, new RegExp(`fetchFeed\\('${family}'\\)`), `${family}.ts must call fetchFeed('${family}'), which is what stamps every RawDoc's source field`)
       assert.doesNotMatch(src, /\btone\s*:/, `${family}.ts must never set a tone field itself`)

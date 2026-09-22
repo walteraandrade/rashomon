@@ -205,3 +205,18 @@ describe('senado as a typed Effect on Effect\'s HttpClient (issue #183)', () => 
     assert.match(errors[0], /^\[senado\] failing: senado 503:/)
   })
 })
+
+describe('senado log lines are unchanged text, read through TestConsole (issue #183)', () => {
+  it('logs "[senado] <id>: <n> pronunciamentos" (issue #183 AC13)', async () => {
+    const person: Person = { id: 'logtest', name: 'Log Test', aliases: ['Log Test'], senadoId: '9999' }
+    const fetchFn = fakeFetch(() =>
+      new Response(
+        JSON.stringify({ DiscursosParlamentar: { Parlamentar: { Pronunciamentos: { Pronunciamento: { UrlTexto: 'https://x', TextoResumo: 'r', DataPronunciamento: '2026-07-14' } } } } }),
+        { status: 200 },
+      ),
+    )
+    const exit = await runTest(drain(collect([person]), pauseMs), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.log.includes('[senado] logtest: 1 pronunciamentos'))
+  })
+})

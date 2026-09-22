@@ -146,3 +146,28 @@ describe('gdelt retry/backoff as a typed Effect (issue #183)', () => {
     assert.equal(otherCalls.length, 1, 'the next person must still make its own request')
   })
 })
+
+describe('gdelt log lines are unchanged text, read through TestConsole (issue #183)', () => {
+  it('logs "[gdelt] <id>: request N/4 (connect takes ~15s)", "429 rate limited, waiting Ns" and "<n> articles" (issue #183 AC13)', async () => {
+    const person: Person = { id: 'logtest', name: 'Log Test', aliases: ['Log Test'] }
+    let n = 0
+    const fetchFn = fakeFetch(() => {
+      n++
+      return n === 1 ? new Response('down', { status: 429 }) : new Response(JSON.stringify({ articles: [{ url: 'https://x', title: 't', seendate: '20260701T100000Z' }] }), { status: 200 })
+    })
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([person]))
+      yield* tick()
+      yield* tick(22_000)
+      yield* tick(rateLimitMs)
+      const inner = yield* Fiber.await(fiber)
+      const logs = (yield* TestConsole.logLines).map(String)
+      return { inner, logs }
+    })
+    const { inner, logs } = await runProgram(program, fetchFn)
+    assert.ok(Exit.isSuccess(inner))
+    assert.ok(logs.includes('[gdelt] logtest: request 1/4 (connect takes ~15s)'))
+    assert.ok(logs.includes('[gdelt] logtest: 429 rate limited, waiting 22s'))
+    assert.ok(logs.includes('[gdelt] logtest: 1 articles'))
+  })
+})

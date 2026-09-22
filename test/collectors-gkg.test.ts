@@ -337,3 +337,26 @@ describe('download() driven through the FetchHttpClient.Fetch seam, no fetchImpl
     assert.match(String(error), /gkg: cannot read lastupdate-translation\.txt/)
   })
 })
+
+describe('gkg log lines are unchanged text, read through TestConsole (issue #183)', () => {
+  before(migrate)
+
+  // GKG_SLOTS is read once into a module-level constant at import time, so a test cannot
+  // change the window size at runtime; it asserts against the module's actual (default, 24)
+  // window instead of trying to override it.
+  it('logs "[gkg] <slot>: missing (404)" for a 404 slot, alongside the pending-count line (issue #183 AC13)', async () => {
+    const latest = '20260912000000'
+    const fetchFn = gkgFetch(latest, () => new Response(null, { status: 404 }))
+    const program = Effect.gen(function* () {
+      const value = yield* collect
+      const log = (yield* TestConsole.logLines).map(String)
+      return { value, log }
+    })
+    const exit = await runTest(program, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const { value, log } = exit.value
+    assert.deepEqual(value, [])
+    assert.equal(log[0], '[gkg] 24 of last 24 slots pending')
+    assert.ok(log.includes(`[gkg] ${latest}: missing (404)`))
+  })
+})

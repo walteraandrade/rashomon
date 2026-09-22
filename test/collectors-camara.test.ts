@@ -175,3 +175,27 @@ describe('camara retry/backoff as a typed Effect (issue #183)', () => {
     assert.match(errors[0], /^\[camara\] exhausted: camara 429:/)
   })
 })
+
+describe('camara log lines are unchanged text, read through TestConsole (issue #183)', () => {
+  it('logs "[camara] <id>: <status>, retrying in Ns (attempt N/3)" and "[camara] <id>: <n> speeches" (issue #183 AC13)', async () => {
+    const person = dep('logtest', '950')
+    let n = 0
+    const fetchFn = fakeFetch(() => {
+      n++
+      return n === 1 ? new Response('down', { status: 429 }) : json({ dados: [{ dataHoraInicio: '2026-07-01T10:00:00', sumario: 'x' }] })
+    })
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([person]))
+      yield* tick()
+      yield* tick(4_000)
+      yield* tick(2_000)
+      const inner = yield* Fiber.await(fiber)
+      const logs = (yield* TestConsole.logLines).map(String)
+      return { inner, logs }
+    })
+    const { inner, logs } = await runProgram(program, fetchFn)
+    assert.ok(Exit.isSuccess(inner))
+    assert.ok(logs.includes('[camara] 950: 429, retrying in 4s (attempt 1/3)'))
+    assert.ok(logs.includes('[camara] logtest: 1 speeches'))
+  })
+})

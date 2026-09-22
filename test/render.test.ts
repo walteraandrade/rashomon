@@ -44,7 +44,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { signed, termMask, type Compare, type CompareTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { signed, termMask, type Compare, type CompareTerm, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -1202,11 +1202,12 @@ describe('paintWeek and paintTermStrip keep their exported shape after the marks
   })
 })
 
-describe('issue #174: one class scheme, one rx source, one text shape for the three word marks', () => {
+// Issue #174.
+describe('one class scheme, one rx source, one text shape for the three word marks', () => {
   const root = dirname(dirname(fileURLToPath(import.meta.url)))
   const renderSrc = readFileSync(join(root, 'src', 'ui', 'render.ts'), 'utf8')
   const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
-  const placedSample = { id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9 }
+  const placedSample: PlacedTerm = { id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9 }
 
   // The block-body finder for a class selector, tolerant of a rule declared with several
   // comma-separated selectors (".ruler-glow, .week-glow { rx: 8px }" is how the spec's own
@@ -1224,25 +1225,25 @@ describe('issue #174: one class scheme, one rx source, one text shape for the th
     return found ? Number(found[1]) : undefined
   }
 
-  it('AC1: render.ts carries no literal word-button, word-glow, word-hit or class="word" string', () => {
+  it('render.ts carries no literal word-button, word-glow, word-hit or class="word" string', () => {
     for (const literal of ['word-button', 'word-glow', 'word-hit', 'class="word"'])
       assert.ok(!renderSrc.includes(literal), `render.ts must not contain ${JSON.stringify(literal)}`)
   })
 
-  it('AC1: the atlas word markup uses atlas-word/atlas-glow/atlas-hit/atlas-text', () => {
-    const html = String(wordMarkup(placedSample as any, 'count', null))
+  it('the atlas word markup uses atlas-word/atlas-glow/atlas-hit/atlas-text', () => {
+    const html = String(wordMarkup(placedSample, 'count', null))
     assert.match(html, /<g class="atlas-word[^"]*"/)
     assert.match(html, /<rect class="atlas-glow"/)
     assert.match(html, /<rect class="atlas-hit"/)
     assert.match(html, /<text class="atlas-text"/)
   })
 
-  it('AC1: the map-svg.is-masked mask-and-underline rule still targets the atlas word class', () => {
+  it('the map-svg.is-masked mask-and-underline rule still targets the atlas word class', () => {
     assert.match(css, /\.map-svg\.is-masked \.atlas-word/)
   })
 
-  it('AC2: no glow or hit rect emitted by any of the three builders carries an rx attribute', async () => {
-    const atlasHtml = String(wordMarkup(placedSample as any, 'count', null))
+  it('no glow or hit rect emitted by any of the three builders carries an rx attribute', async () => {
+    const atlasHtml = String(wordMarkup(placedSample, 'count', null))
     assert.doesNotMatch(atlasHtml, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
     await withFiguresDom(async (els) => {
       const terms: CompareTerm[] = [{ term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) }]
@@ -1256,7 +1257,7 @@ describe('issue #174: one class scheme, one rx source, one text shape for the th
     })
   })
 
-  it('AC2: atlas.css sets rx on the six rules, at the same values the markup used to carry', () => {
+  it('atlas.css sets rx on the six rules, at the same values the markup used to carry', () => {
     assert.equal(rxOf('.atlas-glow'), 9)
     assert.equal(rxOf('.atlas-hit'), 6)
     assert.equal(rxOf('.ruler-glow'), 8)
@@ -1265,7 +1266,7 @@ describe('issue #174: one class scheme, one rx source, one text shape for the th
     assert.equal(rxOf('.week-hit'), 5)
   })
 
-  it('AC3: the ruler wraps its word text in a single <tspan x="0" y="0">, like the atlas and the week', async () => {
+  it('the ruler wraps its word text in a single <tspan x="0" y="0">, like the atlas and the week', async () => {
     await withFiguresDom(async (els) => {
       const terms: CompareTerm[] = [{ term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) }]
       paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
@@ -1273,7 +1274,7 @@ describe('issue #174: one class scheme, one rx source, one text shape for the th
     })
   })
 
-  it('AC7: marks.ts still exports only frame, axis and overflowList — no wordMark', async () => {
+  it('marks.ts still exports only frame, axis and overflowList — no wordMark', async () => {
     const marks = await import('../src/ui/marks.js')
     assert.deepEqual(Object.keys(marks).sort(), ['axis', 'frame', 'overflowList'])
   })

@@ -1,6 +1,8 @@
+import { Console, Effect } from 'effect'
+import type { HttpClient } from 'effect/unstable/http'
 import { Unzip, UnzipInflate } from 'fflate'
 import type { Collector, RawDoc } from '../types.js'
-import { headers, sequential, headerLength, overLimit, readCapped, MAX_RESPONSE_BYTES } from '../http.js'
+import { MAX_RESPONSE_BYTES, ResponseTooLarge, getBytes, overLimit, runWithFetch } from '../http.js'
 import { db } from '../db.js'
 import { decodeEntities } from '../extract.js'
 
@@ -10,6 +12,10 @@ const slots = Number(process.env.GKG_SLOTS ?? 24)
 
 // MAX_EXPANDED_BYTES bounds the *decompressed* stream; MAX_RESPONSE_BYTES bounds the download.
 export const MAX_EXPANDED_BYTES = 128 * 1024 * 1024
+
+// A slot measures ~13-14MB compressed (docs/sources.md); REQUEST_TIMEOUT_MS (45s) is sized for
+// small JSON endpoints, not this, so the zip download carries its own, much longer ceiling.
+export const GKG_DOWNLOAD_TIMEOUT_MS = 300_000
 
 export type SlotDownload =
   | { status: 'missing' }
@@ -89,42 +95,40 @@ export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYT
 
 const col = { domain: 3, url: 4, persons: 11, tone: 15, translation: 25, extras: 26 } as const
 
-const log = (msg: string) => console.log(`[gkg] ${msg}`)
-
 const pad = (n: number) => String(n).padStart(2, '0')
 const slotName = (d: Date) =>
   `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00`
 const slotDate = (s: string) =>
   new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), +s.slice(8, 10), +s.slice(10, 12)))
 
-const latestSlot = async () => {
-  const txt = await (await fetch(`${base}/lastupdate-translation.txt`, { headers })).text()
+export const latestSlot: Effect.Effect<string, Error, HttpClient.HttpClient> = Effect.gen(function* () {
+  const { body } = yield* getBytes(`${base}/lastupdate-translation.txt`)
+  const txt = new TextDecoder().decode(body)
   const m = txt.match(/(\d{14})\.translation\.gkg\.csv\.zip/)
-  if (!m) throw new Error('gkg: cannot read lastupdate-translation.txt')
+  if (!m) return yield* Effect.fail(new Error('gkg: cannot read lastupdate-translation.txt'))
   return m[1]
-}
+})
 
 const recentSlots = (latest: string) =>
   Array.from({ length: slots }, (_, i) => slotName(new Date(slotDate(latest).getTime() - i * slotMs)))
 
-const processedSlots = async () =>
-  new Set((await db.query<{ slot: string }>(`select slot from gkg_files`)).rows.map((r) => r.slot))
+const processedSlots: Effect.Effect<Set<string>, never> = Effect.promise(() => db.query<{ slot: string }>(`select slot from gkg_files`)).pipe(
+  Effect.map((res) => new Set(res.rows.map((r) => r.slot))),
+)
 
-export const download = async (slot: string, fetchImpl: typeof fetch = fetch): Promise<SlotDownload> => {
-  const res = await fetchImpl(`${base}/${slot}.translation.gkg.csv.zip`, { headers })
-  if (res.status === 404) return { status: 'missing' }
-  if (!res.ok) throw new Error(`gkg ${slot}: ${res.status}`)
-
-  const declared = headerLength(res.headers.get('content-length'))
-  if (declared !== null && overLimit(declared, MAX_RESPONSE_BYTES)) {
-    return { status: 'oversize', stage: 'compressed', bytes: declared, limit: MAX_RESPONSE_BYTES }
-  }
-
-  const capped = await readCapped(res.body, MAX_RESPONSE_BYTES)
-  if (!capped.ok) return { status: 'oversize', stage: 'compressed', bytes: capped.bytes, limit: MAX_RESPONSE_BYTES }
-
-  return unzipBounded(capped.data, MAX_EXPANDED_BYTES)
-}
+// The declared/streaming distinction http.ts's ResponseTooLarge makes is about the wire read;
+// here it always means the compressed download, distinct from unzipBounded's 'expanded' stage.
+export const download = (slot: string): Effect.Effect<SlotDownload, Error, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const fetched = yield* getBytes(`${base}/${slot}.translation.gkg.csv.zip`, MAX_RESPONSE_BYTES, GKG_DOWNLOAD_TIMEOUT_MS).pipe(
+      Effect.catchTag('ResponseTooLarge', (e: ResponseTooLarge) => Effect.succeed({ oversize: true as const, bytes: e.bytes, limit: e.limit })),
+    )
+    if ('oversize' in fetched) return { status: 'oversize', stage: 'compressed', bytes: fetched.bytes, limit: fetched.limit }
+    const { status, body } = fetched
+    if (status === 404) return { status: 'missing' }
+    if (status < 200 || status >= 300) return yield* Effect.fail(new Error(`gkg ${slot}: ${status}`))
+    return yield* Effect.promise(() => unzipBounded(body, MAX_EXPANDED_BYTES))
+  })
 
 const rowToDoc = (slot: string) => (cols: string[]): RawDoc | null => {
   const title = decodeEntities(cols[col.extras]?.match(/<PAGE_TITLE>(.*?)<\/PAGE_TITLE>/)?.[1] ?? '')
@@ -150,28 +154,35 @@ const parse = (slot: string, csv: string): RawDoc[] =>
     .map(rowToDoc(slot))
     .filter((d): d is RawDoc => d !== null)
 
-const processSlot = async (slot: string): Promise<RawDoc[]> => {
-  const result = await download(slot)
-  if (result.status === 'missing') return (log(`${slot}: missing (404)`), [])
-  if (result.status === 'oversize') {
-    // oversize: not marked done, so the next run retries it or it ages out of the look-back window.
-    log(`${slot}: oversize (${result.stage}, ${result.bytes} bytes > ${result.limit} limit), skipped`)
-    return []
-  }
-  if (result.csv === '') {
-    // Empty archive: not recorded as done; retrying may get a real answer.
-    log(`${slot}: empty archive, skipped`)
-    return []
-  }
-  const docs = parse(slot, result.csv)
-  await db.query(`insert into gkg_files (slot, rows) values ($1, $2) on conflict do nothing`, [slot, docs.length])
-  log(`${slot}: ${docs.length} portuguese docs`)
-  return docs
-}
+const processSlot = (slot: string): Effect.Effect<RawDoc[], Error, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const result = yield* download(slot)
+    if (result.status === 'missing') {
+      yield* Console.log(`[gkg] ${slot}: missing (404)`)
+      return []
+    }
+    if (result.status === 'oversize') {
+      // oversize: not marked done, so the next run retries it or it ages out of the look-back window.
+      yield* Console.log(`[gkg] ${slot}: oversize (${result.stage}, ${result.bytes} bytes > ${result.limit} limit), skipped`)
+      return []
+    }
+    if (result.csv === '') {
+      // Empty archive: not recorded as done; retrying may get a real answer.
+      yield* Console.log(`[gkg] ${slot}: empty archive, skipped`)
+      return []
+    }
+    const docs = parse(slot, result.csv)
+    yield* Effect.promise(() => db.query(`insert into gkg_files (slot, rows) values ($1, $2) on conflict do nothing`, [slot, docs.length]))
+    yield* Console.log(`[gkg] ${slot}: ${docs.length} portuguese docs`)
+    return docs
+  })
 
-export const gkg: Collector = async () => {
-  const done = await processedSlots()
-  const pending = recentSlots(await latestSlot()).filter((s) => !done.has(s))
-  log(`${pending.length} of last ${slots} slots pending`)
-  return (await sequential(pending, processSlot)).flat()
-}
+export const collect: Effect.Effect<RawDoc[], Error, HttpClient.HttpClient> = Effect.gen(function* () {
+  const [done, latest] = yield* Effect.all([processedSlots, latestSlot])
+  const pending = recentSlots(latest).filter((s) => !done.has(s))
+  yield* Console.log(`[gkg] ${pending.length} of last ${slots} slots pending`)
+  const docs = yield* Effect.forEach(pending, processSlot)
+  return docs.flat()
+})
+
+export const gkg: Collector = () => runWithFetch(collect)

@@ -5,7 +5,7 @@ import { TestConsole } from 'effect/testing'
 import { collect, gdelt } from '../src/collectors/gdelt.js'
 import { collectors } from '../src/collectors/index.js'
 import type { Person } from '../src/types.js'
-import { drain, fakeFetch, runProgram, runTest, tick } from './effect.js'
+import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
 
 const rateLimitMs = 5_500
 
@@ -169,5 +169,26 @@ describe('gdelt log lines are unchanged text, read through TestConsole (issue #1
     assert.ok(logs.includes('[gdelt] logtest: request 1/4 (connect takes ~15s)'))
     assert.ok(logs.includes('[gdelt] logtest: 429 rate limited, waiting 22s'))
     assert.ok(logs.includes('[gdelt] logtest: 1 articles'))
+  })
+})
+
+describe('gdelt: a truncated JSON body is that person\'s failure, never the run\'s', () => {
+  it('logs "[gdelt] ana: <parse message>" and the next person still gets its own request', async () => {
+    const fetchFn = fakeFetch((c) => (c.url.searchParams.get('query')?.includes('Ana') ? new Response('{"articles": [', { status: 200 }) : json({ articles: [] })))
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([ana, bento]))
+      yield* tick()
+      yield* tick(rateLimitMs)
+      yield* tick(rateLimitMs)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program, fetchFn)
+    assert.ok(Exit.isSuccess(inner), 'a parse failure must be a typed failure caught per person, not a defect')
+    assert.deepEqual(inner.value, [])
+    assert.equal(fetchFn.calls.filter((c) => c.url.searchParams.get('query')?.includes('Bento')).length, 1, 'bento still gets its own request after ana fails')
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[gdelt\] ana: .*JSON/)
   })
 })

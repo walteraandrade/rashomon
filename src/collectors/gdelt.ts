@@ -1,7 +1,7 @@
 import { Console, Effect } from 'effect'
 import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, Person, RawDoc } from '../types.js'
-import { getBytes, runWithFetch } from '../http.js'
+import { getBytes, parseJson, runWithFetch } from '../http.js'
 
 const base = 'https://api.gdeltproject.org/api/v2/doc/doc'
 const rateLimitMs = 5500
@@ -34,7 +34,7 @@ const attempt = (person: Person, n: number): Effect.Effect<any[], Error, HttpCli
       return yield* attempt(person, n + 1)
     }
     if (!text.trim().startsWith('{')) return yield* Effect.fail(new Error(`gdelt ${status}: ${text.trim().slice(0, 80)}`))
-    const articles = (JSON.parse(text) as { articles?: any[] }).articles ?? []
+    const articles = (yield* parseJson<{ articles?: any[] }>(text)).articles ?? []
     yield* Console.log(`[gdelt] ${person.id}: ${articles.length} articles`)
     return articles
   })

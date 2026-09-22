@@ -118,6 +118,9 @@ const processedSlots: Effect.Effect<Set<string>, never> = Effect.promise(() => d
 
 // The declared/streaming distinction http.ts's ResponseTooLarge makes is about the wire read;
 // here it always means the compressed download, distinct from unzipBounded's 'expanded' stage.
+// The byte cap is decided inside getBytes, before the status is read: a 404 whose error page
+// declares a body over MAX_RESPONSE_BYTES resolves 'oversize', not 'missing'. Both skip the slot
+// without marking it done, so only the log line differs.
 export const download = (slot: string): Effect.Effect<SlotDownload, Error, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const fetched = yield* getBytes(`${base}/${slot}.translation.gkg.csv.zip`, MAX_RESPONSE_BYTES, GKG_DOWNLOAD_TIMEOUT_MS).pipe(

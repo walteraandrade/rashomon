@@ -47,6 +47,11 @@ export class ResponseTooLarge extends Data.TaggedError('ResponseTooLarge')<{
   }
 }
 
+// JSON.parse throws, and a throw inside an Effect is a defect that Effect.catch never sees: a
+// malformed body must land in the typed error channel or it aborts the whole collector run.
+export const parseJson = <T>(text: string): Effect.Effect<T, Error> =>
+  Effect.try({ try: () => JSON.parse(text) as T, catch: (e) => new Error(e instanceof Error ? e.message : String(e)) })
+
 export type Fetched = { status: number; body: Uint8Array }
 
 type Fold = { total: number; chunks: Uint8Array[] }

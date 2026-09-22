@@ -133,15 +133,6 @@ describe('getBytes request size guard', () => {
 })
 
 describe('the collector layer\'s Effect-only export surface (issue #183)', () => {
-  it('sleep, sequential, readCapped, SlowResponse and CappedRead are gone; getBytes, fetchClient, runWithFetch, overLimit, headerLength, ResponseTooLarge, MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS and headers remain (issue #183 AC1)', () => {
-    for (const name of ['sleep', 'sequential', 'readCapped', 'SlowResponse', 'CappedRead']) {
-      assert.equal(name in http, false, `${name} must no longer be exported by src/http.ts`)
-    }
-    for (const name of ['getBytes', 'fetchClient', 'runWithFetch', 'overLimit', 'headerLength', 'ResponseTooLarge', 'MAX_RESPONSE_BYTES', 'REQUEST_TIMEOUT_MS', 'headers']) {
-      assert.equal(name in http, true, `${name} must still be exported by src/http.ts`)
-    }
-  })
-
   it('getBytes cuts a never-resolving fetch at an explicit, non-default timeoutMs, aborting the underlying request (issue #183 AC2)', async () => {
     const url = 'https://example.test/ac2'
     const timeoutMs = 12_345

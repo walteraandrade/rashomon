@@ -199,3 +199,26 @@ describe('camara log lines are unchanged text, read through TestConsole (issue #
     assert.ok(logs.includes('[camara] logtest: 1 speeches'))
   })
 })
+
+describe('camara: a 200 whose body is not JSON is that person\'s failure, never the run\'s', () => {
+  it('logs "[camara] a: <parse message>" and the next person still gets its own request', async () => {
+    const a = dep('a', '111')
+    const b = dep('b', '222')
+    const fetchFn = fakeFetch((c) => (c.url.pathname.includes('/111/') ? new Response('<html>oops</html>', { status: 200 }) : json({ dados: [] })))
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([a, b]))
+      yield* tick()
+      yield* tick(1_000)
+      yield* tick(1_000)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program, fetchFn)
+    assert.ok(Exit.isSuccess(inner), 'a parse failure must be a typed failure caught per person, not a defect')
+    assert.deepEqual(inner.value, [])
+    assert.equal(fetchFn.calls.filter((c) => c.url.pathname.includes('/222/')).length, 1, 'b still gets its own request after a fails')
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[camara\] a: .*JSON/)
+  })
+})

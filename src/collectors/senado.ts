@@ -1,7 +1,7 @@
 import { Console, Effect } from 'effect'
 import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, Person, RawDoc } from '../types.js'
-import { getBytes, runWithFetch } from '../http.js'
+import { getBytes, parseJson, runWithFetch } from '../http.js'
 
 const base = 'https://legis.senado.leg.br/dadosabertos/senador'
 const pauseMs = 500
@@ -26,9 +26,9 @@ const fetchPronunciamentos = (senadoId: string): Effect.Effect<Pronunciamento[],
     const { status, body } = yield* getBytes(discursosUrl(senadoId))
     const text = new TextDecoder().decode(body)
     if (!text.trim().startsWith('{')) return yield* Effect.fail(new Error(`senado ${status}: ${text.trim().slice(0, 80)}`))
-    const parsed = JSON.parse(text) as {
+    const parsed = yield* parseJson<{
       DiscursosParlamentar?: { Parlamentar?: { Pronunciamentos?: { Pronunciamento?: Pronunciamento | Pronunciamento[] } } }
-    }
+    }>(text)
     const raw = parsed.DiscursosParlamentar?.Parlamentar?.Pronunciamentos?.Pronunciamento ?? []
     return Array.isArray(raw) ? raw : [raw]
   })

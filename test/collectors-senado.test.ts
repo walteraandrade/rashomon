@@ -7,7 +7,7 @@ import { collect, hasUsableDate, senado, toRawDoc } from '../src/collectors/sena
 import { collectors, defaultSources } from '../src/collectors/index.js'
 import type { Person, Source } from '../src/types.js'
 import { docs } from './fixture.js'
-import { drain, fakeFetch, runProgram, runTest, tick } from './effect.js'
+import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
 
 const pauseMs = 500
 
@@ -218,5 +218,28 @@ describe('senado log lines are unchanged text, read through TestConsole (issue #
     const exit = await runTest(drain(collect([person]), pauseMs), fetchFn)
     assert.ok(Exit.isSuccess(exit))
     assert.ok(exit.value.log.includes('[senado] logtest: 1 pronunciamentos'))
+  })
+})
+
+describe('senado: a truncated JSON body is that person\'s failure, never the run\'s', () => {
+  it('logs "[senado] a: <parse message>" and the next person still gets its own request', async () => {
+    const a: Person = { id: 'a', name: 'A', aliases: ['A'], senadoId: '111' }
+    const b: Person = { id: 'b', name: 'B', aliases: ['B'], senadoId: '222' }
+    const fetchFn = fakeFetch((c) => (c.url.pathname.includes('/111') ? new Response('{"DiscursosParlamentar": {', { status: 200 }) : json({ DiscursosParlamentar: {} })))
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([a, b]))
+      yield* tick()
+      yield* tick(pauseMs)
+      yield* tick(pauseMs)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program, fetchFn)
+    assert.ok(Exit.isSuccess(inner), 'a parse failure must be a typed failure caught per person, not a defect')
+    assert.deepEqual(inner.value, [])
+    assert.equal(fetchFn.calls.filter((c) => c.url.pathname.includes('/222')).length, 1, 'b still gets its own request after a fails')
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[senado\] a: .*JSON/)
   })
 })

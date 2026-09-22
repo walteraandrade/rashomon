@@ -1,7 +1,7 @@
 import { Console, Effect } from 'effect'
 import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, Person, RawDoc } from '../types.js'
-import { getBytes, runWithFetch } from '../http.js'
+import { getBytes, parseJson, runWithFetch } from '../http.js'
 
 const base = 'https://dadosabertos.camara.leg.br/api/v2/deputados'
 const windowDays = 30
@@ -35,7 +35,7 @@ const attempt = (camaraId: string, n: number): Effect.Effect<any[], Error, HttpC
       return yield* attempt(camaraId, n + 1)
     }
     if (status < 200 || status >= 300) return yield* Effect.fail(new Error(`camara ${status}: ${text.trim().slice(0, 120)}`))
-    return (JSON.parse(text) as { dados?: any[] }).dados ?? []
+    return (yield* parseJson<{ dados?: any[] }>(text)).dados ?? []
   })
 
 const toDoc = (person: Person, item: any): RawDoc | null => {

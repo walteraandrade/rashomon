@@ -1,6 +1,5 @@
 import { Effect } from 'effect'
-import type { HttpClient } from 'effect/unstable/http'
-import type { Collector, RawDoc } from '../types.js'
+import type { Collector } from '../types.js'
 import { runWithFetch } from '../http.js'
 import { fetchFeed } from './rss.js'
 
@@ -19,8 +18,6 @@ const feeds = [
   'https://revistaoeste.com/feed/',
 ]
 
-export const collect: Effect.Effect<RawDoc[], unknown, HttpClient.HttpClient> = Effect.forEach(feeds, fetchFeed('nicho'), {
-  concurrency: 'unbounded',
-}).pipe(Effect.map((docs) => docs.flat()))
+export const collect = Effect.forEach(feeds, fetchFeed('nicho'), { concurrency: 'unbounded' }).pipe(Effect.map((docs) => docs.flat()))
 
 export const nicho: Collector = () => runWithFetch(collect)

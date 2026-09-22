@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect, Exit } from 'effect'
+import { Cause, Effect, Exit } from 'effect'
 import { body, collect as collectRss, fetchFeed, toDoc } from '../src/collectors/rss.js'
 import { collect as collectGnews } from '../src/collectors/gnews.js'
 import { collect as collectJuridico } from '../src/collectors/juridico.js'
 import { collect as collectOficial } from '../src/collectors/oficial.js'
 import { collect as collectNicho } from '../src/collectors/nicho.js'
-import { MAX_RESPONSE_BYTES, ResponseTooLarge } from '../src/http.js'
+import { MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS, ResponseTooLarge } from '../src/http.js'
 import type { Person } from '../src/types.js'
-import { failureOf, fakeFetch, hanging, runTest, type Call } from './effect.js'
+import { drain, failureOf, fakeFetch, hanging, runTest, type Call } from './effect.js'
 
 const ana: Person = { id: 'ana', name: 'Ana Souza', aliases: ['Ana Souza'] }
 const bento: Person = { id: 'bento', name: 'Bento Lima', aliases: ['Bento Lima'] }
@@ -35,7 +35,7 @@ describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no gl
     assert.match(exit.value[0].text, /Eleições/)
   })
 
-  it('fails on a declared content-length over MAX_RESPONSE_BYTES before reading any of the body', async () => {
+  it('fails on a declared content-length over MAX_RESPONSE_BYTES before reading any of the body, the message naming the feed', async () => {
     let read = false
     const stream = new ReadableStream<Uint8Array>({ pull: () => void (read = true) }, { highWaterMark: 0 })
     const fetchFn = fakeFetch(() => new Response(stream, { status: 200, headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) } }))
@@ -43,9 +43,10 @@ describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no gl
     assert.ok(error instanceof ResponseTooLarge)
     assert.equal(error.stage, 'declared')
     assert.equal(read, false)
+    assert.match(error.message, /^https:\/\/example\.org\/feed: response too large/)
   })
 
-  it('fails once the streamed body exceeds MAX_RESPONSE_BYTES with no declared length', async () => {
+  it('fails once the streamed body exceeds MAX_RESPONSE_BYTES with no declared length, the message naming the feed', async () => {
     const chunk = new Uint8Array(MAX_RESPONSE_BYTES)
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -58,12 +59,24 @@ describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no gl
     const error = failureOf(await runTest(fetchFeed('rss')('https://example.org/feed'), fetchFn))
     assert.ok(error instanceof ResponseTooLarge)
     assert.equal(error.stage, 'streaming')
+    assert.match(error.message, /^https:\/\/example\.org\/feed: response too large/)
   })
 
   it('fails with "<source> <url> <status>" on a non-2xx status, unchanged from before', async () => {
     const fetchFn = fakeFetch(() => new Response('nope', { status: 500 }))
     const error = failureOf(await runTest(fetchFeed('rss')('https://example.org/feed'), fetchFn))
     assert.match(String(error), /rss https:\/\/example\.org\/feed 500/)
+  })
+
+  it('a timed-out feed fails with "<source> <url>: <reason>", so a stalled feed among several is identifiable', async () => {
+    const fetchFn = fakeFetch(hanging)
+    const exit = await runTest(drain(fetchFeed('rss')('https://example.org/feed'), REQUEST_TIMEOUT_MS), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const { exit: inner, elapsedMs } = exit.value
+    const error = failureOf(inner)
+    assert.equal(elapsedMs, REQUEST_TIMEOUT_MS)
+    assert.ok(!Cause.isTimeoutError(error), 'fetchFeed wraps the bare TimeoutError with its own feed-identifying message')
+    assert.match(String(error), /rss https:\/\/example\.org\/feed: /)
   })
 })
 

@@ -1,8 +1,7 @@
 import { XMLParser } from 'fast-xml-parser'
 import { Effect } from 'effect'
-import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, RawDoc, Source } from '../types.js'
-import { getBytes, runWithFetch } from '../http.js'
+import { ResponseTooLarge, getBytes, runWithFetch } from '../http.js'
 import { decodeEntities, domainOf } from '../extract.js'
 
 // Politics sections where available; `content:encoded` feeds added for outlets that publish no politics section.
@@ -56,6 +55,9 @@ export const toDoc = (source: Source) => (item: any): RawDoc | null => {
 // interrupts the sibling requests a caller ran alongside it.
 export const fetchFeed = (source: Source) => (url: string) =>
   getBytes(url).pipe(
+    // ResponseTooLarge already names its own url; anything else (a timeout, a network error)
+    // gets the feed stitched in here, so a failed run always says which of the family's feeds broke.
+    Effect.mapError((e) => (e instanceof ResponseTooLarge ? e : new Error(`${source} ${url}: ${e instanceof Error ? e.message : String(e)}`))),
     Effect.flatMap(({ status, body }) => {
       if (status < 200 || status >= 300) return Effect.fail(new Error(`${source} ${url} ${status}`))
       const xml = parser.parse(decode(body))
@@ -63,8 +65,6 @@ export const fetchFeed = (source: Source) => (url: string) =>
     }),
   )
 
-export const collect: Effect.Effect<RawDoc[], unknown, HttpClient.HttpClient> = Effect.forEach(feeds, fetchFeed('rss'), { concurrency: 'unbounded' }).pipe(
-  Effect.map((docs) => docs.flat()),
-)
+export const collect = Effect.forEach(feeds, fetchFeed('rss'), { concurrency: 'unbounded' }).pipe(Effect.map((docs) => docs.flat()))
 
 export const rss: Collector = () => runWithFetch(collect)

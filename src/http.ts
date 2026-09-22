@@ -42,8 +42,8 @@ export class ResponseTooLarge extends Data.TaggedError('ResponseTooLarge')<{
 }> {
   get message() {
     return this.stage === 'declared'
-      ? `response too large: declared ${this.bytes} bytes exceeds ${this.limit}`
-      : `response too large: exceeded ${this.limit} bytes while streaming`
+      ? `${this.url}: response too large: declared ${this.bytes} bytes exceeds ${this.limit}`
+      : `${this.url}: response too large: exceeded ${this.limit} bytes while streaming`
   }
 }
 

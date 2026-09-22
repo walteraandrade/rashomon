@@ -1,12 +1,27 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Cause, Effect, Exit } from 'effect'
-import { MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS, ResponseTooLarge, getBytes, headerLength, overLimit, readCapped } from '../src/http.js'
+import { Cause, Exit } from 'effect'
+import * as http from '../src/http.js'
+import { MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS, ResponseTooLarge, getBytes, headerLength, overLimit } from '../src/http.js'
 import { drain, fakeFetch, failureOf, hanging, runTest } from './effect.js'
 
 describe('MAX_RESPONSE_BYTES', () => {
   it('is 32 MB', () => {
     assert.equal(MAX_RESPONSE_BYTES, 32 * 1024 * 1024)
+  })
+})
+
+describe('http.ts export surface — the Promise helpers are gone, the Effect boundary stays', () => {
+  it('no longer exports sleep, sequential, readCapped, slowGet, SlowResponse or CappedRead', () => {
+    for (const name of ['sleep', 'sequential', 'readCapped', 'slowGet', 'SlowResponse', 'CappedRead']) {
+      assert.equal(name in http, false, `http.ts must no longer export ${name}`)
+    }
+  })
+
+  it('still exports getBytes, fetchClient, runWithFetch, overLimit, headerLength, ResponseTooLarge, MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS and headers', () => {
+    for (const name of ['getBytes', 'fetchClient', 'runWithFetch', 'overLimit', 'headerLength', 'ResponseTooLarge', 'MAX_RESPONSE_BYTES', 'REQUEST_TIMEOUT_MS', 'headers']) {
+      assert.equal(name in http, true, `http.ts must still export ${name}`)
+    }
   })
 })
 
@@ -55,27 +70,8 @@ const streamOf = (chunks: Uint8Array[], onCancel?: () => void): ReadableStream<U
     cancel: onCancel,
   })
 
-describe('readCapped', () => {
-  it('resolves the full body under the cap', async () => {
-    const result = await readCapped(streamOf([new Uint8Array([1, 2]), new Uint8Array([3, 4])]), 10)
-    assert.equal(result.ok, true)
-    if (result.ok) assert.deepEqual([...result.data], [1, 2, 3, 4])
-  })
-
-  it('resolves oversize once the running total exceeds the cap, without a partial body', async () => {
-    const result = await readCapped(streamOf([new Uint8Array(3), new Uint8Array(3)]), 4)
-    assert.equal(result.ok, false)
-    if (!result.ok) assert.equal(result.bytes, 6)
-  })
-
-  it('treats a null body as empty', async () => {
-    const result = await readCapped(null, 10)
-    assert.deepEqual(result, { ok: true, data: new Uint8Array(0) })
-  })
-})
-
-// getBytes is the request every slowGet caller makes (gdelt, camara, senado), exercised against
-// a stub fetch: the same size guard readCapped applies to a web stream, now on the wire.
+// getBytes is the request every collector makes (gdelt, camara, senado, rss, gkg), exercised
+// against a stub fetch: one call site carries both the byte cap and the wall-clock cap.
 describe('getBytes request size guard', () => {
   const url = 'https://example.test/feed'
 
@@ -114,13 +110,24 @@ describe('getBytes request size guard', () => {
     assert.equal(cancelled, true, 'the body stream must be cancelled, not drained')
   })
 
-  it('a silent connection is cut at REQUEST_TIMEOUT_MS and the fetch is aborted', async () => {
+  it('a silent connection is cut at REQUEST_TIMEOUT_MS by default and the fetch is aborted', async () => {
     const fetchFn = fakeFetch(hanging)
-    const exit = await runTest(drain(getBytes(url).pipe(Effect.timeout(REQUEST_TIMEOUT_MS)), REQUEST_TIMEOUT_MS), fetchFn)
+    const exit = await runTest(drain(getBytes(url), REQUEST_TIMEOUT_MS), fetchFn)
     assert.ok(Exit.isSuccess(exit))
     const { exit: inner, elapsedMs } = exit.value
     assert.ok(Cause.isTimeoutError(failureOf(inner)))
     assert.equal(elapsedMs, REQUEST_TIMEOUT_MS)
+    assert.equal(fetchFn.calls[0].signal.aborted, true)
+  })
+
+  it('a silent connection is cut at a non-default timeoutMs, not REQUEST_TIMEOUT_MS', async () => {
+    const timeoutMs = 5_000
+    const fetchFn = fakeFetch(hanging)
+    const exit = await runTest(drain(getBytes(url, MAX_RESPONSE_BYTES, timeoutMs), timeoutMs), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const { exit: inner, elapsedMs } = exit.value
+    assert.ok(Cause.isTimeoutError(failureOf(inner)))
+    assert.equal(elapsedMs, timeoutMs)
     assert.equal(fetchFn.calls[0].signal.aborted, true)
   })
 })

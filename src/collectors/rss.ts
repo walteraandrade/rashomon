@@ -1,6 +1,8 @@
 import { XMLParser } from 'fast-xml-parser'
+import { Effect } from 'effect'
+import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, RawDoc, Source } from '../types.js'
-import { headers, headerLength, overLimit, readCapped, MAX_RESPONSE_BYTES } from '../http.js'
+import { getBytes, runWithFetch } from '../http.js'
 import { decodeEntities, domainOf } from '../extract.js'
 
 // Politics sections where available; `content:encoded` feeds added for outlets that publish no politics section.
@@ -49,19 +51,20 @@ export const toDoc = (source: Source) => (item: any): RawDoc | null => {
   }
 }
 
-export const fetchFeed = (source: Source) => async (url: string): Promise<RawDoc[]> => {
-  const res = await fetch(url, { headers })
-  if (!res.ok) throw new Error(`${source} ${url} ${res.status}`)
+// One capped, timed GET (getBytes' REQUEST_TIMEOUT_MS default) plus the XML parse. No retry: a
+// stalled or oversize feed fails this feed alone, and Effect.forEach's default fail-fast
+// interrupts the sibling requests a caller ran alongside it.
+export const fetchFeed = (source: Source) => (url: string) =>
+  getBytes(url).pipe(
+    Effect.flatMap(({ status, body }) => {
+      if (status < 200 || status >= 300) return Effect.fail(new Error(`${source} ${url} ${status}`))
+      const xml = parser.parse(decode(body))
+      return Effect.succeed(asArray<any>(xml?.rss?.channel?.item).map(toDoc(source)).filter((d): d is RawDoc => d !== null))
+    }),
+  )
 
-  const declared = headerLength(res.headers.get('content-length'))
-  if (declared !== null && overLimit(declared, MAX_RESPONSE_BYTES)) {
-    throw new Error(`${source} ${url}: response too large (declared ${declared} bytes exceeds ${MAX_RESPONSE_BYTES})`)
-  }
-  const capped = await readCapped(res.body, MAX_RESPONSE_BYTES)
-  if (!capped.ok) throw new Error(`${source} ${url}: response too large (exceeded ${MAX_RESPONSE_BYTES} bytes while streaming)`)
+export const collect: Effect.Effect<RawDoc[], unknown, HttpClient.HttpClient> = Effect.forEach(feeds, fetchFeed('rss'), { concurrency: 'unbounded' }).pipe(
+  Effect.map((docs) => docs.flat()),
+)
 
-  const xml = parser.parse(decode(capped.data))
-  return asArray<any>(xml?.rss?.channel?.item).map(toDoc(source)).filter((d): d is RawDoc => d !== null)
-}
-
-export const rss: Collector = async () => (await Promise.all(feeds.map(fetchFeed('rss')))).flat()
+export const rss: Collector = () => runWithFetch(collect)

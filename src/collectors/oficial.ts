@@ -1,4 +1,7 @@
-import type { Collector } from '../types.js'
+import { Effect } from 'effect'
+import type { HttpClient } from 'effect/unstable/http'
+import type { Collector, RawDoc } from '../types.js'
+import { runWithFetch } from '../http.js'
 import { fetchFeed } from './rss.js'
 
 const feeds = [
@@ -8,4 +11,8 @@ const feeds = [
   'https://agenciabrasil.ebc.com.br/rss/politica/feed.xml',
 ]
 
-export const oficial: Collector = async () => (await Promise.all(feeds.map(fetchFeed('oficial')))).flat()
+export const collect: Effect.Effect<RawDoc[], unknown, HttpClient.HttpClient> = Effect.forEach(feeds, fetchFeed('oficial'), {
+  concurrency: 'unbounded',
+}).pipe(Effect.map((docs) => docs.flat()))
+
+export const oficial: Collector = () => runWithFetch(collect)

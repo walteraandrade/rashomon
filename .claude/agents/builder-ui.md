@@ -20,4 +20,4 @@ Kill your server when done.
 
 Check: no console errors, the new element renders with real data, the interaction described in the spec works, the page still works at 900px wide. Save screenshots to `/tmp/rashomon-shots/<issue>-<n>.png`.
 
-Commit small, English, imperative, no trailer lines. Return: files changed, what you verified with which screenshot, anything from the spec you could not do.
+Commit small, English, imperative, no trailer lines. Never push or open a pull request; the `release` role does that after the validator approves. Return: files changed, what you verified with which screenshot, anything from the spec you could not do.

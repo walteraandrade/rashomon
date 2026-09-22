@@ -1,73 +1,94 @@
+import { Console, Data, Effect, Option, Schema, Stream } from 'effect'
+import { HttpBody, HttpClient, HttpClientResponse, type HttpClientResponse as Response } from 'effect/unstable/http'
 import type { Collector, Person, RawDoc } from '../types.js'
-import { headers, sequential, sleep } from '../http.js'
+import { headers, REQUEST_TIMEOUT_MS, runWithFetch } from '../http.js'
 
 const publicHost = 'https://api.bsky.app'
 const authHost = 'https://bsky.social'
 const maxPages = 5
 const pauseMs = 1500
-// Same ceiling as slowGet in http.ts: a silent connection costs one page, not the whole run.
-const requestTimeoutMs = 45_000
 
-type Page = { posts: any[]; cursor?: string }
+const Post = Schema.Struct({
+  uri: Schema.String,
+  indexedAt: Schema.optional(Schema.String),
+  record: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String), createdAt: Schema.optional(Schema.String) })),
+  author: Schema.optional(Schema.Struct({ handle: Schema.optional(Schema.String) })),
+})
+type Post = typeof Post.Type
+
+const Page = Schema.Struct({ posts: Schema.Array(Post), cursor: Schema.optional(Schema.String) })
+const SessionBody = Schema.Struct({ accessJwt: Schema.String })
+
 type Session = { host: string; headers: Record<string, string>; pages: number; mode: string }
 
-const login = async (): Promise<Session> => {
+export class BlueskyError extends Data.TaggedError('BlueskyError')<{ status: number; message: string }> {}
+
+const publicSession: Session = { host: publicHost, headers, pages: 1, mode: 'public (no BSKY_HANDLE/BSKY_APP_PASSWORD)' }
+
+// Bluesky explains a refusal in the body; keep the head of it in the error, on one line.
+const refused = (label: string, res: Response.HttpClientResponse) =>
+  res.text.pipe(Effect.flatMap((text) => new BlueskyError({ status: res.status, message: `${label} ${res.status}: ${text.replace(/\s+/g, ' ').slice(0, 200)}` })))
+
+const ok = (res: Response.HttpClientResponse) => res.status >= 200 && res.status < 300
+
+const login = Effect.gen(function* () {
   const identifier = process.env.BSKY_HANDLE
   const password = process.env.BSKY_APP_PASSWORD
-  if (!identifier || !password) return { host: publicHost, headers, pages: 1, mode: 'public (no BSKY_HANDLE/BSKY_APP_PASSWORD)' }
-  const res = await fetch(`${authHost}/xrpc/com.atproto.server.createSession`, {
-    method: 'POST',
-    headers: { ...headers, 'content-type': 'application/json' },
-    body: JSON.stringify({ identifier, password }),
-    signal: AbortSignal.timeout(requestTimeoutMs),
+  if (!identifier || !password) return publicSession
+  const client = yield* HttpClient.HttpClient
+  const res = yield* client
+    .post(`${authHost}/xrpc/com.atproto.server.createSession`, { headers, body: HttpBody.jsonUnsafe({ identifier, password }) })
+    .pipe(Effect.timeout(REQUEST_TIMEOUT_MS))
+  if (!ok(res)) return yield* refused('bluesky login', res)
+  const { accessJwt } = yield* HttpClientResponse.schemaBodyJson(SessionBody)(res)
+  return { host: authHost, headers: { ...headers, authorization: `Bearer ${accessJwt}` }, pages: maxPages, mode: `authenticated as ${identifier}` } satisfies Session
+})
+
+const fetchPage = (s: Session, q: string, cursor: string | undefined) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient
+    const res = yield* client
+      .get(`${s.host}/xrpc/app.bsky.feed.searchPosts`, { headers: s.headers, urlParams: { q, lang: 'pt', limit: '100', ...(cursor ? { cursor } : {}) } })
+      .pipe(Effect.timeout(REQUEST_TIMEOUT_MS))
+    if (!ok(res)) return yield* refused('bluesky', res)
+    return yield* HttpClientResponse.schemaBodyJson(Page)(res)
   })
-  if (!res.ok) throw new Error(`bluesky login ${res.status}: ${(await res.text()).slice(0, 200)}`)
-  const { accessJwt } = (await res.json()) as { accessJwt: string }
-  return { host: authHost, headers: { ...headers, authorization: `Bearer ${accessJwt}` }, pages: maxPages, mode: `authenticated as ${identifier}` }
-}
 
-const fetchPage = async (s: Session, q: string, cursor?: string): Promise<Page> => {
-  const url = new URL(`${s.host}/xrpc/app.bsky.feed.searchPosts`)
-  url.searchParams.set('q', q)
-  url.searchParams.set('lang', 'pt')
-  url.searchParams.set('limit', '100')
-  if (cursor) url.searchParams.set('cursor', cursor)
-  const res = await fetch(url, { headers: s.headers, signal: AbortSignal.timeout(requestTimeoutMs) })
-  if (!res.ok) throw new Error(`bluesky ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`)
-  return res.json() as Promise<Page>
-}
-
-const toDoc = (p: any): RawDoc => ({
+const toDoc = (p: Post): RawDoc => ({
   source: 'bluesky',
   uri: p.uri,
   text: p.record?.text ?? '',
-  publishedAt: p.record?.createdAt ?? p.indexedAt,
+  publishedAt: p.record?.createdAt ?? p.indexedAt ?? '',
   domain: p.author?.handle,
 })
 
-const collectPerson = async (s: Session, person: Person, cursor?: string, left = s.pages): Promise<RawDoc[]> => {
-  if (left === 0) return []
-  const page = await fetchPage(s, person.name, cursor)
-  const docs = page.posts.map(toDoc)
-  if (!page.cursor || left === 1) return docs
-  await sleep(pauseMs)
-  return [...docs, ...(await collectPerson(s, person, page.cursor, left - 1))]
-}
+type Cursor = { cursor: string | undefined; left: number }
 
-const collectSafely = async (s: Session, person: Person): Promise<RawDoc[]> => {
-  try {
-    const docs = await collectPerson(s, person)
-    await sleep(pauseMs)
-    return docs
-  } catch (e) {
-    console.log(`[bluesky] ${person.name}: ${(e as Error).message}`)
-    await sleep(pauseMs * 4)
-    return []
-  }
-}
+// One person's pages, oldest request first: the pause sits before every page but the first,
+// so the last page never waits for nothing.
+const collectPerson = (s: Session, person: Person) =>
+  Stream.paginate({ cursor: undefined, left: s.pages } satisfies Cursor, ({ cursor, left }: Cursor) =>
+    Effect.gen(function* () {
+      if (cursor) yield* Effect.sleep(pauseMs)
+      const page = yield* fetchPage(s, person.name, cursor)
+      const next = page.cursor && left > 1 ? Option.some({ cursor: page.cursor, left: left - 1 }) : Option.none()
+      return [page.posts.map(toDoc), next] as const
+    }),
+  ).pipe(Stream.runCollect)
 
-export const bluesky: Collector = async (persons) => {
-  const session = await login()
-  console.log(`[bluesky] ${session.mode}, up to ${session.pages} page(s) per person`)
-  return (await sequential(persons, (p) => collectSafely(session, p))).flat()
-}
+// A person's failure costs that person's posts and a longer pause, never the run.
+const collectSafely = (s: Session, person: Person) =>
+  collectPerson(s, person).pipe(
+    Effect.tap(() => Effect.sleep(pauseMs)),
+    Effect.catch((e) => Console.log(`[bluesky] ${person.name}: ${e.message}`).pipe(Effect.andThen(Effect.sleep(pauseMs * 4)), Effect.as([] as RawDoc[]))),
+  )
+
+export const collect = (persons: Person[]) =>
+  Effect.gen(function* () {
+    const session = yield* login
+    yield* Console.log(`[bluesky] ${session.mode}, up to ${session.pages} page(s) per person`)
+    const docs = yield* Effect.forEach(persons, (p) => collectSafely(session, p))
+    return docs.flat()
+  })
+
+export const bluesky: Collector = (persons) => runWithFetch(collect(persons))

@@ -24,6 +24,7 @@ Which words stick to a Brazilian political figure, across Bluesky, Google News, 
 ## Layout
 
 - `src/collectors/*` one collector per source, same `Collector` signature.
+- `src/http.ts` is the Effect pilot's boundary (Effect 4 RC, `effect@4.0.0-rc.117`, pinned exact because the RC still renames APIs between builds). Inside it and `src/collectors/bluesky.ts` the code is Effect: `getBytes` is one capped GET on Effect's `HttpClient`, `fetchClient` the only layer (global fetch, trace-header propagation off), `runWithFetch` the one place an Effect becomes a Promise. Every other collector still gets the same Promise exports (`slowGet`, `sleep`, `sequential`, `readCapped`) and never imports `effect` itself; `Collector` stays `(persons) => Promise<RawDoc[]>`. Tests drive the collector through `test/effect.ts`: a stub `fetch` handed to `FetchHttpClient.Fetch`, `TestClock` for every pause and timeout, `TestConsole` for the log lines, so a 45 s timeout or a 6 s back-off costs the suite nothing. Whether the rest of the collector layer follows is an open decision, not a direction.
 - `src/extract.ts` normalization, hashtags, words, phrases, stopwords, person matching.
 - `src/phrases.ts` the collocation lexicon: staging every adjacent word pair, the count/stickiness floors, loading it back.
 - `src/store.ts` inserts docs and persons (shared by ingest and reindex).

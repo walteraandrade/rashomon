@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   STRIP_MAX_HEIGHT,
   STRIP_MIN_R,
@@ -41,7 +44,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { signed, termMask, type Compare, type CompareTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { signed, termMask, type Compare, type CompareTerm, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -157,7 +160,7 @@ describe("the person's own entry points to her documents", () => {
       drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'pmi', onChoose: () => {}, onShowPerson: () => calls.push('person') })
       assert.match(els.viewport.innerHTML, /<g class="center-label" data-person-docs role="button" tabindex="0"/)
       assert.equal(els.viewport.innerHTML.match(/data-person-docs/g)?.length, 1, 'exactly one centre, and it is the entry point')
-      assert.doesNotMatch(els.viewport.innerHTML, /class="word-button"[^>]*data-person-docs/, 'a word is never the person')
+      assert.doesNotMatch(els.viewport.innerHTML, /class="atlas-word"[^>]*data-person-docs/, 'a word is never the person')
       assert.equal(calls.length, 0, 'painting opens nothing on its own')
     })
   })
@@ -628,7 +631,7 @@ describe('paintRuler: the word itself is the mark (issue #99)', () => {
       assert.equal(overflowCount, 0)
       assert.doesNotMatch(html, /<circle/, 'no dot survives: the mark is the word')
       assert.equal([...html.matchAll(/<text class="ruler-text"/g)].length, 3)
-      for (const word of ['alckmin', 'rachadinha', '#bolsa']) assert.ok(html.includes(`>${word}</text>`), `${word} must be written on the ruler`)
+      for (const word of ['alckmin', 'rachadinha', '#bolsa']) assert.ok(html.includes(`>${word}</tspan>`), `${word} must be written on the ruler`)
     })
   })
 
@@ -1196,5 +1199,83 @@ describe('paintWeek and paintTermStrip keep their exported shape after the marks
     assert.equal(typeof paintWeekError, 'function')
     assert.equal(typeof paintTermStrip, 'function')
     assert.equal(typeof termStripLayout, 'function')
+  })
+})
+
+// Issue #174.
+describe('one class scheme, one rx source, one text shape for the three word marks', () => {
+  const root = dirname(dirname(fileURLToPath(import.meta.url)))
+  const renderSrc = readFileSync(join(root, 'src', 'ui', 'render.ts'), 'utf8')
+  const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+  const placedSample: PlacedTerm = { id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9 }
+
+  // The block-body finder for a class selector, tolerant of a rule declared with several
+  // comma-separated selectors (".ruler-glow, .week-glow { rx: 8px }" is how the spec's own
+  // example groups the shared value).
+  const ruleFor = (selector: string) => {
+    for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      const selectors = m[1].split(',').map((s) => s.trim())
+      if (selectors.includes(selector)) return m[2]
+    }
+    return ''
+  }
+  const rxOf = (selector: string) => {
+    const body = ruleFor(selector)
+    const found = body.match(/rx\s*:\s*([\d.]+)px/)
+    return found ? Number(found[1]) : undefined
+  }
+
+  it('render.ts carries no literal word-button, word-glow, word-hit or class="word" string', () => {
+    for (const literal of ['word-button', 'word-glow', 'word-hit', 'class="word"'])
+      assert.ok(!renderSrc.includes(literal), `render.ts must not contain ${JSON.stringify(literal)}`)
+  })
+
+  it('the atlas word markup uses atlas-word/atlas-glow/atlas-hit/atlas-text', () => {
+    const html = String(wordMarkup(placedSample, 'count', null))
+    assert.match(html, /<g class="atlas-word[^"]*"/)
+    assert.match(html, /<rect class="atlas-glow"/)
+    assert.match(html, /<rect class="atlas-hit"/)
+    assert.match(html, /<text class="atlas-text"/)
+  })
+
+  it('the map-svg.is-masked mask-and-underline rule still targets the atlas word class', () => {
+    assert.match(css, /\.map-svg\.is-masked \.atlas-word/)
+  })
+
+  it('no glow or hit rect emitted by any of the three builders carries an rx attribute', async () => {
+    const atlasHtml = String(wordMarkup(placedSample, 'count', null))
+    assert.doesNotMatch(atlasHtml, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
+    await withFiguresDom(async (els) => {
+      const terms: CompareTerm[] = [{ term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) }]
+      paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
+      assert.doesNotMatch(els.compareRuler.innerHTML, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
+    })
+    withFakeDocument(['weekChart', 'weekNote'], (els) => {
+      const buckets = [{ start: '2026-09-08T03:00:00.000Z', about: 5, terms: [{ term: 'reforma', kind: 'word', count: 3 }] }]
+      paintWeek({ data: { days: 7, tz: 'America/Sao_Paulo', buckets } as Week, metrics, selected: null, onPick: () => {} })
+      assert.doesNotMatch(els.weekChart.innerHTML, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
+    })
+  })
+
+  it('atlas.css sets rx on the six rules, at the same values the markup used to carry', () => {
+    assert.equal(rxOf('.atlas-glow'), 9)
+    assert.equal(rxOf('.atlas-hit'), 6)
+    assert.equal(rxOf('.ruler-glow'), 8)
+    assert.equal(rxOf('.ruler-hit'), 5)
+    assert.equal(rxOf('.week-glow'), 8)
+    assert.equal(rxOf('.week-hit'), 5)
+  })
+
+  it('the ruler wraps its word text in a single <tspan x="0" y="0">, like the atlas and the week', async () => {
+    await withFiguresDom(async (els) => {
+      const terms: CompareTerm[] = [{ term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) }]
+      paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
+      assert.match(els.compareRuler.innerHTML, /<text class="ruler-text"[^>]*><tspan x="0" y="0">alckmin<\/tspan><\/text>/)
+    })
+  })
+
+  it('marks.ts still exports only frame, axis and overflowList — no wordMark', async () => {
+    const marks = await import('../src/ui/marks.js')
+    assert.deepEqual(Object.keys(marks).sort(), ['axis', 'frame', 'overflowList'])
   })
 })

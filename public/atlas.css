@@ -279,12 +279,16 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .map-svg { display: block; width: var(--map-width, auto); height: auto; }
 /* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
    point of the graph. The family and weight are still fixed here, like everywhere else. */
-.map-svg .word { font-family: var(--mono); font-weight: 500; fill: var(--wc); font-size: var(--size); }
+.map-svg .atlas-text { font-family: var(--mono); font-weight: 500; fill: var(--wc); font-size: var(--size); }
 /* --wc is the word's own colour, resolved once per state on the group so the hit box can borrow
    it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
    nearly transparent, so it says "this one" without competing with what the colour means. */
-.word-button { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.word-glow, .word-hit { fill: transparent; }
+.atlas-word { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.atlas-glow { rx: 9px; }
+.atlas-hit { rx: 6px; }
+.ruler-glow, .week-glow { rx: 8px; }
+.ruler-hit, .week-hit { rx: 5px; }
+.atlas-glow, .atlas-hit { fill: transparent; }
 /* Under the cursor a ground; picked or matched, the same ground at twice the strength. Its edge
    is two shapes, not one: a core barely blurred (2px) and a wider penumbra behind it (7px). One
    uniformly blurred rectangle has no form -- it is fog, and fog has no boundary to read. Stacked,
@@ -294,24 +298,24 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    hard rectangle reappears for the length of the fade.
    The mark's own colour never changes either: painting a picked word --accent threw away the one
    thing the colour is there to say. */
-.word-glow, .ruler-glow { filter: blur(7px); transition: fill .16s ease-out; }
-.word-hit, .ruler-hit { filter: blur(2px); transition: fill .16s ease-out; }
+.atlas-glow, .ruler-glow { filter: blur(7px); transition: fill .16s ease-out; }
+.atlas-hit, .ruler-hit { filter: blur(2px); transition: fill .16s ease-out; }
 .center-hit, .dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
-.word-button:hover .word-glow, .word-button:focus-visible .word-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
-.word-button:hover .word-hit, .word-button:focus-visible .word-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
-.word-button.is-selected .word-glow, .word-button.is-match .word-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
-.word-button.is-selected .word-hit, .word-button.is-match .word-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.word-button.is-dim { opacity: .22; }
-.word-button.is-neighbor { --wc: var(--green); }
+.atlas-word:hover .atlas-glow, .atlas-word:focus-visible .atlas-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
+.atlas-word:hover .atlas-hit, .atlas-word:focus-visible .atlas-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
+.atlas-word.is-selected .atlas-glow, .atlas-word.is-match .atlas-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
+.atlas-word.is-selected .atlas-hit, .atlas-word.is-match .atlas-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
+.atlas-word.is-dim { opacity: .22; }
+.atlas-word.is-neighbor { --wc: var(--green); }
 /* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
    mask and gain the underline, so the relation stays visible without the green competing. So do
    hover, pick and search match: every one of them is drawn by the box, never by repainting the
    word, or the mask would go blank exactly on the word the reader is looking at. */
-.map-svg.is-masked .word-button, .map-svg.is-masked .word-button.is-neighbor { --wc: var(--mask, var(--muted)); }
-.map-svg.is-masked .word-button.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
+.map-svg.is-masked .atlas-word, .map-svg.is-masked .atlas-word.is-neighbor { --wc: var(--mask, var(--muted)); }
+.map-svg.is-masked .atlas-word.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
 .mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--hostile), color-mix(in srgb, var(--scale-mid) 50%, transparent), var(--favor)); }
 .underline { stroke: var(--wc, var(--accent)); stroke-width: 1.5; opacity: 0; }
-.word-button.is-selected .underline { opacity: 1; }
+.atlas-word.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
 /* The centre is the person's own entry to the documents, so it answers to the cursor the way a
    word does -- the same soft box, in the colour the name is already written in. */
@@ -467,7 +471,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 }
 @media (prefers-reduced-motion: reduce) {
   .docs-dialog[open] { animation: none; }
-  .word-glow, .word-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card { transition: none; }
+  .atlas-glow, .atlas-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card { transition: none; }
   .ghost-field { animation: none; }
 }
 .docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }

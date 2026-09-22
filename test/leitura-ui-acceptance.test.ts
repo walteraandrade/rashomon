@@ -105,7 +105,7 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     assert.match(css, /--mono:\s*'IBM Plex Mono'/)
     assert.match(css, /--display:\s*'IBM Plex Sans Condensed'/)
     assert.ok(FONT_MONO.startsWith("'IBM Plex Mono'"), 'canvas measurement must use the face the map is painted with')
-    assert.match(css, /\.map-svg \.word \{[^}]*var\(--mono\)/, 'the map paints words in the face layout.js measures them with')
+    assert.match(css, /\.map-svg \.atlas-text \{[^}]*var\(--mono\)/, 'the map paints words in the face layout.js measures them with')
     assert.ok(FONT_DISPLAY.startsWith("'IBM Plex Sans Condensed'"), 'the centre name is measured with the display face')
     // compare.html is gone (issue #91): the ruler now lives on design-5.html, already in this
     // loop, so the deleted page's own slot is dropped rather than replaced.

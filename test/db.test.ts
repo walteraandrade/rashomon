@@ -320,7 +320,7 @@ describe('maintenance stays out of the request path (issue #44)', () => {
   })
 })
 
-describe('db (issue #184)', () => {
+describe('db on the SqlClient layer', () => {
   before(seed)
 
   it('answers a trivial query through the PGlite layer, on memory://', async () => {

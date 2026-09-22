@@ -119,6 +119,10 @@ while truncate holds it at 32.1 MB across any number of runs. That is why no vac
 `pnpm purge` is the opposite case — a permanent deletion whose pages are never refilled — so it runs
 `vacuum full` on the tables it emptied, as `purge orphan-terms` already did. Neither ever runs from a
 request: like `analyze`, both belong to the process that owns `DATA_DIR`, with the server stopped.
+On a managed database every maintenance statement (`analyze`, `truncate`, `vacuum full`) now travels
+over `@effect/sql-pg`'s extended-query protocol, unprepared; PostgreSQL accepts `vacuum` there as the
+sole statement of its implicit block, but this path is unverified against the real server and is
+part of the manual round that gates the Effect db PR (issue #184), not of the test suite.
 
 **Measuring it.** `pnpm bench:writes` builds a deterministic synthetic corpus (the same
 `src/bench-corpus.ts` as `pnpm bench`) in its own `DATA_DIR`, then reports statements sent to PGlite,

@@ -23,8 +23,8 @@ export const clampEnv = (v: string | undefined, d: number, lo: number, hi: numbe
 // sslmode stripped (would override ssl option). Non-local connections are verified against
 // PG_SSL_CA (the server's CA certificate, added to Node's default trust store). Without it,
 // poolConfig refuses to build a config rather than connect with an unverified chain.
-// Returns both `@effect/sql-pg`'s PgPoolConfig fields (url, maxConnections, connectTimeout) and
-// pg's own (connectionString, connectionTimeoutMillis), so src/push.ts's `new pg.Pool(poolConfig(url))` still works.
+// Also carries pg's connectionString/connectionTimeoutMillis for src/push.ts's one-shot pool,
+// which sets its own `max` (pg ignores maxConnections).
 export const poolConfig = (url: string) => {
   const parsed = new URL(url)
   parsed.searchParams.delete('sslmode')
@@ -49,23 +49,17 @@ export const poolConfig = (url: string) => {
 // DATABASE_URL / POSTGRES_URL wins over embedded PGlite; 'memory://' for tests.
 const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
 
-// Internal wiring; no module outside this file reaches into DbLayer or the runtime it builds.
 const DbLayer: Layer.Layer<SqlClient.SqlClient, SqlError.SqlError> = url
   ? PgClient.layer(poolConfig(url))
   : PgliteClient.layer({ dataDir: process.env.DATA_DIR ?? './data/pg' })
 
-// Built once at module load, mirroring the eager pool/PGlite construction this replaces.
 const runtime = ManagedRuntime.make(DbLayer)
 
-// An open inTransaction leaves its live Effect context here for its callback's duration, so a
-// plain db.query/db.exec call made inside it runs on that transaction's own connection instead
-// of the pool/PGlite's top-level one. Module-private to db.ts/store.ts.
+// An open inTransaction leaves its Effect context here for its callback's duration, so a plain
+// db.query/db.exec made inside it runs on that transaction's connection, not the top-level one.
 const txContext = new AsyncLocalStorage<Context.Context<SqlClient.SqlClient>>()
 
-// Runs an Effect requiring SqlClient.SqlClient to a Promise, joining any already-open
-// inTransaction the same way db.query/db.exec do. store.ts's *Effect writers are run through
-// this, both by tests exercising them directly and, where a Promise counterpart chooses to,
-// by that counterpart itself.
+// Effect to Promise, joining an open inTransaction the way db.query/db.exec do.
 export const runSql = <A>(effect: Effect.Effect<A, SqlError.SqlError, SqlClient.SqlClient>): Promise<A> => {
   const ctx = txContext.getStore()
   return ctx ? Effect.runPromiseWith(ctx)(effect) : runtime.runPromise(effect)
@@ -79,9 +73,8 @@ const runStatement = <A extends object>(text: string, params: readonly unknown[]
 
 const execute = <A extends object>(text: string, params?: readonly unknown[]): Promise<readonly A[]> => runSql(runStatement<A>(text, params))
 
-// store.ts's inTransaction, re-exported there: begins, or nested, savepoints, a real transaction
-// via sql.withTransaction, and runs `fn` with its context set in txContext so every db.query/db.exec
-// call it makes -- directly or through a store.ts writer -- joins it.
+// store.ts's inTransaction: a real transaction via sql.withTransaction (a nested call is a
+// savepoint), with `fn` run under txContext so every db.query/db.exec inside it joins.
 export const runInTransaction = <T>(fn: () => Promise<T>): Promise<T> => {
   const body = Effect.gen(function* () {
     const ctx = yield* Effect.context<SqlClient.SqlClient>()
@@ -198,8 +191,7 @@ export const schema = `
     );
 `
 
-// The extended query protocol behind sql.unsafe parses one statement per call, unlike the
-// pg/PGlite exec() this replaces, which ran the whole semicolon-separated script at once.
+// sql.unsafe parses one statement per call, unlike the exec() it replaces.
 const schemaStatements = schema
   .split(';')
   .map((s) => s.trim())

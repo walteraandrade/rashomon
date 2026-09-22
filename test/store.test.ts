@@ -481,7 +481,7 @@ describe('docs.text is capped at write time (issue #128)', () => {
 })
 
 // db.ts's real transaction (sql.withTransaction) and the savepoint nesting it gives inTransaction.
-describe('inTransaction nesting (issue #184)', () => {
+describe('inTransaction nesting: savepoints, not a second begin', () => {
   before(seed)
 
   const uriOf = (name: string) => `https://example.org/tx-${name}`
@@ -540,10 +540,10 @@ describe('inTransaction nesting (issue #184)', () => {
   })
 })
 
-// Parity between the Promise writers and their Effect-native counterparts (issue #184): each pair
+// Parity between the Promise writers and their Effect-native counterparts: each pair
 // is run against a disjoint set of rows so both can be asserted in the same test file, and the
 // last case leaves persons back at exactly the fixture's own list.
-describe('Effect-native writers write the same rows as their Promise counterparts (issue #184)', () => {
+describe('Effect-native writers write the same rows as their Promise counterparts', () => {
   before(seed)
 
   it('upsertPersonsEffect writes the same person row as upsertPersons', async () => {
@@ -609,6 +609,27 @@ describe('Effect-native writers write the same rows as their Promise counterpart
       }
     }
     assert.deepEqual(await rowsFor('promise'), await rowsFor('effect'))
+  })
+
+  it('both paths keep the tone rule: a gkg tone is stored, a tone on any other source is null, and domain travels', async () => {
+    const mk = (path: string, source: 'gkg' | 'rss', tone: number) => ({
+      source,
+      uri: `https://example.org/tone-${path}`,
+      text: 'Lula fala sobre a reforma',
+      publishedAt: new Date().toISOString(),
+      domain: 'example.org',
+      tone,
+    })
+    await insertDoc(mk('gkg-promise', 'gkg', 2.5), persons)
+    await runSql(insertDocEffect(mk('gkg-effect', 'gkg', 2.5), persons))
+    await insertDoc(mk('rss-promise', 'rss', 42), persons)
+    await runSql(insertDocEffect(mk('rss-effect', 'rss', 42), persons))
+    const stored = async (path: string) =>
+      (await db.query<{ source: string; tone: number | null; domain: string | null }>(`select source, tone, domain from docs where uri = $1`, [`https://example.org/tone-${path}`])).rows[0]
+    assert.deepEqual(await stored('gkg-promise'), { source: 'gkg', tone: 2.5, domain: 'example.org' })
+    assert.deepEqual(await stored('gkg-effect'), await stored('gkg-promise'))
+    assert.deepEqual(await stored('rss-promise'), { source: 'rss', tone: null, domain: 'example.org' })
+    assert.deepEqual(await stored('rss-effect'), await stored('rss-promise'))
   })
 
   it('insertDocsEffect writes the same totals and rows as insertDocs for equivalent documents', async () => {
@@ -695,7 +716,7 @@ describe('Effect-native writers write the same rows as their Promise counterpart
   })
 })
 
-describe('an Effect writer fails with a catchable SqlError, not a flattened rejected Promise (issue #184, AC14)', () => {
+describe('an Effect writer fails with a catchable SqlError, not a flattened rejected Promise', () => {
   before(seed)
 
   it('insertDocEffect on a genuine SQL failure (a foreign-key violation) can be caught with Effect.catchTag("SqlError", ...)', async () => {

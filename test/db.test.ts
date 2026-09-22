@@ -112,7 +112,7 @@ describe('poolConfig', () => {
     })
   })
 
-  it('importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset', () => {
+  it('importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset (poolConfig stays pure/synchronous, never opening a socket)', () => {
     // This test file already imports src/db.ts above, under the test environment's
     // DATA_DIR=memory:// with no DATABASE_URL/POSTGRES_URL. That import already happened
     // without throwing (or the whole suite would already have failed to start), regardless
@@ -334,5 +334,64 @@ describe('db (issue #184)', () => {
     assert.equal(child.status, 0, child.stderr)
     const shape = JSON.parse(child.stdout.trim().split('\n').pop() as string) as { query: string; exec: string; close: string }
     assert.deepEqual(shape, { query: 'function', exec: 'function', close: 'function' })
+  })
+
+  it('no code path in src/db.ts imports pg for the remote driver; the remote layer is built from poolConfig through @effect/sql-pg', () => {
+    const src = readRepoFile('src/db.ts')
+    assert.doesNotMatch(src, /from ['"]pg['"]/, 'src/db.ts must never import the pg driver')
+    assert.match(src, /@effect\/sql-pg/)
+    assert.match(src, /PgClient\.layer\(poolConfig\(url\)\)/)
+  })
+
+  it('every current importer still reaches db.ts through the same relative import path', () => {
+    const importers = [
+      ['graph.ts', './db.js'],
+      ['aggregate.ts', './db.js'],
+      ['server.ts', './db.js'],
+      ['phrases.ts', './db.js'],
+      ['reindex.ts', './db.js'],
+      ['purge.ts', './db.js'],
+      ['push.ts', './db.js'],
+      ['score.ts', './db.js'],
+      ['export-docs.ts', './db.js'],
+      ['migrate.ts', './db.js'],
+      ['collectors/gkg.ts', '../db.js'],
+    ] as const
+    for (const [file, path] of importers) {
+      const src = readRepoFile(`src/${file}`)
+      assert.match(src, new RegExp(`from ['"]${path.replace('.', '\\.')}['"]`), `${file} must still import from ${path}`)
+    }
+  })
+
+  it('a db.query/db.exec call made with no open inTransaction runs outside any transaction (a later failing statement does not roll it back)', async () => {
+    const uri = 'https://example.org/bare-write-outside-transaction'
+    await db.query(`insert into docs (source, uri, text, published_at) values ('rss', $1, 'x', now())`, [uri])
+    await assert.rejects(() => db.query(`select * from a_table_that_does_not_exist`))
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uri])
+    assert.equal(rows[0].n, 1, 'the earlier bare write must still be there: it was never part of a transaction with the failing statement')
+  })
+
+  it('the docs state driver selection follows DATABASE_URL/POSTGRES_URL between embedded PGlite and a managed Postgres client, and the pool defaults to 3, clamped 1..20 via PG_POOL_MAX', () => {
+    assert.match(docsText, /DATABASE_URL.{0,40}POSTGRES_URL|POSTGRES_URL.{0,40}DATABASE_URL/)
+    assert.match(docsText, /embedded PGlite/i)
+    assert.match(docsText, /managed Postgres/i)
+    assert.match(docsText, /PG_POOL_MAX[\s\S]{0,200}\b3\b/)
+    assert.match(docsText, /PG_POOL_MAX[\s\S]{0,200}1\.\.20|1\.\.20[\s\S]{0,200}PG_POOL_MAX/)
+  })
+
+  it('CLAUDE.md states a transaction is always opened through inTransaction or sql.withTransaction, never a raw begin/commit/rollback string', () => {
+    const claude = readRepoFile('CLAUDE.md')
+    assert.match(claude, /inTransaction/)
+    assert.match(claude, /sql\.withTransaction/)
+    assert.match(claude, /never a raw.{0,20}begin.{0,20}commit.{0,20}rollback/)
+  })
+
+  it('package.json pins @effect/sql-pglite and @effect/sql-pg to effect\'s own 4.0.0-rc.117, and keeps pg / @types/pg', () => {
+    const pkg = JSON.parse(readRepoFile('package.json')) as { dependencies: Record<string, string>; devDependencies?: Record<string, string> }
+    assert.equal(pkg.dependencies.effect, '4.0.0-rc.117')
+    assert.equal(pkg.dependencies['@effect/sql-pglite'], '4.0.0-rc.117')
+    assert.equal(pkg.dependencies['@effect/sql-pg'], '4.0.0-rc.117')
+    assert.ok(pkg.dependencies.pg, 'pg must remain listed: src/push.ts still imports it directly')
+    assert.ok(pkg.devDependencies?.['@types/pg'] ?? pkg.dependencies['@types/pg'], '@types/pg must remain listed')
   })
 })

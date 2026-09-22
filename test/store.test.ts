@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { after, describe, it, before } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { db, migrate, runSql } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import {
@@ -486,6 +488,13 @@ describe('inTransaction nesting (issue #184)', () => {
   const uriOf = (name: string) => `https://example.org/tx-${name}`
   const docNamed = (name: string) => ({ source: 'rss' as const, uri: uriOf(name), text: 'Lula fala sobre a reforma', publishedAt: new Date().toISOString() })
   const exists = async (name: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uriOf(name)])).rows[0].n > 0
+
+  it('inTransaction keeps its <T>(fn: () => Promise<T>) => Promise<T> signature, and store.ts holds no module-level open flag', async () => {
+    const result = await inTransaction(async () => 42)
+    assert.equal(result, 42)
+    const src = readFileSync(fileURLToPath(new URL('../src/store.ts', import.meta.url)), 'utf8')
+    assert.doesNotMatch(src, /^\s*let\s+open\b/m, 'store.ts must not hold a module-level open flag')
+  })
 
   it('a nested transaction that throws and is caught rolls back only its own writes', async () => {
     const sentinel = new Error('inner rollback')

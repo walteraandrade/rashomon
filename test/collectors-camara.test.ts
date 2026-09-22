@@ -1,84 +1,113 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { camara } from '../src/collectors/camara.js'
+import { describe, it } from 'node:test'
+import { Effect, Exit, Fiber } from 'effect'
+import { TestConsole } from 'effect/testing'
+import { camara, collect } from '../src/collectors/camara.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
 import type { Person } from '../src/types.js'
+import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
 
-const readRepoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${relPath}`, import.meta.url)), 'utf8')
+const readRepoFile = (relPath: string) => readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8')
 
-// Issue #24. AC1 (Source/Person types include 'camara'/camaraId?) is a compile-time criterion
-// covered by pnpm typecheck. The write path (tone null, the fixture doc's tag) is in
-// test/store.test.ts, the parsers in test/query.test.ts, the docs in test/docs-drift.test.ts and
-// the segmented control in test/figures-atlas.test.ts.
+const dep = (id: string, camaraId: string): Person => ({ id, name: id, aliases: [id], camaraId })
 
-describe('camara collector — AC2', () => {
-  const src = readRepoFile('src/collectors/camara.ts')
-
-  it('built only from sequential/sleep/slowGet in src/http.ts, no bespoke fetch or setTimeout retry', () => {
-    assert.match(src, /from '\.\.\/http\.js'/)
-    assert.match(src, /\bsequential\(/)
-    assert.match(src, /\bsleep\(/)
-    assert.match(src, /\bslowGet\(/)
-    assert.doesNotMatch(src, /\bfetch\(/)
-    assert.doesNotMatch(src, /\bsetTimeout\(/)
-  })
-
+describe('camara collector', () => {
   it('exports camara as an async (persons: Person[]) => Promise<RawDoc[]>', async () => {
     const result = camara([])
     assert.ok(result instanceof Promise)
     assert.deepEqual(await result, [])
   })
-})
 
-describe('camara collector — AC3', () => {
-  it('a person without camaraId produces zero HTTP requests and zero thrown/logged errors', async () => {
+  it('a person without camaraId produces zero HTTP requests and zero log lines', async () => {
     const noCamaraId: Person = { id: 'sem-camara', name: 'Sem Câmara', aliases: ['Sem Câmara'] }
-    const errors: unknown[] = []
-    const logs: unknown[] = []
-    const originalError = console.error
-    const originalLog = console.log
-    console.error = (...args: unknown[]) => errors.push(args)
-    console.log = (...args: unknown[]) => logs.push(args)
-    let result: unknown
-    try {
-      result = await camara([noCamaraId])
-    } finally {
-      console.error = originalError
-      console.log = originalLog
-    }
-    assert.deepEqual(result, [])
-    assert.deepEqual(errors, [])
-    assert.deepEqual(logs, [])
+    const fetchFn = fakeFetch(() => {
+      throw new Error('must never be called')
+    })
+    const docs = await runProgram(collect([noCamaraId]), fetchFn)
+    assert.deepEqual(docs, [])
+    assert.equal(fetchFn.calls.length, 0)
   })
-})
 
-describe('camara collector — AC4', () => {
-  const src = readRepoFile('src/collectors/camara.ts')
-
-  it('the RawDoc literal the collector returns always sets source: "camara" and never sets tone', () => {
-    assert.match(src, /source:\s*'camara'/)
-    assert.doesNotMatch(src, /\btone\s*:/)
-  })
-})
-
-// Issue #24 shipped camara opt-in because no rate limit had been measured, only assumed;
-// four unpaced requests to the live endpoint answered 200 in 490-730ms, so the collector
-// now joins the default set like senado. It keeps its 429/5xx backoff, which senado lacks.
-describe('camara collector — AC5', () => {
   it('collectors registers camara and defaultSources includes it', () => {
     assert.equal(typeof collectors.camara, 'function')
     assert.ok(defaultSources.includes('camara'), 'camara must be a default, not opt-in, source')
   })
-})
-
-describe('camara collector — AC11', () => {
-  const seedData = JSON.parse(readRepoFile('seed.json')) as Array<{ id: string; camaraId?: string }>
 
   it('camaraId is set only on the verified sitting/former deputies, each a numeric id', () => {
+    const seedData = JSON.parse(readRepoFile('seed.json')) as Array<{ id: string; camaraId?: string }>
     const withId = seedData.filter((p) => p.camaraId).map((p) => p.id).sort()
     assert.deepEqual(withId, ['bolsonaro', 'eduardo-bolsonaro', 'hugo-motta', 'nikolas'].sort())
     for (const p of seedData) if (p.camaraId) assert.match(p.camaraId, /^\d+$/)
+  })
+
+  it('every mapped RawDoc carries source: "camara" and never a tone', async () => {
+    const person = dep('dep', '123')
+    const fetchFn = fakeFetch(() => json({ dados: [{ dataHoraInicio: '2026-07-01T10:00:00', sumario: 'fala' }] }))
+    const exit = await runTest(drain(collect([person]), 1_000), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.exit))
+    const docs = exit.value.exit.value
+    assert.equal(docs.length, 1)
+    assert.equal(docs[0].source, 'camara')
+    assert.equal('tone' in docs[0], false)
+  })
+
+  describe('retry timing', () => {
+    it('429 then 500 then 200 makes exactly three requests, waiting 4 000ms then 8 000ms between them', async () => {
+      const person = dep('dep', '123')
+      let n = 0
+      const fetchFn = fakeFetch(() => {
+        n++
+        if (n === 1) return new Response('rate limited', { status: 429 })
+        if (n === 2) return new Response('server error', { status: 500 })
+        return json({ dados: [] })
+      })
+      const program = Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(collect([person]))
+        yield* tick()
+        assert.equal(fetchFn.calls.length, 1, 'the first attempt fires immediately')
+
+        yield* tick(3_999)
+        assert.equal(fetchFn.calls.length, 1, 'must not retry before 4 000ms have passed')
+        yield* tick(1)
+        assert.equal(fetchFn.calls.length, 2, 'retries at exactly 4 000ms')
+
+        yield* tick(7_999)
+        assert.equal(fetchFn.calls.length, 2, 'must not retry before a further 8 000ms have passed')
+        yield* tick(1)
+        assert.equal(fetchFn.calls.length, 3, 'retries at exactly a further 8 000ms')
+
+        yield* tick(2_000) // drains the final pacing pause so the fiber settles
+        return yield* Fiber.await(fiber)
+      })
+      const exit = await runProgram(program, fetchFn)
+      assert.ok(Exit.isSuccess(exit))
+    })
+
+    it('a fourth consecutive 429 fails that person, logged, and the next person still gets its own request', async () => {
+      const a = dep('a', '111')
+      const b = dep('b', '222')
+      const fetchFn = fakeFetch((c) => (c.url.pathname.includes('/111/') ? new Response('slow down', { status: 429 }) : json({ dados: [] })))
+      const program = Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(collect([a, b]))
+        yield* tick()
+        yield* tick(4_000)
+        yield* tick(8_000)
+        yield* tick(12_000)
+        yield* tick(2_000)
+        const inner = yield* Fiber.await(fiber)
+        const errors = yield* TestConsole.errorLines
+        return { inner, errors: errors.map(String) }
+      })
+      const { inner, errors } = await runProgram(program, fetchFn)
+      assert.ok(Exit.isSuccess(inner))
+      const aCalls = fetchFn.calls.filter((c) => c.url.pathname.includes('/111/'))
+      assert.equal(aCalls.length, 4, 'a: one initial attempt plus three retries, then gives up')
+      const bCalls = fetchFn.calls.filter((c) => c.url.pathname.includes('/222/'))
+      assert.equal(bCalls.length, 1, 'b still gets its own request after a fails')
+      assert.equal(errors.length, 1)
+      assert.match(errors[0], /^\[camara\] a: camara 429:/)
+    })
   })
 })

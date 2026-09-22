@@ -112,6 +112,16 @@ describe('documented facts per collector', () => {
     assert.match(docsText, /distinct from|not.*REQUEST_TIMEOUT_MS|different from/i, 'the docs must say the two timeouts are distinct')
   })
 
+  // Issue #183, AC15: the download timeout is documented as its own ceiling, separate from the
+  // byte caps (MAX_RESPONSE_BYTES/MAX_EXPANDED_BYTES), not merely distinct from REQUEST_TIMEOUT_MS.
+  it('states the gkg download timeout is independent of the byte caps, not only of REQUEST_TIMEOUT_MS', () => {
+    assert.match(
+      docsText,
+      /distinct from both `?REQUEST_TIMEOUT_MS`?\s+and\s+the\s+`?MAX_RESPONSE_BYTES`?\/`?MAX_EXPANDED_BYTES`?\s+byte caps|three independent ends/i,
+      'the docs must state the download timeout is a ceiling separate from both byte caps, not only from REQUEST_TIMEOUT_MS',
+    )
+  })
+
   it('every collector\'s network read is timeout-bounded, not only gdelt/camara/senado/bluesky', () => {
     assert.match(docsText, /every collector's network read is.{0,20}timeout-bounded/i)
   })

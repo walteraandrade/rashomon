@@ -1,3 +1,4 @@
+import { Effect } from 'effect'
 import assert from 'node:assert/strict'
 import { after, describe, it, before } from 'node:test'
 import { db, migrate, runSql } from '../src/db.js'
@@ -691,5 +692,18 @@ describe('Effect-native writers write the same rows as their Promise counterpart
     assert.equal((await derivedCounts(byEffect.uris[0]))?.persons, 1)
     assert.equal((await derivedCounts(byPromise.uris[2]))?.persons, 1)
     assert.equal((await derivedCounts(byEffect.uris[2]))?.persons, 1)
+  })
+})
+
+describe('an Effect writer fails with a catchable SqlError, not a flattened rejected Promise (issue #184, AC14)', () => {
+  before(seed)
+
+  it('insertDocEffect on a genuine SQL failure (a foreign-key violation) can be caught with Effect.catchTag("SqlError", ...)', async () => {
+    const phantom = untrackedPerson('sql-error-catchtag')
+    const doc = { source: 'rss' as const, uri: 'https://example.org/sql-error-catchtag', text: `${phantom.name} fala sobre a reforma`, publishedAt: now() }
+    const result = await runSql(Effect.catchTag(insertDocEffect(doc, [phantom]), 'SqlError', () => Effect.succeed('caught' as const)))
+    assert.equal(result, 'caught')
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [doc.uri])
+    assert.equal(rows[0].n, 0, 'the failed transaction must not leave the docs row behind')
   })
 })

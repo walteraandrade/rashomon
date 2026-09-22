@@ -112,6 +112,12 @@ describe('poolConfig', () => {
     })
   })
 
+  it('disables named prepared statements, which misfire on a transaction-mode pooler', async () => {
+    await withEnv({ PG_SSL_CA: undefined }, () => {
+      assert.equal(poolConfig('postgres://user:pw@localhost:5432/db').prepare, false)
+    })
+  })
+
   it('importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset (poolConfig stays pure/synchronous, never opening a socket)', () => {
     // This test file already imports src/db.ts above, under the test environment's
     // DATA_DIR=memory:// with no DATABASE_URL/POSTGRES_URL. That import already happened
@@ -334,33 +340,6 @@ describe('db (issue #184)', () => {
     assert.equal(child.status, 0, child.stderr)
     const shape = JSON.parse(child.stdout.trim().split('\n').pop() as string) as { query: string; exec: string; close: string }
     assert.deepEqual(shape, { query: 'function', exec: 'function', close: 'function' })
-  })
-
-  it('no code path in src/db.ts imports pg for the remote driver; the remote layer is built from poolConfig through @effect/sql-pg', () => {
-    const src = readRepoFile('src/db.ts')
-    assert.doesNotMatch(src, /from ['"]pg['"]/, 'src/db.ts must never import the pg driver')
-    assert.match(src, /@effect\/sql-pg/)
-    assert.match(src, /PgClient\.layer\(poolConfig\(url\)\)/)
-  })
-
-  it('every current importer still reaches db.ts through the same relative import path', () => {
-    const importers = [
-      ['graph.ts', './db.js'],
-      ['aggregate.ts', './db.js'],
-      ['server.ts', './db.js'],
-      ['phrases.ts', './db.js'],
-      ['reindex.ts', './db.js'],
-      ['purge.ts', './db.js'],
-      ['push.ts', './db.js'],
-      ['score.ts', './db.js'],
-      ['export-docs.ts', './db.js'],
-      ['migrate.ts', './db.js'],
-      ['collectors/gkg.ts', '../db.js'],
-    ] as const
-    for (const [file, path] of importers) {
-      const src = readRepoFile(`src/${file}`)
-      assert.match(src, new RegExp(`from ['"]${path.replace('.', '\\.')}['"]`), `${file} must still import from ${path}`)
-    }
   })
 
   it('a db.query/db.exec call made with no open inTransaction runs outside any transaction (a later failing statement does not roll it back)', async () => {

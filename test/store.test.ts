@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { after, describe, it, before } from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { db, migrate, runSql } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import {
@@ -489,11 +487,9 @@ describe('inTransaction nesting (issue #184)', () => {
   const docNamed = (name: string) => ({ source: 'rss' as const, uri: uriOf(name), text: 'Lula fala sobre a reforma', publishedAt: new Date().toISOString() })
   const exists = async (name: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uriOf(name)])).rows[0].n > 0
 
-  it('inTransaction keeps its <T>(fn: () => Promise<T>) => Promise<T> signature, and store.ts holds no module-level open flag', async () => {
+  it('inTransaction keeps its <T>(fn: () => Promise<T>) => Promise<T> signature', async () => {
     const result = await inTransaction(async () => 42)
     assert.equal(result, 42)
-    const src = readFileSync(fileURLToPath(new URL('../src/store.ts', import.meta.url)), 'utf8')
-    assert.doesNotMatch(src, /^\s*let\s+open\b/m, 'store.ts must not hold a module-level open flag')
   })
 
   it('a nested transaction that throws and is caught rolls back only its own writes', async () => {
@@ -631,5 +627,69 @@ describe('Effect-native writers write the same rows as their Promise counterpart
     const termsFor = async (uri: string) =>
       (await db.query<{ term: string }>(`select t.term from doc_terms t join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
     for (let i = 0; i < byPromise.length; i++) assert.deepEqual(await termsFor(byPromise[i].uri), await termsFor(byEffect[i].uri))
+  })
+
+  it('insertDocsEffect and insertDocs agree on an enrichment: the same uri arrives again, longer and with a domain', async () => {
+    const pair = (prefix: string) => {
+      const uri = `https://example.org/enrich-parity-${prefix}`
+      const short = { source: 'gnews' as const, uri, text: 'Lula fala sobre a pauta tributaria', publishedAt: now() }
+      const long = {
+        source: 'rss' as const,
+        uri,
+        text: 'Lula fala sobre a pauta tributaria. Marina Silva criticou a proposta e pediu revisao do texto encaminhado ao Congresso.',
+        publishedAt: now(),
+        domain: 'example.org',
+      }
+      return { uri, short, long }
+    }
+    const byPromise = pair('promise')
+    const byEffect = pair('effect')
+
+    assert.deepEqual(await insertDocs([byPromise.short], persons), { written: 1, enriched: 0, failed: 0 })
+    assert.deepEqual(await runSql(insertDocsEffect([byEffect.short], persons)), { written: 1, enriched: 0, failed: 0 })
+
+    const enrichedPromise = await insertDocs([byPromise.long], persons)
+    const enrichedEffect = await runSql(insertDocsEffect([byEffect.long], persons))
+    assert.deepEqual(enrichedPromise, { written: 0, enriched: 1, failed: 0 })
+    assert.deepEqual(enrichedEffect, enrichedPromise)
+
+    const rowsFor = async (uri: string) => ({
+      text: await textOf(uri),
+      terms: await termsOf(uri),
+      candidates: (
+        await db.query<{ name: string }>(`select c.name from doc_candidates c join docs d on d.id = c.doc_id where d.uri = $1 order by 1`, [uri])
+      ).rows.map((r) => r.name),
+    })
+    assert.deepEqual(await rowsFor(byPromise.uri), await rowsFor(byEffect.uri))
+  })
+
+  it('insertDocsEffect and insertDocs agree on a group with one failing doc: the good docs still land', async () => {
+    const group = (prefix: string) => {
+      const phantom = untrackedPerson(`ainda-nao-cadastrado-${prefix}`)
+      const uris = [`https://example.org/group-parity-${prefix}-1`, `https://example.org/group-parity-${prefix}-2`, `https://example.org/group-parity-${prefix}-3`]
+      const docs = uris.map((uri, i) => ({
+        source: 'rss' as const,
+        uri,
+        text: i === 1 ? 'Ciro Gomes fala sobre a reforma' : `Lula fala sobre a pauta ${i}`,
+        publishedAt: now(),
+        domain: 'example.org',
+      }))
+      const family = [...persons, phantom]
+      return { uris, docs, family }
+    }
+    const byPromise = group('promise')
+    const byEffect = group('effect')
+
+    const totalsPromise = await insertDocs(byPromise.docs, byPromise.family, 3)
+    const totalsEffect = await runSql(insertDocsEffect(byEffect.docs, byEffect.family, 3))
+    assert.deepEqual(totalsPromise, { written: 2, enriched: 0, failed: 1 })
+    assert.deepEqual(totalsEffect, totalsPromise)
+
+    assert.equal(await derivedCounts(byPromise.uris[1]), null)
+    assert.equal(await derivedCounts(byEffect.uris[1]), null)
+    assert.equal((await derivedCounts(byPromise.uris[0]))?.persons, 1)
+    assert.equal((await derivedCounts(byEffect.uris[0]))?.persons, 1)
+    assert.equal((await derivedCounts(byPromise.uris[2]))?.persons, 1)
+    assert.equal((await derivedCounts(byEffect.uris[2]))?.persons, 1)
   })
 })

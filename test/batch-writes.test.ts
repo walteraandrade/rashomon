@@ -49,10 +49,13 @@ describe('bounded write batches (issue #50)', () => {
     assert.equal(await statements(() => writeDerived([], 500)), 0)
   })
 
-  it('spends one transaction and a handful of statements per group of documents', async () => {
+  it('spends a handful of statements per group of documents, not one per row', async () => {
     // 4 upserts + 1 doc_persons batch + 1 doc_terms batch. The transaction itself (begin/commit,
     // or a savepoint for a nested one) runs through the SqlClient driver's own connection, not
-    // through db.exec, so it never reaches this counter.
+    // through db.exec, so it never reaches this counter. Coverage that insertDocs still spends
+    // one transaction per group -- a failing group rolls back without disturbing another group's
+    // writes -- lives behaviourally in test/store.test.ts ("insertDocs groups documents into
+    // bounded transactions", "insertDocsEffect and insertDocs agree on a group with one failing doc").
     assert.equal(await statements(() => insertDocs(docs(4, 'group'), persons, 4)), 6)
     // Same documents with the row bound at 1, which is what the old per-row path cost:
     // 4 upserts + 4 person rows + 8 term rows.
@@ -60,6 +63,24 @@ describe('bounded write batches (issue #50)', () => {
     const unbatched = await statements(() => insertDocs(docs(4, 'unbatched'), persons, 4))
     delete process.env.WRITE_BATCH_ROWS
     assert.equal(unbatched, 16)
+  })
+
+  it('a failing group rolls back its own transaction only: an untouched group before and after it still lands whole', async () => {
+    const phantom = { id: 'ainda-nao-cadastrado-batch', name: 'Ciro Gomes', aliases: ['Ciro Gomes'] }
+    const groupOf = (prefix: string, bad: boolean) => [
+      { source: 'rss' as const, uri: `https://example.org/${prefix}/a`, text: bad ? 'Ciro Gomes fala sobre a reforma' : `lula fala sobre a reforma ${prefix}a`, publishedAt: new Date().toISOString() },
+      { source: 'rss' as const, uri: `https://example.org/${prefix}/b`, text: `lula fala sobre a reforma ${prefix}b`, publishedAt: new Date().toISOString() },
+    ]
+    const all = [...groupOf('rollback-1', false), ...groupOf('rollback-2', true), ...groupOf('rollback-3', false)]
+    const totals = await insertDocs(all, [...persons, phantom], 2)
+    assert.deepEqual(totals, { written: 5, enriched: 0, failed: 1 })
+    const exists = async (uri: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uri])).rows[0].n > 0
+    assert.equal(await exists('https://example.org/rollback-1/a'), true)
+    assert.equal(await exists('https://example.org/rollback-1/b'), true)
+    assert.equal(await exists('https://example.org/rollback-2/a'), false, 'the bad doc itself never lands')
+    assert.equal(await exists('https://example.org/rollback-2/b'), true, 'its group-mate survives the retry')
+    assert.equal(await exists('https://example.org/rollback-3/a'), true)
+    assert.equal(await exists('https://example.org/rollback-3/b'), true)
   })
 
   it('grows its statement count with the number of groups, not with the number of documents', async () => {

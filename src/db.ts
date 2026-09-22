@@ -40,6 +40,9 @@ export const poolConfig = (url: string) => {
     maxConnections: clampEnv(process.env.PG_POOL_MAX, 3, 1, 20),
     connectTimeout: 10_000,
     connectionTimeoutMillis: 10_000,
+    // Off: a transaction-mode pooler (port 6543) can hand a named prepared statement to a
+    // different physical connection than the one that parsed it. pg.Pool ignores the field.
+    prepare: false,
   }
 }
 
@@ -101,6 +104,7 @@ const base: Db = {
 
 export const db: Db = perfEnabled ? instrument(base) : base
 
+// Split on ';' below, so no statement here may hold a semicolon in a literal or dollar-quoted body.
 export const schema = `
     create table if not exists persons (
       id text primary key,
@@ -201,7 +205,9 @@ const schemaStatements = schema
   .map((s) => s.trim())
   .filter(Boolean)
 
-export const migrate = () => schemaStatements.reduce<Promise<unknown>>(async (acc, statement) => (await acc, db.exec(statement)), Promise.resolve(undefined))
+// One transaction for the whole script: a failure partway through leaves the schema untouched.
+export const migrate = () =>
+  runInTransaction(() => schemaStatements.reduce<Promise<unknown>>(async (acc, statement) => (await acc, db.exec(statement)), Promise.resolve(undefined)))
 
 // Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
 export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms_all', 'graph_terms'] as const

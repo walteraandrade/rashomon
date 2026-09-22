@@ -45,7 +45,7 @@ describe('public/bundle.js stays in step with src/ui', () => {
     assert.equal(bundle.status, 200)
     assert.match(bundle.headers.get('content-type') ?? '', /javascript/)
     // The ten modules live in src/ui as the source of truth: every front-end test imports them
-    // directly, and atlas-modules-acceptance.test.ts pins their import graph. They are
+    // directly, and test/invariants.test.ts pins their import graph. They are
     // TypeScript, so no browser could run them -- public/ must not ship them at all.
     for (const file of ['api.ts', 'app.ts', 'format.ts', 'layout.ts', 'render.ts', 'state.ts', 'figures/atlas.ts', 'figures/testimony.ts', 'figures/compare.ts']) {
       assert.equal((await app.request(`/js/${file}`)).status, 404, `/js/${file} must not be served`)

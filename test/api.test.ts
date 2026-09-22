@@ -185,7 +185,7 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
   })
 })
 
-describe('issue #147: weekParams / loadWeek stay fixed at days=7', () => {
+describe('weekParams / loadWeek stay fixed at days=7', () => {
   it('weekParams sends days=7, the full kind set, plus the chosen source and limit', () => {
     const qp = weekParams({ source: 'gdelt', limit: '5' })
     assert.equal(qp.toString(), new URLSearchParams({ days: '7', source: 'gdelt', kind: 'word,hashtag,phrase', limit: '5' }).toString())
@@ -198,7 +198,7 @@ describe('issue #147: weekParams / loadWeek stay fixed at days=7', () => {
   })
 })
 
-describe('issue #147: docsParams accepts an optional day, appended only when non-empty', () => {
+describe('docsParams accepts an optional day, appended only when non-empty', () => {
   it('day is absent from the querystring by default and when explicitly empty', () => {
     assert.equal(docsParams({ days: '7', source: 'all' }).has('day'), false)
     assert.equal(docsParams({ days: '7', source: 'all', day: '' }).has('day'), false)
@@ -213,7 +213,7 @@ describe('issue #147: docsParams accepts an optional day, appended only when non
   })
 })
 
-describe('issue #147 AC20: sparklineParams / loadTimeline, the inspector sparkline', () => {
+describe('sparklineParams / loadTimeline, the inspector sparkline', () => {
   it('sparklineParams asks for 7 rolling days, bucketed by day, for one term/kind, on the atlas source', () => {
     const qp = sparklineParams('reforma', 'word', 'bluesky')
     assert.equal(qp.toString(), new URLSearchParams({ term: 'reforma', kind: 'word', days: '7', bucket: 'day', source: 'bluesky' }).toString())

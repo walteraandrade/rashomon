@@ -318,13 +318,13 @@ describe('gkg() skips an oversize slot without marking gkg_files, and the run fi
     globalThis.fetch = originalFetch
   })
 
-  it('AC9: gkg() resolves without throwing and includes a doc from an ok slot even though one slot is oversize', async () => {
+  it('gkg() resolves without throwing and includes a doc from an ok slot even though one slot is oversize', async () => {
     const docs = await gkg([])
     assert.ok(docs.some((d) => d.uri === `https://example.org/${okSlot}`), 'the ok slot must still produce a doc')
     assert.ok(!docs.some((d) => d.uri.includes(oversizeSlot)), 'the oversize slot must never produce a doc')
   })
 
-  it('AC8: the oversize slot gets no gkg_files row; the ok slot does', async () => {
+  it('the oversize slot gets no gkg_files row; the ok slot does', async () => {
     const oversizeRows = (await db.query(`select 1 from gkg_files where slot = $1`, [oversizeSlot])).rows
     assert.equal(oversizeRows.length, 0, 'an oversize slot must never be inserted into gkg_files')
     const okRows = (await db.query(`select 1 from gkg_files where slot = $1`, [okSlot])).rows

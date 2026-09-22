@@ -116,7 +116,7 @@ describe('help.ts: como-ler.html clicks stay on the atlas', () => {
     })
   })
 
-  it('issue #147: a plain click on como-ler.html#semana opens the dialog at figure 5\'s section', () => {
+  it('a plain click on como-ler.html#semana opens the dialog at figure 5\'s section', () => {
     withHelpDom(({ dialog, listeners, scrolled }) => {
       mountHelp()
       const click = listeners.find((l) => l.type === 'click')

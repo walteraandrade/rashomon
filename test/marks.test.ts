@@ -13,8 +13,8 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 // byte-identical output of the figures that call these -- this file exercises the builders
 // directly, the way the issue's own test plan asks for.
 
-describe('issue #170: marks.ts pure SVG builders', () => {
-  it('AC1: marks.ts exports frame, axis and overflowList as functions', () => {
+describe('marks.ts pure SVG builders', () => {
+  it('marks.ts exports frame, axis and overflowList as functions', () => {
     assert.equal(typeof frame, 'function')
     assert.equal(typeof axis, 'function')
     assert.equal(typeof overflowList, 'function')
@@ -66,18 +66,18 @@ describe('issue #170: marks.ts pure SVG builders', () => {
     const intro = html`<p class="eyebrow">2 não couberam</p>`
     const renderItem = (w: string) => html`<button>${w}</button>`
 
-    it('AC1: no items, no markup at all', () => {
+    it('no items, no markup at all', () => {
       assert.equal(overflowList({ items: [], cls: 'week', intro, renderItem }), '')
     })
 
-    it('AC1: one wrapper, the intro first, then one rendered item per entry in order', () => {
+    it('one wrapper, the intro first, then one rendered item per entry in order', () => {
       const out = String(overflowList({ items: ['lula', 'moraes'], cls: 'week', intro, renderItem }))
       assert.equal((out.match(/<div class="week-overflow">/g) || []).length, 1)
       assert.equal(out, '<div class="week-overflow"><p class="eyebrow">2 não couberam</p><button>lula</button><button>moraes</button></div>')
     })
   })
 
-  it('issue #170 AC9: CLAUDE.md documents marks.ts between layout.ts and render.ts, DOM-free, owning frame/axis/overflow-list', () => {
+  it('CLAUDE.md documents marks.ts between layout.ts and render.ts, DOM-free, owning frame/axis/overflow-list', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     const layoutIdx = claude.indexOf('`src/ui/layout.ts`')
     const marksIdx = claude.indexOf('`src/ui/marks.ts`')

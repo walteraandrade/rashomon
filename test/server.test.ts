@@ -112,7 +112,7 @@ describe('the routes answer their *For functions with the default parser (issue 
     }
   })
 
-  it('issue #25 AC8: GET /graph?source=senado for a person with zero senado docs returns the empty, stats.docs===0 shape', async () => {
+  it('GET /graph?source=senado for a person with zero senado docs returns the empty, stats.docs===0 shape', async () => {
     const res = await app.request('/api/people/lula/graph?source=senado&days=365')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Awaited<ReturnType<typeof graphFor>>
@@ -123,7 +123,7 @@ describe('the routes answer their *For functions with the default parser (issue 
   })
 })
 
-describe('issue #151 AC1: /rising default limit is 40, not 20', () => {
+describe('/rising default limit is 40, not 20', () => {
   before(seed)
 
   it('a wide window with more than 20 matching terms and no limit param returns more than 20', async () => {
@@ -138,13 +138,13 @@ describe('issue #151 AC1: /rising default limit is 40, not 20', () => {
 describe('GET /api/people/:id/testimony (issue #21)', () => {
   before(seed)
 
-  it('AC2: an unknown id returns 404 with { error: "person not found" }, the same shape as every other /:id/* route', async () => {
+  it('an unknown id returns 404 with { error: "person not found" }, the same shape as every other /:id/* route', async () => {
     const res = await app.request('/api/people/does-not-exist/testimony')
     assert.equal(res.status, 404)
     assert.deepEqual(await res.json(), { error: 'person not found' })
   })
 
-  it('AC2b: wires the querystring through parseTestimonyQuery end to end', async () => {
+  it('wires the querystring through parseTestimonyQuery end to end', async () => {
     const body = await testimony('?method=stub&min=2')
     // oglobo.globo.com/gdelt clears min=2 (scores 5, -1 -> avg 2, n=2), the same hand
     // computation test/graph.test.ts makes, this time reached purely through the HTTP layer.
@@ -179,7 +179,7 @@ describe('GET /api/people/:id/week (issue #147)', () => {
   })
   after(reseed)
 
-  it('issue #147 AC1: GET /api/people/nobody/week is the same 404', async () => {
+  it('GET /api/people/nobody/week is the same 404', async () => {
     const res = await app.request('/api/people/nobody/week')
     assert.equal(res.status, 404)
     assert.deepEqual(await res.json(), { error: 'person not found' })
@@ -359,7 +359,7 @@ describe('GET /week?testimony=1 (issue #150)', () => {
     assert.deepEqual(bucketAt(body, brtYmd(daysAgo(6))).testimony, { score: 4, n: 1 })
   })
 
-  it('AC1: no bucket carries a testimony key across query-parameter combinations when the flag is absent', async () => {
+  it('no bucket carries a testimony key across query-parameter combinations when the flag is absent', async () => {
     const qs = ['days=30', 'days=30&source=gdelt', 'days=30&domain=estadao.com.br', 'days=30&lean=right', 'days=30&kind=word', 'days=30&limit=40']
     for (const q of qs) {
       const body = await week(q)
@@ -367,7 +367,7 @@ describe('GET /week?testimony=1 (issue #150)', () => {
     }
   })
 
-  it('AC6: an unscored method answers a 200 with testimony null on every bucket, not a 4xx', async () => {
+  it('an unscored method answers a 200 with testimony null on every bucket, not a 4xx', async () => {
     const res = await app.request('/api/people/tarcisio/week?days=30&testimony=1&method=nobody:ever')
     assert.equal(res.status, 200)
     const body = await res.json()
@@ -379,7 +379,7 @@ describe('GET /week?testimony=1 (issue #150)', () => {
 describe('GET /api/compare (issue #93)', () => {
   before(seed)
 
-  it('AC1: returns 200 with a body of exactly { days, a, b, terms } — no links/signature/nodes/outlets', async () => {
+  it('returns 200 with a body of exactly { days, a, b, terms } — no links/signature/nodes/outlets', async () => {
     const res = await app.request('/api/compare?a=lula&b=bolsonaro')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Record<string, unknown>
@@ -387,14 +387,14 @@ describe('GET /api/compare (issue #93)', () => {
     assert.ok(!('links' in (body.a as object)))
   })
 
-  it('AC2: a.person and b.person are each { id, name, aliases }, matching the persons row', async () => {
+  it('a.person and b.person are each { id, name, aliases }, matching the persons row', async () => {
     const res = await app.request('/api/compare?a=lula&b=bolsonaro')
     const body = (await res.json()) as { a: { person: unknown }; b: { person: unknown } }
     assert.deepEqual(body.a.person, { id: lula.id, name: lula.name, aliases: lula.aliases })
     assert.deepEqual(body.b.person, { id: bolsonaro.id, name: bolsonaro.name, aliases: bolsonaro.aliases })
   })
 
-  it('AC3/AC4: an unknown a, an unknown b, or both omitted return 404 with { error: "person not found" }', async () => {
+  it('an unknown a, an unknown b, or both omitted return 404 with { error: "person not found" }', async () => {
     for (const url of ['/api/compare?a=nobody&b=lula', '/api/compare?a=lula&b=nobody', '/api/compare']) {
       const res = await app.request(url)
       assert.equal(res.status, 404, url)
@@ -413,13 +413,13 @@ describe('GET /api/candidates (issue #32)', () => {
     return res.json() as Promise<{ days: number; candidates: { name: string; count: number; sources: number; previous: number; samples: { id: number; source: string; text: string }[] }[] }>
   }
 
-  it('AC5: defaults to days=7 min=5, which hides every fixture name (max count is 4)', async () => {
+  it('defaults to days=7 min=5, which hides every fixture name (max count is 4)', async () => {
     const body = await get()
     assert.equal(body.days, 7)
     assert.deepEqual(body.candidates, [])
   })
 
-  it('AC5: ranks by document count with count, distinct sources and the previous window', async () => {
+  it('ranks by document count with count, distinct sources and the previous window', async () => {
     const { candidates } = await get('?min=2')
     assert.deepEqual(
       candidates.map(({ name, count, sources, previous }) => ({ name, count, sources, previous })),
@@ -430,7 +430,7 @@ describe('GET /api/candidates (issue #32)', () => {
     )
   })
 
-  it('AC5: caps samples at three, newest first, with id, source and text only', async () => {
+  it('caps samples at three, newest first, with id, source and text only', async () => {
     const { candidates } = await get('?min=2')
     const hugo = candidates.find((c) => c.name === 'hugo motta')!
     assert.equal(hugo.samples.length, 3)
@@ -439,7 +439,7 @@ describe('GET /api/candidates (issue #32)', () => {
     assert.equal(hugo.samples[0].text, 'O Senado ouve Hugo Motta sobre a reforma')
   })
 
-  it('AC5: min=1 surfaces the single-doc names and limit trims the list', async () => {
+  it('min=1 surfaces the single-doc names and limit trims the list', async () => {
     const all = await get('?min=1')
     assert.deepEqual(all.candidates.map((c) => c.name), ['hugo motta', 'renan calheiros', 'michelle bolsonaro', 'rodrigo pacheco'])
     const one = await get('?min=1&limit=1')
@@ -448,19 +448,19 @@ describe('GET /api/candidates (issue #32)', () => {
 
   // days=14 until issue #111 enumerated the windows; 30 is the next one up and still wide
   // enough to swallow the previous window this criterion is about.
-  it('AC5: a longer window moves the previous docs into the count', async () => {
+  it('a longer window moves the previous docs into the count', async () => {
     const { candidates } = await get('?days=30&min=2')
     const renan = candidates.find((c) => c.name === 'renan calheiros')!
     assert.equal(renan.count, 4)
     assert.equal(renan.previous, 0)
   })
 
-  it('AC5: never lists a tracked alias', async () => {
+  it('never lists a tracked alias', async () => {
     const { candidates } = await get('?days=365&min=1&limit=200')
     assert.ok(!candidates.some((c) => ['lula', 'luiz inacio', 'tarcisio', 'bolsonaro', 'jair bolsonaro'].includes(c.name)))
   })
 
-  it('AC5: leaves the existing routes untouched', async () => {
+  it('leaves the existing routes untouched', async () => {
     const people = await (await app.request('/api/people')).json() as { id: string }[]
     assert.deepEqual(people.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
     const graph = await (await app.request('/api/people/lula/graph')).json() as { person: { id: string } }
@@ -540,7 +540,7 @@ describe('the static pages', () => {
   // Issue #108: the two legacy pages are deleted outright, not just unlinked. Neither
   // public/index.html nor public/atlas-legacy.html exists any more, and both 404 through the
   // same catch-all static handler that already 404s an archived design.
-  it('AC8: the two deleted legacy pages 404 and no longer exist under public/', async () => {
+  it('the two deleted legacy pages 404 and no longer exist under public/', async () => {
     for (const rel of ['index.html', 'atlas-legacy.html']) {
       assert.ok(!existsSync(join(root, 'public', rel)), `public/${rel} must not exist`)
       const res = await app.request(`/${rel}`)

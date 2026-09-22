@@ -360,8 +360,8 @@ describe('mount: colour by avaliação is the default', () => {
 
 // Issue #149: a third mode on figure 1, a beeswarm of a person's words positioned by their own
 // kikori mean. No new route, no new fetch: the strip paints from the graph already loaded.
-describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () => {
-  it('AC1: createHandlers exposes modeStrip, which calls setMode with "strip"', () => {
+describe('figure 1 gains a beeswarm strip mode (Avaliação)', () => {
+  it('createHandlers exposes modeStrip, which calls setMode with "strip"', () => {
     let arg: string | undefined
     const h: any = createHandlers({ setMode: (m: string) => (arg = m) })
     assert.equal(typeof h.modeStrip, 'function', "createHandlers' returned table must expose modeStrip, the same way it exposes modeMap/modeColumns")
@@ -369,7 +369,7 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     assert.equal(arg, 'strip')
   })
 
-  it('AC5: modeStrip is a local repaint — shows #atlasStrip, hides #viewport/#columns/#mask/#zoomGroup, and issues no new request', async () => {
+  it('modeStrip is a local repaint — shows #atlasStrip, hides #viewport/#columns/#mask/#zoomGroup, and issues no new request', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const people = persons.map(({ id, name }) => ({ id, name }))
@@ -399,7 +399,7 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     })
   })
 
-  it('issue #149 gap: a word selected before switching to strip keeps its is-selected mark on the strip circle', async () => {
+  it('gap: a word selected before switching to strip keeps its is-selected mark on the strip circle', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const people = persons.map(({ id, name }) => ({ id, name }))
@@ -424,7 +424,7 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     })
   })
 
-  it('AC6: a strip pick reuses the same handlers.pick(id) path drawMap and paintColumns use, and stays single-sided', async () => {
+  it('a strip pick reuses the same handlers.pick(id) path drawMap and paintColumns use, and stays single-sided', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const people = persons.map(({ id, name }) => ({ id, name }))
@@ -448,7 +448,7 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     })
   })
 
-  it('AC7: a click on empty space inside #atlasStrip releases the selection, the same way #viewport/#columns already do', async () => {
+  it('a click on empty space inside #atlasStrip releases the selection, the same way #viewport/#columns already do', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const people = persons.map(({ id, name }) => ({ id, name }))
@@ -512,7 +512,7 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     })
   })
 
-  it('issue #149 gap: #atlasStrip observes its own resize and repaints, like figure 2\'s #strip', async () => {
+  it('gap: #atlasStrip observes its own resize and repaints, like figure 2\'s #strip', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const people = persons.map(({ id, name }) => ({ id, name }))
@@ -548,7 +548,7 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
     })
   })
 
-  it('issue #149 gap: #legend names the strip\'s own size/colour encoding in strip mode, not the map\'s link/zoom copy', async () => {
+  it('gap: #legend names the strip\'s own size/colour encoding in strip mode, not the map\'s link/zoom copy', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const people = persons.map(({ id, name }) => ({ id, name }))
@@ -568,7 +568,7 @@ describe('issue #149: figure 1 gains a beeswarm strip mode (Avaliação)', () =>
 // The pure inspect() sparkline markup lives in test/render.test.ts; these pin the wiring only
 // figures/atlas.ts owns: which request a pick makes, when none is made, and that a stale
 // response never overwrites a later pick.
-describe('issue #147 AC20: figure 1 fetches the inspector sparkline on its own fixed recorte', () => {
+describe('figure 1 fetches the inspector sparkline on its own fixed recorte', () => {
   const nodes = [
     { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } },
     { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0.2, n: 8 } },

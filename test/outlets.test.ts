@@ -50,7 +50,7 @@ describe('outlets.json content matches the issue specification exactly', () => {
 })
 
 describe('resolveScope / labelFor', () => {
-  it('AC12: an empty domain+lean intersection resolves to \'\' (not \'all\'), matching zero real docs.domain by construction', () => {
+  it('an empty domain+lean intersection resolves to \'\' (not \'all\'), matching zero real docs.domain by construction', () => {
     const { domain, outlets } = resolveScope('example.org', 'right')
     assert.equal(domain, '')
     assert.deepEqual(outlets, [])

@@ -5,7 +5,7 @@ import { SCOPE_LIMIT, SCOPE_TTL_MS, clearScopes, debounce, fromScope, readScope,
 // src/ui/state.ts: the page-wide scope memo and debounce. Everything per-figure lives inside
 // that figure's own mount(), so nothing else is here.
 
-describe('issue #43 AC2: the memo is bounded, short-lived and never caches a failure', () => {
+describe('the memo is bounded, short-lived and never caches a failure', () => {
   it('serves a fresh entry without calling the fetcher again', async () => {
     clearScopes()
     let calls = 0

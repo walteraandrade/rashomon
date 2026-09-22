@@ -180,17 +180,17 @@ describe('PR #153 review: docs/operations.md cache-surface and staleness paragra
   })
 })
 
-describe('issue #112 AC12: docs/operations.md states the dependency and size facts', () => {
-  it('AC12: @huggingface/transformers is documented as required only by pnpm score and shipped as optional', () => {
+describe('docs/operations.md states the dependency and size facts', () => {
+  it('@huggingface/transformers is documented as required only by pnpm score and shipped as optional', () => {
     assert.match(docsText, /@huggingface\/transformers[\s\S]{0,80}required only by[\s\S]{0,20}pnpm score/, 'operations docs must say the package is required only by pnpm score')
     assert.match(docsText, /optionalDependencies/, 'operations docs must say it ships as an optional dependency')
   })
 
-  it('AC12: the deployed /api function is documented as excluded from the import graph that reaches the model loader', () => {
+  it('the deployed /api function is documented as excluded from the import graph that reaches the model loader', () => {
     assert.match(docsText, /deployed[\s\S]{0,20}\/api[\s\S]{0,120}never reaches the model loader/i)
   })
 
-  it('AC12: the measured before/after size of .vercel/output/functions/api/index.func is recorded, and after is smaller', () => {
+  it('the measured before/after size of .vercel/output/functions/api/index.func is recorded, and after is smaller', () => {
     assert.match(docsText, /index\.func/, 'the docs must name the measured artifact')
     const bytes = [...docsText.matchAll(/before this split,[\s\S]{0,80}?was\s+([\d,]+)\s+bytes[\s\S]{0,200}?after,\s+it is\s+([\d,]+)\s+bytes/g)]
     assert.equal(bytes.length, 1, 'the docs must record one before/after size pair for index.func, in prose next to each other')
@@ -201,15 +201,15 @@ describe('issue #112 AC12: docs/operations.md states the dependency and size fac
   })
 })
 
-describe('issue #108 docs facts', () => {
-  it("AC17: kind's documented accepted values are exactly hashtag, word and phrase, never theme", () => {
+describe('docs facts', () => {
+  it("kind's documented accepted values are exactly hashtag, word and phrase, never theme", () => {
     const m = /`kind`:\s*([^.\n]*)/.exec(docsText)
     assert.ok(m, 'no page documents what values `kind` accepts')
     const values = [...m![1].matchAll(/`(\w+)`/g)].map((x) => x[1]).sort()
     assert.deepEqual(values, ['hashtag', 'phrase', 'word'], "docs/api.md's kind line must list exactly hashtag, word and phrase")
   })
 
-  it('AC17: pnpm purge themes is documented, and what it clears is documented alongside it', () => {
+  it('pnpm purge themes is documented, and what it clears is documented alongside it', () => {
     const idx = docsText.indexOf('purge themes')
     assert.ok(idx > -1, 'no page documents `pnpm purge themes`')
     const around = docsText.slice(Math.max(0, idx - 200), idx + 400)
@@ -217,7 +217,7 @@ describe('issue #108 docs facts', () => {
     assert.match(around, /kikori:q8/, 'the purge themes docs must mention the pre-revision kikori:q8-style testimony rows it clears')
   })
 
-  it('AC17: the docs say public/index.html is gone, not a reachable legacy UI', () => {
+  it('the docs say public/index.html is gone, not a reachable legacy UI', () => {
     const idx = docsText.indexOf('index.html')
     assert.ok(idx > -1, 'no page mentions public/index.html at all')
     const around = docsText.slice(Math.max(0, idx - 80), idx + 160)
@@ -225,26 +225,58 @@ describe('issue #108 docs facts', () => {
     assert.match(around, /(gone|removed|deleted|no longer)/i, 'docs must say index.html is gone')
   })
 
-  it('AC18: CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
+  it('CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     assert.doesNotMatch(claude, /theme codes[^\n]*(stay|remain) in the API/i, 'CLAUDE.md must not describe theme codes staying in the API any more')
     assert.doesNotMatch(claude, /`kind`[^\n]*`theme`/, 'CLAUDE.md must not list theme as a kind value')
   })
 
-  it('AC18: CLAUDE.md no longer describes public/index.html as reachable legacy UI', () => {
+  it('CLAUDE.md no longer describes public/index.html as reachable legacy UI', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     assert.doesNotMatch(claude, /index\.html[^\n]*reachable/i, 'CLAUDE.md must not describe index.html as reachable')
     assert.doesNotMatch(claude, /legacy UI, reachable only by name/i)
   })
 
-  it("AC19: src/ui/api.ts's ATLAS_KINDS comment no longer claims theme codes stay in the API or show on atlas-legacy.html", () => {
+  it("src/ui/api.ts's ATLAS_KINDS comment no longer claims theme codes stay in the API or show on atlas-legacy.html", () => {
     const apiTs = readFileSync(join(root, 'src/ui/api.ts'), 'utf8')
     assert.doesNotMatch(apiTs, /stay in the API/i)
     assert.doesNotMatch(apiTs, /atlas-legacy\.html/)
   })
 
-  it('AC19: ATLAS_KINDS itself is unchanged', () => {
+  it('ATLAS_KINDS itself is unchanged', () => {
     const apiTs = readFileSync(join(root, 'src/ui/api.ts'), 'utf8')
     assert.match(apiTs, /ATLAS_KINDS = 'word,hashtag,phrase'/)
+  })
+
+})
+
+// Issue #175: the test suite dropped test/atlas-modules-acceptance.test.ts (split into
+// test/invariants.test.ts) and the "issue number in the title" labeling rule it used to
+// follow. Both CLAUDE.md and docs/factory.md described that file and that rule by name, so
+// a drift check here keeps the prose in step with the file layout it describes.
+describe('CLAUDE.md and docs/factory.md describe the current test-file layout, not the deleted one', () => {
+  it('CLAUDE.md no longer names the deleted test/atlas-modules-acceptance.test.ts', () => {
+    const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
+    assert.doesNotMatch(claude, /atlas-modules-acceptance/, 'CLAUDE.md must not name the deleted test file')
+  })
+
+  it('docs/factory.md no longer names the deleted test/atlas-modules-acceptance.test.ts', () => {
+    assert.doesNotMatch(docsText, /atlas-modules-acceptance/, 'docs/factory.md must not name the deleted test file')
+  })
+
+  it("CLAUDE.md's test/ bullet says a test asserts on output or behaviour, and scopes source-reading to test/invariants.test.ts", () => {
+    const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
+    const bullet = /^-\s*`test\/`\s*node:test suites\.[^\n]*/m.exec(claude)?.[0]
+    assert.ok(bullet, "CLAUDE.md must still carry a `test/` bullet")
+    assert.match(bullet!, /asserts on output or behaviour/i, 'the test/ bullet must state that a test asserts on output or behaviour')
+    assert.match(bullet!, /invariants\.test\.ts/, 'the test/ bullet must scope source-reading to a repo-wide invariant named in test/invariants.test.ts')
+  })
+
+  it("docs/factory.md no longer instructs putting the issue number in a test label's title", () => {
+    assert.doesNotMatch(docsText, /with the issue number in its title/i, "docs/factory.md must not instruct an issue number in a test label's title any more")
+  })
+
+  it('docs/factory.md lists invariants.test.ts, not atlas-modules-acceptance.test.ts, among the cross-cutting test files', () => {
+    assert.match(docsText, /\binvariants\b/, 'docs/factory.md must list invariants.test.ts among the cross-cutting files')
   })
 })

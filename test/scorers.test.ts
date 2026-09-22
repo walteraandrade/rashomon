@@ -75,7 +75,7 @@ describe('kikori method label', () => {
     assert.equal(methods.stub(), 'stub')
   })
 
-  it('AC3 of issue #112: methods from scorers/index.ts and scorers/method.ts are the same object by reference', () => {
+  it('methods from scorers/index.ts and scorers/method.ts are the same object by reference', () => {
     assert.equal(methods, methodsFromMethod, 'both must be the very same object, not two definitions of the same shape')
   })
 
@@ -117,7 +117,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const srcDir = join(root, 'src')
 const srcSource = (relPath: string) => readFileSync(join(srcDir, relPath), 'utf8')
 
-// Same shape as test/atlas-modules-acceptance.test.ts's importsOf: both quote styles, both
+// Same shape as test/invariants.test.ts's importsOf: both quote styles, both
 // single-line and multi-line import/export-from forms.
 const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 
@@ -155,15 +155,15 @@ const allSrcFiles = (dir = srcDir, prefix = ''): string[] =>
     entry.isDirectory() ? allSrcFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.ts') ? [`${prefix}${entry.name}`] : [],
   )
 
-describe('issue #112 AC1: src/scorers/method.ts is a zero-import module', () => {
-  it('AC1: has no import statement at all, not even type-only, and no reference to the model package', () => {
+describe('src/scorers/method.ts is a zero-import module', () => {
+  it('has no import statement at all, not even type-only, and no reference to the model package', () => {
     const source = srcSource('scorers/method.ts')
     assert.doesNotMatch(source, /^\s*import\b/m, 'method.ts must declare zero import statements')
     assert.doesNotMatch(source, /@huggingface\/transformers/, 'method.ts must not name the model package')
     assert.doesNotMatch(source, /\bimport\s*\(/, 'method.ts must not dynamic-import anything either')
   })
 
-  it('AC1: exports dtype(), modelRevision() and the methods map, unmoved', async () => {
+  it('exports dtype(), modelRevision() and the methods map, unmoved', async () => {
     const mod = (await import('../src/scorers/method.js')) as Record<string, unknown>
     assert.equal(typeof mod.dtype, 'function')
     assert.equal(typeof mod.modelRevision, 'function')
@@ -172,8 +172,8 @@ describe('issue #112 AC1: src/scorers/method.ts is a zero-import module', () => 
   })
 })
 
-describe('issue #112 AC2: src/scorers/onnx.ts no longer owns the label logic', () => {
-  it('AC2: does not declare dtype, modelRevision or kikoriMethod as its own const/function', () => {
+describe('src/scorers/onnx.ts no longer owns the label logic', () => {
+  it('does not declare dtype, modelRevision or kikoriMethod as its own const/function', () => {
     const source = srcSource('scorers/onnx.ts')
     assert.doesNotMatch(source, /\bconst\s+dtype\s*=/, 'dtype must be imported, not redefined')
     assert.doesNotMatch(source, /\bconst\s+modelRevision\s*=/, 'modelRevision must be imported, not redefined')
@@ -181,27 +181,27 @@ describe('issue #112 AC2: src/scorers/onnx.ts no longer owns the label logic', (
     assert.match(source, /from\s+['"]\.\/method\.js['"]/, 'onnx.ts must import dtype/modelRevision back from ./method.js')
   })
 
-  it('AC2: still exports pairIds, scoreFromLogits and the default onnx scorer', () => {
+  it('still exports pairIds, scoreFromLogits and the default onnx scorer', () => {
     assert.equal(typeof pairIds, 'function')
     assert.equal(typeof scoreFromLogits, 'function')
     assert.equal(typeof onnx, 'function')
   })
 })
 
-describe('issue #112 AC4: the deployed import graph never reaches onnx.ts', () => {
-  it('AC4: a generic walk from src/server.ts never visits src/scorers/onnx.ts', () => {
+describe('the deployed import graph never reaches onnx.ts', () => {
+  it('a generic walk from src/server.ts never visits src/scorers/onnx.ts', () => {
     const reachable = reachableFrom('server.ts')
     assert.ok(!reachable.has('scorers/onnx.ts'), `server.ts's import graph must not reach onnx.ts, but it reached: ${[...reachable].sort().join(', ')}`)
   })
 })
 
-describe('issue #112 AC5: query.ts stops importing scorers/index.js', () => {
-  it('AC5: src/query.ts does not import from ./scorers/index.js, and imports methods from ./scorers/method.js', () => {
+describe('query.ts stops importing scorers/index.js', () => {
+  it('src/query.ts does not import from ./scorers/index.js, and imports methods from ./scorers/method.js', () => {
     assert.doesNotMatch(srcSource('query.ts'), /scorers\/index\.js/, 'query.ts must read methods from ./scorers/method.js instead')
     assert.match(srcSource('query.ts'), /from\s+['"]\.\/scorers\/method\.js['"]/)
   })
 
-  it('AC5: src/score.ts is the only file under src/ (outside scorers/index.ts and onnx.ts) importing scorers/index.js', () => {
+  it('src/score.ts is the only file under src/ (outside scorers/index.ts and onnx.ts) importing scorers/index.js', () => {
     const importers = allSrcFiles()
       .filter((file) => file !== 'scorers/index.ts' && file !== 'scorers/onnx.ts')
       .filter((file) => importsOf(srcSource(file)).some((spec) => resolve(file, spec) === 'scorers/index.ts'))
@@ -209,8 +209,8 @@ describe('issue #112 AC5: query.ts stops importing scorers/index.js', () => {
   })
 })
 
-describe('issue #112 AC6: @huggingface/transformers moves to optionalDependencies', () => {
-  it('AC6: package.json lists it under optionalDependencies, not dependencies, at the same version range', () => {
+describe('@huggingface/transformers moves to optionalDependencies', () => {
+  it('package.json lists it under optionalDependencies, not dependencies, at the same version range', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>
       optionalDependencies?: Record<string, string>
@@ -220,14 +220,14 @@ describe('issue #112 AC6: @huggingface/transformers moves to optionalDependencie
   })
 })
 
-describe('issue #112 AC9: onnx.ts keeps its network-safety gate', () => {
-  it('AC9: the Hub import stays a dynamic import() inside a function body, not at module scope', () => {
+describe('onnx.ts keeps its network-safety gate', () => {
+  it('the Hub import stays a dynamic import() inside a function body, not at module scope', () => {
     const source = srcSource('scorers/onnx.ts')
     assert.doesNotMatch(source, /^\s*import\s+.*@huggingface\/transformers/m, 'the Hub client must never be a static import')
     assert.match(source, /await import\(['"]@huggingface\/transformers['"]\)/, 'the dynamic import must still be present, inside load()')
   })
 
-  it('AC13 of issue #21: importing the onnx scorer module resolves without invoking any model call', async () => {
+  it('importing the onnx scorer module resolves without invoking any model call', async () => {
     const mod = await import('../src/scorers/onnx.js')
     assert.equal(typeof mod.onnx, 'function')
   })

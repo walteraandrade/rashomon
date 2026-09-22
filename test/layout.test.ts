@@ -183,7 +183,7 @@ const overlapping = (words: { term: string; x: number; y: number; w: number; h: 
   return bad
 }
 
-describe('AC2: the words never overlap and never leave the frame', () => {
+describe('the words never overlap and never leave the frame', () => {
   for (const width of [1280, 860, 375]) {
     it(`packs a real-shaped recorte at ${width}px with zero overlaps and zero words outside the frame`, () => {
       const { items } = rulerTerms(corpus(), 'count')
@@ -211,7 +211,7 @@ describe('AC2: the words never overlap and never leave the frame', () => {
   })
 })
 
-describe('AC3: no word is drawn below the size floor the site sets', () => {
+describe('no word is drawn below the size floor the site sets', () => {
   it('every word is at least RULER_SIZE_MIN px, at any width', () => {
     const { items } = rulerTerms(corpus(), 'count')
     assert.equal(RULER_SIZE_MIN, 11, 'atlas.css sets 11px as the smallest type on the site')
@@ -240,7 +240,7 @@ describe('AC3: no word is drawn below the size floor the site sets', () => {
   })
 })
 
-describe('AC4: a word both people have never touches an end', () => {
+describe('a word both people have never touches an end', () => {
   it('alckmin (192 documents with Lula, 14 with Bolsonaro) is drawn inside the ruler', () => {
     const terms: CompareTerm[] = [
       { term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) },
@@ -264,7 +264,7 @@ describe('AC4: a word both people have never touches an end', () => {
   })
 })
 
-describe('AC5: a word that does not fit is listed rather than dropped', () => {
+describe('a word that does not fit is listed rather than dropped', () => {
   // Enough words at one balance to exhaust the height cap whatever the packer does.
   const crowded = (): CompareTerm[] => Array.from({ length: 120 }, (_, i) => ({ term: `exclusivadolula${i}`, kind: 'word', a: side(50, 1), b: null }))
 

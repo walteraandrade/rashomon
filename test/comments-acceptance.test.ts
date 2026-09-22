@@ -43,10 +43,10 @@ const commentsAttachedTo = (src: string, decl: RegExp): string => {
   return block.reverse().join('\n')
 }
 
-describe('issue #134: comments state constraints, not history', () => {
+describe('comments state constraints, not history', () => {
   const files = srcTsRel()
 
-  it('AC1: src/**/*.ts comment-line density (stripped line starts with //) is under 10%', () => {
+  it('src/**/*.ts comment-line density (stripped line starts with //) is under 10%', () => {
     let comments = 0
     let total = 0
     for (const rel of files) {
@@ -63,7 +63,7 @@ describe('issue #134: comments state constraints, not history', () => {
     )
   })
 
-  it('AC2: no src/**/*.ts comment contains the word master', () => {
+  it('no src/**/*.ts comment contains the word master', () => {
     const hits: string[] = []
     for (const rel of files) {
       const src = readSrc(rel)
@@ -78,7 +78,7 @@ describe('issue #134: comments state constraints, not history', () => {
     assert.deepEqual(hits, [], `comments still contain the word master: ${hits.join(', ')}`)
   })
 
-  it('AC3: CLAUDE.md Style states that a comment states the constraint and history lives in git and docs', () => {
+  it('CLAUDE.md Style states that a comment states the constraint and history lives in git and docs', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     const style = claude.split(/^## Style\s*$/m)[1]?.split(/^## /m)[0] ?? ''
     assert.ok(style, 'CLAUDE.md must have a Style section')
@@ -86,7 +86,7 @@ describe('issue #134: comments state constraints, not history', () => {
     assert.match(style, /history lives in git and docs/i)
   })
 
-  it('AC4: gkg.ts does not say master reported null; DAYS does not retell the 365-key/issue story', () => {
+  it('gkg.ts does not say master reported null; DAYS does not retell the 365-key/issue story', () => {
     const gkg = readSrc('src/collectors/gkg.ts')
     assert.doesNotMatch(gkg, /master reported as [`']?null/i)
     assert.doesNotMatch(gkg, /which master reported/i)
@@ -98,7 +98,7 @@ describe('issue #134: comments state constraints, not history', () => {
     assert.doesNotMatch(days, /issues?\s*#\d+/i)
   })
 
-  it('AC5: keeper comments still state the constraint: MAX_RESPONSE_BYTES and inTransaction', () => {
+  it('keeper comments still state the constraint: MAX_RESPONSE_BYTES and inTransaction', () => {
     const http = commentsAttachedTo(readSrc('src/http.ts'), /^export const MAX_RESPONSE_BYTES\b/)
     assert.ok(http, 'MAX_RESPONSE_BYTES must have a comment stating the constraint')
     assert.match(http, /ceiling|limit|bound/i)

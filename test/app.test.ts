@@ -45,7 +45,7 @@ const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promis
   }
 }
 
-describe('issue #92 AC7: the two figures can show different people at once', () => {
+describe('the two figures can show different people at once', () => {
   it('atlas.person seeds figure 1, testimony.person seeds figure 2, independently', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -69,7 +69,7 @@ describe('issue #92 AC7: the two figures can show different people at once', () 
   })
 })
 
-describe('issue #92 AC8: a bare querystring key seeds both figures; a prefixed one overrides only its own', () => {
+describe('a bare querystring key seeds both figures; a prefixed one overrides only its own', () => {
   it('bare days= seeds both figures', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -115,7 +115,7 @@ describe('issue #92 AC8: a bare querystring key seeds both figures; a prefixed o
   })
 })
 
-describe('issue #92 AC9: a control change never crosses figures', () => {
+describe('a control change never crosses figures', () => {
   it("changing figure 2's own control reloads only figure 2", async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -181,7 +181,7 @@ describe('issue #92 AC9: a control change never crosses figures', () => {
   })
 })
 
-describe('issue #92 AC12: /api/people is fetched exactly once, and seeds both figures', () => {
+describe('/api/people is fetched exactly once, and seeds both figures', () => {
   it('one call to /api/people mounts both person selects', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -211,7 +211,7 @@ const withLocationAndReload = async <T>(search: string, fn: (reloads: number[]) 
   }
 }
 
-describe('issue #92: a failed GET /api/people is an outage, never an empty seed', () => {
+describe('a failed GET /api/people is an outage, never an empty seed', () => {
   it('paints the error copy and a working retry in both figures, not the empty-seed copy', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -264,7 +264,7 @@ describe('issue #92: a failed GET /api/people is an outage, never an empty seed'
   })
 })
 
-describe('issue #92: the loading ghost shows before /api/people resolves', () => {
+describe('the loading ghost shows before /api/people resolves', () => {
   it('boot() paints the loading reader synchronously, ahead of the network round trip', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -288,7 +288,7 @@ describe('issue #92: the loading ghost shows before /api/people resolves', () =>
   })
 })
 
-describe('issue #151: figure 4 (rising) joins app.ts\'s bootstrap, same bare/prefixed convention as the other three', () => {
+describe('figure 4 (rising) joins app.ts\'s bootstrap, same bare/prefixed convention as the other three', () => {
   it('bare ?person= seeds risingPerson; rising.source overrides the source for figure 4 only', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -303,7 +303,7 @@ describe('issue #151: figure 4 (rising) joins app.ts\'s bootstrap, same bare/pre
   })
 })
 
-describe("issue #147: figure 5 (week) joins app.ts's bootstrap, same bare/prefixed convention, but bare days= never reaches it", () => {
+describe("figure 5 (week) joins app.ts's bootstrap, same bare/prefixed convention, but bare days= never reaches it", () => {
   it('bare ?person= seeds weekPerson; week.source=/week.limit= override figure 5 only; bare days= is ignored', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()

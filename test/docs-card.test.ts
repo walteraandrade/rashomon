@@ -211,7 +211,7 @@ describe('figure 3: a word on the ruler opens both people at once', () => {
 
 // Issue #151: figure 4's own word belongs to one person, not two, and always the recent 7-day
 // window — never the figure's own 30-day baseline it scores lift against.
-describe('issue #151 AC11/AC12: figure 4 (rising) opens one side, scoped to the last 7 days, and releases it the same way the other figures do', () => {
+describe('figure 4 (rising) opens one side, scoped to the last 7 days, and releases it the same way the other figures do', () => {
   it('picking a word requests exactly one /docs call, for the tracked person, days=7, term=the word', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()

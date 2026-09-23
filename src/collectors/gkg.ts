@@ -180,11 +180,17 @@ const processSlot = (slot: string): Effect.Effect<RawDoc[], Error, HttpClient.Ht
     return docs
   })
 
+// A slot's own failure (a timeout, a network error) must cost only that slot: processSlot may
+// have already committed gkg_files for an earlier, successful slot, and an uncaught failure
+// here would fail the whole Effect.forEach, discarding those already-produced docs.
+const processSlotSafely = (slot: string) =>
+  processSlot(slot).pipe(Effect.catch((e) => Console.log(`[gkg] ${slot}: ${e.message}, skipped`).pipe(Effect.as([] as RawDoc[]))))
+
 export const collect: Effect.Effect<RawDoc[], Error, HttpClient.HttpClient> = Effect.gen(function* () {
   const [done, latest] = yield* Effect.all([processedSlots, latestSlot])
   const pending = recentSlots(latest).filter((s) => !done.has(s))
   yield* Console.log(`[gkg] ${pending.length} of last ${slots} slots pending`)
-  const docs = yield* Effect.forEach(pending, processSlot)
+  const docs = yield* Effect.forEach(pending, processSlotSafely)
   return docs.flat()
 })
 

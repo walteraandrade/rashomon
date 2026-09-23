@@ -270,6 +270,44 @@ describe('collect() skips an oversize slot without marking gkg_files, and the ru
   })
 })
 
+// Regression: a later slot timing out used to fail the whole Effect.forEach, discarding the
+// docs an earlier slot had already produced even though that earlier slot's gkg_files row was
+// already committed -- permanent silent loss. Each slot's failure must cost only that slot.
+describe('collect() keeps an earlier slot\'s docs when a later slot times out', () => {
+  before(migrate)
+
+  const latest = '20260912120000'
+  const timeoutSlot = '20260912114500' // processed second (older), stalls past GKG_DOWNLOAD_TIMEOUT_MS
+
+  const originalSlots = process.env.GKG_SLOTS
+  after(() => {
+    if (originalSlots === undefined) delete process.env.GKG_SLOTS
+    else process.env.GKG_SLOTS = originalSlots
+  })
+
+  it('still returns and records the ok slot, and logs the timeout instead of failing the run', async () => {
+    process.env.GKG_SLOTS = '2'
+    const fetchFn = fakeFetch((c) => {
+      if (c.url.pathname.endsWith('lastupdate-translation.txt')) return new Response(`${latest}.translation.gkg.csv.zip`, { status: 200 })
+      const slot = c.url.pathname.match(/\/(\d{14})\.translation\.gkg\.csv\.zip$/)?.[1] ?? ''
+      if (slot === timeoutSlot) return hanging(c)
+      return new Response(zipSync({ 'entry.csv': strToU8(gkgRow(slot)) }), { status: 200 })
+    })
+    const exit = await runTest(drain(collect, GKG_DOWNLOAD_TIMEOUT_MS), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const { exit: innerExit, log } = exit.value
+    assert.ok(Exit.isSuccess(innerExit), 'one slot timing out must not fail the whole collect()')
+    if (!Exit.isSuccess(innerExit)) return
+    assert.ok(innerExit.value.some((d) => d.uri === `https://example.org/${latest}`), 'the ok slot must still produce a doc')
+    assert.ok(!innerExit.value.some((d) => d.uri.includes(timeoutSlot)), 'the timed-out slot must never produce a doc')
+    const okRows = (await db.query(`select 1 from gkg_files where slot = $1`, [latest])).rows
+    assert.equal(okRows.length, 1, 'the successfully parsed slot must be recorded exactly once')
+    const timeoutRows = (await db.query(`select 1 from gkg_files where slot = $1`, [timeoutSlot])).rows
+    assert.equal(timeoutRows.length, 0, 'a timed-out slot must stay pending so a later run retries it')
+    assert.ok(log.some((l) => l.startsWith(`[gkg] ${timeoutSlot}:`) && l.endsWith('skipped')), `expected a skip log line for ${timeoutSlot}, got: ${JSON.stringify(log)}`)
+  })
+})
+
 describe('download() driven through the FetchHttpClient.Fetch seam, no fetchImpl parameter (issue #183)', () => {
   const slot = '20260915000000'
 

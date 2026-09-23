@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect, Exit, Fiber } from 'effect'
 import { TestConsole } from 'effect/testing'
-import { collect, gdelt } from '../src/collectors/gdelt.js'
+import { collect } from '../src/collectors/gdelt.js'
 import { collectors } from '../src/collectors/index.js'
 import type { Person } from '../src/types.js'
 import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
@@ -13,10 +13,14 @@ const ana: Person = { id: 'ana', name: 'Ana Souza', aliases: ['Ana Souza'] }
 const bento: Person = { id: 'bento', name: 'Bento Lima', aliases: ['Bento Lima'] }
 
 describe('gdelt collector', () => {
-  it('exports gdelt as an async (persons: Person[]) => Promise<RawDoc[]>', async () => {
-    const result = gdelt([])
-    assert.ok(result instanceof Promise)
-    assert.deepEqual(await result, [])
+  it('collect([]) resolves to [] with no request, run through the typed Effect', async () => {
+    const fetchFn = fakeFetch(() => {
+      throw new Error('must never be called')
+    })
+    const exit = await runTest(collect([]), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.deepEqual(exit.value, [])
+    assert.equal(fetchFn.calls.length, 0)
   })
 
   it('collectors registers gdelt as a function (opt-in: not part of defaultSources)', () => {

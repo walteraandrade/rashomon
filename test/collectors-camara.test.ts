@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { Effect, Exit, Fiber } from 'effect'
 import { TestConsole } from 'effect/testing'
-import { camara, collect } from '../src/collectors/camara.js'
+import { collect } from '../src/collectors/camara.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
 import type { Person } from '../src/types.js'
 import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
@@ -13,10 +13,14 @@ const readRepoFile = (relPath: string) => readFileSync(new URL(`../${relPath}`, 
 const dep = (id: string, camaraId: string): Person => ({ id, name: id, aliases: [id], camaraId })
 
 describe('camara collector', () => {
-  it('exports camara as an async (persons: Person[]) => Promise<RawDoc[]>', async () => {
-    const result = camara([])
-    assert.ok(result instanceof Promise)
-    assert.deepEqual(await result, [])
+  it('collect([]) resolves to [] with no request, run through the typed Effect', async () => {
+    const fetchFn = fakeFetch(() => {
+      throw new Error('must never be called')
+    })
+    const exit = await runTest(collect([]), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.deepEqual(exit.value, [])
+    assert.equal(fetchFn.calls.length, 0)
   })
 
   it('a person without camaraId produces zero HTTP requests and zero log lines', async () => {

@@ -90,8 +90,3 @@ export const getBytes = (url: string | URL, limit = MAX_RESPONSE_BYTES, timeoutM
 // would otherwise stamp `traceparent`/`b3` on every request to GDELT, Bluesky and the chambers,
 // which every collector's earlier direct fetch() call never sent.
 export const fetchClient: Layer.Layer<HttpClient.HttpClient> = Layer.merge(FetchHttpClient.layer, Layer.succeed(HttpClient.TracerPropagationEnabled, false))
-
-// The boundary between the Effect side and the Promise collectors: fetchClient in, a plain
-// Promise out. A failure rejects with the typed error itself, so `.message` reads.
-export const runWithFetch = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>): Promise<A> =>
-  Effect.runPromise(Effect.provide(effect, fetchClient))

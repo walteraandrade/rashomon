@@ -1,6 +1,4 @@
 import { Effect } from 'effect'
-import type { Collector } from '../types.js'
-import { runWithFetch } from '../http.js'
 import { fetchFeed } from './rss.js'
 
 const feeds = [
@@ -20,4 +18,3 @@ const feeds = [
 
 export const collect = Effect.forEach(feeds, fetchFeed('nicho'), { concurrency: 'unbounded' }).pipe(Effect.map((docs) => docs.flat()))
 
-export const nicho: Collector = () => runWithFetch(collect)

@@ -1,47 +1,114 @@
-import persons from '../seed.json' with { type: 'json' }
-import { AGGREGATE_TABLES, buildGraphAggregates } from './aggregate.js'
-import { analyzeAfterWrite, analyzeMinDocs, analyzeTables, db, migrate } from './db.js'
+import { Cause, Console, Data, Effect, Exit, Layer } from 'effect'
+import type { HttpClient } from 'effect/unstable/http'
+import { SqlClient } from 'effect/unstable/sql'
+import personsSeed from '../seed.json' with { type: 'json' }
+import { AGGREGATE_TABLES, buildGraphAggregates, type AggregateReport } from './aggregate.js'
+import { analyzeAfterWrite, analyzeMinDocs, analyzeTables, db, migrate, runSql, type AnalyzedTable } from './db.js'
 import { collectors, defaultSources } from './collectors/index.js'
+import { fetchClient } from './http.js'
 import { loadPhrases } from './phrases.js'
-import { insertDocs, pruneRemoved, upsertPersons } from './store.js'
-import type { Person, Phrases, RawDoc } from './types.js'
+import { insertDocs, pruneRemovedEffect, upsertPersons } from './store.js'
+import type { Collector, Person, Phrases, RawDoc, Source } from './types.js'
 
-const runSource = async (name: string, ps: Person[], lexicon: Phrases) => {
-  const collect = collectors[name as keyof typeof collectors]
-  const docs = await collect(ps).catch((e: Error) => (console.error(`[${name}] ${e.message}`), [] as RawDoc[]))
-  const { written, enriched, failed } = await insertDocs(docs, ps, undefined, lexicon)
-  // `enriched` is the early warning this project has no other source for: it counts documents
-  // whose stored text a feed just replaced with a longer one. A feed that quietly stops filling
-  // `content:encoded` shows up here as a number falling to zero, before the atlas gets duller.
-  console.log(`[${name}] fetched ${docs.length}, new ${written}${enriched ? `, enriched ${enriched}` : ''}${failed ? `, failed ${failed}` : ''}`)
-  return written
+export type SourceResult = { name: string; fetched: number; written: number; enriched: number; failed: number; error?: string }
+export type IngestReport = {
+  removed: string[]
+  sources: SourceResult[]
+  totalDocs: number
+  analyzed: readonly AnalyzedTable[]
+  aggregates: AggregateReport
 }
 
-const main = async () => {
-  await migrate()
-  const removed = await pruneRemoved(persons)
-  if (removed.length) console.log(`removed persons: ${removed.join(', ')}`)
-  await upsertPersons(persons)
+export type IngestStage = 'migrate' | 'upsertPersons' | 'pruneRemoved' | 'loadPhrases' | 'docCount' | 'analyzeAfterWrite' | 'buildGraphAggregates' | 'analyzeTables'
+export class IngestFailure extends Data.TaggedError('IngestFailure')<{ stage: IngestStage; cause: unknown }> {}
+
+// `upsertPersons` and `pruneRemoved` are narrow seams so a test can make store.ts's writers reject.
+export type IngestOptions = {
+  collectors?: Partial<Record<Source, Collector>>
+  upsertPersons?: (ps: Person[]) => Promise<void>
+  pruneRemoved?: (ps: Person[]) => Promise<string[]>
+}
+
+const errorMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
+type Registry = Partial<Record<Source, Collector>>
+
+// A collector failure or an unknown source name both cost that source alone: logged, `docs = []`, never propagates.
+const runSource = (
+  name: string,
+  registry: Registry,
+  ps: Person[],
+  lexicon: Phrases,
+): Effect.Effect<SourceResult, never, HttpClient.HttpClient | SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const collect = registry[name as Source]
+    // Effect.suspend: a collector that throws while building its Effect is that source's failure too.
+    const outcome = collect ? yield* Effect.exit(Effect.suspend(() => collect(ps))) : Exit.fail(new Error(`unknown source: ${name}`))
+    const docs: RawDoc[] = Exit.isSuccess(outcome) ? outcome.value : []
+    const failureMessage = Exit.isFailure(outcome) ? errorMessage(Cause.squash(outcome.cause)) : undefined
+    if (failureMessage) yield* Console.error(`[${name}] ${failureMessage}`)
+    const { written, enriched, failed } = yield* Effect.promise(() => insertDocs(docs, ps, undefined, lexicon))
+    // `enriched` is the early warning this project has no other source for: it counts documents
+    // whose stored text a feed just replaced with a longer one. A feed that quietly stops filling
+    // `content:encoded` shows up here as a number falling to zero, before the atlas gets duller.
+    yield* Console.log(`[${name}] fetched ${docs.length}, new ${written}${enriched ? `, enriched ${enriched}` : ''}${failed ? `, failed ${failed}` : ''}`)
+    return { name, fetched: docs.length, written, enriched, failed, ...(failureMessage ? { error: failureMessage } : {}) } satisfies SourceResult
+  })
+
+export const ingest = (
+  persons: Person[],
+  names: string[],
+  options: IngestOptions = {},
+): Effect.Effect<IngestReport, IngestFailure, HttpClient.HttpClient | SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise({ try: () => migrate(), catch: (cause) => new IngestFailure({ stage: 'migrate', cause }) })
+    const removed = yield* (
+      options.pruneRemoved
+        ? Effect.tryPromise({ try: () => options.pruneRemoved!(persons), catch: (cause) => new IngestFailure({ stage: 'pruneRemoved', cause }) })
+        : pruneRemovedEffect(persons).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'pruneRemoved', cause })))
+    )
+    if (removed.length) yield* Console.log(`removed persons: ${removed.join(', ')}`)
+    const doUpsertPersons = options.upsertPersons ?? upsertPersons
+    yield* Effect.tryPromise({ try: () => doUpsertPersons(persons), catch: (cause) => new IngestFailure({ stage: 'upsertPersons', cause }) })
+    // Read once, before any collector runs: a phrase this run's own docs would justify is
+    // tagged by the next `pnpm reindex`, not by this one.
+    const lexicon = yield* Effect.tryPromise({ try: () => loadPhrases(), catch: (cause) => new IngestFailure({ stage: 'loadPhrases', cause }) })
+    const registry: Registry = { ...collectors, ...options.collectors }
+    const sources = yield* Effect.forEach(names, (name) => runSource(name, registry, persons, lexicon), { concurrency: 1 })
+    const written = sources.reduce((sum, s) => sum + s.written, 0)
+    const { rows } = yield* Effect.tryPromise({
+      try: () => db.query<{ n: string }>(`select count(*) as n from docs`),
+      catch: (cause) => new IngestFailure({ stage: 'docCount', cause }),
+    })
+    const totalDocs = Number(rows[0].n)
+    yield* Console.log(`total docs: ${totalDocs}`)
+    const analyzed = yield* Effect.tryPromise({ try: () => analyzeAfterWrite(written), catch: (cause) => new IngestFailure({ stage: 'analyzeAfterWrite', cause }) })
+    yield* Console.log(
+      analyzed.length
+        ? `analyzed ${analyzed.join(', ')} after ${written} new docs`
+        : `skipped analyze: ${written} new docs below ANALYZE_MIN_DOCS=${analyzeMinDocs()}`,
+    )
+    // The window moves even when nothing new was written, so the aggregates are rebuilt every run.
+    const aggregates = yield* Effect.tryPromise({ try: () => buildGraphAggregates(persons), catch: (cause) => new IngestFailure({ stage: 'buildGraphAggregates', cause }) })
+    yield* Effect.tryPromise({ try: () => analyzeTables(AGGREGATE_TABLES), catch: (cause) => new IngestFailure({ stage: 'analyzeTables', cause }) })
+    yield* Console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
+    return { removed, sources, totalDocs, analyzed, aggregates } satisfies IngestReport
+  })
+
+const isMain = process.argv[1] && import.meta.url === new URL(process.argv[1], 'file://').href
+
+if (isMain) {
   const only = process.argv.slice(2)
   const names = only.length ? only : defaultSources
-  // Read once, before any collector runs: ingest tags new documents with the phrases the last
-  // `pnpm reindex` found, and never discovers new ones itself. A pair that only becomes a
-  // phrase because of documents collected today is tagged by the next reindex, not by this run.
-  const lexicon = await loadPhrases()
-  const written = await names.reduce<Promise<number>>(async (acc, n) => (await acc) + (await runSource(n, persons, lexicon)), Promise.resolve(0))
-  const { rows } = await db.query<{ n: string }>(`select count(*) as n from docs`)
-  console.log(`total docs: ${rows[0].n}`)
-  const analyzed = await analyzeAfterWrite(written)
-  console.log(
-    analyzed.length
-      ? `analyzed ${analyzed.join(', ')} after ${written} new docs`
-      : `skipped analyze: ${written} new docs below ANALYZE_MIN_DOCS=${analyzeMinDocs()}`,
-  )
-  // The window moves even when nothing new was written, so the aggregates are rebuilt every run.
-  const aggregates = await buildGraphAggregates(persons)
-  await analyzeTables(AGGREGATE_TABLES)
-  console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
-  await db.close()
+  // Reuses db.ts's own running connection rather than opening a second one on the same DATA_DIR.
+  const sqlClient = await runSql(SqlClient.SqlClient)
+  const layer = Layer.merge(fetchClient, Layer.succeed(SqlClient.SqlClient, sqlClient))
+  try {
+    await Effect.runPromise(Effect.provide(ingest(personsSeed, names), layer))
+  } catch (e) {
+    console.error(`ingest failed: ${errorMessage(e)}`)
+    process.exitCode = 1
+  } finally {
+    await db.close()
+  }
 }
-
-main()

@@ -1,7 +1,7 @@
 import { Console, Effect } from 'effect'
 import type { HttpClient } from 'effect/unstable/http'
-import type { Collector, Person, RawDoc } from '../types.js'
-import { getBytes, parseJson, runWithFetch } from '../http.js'
+import type { Person, RawDoc } from '../types.js'
+import { getBytes, parseJson } from '../http.js'
 
 const base = 'https://legis.senado.leg.br/dadosabertos/senador'
 const pauseMs = 500
@@ -66,4 +66,3 @@ export const collect = (persons: Person[]): Effect.Effect<RawDoc[], never, HttpC
     return docs.flat()
   })
 
-export const senado: Collector = (persons) => runWithFetch(collect(persons))

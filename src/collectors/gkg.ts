@@ -1,8 +1,8 @@
-import { Console, Effect } from 'effect'
-import type { HttpClient } from 'effect/unstable/http'
+import { Cause, Console, Data, Effect } from 'effect'
+import type { HttpClient, HttpClientError } from 'effect/unstable/http'
 import { Unzip, UnzipInflate } from 'fflate'
-import type { Collector, RawDoc } from '../types.js'
-import { MAX_RESPONSE_BYTES, ResponseTooLarge, getBytes, overLimit, runWithFetch } from '../http.js'
+import type { RawDoc } from '../types.js'
+import { MAX_RESPONSE_BYTES, ResponseTooLarge, getBytes, overLimit } from '../http.js'
 import { db } from '../db.js'
 import { decodeEntities } from '../extract.js'
 
@@ -16,6 +16,8 @@ export const MAX_EXPANDED_BYTES = 128 * 1024 * 1024
 // A slot measures ~13-14MB compressed (docs/sources.md); REQUEST_TIMEOUT_MS (45s) is sized for
 // small JSON endpoints, not this, so the zip download carries its own, much longer ceiling.
 export const GKG_DOWNLOAD_TIMEOUT_MS = 300_000
+
+export class GkgError extends Data.TaggedError('GkgError')<{ message: string }> {}
 
 export type SlotDownload =
   | { status: 'missing' }
@@ -101,11 +103,11 @@ const slotName = (d: Date) =>
 const slotDate = (s: string) =>
   new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), +s.slice(8, 10), +s.slice(10, 12)))
 
-export const latestSlot: Effect.Effect<string, Error, HttpClient.HttpClient> = Effect.gen(function* () {
+export const latestSlot: Effect.Effect<string, GkgError | ResponseTooLarge | HttpClientError.HttpClientError | Cause.TimeoutError, HttpClient.HttpClient> = Effect.gen(function* () {
   const { body } = yield* getBytes(`${base}/lastupdate-translation.txt`)
   const txt = new TextDecoder().decode(body)
   const m = txt.match(/(\d{14})\.translation\.gkg\.csv\.zip/)
-  if (!m) return yield* Effect.fail(new Error('gkg: cannot read lastupdate-translation.txt'))
+  if (!m) return yield* Effect.fail(new GkgError({ message: 'gkg: cannot read lastupdate-translation.txt' }))
   return m[1]
 })
 
@@ -121,7 +123,7 @@ const processedSlots: Effect.Effect<Set<string>, never> = Effect.promise(() => d
 // The byte cap is decided inside getBytes, before the status is read: a 404 whose error page
 // declares a body over MAX_RESPONSE_BYTES resolves 'oversize', not 'missing'. Both skip the slot
 // without marking it done, so only the log line differs.
-export const download = (slot: string): Effect.Effect<SlotDownload, Error, HttpClient.HttpClient> =>
+export const download = (slot: string): Effect.Effect<SlotDownload, GkgError | HttpClientError.HttpClientError | Cause.TimeoutError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const fetched = yield* getBytes(`${base}/${slot}.translation.gkg.csv.zip`, MAX_RESPONSE_BYTES, GKG_DOWNLOAD_TIMEOUT_MS).pipe(
       Effect.catchTag('ResponseTooLarge', (e: ResponseTooLarge) => Effect.succeed({ oversize: true as const, bytes: e.bytes, limit: e.limit })),
@@ -129,7 +131,7 @@ export const download = (slot: string): Effect.Effect<SlotDownload, Error, HttpC
     if ('oversize' in fetched) return { status: 'oversize', stage: 'compressed', bytes: fetched.bytes, limit: fetched.limit }
     const { status, body } = fetched
     if (status === 404) return { status: 'missing' }
-    if (status < 200 || status >= 300) return yield* Effect.fail(new Error(`gkg ${slot}: ${status}`))
+    if (status < 200 || status >= 300) return yield* Effect.fail(new GkgError({ message: `gkg ${slot}: ${status}` }))
     return yield* Effect.promise(() => unzipBounded(body, MAX_EXPANDED_BYTES))
   })
 
@@ -157,7 +159,7 @@ const parse = (slot: string, csv: string): RawDoc[] =>
     .map(rowToDoc(slot))
     .filter((d): d is RawDoc => d !== null)
 
-const processSlot = (slot: string): Effect.Effect<RawDoc[], Error, HttpClient.HttpClient> =>
+const processSlot = (slot: string): Effect.Effect<RawDoc[], GkgError | HttpClientError.HttpClientError | Cause.TimeoutError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const result = yield* download(slot)
     if (result.status === 'missing') {
@@ -186,7 +188,7 @@ const processSlot = (slot: string): Effect.Effect<RawDoc[], Error, HttpClient.Ht
 const processSlotSafely = (slot: string) =>
   processSlot(slot).pipe(Effect.catch((e) => Console.log(`[gkg] ${slot}: ${e.message}, skipped`).pipe(Effect.as([] as RawDoc[]))))
 
-export const collect: Effect.Effect<RawDoc[], Error, HttpClient.HttpClient> = Effect.gen(function* () {
+export const collect: Effect.Effect<RawDoc[], GkgError | ResponseTooLarge | HttpClientError.HttpClientError | Cause.TimeoutError, HttpClient.HttpClient> = Effect.gen(function* () {
   const [done, latest] = yield* Effect.all([processedSlots, latestSlot])
   const pending = recentSlots(latest).filter((s) => !done.has(s))
   yield* Console.log(`[gkg] ${pending.length} of last ${slots} slots pending`)
@@ -194,4 +196,3 @@ export const collect: Effect.Effect<RawDoc[], Error, HttpClient.HttpClient> = Ef
   return docs.flat()
 })
 
-export const gkg: Collector = () => runWithFetch(collect)

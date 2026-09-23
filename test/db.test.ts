@@ -1,4 +1,6 @@
+import { Duration } from 'effect'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import tls from 'node:tls'
@@ -94,17 +96,29 @@ describe('poolConfig', () => {
     })
   })
 
-  it('PG_POOL_MAX: unset, abc, 0 and 500 give 3, 3, 1 and 20', async () => {
+  it('PG_POOL_MAX: unset, abc, 0 and 500 give 3, 3, 1 and 20 on maxConnections (PgPoolConfig\'s own field name)', async () => {
     const url = 'postgres://user:pw@localhost:5432/db'
     const cases: [string | undefined, number][] = [[undefined, 3], ['abc', 3], ['0', 1], ['500', 20]]
     await cases.reduce<Promise<void>>(
       (acc, [value, expected]) =>
-        acc.then(() => withEnv({ PG_POOL_MAX: value }, () => assert.equal(poolConfig(url).max, expected))),
+        acc.then(() => withEnv({ PG_POOL_MAX: value }, () => assert.equal(poolConfig(url).maxConnections, expected))),
       Promise.resolve(),
     )
   })
 
-  it('importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset', () => {
+  it('connectTimeout resolves to 10 seconds', async () => {
+    await withEnv({ PG_SSL_CA: undefined }, () => {
+      assert.equal(Duration.toMillis(poolConfig('postgres://user:pw@localhost:5432/db').connectTimeout), 10_000)
+    })
+  })
+
+  it('disables named prepared statements, which misfire on a transaction-mode pooler', async () => {
+    await withEnv({ PG_SSL_CA: undefined }, () => {
+      assert.equal(poolConfig('postgres://user:pw@localhost:5432/db').prepare, false)
+    })
+  })
+
+  it('importing db.ts does not throw when DATABASE_URL and POSTGRES_URL are unset (poolConfig stays pure/synchronous, never opening a socket)', () => {
     // This test file already imports src/db.ts above, under the test environment's
     // DATA_DIR=memory:// with no DATABASE_URL/POSTGRES_URL. That import already happened
     // without throwing (or the whole suite would already have failed to start), regardless
@@ -303,5 +317,60 @@ describe('maintenance stays out of the request path (issue #44)', () => {
       .filter((f) => !owners.includes(f.slice(root.length)))
       .filter((f) => /analyzeTables|analyzeAfterWrite|`\s*analyze\b/i.test(readFileSync(f, 'utf8')))
     assert.deepEqual(offenders, [], 'maintenance must run only in the process that owns DATA_DIR')
+  })
+})
+
+describe('db on the SqlClient layer', () => {
+  before(seed)
+
+  it('answers a trivial query through the PGlite layer, on memory://', async () => {
+    const { rows } = await db.query<{ n: number }>(`select 1::int as n`)
+    assert.deepEqual(rows, [{ n: 1 }])
+  })
+
+  it('with PERF=1, query and exec are still instrumented: the returned object still exposes them as plain functions', () => {
+    const script = `
+      const { db } = await import('./src/db.ts')
+      console.log(JSON.stringify({ query: typeof db.query, exec: typeof db.exec, close: typeof db.close }))
+    `
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+      env: { ...process.env, PERF: '1', PERF_LOG: '0', DATA_DIR: 'memory://' },
+      encoding: 'utf8',
+    })
+    assert.equal(child.status, 0, child.stderr)
+    const shape = JSON.parse(child.stdout.trim().split('\n').pop() as string) as { query: string; exec: string; close: string }
+    assert.deepEqual(shape, { query: 'function', exec: 'function', close: 'function' })
+  })
+
+  it('a db.query/db.exec call made with no open inTransaction runs outside any transaction (a later failing statement does not roll it back)', async () => {
+    const uri = 'https://example.org/bare-write-outside-transaction'
+    await db.query(`insert into docs (source, uri, text, published_at) values ('rss', $1, 'x', now())`, [uri])
+    await assert.rejects(() => db.query(`select * from a_table_that_does_not_exist`))
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uri])
+    assert.equal(rows[0].n, 1, 'the earlier bare write must still be there: it was never part of a transaction with the failing statement')
+  })
+
+  it('the docs state driver selection follows DATABASE_URL/POSTGRES_URL between embedded PGlite and a managed Postgres client, and the pool defaults to 3, clamped 1..20 via PG_POOL_MAX', () => {
+    assert.match(docsText, /DATABASE_URL.{0,40}POSTGRES_URL|POSTGRES_URL.{0,40}DATABASE_URL/)
+    assert.match(docsText, /embedded PGlite/i)
+    assert.match(docsText, /managed Postgres/i)
+    assert.match(docsText, /PG_POOL_MAX[\s\S]{0,200}\b3\b/)
+    assert.match(docsText, /PG_POOL_MAX[\s\S]{0,200}1\.\.20|1\.\.20[\s\S]{0,200}PG_POOL_MAX/)
+  })
+
+  it('CLAUDE.md states a transaction is always opened through inTransaction or sql.withTransaction, never a raw begin/commit/rollback string', () => {
+    const claude = readRepoFile('CLAUDE.md')
+    assert.match(claude, /inTransaction/)
+    assert.match(claude, /sql\.withTransaction/)
+    assert.match(claude, /never a raw.{0,20}begin.{0,20}commit.{0,20}rollback/)
+  })
+
+  it('package.json pins @effect/sql-pglite and @effect/sql-pg to effect\'s own 4.0.0-rc.117, and keeps pg / @types/pg', () => {
+    const pkg = JSON.parse(readRepoFile('package.json')) as { dependencies: Record<string, string>; devDependencies?: Record<string, string> }
+    assert.equal(pkg.dependencies.effect, '4.0.0-rc.117')
+    assert.equal(pkg.dependencies['@effect/sql-pglite'], '4.0.0-rc.117')
+    assert.equal(pkg.dependencies['@effect/sql-pg'], '4.0.0-rc.117')
+    assert.ok(pkg.dependencies.pg, 'pg must remain listed: src/push.ts still imports it directly')
+    assert.ok(pkg.devDependencies?.['@types/pg'] ?? pkg.dependencies['@types/pg'], '@types/pg must remain listed')
   })
 })

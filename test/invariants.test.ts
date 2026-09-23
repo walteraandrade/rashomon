@@ -368,3 +368,12 @@ describe('the collector layer runs on Effect\'s HttpClient, not node:https', () 
     assert.ok(!testFileNames().includes('collectors-press.test.ts'))
   })
 })
+
+describe('the managed database driver is @effect/sql-pg, not pg', () => {
+  it('no file under src/ imports pg directly, except push.ts (its own one-shot copy target)', () => {
+    for (const file of srcFiles()) {
+      if (file === 'push.ts') continue
+      assert.doesNotMatch(srcSource(file), /from\s+['"]pg['"]|require\(['"]pg['"]\)/, `${file} must not import pg`)
+    }
+  })
+})

@@ -1,8 +1,28 @@
+import { Effect } from 'effect'
 import assert from 'node:assert/strict'
 import { after, describe, it, before } from 'node:test'
-import { db, migrate } from '../src/db.js'
+import { db, migrate, runSql } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
-import { MAX_DOC_CHARS, batches, insertDoc, insertDocs, tonedSources, truncateText, upsertPersons, writeBatchDocs, writeBatchRows } from '../src/store.js'
+import {
+  MAX_DOC_CHARS,
+  batches,
+  insertDoc,
+  insertDocEffect,
+  insertDocs,
+  insertDocsEffect,
+  inTransaction,
+  pruneRemoved,
+  pruneRemovedEffect,
+  tonedSources,
+  truncateText,
+  upsertPersons,
+  upsertPersonsEffect,
+  writeBatchDocs,
+  writeBatchRows,
+  writeDerived,
+  writeDerivedEffect,
+  type Derived,
+} from '../src/store.js'
 import { collidingUri, derivedCounts, enrichmentDocs, orphanTermCount, persons, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
 import './close.js'
 
@@ -457,5 +477,254 @@ describe('docs.text is capped at write time (issue #128)', () => {
     const text = long('zumbificacao')
     await insertDocs([{ source: 'rss', uri, text, publishedAt: new Date().toISOString() }], persons)
     assert.equal(await textOf(uri), truncateText(text))
+  })
+})
+
+// db.ts's real transaction (sql.withTransaction) and the savepoint nesting it gives inTransaction.
+describe('inTransaction nesting: savepoints, not a second begin', () => {
+  before(seed)
+
+  const uriOf = (name: string) => `https://example.org/tx-${name}`
+  const docNamed = (name: string) => ({ source: 'rss' as const, uri: uriOf(name), text: 'Lula fala sobre a reforma', publishedAt: new Date().toISOString() })
+  const exists = async (name: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uriOf(name)])).rows[0].n > 0
+
+  it('inTransaction keeps its <T>(fn: () => Promise<T>) => Promise<T> signature', async () => {
+    const result = await inTransaction(async () => 42)
+    assert.equal(result, 42)
+  })
+
+  it('a nested transaction that throws and is caught rolls back only its own writes', async () => {
+    const sentinel = new Error('inner rollback')
+    await inTransaction(async () => {
+      await insertDoc(docNamed('outer-before'), persons)
+      await inTransaction(async () => {
+        await insertDoc(docNamed('inner'), persons)
+        throw sentinel
+      }).catch((e) => {
+        if (e !== sentinel) throw e
+      })
+      await insertDoc(docNamed('outer-after'), persons)
+    })
+    assert.equal(await exists('outer-before'), true)
+    assert.equal(await exists('outer-after'), true)
+    assert.equal(await exists('inner'), false)
+  })
+
+  it('an outer transaction that throws rolls back both its own and a committed inner\'s writes', async () => {
+    const sentinel = new Error('outer rollback')
+    await inTransaction(async () => {
+      await inTransaction(async () => {
+        await insertDoc(docNamed('inner-committed'), persons)
+      })
+      await insertDoc(docNamed('outer-own'), persons)
+      throw sentinel
+    }).catch((e) => {
+      if (e !== sentinel) throw e
+    })
+    assert.equal(await exists('inner-committed'), false)
+    assert.equal(await exists('outer-own'), false)
+  })
+
+  it('a bare db.query call inside the callback sees the transaction\'s own uncommitted rows', async () => {
+    let seenInside = false
+    const sentinel = new Error('rollback')
+    await inTransaction(async () => {
+      await insertDoc(docNamed('bare-query'), persons)
+      seenInside = await exists('bare-query')
+      throw sentinel
+    }).catch((e) => {
+      if (e !== sentinel) throw e
+    })
+    assert.equal(seenInside, true, "the transaction's own connection must see its own uncommitted insert")
+    assert.equal(await exists('bare-query'), false, 'and it must be rolled back once the callback throws')
+  })
+})
+
+// Parity between the Promise writers and their Effect-native counterparts: each pair
+// is run against a disjoint set of rows so both can be asserted in the same test file, and the
+// last case leaves persons back at exactly the fixture's own list.
+describe('Effect-native writers write the same rows as their Promise counterparts', () => {
+  before(seed)
+
+  it('upsertPersonsEffect writes the same person row as upsertPersons', async () => {
+    const viaPromise = { id: 'twin-promise', name: 'Twin', aliases: ['Twin'] }
+    const viaEffect = { id: 'twin-effect', name: 'Twin', aliases: ['Twin'] }
+    await upsertPersons([viaPromise])
+    await runSql(upsertPersonsEffect([viaEffect]))
+    const rows = (await db.query<{ id: string; name: string; aliases: string[] }>(`select id, name, aliases from persons where id = any($1::text[]) order by id`, [[viaPromise.id, viaEffect.id]])).rows
+    assert.equal(rows.length, 2)
+    assert.deepEqual(
+      rows.map((r) => ({ name: r.name, aliases: r.aliases })),
+      [
+        { name: viaPromise.name, aliases: viaPromise.aliases },
+        { name: viaEffect.name, aliases: viaEffect.aliases },
+      ],
+    )
+    await pruneRemoved(persons)
+  })
+
+  it('pruneRemovedEffect removes the same rows pruneRemoved would, returning their ids', async () => {
+    const doomedByPromise = { id: 'doomed-promise', name: 'Doomed Promise', aliases: ['Doomed Promise'] }
+    const doomedByEffect = { id: 'doomed-effect', name: 'Doomed Effect', aliases: ['Doomed Effect'] }
+    await upsertPersons([doomedByPromise, doomedByEffect])
+    assert.deepEqual(await pruneRemoved([...persons, doomedByEffect]), [doomedByPromise.id])
+    assert.deepEqual(await runSql(pruneRemovedEffect(persons)), [doomedByEffect.id])
+    const remaining = (await db.query<{ id: string }>(`select id from persons where id = any($1::text[])`, [[doomedByPromise.id, doomedByEffect.id]])).rows
+    assert.deepEqual(remaining, [])
+  })
+
+  it('writeDerivedEffect writes the same doc_persons/doc_terms/doc_candidates rows as writeDerived', async () => {
+    const insertBareDoc = async (uri: string) =>
+      (await db.query<{ id: number }>(`insert into docs (source, uri, text, published_at) values ('rss', $1, 'x', now()) returning id`, [uri])).rows[0].id
+    const idPromise = await insertBareDoc('https://example.org/derived-promise')
+    const idEffect = await insertBareDoc('https://example.org/derived-effect')
+    const derivedFor = (docId: number): Derived => ({ docId, persons: [persons[0].id], terms: [{ term: 'exemplo', kind: 'word' }], names: ['Fulano De Tal'] })
+    await writeDerived([derivedFor(idPromise)])
+    await runSql(writeDerivedEffect([derivedFor(idEffect)]))
+    const rowsFor = async (docId: number) => ({
+      persons: (await db.query<{ person_id: string }>(`select person_id from doc_persons where doc_id = $1 order by 1`, [docId])).rows.map((r) => r.person_id),
+      terms: (await db.query<{ term: string; kind: string }>(`select term, kind from doc_terms where doc_id = $1 order by 1, 2`, [docId])).rows,
+      names: (await db.query<{ name: string }>(`select name from doc_candidates where doc_id = $1 order by 1`, [docId])).rows.map((r) => r.name),
+    })
+    assert.deepEqual(await rowsFor(idPromise), await rowsFor(idEffect))
+  })
+
+  it('insertDocEffect writes the same rows as insertDoc for an equivalent document', async () => {
+    const mk = (name: string) => ({
+      source: 'rss' as const,
+      uri: `https://example.org/insert-effect-${name}`,
+      text: 'Lula fala sobre a reforma',
+      publishedAt: new Date().toISOString(),
+      domain: 'example.org',
+    })
+    const wroteByPromise = await insertDoc(mk('promise'), persons)
+    const wroteByEffect = await runSql(insertDocEffect(mk('effect'), persons))
+    assert.equal(wroteByPromise, true)
+    assert.equal(wroteByEffect, true)
+    const rowsFor = async (name: string) => {
+      const docId = (await db.query<{ id: number }>(`select id from docs where uri = $1`, [`https://example.org/insert-effect-${name}`])).rows[0].id
+      return {
+        persons: (await db.query<{ person_id: string }>(`select person_id from doc_persons where doc_id = $1 order by 1`, [docId])).rows.map((r) => r.person_id),
+        terms: (await db.query<{ term: string; kind: string }>(`select term, kind from doc_terms where doc_id = $1 order by 1, 2`, [docId])).rows,
+      }
+    }
+    assert.deepEqual(await rowsFor('promise'), await rowsFor('effect'))
+  })
+
+  it('both paths keep the tone rule: a gkg tone is stored, a tone on any other source is null, and domain travels', async () => {
+    const mk = (path: string, source: 'gkg' | 'rss', tone: number) => ({
+      source,
+      uri: `https://example.org/tone-${path}`,
+      text: 'Lula fala sobre a reforma',
+      publishedAt: new Date().toISOString(),
+      domain: 'example.org',
+      tone,
+    })
+    await insertDoc(mk('gkg-promise', 'gkg', 2.5), persons)
+    await runSql(insertDocEffect(mk('gkg-effect', 'gkg', 2.5), persons))
+    await insertDoc(mk('rss-promise', 'rss', 42), persons)
+    await runSql(insertDocEffect(mk('rss-effect', 'rss', 42), persons))
+    const stored = async (path: string) =>
+      (await db.query<{ source: string; tone: number | null; domain: string | null }>(`select source, tone, domain from docs where uri = $1`, [`https://example.org/tone-${path}`])).rows[0]
+    assert.deepEqual(await stored('gkg-promise'), { source: 'gkg', tone: 2.5, domain: 'example.org' })
+    assert.deepEqual(await stored('gkg-effect'), await stored('gkg-promise'))
+    assert.deepEqual(await stored('rss-promise'), { source: 'rss', tone: null, domain: 'example.org' })
+    assert.deepEqual(await stored('rss-effect'), await stored('rss-promise'))
+  })
+
+  it('insertDocsEffect writes the same totals and rows as insertDocs for equivalent documents', async () => {
+    const mk = (prefix: string, i: number) => ({
+      source: 'rss' as const,
+      uri: `https://example.org/insert-docs-effect-${prefix}-${i}`,
+      text: `Lula fala sobre a reforma ${i}`,
+      publishedAt: new Date().toISOString(),
+      domain: 'example.org',
+    })
+    const byPromise = [mk('promise', 0), mk('promise', 1)]
+    const byEffect = [mk('effect', 0), mk('effect', 1)]
+    const totalsPromise = await insertDocs(byPromise, persons)
+    const totalsEffect = await runSql(insertDocsEffect(byEffect, persons))
+    assert.deepEqual(totalsPromise, { written: 2, enriched: 0, failed: 0 })
+    assert.deepEqual(totalsEffect, totalsPromise)
+    const termsFor = async (uri: string) =>
+      (await db.query<{ term: string }>(`select t.term from doc_terms t join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
+    for (let i = 0; i < byPromise.length; i++) assert.deepEqual(await termsFor(byPromise[i].uri), await termsFor(byEffect[i].uri))
+  })
+
+  it('insertDocsEffect and insertDocs agree on an enrichment: the same uri arrives again, longer and with a domain', async () => {
+    const pair = (prefix: string) => {
+      const uri = `https://example.org/enrich-parity-${prefix}`
+      const short = { source: 'gnews' as const, uri, text: 'Lula fala sobre a pauta tributaria', publishedAt: now() }
+      const long = {
+        source: 'rss' as const,
+        uri,
+        text: 'Lula fala sobre a pauta tributaria. Marina Silva criticou a proposta e pediu revisao do texto encaminhado ao Congresso.',
+        publishedAt: now(),
+        domain: 'example.org',
+      }
+      return { uri, short, long }
+    }
+    const byPromise = pair('promise')
+    const byEffect = pair('effect')
+
+    assert.deepEqual(await insertDocs([byPromise.short], persons), { written: 1, enriched: 0, failed: 0 })
+    assert.deepEqual(await runSql(insertDocsEffect([byEffect.short], persons)), { written: 1, enriched: 0, failed: 0 })
+
+    const enrichedPromise = await insertDocs([byPromise.long], persons)
+    const enrichedEffect = await runSql(insertDocsEffect([byEffect.long], persons))
+    assert.deepEqual(enrichedPromise, { written: 0, enriched: 1, failed: 0 })
+    assert.deepEqual(enrichedEffect, enrichedPromise)
+
+    const rowsFor = async (uri: string) => ({
+      text: await textOf(uri),
+      terms: await termsOf(uri),
+      candidates: (
+        await db.query<{ name: string }>(`select c.name from doc_candidates c join docs d on d.id = c.doc_id where d.uri = $1 order by 1`, [uri])
+      ).rows.map((r) => r.name),
+    })
+    assert.deepEqual(await rowsFor(byPromise.uri), await rowsFor(byEffect.uri))
+  })
+
+  it('insertDocsEffect and insertDocs agree on a group with one failing doc: the good docs still land', async () => {
+    const group = (prefix: string) => {
+      const phantom = untrackedPerson(`ainda-nao-cadastrado-${prefix}`)
+      const uris = [`https://example.org/group-parity-${prefix}-1`, `https://example.org/group-parity-${prefix}-2`, `https://example.org/group-parity-${prefix}-3`]
+      const docs = uris.map((uri, i) => ({
+        source: 'rss' as const,
+        uri,
+        text: i === 1 ? 'Ciro Gomes fala sobre a reforma' : `Lula fala sobre a pauta ${i}`,
+        publishedAt: now(),
+        domain: 'example.org',
+      }))
+      const family = [...persons, phantom]
+      return { uris, docs, family }
+    }
+    const byPromise = group('promise')
+    const byEffect = group('effect')
+
+    const totalsPromise = await insertDocs(byPromise.docs, byPromise.family, 3)
+    const totalsEffect = await runSql(insertDocsEffect(byEffect.docs, byEffect.family, 3))
+    assert.deepEqual(totalsPromise, { written: 2, enriched: 0, failed: 1 })
+    assert.deepEqual(totalsEffect, totalsPromise)
+
+    assert.equal(await derivedCounts(byPromise.uris[1]), null)
+    assert.equal(await derivedCounts(byEffect.uris[1]), null)
+    assert.equal((await derivedCounts(byPromise.uris[0]))?.persons, 1)
+    assert.equal((await derivedCounts(byEffect.uris[0]))?.persons, 1)
+    assert.equal((await derivedCounts(byPromise.uris[2]))?.persons, 1)
+    assert.equal((await derivedCounts(byEffect.uris[2]))?.persons, 1)
+  })
+})
+
+describe('an Effect writer fails with a catchable SqlError, not a flattened rejected Promise', () => {
+  before(seed)
+
+  it('insertDocEffect on a genuine SQL failure (a foreign-key violation) can be caught with Effect.catchTag("SqlError", ...)', async () => {
+    const phantom = untrackedPerson('sql-error-catchtag')
+    const doc = { source: 'rss' as const, uri: 'https://example.org/sql-error-catchtag', text: `${phantom.name} fala sobre a reforma`, publishedAt: now() }
+    const result = await runSql(Effect.catchTag(insertDocEffect(doc, [phantom]), 'SqlError', () => Effect.succeed('caught' as const)))
+    assert.equal(result, 'caught')
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [doc.uri])
+    assert.equal(rows[0].n, 0, 'the failed transaction must not leave the docs row behind')
   })
 })

@@ -65,7 +65,8 @@ const generate = async () => {
   }
   console.log(`dataset: generating ${DOCS} docs into ${DATA_DIR}`)
   const started = performance.now()
-  await db.exec(`delete from doc_testimony; delete from doc_candidates; delete from doc_terms; delete from doc_persons; delete from docs; delete from persons;`)
+  // One statement per db.exec call: the extended query protocol parses one at a time.
+  for (const table of ['doc_testimony', 'doc_candidates', 'doc_terms', 'doc_persons', 'docs', 'persons']) await db.exec(`delete from ${table}`)
   await upsertPersons(persons)
   const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: Date.now() })
   for (const doc of docs) await insertDoc(doc, persons)

@@ -1,6 +1,9 @@
-import { PGlite } from '@electric-sql/pglite'
+import { PgClient } from '@effect/sql-pg'
+import { PgliteClient } from '@effect/sql-pglite'
+import { Context, Effect, Layer, ManagedRuntime, Redacted } from 'effect'
+import { SqlClient, SqlError } from 'effect/unstable/sql'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import tls from 'node:tls'
-import pg from 'pg'
 import { instrument, perfEnabled } from './perf.js'
 
 type Rows<T> = { rows: T[] }
@@ -20,46 +23,80 @@ export const clampEnv = (v: string | undefined, d: number, lo: number, hi: numbe
 // sslmode stripped (would override ssl option). Non-local connections are verified against
 // PG_SSL_CA (the server's CA certificate, added to Node's default trust store). Without it,
 // poolConfig refuses to build a config rather than connect with an unverified chain.
-export const poolConfig = (url: string): pg.PoolConfig => {
+// Also carries pg's connectionString/connectionTimeoutMillis for src/push.ts's one-shot pool,
+// which sets its own `max` (pg ignores maxConnections).
+export const poolConfig = (url: string) => {
   const parsed = new URL(url)
   parsed.searchParams.delete('sslmode')
   const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
   const ca = process.env.PG_SSL_CA
   if (!isLocal && !ca) throw new Error('PG_SSL_CA is required for a non-local database connection')
+  const connectionString = parsed.toString()
+  const ssl = isLocal ? undefined : { ca: [...tls.rootCertificates, ca as string], rejectUnauthorized: true }
   return {
-    connectionString: parsed.toString(),
-    max: clampEnv(process.env.PG_POOL_MAX, 3, 1, 20),
+    url: Redacted.make(connectionString),
+    connectionString,
+    ssl,
+    maxConnections: clampEnv(process.env.PG_POOL_MAX, 3, 1, 20),
+    connectTimeout: 10_000,
     connectionTimeoutMillis: 10_000,
-    ssl: isLocal ? undefined : { ca: [...tls.rootCertificates, ca as string], rejectUnauthorized: true },
-  }
-}
-
-const remote = (url: string): Db => {
-  const pool = new pg.Pool(poolConfig(url))
-  return {
-    query: (sql, params) => pool.query(sql, params as unknown[]) as never,
-    exec: (sql) => pool.query(sql),
-    close: () => pool.end(),
-  }
-}
-
-const embedded = (dir: string): Db => {
-  const pglite = new PGlite(dir)
-  return {
-    query: (sql, params) => pglite.query(sql, params as unknown[]) as never,
-    exec: (sql) => pglite.exec(sql),
-    close: () => pglite.close(),
+    // Off: a transaction-mode pooler (port 6543) can hand a named prepared statement to a different physical connection than the one that parsed it. pg.Pool ignores the field.
+    prepare: false,
   }
 }
 
 // DATABASE_URL / POSTGRES_URL wins over embedded PGlite; 'memory://' for tests.
 const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
 
-const base: Db = url ? remote(url) : embedded(process.env.DATA_DIR ?? './data/pg')
+const DbLayer: Layer.Layer<SqlClient.SqlClient, SqlError.SqlError> = url
+  ? PgClient.layer(poolConfig(url))
+  : PgliteClient.layer({ dataDir: process.env.DATA_DIR ?? './data/pg' })
+
+const runtime = ManagedRuntime.make(DbLayer)
+
+// An open inTransaction leaves its Effect context here for its callback's duration, so a plain
+// db.query/db.exec made inside it runs on that transaction's connection, not the top-level one.
+const txContext = new AsyncLocalStorage<Context.Context<SqlClient.SqlClient>>()
+
+// Effect to Promise, joining an open inTransaction the way db.query/db.exec do.
+export const runSql = <A>(effect: Effect.Effect<A, SqlError.SqlError, SqlClient.SqlClient>): Promise<A> => {
+  const ctx = txContext.getStore()
+  return ctx ? Effect.runPromiseWith(ctx)(effect) : runtime.runPromise(effect)
+}
+
+const runStatement = <A extends object>(text: string, params: readonly unknown[] = []) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    return yield* sql.unsafe<A>(text, params as unknown[])
+  })
+
+const execute = <A extends object>(text: string, params?: readonly unknown[]): Promise<readonly A[]> => runSql(runStatement<A>(text, params))
+
+// store.ts's inTransaction: a real transaction via sql.withTransaction (a nested call is a
+// savepoint), with `fn` run under txContext so every db.query/db.exec inside it joins.
+export const runInTransaction = <T>(fn: () => Promise<T>): Promise<T> => {
+  const body = Effect.gen(function* () {
+    const ctx = yield* Effect.context<SqlClient.SqlClient>()
+    return yield* Effect.tryPromise({ try: () => txContext.run(ctx, fn), catch: (cause) => cause })
+  })
+  return runSql(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient
+      return yield* sql.withTransaction(body) as Effect.Effect<T, SqlError.SqlError, SqlClient.SqlClient>
+    }),
+  )
+}
 
 // PERF=1 swaps in a proxy that times query/exec into the current request's counters.
+const base: Db = {
+  query: (text, params) => execute(text, params).then((rows) => ({ rows })) as never,
+  exec: (text) => execute(text),
+  close: () => runtime.dispose(),
+}
+
 export const db: Db = perfEnabled ? instrument(base) : base
 
+// Split on ';' below, so no statement here may hold a semicolon in a literal or dollar-quoted body.
 export const schema = `
     create table if not exists persons (
       id text primary key,
@@ -153,7 +190,15 @@ export const schema = `
     );
 `
 
-export const migrate = () => db.exec(schema)
+// sql.unsafe parses one statement per call, unlike the exec() it replaces.
+const schemaStatements = schema
+  .split(';')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+// One transaction for the whole script: a failure partway through leaves the schema untouched.
+export const migrate = () =>
+  runInTransaction(() => schemaStatements.reduce<Promise<unknown>>(async (acc, statement) => (await acc, db.exec(statement)), Promise.resolve(undefined)))
 
 // Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
 export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms_all', 'graph_terms'] as const

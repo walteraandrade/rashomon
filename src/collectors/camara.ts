@@ -1,7 +1,7 @@
 import { Console, Effect } from 'effect'
 import type { HttpClient } from 'effect/unstable/http'
-import type { Collector, Person, RawDoc } from '../types.js'
-import { getBytes, parseJson, runWithFetch } from '../http.js'
+import type { Person, RawDoc } from '../types.js'
+import { getBytes, parseJson } from '../http.js'
 
 const base = 'https://dadosabertos.camara.leg.br/api/v2/deputados'
 const windowDays = 30
@@ -68,4 +68,3 @@ const collectPerson = (person: Person): Effect.Effect<RawDoc[], never, HttpClien
 export const collect = (persons: Person[]): Effect.Effect<RawDoc[], never, HttpClient.HttpClient> =>
   Effect.forEach(persons, collectPerson).pipe(Effect.map((docs) => docs.flat()))
 
-export const camara: Collector = (persons) => runWithFetch(collect(persons))

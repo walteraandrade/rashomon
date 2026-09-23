@@ -13,13 +13,13 @@ describe('MAX_RESPONSE_BYTES', () => {
 
 describe('http.ts export surface — the Promise helpers are gone, the Effect boundary stays', () => {
   it('no longer exports sleep, sequential, readCapped, slowGet, SlowResponse or CappedRead', () => {
-    for (const name of ['sleep', 'sequential', 'readCapped', 'slowGet', 'SlowResponse', 'CappedRead']) {
+    for (const name of ['sleep', 'sequential', 'readCapped', 'slowGet', 'SlowResponse', 'CappedRead', 'runWithFetch']) {
       assert.equal(name in http, false, `http.ts must no longer export ${name}`)
     }
   })
 
-  it('still exports getBytes, fetchClient, runWithFetch, overLimit, headerLength, ResponseTooLarge, MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS and headers', () => {
-    for (const name of ['getBytes', 'fetchClient', 'runWithFetch', 'overLimit', 'headerLength', 'ResponseTooLarge', 'MAX_RESPONSE_BYTES', 'REQUEST_TIMEOUT_MS', 'headers']) {
+  it('still exports getBytes, fetchClient, overLimit, headerLength, ResponseTooLarge, MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS and headers', () => {
+    for (const name of ['getBytes', 'fetchClient', 'overLimit', 'headerLength', 'ResponseTooLarge', 'MAX_RESPONSE_BYTES', 'REQUEST_TIMEOUT_MS', 'headers']) {
       assert.equal(name in http, true, `http.ts must still export ${name}`)
     }
   })

@@ -1,3 +1,11 @@
+import type { Cause, Effect, Schema } from 'effect'
+import type { HttpClient, HttpClientError } from 'effect/unstable/http'
+import type { SqlClient } from 'effect/unstable/sql'
+import type { ResponseTooLarge } from './http.js'
+import type { BlueskyError } from './collectors/bluesky.js'
+import type { GkgError } from './collectors/gkg.js'
+import type { RssError } from './collectors/rss.js'
+
 export type Person = { id: string; name: string; aliases: string[]; exclude?: string[]; camaraId?: string; senadoId?: string }
 export type Source = 'bluesky' | 'gdelt' | 'rss' | 'gnews' | 'gkg' | 'camara' | 'senado' | 'juridico' | 'oficial' | 'nicho'
 export type RawDoc = {
@@ -10,7 +18,10 @@ export type RawDoc = {
   extraTerms?: Term[]
   extraNames?: string[]
 }
-export type Collector = (persons: Person[]) => Promise<RawDoc[]>
+// An explicit union, not `Effect.Effect.Error<ReturnType<typeof collect>>` inference, so a new
+// collector error type is a visible addition here; gkg and rss raise their own tagged class.
+export type CollectorError = ResponseTooLarge | BlueskyError | GkgError | RssError | HttpClientError.HttpClientError | Schema.SchemaError | Cause.TimeoutError
+export type Collector = (persons: Person[]) => Effect.Effect<RawDoc[], CollectorError, HttpClient.HttpClient | SqlClient.SqlClient>
 export type Term = { term: string; kind: 'hashtag' | 'word' | 'phrase' }
 // A 'phrase' term is several words read as one unit: a proper noun the writer capitalized
 // ('alexandre de moraes'), or a collocation the corpus itself shows sticking together

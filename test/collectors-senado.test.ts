@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { Effect, Exit, Fiber } from 'effect'
 import { TestConsole } from 'effect/testing'
-import { collect, hasUsableDate, senado, toRawDoc } from '../src/collectors/senado.js'
+import { collect, hasUsableDate, toRawDoc } from '../src/collectors/senado.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
 import type { Person, Source } from '../src/types.js'
 import { docs } from './fixture.js'
@@ -164,9 +164,14 @@ describe('senado collector', () => {
     })
   })
 
-  it('senado (the Promise Collector) matches the empty-persons short-circuit, no network', async () => {
+  it('collect([]) short-circuits before any request, run through the typed Effect', async () => {
+    const fetchFn = fakeFetch(() => {
+      throw new Error('must never be called')
+    })
     const start = Date.now()
-    assert.deepEqual(await senado([]), [])
+    const exit = await runTest(collect([]), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.deepEqual(exit.value, [])
     assert.ok(Date.now() - start < 1000, 'must short-circuit before any request, not merely resolve an empty batch')
   })
 })

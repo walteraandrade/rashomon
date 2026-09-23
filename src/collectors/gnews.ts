@@ -1,6 +1,5 @@
 import { Effect } from 'effect'
-import type { Collector, Person } from '../types.js'
-import { runWithFetch } from '../http.js'
+import type { Person } from '../types.js'
 import { fetchFeed } from './rss.js'
 
 const feedUrl = (person: Person) => {
@@ -17,4 +16,3 @@ const feedUrl = (person: Person) => {
 export const collect = (persons: Person[]) =>
   Effect.forEach(persons, (p) => fetchFeed('gnews')(feedUrl(p))).pipe(Effect.map((docs) => docs.flat()))
 
-export const gnews: Collector = (persons) => runWithFetch(collect(persons))

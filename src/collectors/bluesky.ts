@@ -1,7 +1,7 @@
 import { Console, Data, Effect, Option, Result, Schema, Stream } from 'effect'
 import { HttpBody, HttpClient, HttpClientResponse, type HttpClientResponse as Response } from 'effect/unstable/http'
-import type { Collector, Person, RawDoc } from '../types.js'
-import { headers, REQUEST_TIMEOUT_MS, runWithFetch } from '../http.js'
+import type { Person, RawDoc } from '../types.js'
+import { headers, REQUEST_TIMEOUT_MS } from '../http.js'
 
 const publicHost = 'https://api.bsky.app'
 const authHost = 'https://bsky.social'
@@ -103,4 +103,3 @@ export const collect = (persons: Person[]) =>
     return docs.flat()
   })
 
-export const bluesky: Collector = (persons) => runWithFetch(collect(persons))

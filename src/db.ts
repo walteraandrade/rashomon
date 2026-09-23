@@ -35,7 +35,8 @@ export const poolConfig = (url: string) => {
   const rawCa = process.env.PG_SSL_CA
   if (!isLocal && !rawCa) throw new Error('PG_SSL_CA is required for a non-local database connection')
   const ca = isLocal ? undefined : normalizeCa(rawCa as string)
-  if (!isLocal && !ca?.includes('-----BEGIN CERTIFICATE-----')) throw new Error('PG_SSL_CA is not a valid PEM certificate')
+  if (!isLocal && !ca?.includes('-----BEGIN CERTIFICATE-----'))
+    throw new Error(`PG_SSL_CA has no -----BEGIN CERTIFICATE----- line; it starts with ${JSON.stringify(ca?.slice(0, 24))}`)
   const connectionString = parsed.toString()
   const ssl = isLocal ? undefined : { ca: [...tls.rootCertificates, ca as string], rejectUnauthorized: true }
   return {

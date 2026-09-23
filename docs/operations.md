@@ -45,7 +45,7 @@ DATA_DIR=./data/pg pnpm push                     # one-way copy of a local PGlit
 vercel deploy --prod
 ```
 
-**A pulled `PG_SSL_CA` arrives with its newlines escaped, and that is fine.** Reading the CA from a file, as above, is always safe. Pulling it out of Vercel instead used to need an extra unescaping step: `vercel env pull` writes the certificate on one line with the newlines escaped (`PG_SSL_CA="-----BEGIN CERTIFICATE-----\nMII..."`), and `source` leaves those two characters exactly as they are. `poolConfig` now normalizes both the literal `\n` and `\r\n` escape sequences to real newlines before validating and using the value, so either form — literal-escaped or already real newlines — works with no separate unescaping step:
+**A pulled `PG_SSL_CA` works as is.** `vercel env pull` writes the certificate on one line with the newlines escaped (`PG_SSL_CA="-----BEGIN CERTIFICATE-----\nMII..."`), and `source` leaves those two characters exactly as they are. `poolConfig` accepts either form, literal `\n`/`\r\n` escapes or real newlines, and refuses a value with no `-----BEGIN CERTIFICATE-----` line instead of connecting with a certificate that never loaded:
 
 ```bash
 set -a && source .env.production && set +a && DATABASE_URL="$POSTGRES_URL_NON_POOLING" pnpm reindex

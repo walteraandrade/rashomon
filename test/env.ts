@@ -3,7 +3,7 @@
 // means "unset for the duration", which is not the same as "leave alone": every variable the
 // expectation depends on has to be named, or a stray TESTIMONY_REVISION in the ambient
 // environment silently moves the method label a test asserts.
-export const withEnv = async (vars: Record<string, string | undefined>, run: () => void | Promise<void>) => {
+export const withEnv = async <T = void>(vars: Record<string, string | undefined>, run: () => T | Promise<T>): Promise<T> => {
   const set = (k: string, v: string | undefined) => {
     if (v === undefined) delete process.env[k]
     else process.env[k] = v
@@ -11,7 +11,7 @@ export const withEnv = async (vars: Record<string, string | undefined>, run: () 
   const previous = Object.keys(vars).map((k) => [k, process.env[k]] as const)
   Object.entries(vars).forEach(([k, v]) => set(k, v))
   try {
-    await run()
+    return await run()
   } finally {
     previous.forEach(([k, v]) => set(k, v))
   }

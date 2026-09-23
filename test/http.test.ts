@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { MAX_RESPONSE_BYTES, overLimit, headerLength, readCapped } from '../src/http.js'
-
-const src = readFileSync(fileURLToPath(new URL('../src/http.ts', import.meta.url)), 'utf8')
+import { Cause, Effect, Exit } from 'effect'
+import { MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS, ResponseTooLarge, getBytes, headerLength, overLimit, readCapped } from '../src/http.js'
+import { drain, fakeFetch, failureOf, hanging, runTest } from './effect.js'
 
 describe('MAX_RESPONSE_BYTES', () => {
   it('is 32 MB', () => {
@@ -48,15 +46,16 @@ describe('headerLength', () => {
   })
 })
 
-describe('readCapped', () => {
-  const streamOf = (chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
-    new ReadableStream({
-      start(controller) {
-        for (const c of chunks) controller.enqueue(c)
-        controller.close()
-      },
-    })
+const streamOf = (chunks: Uint8Array[], onCancel?: () => void): ReadableStream<Uint8Array> =>
+  new ReadableStream({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(c)
+      controller.close()
+    },
+    cancel: onCancel,
+  })
 
+describe('readCapped', () => {
   it('resolves the full body under the cap', async () => {
     const result = await readCapped(streamOf([new Uint8Array([1, 2]), new Uint8Array([3, 4])]), 10)
     assert.equal(result.ok, true)
@@ -75,31 +74,53 @@ describe('readCapped', () => {
   })
 })
 
-// Exercising the real node:https path would require a live or local server, outside this
-// project's testing convention (see bluesky-timeout.test.ts) -- so slowGet's own wiring is
-// asserted from its source text instead.
-describe('slowGet request size guard (source text)', () => {
-  const slowGetBody = src.slice(src.indexOf('export const slowGet'))
-  const dataIdx = slowGetBody.indexOf("res.on('data'")
+// getBytes is the request every slowGet caller makes (gdelt, camara, senado), exercised against
+// a stub fetch: the same size guard readCapped applies to a web stream, now on the wire.
+describe('getBytes request size guard', () => {
+  const url = 'https://example.test/feed'
 
-  it('checks content-length via headerLength, and rejects, before any body listener is registered', () => {
-    const beforeBody = slowGetBody.slice(0, dataIdx)
-    assert.match(beforeBody, /headerLength\(res\.headers\['content-length'\]\)/)
-    assert.match(beforeBody, /overLimit\(declared, MAX_RESPONSE_BYTES\)/)
-    assert.match(beforeBody, /res\.destroy\(\)/)
-    assert.match(beforeBody, /fail\(/, 'an over-limit declared length must reject, not resolve')
-    assert.doesNotMatch(beforeBody, /resolve\(/, 'the declared-length check must never resolve')
+  it('returns status and bytes for a body under the cap; the wire carries the project user-agent and nothing else', async () => {
+    const fetchFn = fakeFetch(() => new Response(new Uint8Array([1, 2, 3]), { status: 203 }))
+    const exit = await runTest(getBytes(url, 10), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.status, 203)
+    assert.deepEqual([...exit.value.body], [1, 2, 3])
+    assert.equal(fetchFn.calls[0].method, 'GET')
+    // Effect's client would add traceparent/b3 by default; fetchClient turns that off.
+    assert.deepEqual([...fetchFn.calls[0].headers.entries()], [['user-agent', 'assoc-graph/0.1 (personal research)']])
   })
 
-  it('stops accumulating once the running total exceeds MAX_RESPONSE_BYTES while streaming, never resolving a partial body', () => {
-    const dataHandler = slowGetBody.slice(dataIdx, slowGetBody.indexOf("res.on('end'"))
-    assert.match(dataHandler, /total \+= c\.length/)
-    assert.match(dataHandler, /overLimit\(total, MAX_RESPONSE_BYTES\)/)
-    assert.match(dataHandler, /res\.destroy\(\)/)
-    assert.match(dataHandler, /fail\(/)
-    // the resolve only happens on 'end', which the oversize branch above returns out of via
-    // fail() before ever reaching -- so an oversize response can never resolve at all.
-    const endHandler = slowGetBody.slice(slowGetBody.indexOf("res.on('end'"))
-    assert.match(endHandler, /if \(settled\) return/, 'end must no-op once fail() already settled the promise')
+  it('fails on a declared content-length over the cap before reading any of the body', async () => {
+    let read = false
+    // highWaterMark 0: the stream pulls only on demand, so `read` means someone asked for the body.
+    const body = new ReadableStream<Uint8Array>({ pull: () => void (read = true) }, { highWaterMark: 0 })
+    const fetchFn = fakeFetch(() => new Response(body, { status: 200, headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) } }))
+    const error = failureOf(await runTest(getBytes(url), fetchFn))
+    assert.ok(error instanceof ResponseTooLarge)
+    assert.equal(error.stage, 'declared')
+    assert.equal(error.bytes, MAX_RESPONSE_BYTES + 1)
+    assert.match(error.message, /declared 33554433 bytes exceeds 33554432/)
+    assert.equal(read, false)
+  })
+
+  it('fails once the running total exceeds the cap while streaming, never with a partial body', async () => {
+    let cancelled = false
+    const fetchFn = fakeFetch(() => new Response(streamOf([new Uint8Array(3), new Uint8Array(3), new Uint8Array(3)], () => (cancelled = true)), { status: 200 }))
+    const error = failureOf(await runTest(getBytes(url, 4), fetchFn))
+    assert.ok(error instanceof ResponseTooLarge)
+    assert.equal(error.stage, 'streaming')
+    assert.equal(error.bytes, 6)
+    assert.match(error.message, /exceeded 4 bytes while streaming/)
+    assert.equal(cancelled, true, 'the body stream must be cancelled, not drained')
+  })
+
+  it('a silent connection is cut at REQUEST_TIMEOUT_MS and the fetch is aborted', async () => {
+    const fetchFn = fakeFetch(hanging)
+    const exit = await runTest(drain(getBytes(url).pipe(Effect.timeout(REQUEST_TIMEOUT_MS)), REQUEST_TIMEOUT_MS), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const { exit: inner, elapsedMs } = exit.value
+    assert.ok(Cause.isTimeoutError(failureOf(inner)))
+    assert.equal(elapsedMs, REQUEST_TIMEOUT_MS)
+    assert.equal(fetchFn.calls[0].signal.aborted, true)
   })
 })

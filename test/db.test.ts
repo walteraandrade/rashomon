@@ -213,6 +213,94 @@ describe('poolConfig', () => {
   })
 })
 
+describe("PG_SSL_CA literal \\n escapes (issue #189)", () => {
+  const nonLocalUrl = 'postgres://user:pw@db.example.com:5432/db'
+
+  it('criterion 1: a PG_SSL_CA with literal \\n sequences normalizes to real newlines in ssl.ca', async () => {
+    const literal = '-----BEGIN CERTIFICATE-----\\nMII...\\n-----END CERTIFICATE-----\\n'
+    await withEnv({ PG_SSL_CA: literal }, () => {
+      const ssl = poolConfig(nonLocalUrl).ssl as { ca: string[] }
+      const entry = ssl.ca.find((c) => c.includes('BEGIN CERTIFICATE'))
+      assert.ok(entry)
+      assert.ok(entry.split('\n').length > 1)
+      assert.doesNotMatch(entry, /\\n/)
+    })
+  })
+
+  it('criterion 2: a PG_SSL_CA with literal \\r\\n sequences normalizes to real \\r\\n, not a bare \\r plus a converted \\n', async () => {
+    const literal = '-----BEGIN CERTIFICATE-----\\r\\nMII\\r\\n-----END CERTIFICATE-----\\r\\n'
+    const expected = '-----BEGIN CERTIFICATE-----\r\nMII\r\n-----END CERTIFICATE-----\r\n'
+    await withEnv({ PG_SSL_CA: literal }, () => {
+      const ssl = poolConfig(nonLocalUrl).ssl as { ca: string[] }
+      assert.ok(ssl.ca.includes(expected))
+    })
+  })
+
+  it('criterion 3: a PG_SSL_CA with real embedded newlines and no literal escapes is passed through byte-identical', async () => {
+    const real = '-----BEGIN CERTIFICATE-----\r\nfake\nmulti\nline\n-----END CERTIFICATE-----\n'
+    await withEnv({ PG_SSL_CA: real }, () => {
+      const ssl = poolConfig(nonLocalUrl).ssl as { ca: string[] }
+      assert.ok(ssl.ca.includes(real))
+    })
+  })
+
+  it('criterion 4: a PG_SSL_CA that is still not PEM after normalization throws naming PG_SSL_CA, non-local host only', async () => {
+    await withEnv({ PG_SSL_CA: 'not-a-cert\\nstill-not-a-cert\\n' }, () => {
+      assert.throws(() => poolConfig(nonLocalUrl), /PG_SSL_CA/)
+    })
+  })
+
+  it('criterion 5: for a local host, ssl is undefined regardless of a non-PEM PG_SSL_CA, and normalization/validation never runs', async () => {
+    await withEnv({ PG_SSL_CA: 'not-pem-at-all\\nnope' }, () => {
+      assert.equal(poolConfig('postgres://user:pw@localhost:5432/db').ssl, undefined)
+    })
+    await withEnv({ PG_SSL_CA: 'not-pem-at-all\\nnope' }, () => {
+      assert.equal(poolConfig('postgres://user:pw@127.0.0.1:5432/db').ssl, undefined)
+    })
+  })
+
+  it('criterion 6: ssl.ca stays one array of tls.rootCertificates.length + 1 entries after normalizing a literal-escaped CA', async () => {
+    const literal = '-----BEGIN CERTIFICATE-----\\nMII\\n-----END CERTIFICATE-----\\n'
+    await withEnv({ PG_SSL_CA: literal }, () => {
+      const ssl = poolConfig(nonLocalUrl).ssl as { ca: string[] }
+      assert.equal(ssl.ca.length, tls.rootCertificates.length + 1)
+    })
+  })
+
+  it('criterion 7: src/push.ts needs no code change, inheriting normalization via poolConfig(url) alone', () => {
+    const src = readRepoFile('src/push.ts')
+    const poolCall = /new pg\.Pool\(\{([^;]*?)\}\)/.exec(src)
+    assert.ok(poolCall)
+    assert.match(poolCall[1], /poolConfig\(url\)/)
+    assert.doesNotMatch(poolCall[1], /\bssl\s*:/)
+  })
+
+  it('criterion 8: the comment above poolConfig still names PG_SSL_CA and verification, never an unverified chain', () => {
+    const src = readRepoFile('src/db.ts')
+    const [, comment] = /((?:\/\/[^\n]*\n)+)export const poolConfig/.exec(src) ?? []
+    assert.ok(comment)
+    assert.match(comment, /PG_SSL_CA/)
+    assert.match(comment, /verif/i)
+    assert.doesNotMatch(comment, /without chain verification/i)
+  })
+
+  it('criterion 9: docs state that PG_SSL_CA accepts either a literal-escaped or a real-newline value', () => {
+    assert.match(docsText, /PG_SSL_CA[\s\S]{0,400}(literal|escaped)[\s\S]{0,400}newline/i)
+  })
+
+  it("criterion 10: docs no longer instruct running printf '%b' on PG_SSL_CA", () => {
+    assert.doesNotMatch(docsText, /printf '%b'/)
+  })
+
+  it('criterion 11: the pre-existing docs facts about PG_SSL_CA (PEM/fail-closed, Vercel, DATABASE_URL/POSTGRES_URL) still hold', () => {
+    assert.match(docsText, /PG_SSL_CA/)
+    assert.match(docsText, /PEM/i)
+    assert.match(docsText, /fail(s)? closed|refuses to (build|connect)|stops the connection|without an? unverified/i)
+    assert.match(docsText, /PG_SSL_CA[\s\S]{0,400}Vercel/i)
+    assert.match(docsText, /PG_SSL_CA[\s\S]{0,200}(DATABASE_URL|POSTGRES_URL)|(DATABASE_URL|POSTGRES_URL)[\s\S]{0,200}PG_SSL_CA/)
+  })
+})
+
 describe('read indexes and planner statistics (issue #44)', () => {
   before(seed)
 

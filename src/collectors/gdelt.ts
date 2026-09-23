@@ -1,5 +1,7 @@
+import { Console, Effect } from 'effect'
+import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, Person, RawDoc } from '../types.js'
-import { sequential, sleep, slowGet } from '../http.js'
+import { getBytes, parseJson, runWithFetch } from '../http.js'
 
 const base = 'https://api.gdeltproject.org/api/v2/doc/doc'
 const rateLimitMs = 5500
@@ -18,32 +20,43 @@ const queryUrl = (person: Person) => {
   return url
 }
 
-const log = (msg: string) => console.log(`[gdelt] ${msg}`)
+// 429 retried up to 3 times, waiting rateLimitMs * 4 * attempt (22s, 44s, 66s) between them;
+// a non-JSON body (any other status, or the 4th 429) fails with the status and the head of it.
+const attempt = (person: Person, n: number): Effect.Effect<any[], Error, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    yield* Console.log(`[gdelt] ${person.id}: request ${n}/4 (connect takes ~15s)`)
+    const { status, body } = yield* getBytes(queryUrl(person))
+    const text = new TextDecoder().decode(body)
+    if (status === 429 && n <= 3) {
+      const wait = rateLimitMs * 4 * n
+      yield* Console.log(`[gdelt] ${person.id}: 429 rate limited, waiting ${Math.round(wait / 1000)}s`)
+      yield* Effect.sleep(wait)
+      return yield* attempt(person, n + 1)
+    }
+    if (!text.trim().startsWith('{')) return yield* Effect.fail(new Error(`gdelt ${status}: ${text.trim().slice(0, 80)}`))
+    const articles = (yield* parseJson<{ articles?: any[] }>(text)).articles ?? []
+    yield* Console.log(`[gdelt] ${person.id}: ${articles.length} articles`)
+    return articles
+  })
 
-const fetchArticles = async (person: Person, attempt = 1): Promise<any[]> => {
-  log(`${person.id}: request ${attempt}/4 (connect takes ~15s)`)
-  const { status, body } = await slowGet(queryUrl(person))
-  if (status === 429 && attempt <= 3) {
-    const wait = rateLimitMs * 4 * attempt
-    log(`${person.id}: 429 rate limited, waiting ${Math.round(wait / 1000)}s`)
-    return sleep(wait).then(() => fetchArticles(person, attempt + 1))
-  }
-  if (!body.trim().startsWith('{')) throw new Error(`gdelt ${status}: ${body.trim().slice(0, 80)}`)
-  const articles = (JSON.parse(body) as { articles?: any[] }).articles ?? []
-  log(`${person.id}: ${articles.length} articles`)
-  return articles
-}
+// A person's failure costs that person's articles and a log line; the per-person pause after a
+// successful or failed request is unchanged either way.
+const collectPerson = (person: Person): Effect.Effect<RawDoc[], never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const articles = yield* attempt(person, 1).pipe(
+      Effect.catch((e) => Console.error(`[gdelt] ${person.id}: ${e.message}`).pipe(Effect.as([] as any[]))),
+    )
+    yield* Effect.sleep(rateLimitMs)
+    return articles.map((a) => ({
+      source: 'gdelt' as const,
+      uri: a.url,
+      text: cleanTitle(a.title ?? ''),
+      publishedAt: toIso(a.seendate),
+      domain: String(a.domain ?? '').toLowerCase() || undefined,
+    }))
+  })
 
-const collectPerson = async (person: Person): Promise<RawDoc[]> => {
-  const articles = await fetchArticles(person).catch((e: Error) => (console.error(`[gdelt] ${person.id}: ${e.message}`), []))
-  await sleep(rateLimitMs)
-  return articles.map((a) => ({
-    source: 'gdelt' as const,
-    uri: a.url,
-    text: cleanTitle(a.title ?? ''),
-    publishedAt: toIso(a.seendate),
-    domain: String(a.domain ?? '').toLowerCase() || undefined,
-  }))
-}
+export const collect = (persons: Person[]): Effect.Effect<RawDoc[], never, HttpClient.HttpClient> =>
+  Effect.forEach(persons, collectPerson).pipe(Effect.map((docs) => docs.flat()))
 
-export const gdelt: Collector = async (persons) => (await sequential(persons, collectPerson)).flat()
+export const gdelt: Collector = (persons) => runWithFetch(collect(persons))

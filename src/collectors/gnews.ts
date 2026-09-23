@@ -1,5 +1,6 @@
+import { Effect } from 'effect'
 import type { Collector, Person } from '../types.js'
-import { sequential } from '../http.js'
+import { runWithFetch } from '../http.js'
 import { fetchFeed } from './rss.js'
 
 const feedUrl = (person: Person) => {
@@ -11,5 +12,9 @@ const feedUrl = (person: Person) => {
   return url.toString()
 }
 
-export const gnews: Collector = async (persons) =>
-  (await sequential(persons, (p) => fetchFeed('gnews')(feedUrl(p)))).flat()
+// One person's feed at a time -- Effect.forEach's default concurrency, the same pacing
+// `sequential` gave this collector before the Effect conversion.
+export const collect = (persons: Person[]) =>
+  Effect.forEach(persons, (p) => fetchFeed('gnews')(feedUrl(p))).pipe(Effect.map((docs) => docs.flat()))
+
+export const gnews: Collector = (persons) => runWithFetch(collect(persons))

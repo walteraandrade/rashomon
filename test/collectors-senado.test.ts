@@ -1,17 +1,24 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
+import { Effect, Exit, Fiber } from 'effect'
+import { TestConsole } from 'effect/testing'
+import { collect, hasUsableDate, senado, toRawDoc } from '../src/collectors/senado.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
-import { hasUsableDate, senado, toRawDoc } from '../src/collectors/senado.js'
 import type { Person, Source } from '../src/types.js'
 import { docs } from './fixture.js'
+import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
 
-// No network call is exercised here: every person below lacks senadoId, so the collector
-// must short-circuit before calling sequential/slowGet at all (CLAUDE.md: no external
-// calls in tests). A hung/failed request would time the test out rather than resolve fast.
-describe('senado collector (issue #25)', () => {
+const pauseMs = 500
+
+describe('senado collector', () => {
   it('returns [] for an empty person list, no request made', async () => {
-    assert.deepEqual(await senado([]), [])
+    const fetchFn = fakeFetch(() => {
+      throw new Error('must never be called')
+    })
+    const docs = await runProgram(collect([]), fetchFn)
+    assert.deepEqual(docs, [])
+    assert.equal(fetchFn.calls.length, 0)
   })
 
   it('returns [] when every person lacks senadoId, no request made', async () => {
@@ -19,10 +26,12 @@ describe('senado collector (issue #25)', () => {
       { id: 'lula', name: 'Lula', aliases: ['Lula'] },
       { id: 'tarcisio', name: 'Tarcísio', aliases: ['Tarcísio'], exclude: ['C'] },
     ]
-    // a hung/failed real request would time this test out rather than resolve almost instantly
-    const start = Date.now()
-    assert.deepEqual(await senado(persons), [])
-    assert.ok(Date.now() - start < 1000, 'must short-circuit before any request, not merely resolve an empty batch')
+    const fetchFn = fakeFetch(() => {
+      throw new Error('must never be called')
+    })
+    const result = await runProgram(collect(persons), fetchFn)
+    assert.deepEqual(result, [])
+    assert.equal(fetchFn.calls.length, 0)
   })
 
   it('Source includes "senado" and Person carries an optional senadoId (compile-time, pinned at runtime too)', () => {
@@ -34,12 +43,68 @@ describe('senado collector (issue #25)', () => {
     assert.equal(withoutId.senadoId, undefined)
   })
 
-  it('every mapped RawDoc is built with source: "senado" and never sets tone (source text, no network mock)', () => {
-    // CLAUDE.md forbids hitting external APIs from tests, so this is read as source text
-    const source = readFileSync(new URL('../src/collectors/senado.ts', import.meta.url), 'utf8')
-    assert.match(source, /source:\s*'senado'/, 'RawDoc mapping must set source: "senado"')
-    assert.doesNotMatch(source, /\btone\s*:/, 'RawDoc mapping must never set a tone field')
-    assert.match(source, /person\.senadoId/, 'must key the request off person.senadoId')
+  it('one request per senadoId person, zero for a person without one', async () => {
+    const withId: Person = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre'], senadoId: '3830' }
+    const withoutId: Person = { id: 'lula', name: 'Lula', aliases: ['Lula'] }
+    const fetchFn = fakeFetch(() =>
+      new Response(JSON.stringify({ DiscursosParlamentar: { Parlamentar: { Pronunciamentos: {} } } }), { status: 200 }),
+    )
+    const exit = await runTest(drain(collect([withoutId, withId]), pauseMs), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.exit))
+    assert.equal(fetchFn.calls.length, 1)
+    assert.match(fetchFn.calls[0].url.pathname, /\/3830\//)
+  })
+
+  it('every mapped RawDoc is built with source: "senado" and never a tone', async () => {
+    const person: Person = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre'], senadoId: '3830' }
+    const fetchFn = fakeFetch(() =>
+      new Response(
+        JSON.stringify({
+          DiscursosParlamentar: {
+            Parlamentar: {
+              Pronunciamentos: { Pronunciamento: { UrlTexto: 'https://x', TextoResumo: 'resumo', DataPronunciamento: '2026-07-14' } },
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    )
+    const exit = await runTest(drain(collect([person]), pauseMs), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.exit))
+    const result = exit.value.exit.value
+    assert.equal(result.length, 1)
+    assert.equal(result[0].source, 'senado')
+    assert.equal('tone' in result[0], false)
+  })
+
+  it('a failure for one person is logged, and the next person\'s request still runs', async () => {
+    const a: Person = { id: 'a', name: 'A', aliases: ['A'], senadoId: '111' }
+    const b: Person = { id: 'b', name: 'B', aliases: ['B'], senadoId: '222' }
+    const fetchFn = fakeFetch((c) =>
+      c.url.pathname.includes('/111/')
+        ? new Response('<html>not json</html>', { status: 500 })
+        : new Response(JSON.stringify({ DiscursosParlamentar: { Parlamentar: { Pronunciamentos: {} } } }), { status: 200 }),
+    )
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([a, b]))
+      yield* tick()
+      yield* tick(pauseMs)
+      yield* tick(pauseMs)
+      const inner = yield* Fiber.await(fiber)
+      const errors = yield* TestConsole.errorLines
+      const logs = yield* TestConsole.logLines
+      return { inner, errors: errors.map(String), logs: logs.map(String) }
+    })
+    const { inner, errors, logs } = await runProgram(program, fetchFn)
+    assert.ok(Exit.isSuccess(inner))
+    if (Exit.isSuccess(inner)) assert.deepEqual(inner.value, [])
+    assert.equal(fetchFn.calls.filter((c) => c.url.pathname.includes('/111/')).length, 1)
+    assert.equal(fetchFn.calls.filter((c) => c.url.pathname.includes('/222/')).length, 1)
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[senado\] a: senado 500: <html>not json<\/html>$/)
+    assert.ok(logs.includes('[senado] a: 0 pronunciamentos'))
   })
 
   it('collectors/index.ts registers senado in the collectors map and in defaultSources', () => {
@@ -97,5 +162,84 @@ describe('senado collector (issue #25)', () => {
       assert.equal(doc.source, 'senado')
       assert.equal(doc.tone, undefined)
     })
+  })
+
+  it('senado (the Promise Collector) matches the empty-persons short-circuit, no network', async () => {
+    const start = Date.now()
+    assert.deepEqual(await senado([]), [])
+    assert.ok(Date.now() - start < 1000, 'must short-circuit before any request, not merely resolve an empty batch')
+  })
+})
+
+describe('senado as a typed Effect on Effect\'s HttpClient (issue #183)', () => {
+  it('exactly one request per person carrying senadoId, zero for a person without one; a failure for one person is logged and the next person\'s request still runs (issue #183 AC9)', async () => {
+    const withId: Person = { id: 'has-id', name: 'Has Id', aliases: ['Has Id'], senadoId: '7001' }
+    const withoutId: Person = { id: 'no-id', name: 'No Id', aliases: ['No Id'] }
+    const okBody = JSON.stringify({ DiscursosParlamentar: { Parlamentar: { Pronunciamentos: {} } } })
+    const okFetch = fakeFetch(() => new Response(okBody, { status: 200 }))
+    const okExit = await runTest(drain(collect([withoutId, withId]), pauseMs), okFetch)
+    assert.ok(Exit.isSuccess(okExit))
+    assert.ok(Exit.isSuccess(okExit.value.exit))
+    assert.equal(okFetch.calls.length, 1)
+    assert.match(okFetch.calls[0].url.pathname, /\/7001\//)
+
+    const failing: Person = { id: 'failing', name: 'Failing', aliases: ['Failing'], senadoId: '7002' }
+    const continuing: Person = { id: 'continuing', name: 'Continuing', aliases: ['Continuing'], senadoId: '7003' }
+    const failFetch = fakeFetch((c) =>
+      c.url.pathname.includes('/7002/') ? new Response('<html>error</html>', { status: 503 }) : new Response(okBody, { status: 200 }),
+    )
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([failing, continuing]))
+      yield* tick()
+      yield* tick(pauseMs)
+      yield* tick(pauseMs)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program, failFetch)
+    assert.ok(Exit.isSuccess(inner))
+    assert.equal(failFetch.calls.filter((c) => c.url.pathname.includes('/7002/')).length, 1)
+    assert.equal(failFetch.calls.filter((c) => c.url.pathname.includes('/7003/')).length, 1, 'the next person must still make its own request')
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[senado\] failing: senado 503:/)
+  })
+})
+
+describe('senado log lines are unchanged text, read through TestConsole (issue #183)', () => {
+  it('logs "[senado] <id>: <n> pronunciamentos" (issue #183 AC13)', async () => {
+    const person: Person = { id: 'logtest', name: 'Log Test', aliases: ['Log Test'], senadoId: '9999' }
+    const fetchFn = fakeFetch(() =>
+      new Response(
+        JSON.stringify({ DiscursosParlamentar: { Parlamentar: { Pronunciamentos: { Pronunciamento: { UrlTexto: 'https://x', TextoResumo: 'r', DataPronunciamento: '2026-07-14' } } } } }),
+        { status: 200 },
+      ),
+    )
+    const exit = await runTest(drain(collect([person]), pauseMs), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.log.includes('[senado] logtest: 1 pronunciamentos'))
+  })
+})
+
+describe('senado: a truncated JSON body is that person\'s failure, never the run\'s', () => {
+  it('logs "[senado] a: <parse message>" and the next person still gets its own request', async () => {
+    const a: Person = { id: 'a', name: 'A', aliases: ['A'], senadoId: '111' }
+    const b: Person = { id: 'b', name: 'B', aliases: ['B'], senadoId: '222' }
+    const fetchFn = fakeFetch((c) => (c.url.pathname.includes('/111') ? new Response('{"DiscursosParlamentar": {', { status: 200 }) : json({ DiscursosParlamentar: {} })))
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(collect([a, b]))
+      yield* tick()
+      yield* tick(pauseMs)
+      yield* tick(pauseMs)
+      const inner = yield* Fiber.await(fiber)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { inner, errors }
+    })
+    const { inner, errors } = await runProgram(program, fetchFn)
+    assert.ok(Exit.isSuccess(inner), 'a parse failure must be a typed failure caught per person, not a defect')
+    assert.deepEqual(inner.value, [])
+    assert.equal(fetchFn.calls.filter((c) => c.url.pathname.includes('/222')).length, 1, 'b still gets its own request after a fails')
+    assert.equal(errors.length, 1)
+    assert.match(errors[0], /^\[senado\] a: .*JSON/)
   })
 })

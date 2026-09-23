@@ -1,4 +1,4 @@
-import { Effect, Exit, Fiber, Option } from 'effect'
+import { Cause, Effect, Exit, Fiber, Option } from 'effect'
 import { TestClock, TestConsole } from 'effect/testing'
 import { FetchHttpClient, type HttpClient } from 'effect/unstable/http'
 import { fetchClient } from '../src/http.js'
@@ -75,4 +75,22 @@ export const failureOf = <A, E>(exit: Exit.Exit<A, E>): E => {
   const error = Exit.findErrorOption(exit)
   if (Option.isNone(error)) throw new Error('expected a typed failure, got ' + String(exit))
   return error.value
+}
+
+// Advances the fake clock by ms (0 for none) and lets one real macrotask turn run, so a fake
+// fetch's pending native Promise -- and whatever the effect schedules right after it -- gets a
+// chance to settle before the next assertion.
+export const tick = (ms = 0) =>
+  Effect.gen(function* () {
+    if (ms > 0) yield* TestClock.adjust(ms)
+    yield* Effect.promise(() => new Promise<void>((r) => setImmediate(r)))
+  })
+
+// Like runTest, but rethrows a failure or defect as the real exception it carries, so an
+// assertion made inside the program itself (a retry-timing scenario stepping the clock by
+// hand) surfaces with its own message and stack instead of an opaque Exit.
+export const runProgram = async <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>, fetchFn: FakeFetch): Promise<A> => {
+  const exit = await runTest(effect, fetchFn)
+  if (Exit.isFailure(exit)) throw Cause.squash(exit.cause)
+  return exit.value
 }

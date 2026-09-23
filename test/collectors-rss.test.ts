@@ -1,82 +1,134 @@
 import assert from 'node:assert/strict'
-import { afterEach, describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { body, fetchFeed, toDoc } from '../src/collectors/rss.js'
-import { MAX_RESPONSE_BYTES } from '../src/http.js'
+import { describe, it } from 'node:test'
+import { Cause, Effect, Exit } from 'effect'
+import { body, collect as collectRss, fetchFeed, toDoc } from '../src/collectors/rss.js'
+import { collect as collectGnews } from '../src/collectors/gnews.js'
+import { collect as collectJuridico } from '../src/collectors/juridico.js'
+import { collect as collectOficial } from '../src/collectors/oficial.js'
+import { collect as collectNicho } from '../src/collectors/nicho.js'
+import { MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS, ResponseTooLarge } from '../src/http.js'
+import type { Person } from '../src/types.js'
+import { drain, failureOf, fakeFetch, hanging, runTest, type Call } from './effect.js'
 
-const rssSrc = readFileSync(fileURLToPath(new URL('../src/collectors/rss.ts', import.meta.url)), 'utf8')
+const ana: Person = { id: 'ana', name: 'Ana Souza', aliases: ['Ana Souza'] }
+const bento: Person = { id: 'bento', name: 'Bento Lima', aliases: ['Bento Lima'] }
 
-// The same convention as test/api.test.ts and press-collectors-acceptance.test.ts: stub
-// global fetch and restore it afterward, so this never hits the network (CLAUDE.md).
-const originalFetch = globalThis.fetch
-afterEach(() => {
-  globalThis.fetch = originalFetch
-})
+const rssBody = (encoding = 'UTF-8') =>
+  `<?xml version="1.0" encoding="${encoding}"?><rss><channel><item><link>https://x/1</link><title>Fulano fala</title></item></channel></rss>`
 
-const streamOf = (chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
-  new ReadableStream({
-    start(controller) {
-      for (const c of chunks) controller.enqueue(c)
-      controller.close()
-    },
+describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no global fetch)', () => {
+  it('parses a feed under the cap into docs', async () => {
+    const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('rss')('https://example.org/feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    assert.equal(exit.value[0].uri, 'https://x/1')
   })
 
-const stubFetch = (res: { status?: number; ok?: boolean; contentLength?: string | null; body?: ReadableStream<Uint8Array> | null }) => {
-  let bodyAccessed = false
-  globalThis.fetch = (async () => ({
-    status: res.status ?? 200,
-    ok: res.ok ?? true,
-    headers: { get: (k: string) => (k === 'content-length' ? res.contentLength ?? null : null) },
-    get body() {
-      bodyAccessed = true
-      return res.body ?? null
-    },
-  })) as unknown as typeof fetch
-  return () => bodyAccessed
-}
-
-describe('fetchFeed — imports and reuses http.ts\'s shared ceiling (source text)', () => {
-  it('imports MAX_RESPONSE_BYTES from ../http.js rather than re-declaring a literal', () => {
-    assert.match(rssSrc, /import\s*\{[^}]*MAX_RESPONSE_BYTES[^}]*\}\s*from\s*'\.\.\/http\.js'/)
-    assert.doesNotMatch(rssSrc, /const\s+MAX_RESPONSE_BYTES/, 'must reuse the shared constant, not redeclare it')
+  it('decodes a latin1-declared prolog correctly', async () => {
+    const xml = `<?xml version="1.0" encoding="ISO-8859-1"?><rss><channel><item><link>https://x/2</link><title>Eleiu00e7u00f5es</title></item></channel></rss>`
+      .replace('Eleiu00e7u00f5es', 'Eleições')
+    const bytes = new Uint8Array([...Buffer.from(xml, 'latin1')])
+    const fetchFn = fakeFetch(() => new Response(bytes, { status: 200 }))
+    const exit = await runTest(fetchFeed('rss')('https://example.org/feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.match(exit.value[0].text, /Eleições/)
   })
 
-  it('checks content-length before res.arrayBuffer()/reading the body', () => {
-    const clIdx = rssSrc.indexOf('headerLength(res.headers')
-    const arrayBufferIdx = rssSrc.indexOf('res.arrayBuffer()')
-    const readCappedIdx = rssSrc.indexOf('readCapped(res.body')
-    assert.ok(clIdx > -1, 'fetchFeed must check content-length')
-    assert.equal(arrayBufferIdx, -1, 'fetchFeed must no longer call res.arrayBuffer() directly')
-    assert.ok(readCappedIdx > -1 && clIdx < readCappedIdx, 'content-length check must precede the capped body read')
-  })
-})
-
-describe('fetchFeed — behaviour, driven through a stubbed global fetch', () => {
-  const feedXml = '<rss><channel><item><link>https://x/1</link><title>Fulano fala</title></item></channel></rss>'
-
-  it('parses a feed under the cap', async () => {
-    stubFetch({ body: streamOf([new TextEncoder().encode(feedXml)]) })
-    const docs = await fetchFeed('rss')('https://example.org/feed')
-    assert.equal(docs.length, 1)
-    assert.equal(docs[0].uri, 'https://x/1')
+  it('fails on a declared content-length over MAX_RESPONSE_BYTES before reading any of the body, the message naming the feed', async () => {
+    let read = false
+    const stream = new ReadableStream<Uint8Array>({ pull: () => void (read = true) }, { highWaterMark: 0 })
+    const fetchFn = fakeFetch(() => new Response(stream, { status: 200, headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) } }))
+    const error = failureOf(await runTest(fetchFeed('rss')('https://example.org/feed'), fetchFn))
+    assert.ok(error instanceof ResponseTooLarge)
+    assert.equal(error.stage, 'declared')
+    assert.equal(read, false)
+    assert.match(error.message, /^https:\/\/example\.org\/feed: response too large/)
   })
 
-  it('rejects a declared content-length over MAX_RESPONSE_BYTES without reading the body', async () => {
-    const wasBodyAccessed = stubFetch({ contentLength: String(MAX_RESPONSE_BYTES + 1) })
-    await assert.rejects(fetchFeed('rss')('https://example.org/feed'), /too large/)
-    assert.equal(wasBodyAccessed(), false)
-  })
-
-  it('rejects once the streamed body exceeds MAX_RESPONSE_BYTES with no declared length', async () => {
+  it('fails once the streamed body exceeds MAX_RESPONSE_BYTES with no declared length, the message naming the feed', async () => {
     const chunk = new Uint8Array(MAX_RESPONSE_BYTES)
-    stubFetch({ body: streamOf([chunk, new Uint8Array([1])]) })
-    await assert.rejects(fetchFeed('rss')('https://example.org/feed'), /too large/)
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk)
+        controller.enqueue(new Uint8Array([1]))
+        controller.close()
+      },
+    })
+    const fetchFn = fakeFetch(() => new Response(stream, { status: 200 }))
+    const error = failureOf(await runTest(fetchFeed('rss')('https://example.org/feed'), fetchFn))
+    assert.ok(error instanceof ResponseTooLarge)
+    assert.equal(error.stage, 'streaming')
+    assert.match(error.message, /^https:\/\/example\.org\/feed: response too large/)
   })
 
-  it('still throws on a non-ok status, unchanged from today', async () => {
-    stubFetch({ status: 500, ok: false })
-    await assert.rejects(fetchFeed('rss')('https://example.org/feed'), /rss https:\/\/example\.org\/feed 500/)
+  it('fails with "<source> <url> <status>" on a non-2xx status, unchanged from before', async () => {
+    const fetchFn = fakeFetch(() => new Response('nope', { status: 500 }))
+    const error = failureOf(await runTest(fetchFeed('rss')('https://example.org/feed'), fetchFn))
+    assert.match(String(error), /rss https:\/\/example\.org\/feed 500/)
+  })
+
+  it('a timed-out feed fails with "<source> <url>: <reason>", so a stalled feed among several is identifiable', async () => {
+    const fetchFn = fakeFetch(hanging)
+    const exit = await runTest(drain(fetchFeed('rss')('https://example.org/feed'), REQUEST_TIMEOUT_MS), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const { exit: inner, elapsedMs } = exit.value
+    const error = failureOf(inner)
+    assert.equal(elapsedMs, REQUEST_TIMEOUT_MS)
+    assert.ok(!Cause.isTimeoutError(error), 'fetchFeed wraps the bare TimeoutError with its own feed-identifying message')
+    assert.match(String(error), /rss https:\/\/example\.org\/feed: /)
+  })
+})
+
+describe('one failing feed short-circuits the whole run and interrupts its siblings', () => {
+  it('a second, hanging feed never resolves once the first one fails', async () => {
+    const fetchFn = fakeFetch((c) => (c.url.href === 'https://a/' ? new Response('boom', { status: 500 }) : hanging(c)))
+    const run = Effect.forEach(['https://a/', 'https://b/'], fetchFeed('rss'), { concurrency: 'unbounded' })
+    const exit = await runTest(run, fetchFn)
+    assert.ok(Exit.isFailure(exit))
+    const bCall = fetchFn.calls.find((c) => c.url.href === 'https://b/')
+    assert.ok(bCall === undefined || bCall.signal.aborted === true, 'the sibling request must never fire, or be aborted once the run fails')
+  })
+})
+
+describe('rss/juridico/oficial/nicho — each fetches its own hardcoded feed list, stamped with the family source, never a tone', () => {
+  // One doc per stubbed feed URL (the stub returns the same one-item body regardless of url),
+  // so the doc count also proves each family fetches its own list, not another's or none.
+  const cases: [string, Effect.Effect<any[], unknown, any>, number][] = [
+    ['rss', collectRss, 8],
+    ['juridico', collectJuridico, 3],
+    ['oficial', collectOficial, 4],
+    ['nicho', collectNicho, 10],
+  ]
+
+  for (const [family, collect, feedCount] of cases) {
+    it(`${family}: fetches its own ${feedCount} feeds, every RawDoc carries source: '${family}' and no tone field`, async () => {
+      const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
+      const exit = await runTest(collect, fetchFn)
+      assert.ok(Exit.isSuccess(exit))
+      assert.equal(exit.value.length, feedCount, `${family} must fetch exactly its own ${feedCount} hardcoded feeds`)
+      for (const doc of exit.value) {
+        assert.equal(doc.source, family)
+        assert.equal('tone' in doc, false)
+      }
+    })
+  }
+})
+
+describe('gnews — one request per person, and the query carries q/hl/gl/ceid', () => {
+  it('fetches one feed per person, sequentially', async () => {
+    const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
+    const exit = await runTest(collectGnews([ana, bento]), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const search = (c: Call) => c.url.host === 'news.google.com'
+    const calls = fetchFn.calls.filter(search)
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].url.searchParams.get('q'), 'Ana Souza')
+    assert.equal(calls[0].url.searchParams.get('hl'), 'pt-BR')
+    assert.equal(calls[0].url.searchParams.get('gl'), 'BR')
+    assert.equal(calls[0].url.searchParams.get('ceid'), 'BR:pt-419')
+    assert.equal(calls[1].url.searchParams.get('q'), 'Bento Lima')
+    for (const doc of exit.value) assert.equal(doc.source, 'gnews')
   })
 })
 
@@ -110,5 +162,79 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
     })
     assert.match(doc?.text ?? '', /^Manchete curta\. Corpo inteiro/)
     assert.ok((doc?.text.length ?? 0) > 400)
+  })
+})
+
+describe('collectors on Effect, drop the Promise helpers (issue #183)', () => {
+  it('juridico, oficial and nicho each fetch their own distinct hardcoded feed list, every doc stamped with the family source and never a tone (issue #183 AC4)', async () => {
+    const seen = new Map<string, Set<string>>()
+    const stub = (name: string) =>
+      fakeFetch((c) => {
+        const set = seen.get(name) ?? new Set<string>()
+        set.add(c.url.href)
+        seen.set(name, set)
+        return new Response(rssBody(), { status: 200 })
+      })
+    const cases: [string, Effect.Effect<any[], unknown, any>][] = [
+      ['juridico', collectJuridico],
+      ['oficial', collectOficial],
+      ['nicho', collectNicho],
+    ]
+    for (const [name, collect] of cases) {
+      const fetchFn = stub(name)
+      const exit = await runTest(collect, fetchFn)
+      assert.ok(Exit.isSuccess(exit))
+      assert.ok(exit.value.length > 0, `${name} must fetch at least one feed`)
+      for (const doc of exit.value) {
+        assert.equal(doc.source, name)
+        assert.equal('tone' in doc, false)
+      }
+    }
+    const [juridicoUrls, oficialUrls, nichoUrls] = ['juridico', 'oficial', 'nicho'].map((n) => [...(seen.get(n) ?? new Set())].sort().join('|'))
+    assert.ok(juridicoUrls && oficialUrls && nichoUrls, 'each family must actually issue requests')
+    assert.equal(new Set([juridicoUrls, oficialUrls, nichoUrls]).size, 3, 'each family must fetch its own distinct feed list, not another\'s')
+  })
+
+  it('a declared content-length over the cap fails before any byte is read, and a body that grows past the cap while streaming fails and cancels the stream (issue #183 AC5)', async () => {
+    let readDeclared = false
+    const declaredStream = new ReadableStream<Uint8Array>({ pull: () => void (readDeclared = true) }, { highWaterMark: 0 })
+    const declaredFetch = fakeFetch(() => new Response(declaredStream, { status: 200, headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) } }))
+    const declaredError = failureOf(await runTest(fetchFeed('rss')('https://example.org/big'), declaredFetch))
+    assert.ok(declaredError instanceof ResponseTooLarge)
+    assert.equal(declaredError.stage, 'declared')
+    assert.equal(readDeclared, false, 'must not read any byte once the declared length is over the cap')
+
+    // Four chunks, not two: the first two sum to exactly MAX_RESPONSE_BYTES (not over, the
+    // check is strict >), the third tips it over -- with a fourth still queued and unread, so
+    // the underlying stream is still 'readable' (not already closed) when getBytes cancels it,
+    // proving a genuine cancellation rather than a no-op on an already-drained stream.
+    let cancelled = false
+    const half = Math.floor(MAX_RESPONSE_BYTES / 2)
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(half))
+        controller.enqueue(new Uint8Array(MAX_RESPONSE_BYTES - half))
+        controller.enqueue(new Uint8Array([1]))
+        controller.enqueue(new Uint8Array([1]))
+        controller.close()
+      },
+      cancel: () => void (cancelled = true),
+    })
+    const streamingFetch = fakeFetch(() => new Response(stream, { status: 200 }))
+    const streamingError = failureOf(await runTest(fetchFeed('rss')('https://example.org/stream'), streamingFetch))
+    assert.ok(streamingError instanceof ResponseTooLarge)
+    assert.equal(streamingError.stage, 'streaming')
+    assert.equal(cancelled, true, 'the stream must be cancelled once the running total exceeds the cap, no partial body kept')
+  })
+
+  it('one failing feed among several fails the whole run and interrupts the in-flight siblings (issue #183 AC6)', async () => {
+    const fetchFn = fakeFetch((c) => (c.url.href === 'https://fails.example/' ? new Response('boom', { status: 500 }) : hanging(c)))
+    const run = Effect.forEach(['https://fails.example/', 'https://sibling-a.example/', 'https://sibling-b.example/'], fetchFeed('rss'), { concurrency: 'unbounded' })
+    const exit = await runTest(run, fetchFn)
+    assert.ok(Exit.isFailure(exit))
+    for (const url of ['https://sibling-a.example/', 'https://sibling-b.example/']) {
+      const call = fetchFn.calls.find((c) => c.url.href === url)
+      assert.ok(call === undefined || call.signal.aborted === true, `${url} must either never fire or be interrupted once the run fails`)
+    }
   })
 })

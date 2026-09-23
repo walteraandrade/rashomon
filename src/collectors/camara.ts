@@ -1,5 +1,7 @@
+import { Console, Effect } from 'effect'
+import type { HttpClient } from 'effect/unstable/http'
 import type { Collector, Person, RawDoc } from '../types.js'
-import { sequential, sleep, slowGet } from '../http.js'
+import { getBytes, parseJson, runWithFetch } from '../http.js'
 
 const base = 'https://dadosabertos.camara.leg.br/api/v2/deputados'
 const windowDays = 30
@@ -20,18 +22,21 @@ const speechesUrl = (camaraId: string) => {
   return url
 }
 
-const log = (msg: string) => console.log(`[camara] ${msg}`)
-
-const fetchSpeeches = async (camaraId: string, attempt = 1): Promise<any[]> => {
-  const { status, body } = await slowGet(speechesUrl(camaraId))
-  if ((status === 429 || status >= 500) && attempt <= 3) {
-    const wait = pauseMs * 4 * attempt
-    log(`${camaraId}: ${status}, retrying in ${Math.round(wait / 1000)}s (attempt ${attempt}/3)`)
-    return sleep(wait).then(() => fetchSpeeches(camaraId, attempt + 1))
-  }
-  if (status < 200 || status >= 300) throw new Error(`camara ${status}: ${body.trim().slice(0, 120)}`)
-  return (JSON.parse(body) as { dados?: any[] }).dados ?? []
-}
+// 429/5xx retried up to 3 times, waiting pauseMs * 4 * attempt (4s, 8s, 12s) between them; any
+// other status, or the 4th attempt, fails with the status and the head of the body.
+const attempt = (camaraId: string, n: number): Effect.Effect<any[], Error, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const { status, body } = yield* getBytes(speechesUrl(camaraId))
+    const text = new TextDecoder().decode(body)
+    if ((status === 429 || status >= 500) && n <= 3) {
+      const wait = pauseMs * 4 * n
+      yield* Console.log(`[camara] ${camaraId}: ${status}, retrying in ${Math.round(wait / 1000)}s (attempt ${n}/3)`)
+      yield* Effect.sleep(wait)
+      return yield* attempt(camaraId, n + 1)
+    }
+    if (status < 200 || status >= 300) return yield* Effect.fail(new Error(`camara ${status}: ${text.trim().slice(0, 120)}`))
+    return (yield* parseJson<{ dados?: any[] }>(text)).dados ?? []
+  })
 
 const toDoc = (person: Person, item: any): RawDoc | null => {
   if (!item.dataHoraInicio) return null
@@ -48,12 +53,19 @@ const toDoc = (person: Person, item: any): RawDoc | null => {
   return { source: 'camara', uri, text, publishedAt, domain: 'camara.leg.br' }
 }
 
-const collectPerson = async (person: Person): Promise<RawDoc[]> => {
-  if (!person.camaraId) return []
-  const speeches = await fetchSpeeches(person.camaraId).catch((e: Error) => (console.error(`[camara] ${person.id}: ${e.message}`), []))
-  log(`${person.id}: ${speeches.length} speeches`)
-  await sleep(pauseMs)
-  return speeches.map((s) => toDoc(person, s)).filter((d): d is RawDoc => d !== null)
-}
+// A person's failure costs that person's speeches and a log line, never the run.
+const collectPerson = (person: Person): Effect.Effect<RawDoc[], never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    if (!person.camaraId) return []
+    const speeches = yield* attempt(person.camaraId, 1).pipe(
+      Effect.catch((e) => Console.error(`[camara] ${person.id}: ${e.message}`).pipe(Effect.as([] as any[]))),
+    )
+    yield* Console.log(`[camara] ${person.id}: ${speeches.length} speeches`)
+    yield* Effect.sleep(pauseMs)
+    return speeches.map((s) => toDoc(person, s)).filter((d): d is RawDoc => d !== null)
+  })
 
-export const camara: Collector = async (persons) => (await sequential(persons, collectPerson)).flat()
+export const collect = (persons: Person[]): Effect.Effect<RawDoc[], never, HttpClient.HttpClient> =>
+  Effect.forEach(persons, collectPerson).pipe(Effect.map((docs) => docs.flat()))
+
+export const camara: Collector = (persons) => runWithFetch(collect(persons))

@@ -40,8 +40,7 @@ export const poolConfig = (url: string) => {
     maxConnections: clampEnv(process.env.PG_POOL_MAX, 3, 1, 20),
     connectTimeout: 10_000,
     connectionTimeoutMillis: 10_000,
-    // Off: a transaction-mode pooler (port 6543) can hand a named prepared statement to a
-    // different physical connection than the one that parsed it. pg.Pool ignores the field.
+    // Off: a transaction-mode pooler (port 6543) can hand a named prepared statement to a different physical connection than the one that parsed it. pg.Pool ignores the field.
     prepare: false,
   }
 }

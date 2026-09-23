@@ -19,6 +19,8 @@ const INSERT_DOC_TERMS_SQL = `insert into doc_terms (doc_id, term, kind) select 
 const INSERT_DOC_CANDIDATES_SQL = `insert into doc_candidates (doc_id, name) select * from unnest($1::int[], $2::text[]) on conflict do nothing`
 const DELETE_DOC_TERMS_SQL = `delete from doc_terms where doc_id = any($1::int[])`
 const DELETE_DOC_CANDIDATES_SQL = `delete from doc_candidates where doc_id = any($1::int[])`
+const DELETE_ORPHAN_DOC_PERSONS_SQL = `delete from doc_persons where not (person_id = any($1::text[]))`
+const DELETE_ORPHAN_PERSONS_SQL = `delete from persons where not (id = any($1::text[])) returning id`
 // On conflict: domain keeps first non-null; tone is null for non-GDELT; longer text wins.
 const UPSERT_DOC_SQL = `insert into docs (source, uri, text, published_at, extra_terms, domain, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (uri) do update set
@@ -50,15 +52,14 @@ export const batches = <T>(xs: readonly T[], size: number): T[][] =>
 export const inBatches = <T>(xs: readonly T[], size: number, fn: (batch: T[]) => Promise<unknown>) =>
   batches(xs, size).reduce<Promise<void>>(async (acc, b) => (await acc, void (await fn(b))), Promise.resolve())
 
-// db.ts owns the real transaction (sql.withTransaction); a nested inTransaction call registers
-// as a savepoint there instead of a second transaction.
+// db.ts owns the real transaction (sql.withTransaction); a nested inTransaction call registers as a savepoint there instead of a second transaction.
 export const inTransaction = runInTransaction
 
 export const pruneRemoved = async (ps: Person[]) => {
   const ids = ps.map((p) => p.id)
   return inTransaction(async () => {
-    await db.query(`delete from doc_persons where not (person_id = any($1::text[]))`, [ids])
-    const { rows } = await db.query<{ id: string }>(`delete from persons where not (id = any($1::text[])) returning id`, [ids])
+    await db.query(DELETE_ORPHAN_DOC_PERSONS_SQL, [ids])
+    const { rows } = await db.query<{ id: string }>(DELETE_ORPHAN_PERSONS_SQL, [ids])
     return rows.map((r) => r.id)
   })
 }
@@ -106,8 +107,7 @@ export type Written = 'inserted' | 'enriched' | 'unchanged'
 const outcome = (row: { inserted: boolean; took_incoming: boolean } | undefined): Written =>
   !row ? 'unchanged' : row.inserted ? 'inserted' : row.took_incoming ? 'enriched' : 'unchanged'
 
-// Clear terms when text is replaced: headline terms must not sum with the article's.
-// doc_persons is left alone: the headline already named them; the body only adds.
+// Clear terms when text is replaced: headline terms must not sum with the article's. doc_persons is left alone: the headline already named them; the body only adds.
 const clearDerived = async (ids: readonly number[]) => {
   if (!ids.length) return
   await db.query(DELETE_DOC_TERMS_SQL, [ids])
@@ -156,9 +156,7 @@ export const insertDocs = (docs: readonly RawDoc[], ps: Person[], size = writeBa
     }, Promise.resolve(totals))
   }, Promise.resolve({ written: 0, enriched: 0, failed: 0 }))
 
-// Effect-native counterparts, built on Effect.gen/Effect.forEach against the ambient SqlClient
-// rather than wrapping the Promise functions above, so a caller can Effect.catchTag a SqlError.
-// Statement text is shared above; only the batching is written twice (test/store.test.ts).
+// Effect-native counterparts, built on Effect.gen/Effect.forEach against the ambient SqlClient rather than wrapping the Promise functions above, so a caller can Effect.catchTag a SqlError. Statement text is shared above; only the batching is written twice (test/store.test.ts).
 
 const writeDerivedRows = (sql: SqlClient.SqlClient, rows: readonly Derived[], size: number) =>
   Effect.forEach(derivedStatements(rows, size), ([text, params]) => sql.unsafe(text, params), { discard: true })
@@ -169,8 +167,8 @@ export const pruneRemovedEffect = (ps: Person[]): Effect.Effect<string[], SqlErr
     const ids = ps.map((p) => p.id)
     return yield* sql.withTransaction(
       Effect.gen(function* () {
-        yield* sql.unsafe(`delete from doc_persons where not (person_id = any($1::text[]))`, [ids])
-        const rows = yield* sql.unsafe<{ id: string }>(`delete from persons where not (id = any($1::text[])) returning id`, [ids])
+        yield* sql.unsafe(DELETE_ORPHAN_DOC_PERSONS_SQL, [ids])
+        const rows = yield* sql.unsafe<{ id: string }>(DELETE_ORPHAN_PERSONS_SQL, [ids])
         return rows.map((r) => r.id)
       }),
     )

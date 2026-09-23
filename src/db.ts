@@ -20,6 +20,9 @@ export const clampEnv = (v: string | undefined, d: number, lo: number, hi: numbe
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d
 }
 
+// vercel env pull hands back literal \n/\r\n text; longer sequence first so \r\n isn't split.
+const normalizeCa = (ca: string) => ca.replace(/\\r\\n/g, '\r\n').replace(/\\n/g, '\n')
+
 // sslmode stripped (would override ssl option). Non-local connections are verified against
 // PG_SSL_CA (the server's CA certificate, added to Node's default trust store). Without it,
 // poolConfig refuses to build a config rather than connect with an unverified chain.
@@ -29,8 +32,10 @@ export const poolConfig = (url: string) => {
   const parsed = new URL(url)
   parsed.searchParams.delete('sslmode')
   const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
-  const ca = process.env.PG_SSL_CA
-  if (!isLocal && !ca) throw new Error('PG_SSL_CA is required for a non-local database connection')
+  const rawCa = process.env.PG_SSL_CA
+  if (!isLocal && !rawCa) throw new Error('PG_SSL_CA is required for a non-local database connection')
+  const ca = isLocal ? undefined : normalizeCa(rawCa as string)
+  if (!isLocal && !ca?.includes('-----BEGIN CERTIFICATE-----')) throw new Error('PG_SSL_CA is not a valid PEM certificate')
   const connectionString = parsed.toString()
   const ssl = isLocal ? undefined : { ca: [...tls.rootCertificates, ca as string], rejectUnauthorized: true }
   return {

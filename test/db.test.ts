@@ -49,7 +49,7 @@ describe('poolConfig', () => {
   })
 
   it('strips sslmode from a non-local url, keeping other params', async () => {
-    await withEnv({ PG_SSL_CA: 'fake-ca-pem' }, () => {
+    await withEnv({ PG_SSL_CA: '-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n' }, () => {
       const { connectionString } = poolConfig('postgres://user:pw@db.example.com:5432/db?sslmode=require&x=1')
       assert.doesNotMatch(String(connectionString), /sslmode/)
       assert.match(String(connectionString), /x=1/)
@@ -69,7 +69,7 @@ describe('poolConfig', () => {
   })
 
   it('the ssl config adds PG_SSL_CA to Node\'s default trust store rather than replacing it, so a pooler serving a publicly-signed cert still verifies', async () => {
-    const ca = 'fake-ca-pem'
+    const ca = '-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n'
     await withEnv({ PG_SSL_CA: ca }, () => {
       const config = poolConfig('postgres://user:pw@db.example.com:5432/db')
       const ssl = config.ssl as { rejectUnauthorized: boolean; ca: string[] }
@@ -169,6 +169,47 @@ describe('poolConfig', () => {
   it('out of scope: no PG_SSL_INSECURE opt-out exists anywhere in src/db.ts', () => {
     const src = readRepoFile('src/db.ts')
     assert.doesNotMatch(src, /PG_SSL_INSECURE/)
+  })
+
+  it('normalizes literal \\n escape sequences in PG_SSL_CA to real newlines', async () => {
+    const literal = '-----BEGIN CERTIFICATE-----\\nMII\\n-----END CERTIFICATE-----\\n'
+    const real = '-----BEGIN CERTIFICATE-----\nMII\n-----END CERTIFICATE-----\n'
+    await withEnv({ PG_SSL_CA: literal }, () => {
+      const config = poolConfig('postgres://user:pw@db.example.com:5432/db')
+      const ssl = config.ssl as { ca: string[] }
+      assert.ok(ssl.ca.includes(real))
+      assert.ok(ssl.ca.some((c) => c.split('\n').length > 1))
+    })
+  })
+
+  it('normalizes literal \\r\\n escape sequences in PG_SSL_CA to real newlines, not a bare \\r plus a converted \\n', async () => {
+    const literal = '-----BEGIN CERTIFICATE-----\\r\\nMII\\r\\n-----END CERTIFICATE-----\\r\\n'
+    const real = '-----BEGIN CERTIFICATE-----\r\nMII\r\n-----END CERTIFICATE-----\r\n'
+    await withEnv({ PG_SSL_CA: literal }, () => {
+      const config = poolConfig('postgres://user:pw@db.example.com:5432/db')
+      const ssl = config.ssl as { ca: string[] }
+      assert.ok(ssl.ca.includes(real))
+    })
+  })
+
+  it('throws naming PG_SSL_CA when the normalized value has no BEGIN CERTIFICATE marker, for a non-local host', async () => {
+    await withEnv({ PG_SSL_CA: 'not-pem-even-after-normalizing\\n' }, () => {
+      assert.throws(() => poolConfig('postgres://user:pw@db.example.com:5432/db'), /PG_SSL_CA/)
+    })
+  })
+
+  it('does not read or validate PG_SSL_CA for a local host even when its value is not PEM', async () => {
+    await withEnv({ PG_SSL_CA: 'not-pem-at-all' }, () => {
+      assert.equal(poolConfig('postgres://user:pw@localhost:5432/db').ssl, undefined)
+    })
+  })
+
+  it('docs state that PG_SSL_CA accepts either literal-escaped or real newlines', () => {
+    assert.match(docsText, /PG_SSL_CA[\s\S]{0,400}(literal|escaped)[\s\S]{0,400}newline/i)
+  })
+
+  it('docs no longer instruct running printf %b on PG_SSL_CA', () => {
+    assert.doesNotMatch(docsText, /printf '%b'/)
   })
 })
 

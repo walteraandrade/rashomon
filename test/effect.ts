@@ -33,6 +33,18 @@ export const json = (body: unknown, status = 200) => new Response(JSON.stringify
 export const hanging = (call: Call) =>
   new Promise<Response>((_, reject) => call.signal.addEventListener('abort', () => reject(new Error('aborted'))))
 
+// A fetch that resolves immediately with headers, but whose body never delivers a chunk or
+// closes -- until the caller gives up. Exercises the body-read stage separately from the
+// headers stage `hanging` exercises.
+export const hangingBody = (call: Call): Response => {
+  const body = new ReadableStream<Uint8Array>({
+    start: (controller) => {
+      call.signal.addEventListener('abort', () => controller.error(new Error('aborted')))
+    },
+  })
+  return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } })
+}
+
 // Runs an effect on the fake clock and the fake console, with the stub fetch wired in.
 export const runTest = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>, fetchFn: FakeFetch): Promise<Exit.Exit<A, E>> =>
   Effect.runPromiseExit(

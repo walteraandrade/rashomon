@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { Exit } from 'effect'
 import { BlueskyError, collect } from '../src/collectors/bluesky.js'
 import type { Person } from '../src/types.js'
-import { drain, fakeFetch, failureOf, hanging, json, runTest, type Call } from './effect.js'
+import { drain, fakeFetch, failureOf, hanging, hangingBody, json, runTest, type Call } from './effect.js'
 import { withEnv } from './env.js'
 
 const ana: Person = { id: 'ana', name: 'Ana Souza', aliases: ['Ana Souza'] }
@@ -143,5 +143,27 @@ describe('bluesky collector, one person failing', () => {
     assert.ok(Exit.isSuccess(exit) && Exit.isSuccess(exit.value.exit))
     assert.equal(exit.value.exit.value.length, 1)
     assert.match(exit.value.log[1], /^\[bluesky\] Ana Souza: /)
+  })
+
+  it('a body that stalls after headers is cut after 45 s too, not just a headers-stage hang', async () => {
+    const fetchFn = fakeFetch((c) => (c.url.searchParams.get('q') === 'Ana Souza' ? hangingBody(c) : json({ posts: [post(3)] })))
+    const exit = await withEnv(anonymous, () => runTest(drain(collect([ana, bento]), 45_000), fetchFn))
+    assert.ok(Exit.isSuccess(exit) && Exit.isSuccess(exit.value.exit))
+    assert.equal(exit.value.exit.value.length, 1)
+    assert.equal(fetchFn.calls.find((c) => c.url.searchParams.get('q') === 'Ana Souza')?.signal.aborted, true)
+    assert.match(exit.value.log[1], /^\[bluesky\] Ana Souza: .*45/i)
+  })
+
+  it('one malformed post in a page costs only that post, not its valid siblings', async () => {
+    const fetchFn = fakeFetch((c) =>
+      c.url.searchParams.get('q') === 'Ana Souza' ? json({ posts: [post(1), { record: { text: 'no uri here' } }] }) : json({ posts: [post(3)] }),
+    )
+    const exit = await withEnv(anonymous, () => runTest(drain(collect([ana, bento]), PAUSE), fetchFn))
+    assert.ok(Exit.isSuccess(exit) && Exit.isSuccess(exit.value.exit))
+    assert.deepEqual(
+      exit.value.exit.value.map((d) => d.uri),
+      ['at://did:plc:x/app.bsky.feed.post/1', 'at://did:plc:x/app.bsky.feed.post/3'],
+    )
+    assert.ok(exit.value.log.some((line) => /dropped 1 malformed post/.test(line)))
   })
 })

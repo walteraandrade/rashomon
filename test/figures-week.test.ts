@@ -183,6 +183,56 @@ describe('picking a word in a column opens the docs card with that column own da
       assert.equal(els.docsDialog.open, true, 'a background click here releases nothing it does not own')
     })
   })
+
+  it('pressing Escape releases the pick and closes the card this figure opened, wired through figure.ts (gap 4)', async () => {
+    await withFiguresDom(async (els, calls, fireDocumentKeydown) => {
+      clearScopes()
+      routeFetch(calls, { '/week': weekData([bucket()]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/week.js')
+      mount(els.week, { people, initial: { person: 'lula' } })
+      await flush()
+      const mark = [...els.weekChart.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      fireDocumentKeydown('Escape')
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'Escape must release the pick and close the card it opened')
+    })
+  })
+
+  it('exactly one ResizeObserver observes #weekChart, the runtime\'s own; firing it at a new width keeps the pick and the open card', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const captured: { target: unknown; cb: () => void }[] = []
+      class CapturingResizeObserver {
+        cb: () => void
+        constructor(cb: () => void) {
+          this.cb = cb
+        }
+        observe(target: unknown) {
+          captured.push({ target, cb: this.cb })
+        }
+        disconnect() {}
+      }
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = CapturingResizeObserver
+      routeFetch(calls, { '/week': weekData([bucket()]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/week.js')
+      mount(els.week, { people, initial: { person: 'lula' } })
+      await flush()
+      const weekChartObservers = captured.filter((c) => c.target === els.weekChart)
+      assert.equal(weekChartObservers.length, 1, 'exactly one ResizeObserver must observe #weekChart, the runtime\'s own')
+      const mark = [...els.weekChart.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'picking a word opens the card')
+      els.weekChart.clientWidth = 400
+      weekChartObservers[0].cb()
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'a resize must not close the card this figure opened')
+      assert.match(els.weekChart.innerHTML, /is-selected/, 'the picked word stays selected across a resize repaint')
+    })
+  })
 })
 
 describe('an empty week keeps the seven about numbers and paints no marks', () => {

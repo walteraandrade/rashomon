@@ -80,12 +80,6 @@ describe('the outlet in focus is local to this figure', () => {
 })
 
 describe('the strip repaints off its own ResizeObserver, not figure 1\'s resizeMap (issue #92 AC13)', () => {
-  it("figures/testimony.js observes #strip with its own ResizeObserver", () => {
-    const src = readFileSync(join(root, 'src', 'ui', 'figures', 'testimony.ts'), 'utf8')
-    assert.match(src, /new ResizeObserver\(/, 'figure 2 must own its own ResizeObserver')
-    assert.match(src, /\.observe\(\$\('strip'\)\)/, "it must observe its own #strip")
-  })
-
   it('resizing #strip through the real ResizeObserver callback repaints the strip with the new width', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -112,8 +106,9 @@ describe('the strip repaints off its own ResizeObserver, not figure 1\'s resizeM
       await flush()
       const firstMarkup = els.strip.innerHTML
       assert.match(firstMarkup, /viewBox="0 0 800/, 'the strip must first paint at its own clientWidth')
-      const stripObserver = captured.find((c) => c.target === els.strip)
-      assert.ok(stripObserver, 'figures/testimony.js must observe #strip with its own ResizeObserver')
+      const stripObservers = captured.filter((c) => c.target === els.strip)
+      assert.equal(stripObservers.length, 1, 'exactly one ResizeObserver must observe #strip, the runtime\'s own')
+      const stripObserver = stripObservers[0]
       els.strip.clientWidth = 400
       stripObserver!.cb()
       const secondMarkup = els.strip.innerHTML

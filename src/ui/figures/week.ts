@@ -7,8 +7,7 @@ import { html, kinds, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, t
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintWeek, paintWeekError, paintWeekLoading } from '../render.js'
 import { WEEK_COLUMN_WIDTH } from '../layout.js'
-import { span } from '../perf.js'
-import { debounce, fromScope, readScope } from '../state.js'
+import { runFigure } from '../figure.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
 
@@ -21,8 +20,6 @@ const $ = (id: string): any => document.getElementById(id)
 
 const OWNER = 'week'
 
-const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
-
 const applySeed = (select: any, value: string | undefined) => {
   if (value === undefined || !select) return
   if ([...select.options].some((o: any) => o.value === value)) select.value = value
@@ -34,8 +31,6 @@ const resolvePerson = (people: Person[], seeded: string | undefined) =>
 export const mount = (root: FigureRoot, { people, initial, peopleError = null }: { people: Person[]; initial: Seed; peopleError?: PeopleError }) => {
   let data: Week | null = null
   let selected: { day: string; term: string; kind: string } | null = null
-  let requestId = 0
-  let controller: AbortController | null = null
   let metrics: ReturnType<typeof createCanvasMeasure> | null = null
   let columnWidth = WEEK_COLUMN_WIDTH
   const measured = () => (metrics ??= createCanvasMeasure())
@@ -65,22 +60,19 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   // Selecting is a toggle; the overflow list's own buttons carry the same data-day/term/kind.
   const pick = (day: string, term: string, kind: string) => {
-    selected = selected && selected.day === day && selected.term === term && selected.kind === kind ? null : { day, term, kind }
+    if (selected && selected.day === day && selected.term === term && selected.kind === kind) {
+      figure.release()
+      return
+    }
+    selected = { day, term, kind }
     repaint()
-    if (selected) showDocs(selected)
-    else closeOwnCard()
-  }
-
-  // Never shuts a card another figure opened over this one's pick.
-  const closeOwnCard = () => {
-    if (docsCard.openedBy(OWNER)) docsCard.close()
+    showDocs(selected)
   }
 
   const releaseSelection = () => {
     if (!selected) return
     selected = null
     repaint()
-    closeOwnCard()
   }
 
   const showDocs = (word: { day: string; term: string; kind: string }) => {
@@ -104,69 +96,66 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     })
   }
 
-  const background = (target: Element | null) => {
-    if (target && target.closest('[data-term]')) return
-    releaseSelection()
-  }
-
-  const load = async () => {
-    const id = ++requestId
-    controller?.abort()
-    controller = new AbortController()
+  const params = (): URLSearchParams | null => {
     if (peopleError) {
       data = null
       $('weekChart').hidden = true
       $('weekChart').innerHTML = ''
       $('weekNote').textContent = 'Falha de rede ou base indisponível.'
-      return
+      return null
     }
     if (!people.length) {
       data = null
       $('weekChart').hidden = true
       $('weekChart').innerHTML = ''
       $('weekNote').textContent = 'Nenhuma pessoa cadastrada.'
-      return
+      return null
     }
-    const params = api.weekParams({ source: source(), limit: limit() })
-    const key = personId() + '?' + params
-    if (!readScope('week', key)) {
-      if (data) root.classList.add('is-loading')
-      else paintWeekLoading()
-    }
-    const painted = span('figure:week')
-    try {
-      const result = await fromScope('week', key, () => api.loadWeek(personId(), params, (controller as AbortController).signal))
-      if (id !== requestId) return
-      data = result
-      selected = null
-      root.classList.remove('is-loading')
-      repaint()
-      painted({ person: personId(), query: key })
-    } catch (e) {
-      if (id === requestId && !aborted(e)) {
-        data = null
-        root.classList.remove('is-loading')
-        paintWeekError()
-      }
-    }
+    const qp = api.weekParams({ source: source(), limit: limit() })
+    qp.set('person', personId())
+    return qp
   }
 
-  const debouncedLoad = debounce(load)
+  const ghost = () => {
+    if (data) root.classList.add('is-loading')
+    else paintWeekLoading()
+  }
+
+  const paint = (result: Week) => {
+    // A resize repaint calls this with the same object again; only a new dataset clears the pick.
+    const isNewData = result !== data
+    data = result
+    if (isNewData) selected = null
+    root.classList.remove('is-loading')
+    repaint()
+  }
+
+  const paintError = () => {
+    data = null
+    root.classList.remove('is-loading')
+    paintWeekError()
+  }
+
+  // `el`/`markSelector` give background-click/Escape/resize wiring; a resize calls `paint`
+  // again with the same `data`, whose own `repaint()` already remeasures and repaints twice.
+  const figure = runFigure<Week>({
+    name: 'week',
+    params,
+    fetch: (queryParams, signal) => api.loadWeek(queryParams.get('person')!, api.weekParams({ source: queryParams.get('source')!, limit: queryParams.get('limit')! }), signal),
+    ghost,
+    paint,
+    paintError,
+    detail: (_data, queryParams) => ({ person: queryParams.get('person') }),
+    el: $('weekChart'),
+    markSelector: '[data-term]',
+    onRelease: releaseSelection,
+  })
 
   // Closes the card only when this figure opened it: a control here must not shut a card the
   // atlas or the ruler is showing (#148 review, 2).
   const onControlChange = () => {
-    if (selected) {
-      selected = null
-      closeOwnCard()
-    }
-    debouncedLoad()
-  }
-
-  // Escape releases this figure's own pick (and the card it opened); the atlas already owns
-  // "Escape closes whatever card is open".
-  const onKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') releaseSelection()
+    figure.release()
+    figure.reload()
   }
 
   $('weekSource').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
@@ -179,12 +168,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('weekPerson').addEventListener('change', onControlChange)
   $('weekSource').addEventListener('change', onControlChange)
   $('weekLimit').addEventListener('change', onControlChange)
-  $('weekChart').addEventListener('click', (e: MouseEvent) => background(e.target as Element | null))
-  document.addEventListener('keydown', onKeydown)
-  if (typeof ResizeObserver !== 'undefined')
-    new ResizeObserver(() => {
-      if (data && measureColumn() !== columnWidth) repaint()
-    }).observe($('weekChart'))
 
-  load()
+  figure.load()
 }

@@ -123,6 +123,25 @@ describe('an empty terms array paints the empty note and still renders about.rec
   })
 })
 
+describe('pressing Escape releases the selected word the same way a background click does', () => {
+  it('closes the docs card opened by a word click', async () => {
+    await withFiguresDom(async (els, calls, fireDocumentKeydown) => {
+      clearScopes()
+      routeFetch(calls, { '/rising': risingData([risingTerm({ term: 'diretor' })]) })
+      const { mount } = await import('../src/ui/figures/rising.js')
+      mount(els.rising, { people, initial: {} })
+      await flush()
+      const [word] = els.risingRuler.querySelectorAll('[data-term]')
+      assert.ok(word, 'the ruler must render one clickable word')
+      word.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'picking a word must open the docs card')
+      fireDocumentKeydown('Escape')
+      assert.equal(els.docsDialog.open, false, 'Escape must release the selection and close the card it opened')
+    })
+  })
+})
+
 describe('a GET /rising failure paints the ruler error note and never leaves the loading ghost on screen', () => {
   it('rejects the request; the ghost is replaced by the error note', async () => {
     await withFiguresDom(async (els, calls) => {

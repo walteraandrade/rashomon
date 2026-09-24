@@ -183,6 +183,23 @@ describe('picking a word in a column opens the docs card with that column own da
       assert.equal(els.docsDialog.open, true, 'a background click here releases nothing it does not own')
     })
   })
+
+  it('pressing Escape releases the pick and closes the card this figure opened, wired through figure.ts (gap 4)', async () => {
+    await withFiguresDom(async (els, calls, fireDocumentKeydown) => {
+      clearScopes()
+      routeFetch(calls, { '/week': weekData([bucket()]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/week.js')
+      mount(els.week, { people, initial: { person: 'lula' } })
+      await flush()
+      const mark = [...els.weekChart.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      fireDocumentKeydown('Escape')
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'Escape must release the pick and close the card it opened')
+    })
+  })
 })
 
 describe('an empty week keeps the seven about numbers and paints no marks', () => {

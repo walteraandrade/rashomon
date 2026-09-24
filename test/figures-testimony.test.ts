@@ -80,10 +80,10 @@ describe('the outlet in focus is local to this figure', () => {
 })
 
 describe('the strip repaints off its own ResizeObserver, not figure 1\'s resizeMap (issue #92 AC13)', () => {
-  it("figures/testimony.js observes #strip with its own ResizeObserver", () => {
+  it("figures/testimony.js observes #strip through the shared figure.ts runtime, and no longer wires a second ResizeObserver of its own (gap 2)", () => {
     const src = readFileSync(join(root, 'src', 'ui', 'figures', 'testimony.ts'), 'utf8')
-    assert.match(src, /new ResizeObserver\(/, 'figure 2 must own its own ResizeObserver')
-    assert.match(src, /\.observe\(\$\('strip'\)\)/, "it must observe its own #strip")
+    assert.doesNotMatch(src, /new ResizeObserver\(/, 'figure 2 must not hand-wire a second ResizeObserver; runFigure already observes el[0]')
+    assert.match(src, /el:\s*\[\$\('strip'\)/, "its testimony runFigure call must observe #strip as el[0]")
   })
 
   it('resizing #strip through the real ResizeObserver callback repaints the strip with the new width', async () => {

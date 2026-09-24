@@ -17,11 +17,13 @@ export type FigureTarget = { addEventListener: (type: string, listener: (event?:
 
 export type FigureOptions<T> = {
   name: string
+  scope?: string
   params: () => URLSearchParams | null
   fetch: (params: URLSearchParams, signal: AbortSignal) => Promise<T>
   ghost: () => void
   paint: (data: T) => void
   paintError: (e: unknown) => void
+  detail?: (data: T, params: URLSearchParams) => Record<string, string | number | null>
   el?: FigureTarget | FigureTarget[]
   markSelector?: string
   onRelease?: () => void
@@ -30,11 +32,13 @@ export type FigureOptions<T> = {
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
-  const { name, params, fetch, ghost, paint, paintError, el, markSelector, onRelease } = opts
+  const { name, scope = name, params, fetch, ghost, paint, paintError, detail, el, markSelector, onRelease } = opts
   let requestId = 0
   let controller: AbortController | null = null
   let hasData = false
   let lastData: T | undefined
+  // True between a ghost paint and that fetch settling, so a resize never repaints over it.
+  let loading = false
 
   const load = async () => {
     const id = ++requestId
@@ -44,18 +48,25 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
     const p = params()
     if (p === null) return
     const key = p.toString()
-    if (!readScope(name, key)) ghost()
+    if (!readScope(scope, key)) {
+      ghost()
+      loading = true
+    }
     const painted = span('figure:' + name)
     try {
-      const data = await fromScope(name, key, () => fetch(p, current.signal))
+      const data = await fromScope(scope, key, () => fetch(p, current.signal))
       if (id !== requestId) return
+      loading = false
       hasData = true
       lastData = data
       paint(data)
-      painted({ query: key })
+      painted({ query: key, ...(detail ? detail(data, p) : {}) })
     } catch (e) {
       if (id !== requestId) return
+      loading = false
       if (aborted(e)) return
+      hasData = false
+      lastData = undefined
       paintError(e)
     }
   }
@@ -63,7 +74,7 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
   const reload = debounce(load)
 
   const repaint = () => {
-    if (hasData) paint(lastData as T)
+    if (hasData && !loading) paint(lastData as T)
   }
 
   const release = () => {
@@ -86,7 +97,16 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
         if (e.key === 'Escape') release()
       })
     }
-    if (typeof ResizeObserver !== 'undefined' && targets[0]) new ResizeObserver(() => repaint()).observe(targets[0] as unknown as Element)
+    if (typeof ResizeObserver !== 'undefined' && targets[0]) {
+      let lastWidth = 0
+      const target = targets[0] as unknown as { clientWidth?: number }
+      new ResizeObserver(() => {
+        const width = target.clientWidth ?? 0
+        if (!width || width === lastWidth) return
+        lastWidth = width
+        repaint()
+      }).observe(targets[0] as unknown as Element)
+    }
   }
 
   return { load, reload, repaint, release }

@@ -134,6 +134,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     ghost,
     paint,
     paintError,
+    detail: (_data, queryParams) => ({ person: queryParams.get('person') }),
     el: $('risingRuler'),
     markSelector: '[data-term]',
     onRelease: releaseSelection,

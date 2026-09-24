@@ -96,11 +96,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     })
   }
 
-  const background = (target: Element | null) => {
-    if (target && target.closest('[data-term]')) return
-    figure.release()
-  }
-
   const params = (): URLSearchParams | null => {
     if (peopleError) {
       data = null
@@ -127,8 +122,11 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const paint = (result: Week) => {
+    // A resize repaint (figure.ts, since `el` is given) calls this with the same object again;
+    // only a genuinely new dataset clears the pick.
+    const isNewData = result !== data
     data = result
-    selected = null
+    if (isNewData) selected = null
     root.classList.remove('is-loading')
     repaint()
   }
@@ -139,8 +137,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     paintWeekError()
   }
 
-  // No `el`: the resize handler below remeasures the column before repainting, twice, which
-  // the runtime's plain repaint() does not do; `figure.release()` still owns abort/openedBy.
+  // `el`/`markSelector` give the background-click and Escape wiring; the remeasuring
+  // ResizeObserver below stays this figure's own (it repaints twice, figure.ts's does not).
   const figure = runFigure<Week>({
     name: 'week',
     params,
@@ -148,6 +146,9 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     ghost,
     paint,
     paintError,
+    detail: (_data, queryParams) => ({ person: queryParams.get('person') }),
+    el: $('weekChart'),
+    markSelector: '[data-term]',
     onRelease: releaseSelection,
   })
 
@@ -156,12 +157,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const onControlChange = () => {
     figure.release()
     figure.reload()
-  }
-
-  // Escape releases this figure's own pick (and the card it opened); the atlas already owns
-  // "Escape closes whatever card is open".
-  const onKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') figure.release()
   }
 
   $('weekSource').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
@@ -174,8 +169,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('weekPerson').addEventListener('change', onControlChange)
   $('weekSource').addEventListener('change', onControlChange)
   $('weekLimit').addEventListener('change', onControlChange)
-  $('weekChart').addEventListener('click', (e: MouseEvent) => background(e.target as Element | null))
-  document.addEventListener('keydown', onKeydown)
   if (typeof ResizeObserver !== 'undefined')
     new ResizeObserver(() => {
       if (data && measureColumn() !== columnWidth) repaint()

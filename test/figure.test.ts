@@ -10,6 +10,7 @@ class FakeEl {
   _listeners: Record<string, ((e?: unknown) => void)[]> = {}
   attributes: Record<string, string> = {}
   classes: Record<string, boolean> = {}
+  clientWidth = 100
   classList = {
     add: (n: string) => (this.classes[n] = true),
     remove: (n: string) => (this.classes[n] = false),
@@ -415,6 +416,90 @@ describe('figure.ts: runFigure abort/stale/scope/ghost/background/Escape/resize 
     }
   })
 
+  it('a resize callback with an unchanged width does not repaint (gap 2)', async () => {
+    setupDom()
+    try {
+      const { runFigure } = await import('../src/ui/figure.js')
+      let repaints = 0
+      const handle = runFigure<string>({
+        name: 'ac-resize-nochange',
+        params: () => new URLSearchParams(),
+        fetch: () => Promise.resolve('ok'),
+        ghost: () => {},
+        paint: () => repaints++,
+        paintError: () => {},
+        el: els.host,
+      })
+      await handle.load()
+      assert.equal(repaints, 1)
+      resizeObservers[0].trigger()
+      assert.equal(repaints, 2, 'the first callback establishes the observed width and repaints')
+      resizeObservers[0].trigger()
+      assert.equal(repaints, 2, 'a callback reporting the same clientWidth again must not repaint')
+    } finally {
+      teardownDom()
+    }
+  })
+
+  it('the fromScope/readScope bucket is `scope`, defaulting to `name`, so a memo hit records `api:<scope>` (gap 3)', async () => {
+    setupDom()
+    try {
+      writeScope('sources', new URLSearchParams({ x: '1' }).toString(), 'cached-rows')
+      const { runFigure } = await import('../src/ui/figure.js')
+      const painted: unknown[] = []
+      const handle = runFigure<string>({
+        name: 'outlets',
+        scope: 'sources',
+        params: () => new URLSearchParams({ x: '1' }),
+        fetch: () => Promise.reject(new Error('must not fetch on a scope hit')),
+        ghost: () => {},
+        paint: (d) => painted.push(d),
+        paintError: () => {},
+      })
+      await handle.load()
+      assert.deepEqual(painted, ['cached-rows'])
+      const before = performance.getEntriesByType('measure').length
+      await handle.load()
+      const marks = performance.getEntriesByType('measure').slice(before)
+      assert.ok(marks.some((m) => m.name === 'api:sources'), 'a memo hit must record api:<scope>, not api:<name>')
+      assert.ok(!marks.some((m) => m.name === 'api:outlets'), 'the figure name must not leak into the memo route')
+    } finally {
+      teardownDom()
+    }
+  })
+
+  it('a caught error resets hasData/lastData, so a later width change repaints nothing (gap 1)', async () => {
+    setupDom()
+    try {
+      const { runFigure } = await import('../src/ui/figure.js')
+      let calls = 0
+      let paints = 0
+      let fetches = 0
+      const handle = runFigure<string>({
+        name: 'ac-error-reset',
+        params: () => new URLSearchParams({ c: String(++calls) }),
+        fetch: () => {
+          fetches++
+          return calls === 1 ? Promise.resolve('first') : Promise.reject(new Error('boom'))
+        },
+        ghost: () => {},
+        paint: () => paints++,
+        paintError: () => {},
+        el: els.host,
+      })
+      await handle.load()
+      assert.equal(paints, 1)
+      await handle.load()
+      assert.equal(paints, 1, 'the failed load must not repaint the stale result')
+      resizeObservers[0].trigger()
+      resizeObservers[0].trigger()
+      assert.equal(paints, 1, 'a width change after an error must call neither paint nor fetch')
+      assert.equal(fetches, 2, 'the resize itself must never fetch')
+    } finally {
+      teardownDom()
+    }
+  })
+
   it('reload is debounced; two rapid calls yield one load', async () => {
     setupDom()
     try {
@@ -435,6 +520,32 @@ describe('figure.ts: runFigure abort/stale/scope/ghost/background/Escape/resize 
       handle.reload()
       await flush(250)
       assert.equal(fetches, 1)
+    } finally {
+      teardownDom()
+    }
+  })
+
+  it('an optional detail(data, params) is merged into the figure:<name> span close (gap 5)', async () => {
+    setupDom()
+    try {
+      const { runFigure } = await import('../src/ui/figure.js')
+      const handle = runFigure<{ rows: number }>({
+        name: 'ac-detail',
+        params: () => new URLSearchParams({ person: 'lula' }),
+        fetch: () => Promise.resolve({ rows: 3 }),
+        ghost: () => {},
+        paint: () => {},
+        paintError: () => {},
+        detail: (data, params) => ({ person: params.get('person'), rows: data.rows }),
+      })
+      const before = performance.getEntriesByType('measure').filter((m) => m.name === 'figure:ac-detail').length
+      await handle.load()
+      const marks = performance.getEntriesByType('measure').filter((m) => m.name === 'figure:ac-detail')
+      assert.equal(marks.length, before + 1)
+      const last = marks[marks.length - 1] as PerformanceMeasure
+      assert.equal((last.detail as Record<string, unknown>).person, 'lula')
+      assert.equal((last.detail as Record<string, unknown>).rows, 3)
+      assert.equal((last.detail as Record<string, unknown>).query, 'person=lula')
     } finally {
       teardownDom()
     }

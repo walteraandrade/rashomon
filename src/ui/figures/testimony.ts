@@ -141,11 +141,15 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const outletsFigure = runFigure<OutletRow[]>({
     name: 'outlets',
+    // The memo bucket is the route this hits (/sources), not the figure name, or a hit would
+    // record `api:outlets` instead of `api:sources`.
+    scope: 'sources',
     params: outletsParams,
     fetch: (queryParams, signal) => api.loadSources(queryParams.get('person')!, api.sourcesParams(asGraphOpts(queryParams)), signal),
     ghost: ghostOutlets,
     paint: paintOutletsData,
     paintError: paintOutletsError,
+    detail: (rows, queryParams) => ({ person: queryParams.get('person'), rows: rows.length }),
   })
 
   const testimonyFigure = runFigure<Testimony>({
@@ -155,6 +159,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     ghost: ghostTestimony,
     paint: paintTestimonyData,
     paintError: paintTestimonyErrorData,
+    detail: (_data, queryParams) => ({ person: queryParams.get('person') }),
     el: [$('strip'), $('testimonyList'), $('outletList')],
     markSelector: '[data-domain], [data-testimony-domain], [data-strip-domain]',
     onRelease: resetOutlet,
@@ -182,8 +187,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('testimonyPerson').addEventListener('change', onControlChange)
   $('testimonyDays').addEventListener('change', onControlChange)
   $('testimonySource').addEventListener('change', onControlChange)
-  // Its own ResizeObserver (issue #92 AC13), independent of figure 1's resizeMap.
-  new ResizeObserver(() => repaint()).observe($('strip'))
+  // testimonyFigure's own runFigure already observes #strip (its el[0], issue #92 AC13).
 
   load()
 }

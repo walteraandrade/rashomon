@@ -183,6 +183,21 @@ describe('clicking the same dot again, or empty ruler space, clears the selectio
       assert.match(els.compareDetail.innerHTML, /Clique numa palavra/)
     })
   })
+
+  it('pressing Escape releases the selection the same way a background click does', async () => {
+    await withFiguresDom(async (els, calls, fireDocumentKeydown) => {
+      clearScopes()
+      routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]) })
+      const { mount } = await import('../src/ui/figures/compare.js')
+      mount(els.compare, { people, initial: {} })
+      await flush()
+      const dot = els.compareRuler.querySelectorAll('[data-term]')[0]
+      dot.fire('click')
+      assert.match(els.compareDetail.innerHTML, /nenhum documento/)
+      fireDocumentKeydown('Escape')
+      assert.match(els.compareDetail.innerHTML, /Clique numa palavra/)
+    })
+  })
 })
 
 const emptyGraph = (person: { id: string; name: string }) => ({

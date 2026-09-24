@@ -343,9 +343,15 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // Installs a fake `document` carrying both figures' elements, a no-op `ResizeObserver`, and a
 // browser-shaped `Option` constructor, runs `fn`, then restores every global this touched —
 // same discipline as fake-dom.ts's withFakeDocument, extended to what a real mount() needs.
-export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]) => Promise<T> | T): Promise<T> => {
+// `fireDocumentKeydown` fires every listener a mount() wired with `document.addEventListener`
+// (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
+// level event a figure's own mount() ever wires.
+export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
   const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
+  const fireDocumentKeydown = (key: string) => {
+    for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })
+  }
   const fakeDocument = {
     getElementById: (id: string) => (els as unknown as Record<string, unknown>)[id] ?? null,
     addEventListener: (type: string, fn: (e?: unknown) => void) => {
@@ -406,7 +412,7 @@ export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]
     return jsonResponse({}) as unknown as Response
   }) as typeof fetch
   try {
-    return await fn(els, fetchCalls)
+    return await fn(els, fetchCalls, fireDocumentKeydown)
   } finally {
     ;(globalThis as { document?: unknown }).document = previous.document
     ;(globalThis as { Option?: unknown }).Option = previous.Option

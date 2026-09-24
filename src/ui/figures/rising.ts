@@ -115,6 +115,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const paint = (result: Rising) => {
     data = result
+    selected = null
     lastWidth = $('risingRuler').clientWidth || 0
     root.classList.remove('is-loading')
     repaint()

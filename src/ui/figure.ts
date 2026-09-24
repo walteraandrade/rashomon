@@ -37,8 +37,6 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
   let controller: AbortController | null = null
   let hasData = false
   let lastData: T | undefined
-  // True between a ghost paint and that fetch settling, so a resize never repaints over it.
-  let loading = false
 
   const load = async () => {
     const id = ++requestId
@@ -48,22 +46,17 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
     const p = params()
     if (p === null) return
     const key = p.toString()
-    if (!readScope(scope, key)) {
-      ghost()
-      loading = true
-    }
+    if (!readScope(scope, key)) ghost()
     const painted = span('figure:' + name)
     try {
       const data = await fromScope(scope, key, () => fetch(p, current.signal))
       if (id !== requestId) return
-      loading = false
       hasData = true
       lastData = data
       paint(data)
       painted({ query: key, ...(detail ? detail(data, p) : {}) })
     } catch (e) {
       if (id !== requestId) return
-      loading = false
       if (aborted(e)) return
       hasData = false
       lastData = undefined
@@ -73,8 +66,9 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
 
   const reload = debounce(load)
 
+  // Never gates on in-flight state: a resize mid-reload must still repaint the on-screen data.
   const repaint = () => {
-    if (hasData && !loading) paint(lastData as T)
+    if (hasData) paint(lastData as T)
   }
 
   const release = () => {

@@ -143,6 +143,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const paint = (result: Compare) => {
     data = result
+    selected = null
     lastWidth = $('compareRuler').clientWidth || 0
     $('compareStatus').hidden = result.a.person.id !== result.b.person.id
     root.classList.remove('is-loading')

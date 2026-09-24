@@ -500,7 +500,7 @@ describe('figure.ts: runFigure abort/stale/scope/ghost/background/Escape/resize 
     }
   })
 
-  it('repaint() is a no-op between a ghost paint and that fetch settling; resumes once it does (gap 1/2)', async () => {
+  it('repaint() still repaints the stale data while a reload is in flight, like a resize crossing a breakpoint mid-load', async () => {
     setupDom()
     try {
       const { runFigure } = await import('../src/ui/figure.js')
@@ -519,12 +519,12 @@ describe('figure.ts: runFigure abort/stale/scope/ghost/background/Escape/resize 
       assert.deepEqual(painted, ['A'])
       const loadB = handle.load()
       handle.repaint()
-      assert.deepEqual(painted, ['A'], 'a repaint while B is in flight after its ghost must not repaint the stale A')
+      assert.deepEqual(painted, ['A', 'A'], 'a repaint while B is in flight must still repaint the on-screen A, at the new width')
       resolveB('B')
       await loadB
-      assert.deepEqual(painted, ['A', 'B'])
+      assert.deepEqual(painted, ['A', 'A', 'B'])
       handle.repaint()
-      assert.deepEqual(painted, ['A', 'B', 'B'], 'repaint() resumes once the in-flight fetch has settled')
+      assert.deepEqual(painted, ['A', 'A', 'B', 'B'], 'repaint() keeps working once the in-flight fetch has settled')
     } finally {
       teardownDom()
     }

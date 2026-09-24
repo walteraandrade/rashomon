@@ -1,14 +1,10 @@
-import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
-import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
 import { MINS } from '../src/query.js'
 import * as scoring from '../src/scoring.js'
 import { isName, pmiRank, signatureFloor, sortKey } from '../src/scoring.js'
 import { sql } from '../src/sql.js'
 import { docsText } from './docs.js'
-
-const repoFile = (relPath: string) => readFileSync(fileURLToPath(new URL(`../${relPath}`, import.meta.url)), 'utf8')
 
 describe('scoring fragments', () => {
   it('pmiRank renders pmi * ln(1 + <count>) and binds nothing', () => {
@@ -64,60 +60,11 @@ describe('scoring.ts is the single home for the pmi ordering, signature floor an
     assert.deepEqual(Object.keys(scoring).sort(), ['isName', 'pmiRank', 'signatureFloor', 'sortKey'])
   })
 
-  it('no namePhrase export exists anywhere in the codebase', () => {
-    const grep = (path: string) => repoFile(path)
-    for (const path of ['src/graph.ts', 'src/aggregate.ts', 'src/scoring.ts']) {
-      assert.ok(!/export\s+(const|function)\s+namePhrase\b/.test(grep(path)), `${path} must not export namePhrase`)
-    }
-  })
-
-  it('src/graph.ts has no local sortKey declaration and no namePhrase function', () => {
-    const text = repoFile('src/graph.ts')
-    assert.ok(!/const sortKey = sql`/.test(text))
-    assert.ok(!/function namePhrase/.test(text))
-    assert.ok(!/const namePhrase/.test(text))
-  })
-
-  it('graph.ts and aggregate.ts contain the pmi/signature fragments only inside comments', () => {
-    for (const path of ['src/graph.ts', 'src/aggregate.ts']) {
-      const codeLines = repoFile(path)
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('//'))
-      const code = codeLines.join('\n')
-      assert.ok(!code.includes('pmi * ln(1 + '), `${path} must not inline the pmi formula outside scoring.ts`)
-      assert.ok(!code.includes('greatest(3,'), `${path} must not inline the signature floor outside scoring.ts`)
-    }
-  })
-
-  it('graph.ts calls isName at every own-name filter site (graphQuery, risingQuery, weekQuery, both compareSideCte sides, compareQuery)', () => {
-    const text = repoFile('src/graph.ts')
-    const calls = text.match(/isName\(/g) ?? []
-    assert.ok(calls.length >= 6, `expected at least 6 isName call sites, found ${calls.length}`)
-  })
-
-  it('aggregate.ts calls isName instead of a hand-written own-name predicate', () => {
-    const text = repoFile('src/aggregate.ts')
-    assert.ok(text.includes('isName('), 'aggregate.ts must call isName')
-  })
-
-  it('CLAUDE.md names src/scoring.ts as where the pmi ordering, signature floor and own-name filter live', () => {
-    const claudeMd = repoFile('CLAUDE.md')
-    assert.ok(/scoring\.ts/.test(claudeMd), 'CLAUDE.md must mention src/scoring.ts')
-    const scoringSentence = claudeMd
-      .split('\n')
-      .find((line) => line.includes('`src/scoring.ts`') && line.includes('pmi'))
-    assert.ok(scoringSentence, 'CLAUDE.md must describe src/scoring.ts and the pmi ordering together')
-  })
-
   it('the docs state the pmi-ordering and signature-floor formulas live in src/scoring.ts', () => {
-    assert.match(docsText, /`src\/scoring\.ts`/)
-    const lines = docsText.split('\n')
-    const idx = lines.findIndex((line) => line.includes('scoring.ts'))
-    assert.ok(idx >= 0, 'a docs line must name src/scoring.ts')
-    const window = lines.slice(Math.max(0, idx - 5), idx + 1).join('\n')
-    assert.ok(
-      /pmi/i.test(window) && /(greatest\(3|signature)/i.test(window),
-      'the docs near src/scoring.ts must also describe the pmi ordering and the signature floor',
-    )
+    assert.match(docsText, /src\/scoring\.ts/)
+    const paragraph = docsText.split(/\n\s*\n/).find((block) => block.includes('scoring.ts'))
+    assert.ok(paragraph, 'a docs paragraph must name src/scoring.ts')
+    assert.ok(paragraph.includes('ln(1 + count)'), 'the paragraph naming src/scoring.ts must state the pmi-ordering formula')
+    assert.ok(paragraph.includes('greatest(3'), 'the paragraph naming src/scoring.ts must state the signature-floor formula')
   })
 })

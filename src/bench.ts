@@ -50,9 +50,9 @@ const generateInChild = () => {
 const generate = async () => {
   // PGlite creates the leaf directory but not its parents.
   await mkdir(resolve(DATA_DIR), { recursive: true })
-  const { db, migrate } = await import('./db.js')
-  const { insertDoc, upsertPersons } = await import('./store.js')
-  await migrate()
+  const { db, migrateP } = await import('./db.js')
+  const { insertDocP, upsertPersonsP } = await import('./store.js')
+  await migrateP()
   const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
   if (rows[0].n === DOCS && process.env.BENCH_RESET !== '1') {
     console.log(`dataset: reusing ${rows[0].n} docs in ${DATA_DIR}`)
@@ -67,9 +67,9 @@ const generate = async () => {
   const started = performance.now()
   // One statement per db.exec call: the extended query protocol parses one at a time.
   for (const table of ['doc_testimony', 'doc_candidates', 'doc_terms', 'doc_persons', 'docs', 'persons']) await db.exec(`delete from ${table}`)
-  await upsertPersons(persons)
+  await upsertPersonsP(persons)
   const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: Date.now() })
-  for (const doc of docs) await insertDoc(doc, persons)
+  for (const doc of docs) await insertDocP(doc, persons)
   // One testimony row per (doc, person) pair, deterministic, so the testimony route has
   // something to aggregate. `stub` is the hermetic scorer's label.
   await db.query(

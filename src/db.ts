@@ -4,7 +4,7 @@ import { Context, Effect, Layer, ManagedRuntime, Redacted } from 'effect'
 import { SqlClient, SqlError } from 'effect/unstable/sql'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import tls from 'node:tls'
-import { instrument, perfEnabled } from './perf.js'
+import { perfEnabled, record } from './perf.js'
 
 type Rows<T> = { rows: T[] }
 
@@ -54,14 +54,32 @@ export const poolConfig = (url: string) => {
 // DATABASE_URL / POSTGRES_URL wins over embedded PGlite; 'memory://' for tests.
 const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL
 
-const DbLayer: Layer.Layer<SqlClient.SqlClient, SqlError.SqlError> = url
+const rawLayer: Layer.Layer<SqlClient.SqlClient, SqlError.SqlError> = url
   ? PgClient.layer(poolConfig(url))
   : PgliteClient.layer({ dataDir: process.env.DATA_DIR ?? './data/pg' })
 
+// PERF=1 times every sql.unsafe call, the one point every write -- db.query/db.exec and store.ts's Effect writers alike -- passes through.
+const instrumentSql = (client: SqlClient.SqlClient): SqlClient.SqlClient =>
+  new Proxy(client, {
+    apply: (target, thisArg, args) => Reflect.apply(target as unknown as (...a: unknown[]) => unknown, thisArg, args),
+    get: (target, prop, receiver) => {
+      if (prop === 'unsafe') {
+        return <A extends object>(sql: string, params?: readonly unknown[]) => {
+          const started = performance.now()
+          return Effect.ensuring(target.unsafe<A>(sql, params), Effect.sync(() => record(performance.now() - started))) as unknown as ReturnType<SqlClient.SqlClient['unsafe']>
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+  })
+
+const DbLayer: Layer.Layer<SqlClient.SqlClient, SqlError.SqlError> = perfEnabled
+  ? Layer.effect(SqlClient.SqlClient, Effect.map(SqlClient.SqlClient, instrumentSql)).pipe(Layer.provide(rawLayer))
+  : rawLayer
+
 const runtime = ManagedRuntime.make(DbLayer)
 
-// An open inTransaction leaves its Effect context here for its callback's duration, so a plain
-// db.query/db.exec made inside it runs on that transaction's connection, not the top-level one.
+// An open inTransaction leaves its Effect context here for its callback's duration, so a plain db.query/db.exec made inside it runs on that transaction's connection, not the top-level one.
 const txContext = new AsyncLocalStorage<Context.Context<SqlClient.SqlClient>>()
 
 // Effect to Promise, joining an open inTransaction the way db.query/db.exec do.
@@ -78,8 +96,7 @@ const runStatement = <A extends object>(text: string, params: readonly unknown[]
 
 const execute = <A extends object>(text: string, params?: readonly unknown[]): Promise<readonly A[]> => runSql(runStatement<A>(text, params))
 
-// store.ts's inTransaction: a real transaction via sql.withTransaction (a nested call is a
-// savepoint), with `fn` run under txContext so every db.query/db.exec inside it joins.
+// store.ts's inTransaction: a real transaction via sql.withTransaction (a nested call is a savepoint), with `fn` run under txContext so every db.query/db.exec inside it joins.
 export const runInTransaction = <T>(fn: () => Promise<T>): Promise<T> => {
   const body = Effect.gen(function* () {
     const ctx = yield* Effect.context<SqlClient.SqlClient>()
@@ -93,14 +110,11 @@ export const runInTransaction = <T>(fn: () => Promise<T>): Promise<T> => {
   )
 }
 
-// PERF=1 swaps in a proxy that times query/exec into the current request's counters.
-const base: Db = {
+export const db: Db = {
   query: (text, params) => execute(text, params).then((rows) => ({ rows })) as never,
   exec: (text) => execute(text),
   close: () => runtime.dispose(),
 }
-
-export const db: Db = perfEnabled ? instrument(base) : base
 
 // Split on ';' below, so no statement here may hold a semicolon in a literal or dollar-quoted body.
 export const schema = `
@@ -203,8 +217,9 @@ const schemaStatements = schema
   .filter(Boolean)
 
 // One transaction for the whole script: a failure partway through leaves the schema untouched.
-export const migrate = () =>
-  runInTransaction(() => schemaStatements.reduce<Promise<unknown>>(async (acc, statement) => (await acc, db.exec(statement)), Promise.resolve(undefined)))
+export const migrate = (): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) => sql.withTransaction(Effect.forEach(schemaStatements, (statement) => sql.unsafe(statement), { discard: true })))
+export const migrateP = () => runSql(migrate())
 
 // Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
 export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms_all', 'graph_terms'] as const
@@ -214,12 +229,19 @@ export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 export const analyzeMinDocs = () => clampEnv(process.env.ANALYZE_MIN_DOCS, 200, 1, 1_000_000)
 
 // Targeted analyze, never database-wide; only ingest and reindex call this (they own DATA_DIR).
-export const analyzeTables = async (tables: readonly AnalyzedTable[] = ANALYZED_TABLES) => {
-  const targets = tables.filter((t) => ANALYZED_TABLES.includes(t))
-  await targets.reduce<Promise<void>>(async (acc, t) => (await acc, void (await db.exec(`analyze ${t}`))), Promise.resolve())
-  return targets
-}
+export const analyzeTables = (tables: readonly AnalyzedTable[] = ANALYZED_TABLES): Effect.Effect<readonly AnalyzedTable[], SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    const targets = tables.filter((t) => ANALYZED_TABLES.includes(t))
+    yield* Effect.forEach(targets, (t) => sql.unsafe(`analyze ${t}`), { discard: true })
+    return targets
+  })
+export const analyzeTablesP = (tables?: readonly AnalyzedTable[]) => runSql(analyzeTables(tables))
 
 // A handful of new docs does not move the planner's estimates; skip if below the threshold.
-export const analyzeAfterWrite = async (written: number): Promise<readonly AnalyzedTable[]> =>
-  written >= analyzeMinDocs() ? analyzeTables() : []
+export const analyzeAfterWrite = (written: number): Effect.Effect<readonly AnalyzedTable[], SqlError.SqlError, SqlClient.SqlClient> =>
+  written >= analyzeMinDocs() ? analyzeTables() : Effect.succeed([])
+export const analyzeAfterWriteP = (written: number) => runSql(analyzeAfterWrite(written))
+
+export const docCount = (): Effect.Effect<number, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.map(runStatement<{ n: string }>(`select count(*) as n from docs`), (rows) => Number(rows[0].n))

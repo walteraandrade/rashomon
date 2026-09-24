@@ -113,9 +113,9 @@ describe('serverTiming', () => {
   // in-memory database, migrate, one request, the header on stdout.
   it('PERF=1 sets server-timing on an API response through the middleware, on a 404 too', () => {
     const script = `
-      const { migrate } = await import('./src/db.ts')
+      const { migrateP } = await import('./src/db.ts')
       const { app } = await import('./src/server.ts')
-      await migrate()
+      await migrateP()
       const res = await app.request('/api/people/nobody/graph?days=30')
       console.log(JSON.stringify({ status: res.status, header: res.headers.get('server-timing') }))
     `

@@ -1,5 +1,5 @@
 import seedJson from '../seed.json' with { type: 'json' }
-import { db, migrate } from './db.js'
+import { db, migrateP } from './db.js'
 import { fitsApprox, scoredText } from './scorers/window.js'
 import type { Person } from './types.js'
 
@@ -46,7 +46,7 @@ export const exportLines = async (persons: Person[]): Promise<ExportedDoc[]> => 
 }
 
 const main = async () => {
-  await migrate()
+  await migrateP()
   const rows = await exportLines(seedJson as Person[])
   for (const r of rows) console.log(JSON.stringify(r))
   await db.close()

@@ -28,7 +28,7 @@ import {
 } from '../src/graph.js'
 import { resolveScope } from '../src/outlets.js'
 import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query.js'
-import { inTransaction, insertDoc, upsertPersons } from '../src/store.js'
+import { inTransaction, insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
 import { docPageText } from './docs.js'
 import { futureDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
@@ -323,9 +323,9 @@ describe('senado source (issue #25)', () => {
 
   it("surfaces a senado doc's terms for the tagged senator at a wide-enough window", async () => {
     const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
-    await upsertPersons([alcolumbre])
+    await upsertPersonsP([alcolumbre])
     const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/222222'
-    await insertDoc(
+    await insertDocP(
       { source: 'senado', uri, text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: daysAgo(3200), domain: 'senado.leg.br' },
       [...persons, alcolumbre],
     )
@@ -961,7 +961,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     inTransaction(async () => {
       for (const [i, p] of placed.entries()) {
         const uri = `https://example.org/boundary/${i}`
-        await insertDoc(
+        await insertDocP(
           { source: p.source ?? 'rss', uri, text: p.text ?? golpe, publishedAt: new Date().toISOString(), domain: p.domain ?? 'example.org' },
           persons,
         )
@@ -1125,7 +1125,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
 describe('timelineFor: future-dated doc', () => {
   before(async () => {
     await seed()
-    await insertDoc(futureDoc, persons)
+    await insertDocP(futureDoc, persons)
   })
   after(reseed)
 
@@ -2573,7 +2573,7 @@ describe('weekFor testimony (issue #150 acceptance criteria)', () => {
 describe('weekFor: future-dated doc (issue #147)', () => {
   before(async () => {
     await seed()
-    await insertDoc(futureDoc, persons)
+    await insertDocP(futureDoc, persons)
   })
   after(reseed)
 
@@ -2604,14 +2604,14 @@ describe('weekFor: own-name phrase filter (issue #147)', () => {
     await seed()
     // A capitalized run needs no lexicon rebuild (see test/reindex.test.ts): extract.ts finds
     // "Jair Bolsonaro" as a phrase term straight from insertDoc, no `pnpm reindex` required.
-    await insertDoc(
+    await insertDocP(
       { source: 'rss', uri: namePhraseUri, text: 'O deputado Jair Bolsonaro discursou hoje no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
       persons,
     )
     // Names bolsonaro (so it is "about" him) and carries a capitalized run with none of his own
     // name words in it: this phrase must survive namePhrase, proving the filter drops the
     // person's own name specifically rather than every phrase in the window.
-    await insertDoc(
+    await insertDocP(
       { source: 'rss', uri: survivorUri, text: 'Bolsonaro se reuniu com Alexandre de Moraes no plenário', publishedAt: new Date().toISOString(), domain: 'example.org' },
       persons,
     )

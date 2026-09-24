@@ -1,4 +1,6 @@
-import { clampEnv, db } from './db.js'
+import { Effect } from 'effect'
+import { SqlClient, type SqlError } from 'effect/unstable/sql'
+import { clampEnv, db, runSql } from './db.js'
 import { wordPairs } from './extract.js'
 import { inBatches, writeBatchRows } from './store.js'
 import type { Phrases } from './types.js'
@@ -41,5 +43,10 @@ export const buildPhrases = async (nameWords: readonly string[] = []) => {
   return rows[0].n
 }
 
-export const loadPhrases = async (): Promise<Phrases> =>
-  new Set((await db.query<{ term: string }>(`select term from phrases`)).rows.map((r) => r.term))
+export const loadPhrases = (): Effect.Effect<Phrases, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    const rows = yield* sql.unsafe<{ term: string }>(`select term from phrases`)
+    return new Set(rows.map((r) => r.term))
+  })
+export const loadPhrasesP = () => runSql(loadPhrases())

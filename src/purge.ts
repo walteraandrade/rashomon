@@ -1,4 +1,4 @@
-import { db, migrate } from './db.js'
+import { db, migrateP } from './db.js'
 import { SOURCES } from './query.js'
 
 const usage = 'usage: pnpm purge <source|orphan-terms|themes>'
@@ -51,7 +51,7 @@ export const purgeThemes = async () => {
 
 const main = async () => {
   const target = resolveTarget(process.argv[2])
-  await migrate()
+  await migrateP()
   await (target === 'orphan-terms' ? purgeOrphanTerms() : target === 'themes' ? purgeThemes() : purgeSource(target))
   await db.close()
 }

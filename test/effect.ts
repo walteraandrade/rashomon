@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit, Fiber, Option } from 'effect'
 import { TestClock, TestConsole } from 'effect/testing'
 import { FetchHttpClient, type HttpClient } from 'effect/unstable/http'
+import { SqlClient, SqlError, type Statement } from 'effect/unstable/sql'
 import { fetchClient } from '../src/http.js'
 
 // Every request the collectors make goes through Effect's HttpClient, whose fetch-backed
@@ -84,6 +85,23 @@ export const tick = (ms = 0) =>
   Effect.gen(function* () {
     if (ms > 0) yield* TestClock.adjust(ms)
     yield* Effect.promise(() => new Promise<void>((r) => setImmediate(r)))
+  })
+
+// A SqlClient proxy that fails only the one statement `match` recognizes, forwarding every other
+// call (including inside a transaction, since withTransaction/reserve/the tag come from the real
+// client) unchanged. The client is callable (it is the `sql` tag itself), so `apply` is forwarded too.
+export const failingSql = (client: SqlClient.SqlClient, match: RegExp): SqlClient.SqlClient =>
+  new Proxy(client, {
+    apply: (target, thisArg, args) => Reflect.apply(target as unknown as (...a: unknown[]) => unknown, thisArg, args),
+    get: (target, prop, receiver) => {
+      if (prop === 'unsafe') {
+        return <A extends object>(sql: string, params?: readonly unknown[]) =>
+          match.test(sql)
+            ? (Effect.fail(new SqlError.SqlError({ reason: new SqlError.UnknownError({ cause: new Error('failingSql: ' + sql) }) })) as unknown as Statement.Statement<A>)
+            : target.unsafe<A>(sql, params)
+      }
+      return Reflect.get(target, prop, receiver)
+    },
   })
 
 // Like runTest, but rethrows a failure or defect as the real exception it carries, so an

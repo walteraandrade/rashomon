@@ -4,7 +4,7 @@ import { db } from '../src/db.js'
 import { testimonyFor } from '../src/graph.js'
 import { resolveRun, scoreAll } from '../src/score.js'
 import { scorers } from '../src/scorers/index.js'
-import { insertDoc } from '../src/store.js'
+import { insertDocP } from '../src/store.js'
 import { withEnv } from './env.js'
 import { insertTestimony, persons, reseed, seed } from './fixture.js'
 import './close.js'
@@ -36,7 +36,7 @@ describe('scoreAll', () => {
 
   it('inserts a null row (not a missing one) for empty/whitespace text, and never re-attempts it', async () => {
     const uri = 'https://example.org/empty-text-doc'
-    await insertDoc({ source: 'rss', uri, text: '   ', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
+    await insertDocP({ source: 'rss', uri, text: '   ', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
     // insertDoc only links doc_persons for docs that mention a tracked person's alias, so link
     // it directly to exercise scoreAll's null-score path deterministically
     const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])

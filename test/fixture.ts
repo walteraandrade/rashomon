@@ -1,5 +1,5 @@
-import { db, migrate } from '../src/db.js'
-import { insertDoc, upsertPersons } from '../src/store.js'
+import { db, migrateP } from '../src/db.js'
+import { insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, RawDoc } from '../src/types.js'
 
 export const persons: Person[] = [
@@ -237,7 +237,7 @@ export const candidateDocs: RawDoc[] = [
 
 export const seedCandidates = async () => {
   await seed()
-  for (const d of candidateDocs) await insertDoc(d, persons)
+  for (const d of candidateDocs) await insertDocP(d, persons)
 }
 
 // doc_id is not known ahead of time (docs get a serial id on insert), so this resolves
@@ -323,13 +323,13 @@ let ready: Promise<void> | null = null
 export const seed = () =>
   (ready ??= (async () => {
     if (process.env.DATA_DIR !== 'memory://') throw new Error('tests must run with DATA_DIR=memory://')
-    await migrate()
+    await migrateP()
     // One statement per db.exec call: @effect/sql-pg/@effect/sql-pglite's `unsafe` uses the
     // extended query protocol, which parses one statement at a time (src/db.ts's migrate() splits
     // the schema the same way).
     for (const table of ['doc_terms', 'doc_persons', 'docs', 'persons', 'phrases', 'phrase_stage']) await db.exec(`delete from ${table}`)
-    await upsertPersons(persons)
-    for (const d of docs) await insertDoc(d, persons)
+    await upsertPersonsP(persons)
+    for (const d of docs) await insertDocP(d, persons)
     await seedTestimony()
   })())
 

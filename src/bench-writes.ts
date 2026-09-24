@@ -59,19 +59,19 @@ const report = async (name: string, docs: number, fn: () => Promise<void>) => {
 
 const ingestPhase = async () => {
   await mkdir(resolve(DATA_DIR), { recursive: true })
-  const { db, migrate } = await import('./db.js')
-  const { insertDocs, upsertPersons } = await import('./store.js')
-  await migrate()
-  await upsertPersons(persons)
+  const { db, migrateP } = await import('./db.js')
+  const { insertDocsP, upsertPersonsP } = await import('./store.js')
+  await migrateP()
+  await upsertPersonsP(persons)
   const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: NOW })
-  await report('ingest', docs.length, async () => void (await insertDocs(docs, persons)))
+  await report('ingest', docs.length, async () => void (await insertDocsP(docs, persons)))
   await db.close()
 }
 
 const reindexPhase = async (name: string) => {
-  const { db, migrate } = await import('./db.js')
+  const { db, migrateP } = await import('./db.js')
   const { reindexAll } = await import('./reindex.js')
-  await migrate()
+  await migrateP()
   await report(name, DOCS, async () => void (await reindexAll(persons)))
   await db.close()
 }

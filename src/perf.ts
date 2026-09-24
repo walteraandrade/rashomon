@@ -11,8 +11,8 @@ export type Measured<T> = { value: T; ms: number; sql: number; dbMs: number }
 
 const counters = new AsyncLocalStorage<Counters>()
 
-// No-op outside a measure() scope; scripts using an instrumented db need not know.
-const record = (ms: number) => {
+// No-op outside a measure() scope; exported so db.ts can also count a statement sent straight through the SqlClient, not only one that passes through db.query/db.exec.
+export const record = (ms: number) => {
   const current = counters.getStore()
   if (!current) return
   current.sql += 1

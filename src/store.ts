@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit } from 'effect'
 import { SqlClient, type SqlError } from 'effect/unstable/sql'
-import { clampEnv, db, runInTransaction } from './db.js'
+import { clampEnv, runInTransaction, runSql } from './db.js'
 import { discoverNames, personsMentioned, terms } from './extract.js'
 import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
 
@@ -8,7 +8,7 @@ import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
 export const tonedSources: Source[] = ['gdelt', 'gkg']
 const toneFor = (doc: RawDoc) => (tonedSources.includes(doc.source) ? doc.tone ?? null : null)
 
-// One text per statement, shared by both writer paths so they cannot drift.
+// One text per statement, so a writer and its Promise adapter cannot drift.
 const UPSERT_PERSONS_SQL = `insert into persons (id, name, aliases)
          select p->>'id', p->>'name', array(select jsonb_array_elements_text(p->'aliases'))
          from jsonb_array_elements($1::jsonb) as p
@@ -55,25 +55,6 @@ export const inBatches = <T>(xs: readonly T[], size: number, fn: (batch: T[]) =>
 // db.ts owns the real transaction (sql.withTransaction); a nested inTransaction call registers as a savepoint there instead of a second transaction.
 export const inTransaction = runInTransaction
 
-export const pruneRemoved = async (ps: Person[]) => {
-  const ids = ps.map((p) => p.id)
-  return inTransaction(async () => {
-    await db.query(DELETE_ORPHAN_DOC_PERSONS_SQL, [ids])
-    const { rows } = await db.query<{ id: string }>(DELETE_ORPHAN_PERSONS_SQL, [ids])
-    return rows.map((r) => r.id)
-  })
-}
-
-// Aliases travel as json: `unnest` would mix one person's aliases into the next.
-export const upsertPersons = (ps: Person[], size = writeBatchRows()) => {
-  const unique = [...new Map(ps.map((p) => [p.id, p])).values()]
-  return inTransaction(() =>
-    inBatches(unique, size, (batch) =>
-      db.query(UPSERT_PERSONS_SQL, [JSON.stringify(batch.map((p) => ({ id: p.id, name: p.name, aliases: p.aliases })))]),
-    ),
-  )
-}
-
 export type Derived = { docId: number; persons: string[]; terms: Term[]; names: string[] }
 type Extractable = Pick<RawDoc, 'source' | 'text' | 'extraTerms' | 'extraNames'>
 
@@ -98,70 +79,18 @@ const derivedStatements = (rows: readonly Derived[], size: number): [string, unk
   ]
 }
 
-export const writeDerived = (rows: readonly Derived[], size = writeBatchRows()) =>
-  derivedStatements(rows, size).reduce<Promise<void>>(async (acc, [text, params]) => (await acc, void (await db.query(text, params))), Promise.resolve())
-
-const upsertDoc = async (doc: RawDoc) => (await db.query<UpsertRow>(UPSERT_DOC_SQL, upsertDocParams(doc))).rows[0]
-
 export type Written = 'inserted' | 'enriched' | 'unchanged'
 const outcome = (row: { inserted: boolean; took_incoming: boolean } | undefined): Written =>
   !row ? 'unchanged' : row.inserted ? 'inserted' : row.took_incoming ? 'enriched' : 'unchanged'
 
-// Clear terms when text is replaced: headline terms must not sum with the article's. doc_persons is left alone: the headline already named them; the body only adds.
-const clearDerived = async (ids: readonly number[]) => {
-  if (!ids.length) return
-  await db.query(DELETE_DOC_TERMS_SQL, [ids])
-  await db.query(DELETE_DOC_CANDIDATES_SQL, [ids])
-}
-
 type Batch = { derived: Derived[]; stale: number[]; written: number; enriched: number }
 
-// Cap is applied before upsert and before `derive` so stored text and derived terms match.
-const writeBatch = async (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Promise<{ written: number; enriched: number }> => {
-  const batch = await docs.reduce<Promise<Batch>>(async (acc, raw) => {
-    const a = await acc
-    const doc = { ...raw, text: truncateText(raw.text) }
-    const row = await upsertDoc(doc)
-    const result = outcome(row)
-    if (result === 'unchanged') return a
-    return {
-      derived: [...a.derived, derive(row.id, doc, ps, lexicon)],
-      stale: result === 'enriched' ? [...a.stale, row.id] : a.stale,
-      written: a.written + (result === 'inserted' ? 1 : 0),
-      enriched: a.enriched + (result === 'enriched' ? 1 : 0),
-    }
-  }, Promise.resolve({ derived: [], stale: [], written: 0, enriched: 0 }))
-  await clearDerived(batch.stale)
-  await writeDerived(batch.derived)
-  return { written: batch.written, enriched: batch.enriched }
-}
-
-export const insertDoc = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<string>()): Promise<boolean> =>
-  inTransaction(async () => (await writeBatch([doc], ps, lexicon)).written === 1)
-
-const insertGroup = (docs: readonly RawDoc[], ps: Person[], lexicon: Phrases) => inTransaction(() => writeBatch(docs, ps, lexicon))
-
-// A batch failure rolls back and is replayed doc by doc, so one bad doc costs only itself.
-export type InsertTotals = { written: number; enriched: number; failed: number }
-
-export const insertDocs = (docs: readonly RawDoc[], ps: Person[], size = writeBatchDocs(), lexicon: Phrases = new Set<string>()) =>
-  batches(docs, size).reduce<Promise<InsertTotals>>(async (acc, group) => {
-    const totals = await acc
-    const counts = await insertGroup(group, ps, lexicon).catch(() => null)
-    if (counts) return { ...totals, written: totals.written + counts.written, enriched: totals.enriched + counts.enriched }
-    return group.reduce<Promise<InsertTotals>>(async (inner, doc) => {
-      const t = await inner
-      const one = await insertGroup([doc], ps, lexicon).catch((e: Error) => (console.error(`[store] ${doc.uri}: ${e.message}`), null))
-      return one ? { ...t, written: t.written + one.written, enriched: t.enriched + one.enriched } : { ...t, failed: t.failed + 1 }
-    }, Promise.resolve(totals))
-  }, Promise.resolve({ written: 0, enriched: 0, failed: 0 }))
-
-// Effect-native counterparts, built on Effect.gen/Effect.forEach against the ambient SqlClient rather than wrapping the Promise functions above, so a caller can Effect.catchTag a SqlError. Statement text is shared above; only the batching is written twice (test/store.test.ts).
+// Every writer below is Effect-native, so a caller can Effect.catchTag a typed SqlError; each has a one-line `P`-suffixed Promise adapter, `runSql(<name>(...))`, for a caller outside the Effect world.
 
 const writeDerivedRows = (sql: SqlClient.SqlClient, rows: readonly Derived[], size: number) =>
   Effect.forEach(derivedStatements(rows, size), ([text, params]) => sql.unsafe(text, params), { discard: true })
 
-export const pruneRemovedEffect = (ps: Person[]): Effect.Effect<string[], SqlError.SqlError, SqlClient.SqlClient> =>
+export const pruneRemoved = (ps: Person[]): Effect.Effect<string[], SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     const ids = ps.map((p) => p.id)
@@ -173,8 +102,10 @@ export const pruneRemovedEffect = (ps: Person[]): Effect.Effect<string[], SqlErr
       }),
     )
   })
+export const pruneRemovedP = (ps: Person[]) => runSql(pruneRemoved(ps))
 
-export const upsertPersonsEffect = (ps: Person[], size = writeBatchRows()): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
+// Aliases travel as json: `unnest` would mix one person's aliases into the next.
+export const upsertPersons = (ps: Person[], size = writeBatchRows()): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     const unique = [...new Map(ps.map((p) => [p.id, p])).values()]
@@ -187,13 +118,16 @@ export const upsertPersonsEffect = (ps: Person[], size = writeBatchRows()): Effe
       ),
     )
   })
+export const upsertPersonsP = (ps: Person[], size?: number) => runSql(upsertPersons(ps, size))
 
-export const writeDerivedEffect = (rows: readonly Derived[], size = writeBatchRows()): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
+export const writeDerived = (rows: readonly Derived[], size = writeBatchRows()): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => writeDerivedRows(sql, rows, size))
+export const writeDerivedP = (rows: readonly Derived[], size?: number) => runSql(writeDerived(rows, size))
 
-const upsertDocEffect = (sql: SqlClient.SqlClient, doc: RawDoc) => Effect.map(sql.unsafe<UpsertRow>(UPSERT_DOC_SQL, upsertDocParams(doc)), (rows) => rows[0])
+const upsertDoc = (sql: SqlClient.SqlClient, doc: RawDoc) => Effect.map(sql.unsafe<UpsertRow>(UPSERT_DOC_SQL, upsertDocParams(doc)), (rows) => rows[0])
 
-const clearDerivedEffect = (sql: SqlClient.SqlClient, ids: readonly number[]) =>
+// Clear terms when text is replaced: headline terms must not sum with the article's. doc_persons is left alone: the headline already named them; the body only adds.
+const clearDerived = (sql: SqlClient.SqlClient, ids: readonly number[]) =>
   ids.length
     ? Effect.gen(function* () {
         yield* sql.unsafe(DELETE_DOC_TERMS_SQL, [ids])
@@ -201,12 +135,13 @@ const clearDerivedEffect = (sql: SqlClient.SqlClient, ids: readonly number[]) =>
       })
     : Effect.void
 
-const writeBatchEffect = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Effect.Effect<{ written: number; enriched: number }, SqlError.SqlError> =>
+// Cap is applied before upsert and before `derive` so stored text and derived terms match.
+const writeBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Effect.Effect<{ written: number; enriched: number }, SqlError.SqlError> =>
   Effect.gen(function* () {
     const batch = yield* Effect.reduce(docs, (): Batch => ({ derived: [], stale: [], written: 0, enriched: 0 }), (a, raw) =>
       Effect.gen(function* () {
         const doc = { ...raw, text: truncateText(raw.text) }
-        const row = yield* upsertDocEffect(sql, doc)
+        const row = yield* upsertDoc(sql, doc)
         const result = outcome(row)
         if (result === 'unchanged') return a
         return {
@@ -217,19 +152,23 @@ const writeBatchEffect = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps:
         }
       }),
     )
-    yield* clearDerivedEffect(sql, batch.stale)
+    yield* clearDerived(sql, batch.stale)
     yield* writeDerivedRows(sql, batch.derived, writeBatchRows())
     return { written: batch.written, enriched: batch.enriched }
   })
 
-export const insertDocEffect = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<string>()): Effect.Effect<boolean, SqlError.SqlError, SqlClient.SqlClient> =>
+export const insertDoc = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<string>()): Effect.Effect<boolean, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
-    const result = yield* sql.withTransaction(writeBatchEffect(sql, [doc], ps, lexicon))
+    const result = yield* sql.withTransaction(writeBatch(sql, [doc], ps, lexicon))
     return result.written === 1
   })
+export const insertDocP = (doc: RawDoc, ps: Person[], lexicon?: Phrases) => runSql(insertDoc(doc, ps, lexicon))
 
-export const insertDocsEffect = (
+// A batch failure rolls back and is replayed doc by doc, so one bad doc costs only itself.
+export type InsertTotals = { written: number; enriched: number; failed: number }
+
+export const insertDocs = (
   docs: readonly RawDoc[],
   ps: Person[],
   size = writeBatchDocs(),
@@ -237,15 +176,15 @@ export const insertDocsEffect = (
 ): Effect.Effect<InsertTotals, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
-    const insertGroupEffect = (group: readonly RawDoc[]) => sql.withTransaction(writeBatchEffect(sql, group, ps, lexicon))
+    const insertGroup = (group: readonly RawDoc[]) => sql.withTransaction(writeBatch(sql, group, ps, lexicon))
     return yield* Effect.reduce(batches(docs, size), (): InsertTotals => ({ written: 0, enriched: 0, failed: 0 }), (totals, group) =>
       Effect.gen(function* () {
-        // Effect.exit: a defect costs the group the same doc-by-doc replay the Promise path's .catch gives.
-        const counts = yield* Effect.exit(insertGroupEffect(group))
+        // Effect.exit: a defect costs the group the same doc-by-doc replay the Promise path used to give.
+        const counts = yield* Effect.exit(insertGroup(group))
         if (Exit.isSuccess(counts)) return { ...totals, written: totals.written + counts.value.written, enriched: totals.enriched + counts.value.enriched }
         return yield* Effect.reduce(group, (): InsertTotals => totals, (t, doc) =>
           Effect.gen(function* () {
-            const one = yield* Effect.exit(insertGroupEffect([doc]))
+            const one = yield* Effect.exit(insertGroup([doc]))
             if (Exit.isSuccess(one)) return { ...t, written: t.written + one.value.written, enriched: t.enriched + one.value.enriched }
             console.error(`[store] ${doc.uri}: ${(Cause.squash(one.cause) as Error).message}`)
             return { ...t, failed: t.failed + 1 }
@@ -254,3 +193,4 @@ export const insertDocsEffect = (
       }),
     )
   })
+export const insertDocsP = (docs: readonly RawDoc[], ps: Person[], size?: number, lexicon?: Phrases) => runSql(insertDocs(docs, ps, size, lexicon))

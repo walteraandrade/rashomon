@@ -4,7 +4,7 @@ import { ANALYZED_TABLES, db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import { graphFor, type GraphQuery } from '../src/graph.js'
 import { reindexAll } from '../src/reindex.js'
-import { MAX_DOC_CHARS, insertDoc, truncateText } from '../src/store.js'
+import { MAX_DOC_CHARS, insertDocP, truncateText } from '../src/store.js'
 import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
 import './close.js'
 
@@ -175,7 +175,7 @@ describe('reindex builds the lexicon and tags the corpus with it', () => {
   it("drops a phrase carrying one of the person's own name words from that person's own map", async () => {
     // Capitalized runs still produce them: seed.json cannot stop anyone from writing the name
     // mid-sentence, so the query-time filter is the one that has to hold.
-    await insertDoc({ source: 'rss', uri: 'https://example.org/phrase-name', text: 'O deputado Jair Bolsonaro discursou', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
+    await insertDocP({ source: 'rss', uri: 'https://example.org/phrase-name', text: 'O deputado Jair Bolsonaro discursou', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase' and term = 'jair bolsonaro'`)
     assert.equal(rows[0].n, 1, 'sanity: the run this filter has to hide must exist')
     const graph = await graphFor(persons[2], wide)

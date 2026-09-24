@@ -5,7 +5,7 @@ import { Cause, Effect, Exit } from 'effect'
 import { TestConsole } from 'effect/testing'
 import { collect, download, GKG_DOWNLOAD_TIMEOUT_MS, latestSlot, unzipBounded, MAX_EXPANDED_BYTES } from '../src/collectors/gkg.js'
 import { MAX_RESPONSE_BYTES, REQUEST_TIMEOUT_MS } from '../src/http.js'
-import { db, migrate } from '../src/db.js'
+import { db, migrateP } from '../src/db.js'
 import { drain, fakeFetch, failureOf, hanging, runTest, type Call } from './effect.js'
 import './close.js'
 
@@ -183,7 +183,7 @@ const gkgFetch = (latest: string, bySlot: (slot: string) => Response) =>
   })
 
 describe('collect() records no slot whose payload carried no documents', () => {
-  before(migrate)
+  before(migrateP)
 
   // Slots are processed newest first, and a failure aborts the run the way it did before the
   // Effect conversion, so the ok and entry-less slots are ordered ahead of the junk one to
@@ -223,7 +223,7 @@ describe('collect() records no slot whose payload carried no documents', () => {
 // Issue #108: GDELT's V2Themes column is no longer read into extraTerms at all, even when the
 // row carries one.
 describe('collect() drops GDELT themes: extraTerms is always [] (issue #108)', () => {
-  before(migrate)
+  before(migrateP)
 
   const latest = '20260911130000'
 
@@ -239,7 +239,7 @@ describe('collect() drops GDELT themes: extraTerms is always [] (issue #108)', (
 // AC8/AC9: one pending slot resolves oversize (a declared content-length above
 // MAX_RESPONSE_BYTES) among several that resolve ok. Proven against the actual gkg_files table.
 describe('collect() skips an oversize slot without marking gkg_files, and the run finishes anyway', () => {
-  before(migrate)
+  before(migrateP)
 
   const latest = '20260910120000'
   const oversizeSlot = '20260910114500'
@@ -274,7 +274,7 @@ describe('collect() skips an oversize slot without marking gkg_files, and the ru
 // docs an earlier slot had already produced even though that earlier slot's gkg_files row was
 // already committed -- permanent silent loss. Each slot's failure must cost only that slot.
 describe('collect() keeps an earlier slot\'s docs when a later slot times out', () => {
-  before(migrate)
+  before(migrateP)
 
   const latest = '20260912120000'
   const timeoutSlot = '20260912114500' // processed second (older), stalls past GKG_DOWNLOAD_TIMEOUT_MS
@@ -377,7 +377,7 @@ describe('download() driven through the FetchHttpClient.Fetch seam, no fetchImpl
 })
 
 describe('gkg log lines are unchanged text, read through TestConsole (issue #183)', () => {
-  before(migrate)
+  before(migrateP)
 
   // GKG_SLOTS is read once into a module-level constant at import time, so a test cannot
   // change the window size at runtime; it asserts against the module's actual (default, 24)

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
-import { db, migrate } from './db.js'
+import { db, migrateP } from './db.js'
 import { candidatesFor, compareFor, docsFor, graphFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
@@ -92,6 +92,6 @@ app.use('/*', serveStatic({ root: './public' }))
 
 // Importing `app` in tests never binds a port or migrates; only the entrypoint does.
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await migrate()
+  await migrateP()
   serve({ fetch: app.fetch, port }, () => console.log(`http://localhost:${port}`))
 }

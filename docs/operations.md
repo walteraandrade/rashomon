@@ -97,15 +97,18 @@ transaction open across an arbitrary amount of work. A third bound sits on the d
 - **Reindex.** It reads documents by keyset pagination on the primary key (`where id > $1 order by id
   limit $2`), never materializing more than one page of text, and commits one transaction per page.
 - **Orchestration.** `src/ingest.ts`'s `ingest(persons, names, options)` is an Effect: `migrate`,
-  `pruneRemoved`, `upsertPersons`, `loadPhrases`, the doc count, `analyzeAfterWrite`,
+  `pruneRemoved`, `upsertPersons`, `loadPhrases`, `docCount`, `analyzeAfterWrite`,
   `buildGraphAggregates` and `analyzeTables` are the calls whose rejection fails the whole run, each as
   `IngestFailure({ stage })` with its own stage name — never an uncaught defect, since a plain
   `Effect.promise` around a rejecting Promise resumes with `die`, not a typed failure, and would bypass a
-  caller's `Effect.catchTag`. `pruneRemoved` goes through `store.ts`'s `pruneRemovedEffect` (typed
-  `SqlError`, mapped to `IngestFailure`); the rest have no Effect-native counterpart yet, so they are
-  wrapped in `Effect.tryPromise`. A collector's own failure or a per-doc write failure never fails the
-  run, both are absorbed into that source's `SourceResult`. `pnpm ingest`'s entrypoint runs it with
-  `Effect.runPromise`, provided the
+  caller's `Effect.catchTag`. Every stage but `buildGraphAggregates` is a native Effect `yield*` (`store.ts`
+  and `db.ts` each export one Effect implementation per writer, under its bare name, `SqlError`-typed),
+  mapped with `Effect.mapError` into `IngestFailure`; `buildGraphAggregates` alone is still wrapped in
+  `Effect.tryPromise`, its own Effect rewrite a later issue. `IngestOptions` holds only `collectors`: a
+  stage failure has no per-stage option, it is reached solely through the ambient `SqlClient.SqlClient`,
+  which `test/ingest.test.ts` makes fail with `test/effect.ts`'s `failingSql(client, match)`. A collector's
+  own failure or a per-doc write failure never fails the run, both are absorbed into that source's
+  `SourceResult`. `pnpm ingest`'s entrypoint runs it with `Effect.runPromise`, provided the
   `HttpClient` layer every collector shares (`fetchClient`, `src/http.ts`) and the live `SqlClient`
   service, at the entrypoint rather than deep inside a collector — reusing `db.ts`'s own running
   connection (`runSql(SqlClient.SqlClient)`), never opening a second one on the same `DATA_DIR`. A run

@@ -1,5 +1,5 @@
 import seedJson from '../seed.json' with { type: 'json' }
-import { db, migrate } from './db.js'
+import { db, migrateP } from './db.js'
 import { methods, scorers } from './scorers/index.js'
 // Direct, not through scorers/index.js: method.ts has no imports, so nothing it exports pulls in the model loader.
 import { modelRevision } from './scorers/method.js'
@@ -52,7 +52,7 @@ export const resolveRun = (name: string) => {
 const main = async () => {
   // resolveRun before migrate(): a refused run must not have touched the database.
   const { scorer, method } = resolveRun(process.env.TESTIMONY_SCORER ?? 'onnx')
-  await migrate()
+  await migrateP()
   const n = await scoreAll(method, scorer, seedJson as Person[])
   console.log(`scored ${n} pairs as ${method}`)
   await db.close()

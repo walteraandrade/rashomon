@@ -1,4 +1,5 @@
-import { Duration } from 'effect'
+import { Duration, Effect } from 'effect'
+import { SqlClient } from 'effect/unstable/sql'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
@@ -6,8 +7,9 @@ import { join } from 'node:path'
 import tls from 'node:tls'
 import { after, before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { ANALYZED_TABLES, analyzeAfterWrite, analyzeMinDocs, analyzeTables, db, migrate, poolConfig } from '../src/db.js'
+import { ANALYZED_TABLES, analyzeAfterWriteP, analyzeMinDocs, analyzeTablesP, db, migrateP, poolConfig, runSql } from '../src/db.js'
 import { docsText } from './docs.js'
+import { failingSql } from './effect.js'
 import { withEnv } from './env.js'
 import { indexDefs, lastAnalyzed, planRowEstimate, seed } from './fixture.js'
 import './close.js'
@@ -228,8 +230,8 @@ describe('read indexes and planner statistics (issue #44)', () => {
   })
 
   it('keeps schema setup idempotent: a second migrate leaves one index of each name', async () => {
-    await migrate()
-    await migrate()
+    await migrateP()
+    await migrateP()
     const names = (await indexDefs('doc_persons')).map((d) => d.indexname).sort()
     assert.deepEqual(names, ['doc_persons_person_idx', 'doc_persons_pkey'])
   })
@@ -294,7 +296,7 @@ describe('analyze maintenance policy (issue #44)', () => {
     // A table that was written but never analyzed carries reltuples = -1: "no estimate yet".
     const before = await Promise.all(ANALYZED_TABLES.map(planRowEstimate))
     assert.ok(before.some((n) => n < 0), 'sanity: the fixture must not analyze on its own')
-    const analyzed = await analyzeTables()
+    const analyzed = await analyzeTablesP()
     assert.deepEqual([...analyzed], [...ANALYZED_TABLES])
     for (const t of ANALYZED_TABLES) {
       assert.ok((await planRowEstimate(t)) >= 0, `${t} still has no row estimate`)
@@ -303,20 +305,20 @@ describe('analyze maintenance policy (issue #44)', () => {
   })
 
   it('analyzes only the tables asked for', async () => {
-    const analyzed = await analyzeTables(['doc_persons'])
+    const analyzed = await analyzeTablesP(['doc_persons'])
     assert.deepEqual([...analyzed], ['doc_persons'])
   })
 
   it('ignores a table name outside the allow list, since a table name cannot be a parameter', async () => {
-    const analyzed = await analyzeTables(['persons; drop table docs' as never])
+    const analyzed = await analyzeTablesP(['persons; drop table docs' as never])
     assert.deepEqual([...analyzed], [])
     assert.ok((await db.query<{ n: number }>(`select count(*)::int as n from docs`)).rows[0].n > 0)
   })
 
   it('skips the refresh under the threshold and runs it at or above', async () => {
-    assert.deepEqual([...(await analyzeAfterWrite(0))], [])
-    assert.deepEqual([...(await analyzeAfterWrite(analyzeMinDocs() - 1))], [])
-    assert.deepEqual([...(await analyzeAfterWrite(analyzeMinDocs()))], [...ANALYZED_TABLES])
+    assert.deepEqual([...(await analyzeAfterWriteP(0))], [])
+    assert.deepEqual([...(await analyzeAfterWriteP(analyzeMinDocs() - 1))], [])
+    assert.deepEqual([...(await analyzeAfterWriteP(analyzeMinDocs()))], [...ANALYZED_TABLES])
   })
 })
 
@@ -416,5 +418,24 @@ describe('db on the SqlClient layer', () => {
     assert.equal(pkg.dependencies['@effect/sql-pg'], '4.0.0-rc.117')
     assert.ok(pkg.dependencies.pg, 'pg must remain listed: src/push.ts still imports it directly')
     assert.ok(pkg.devDependencies?.['@types/pg'] ?? pkg.dependencies['@types/pg'], '@types/pg must remain listed')
+  })
+
+  it('failingSql fails only the statement that matches and forwards every other one to the real client, inside a transaction too', async () => {
+    const real = await runSql(SqlClient.SqlClient)
+    const proxy = failingSql(real, /^select 'boom-marker'/)
+    const outsideOk = await Effect.runPromise(proxy.unsafe<{ n: number }>(`select 1::int as n`))
+    assert.deepEqual(outsideOk, [{ n: 1 }])
+    const outsideFail = await Effect.runPromiseExit(proxy.unsafe(`select 'boom-marker'`))
+    assert.equal(outsideFail._tag, 'Failure')
+    const insideTransaction = await Effect.runPromiseExit(
+      proxy.withTransaction(
+        Effect.gen(function* () {
+          const ok = yield* proxy.unsafe<{ n: number }>(`select 2::int as n`)
+          assert.deepEqual(ok, [{ n: 2 }])
+          yield* proxy.unsafe(`select 'boom-marker'`)
+        }),
+      ),
+    )
+    assert.equal(insideTransaction._tag, 'Failure')
   })
 })

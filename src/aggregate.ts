@@ -1,5 +1,5 @@
 import seedJson from '../seed.json' with { type: 'json' }
-import { db, migrate } from './db.js'
+import { db, migrateP } from './db.js'
 import { nameTokens } from './extract.js'
 import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
 import { isName, pmiRank, signatureFloor } from './scoring.js'
@@ -143,7 +143,7 @@ export const hasGraphAggregates = async (): Promise<boolean> => {
 export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery }
 
 const main = async (argv: string[]) => {
-  await migrate()
+  await migrateP()
   if (argv.includes('--if-missing') && (await hasGraphAggregates())) {
     console.log('graph aggregates: already built, skipping')
   } else {

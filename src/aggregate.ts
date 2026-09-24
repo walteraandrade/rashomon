@@ -2,6 +2,7 @@ import seedJson from '../seed.json' with { type: 'json' }
 import { db, migrate } from './db.js'
 import { nameTokens } from './extract.js'
 import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
+import { isName, pmiRank, signatureFloor } from './scoring.js'
 import { sql } from './sql.js'
 import { inTransaction } from './store.js'
 import type { Person } from './types.js'
@@ -62,7 +63,7 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
   const exclude = nameTokens(person)
   const byPmi = (m: number) => sql.raw(`by_pmi_${m}`)
   const ranks = MINS.map(
-    (m) => sql`row_number() over (partition by source, kind, c_pt >= ${m} order by pmi * ln(1 + c_pt) desc, term, kind) as ${byPmi(m)}`,
+    (m) => sql`row_number() over (partition by source, kind, c_pt >= ${m} order by ${pmiRank(sql.raw('c_pt'))} desc, term, kind) as ${byPmi(m)}`,
   )
   const kept = MINS.map((m) => sql`(c_pt >= ${m} and ${byPmi(m)} <= ${top})`)
   return sql`
@@ -73,8 +74,7 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
   p as (
     select coalesce(a.source, 'all') as source, t.term, t.kind, count(*)::int as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any(${exclude}::text[]))
-      and not (position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${exclude}::text[])
+    where not ${isName(sql.raw('t.term'), exclude)}
     group by grouping sets ((a.source, t.term, t.kind), (t.term, t.kind))
   ),
   scored as (
@@ -88,7 +88,7 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
     select source, term, kind, c_pt, c_t, tone, about,
       row_number() over (partition by source, kind order by c_pt desc, term, kind) as by_count,
       ${sql.join(ranks)},
-      row_number() over (partition by source, c_pt >= greatest(3, about * 0.05) order by pmi desc, term, kind) as by_signature
+      row_number() over (partition by source, c_pt >= ${signatureFloor(sql.raw('about'))} order by pmi desc, term, kind) as by_signature
     from scored
   )
   insert into graph_terms (days, source, person_id, term, kind, c_pt, c_t, tone)
@@ -96,7 +96,7 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
   from ranked
   where by_count <= ${top}
     or ${sql.join(kept, '\n    or ')}
-    or (c_pt >= greatest(3, about * 0.05) and by_signature <= 5)`
+    or (c_pt >= ${signatureFloor(sql.raw('about'))} and by_signature <= 5)`
 }
 
 const run = (q: { text: string; values: unknown[] }) => db.query(q.text, q.values)

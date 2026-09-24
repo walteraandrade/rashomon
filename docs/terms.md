@@ -45,7 +45,9 @@ into `phrase_stage` (one row per word occurrence; the row whose `w2` is null is 
 a text, and exists so the unigram counts are exact), then keeps the pairs that clear two floors:
 
 - `MIN_PHRASE_COUNT` occurrences, default 5. PMI-shaped measures are wildest where counts are
-  smallest, which is the same reason `sort=pmi` multiplies by `ln(1 + count)`.
+  smallest, which is the same reason `sort=pmi` multiplies by `ln(1 + count)` — that formula, the
+  `signature` floor (`greatest(3, 5% of stats.about)`) and the own-name filter all live once, in
+  `src/scoring.ts`, and `graph.ts`/`aggregate.ts` both build their SQL around it.
 - `MIN_PHRASE_PERCENT` stickiness, default 35. Stickiness is `c(a b) / min(c(a), c(b))`: of every
   time the rarer of the two words appears, how often is it inside this pair? "turno" has almost
   nowhere else to be, so "primeiro turno" is kept; "dias" is everywhere, so "faltam dias" is not.

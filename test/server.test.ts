@@ -5,7 +5,7 @@ import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor
 import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app } from '../src/server.js'
-import { insertDoc } from '../src/store.js'
+import { insertDocP } from '../src/store.js'
 import { withEnv } from './env.js'
 import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates } from './fixture.js'
 import './close.js'
@@ -168,11 +168,11 @@ describe('GET /api/people/:id/week (issue #147)', () => {
     // Two hashtag-only mentions dated today: no literal word form, so they never compete with
     // the day1 word terms, but they give kind=all a term on a day kind=word leaves empty --
     // the control a dropped `kind` parameter needs to be caught.
-    await insertDoc(
+    await insertDocP(
       { source: 'gnews', uri: 'https://g1.globo.com/week-kind-a', text: 'Lula é só isso #planalto', publishedAt: new Date().toISOString(), domain: 'g1.globo.com' },
       persons,
     )
-    await insertDoc(
+    await insertDocP(
       { source: 'gnews', uri: 'https://g1.globo.com/week-kind-b', text: 'Lula outra vez isso #planalto', publishedAt: new Date().toISOString(), domain: 'g1.globo.com' },
       persons,
     )
@@ -487,7 +487,7 @@ describe('GET /api/people/:id/docs day= (issue #147, AC15 end to end)', () => {
 describe('GET /api/people/:id/docs day=today folds a future-dated doc (issue #147, issue #150)', () => {
   before(async () => {
     await seed()
-    await insertDoc(futureDoc, persons)
+    await insertDocP(futureDoc, persons)
   })
   after(reseed)
 

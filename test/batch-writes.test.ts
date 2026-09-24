@@ -9,9 +9,9 @@ import { describe, it, before } from 'node:test'
 // from test/store.test.ts, the file that otherwise holds every write-path test.
 process.env.PERF = '1'
 
-const { db, migrate } = await import('../src/db.js')
+const { db, migrateP } = await import('../src/db.js')
 const { measure } = await import('../src/perf.js')
-const { insertDocs, upsertPersons, writeDerived } = await import('../src/store.js')
+const { insertDocsP, upsertPersonsP, writeDerivedP } = await import('../src/store.js')
 const { reindexAll } = await import('../src/reindex.js')
 await import('./close.js')
 
@@ -34,8 +34,8 @@ const statements = async (fn: () => Promise<unknown>) => (await measure(fn)).sql
 describe('bounded write batches (issue #50)', () => {
   before(async () => {
     if (process.env.DATA_DIR !== 'memory://') throw new Error('tests must run with DATA_DIR=memory://')
-    await migrate()
-    await upsertPersons(persons)
+    await migrateP()
+    await upsertPersonsP(persons)
   })
 
   it('spends one statement per batch of rows, not one per row', async () => {
@@ -44,9 +44,9 @@ describe('bounded write batches (issue #50)', () => {
     )
     const derived = rows.map((r) => ({ docId: r.id, persons: ['lula'], terms: [], names: [] }))
     // 7 person rows, no terms and no candidates: ceil(7/3) statements and nothing else.
-    assert.equal(await statements(() => writeDerived(derived, 3)), 3)
-    assert.equal(await statements(() => writeDerived(derived, 500)), 1)
-    assert.equal(await statements(() => writeDerived([], 500)), 0)
+    assert.equal(await statements(() => writeDerivedP(derived, 3)), 3)
+    assert.equal(await statements(() => writeDerivedP(derived, 500)), 1)
+    assert.equal(await statements(() => writeDerivedP([], 500)), 0)
   })
 
   it('spends a handful of statements per group of documents, not one per row', async () => {
@@ -55,12 +55,12 @@ describe('bounded write batches (issue #50)', () => {
     // through db.exec, so it never reaches this counter. Coverage that insertDocs still spends
     // one transaction per group -- a failing group rolls back without disturbing another group's
     // writes -- lives behaviourally in test/store.test.ts ("insertDocs groups documents into
-    // bounded transactions", "insertDocsEffect and insertDocs agree on a group with one failing doc").
-    assert.equal(await statements(() => insertDocs(docs(4, 'group'), persons, 4)), 6)
+    // bounded transactions", "insertDocs replays a group with one failing doc: the good docs still land").
+    assert.equal(await statements(() => insertDocsP(docs(4, 'group'), persons, 4)), 6)
     // Same documents with the row bound at 1, which is what the old per-row path cost:
     // 4 upserts + 4 person rows + 8 term rows.
     process.env.WRITE_BATCH_ROWS = '1'
-    const unbatched = await statements(() => insertDocs(docs(4, 'unbatched'), persons, 4))
+    const unbatched = await statements(() => insertDocsP(docs(4, 'unbatched'), persons, 4))
     delete process.env.WRITE_BATCH_ROWS
     assert.equal(unbatched, 16)
   })
@@ -72,7 +72,7 @@ describe('bounded write batches (issue #50)', () => {
       { source: 'rss' as const, uri: `https://example.org/${prefix}/b`, text: `lula fala sobre a reforma ${prefix}b`, publishedAt: new Date().toISOString() },
     ]
     const all = [...groupOf('rollback-1', false), ...groupOf('rollback-2', true), ...groupOf('rollback-3', false)]
-    const totals = await insertDocs(all, [...persons, phantom], 2)
+    const totals = await insertDocsP(all, [...persons, phantom], 2)
     assert.deepEqual(totals, { written: 5, enriched: 0, failed: 1 })
     const exists = async (uri: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uri])).rows[0].n > 0
     assert.equal(await exists('https://example.org/rollback-1/a'), true)
@@ -84,14 +84,14 @@ describe('bounded write batches (issue #50)', () => {
   })
 
   it('grows its statement count with the number of groups, not with the number of documents', async () => {
-    const one = await statements(() => insertDocs(docs(8, 'one-group'), persons, 8))
-    const four = await statements(() => insertDocs(docs(8, 'four-groups'), persons, 2))
+    const one = await statements(() => insertDocsP(docs(8, 'one-group'), persons, 8))
+    const four = await statements(() => insertDocsP(docs(8, 'four-groups'), persons, 2))
     assert.equal(one, 10)
     assert.equal(four, 4 * 4)
   })
 
   it('reindexes in a fixed number of statements per page, whatever the corpus size', async () => {
-    await insertDocs(docs(40, 'reindex'), persons)
+    await insertDocsP(docs(40, 'reindex'), persons)
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
     // Two passes over the corpus since phrases (issue: tokenization noise): the first stages
     // every adjacent word pair, the second derives. Per page that is one staging insert plus

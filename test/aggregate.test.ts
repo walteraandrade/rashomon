@@ -4,7 +4,7 @@ import { buildGraphAggregates, hasGraphAggregates, TOP } from '../src/aggregate.
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
-import { insertDoc } from '../src/store.js'
+import { insertDocP } from '../src/store.js'
 import { persons, seed, untrackedPerson } from './fixture.js'
 import './close.js'
 
@@ -179,7 +179,7 @@ describe('buildGraphAggregates', () => {
   it('cuts the window at build time: a doc inserted after the build shows only on the live path until a rebuild', async () => {
     await buildGraphAggregates(persons)
     const before = await fast(lula, q({ min: '1' }))
-    await insertDoc({ source: 'rss', uri: 'https://example.org/after-build', text: 'Lula visita a fábrica de aeronaves', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
+    await insertDocP({ source: 'rss', uri: 'https://example.org/after-build', text: 'Lula visita a fábrica de aeronaves', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
     const liveAfter = await live(lula, q({ min: '1' }))
     assert.deepEqual(await fast(lula, q({ min: '1' })), before, 'the fast path still renders the previous build')
     assert.notDeepEqual(liveAfter, before, 'the live path already counts the new doc')

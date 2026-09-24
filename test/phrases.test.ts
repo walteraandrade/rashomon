@@ -1,7 +1,8 @@
+import { Effect } from 'effect'
 import assert from 'node:assert/strict'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
-import { buildPhrases, loadPhrases, resetPhraseStage, stagePhrases } from '../src/phrases.js'
+import { buildPhrases, loadPhrases, loadPhrasesP, resetPhraseStage, stagePhrases } from '../src/phrases.js'
 import { seed } from './fixture.js'
 import './close.js'
 
@@ -36,7 +37,7 @@ describe('the lexicon keeps pairs that stick and drops pairs that merely co-occu
       'varios dias contados',
     ])
     await buildPhrases()
-    const lexicon = await loadPhrases()
+    const lexicon = await loadPhrasesP()
     assert.ok(lexicon.has('primeiro turno'), 'a pair its rarer word never leaves must be a phrase')
     assert.ok(!lexicon.has('faltam dias'), 'a pair riding a common word must not be a phrase')
   })
@@ -50,6 +51,17 @@ describe('the lexicon keeps pairs that stick and drops pairs that merely co-occu
     await resetPhraseStage()
     await stagePhrases(['outra coisa qualquer'])
     await buildPhrases()
-    assert.equal((await loadPhrases()).has('primeiro turno'), false)
+    assert.equal((await loadPhrasesP()).has('primeiro turno'), false)
+  })
+})
+
+describe('loadPhrases is one Effect implementation, loadPhrasesP its runSql adapter (issue 191)', () => {
+  before(seed)
+
+  it('loadPhrases is an Effect requiring SqlClient.SqlClient; loadPhrasesP wraps it through runSql', async () => {
+    assert.ok(Effect.isEffect(loadPhrases()))
+    assert.equal(typeof loadPhrasesP, 'function')
+    const result = await loadPhrasesP()
+    assert.ok(result instanceof Set)
   })
 })

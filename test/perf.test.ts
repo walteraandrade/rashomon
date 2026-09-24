@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
-import { instrument, measure, percentile, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from '../src/perf.js'
+import { percentile, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from '../src/perf.js'
 import { app } from '../src/server.js'
 import { seed } from './fixture.js'
 import './close.js'
@@ -38,45 +38,68 @@ describe('instrumentation is opt-in', () => {
   })
 })
 
+// PERF is read once, at import time, by src/perf.ts, so `measure`'s own instrumentation of
+// db.query/db.exec only exists with PERF=1 -- one subprocess per test, the same pattern as
+// the PERF=1 test in the serverTiming describe below.
+const runMeasured = (script: string) => {
+  const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+    env: { ...process.env, PERF: '1', PERF_LOG: '0', DATA_DIR: 'memory://' },
+    encoding: 'utf8',
+  })
+  assert.equal(child.status, 0, child.stderr)
+  return JSON.parse(child.stdout.trim().split('\n').pop() as string)
+}
+
 describe('measure', () => {
-  before(seed)
-
-  it('counts statements and db time of an instrumented handle', async () => {
-    const timed = instrument(db)
-    const { value, sql, dbMs, ms } = await measure(async () => {
-      const a = await timed.query<{ n: number }>(`select count(*)::int as n from docs`)
-      const b = await timed.query<{ n: number }>(`select count(*)::int as n from persons`)
-      return a.rows[0].n + b.rows[0].n
-    })
-    assert.equal(sql, 2)
-    assert.ok(value > 0)
-    assert.ok(dbMs >= 0)
-    assert.ok(ms >= dbMs - 0.001)
+  it('counts statements and db time through the real SqlClient path', () => {
+    const out = runMeasured(`
+      const { db, migrateP } = await import('./src/db.ts')
+      const { measure } = await import('./src/perf.ts')
+      await migrateP()
+      const { value, sql, dbMs, ms } = await measure(async () => {
+        const a = await db.query('select count(*)::int as n from docs')
+        const b = await db.query('select count(*)::int as n from persons')
+        return a.rows[0].n + b.rows[0].n
+      })
+      console.log(JSON.stringify({ value, sql, dbMs, ms }))
+    `)
+    assert.equal(out.sql, 2)
+    assert.ok(out.value >= 0)
+    assert.ok(out.dbMs >= 0)
+    assert.ok(out.ms >= out.dbMs - 0.001)
   })
 
-  it('returns identical rows through the proxy', async () => {
-    const direct = await db.query(`select id, name from persons order by id`)
-    const proxied = await instrument(db).query(`select id, name from persons order by id`)
-    assert.deepEqual(proxied.rows, direct.rows)
+  it('reports zero when no statement runs', () => {
+    const out = runMeasured(`
+      const { measure } = await import('./src/perf.ts')
+      const { sql, dbMs } = await measure(async () => 1)
+      console.log(JSON.stringify({ sql, dbMs }))
+    `)
+    assert.equal(out.sql, 0)
+    assert.equal(out.dbMs, 0)
   })
 
-  it('reports zero when no statement runs', async () => {
-    const { sql, dbMs } = await measure(async () => 1)
-    assert.equal(sql, 0)
-    assert.equal(dbMs, 0)
+  it('does not throw when a query runs outside a measured scope', () => {
+    const out = runMeasured(`
+      const { db, migrateP } = await import('./src/db.ts')
+      await migrateP()
+      const { rows } = await db.query('select 1::int as n')
+      console.log(JSON.stringify({ n: rows[0].n }))
+    `)
+    assert.equal(out.n, 1)
   })
 
-  it('does not throw when an instrumented query runs outside a measured scope', async () => {
-    const { rows } = await instrument(db).query<{ n: number }>(`select 1::int as n`)
-    assert.equal(rows[0].n, 1)
-  })
-
-  it('counts statements issued concurrently', async () => {
-    const timed = instrument(db)
-    const { sql } = await measure(async () => {
-      await Promise.all([timed.query(`select 1`), timed.query(`select 2`), timed.query(`select 3`)])
-    })
-    assert.equal(sql, 3)
+  it('counts statements issued concurrently', () => {
+    const out = runMeasured(`
+      const { db, migrateP } = await import('./src/db.ts')
+      const { measure } = await import('./src/perf.ts')
+      await migrateP()
+      const { sql } = await measure(async () => {
+        await Promise.all([db.query('select 1'), db.query('select 2'), db.query('select 3')])
+      })
+      console.log(JSON.stringify({ sql }))
+    `)
+    assert.equal(out.sql, 3)
   })
 })
 
@@ -113,9 +136,9 @@ describe('serverTiming', () => {
   // in-memory database, migrate, one request, the header on stdout.
   it('PERF=1 sets server-timing on an API response through the middleware, on a 404 too', () => {
     const script = `
-      const { migrate } = await import('./src/db.ts')
+      const { migrateP } = await import('./src/db.ts')
       const { app } = await import('./src/server.ts')
-      await migrate()
+      await migrateP()
       const res = await app.request('/api/people/nobody/graph?days=30')
       console.log(JSON.stringify({ status: res.status, header: res.headers.get('server-timing') }))
     `

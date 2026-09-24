@@ -1,9 +1,9 @@
 import seedPersons from '../seed.json' with { type: 'json' }
 import { AGGREGATE_TABLES, buildGraphAggregates } from './aggregate.js'
-import { analyzeTables, db, migrate } from './db.js'
+import { analyzeTablesP, db, migrateP } from './db.js'
 import { domainOf, nameTokens } from './extract.js'
-import { buildPhrases, loadPhrases, resetPhraseStage, stagePhrases } from './phrases.js'
-import { MAX_DOC_CHARS, derive, inBatches, inTransaction, truncateText, upsertPersons, writeBatchDocs, writeDerived } from './store.js'
+import { buildPhrases, loadPhrasesP, resetPhraseStage, stagePhrases } from './phrases.js'
+import { MAX_DOC_CHARS, derive, inBatches, inTransaction, truncateText, upsertPersonsP, writeBatchDocs, writeDerivedP } from './store.js'
 import type { Person, Source, Term } from './types.js'
 
 type Row = { id: number; source: Source; text: string; extra_terms: Term[]; extra_names: string[] }
@@ -74,7 +74,7 @@ const capTexts = async (size: number) => {
 
 // Separate from main()'s stdout/db wiring, so tests can reindex the fixture in-process.
 export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => {
-  await upsertPersons(persons)
+  await upsertPersonsP(persons)
   const backfilled = await backfillDomains(size)
   const capped = await capTexts(size)
   // Corpus is read twice: lexicon cannot exist until every doc is counted, and no doc can be
@@ -82,20 +82,20 @@ export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => 
   await resetPhraseStage()
   await eachPage(size, (rows) => stagePhrases(rows.map((r) => r.text)))
   const phrases = await buildPhrases(persons.flatMap(nameTokens))
-  const lexicon = await loadPhrases()
+  const lexicon = await loadPhrasesP()
   // `truncate` not `delete`: PGlite has no autovacuum; delete would leave dead pages forever.
   await db.exec(`truncate doc_terms, doc_persons, doc_candidates`)
   const docs = await eachPage(size, (rows) =>
     inTransaction(() =>
-      writeDerived(rows.map((r) => derive(r.id, { source: r.source, text: r.text, extraTerms: r.extra_terms, extraNames: r.extra_names }, persons, lexicon))),
+      writeDerivedP(rows.map((r) => derive(r.id, { source: r.source, text: r.text, extraTerms: r.extra_terms, extraNames: r.extra_names }, persons, lexicon))),
     ),
   )
-  const analyzed = await analyzeTables()
+  const analyzed = await analyzeTablesP()
   return { docs, backfilled, capped, analyzed, phrases }
 }
 
 const main = async () => {
-  await migrate()
+  await migrateP()
   const { docs, backfilled, capped, analyzed, phrases } = await reindexAll(seedPersons)
   if (backfilled) console.log(`backfilled domain for ${backfilled} docs`)
   if (capped) console.log(`capped text of ${capped} docs at ${MAX_DOC_CHARS} chars`)
@@ -105,7 +105,7 @@ const main = async () => {
   // Outside reindexAll on purpose: its statement budget is per page of documents, and the
   // aggregates are one build per window per person.
   const aggregates = await buildGraphAggregates(seedPersons)
-  await analyzeTables(AGGREGATE_TABLES)
+  await analyzeTablesP(AGGREGATE_TABLES)
   console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
   await db.close()
 }

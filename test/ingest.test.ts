@@ -3,7 +3,7 @@ import { after, describe, it } from 'node:test'
 import { Effect, Exit, Layer } from 'effect'
 import { TestConsole } from 'effect/testing'
 import { FetchHttpClient, type HttpClient } from 'effect/unstable/http'
-import { SqlClient } from 'effect/unstable/sql'
+import { SqlClient, SqlError } from 'effect/unstable/sql'
 import { db, runSql } from '../src/db.js'
 import { fetchClient } from '../src/http.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
@@ -11,7 +11,7 @@ import { RssError } from '../src/collectors/rss.js'
 import { ingest, IngestFailure } from '../src/ingest.js'
 import type { RawDoc, Source } from '../src/types.js'
 import { persons, reseed } from './fixture.js'
-import { failureOf, fakeFetch } from './effect.js'
+import { failingSql, failureOf, fakeFetch } from './effect.js'
 import { withEnv } from './env.js'
 import { docsText } from './docs.js'
 import './close.js'
@@ -20,17 +20,21 @@ import './close.js'
 // migrate/pruneRemoved/upsertPersons/insertDocs, which all run against db.ts's own connection).
 // The registry merges the real collectors under the stubs, so the fetch behind fetchClient is a
 // stub that throws: a source a test forgets to stub fails loudly instead of going online. The
-// SqlClient instance is db.ts's own, never a second connection on the same DATA_DIR.
+// SqlClient instance is db.ts's own, never a second connection on the same DATA_DIR. `match`
+// makes a single stage's own statement fail, through failingSql, the only seam a stage's failure
+// can be reached by -- IngestOptions holds no per-stage override.
 const noNetwork = fakeFetch(() => {
   throw new Error('no network in tests')
 })
-const testLayer = async () =>
-  Layer.mergeAll(
+const testLayer = async (match?: RegExp) => {
+  const real = await runSql(SqlClient.SqlClient)
+  return Layer.mergeAll(
     fetchClient,
     Layer.succeed(FetchHttpClient.Fetch, noNetwork),
-    Layer.succeed(SqlClient.SqlClient, await runSql(SqlClient.SqlClient)),
+    Layer.succeed(SqlClient.SqlClient, match ? failingSql(real, match) : real),
     TestConsole.layer,
   )
+}
 
 const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient | SqlClient.SqlClient>, layer: Layer.Layer<HttpClient.HttpClient | SqlClient.SqlClient>) =>
   Effect.gen(function* () {
@@ -96,40 +100,109 @@ describe('ingest', () => {
   })
 
   it('fails the whole run when upsertPersons rejects', async () => {
-    const layer = await testLayer()
+    const layer = await testLayer(/^insert into persons/)
     const docsC = [doc('https://ingest-test.example/c1', 'Lula anuncia uma medida')]
     const { exit } = await Effect.runPromise(
+      run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed(docsC) } }), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'upsertPersons')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [docsC[0].uri])
+    assert.equal(Number(rows[0].n), 0)
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "pruneRemoved" }), not an uncaught defect, when pruneRemoved rejects', async () => {
+    const layer = await testLayer(/^delete from doc_persons where not/)
+    const { exit } = await Effect.runPromise(run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([]) } }), layer))
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure, 'a rejection must surface as a typed IngestFailure, never an uncaught defect')
+    assert.equal(failure.stage, 'pruneRemoved')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "migrate" }) when the schema statement fails, before any collector runs', async () => {
+    const layer = await testLayer(/^\s*create table if not exists persons/)
+    let rssCalled = false
+    const { exit } = await Effect.runPromise(
       run(
-        ingest(persons, ['rss'], {
-          collectors: { rss: () => Effect.succeed(docsC) },
-          upsertPersons: () => Promise.reject(new Error('upsert boom')),
-        }),
+        ingest(persons, ['rss'], { collectors: { rss: () => ((rssCalled = true), Effect.succeed([])) } }),
         layer,
       ),
     )
     assert.ok(Exit.isFailure(exit))
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
-    assert.equal(failure.stage, 'upsertPersons')
-    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [docsC[0].uri])
-    assert.equal(Number(rows[0].n), 0)
+    assert.equal(failure.stage, 'migrate')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    assert.equal(rssCalled, false, 'rss collector should never run once migrate has failed')
   })
 
-  it('fails the whole run with IngestFailure({ stage: "pruneRemoved" }), not an uncaught defect, when pruneRemoved rejects', async () => {
-    const layer = await testLayer()
+  it('fails the whole run with IngestFailure({ stage: "loadPhrases" }) when the schema statement fails, before any collector runs', async () => {
+    const layer = await testLayer(/^select term from phrases/)
+    let rssCalled = false
     const { exit } = await Effect.runPromise(
       run(
-        ingest(persons, ['rss'], {
-          collectors: { rss: () => Effect.succeed([]) },
-          pruneRemoved: () => Promise.reject(new Error('prune boom')),
-        }),
+        ingest(persons, ['rss'], { collectors: { rss: () => ((rssCalled = true), Effect.succeed([])) } }),
         layer,
       ),
     )
     assert.ok(Exit.isFailure(exit))
     const failure = failureOf(exit)
-    assert.ok(failure instanceof IngestFailure, 'a rejection must surface as a typed IngestFailure, never an uncaught defect')
-    assert.equal(failure.stage, 'pruneRemoved')
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'loadPhrases')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    assert.equal(rssCalled, false, 'rss collector should never run once loadPhrases has failed')
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "docCount" }), after every named source has already reached insertDocs', async () => {
+    const uri = 'https://ingest-test.example/doccount1'
+    const layer = await testLayer(/^select count\(\*\) as n from docs/)
+    const { exit } = await Effect.runPromise(
+      run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'docCount')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
+    assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before docCount failed')
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "analyzeAfterWrite" }) (ANALYZE_MIN_DOCS=1)', async () => {
+    const uri = 'https://ingest-test.example/analyzeafter1'
+    const layer = await testLayer(/^analyze docs$/)
+    await withEnv({ ANALYZE_MIN_DOCS: '1' }, async () => {
+      const { exit } = await Effect.runPromise(
+        run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
+      )
+      assert.ok(Exit.isFailure(exit))
+      const failure = failureOf(exit)
+      assert.ok(failure instanceof IngestFailure)
+      assert.equal(failure.stage, 'analyzeAfterWrite')
+      assert.ok(failure.cause instanceof SqlError.SqlError)
+    })
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
+    assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeAfterWrite failed')
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "analyzeTables" }), after buildGraphAggregates has already run', async () => {
+    const uri = 'https://ingest-test.example/analyzetables1'
+    const layer = await testLayer(/^analyze graph_scopes$/)
+    const { exit } = await Effect.runPromise(
+      run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'analyzeTables')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
+    assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
   })
 
   it('respects names order, one source at a time', async () => {
@@ -252,7 +325,7 @@ describe('ingest acceptance, checked against the rows written and the calls made
   })
 
   it('an upsertPersons rejection fails the whole run with IngestFailure({ stage: "upsertPersons" }) and no source is ever attempted', async () => {
-    const layer = await testLayer()
+    const layer = await testLayer(/^insert into persons/)
     let rssCalled = false
     const uri = 'https://ac185-4.example/a'
     const { exit } = await Effect.runPromise(
@@ -264,7 +337,6 @@ describe('ingest acceptance, checked against the rows written and the calls made
               return Effect.succeed([doc(uri, 'Lula participa de reunião de ministros')])
             },
           },
-          upsertPersons: () => Promise.reject(new Error('ac185-4 boom')),
         }),
         layer,
       ),
@@ -273,6 +345,7 @@ describe('ingest acceptance, checked against the rows written and the calls made
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
     assert.equal(failure.stage, 'upsertPersons')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
     assert.equal(rssCalled, false, 'rss collector should never run once upsertPersons has rejected')
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
     assert.equal(Number(rows[0].n), 0)

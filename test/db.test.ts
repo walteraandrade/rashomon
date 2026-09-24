@@ -440,7 +440,7 @@ describe('db on the SqlClient layer', () => {
   })
 })
 
-describe('db.ts collapses migrate/analyzeTables/analyzeAfterWrite to one Effect implementation each, plus docCount (issue 191)', () => {
+describe('db.ts collapses migrate/analyzeTables/analyzeAfterWrite to one Effect implementation each, plus docCount', () => {
   before(seed)
 
   it('migrate, analyzeTables, analyzeAfterWrite and docCount are Effects requiring SqlClient.SqlClient, with migrateP/analyzeTablesP/analyzeAfterWriteP as their runSql adapters', async () => {
@@ -450,37 +450,5 @@ describe('db.ts collapses migrate/analyzeTables/analyzeAfterWrite to one Effect 
     assert.ok(Effect.isEffect(docCount()))
     for (const fn of [migrateP, analyzeTablesP, analyzeAfterWriteP]) assert.equal(typeof fn, 'function')
     assert.equal(typeof (await docCount().pipe(runSql)), 'number')
-  })
-
-  it('CLAUDE.md states each writer has one Effect implementation under its bare name, names the P-suffixed adapter as the only Promise-facing form, and drops the "built independently" sentence', () => {
-    const claude = readRepoFile('CLAUDE.md')
-    assert.match(
-      claude,
-      /each writer[\s\S]{0,80}has one Effect implementation, requiring `SqlClient\.SqlClient`[\s\S]{0,80}under its bare name/,
-      'CLAUDE.md must describe one Effect implementation per writer under its bare name',
-    )
-    assert.match(claude, /P`-suffixed Promise adapter/, 'CLAUDE.md must name the P-suffixed adapter as the Promise-facing form')
-    assert.doesNotMatch(
-      claude,
-      /built independently rather than wrapping the Promise version/,
-      'CLAUDE.md must drop the sentence describing the Effect twin as built independently from a Promise version',
-    )
-  })
-
-  it('CLAUDE.md states every ingest stage but buildGraphAggregates runs as a native Effect yield*, IngestOptions holds only collectors, and a stage fails through the SqlClient a test provides (failingSql), never an option', () => {
-    const claude = readRepoFile('CLAUDE.md')
-    assert.match(claude, /Every stage but `buildGraphAggregates`[\s\S]{0,80}runs as a native Effect `yield\*`/)
-    assert.match(claude, /`IngestOptions` holds only `collectors`/)
-    assert.match(claude, /failingSql\(client, match\)/)
-    assert.match(claude, /never a per-stage option/, 'CLAUDE.md must state a stage failure is reached only through the ambient SqlClient, never a per-stage option')
-  })
-
-  it("docs/operations.md's Orchestration paragraph states every stage but buildGraphAggregates runs as a native Effect, not Effect.tryPromise", () => {
-    assert.match(
-      docsText,
-      /Every stage but `buildGraphAggregates` is a native Effect `yield\*`/,
-      'operations docs must state every stage but buildGraphAggregates is a native Effect',
-    )
-    assert.match(docsText, /`buildGraphAggregates` alone is still wrapped in[\s\S]{0,10}`Effect\.tryPromise`/, 'operations docs must state buildGraphAggregates alone still uses Effect.tryPromise')
   })
 })

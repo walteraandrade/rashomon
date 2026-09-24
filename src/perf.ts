@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-// Opt-in at import: when PERF is unset, db stays bare and no middleware is registered.
+// Opt-in at import: when PERF is unset, db.ts skips the counting SqlClient wrapper and no middleware is registered.
 export const perfEnabled = process.env.PERF === '1' || process.env.PERF === 'true'
 
 // PERF_LOG=0 keeps counters and headers but silences the per-request line (used by pnpm bench).
@@ -26,31 +26,6 @@ export const measure = async <T>(fn: () => Promise<T>): Promise<Measured<T>> => 
   return { value, ms: performance.now() - started, sql: current.sql, dbMs: current.dbMs }
 }
 
-type AsyncFn = (...args: unknown[]) => Promise<unknown>
-
-const timed =
-  (fn: AsyncFn, self: object): AsyncFn =>
-  async (...args) => {
-    const started = performance.now()
-    try {
-      return await fn.apply(self, args)
-    } finally {
-      record(performance.now() - started)
-    }
-  }
-
-// query and exec bound to the raw target: PGlite's private fields throw through a proxy receiver.
-const TIMED = new Set(['query', 'exec'])
-
-export const instrument = <T extends object>(target: T): T =>
-  new Proxy(target, {
-    get(t, prop) {
-      const value = Reflect.get(t, prop, t)
-      if (typeof value === 'function' && typeof prop === 'string' && TIMED.has(prop)) return timed(value as AsyncFn, t)
-      return typeof value === 'function' ? value.bind(t) : value
-    },
-  })
-
 export type RequestPerf = { method: string; path: string; query: string; status: number } & Omit<Measured<unknown>, 'value'>
 
 // One JSON line per request: timings only, never document text or env values.
@@ -68,10 +43,8 @@ export const perfLine = (r: RequestPerf) =>
 
 export const round = (n: number) => Math.round(n * 100) / 100
 
-// The same two timings as the x-perf-* headers, in the shape DevTools draws on the request's
-// Timing tab and PerformanceResourceTiming.serverTiming exposes to the page. `total` is the
-// route's wall-clock and `db` the sum awaited on statements: they overlap, and db > total on
-// a route that fans out.
+// Same two timings as the x-perf-* headers, in the shape DevTools/PerformanceResourceTiming expect.
+// `total` is the route's wall-clock, `db` the sum awaited on statements; they overlap, so db > total on a fan-out.
 export const serverTiming = ({ ms, sql, dbMs }: Omit<Measured<unknown>, 'value'>) =>
   `db;dur=${round(dbMs)};desc="${sql} sql", total;dur=${round(ms)}`
 

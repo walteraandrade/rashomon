@@ -3,7 +3,7 @@ import { after, describe, it } from 'node:test'
 import { Effect, Exit, Layer } from 'effect'
 import { TestConsole } from 'effect/testing'
 import { FetchHttpClient, type HttpClient } from 'effect/unstable/http'
-import { SqlClient } from 'effect/unstable/sql'
+import { SqlClient, SqlError } from 'effect/unstable/sql'
 import { db, runSql } from '../src/db.js'
 import { fetchClient } from '../src/http.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
@@ -109,6 +109,7 @@ describe('ingest', () => {
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
     assert.equal(failure.stage, 'upsertPersons')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [docsC[0].uri])
     assert.equal(Number(rows[0].n), 0)
   })
@@ -120,6 +121,7 @@ describe('ingest', () => {
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure, 'a rejection must surface as a typed IngestFailure, never an uncaught defect')
     assert.equal(failure.stage, 'pruneRemoved')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
   })
 
   it('fails the whole run with IngestFailure({ stage: "migrate" }) when the schema statement fails, before any collector runs', async () => {
@@ -135,6 +137,7 @@ describe('ingest', () => {
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
     assert.equal(failure.stage, 'migrate')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
     assert.equal(rssCalled, false, 'rss collector should never run once migrate has failed')
   })
 
@@ -151,6 +154,7 @@ describe('ingest', () => {
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
     assert.equal(failure.stage, 'loadPhrases')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
     assert.equal(rssCalled, false, 'rss collector should never run once loadPhrases has failed')
   })
 
@@ -164,6 +168,7 @@ describe('ingest', () => {
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
     assert.equal(failure.stage, 'docCount')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
     assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before docCount failed')
   })
@@ -179,6 +184,7 @@ describe('ingest', () => {
       const failure = failureOf(exit)
       assert.ok(failure instanceof IngestFailure)
       assert.equal(failure.stage, 'analyzeAfterWrite')
+      assert.ok(failure.cause instanceof SqlError.SqlError)
     })
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
     assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeAfterWrite failed')
@@ -194,6 +200,7 @@ describe('ingest', () => {
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
     assert.equal(failure.stage, 'analyzeTables')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
     assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
   })
@@ -338,6 +345,7 @@ describe('ingest acceptance, checked against the rows written and the calls made
     const failure = failureOf(exit)
     assert.ok(failure instanceof IngestFailure)
     assert.equal(failure.stage, 'upsertPersons')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
     assert.equal(rssCalled, false, 'rss collector should never run once upsertPersons has rejected')
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
     assert.equal(Number(rows[0].n), 0)

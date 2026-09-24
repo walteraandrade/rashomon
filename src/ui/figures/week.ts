@@ -122,8 +122,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const paint = (result: Week) => {
-    // A resize repaint (figure.ts, since `el` is given) calls this with the same object again;
-    // only a genuinely new dataset clears the pick.
+    // A resize repaint calls this with the same object again; only a new dataset clears the pick.
     const isNewData = result !== data
     data = result
     if (isNewData) selected = null
@@ -137,8 +136,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     paintWeekError()
   }
 
-  // `el`/`markSelector` give the background-click and Escape wiring; the remeasuring
-  // ResizeObserver below stays this figure's own (it repaints twice, figure.ts's does not).
+  // `el`/`markSelector` give background-click/Escape/resize wiring; a resize calls `paint`
+  // again with the same `data`, whose own `repaint()` already remeasures and repaints twice.
   const figure = runFigure<Week>({
     name: 'week',
     params,
@@ -169,10 +168,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('weekPerson').addEventListener('change', onControlChange)
   $('weekSource').addEventListener('change', onControlChange)
   $('weekLimit').addEventListener('change', onControlChange)
-  if (typeof ResizeObserver !== 'undefined')
-    new ResizeObserver(() => {
-      if (data && measureColumn() !== columnWidth) repaint()
-    }).observe($('weekChart'))
 
   figure.load()
 }

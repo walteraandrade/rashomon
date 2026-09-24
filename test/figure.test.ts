@@ -500,6 +500,36 @@ describe('figure.ts: runFigure abort/stale/scope/ghost/background/Escape/resize 
     }
   })
 
+  it('repaint() is a no-op between a ghost paint and that fetch settling; resumes once it does (gap 1/2)', async () => {
+    setupDom()
+    try {
+      const { runFigure } = await import('../src/ui/figure.js')
+      let calls = 0
+      let resolveB: (v: string) => void = () => {}
+      const painted: string[] = []
+      const handle = runFigure<string>({
+        name: 'ac-loading-guard',
+        params: () => new URLSearchParams({ c: String(++calls) }),
+        fetch: () => (calls === 1 ? Promise.resolve('A') : new Promise<string>((resolve) => (resolveB = resolve))),
+        ghost: () => {},
+        paint: (d) => painted.push(d),
+        paintError: () => {},
+      })
+      await handle.load()
+      assert.deepEqual(painted, ['A'])
+      const loadB = handle.load()
+      handle.repaint()
+      assert.deepEqual(painted, ['A'], 'a repaint while B is in flight after its ghost must not repaint the stale A')
+      resolveB('B')
+      await loadB
+      assert.deepEqual(painted, ['A', 'B'])
+      handle.repaint()
+      assert.deepEqual(painted, ['A', 'B', 'B'], 'repaint() resumes once the in-flight fetch has settled')
+    } finally {
+      teardownDom()
+    }
+  })
+
   it('reload is debounced; two rapid calls yield one load', async () => {
     setupDom()
     try {

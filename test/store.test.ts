@@ -585,3 +585,15 @@ describe('an Effect writer fails with a catchable SqlError, not a flattened reje
     assert.equal(rows[0].n, 0, 'the failed transaction must not leave the docs row behind')
   })
 })
+
+// One Effect implementation per writer, Promise adapters through runSql (issue 191).
+describe('store.ts exposes one Effect implementation per writer, plus its runSql adapter', () => {
+  it('pruneRemoved/upsertPersons/writeDerived/insertDoc/insertDocs are Effects, each with a P-suffixed Promise adapter, and no *Effect-suffixed export remains', async () => {
+    for (const fn of [pruneRemovedP, upsertPersonsP, writeDerivedP, insertDocP, insertDocsP]) assert.equal(typeof fn, 'function')
+    assert.ok(Effect.isEffect(insertDoc({ source: 'rss', uri: 'x', text: 'x', publishedAt: now() }, [])))
+    const storeModule = (await import('../src/store.js')) as Record<string, unknown>
+    for (const name of ['pruneRemovedEffect', 'upsertPersonsEffect', 'writeDerivedEffect', 'insertDocEffect', 'insertDocsEffect']) {
+      assert.ok(!(name in storeModule), `${name} must not be exported`)
+    }
+  })
+})

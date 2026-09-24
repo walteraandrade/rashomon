@@ -458,6 +458,24 @@ describe('lean filtering (issue #26)', () => {
     assert.equal(golpeRight?.count_baseline, 0, 'doc 42 is left-labeled, so lean=right must empty the baseline half')
   })
 
+  it('risingFor and timelineFor read source as a comma list, summing the listed sources', async () => {
+    const raw = (r: Awaited<ReturnType<typeof risingFor>>) =>
+      new Map(r.terms.map((t) => [t.term + '|' + t.kind, t.count_recent_raw]))
+    const q: RisingQuery = { ...risingBase, limit: 100 }
+    const gnews = raw(await risingFor(lula, { ...q, source: 'gnews' }))
+    const rss = raw(await risingFor(lula, { ...q, source: 'rss' }))
+    const both = raw(await risingFor(lula, { ...q, source: 'gnews,rss' }))
+    assert.ok(gnews.size > 0 && rss.size > 0, 'the fixture must give lula recent terms on both sources')
+    for (const [key, n] of both) assert.equal(n, (gnews.get(key) ?? 0) + (rss.get(key) ?? 0), key)
+
+    const t = { ...timelineBase, days: 7 }
+    const [g, r, b] = await Promise.all(
+      ['gnews', 'rss', 'gnews,rss'].map((source) => timelineFor(lula, { ...t, source })),
+    )
+    assert.ok(sumOf(g) > 0 && sumOf(r) > 0)
+    assert.equal(sumOf(b), sumOf(g) + sumOf(r))
+  })
+
   it('timelineFor stays a bare {bucket_start,count}[] array and still narrows by lean', async () => {
     const q: TimelineQuery = { ...timelineBase, days: wide, lean: 'right' }
     const rows = await timelineFor(bolsonaro, q)

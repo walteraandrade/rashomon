@@ -18,6 +18,7 @@ import {
   parseLeanList,
   parseQuery,
   parseRisingQuery,
+  parseScope,
   parseSourceList,
   parseTestimonyQuery,
   parseTimelineQuery,
@@ -29,7 +30,7 @@ import {
   brtMidnightUtc,
   calendarDay,
 } from '../src/query.js'
-import { candidatesQuery, compareParams, docsParams, params } from '../src/ui/api.js'
+import { ATLAS_KINDS, candidatesQuery, compareParams, docsParams, params } from '../src/ui/api.js'
 import { withEnv } from './env.js'
 
 // Every parser in src/query.ts, with no database: what each field defaults to, what it snaps
@@ -88,7 +89,7 @@ describe('parseKindList', () => {
   })
 })
 
-// issues #24/#25: the two independent inline literals in parseRisingQuery/parseTimelineQuery
+// issues #24/#25: parseRisingQuery/parseTimelineQuery
 // must accept 'camara' and 'senado' too, so they cannot silently drift from SOURCES again.
 describe('parseRisingQuery/parseTimelineQuery source', () => {
   it('resolves source: camara and senado to themselves, not all', () => {
@@ -108,6 +109,12 @@ describe('parseRisingQuery/parseTimelineQuery source', () => {
   it('still falls back to all on a bogus token, so the check was widened, not loosened', () => {
     assert.equal(parseRisingQuery({ source: 'not-a-real-source' }).source, 'all')
     assert.equal(parseTimelineQuery({ source: 'not-a-real-source' }).source, 'all')
+  })
+
+  it('keeps a comma list, like every other route (issue #195)', () => {
+    assert.equal(parseRisingQuery({ source: 'gkg,rss' }).source, 'gkg,rss')
+    assert.equal(parseTimelineQuery({ source: 'gkg,rss' }).source, 'gkg,rss')
+    assert.equal(parseRisingQuery({ source: 'gkg,bogus' }).source, 'gkg')
   })
 })
 
@@ -321,7 +328,30 @@ describe('parseCandidatesQuery (issue #32)', () => {
   })
 })
 
+describe('parseScope (issue #195)', () => {
+  it('snaps days onto DAYS with the given default and normalizes the four lists', () => {
+    assert.deepEqual(parseScope({}, { days: 7 }), { days: 7, source: 'all', domain: 'all', lean: 'all', kind: 'all' })
+    assert.deepEqual(
+      parseScope({ days: '40', source: 'rss, gkg,rss', domain: 'g1.globo.com,BAD HOST', lean: 'left,nope', kind: 'word,theme' }, { days: 30 }),
+      { days: 30, source: 'rss,gkg', domain: 'g1.globo.com', lean: 'left', kind: 'word' },
+    )
+  })
+
+  it('is the recorte every route with those fields reads', () => {
+    const q = { days: '365', source: 'gkg,rss', domain: 'g1.globo.com', lean: 'right', kind: 'phrase' }
+    const scope = parseScope(q, { days: 30 })
+    for (const parse of [parseQuery, parseDocsQuery, parseRisingQuery, parseTimelineQuery, parseCompareQuery, parseWeekQuery]) {
+      const { days, source, domain, lean, kind } = parse(q)
+      assert.deepEqual({ days, source, domain, lean, kind }, scope, parse.name)
+    }
+  })
+})
+
 describe('KINDS (issue #108)', () => {
+  it('is the same set the page sends as ATLAS_KINDS (issue #195)', () => {
+    assert.deepEqual(new Set(ATLAS_KINDS.split(',')), new Set(KINDS))
+  })
+
   it('no longer accepts the token theme', () => {
     assert.ok(!KINDS.includes('theme'))
     assert.deepEqual(KINDS, ['hashtag', 'word', 'phrase'])

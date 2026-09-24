@@ -37,7 +37,7 @@ Before this the ranges were `[1, 200]`, `[1, 1000]`, `[1, 365]` and `[0, 1000000
 
 ## Shared filters
 
-`source`, `kind`, `domain` and `lean` each take a comma-separated list, matching a doc whose value is any of the listed ones. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all`. A single token behaves exactly as it always did. `rising` and `timeline` still take a single `source` value.
+`source`, `kind`, `domain` and `lean` each take a comma-separated list, matching a doc whose value is any of the listed ones. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all`. A single token behaves exactly as it always did.
 
 - `source`: `bluesky`, `gdelt`, `rss`, `gnews`, `gkg`, `camara`, `senado`, `juridico`, `oficial`, `nicho`. See [sources](sources.md).
 - `kind`: `hashtag`, `word`, `phrase`. The atlas at `/` sends `word,hashtag,phrase`, the full set.

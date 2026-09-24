@@ -4,8 +4,7 @@ import * as api from '../api.js'
 import { html, SOURCE_SEGMENTS, sourceLabels, type OutletRow, type Testimony } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { paintOutlets, paintOutletsError, paintOutletsLoading, paintStrip, paintTestimony, paintTestimonyError, paintTestimonyLoading } from '../render.js'
-import { span } from '../perf.js'
-import { debounce, fromScope, readScope } from '../state.js'
+import { runFigure } from '../figure.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
 
@@ -15,8 +14,6 @@ export type Seed = { person?: string; days?: string; source?: string }
 export type PeopleError = unknown
 
 const $ = (id: string): any => document.getElementById(id)
-
-const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 const applySeed = (select: any, value: string | undefined) => {
   if (value === undefined || !select) return
@@ -30,31 +27,35 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let testimony: Testimony | null = null
   let outletRows: OutletRow[] | null = null
   let outlet = 'all'
-  let lastStripWidth = 0
-  let requestId = 0
-  let controller: AbortController | null = null
 
   const controlValues = () => ({ days: $('testimonyDays').value, sort: 'count', limit: '18', source: $('testimonySource').value })
-  const scopeKey = (personId: string, params: URLSearchParams) => personId + '?' + params
 
+  // Width read fresh (never memoised), so any resize trigger paints at the current width.
   const repaint = () => {
     if (testimony) {
       paintTestimony({ data: testimony, domain: outlet })
-      paintStrip({ data: testimony, domain: outlet, onPick: pickOutlet, width: lastStripWidth || undefined })
+      paintStrip({ data: testimony, domain: outlet, onPick: pickOutlet, width: $('strip').clientWidth || undefined })
     }
     if (outletRows) paintOutlets({ rows: outletRows, testimony, domain: outlet, onPick: pickOutlet })
   }
 
-  // Picking an outlet repaints from existing data and opens the docs card; releasing closes it.
-  const pickOutlet = (d: string) => {
-    if (d === outlet) return
-    outlet = d
+  const resetOutlet = () => {
+    if (outlet === 'all') return
+    outlet = 'all'
     repaint()
-    if (d === 'all') docsCard.close()
-    else showOutletDocs(d)
   }
 
-  const releaseOutlet = () => pickOutlet('all')
+  // Picking 'all' again routes through the runtime, so a card this figure does not own survives.
+  const pickOutlet = (d: string) => {
+    if (d === outlet) return
+    if (d === 'all') {
+      testimonyFigure.release()
+      return
+    }
+    outlet = d
+    repaint()
+    showOutletDocs(d)
+  }
 
   const showOutletDocs = (d: string) => {
     const personId = $('testimonyPerson').value
@@ -62,95 +63,113 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     const person = people.find((p) => p.id === personId)
     const values = controlValues()
     docsCard.open({
+      owner: 'testimony',
       kicker: 'Documentos de',
       title: d,
       sides: [{ personId, personName: person?.name ?? personId, query: api.docsParams({ days: values.days, source: values.source, domain: d }) }],
     })
   }
 
-  const loadSourcesFlow = async (id: number, signal: AbortSignal) => {
-    const person = $('testimonyPerson').value
-    const params = api.sourcesParams(controlValues())
-    const key = scopeKey(person, params)
-    if (!readScope('sources', key)) {
-      if (outletRows) $('outletList').classList.add('is-loading')
-      else paintOutletsLoading()
-    }
-    const painted = span('figure:outlets')
-    try {
-      const rows = await fromScope('sources', key, () => api.loadSources(person, params, signal))
-      if (id !== requestId) return
-      outletRows = rows
-      repaint()
-      painted({ person, query: params.toString(), rows: rows.length })
-    } catch (e) {
-      if (id === requestId && !aborted(e)) paintOutletsError()
-    }
-  }
-
-  const loadTestimonyFlow = async (id: number, signal: AbortSignal) => {
-    const person = $('testimonyPerson').value
-    const params = api.testimonyParams(controlValues())
-    const key = scopeKey(person, params)
-    if (!readScope('testimony', key)) {
-      if (testimony) {
-        $('testimonyList').classList.add('is-loading')
-        $('strip').classList.add('is-loading')
-      } else paintTestimonyLoading()
-    }
-    const painted = span('figure:testimony')
-    try {
-      const data = await fromScope('testimony', key, () => api.loadTestimony(person, params, signal))
-      if (id !== requestId) return
-      testimony = data
-      lastStripWidth = $('strip').clientWidth || 0
-      repaint()
-      painted({ person, query: params.toString() })
-    } catch (e) {
-      if (id === requestId && !aborted(e)) {
-        testimony = null
-        paintTestimonyError()
-      }
-    }
-  }
-
-  const load = () => {
-    const id = ++requestId
-    controller?.abort()
-    controller = new AbortController()
-    outlet = 'all'
+  const paintUnavailable = () => {
+    testimony = null
+    outletRows = null
     if (peopleError) {
-      testimony = null
-      outletRows = null
       $('testimonyList').innerHTML =
         '<p class="note">Falha de rede ou base indisponível.<br>Nenhuma avaliação fictícia será exibida.<br><br><button class="quiet-button" id="testimonyRetry">Tentar novamente</button></p>'
       $('outletList').textContent = ''
       $('strip').hidden = true
       $('testimonyRetry')?.addEventListener('click', () => location.reload())
-      return
-    }
-    if (!people.length) {
-      testimony = null
-      outletRows = null
+    } else {
       $('testimonyList').textContent = 'Nenhuma pessoa cadastrada.'
       $('outletList').textContent = ''
       $('strip').hidden = true
-      return
     }
-    loadSourcesFlow(id, controller.signal)
-    loadTestimonyFlow(id, controller.signal)
   }
 
-  const debouncedLoad = debounce(load)
+  // Only the testimony instance paints the unavailable state below, or the retry button
+  // wires a second click listener when both instances load together.
+  const outletsParams = (): URLSearchParams | null => {
+    if (peopleError || !people.length) return null
+    const qp = api.sourcesParams(controlValues())
+    qp.set('person', $('testimonyPerson').value)
+    return qp
+  }
+
+  const testimonyParamsFn = (): URLSearchParams | null => {
+    if (peopleError || !people.length) {
+      paintUnavailable()
+      return null
+    }
+    const qp = api.testimonyParams(controlValues())
+    qp.set('person', $('testimonyPerson').value)
+    return qp
+  }
+
+  const asGraphOpts = (queryParams: URLSearchParams) => ({
+    days: queryParams.get('days')!,
+    sort: queryParams.get('sort')!,
+    limit: queryParams.get('limit')!,
+    source: queryParams.get('source')!,
+  })
+
+  const ghostOutlets = () => {
+    if (outletRows) $('outletList').classList.add('is-loading')
+    else paintOutletsLoading()
+  }
+
+  const paintOutletsData = (rows: OutletRow[]) => {
+    outletRows = rows
+    repaint()
+  }
+
+  const ghostTestimony = () => {
+    if (testimony) {
+      $('testimonyList').classList.add('is-loading')
+      $('strip').classList.add('is-loading')
+    } else paintTestimonyLoading()
+  }
+
+  const paintTestimonyData = (data: Testimony) => {
+    testimony = data
+    repaint()
+  }
+
+  const paintTestimonyErrorData = () => {
+    testimony = null
+    paintTestimonyError()
+  }
+
+  const outletsFigure = runFigure<OutletRow[]>({
+    name: 'outlets',
+    params: outletsParams,
+    fetch: (queryParams, signal) => api.loadSources(queryParams.get('person')!, api.sourcesParams(asGraphOpts(queryParams)), signal),
+    ghost: ghostOutlets,
+    paint: paintOutletsData,
+    paintError: paintOutletsError,
+  })
+
+  const testimonyFigure = runFigure<Testimony>({
+    name: 'testimony',
+    params: testimonyParamsFn,
+    fetch: (queryParams, signal) => api.loadTestimony(queryParams.get('person')!, api.testimonyParams(asGraphOpts(queryParams)), signal),
+    ghost: ghostTestimony,
+    paint: paintTestimonyData,
+    paintError: paintTestimonyErrorData,
+    el: [$('strip'), $('testimonyList'), $('outletList')],
+    markSelector: '[data-domain], [data-testimony-domain], [data-strip-domain]',
+    onRelease: resetOutlet,
+  })
+
+  const load = () => {
+    outlet = 'all'
+    outletsFigure.load()
+    testimonyFigure.load()
+  }
 
   const onControlChange = () => {
     outlet = 'all'
-    debouncedLoad()
-  }
-
-  const background = (target: Element | null) => {
-    if (target && target.closest('[data-domain], [data-testimony-domain], [data-strip-domain]')) return
-    releaseOutlet()
+    outletsFigure.reload()
+    testimonyFigure.reload()
   }
 
   $('testimonySource').innerHTML = html`${SOURCE_SEGMENTS.map(([value, text]) => html`<option value="${value}">${sourceLabels[value] ?? text}</option>`)}`
@@ -163,15 +182,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('testimonyPerson').addEventListener('change', onControlChange)
   $('testimonyDays').addEventListener('change', onControlChange)
   $('testimonySource').addEventListener('change', onControlChange)
-  for (const id of ['strip', 'testimonyList', 'outletList'])
-    $(id).addEventListener('click', (e: MouseEvent) => background(e.target as Element | null))
-  new ResizeObserver(() => {
-    const width = $('strip').clientWidth
-    if (testimony && width && width !== lastStripWidth) {
-      lastStripWidth = width
-      paintStrip({ data: testimony, domain: outlet, onPick: pickOutlet, width })
-    }
-  }).observe($('strip'))
+  // Its own ResizeObserver (issue #92 AC13), independent of figure 1's resizeMap.
+  new ResizeObserver(() => repaint()).observe($('strip'))
 
   load()
 }

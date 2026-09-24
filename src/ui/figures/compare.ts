@@ -5,8 +5,7 @@ import * as api from '../api.js'
 import { html, kinds, SOURCE_SEGMENTS, scoreName, sourceLabels, type Compare, type Measure } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintCompareDetail, paintCompareLoading, paintRuler, paintRulerError } from '../render.js'
-import { span } from '../perf.js'
-import { debounce, fromScope, readScope } from '../state.js'
+import { runFigure } from '../figure.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
 
@@ -16,8 +15,6 @@ export type Seed = { a?: string; b?: string; days?: string; source?: string; lim
 export type PeopleError = unknown
 
 const $ = (id: string): any => document.getElementById(id)
-
-const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 const applySeed = (select: any, value: string | undefined) => {
   if (value === undefined || !select) return
@@ -37,8 +34,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let data: Compare | null = null
   let selected: { term: string; kind: string } | null = null
   let lastWidth = 0
-  let requestId = 0
-  let controller: AbortController | null = null
   let metrics: Measure | null = null
   const measured = () => (metrics ??= createCanvasMeasure())
 
@@ -85,17 +80,19 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   // Selecting is a toggle; overflow buttons carry the same data-term/data-kind as drawn words.
   const pick = (term: string, kind: string) => {
-    selected = selected && selected.term === term && selected.kind === kind ? null : { term, kind }
+    if (selected && selected.term === term && selected.kind === kind) {
+      figure.release()
+      return
+    }
+    selected = { term, kind }
     repaint()
-    if (selected) showDocs(selected)
-    else docsCard.close()
+    showDocs(selected)
   }
 
   const releaseSelection = () => {
     if (!selected) return
     selected = null
     repaint()
-    docsCard.close()
   }
 
   const showDocs = (word: { term: string; kind: string }) => {
@@ -108,21 +105,14 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       query: api.docsParams({ ...values, term: word.term, kind: word.kind }),
     })
     docsCard.open({
+      owner: 'compare',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
       title: word.term,
       sides: [side(data.a.person), side(data.b.person)],
     })
   }
 
-  const background = (target: Element | null) => {
-    if (target && target.closest('[data-term]')) return
-    releaseSelection()
-  }
-
-  const load = async () => {
-    const id = ++requestId
-    controller?.abort()
-    controller = new AbortController()
+  const params = (): URLSearchParams | null => {
     if (peopleError) {
       data = null
       $('compareStatus').hidden = true
@@ -132,7 +122,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
         '<span class="empty-hint">Falha de rede ou base indisponível. <button class="quiet-button" id="compareRetry">Tentar novamente</button></span>'
       $('compareRetry')?.addEventListener('click', () => location.reload())
       setHiddenNote(0)
-      return
+      return null
     }
     if (!people.length) {
       data = null
@@ -141,42 +131,48 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('compareRuler').innerHTML = ''
       $('compareDetail').innerHTML = '<span class="empty-hint">Nenhuma pessoa cadastrada.</span>'
       setHiddenNote(0)
-      return
+      return null
     }
-    const params = api.compareParams(controlValues())
-    const key = params.toString()
-    if (!readScope('compare', key)) {
-      if (data) root.classList.add('is-loading')
-      else paintCompareLoading()
-    }
-    const painted = span('figure:compare')
-    try {
-      const result = await fromScope('compare', key, () => api.loadCompare(params, (controller as AbortController).signal))
-      if (id !== requestId) return
-      data = result
-      selected = null
-      lastWidth = $('compareRuler').clientWidth || 0
-      $('compareStatus').hidden = result.a.person.id !== result.b.person.id
-      root.classList.remove('is-loading')
-      repaint()
-      painted({ query: key })
-    } catch (e) {
-      if (id === requestId && !aborted(e)) {
-        data = null
-        $('compareStatus').hidden = true
-        root.classList.remove('is-loading')
-        paintRulerError()
-        $('compareDetail').innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
-        setHiddenNote(0)
-      }
-    }
+    return api.compareParams(controlValues())
   }
 
-  const debouncedLoad = debounce(load)
+  const ghost = () => {
+    if (data) root.classList.add('is-loading')
+    else paintCompareLoading()
+  }
+
+  const paint = (result: Compare) => {
+    data = result
+    lastWidth = $('compareRuler').clientWidth || 0
+    $('compareStatus').hidden = result.a.person.id !== result.b.person.id
+    root.classList.remove('is-loading')
+    repaint()
+  }
+
+  const paintError = () => {
+    data = null
+    $('compareStatus').hidden = true
+    root.classList.remove('is-loading')
+    paintRulerError()
+    $('compareDetail').innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
+    setHiddenNote(0)
+  }
+
+  const figure = runFigure<Compare>({
+    name: 'compare',
+    params,
+    fetch: (queryParams, signal) => api.loadCompare(queryParams, signal),
+    ghost,
+    paint,
+    paintError,
+    el: $('compareRuler'),
+    markSelector: '[data-term]',
+    onRelease: releaseSelection,
+  })
 
   const onControlChange = () => {
     selected = null
-    debouncedLoad()
+    figure.reload()
   }
 
   // `measure` is not part of compareParams, so the payload is unchanged; repaint without fetch.
@@ -202,14 +198,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   for (const id of ['compareA', 'compareB', 'compareDays', 'compareSource', 'compareLimit']) $(id).addEventListener('change', onControlChange)
   $('compareMeasure').addEventListener('change', onMeasureChange)
-  $('compareRuler').addEventListener('click', (e: MouseEvent) => background(e.target as Element | null))
-  new ResizeObserver(() => {
-    const width = $('compareRuler').clientWidth
-    if (data && data.terms.length && width && width !== lastWidth) {
-      lastWidth = width
-      repaint()
-    }
-  }).observe($('compareRuler'))
 
-  load()
+  figure.load()
 }

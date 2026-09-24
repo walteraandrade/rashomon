@@ -526,7 +526,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
   recent_scope as (
     select d.id from docs d
     where d.published_at >= now() - make_interval(days => ${q.days})
-      and (${q.source} = 'all' or d.source = ${q.source})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   recent_about as (
@@ -536,7 +536,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
     select d.id from docs d
     where d.published_at < now() - make_interval(days => ${q.days})
       and d.published_at >= now() - make_interval(days => ${q.days}::int + ${q.baseline}::int)
-      and (${q.source} = 'all' or d.source = ${q.source})
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
   ),
   baseline_about as (

@@ -122,39 +122,35 @@ export const OFFSETS = Array.from({ length: 21 }, (_, i) => i * 50)
 export const SOURCES = ['bluesky', 'gdelt', 'rss', 'gnews', 'gkg', 'camara', 'senado', 'juridico', 'oficial', 'nicho']
 
 // Comma-separated, unknown tokens dropped, falls back to 'all' when nothing valid survives.
-export const parseSourceList = (v: string | undefined): string => {
-  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => SOURCES.includes(s)))]
+const parseList = (keep: (token: string) => boolean) => (v: string | undefined): string => {
+  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter(keep))]
   return tokens.length ? tokens.join(',') : 'all'
 }
+
+export const parseSourceList = parseList((s) => SOURCES.includes(s))
 
 export const KINDS = ['hashtag', 'word', 'phrase']
 
-// Same convention as parseSourceList.
-export const parseKindList = (v: string | undefined): string => {
-  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => KINDS.includes(s)))]
-  return tokens.length ? tokens.join(',') : 'all'
-}
+export const parseKindList = parseList((s) => KINDS.includes(s))
 
 const DOMAIN_TOKEN = /^[a-z0-9.:-]{1,120}$/
 
-// Same convention as parseSourceList.
-export const parseDomainList = (v: string | undefined): string => {
-  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => DOMAIN_TOKEN.test(s)))]
-  return tokens.length ? tokens.join(',') : 'all'
-}
+export const parseDomainList = parseList((s) => DOMAIN_TOKEN.test(s))
 
-// Same convention as parseSourceList.
-export const parseLeanList = (v: string | undefined): string => {
-  const tokens = [...new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => (LEANS as string[]).includes(s)))]
-  return tokens.length ? tokens.join(',') : 'all'
-}
+export const parseLeanList = parseList((s) => (LEANS as string[]).includes(s))
 
-export const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({
-  days: snapDays(q.days, 30),
+export type Scope = { days: number; source: string; domain: string; lean: string; kind: string }
+
+export const parseScope = (q: Record<string, string | undefined>, { days }: { days: number }): Scope => ({
+  days: snapDays(q.days, days),
   source: parseSourceList(q.source),
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
+})
+
+export const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({
+  ...parseScope(q, { days: 30 }),
   limit: snapTo(LIMITS, q.limit, 40),
   min: snapTo(MINS, q.min, 2),
   sort: q.sort === 'pmi' ? 'pmi' : 'count',
@@ -163,38 +159,26 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
 })
 
 export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => {
-  const days = snapDays(q.days, 30)
+  const scope = parseScope(q, { days: 30 })
   return {
+    ...scope,
     term: normalize((q.term ?? '').trim()),
-    kind: parseKindList(q.kind),
-    days,
-    source: parseSourceList(q.source),
-    domain: parseDomainList(q.domain),
-    lean: parseLeanList(q.lean),
     limit: snapTo(LIMITS, q.limit, 50),
     offset: snapTo(OFFSETS, q.offset, 0),
-    day: keepDay(q.day, days),
+    day: keepDay(q.day, scope.days),
   }
 }
 
 export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery => ({
-  days: snapDays(q.days, 7),
+  ...parseScope(q, { days: 7 }),
   baseline: snapTo(BASELINES, q.baseline, 30),
-  source: SOURCES.includes(q.source ?? '') ? q.source! : 'all',
-  domain: parseDomainList(q.domain),
-  lean: parseLeanList(q.lean),
-  kind: parseKindList(q.kind),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
   min: snapTo(MINS, q.min, 3),
 })
 
 export const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuery => ({
+  ...parseScope(q, { days: 30 }),
   term: normalize((q.term ?? '').trim()),
-  kind: parseKindList(q.kind),
-  days: snapDays(q.days, 30),
-  source: SOURCES.includes(q.source ?? '') ? q.source! : 'all',
-  domain: parseDomainList(q.domain),
-  lean: parseLeanList(q.lean),
   bucket: q.bucket === 'day' ? 'day' : 'week',
 })
 
@@ -206,12 +190,15 @@ export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery
 
 // Dedicated parser: min defaults to 3, a separate literal so changing parseToneQuery's cannot
 // silently change this one.
-export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => ({
-  days: snapDays(q.days, 30),
-  source: parseSourceList(q.source),
-  method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod(),
-  min: snapTo(MINS, q.min, 3),
-})
+export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => {
+  const { days, source } = parseScope(q, { days: 30 })
+  return {
+    days,
+    source,
+    method: METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod(),
+    min: snapTo(MINS, q.min, 3),
+  }
+}
 
 // Own literals (7 / 5 / 50), distinct from every other route's defaults.
 export const parseCandidatesQuery = (q: Record<string, string | undefined>): CandidatesQuery => ({
@@ -222,20 +209,12 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
 
 // No `min` (see CompareQuery). limit snaps to SMALL_LIMITS, capped at 100.
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
-  days: snapDays(q.days, 30),
-  source: parseSourceList(q.source),
-  domain: parseDomainList(q.domain),
-  lean: parseLeanList(q.lean),
-  kind: parseKindList(q.kind),
+  ...parseScope(q, { days: 30 }),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
 })
 
 export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery => ({
-  days: snapDays(q.days, 7),
-  source: parseSourceList(q.source),
-  domain: parseDomainList(q.domain),
-  lean: parseLeanList(q.lean),
-  kind: parseKindList(q.kind),
+  ...parseScope(q, { days: 7 }),
   limit: snapTo(LIMITS, q.limit, 8),
   // Same gating as /graph (testimony=1 opts in), same label resolution as /testimony (charset
   // check, then the shared default).

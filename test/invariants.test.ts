@@ -377,3 +377,36 @@ describe('the managed database driver is @effect/sql-pg, not pg', () => {
     }
   })
 })
+
+// Strips `//` line comments so a mention inside a comment (explaining why a fragment lives
+// in scoring.ts) never counts as the fragment itself living outside it.
+const withoutLineComments = (source: string) =>
+  source
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n')
+
+describe('the pmi ordering, signature floor and own-name filter live only in src/scoring.ts', () => {
+  it('src/scoring.ts is the only file under src/ with the pmi formula or the signature floor outside a comment', () => {
+    for (const file of srcFiles()) {
+      if (file === 'scoring.ts') continue
+      const code = withoutLineComments(srcSource(file))
+      assert.ok(!code.includes('pmi * ln(1 + '), `${file} must not inline the pmi formula outside scoring.ts`)
+      assert.ok(!code.includes('greatest(3,'), `${file} must not inline the signature floor outside scoring.ts`)
+    }
+  })
+
+  it('no file under src/ declares namePhrase or a local const sortKey', () => {
+    for (const file of srcFiles()) {
+      const code = srcSource(file)
+      assert.ok(!/\bnamePhrase\b/.test(code), `${file} must not declare namePhrase`)
+      if (file !== 'scoring.ts') assert.ok(!/const sortKey\s*=/.test(code), `${file} must not declare a local sortKey`)
+    }
+  })
+
+  it('CLAUDE.md names src/scoring.ts as where the pmi ordering, signature floor and own-name filter live', () => {
+    const claudeMd = srcSource('../CLAUDE.md')
+    const scoringSentence = claudeMd.split('\n').find((line) => line.includes('`src/scoring.ts`') && line.includes('pmi'))
+    assert.ok(scoringSentence, 'CLAUDE.md must describe src/scoring.ts and the pmi ordering together')
+  })
+})

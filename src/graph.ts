@@ -2,6 +2,7 @@ import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
 import { DAYS } from './query.js'
+import { isName, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
 
@@ -153,19 +154,13 @@ const trackedCte = sql`
 // unrestricted even though it only feeds an inner join against term_p: narrowing it is slower
 // (index scan + merge-join vs seq scan). c_pt/c_t are count(*): doc_terms' PK makes doc_id
 // unique per (term, kind) group, so count(distinct) is pure cost. A person's own name
-// words are dropped by the exclude filter; phrases carrying them by namePhrase. `position(' ' in
+// words are dropped by the exclude filter; phrases carrying them by isName. `position(' ' in
 // ...)` guards the string_to_array split so single words (the vast majority) never pay for it.
-const namePhrase = (names: string[]) => sql`(position(' ' in t.term) > 0 and string_to_array(t.term, ' ') && ${names}::text[])`
-
-// compareQuery's flag for "this (term, kind) key is (or contains) that side's own name word":
-// evaluated on the unioned key rather than on doc_terms.term, so it cannot reuse namePhrase.
-const isName = (col: Sql, names: string[]) =>
-  sql`(${col} = any(${names}::text[]) or (position(' ' in ${col}) > 0 and string_to_array(${col}, ' ') && ${names}::text[]))`
 
 // Bare `pmi` in ORDER BY names the rounded output column; inside an expression it names the raw one.
 const graphQuery = (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
-  const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
+  const sortKeyExpr = sortKey(q.sort, sql.raw('count'))
   return sql`
   with ${scopeCte(person, q)}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
@@ -173,7 +168,7 @@ const graphQuery = (person: Person, q: GraphQuery) => {
   term_p as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
+    where not ${isName(sql.raw('t.term'), exclude)}
     group by 1, 2
   ),
   term_all as materialized (
@@ -190,16 +185,16 @@ const graphQuery = (person: Person, q: GraphQuery) => {
     select term, kind, count,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
-      ${sortKey} as sort_key
+      ${sortKeyExpr} as sort_key
     from nodes_scored
-    order by ${sortKey} desc, term, kind
+    order by ${sortKeyExpr} desc, term, kind
     limit ${q.limit}
   ),
   signature_scored as (
     select p.term, p.kind, p.c_pt::int as count,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
-    where p.c_pt >= greatest(3, np.total * 0.05)
+    where p.c_pt >= ${signatureFloor(sql.raw('np.total'))}
   ),
   signature_top as (
     select term, kind, count, round(pmi::numeric, 2)::float8 as pmi
@@ -228,7 +223,7 @@ const graphQuery = (person: Person, q: GraphQuery) => {
 // mid-window), so a scope with about > 0 and no term rows also yields zero rows rather than
 // an empty graph. domain/lean never come here: the aggregates know only days and a single source.
 const graphFastQuery = (person: Person, q: GraphQuery) => {
-  const sortKey = sql`(case when ${q.sort} = 'pmi' then pmi * ln(1 + count) else count end)`
+  const sortKeyExpr = sortKey(q.sort, sql.raw('count'))
   return sql`
   with s as (
     select docs, tracked, about from graph_scopes
@@ -246,16 +241,16 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
     select term, kind, count,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
-      ${sortKey} as sort_key
+      ${sortKeyExpr} as sort_key
     from scored
     where count >= ${q.min} and (${q.kind} = 'all' or kind = any(string_to_array(${q.kind}, ',')))
-    order by ${sortKey} desc, term, kind
+    order by ${sortKeyExpr} desc, term, kind
     limit ${q.limit}
   ),
   signature_top as (
     select term, kind, count, round(pmi::numeric, 2)::float8 as pmi
     from scored, s
-    where count >= greatest(3, s.about * 0.05)
+    where count >= ${signatureFloor(sql.raw('s.about'))}
     order by pmi desc, term, kind
     limit 5
   )
@@ -524,7 +519,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
   const termsOf = (about: Sql, count: Sql) => sql`
     select t.term, t.kind, count(*)::float8 as ${count}
     from doc_terms t join ${about} a on a.doc_id = t.doc_id
-    where (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ','))) and not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
+    where (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ','))) and not ${isName(sql.raw('t.term'), exclude)}
     group by 1, 2`
   return sql`
   with
@@ -713,7 +708,7 @@ const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
   ${termP} as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any(${names}::text[])) and not ${namePhrase(names)}
+    where not ${isName(sql.raw('t.term'), names)}
     group by 1, 2
   ),
   ${scored} as (
@@ -726,7 +721,7 @@ const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
     select term, kind from ${scored} order by count desc, term, kind limit ${q.limit}
   ),
   ${top}_pmi as (
-    select term, kind from ${scored} order by pmi * ln(1 + count) desc, term, kind limit ${q.limit}
+    select term, kind from ${scored} order by ${pmiRank(sql.raw('count'))} desc, term, kind limit ${q.limit}
   )`
 }
 
@@ -821,7 +816,7 @@ const weekQuery = (person: Person, q: WeekQuery) => {
       from kept k
       join doc_persons dp on dp.doc_id = k.id and dp.person_id = ${person.id}
       join doc_terms t on t.doc_id = k.id
-      where not (t.term = any(${exclude}::text[])) and not ${namePhrase(exclude)}
+      where not ${isName(sql.raw('t.term'), exclude)}
         and (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ',')))
       group by k.day, t.term, t.kind
     ) g

@@ -605,6 +605,69 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .pmi-scale dd { font-family: var(--mono); font-size: var(--t-2xs); line-height: 1.35; }
 .chapter-foot { margin-top: var(--space-6); padding-top: var(--space-4); color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-5); max-width: none; }
 
+/* ---------- the about page (sobre.html) ---------- */
+/* Same reading rules as como-ler, one column wide: this page tells a story in order, and the
+   kikori block is its centre, so it alone gets a figure card. */
+.about .about-block { margin-top: var(--space-8); scroll-margin-top: var(--space-5); max-width: 980px; }
+.about .chapter-nav + .about-block { margin-top: 0; }
+.about-block .eyebrow + h2 { margin-top: var(--space-2); }
+.about-kikori-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: var(--space-5) var(--space-7); align-items: center; }
+.about-mascot { margin: 0; }
+.about-mascot img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+@media (max-width: 760px) { .about-kikori-head { grid-template-columns: 1fr; } .about-mascot { max-width: 260px; } }
+.about-lead { font-size: var(--t-md); color: var(--ink); }
+.about-block em { font-style: normal; color: var(--accent); }
+.about-block b { font-weight: 600; }
+.about-stats { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-7); margin-top: var(--space-5); }
+.about-sources { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-4) var(--space-5); margin-top: var(--space-5); }
+.about-sources li { display: flex; flex-direction: column; gap: 2px; }
+.about-sources b { font-family: var(--mono); font-size: var(--t-sm); font-weight: 500; color: var(--ink); }
+.about-sources span { font-size: var(--t-xs); color: var(--muted); }
+.about-steps { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-4); }
+.about-steps li { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); background: var(--panel); border: 1px solid var(--line); border-radius: 2px; }
+.about-steps p { font-size: var(--t-xs); color: var(--muted); margin: 0; }
+.about-pair { font-family: var(--mono); font-size: var(--t-xs); line-height: var(--lh-body); color: var(--ink); }
+.about-pair i { font-style: normal; color: var(--accent); }
+.about-steps .about-big { font-family: var(--mono); font-size: var(--t-xl); font-weight: 500; color: var(--ink); line-height: 1; }
+.about-probs { display: grid; gap: var(--space-2); margin: 0; }
+.about-probs > div { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.about-probs dt { font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; text-transform: none; letter-spacing: var(--tr-label); color: var(--muted); }
+.about-probs dd { display: flex; align-items: center; gap: var(--space-2); font-family: var(--mono); font-size: var(--t-2xs); color: var(--ink); font-variant-numeric: tabular-nums; }
+.about-probs .bar { flex: 1; height: 6px; background: var(--soft); border-radius: 1px; overflow: hidden; }
+.about-probs .fill { display: block; height: 100%; background: var(--scale-mid); }
+.about-probs .neg .fill { background: var(--hostile); }
+.about-probs .pos .fill { background: var(--favor); }
+.about-probs .p14 { width: 14%; } .about-probs .p16 { width: 16%; } .about-probs .p70 { width: 70%; }
+.about-steps .about-formula { font-family: var(--mono); font-size: var(--t-sm); color: var(--ink); }
+.about-formula b, .about .favor { color: var(--favor); font-weight: 600; }
+.about-swap { margin: var(--space-6) 0 0; overflow-x: auto; }
+.about-swap-head h3 { margin-top: var(--space-2); }
+.about-swap-head .figure-sub { margin-top: var(--space-2); }
+.about-ruler { display: block; width: 100%; min-width: 600px; height: auto; margin-top: var(--space-5); overflow: visible; }
+.about-ruler .axis { stroke: var(--line); stroke-width: 2; }
+.about-ruler .cut { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: .7; }
+.about-ruler .zone { font-family: var(--mono); font-size: var(--t-micro); font-weight: 600; letter-spacing: var(--tr-label); }
+.about-ruler .zone.neg, .about-ruler .who.hot { fill: var(--hostile); }
+.about-ruler .zone.neu { fill: var(--muted); }
+.about-ruler .zone.pos { fill: var(--favor); }
+.about-ruler .sent { fill: var(--ink); font-family: var(--mono); font-size: var(--t-xs); }
+.about-ruler .who { fill: var(--muted); font-family: var(--mono); font-size: var(--t-micro); }
+.about-ruler .who.hot { fill: var(--accent); font-weight: 600; }
+.about-ruler .dot { fill-opacity: .75; stroke: var(--panel); stroke-width: 1.5; }
+.about-ruler .dot.neg { fill: var(--hostile); }
+.about-ruler .dot.neu { fill: var(--scale-mid); }
+.about-ruler .dot.pos { fill: var(--favor); }
+.about-swap-note { margin-top: var(--space-5); font-size: var(--t-sm); color: var(--muted); }
+.about-swap-note b { color: var(--ink); }
+.about-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5) var(--space-7); margin-top: var(--space-6); }
+.about-cols ul, .about-caveats { padding-left: 1.1em; }
+.about-cols li, .about-caveats li { font-size: var(--t-sm); color: var(--muted); margin-top: var(--space-2); }
+.about-cols li b, .about-caveats li b { color: var(--ink); }
+.about-links { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-family: var(--mono); font-size: var(--t-sm); margin-top: var(--space-5); }
+.about-links a { color: var(--accent); text-underline-offset: 4px; }
+@media (max-width: 900px) { .about-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .about-steps, .about-cols { grid-template-columns: 1fr; } }
+
 /* ---------- the ruler (figure 3, compare two people, issue #91; figure 4, one person's own
    before/now, issue #151) — one set of rules, since both figures draw a term on a -1..1 axis
    with the same --cmp-a/--cmp-b pair, only the words at either end and axis prose differ. ---------- */

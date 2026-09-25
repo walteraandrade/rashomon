@@ -30,8 +30,8 @@ describe('public/bundle.js stays in step with src/ui', () => {
     )
   })
 
-  it('is what design-5.html loads, and the only script it loads', () => {
-    const html = readFileSync('public/design-5.html', 'utf8')
+  it('is what atlas.html loads, and the only script it loads', () => {
+    const html = readFileSync('public/atlas.html', 'utf8')
     // Vercel Web Analytics is a platform tag, not a module of this repo: it ships no code we
     // author and is served by the host, so it is excluded from the bundle's single-script rule.
     const srcs = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gi)]

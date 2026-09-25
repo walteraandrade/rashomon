@@ -23,7 +23,7 @@ const jsFiles = (dir = jsDir, prefix = ''): string[] =>
     entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.ts') ? [`${prefix}${entry.name}`] : [],
   )
 const moduleSource = (name: string) => readFileSync(join(jsDir, name), 'utf8')
-const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
+const atlasPage = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
 const testFileNames = () => readdirSync(testDir).filter((f) => f.endsWith('.test.ts'))
 const testFileSource = (name: string) => readFileSync(join(testDir, name), 'utf8')
 
@@ -55,16 +55,16 @@ describe('public/ serves every file it ships and nothing under src/ui', () => {
   })
 })
 
-describe('design-5.html carries no styles and no logic of its own', () => {
+describe('atlas.html carries no styles and no logic of its own', () => {
   it('has no <style> block, no inline style= and no inline script body', () => {
-    const html = design5()
+    const html = atlasPage()
     assert.doesNotMatch(html, /<style[\s>]/i, 'every rule belongs in public/atlas.css')
     assert.deepEqual(inlineStyles(html), [], 'no inline style= in the markup, not even a --var override')
     // An inline script body is what made the old page ungreppable-but-untestable; the page
     // may only reference a module file.
     const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
     for (const [, attrs, body] of scripts) {
-      assert.match(attrs, /\bsrc=/, `design-5.html must not carry an inline script body: ${body.slice(0, 80)}`)
+      assert.match(attrs, /\bsrc=/, `atlas.html must not carry an inline script body: ${body.slice(0, 80)}`)
       assert.equal(body.trim(), '')
     }
     assert.match(html, /<script type="module" src="\.\/bundle\.js"><\/script>/)

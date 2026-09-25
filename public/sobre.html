@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>rashomon · sobre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<link rel="stylesheet" href="atlas.css">
+</head>
+<body>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="28" height="28">rashomon<span>.</span></a><nav><a class="help-link" href="/">atlas</a><a class="help-link" href="como-ler.html">como ler</a><a class="help-link" href="sobre.html">sobre</a></nav></header>
+<main class="reading about">
+  <header class="masthead">
+    <p class="eyebrow">Rashomon · sobre</p>
+    <h1 id="sobreTitle">Quatro testemunhas, um crime</h1>
+    <p class="lede">No filme de Kurosawa, cada testemunha conta o mesmo crime de um jeito. Aqui as testemunhas são a imprensa, as redes e o Congresso, e o crime é um nome.</p>
+  </header>
+
+  <section class="chapter" aria-labelledby="sobreTitle">
+    <nav class="chapter-nav" aria-label="Seções"><a href="#o-que-e">O que é</a><a href="#textos">De onde vêm os textos</a><a href="#kikori">O kikori</a><a href="#cuidados">Cuidados</a><a href="#codigo">Código</a></nav>
+
+    <div class="about-block" id="o-que-e">
+      <h2>O que é</h2>
+      <p>O rashomon junta tudo o que se escreve sobre 27 figuras públicas do Brasil. Depois desenha as palavras que grudam em cada nome: quantas vezes aparecem, o quanto isso surpreende, quem escreveu e com que avaliação.</p>
+      <p>Ele não diz quem tem razão. Ele mostra que versões existem e deixa você ler os textos por trás de cada uma.</p>
+      <dl class="stat about-stats">
+        <div><dt>pessoas acompanhadas</dt><dd>27</dd></div>
+        <div><dt>fontes</dt><dd>10</dd></div>
+        <div><dt>gráficos</dt><dd>5</dd></div>
+        <div><dt>cópias de artigo guardadas</dt><dd>0</dd></div>
+      </dl>
+    </div>
+
+    <div class="about-block" id="textos">
+      <h2>De onde vêm os textos</h2>
+      <p>Um coletor por fonte. Cada um traz só o que a fonte entrega de propósito: o post, o resumo do feed, o título. Nenhum coletor abre a página de um artigo para copiá-la.</p>
+      <ul class="about-sources">
+        <li><b>Bluesky</b><span>posts que citam a pessoa</span></li>
+        <li><b>Google News</b><span>busca por nome, Brasil, pt-BR</span></li>
+        <li><b>GDELT GKG</b><span>notícias do mundo, traduzidas, linhas em português</span></li>
+        <li><b>GDELT DOC</b><span>busca de notícias do GDELT, fora da coleta diária</span></li>
+        <li><b>RSS</b><span>g1, Folha, Veja e Correio (política); CNN, Metrópoles, Poder360 e O Sul (site inteiro)</span></li>
+        <li><b>Jurídico</b><span>tribunais e imprensa jurídica</span></li>
+        <li><b>Oficial</b><span>assessorias de instituições</span></li>
+        <li><b>Nicho</b><span>imprensa partidária, investigativa e de checagem</span></li>
+        <li><b>Câmara</b><span>resumos de discursos de deputados</span></li>
+        <li><b>Senado</b><span>resumos de discursos de senadores</span></li>
+      </ul>
+      <p class="note">Um texto guardado tem no máximo 20 000 caracteres. Um nome só conta quando aparece inteiro: “Leite” sozinho seria a bebida, por isso o site prefere nomes completos.</p>
+    </div>
+
+    <div class="about-block about-kikori" id="kikori">
+      <div class="about-kikori-head">
+      <div>
+      <p class="eyebrow">O modelo</p>
+      <h2>Kikori, o lenhador</h2>
+      <p class="about-lead">Kikori é o lenhador do filme: a testemunha em quem todos confiam, e que também mentiu. É o nome do modelo que dá uma nota para cada texto, de −10 (contra a pessoa) a +10 (a favor).</p>
+      <p>Pense num fiscal que lê uma frase e aponta: “isso fala mal dela”, “isso não fala nada”, “isso elogia”. O kikori faz isso com cada par <b>pessoa + texto</b>. O mesmo texto pode ganhar uma nota para uma pessoa e outra nota para outra, porque a pergunta é sempre “como esse texto trata <em>essa</em> pessoa?”.</p>
+
+      </div>
+      <figure class="about-mascot"><img src="/kikori.png" alt="Kikori, o mascote: um carcará em pixel art, de fones de ouvido e asas abertas." width="472" height="344"></figure>
+      </div>
+
+      <h3>Como uma nota nasce</h3>
+      <ol class="about-steps">
+        <li>
+          <span class="eyebrow">1 · o par</span>
+          <code class="about-pair"><i>[CLS]</i> Tarcísio <i>[SEP]</i> Tarcísio fez um trabalho excelente <i>[SEP]</i></code>
+          <p>O nome vai na frente, o texto atrás. O modelo lê os dois juntos.</p>
+        </li>
+        <li>
+          <span class="eyebrow">2 · a janela</span>
+          <p class="about-big">256</p>
+          <p>pedaços de palavra, no máximo, somando o nome e o texto. Num texto longo, a janela fica em volta da primeira vez que o nome aparece. Um texto que não traz o nome manda o começo.</p>
+        </li>
+        <li>
+          <span class="eyebrow">3 · três chances</span>
+          <dl class="about-probs">
+            <div class="neg"><dt>contra</dt><dd><span class="bar"><span class="fill p18"></span></span>0,183</dd></div>
+            <div class="neu"><dt>neutro</dt><dd><span class="bar"><span class="fill p15"></span></span>0,149</dd></div>
+            <div class="pos"><dt>a favor</dt><dd><span class="bar"><span class="fill p67"></span></span>0,668</dd></div>
+          </dl>
+          <p>O modelo divide 100% entre as três respostas.</p>
+        </li>
+        <li>
+          <span class="eyebrow">4 · a nota</span>
+          <p class="about-formula">(0,668 − 0,183) × 10 = <b class="favor">+4,9</b></p>
+          <p>A favor menos contra, vezes 10. Até −2,5 conta como contra; de +2,5 para cima, a favor.</p>
+        </li>
+      </ol>
+
+      <figure class="figure about-swap" aria-labelledby="swapTitle">
+        <header class="about-swap-head">
+          <span class="eyebrow">Teste</span>
+          <h3 id="swapTitle">A mesma frase, quatro nomes</h3>
+          <p class="figure-sub">Notas reais do kikori. Só o nome muda.</p>
+        </header>
+        <svg class="about-ruler" viewBox="0 0 720 290" role="img" aria-label="Três frases numa régua de −10 a +10. Elogio: os quatro nomes entre +4,9 e +5,8. Frase neutra: os quatro entre 0,0 e +0,4. Ataque: Jair, Tarcísio e Michelle entre −4,3 e −4,4; Lula em +0,1.">
+                    <text class="micro" x="40" y="18" text-anchor="middle">−10</text>
+          <text class="micro" x="280" y="18" text-anchor="middle">−2,5</text>
+          <text class="micro" x="360" y="18" text-anchor="middle">0</text>
+          <text class="micro" x="440" y="18" text-anchor="middle">+2,5</text>
+          <text class="micro" x="680" y="18" text-anchor="middle">+10</text>
+          <text class="zone neg" x="160" y="40" text-anchor="middle">contra</text>
+          <text class="zone neu" x="360" y="40" text-anchor="middle">neutro</text>
+          <text class="zone pos" x="560" y="40" text-anchor="middle">a favor</text>
+
+          <text class="sent" x="40" y="80">“X fez um trabalho excelente”</text>
+          <line class="axis" x1="40" y1="98" x2="680" y2="98"/>
+          <line class="tick" x1="280" y1="91" x2="280" y2="105"/>
+          <line class="tick" x1="440" y1="91" x2="440" y2="105"/>
+          <circle class="dot pos" cx="515.5" cy="98" r="6"/>
+          <circle class="dot pos" cx="525.4" cy="98" r="6"/>
+          <circle class="dot pos" cx="532.8" cy="98" r="6"/>
+          <circle class="dot pos" cx="546.2" cy="98" r="6"/>
+          <text class="who" x="531" y="122" text-anchor="middle">os quatro · +4,9 a +5,8</text>
+
+          <text class="sent" x="40" y="160">“X participou da reunião na terça”</text>
+          <line class="axis" x1="40" y1="178" x2="680" y2="178"/>
+          <line class="tick" x1="280" y1="171" x2="280" y2="185"/>
+          <line class="tick" x1="440" y1="171" x2="440" y2="185"/>
+          <circle class="dot neu" cx="360.6" cy="178" r="6"/>
+          <circle class="dot neu" cx="361.3" cy="178" r="6"/>
+          <circle class="dot neu" cx="372.2" cy="178" r="6"/>
+          <text class="who" x="366" y="202" text-anchor="middle">os quatro · 0,0 a +0,4</text>
+
+          <text class="sent" x="40" y="240">“X é um corrupto e destruiu o país”</text>
+          <line class="axis" x1="40" y1="258" x2="680" y2="258"/>
+          <line class="tick" x1="280" y1="251" x2="280" y2="265"/>
+          <line class="tick" x1="440" y1="251" x2="440" y2="265"/>
+          <circle class="dot neg" cx="219.2" cy="258" r="6"/>
+          <circle class="dot neg" cx="221.1" cy="258" r="6"/>
+          <circle class="dot neg" cx="221.8" cy="258" r="6"/>
+          <circle class="dot neu" cx="364.5" cy="258" r="6"/>
+          <text class="who" x="40" y="282" text-anchor="start">Jair, Tarcísio, Michelle · −4,3 a −4,4</text>
+          <text class="who hot" x="364.5" y="282" text-anchor="middle">Lula · +0,1</text>
+        </svg>
+        <p class="about-swap-note">Elogio e frase neutra: o nome não muda nada. Ataque: com Lula, a mesma frase cai no neutro, colada no zero. O modelo aprendeu com textos em que Lula recebe mais elogios, e o nome virou uma pista. <b>Por isso o site nunca compara a nota de uma pessoa com a de outra.</b> Ele compara veículos falando da mesma pessoa: o viés é igual para todos eles, então a diferença entre veículos continua valendo.</p>
+      </figure>
+
+      <div class="about-cols">
+        <div>
+          <h3>O que ele mede</h3>
+          <ul>
+            <li><b>O enquadramento</b>, nos dois sentidos: adjetivos, ironia, deboche, elogio, ataque.</li>
+            <li><b>Avaliações citadas.</b> “Fulano chama o governo de máfia” pesa contra o governo, mesmo que o jornal só relate.</li>
+            <li><b>O descrédito</b>, só para baixo: “alvo da PF”, “acusado de”, “ligado ao escândalo” descem um pouco a nota, mesmo sem opinião no texto.</li>
+            <li><b>Torcida.</b> “Vou votar em você”, “LULA 13” sobem a nota.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>O que ele não mede</h3>
+          <ul>
+            <li>Se o texto diz a verdade.</li>
+            <li>A política da pessoa, ou o lado de quem escreveu.</li>
+            <li>O humor geral do texto.</li>
+            <li>Parentes e aliados. Uma denúncia contra o filho não mexe na nota do pai, se o texto não fala do pai.</li>
+            <li>Boas notícias contadas sem elogio. “Lidera pesquisa com 40%” é 0. Por isso a régua pende um pouco para o negativo, e pende igual para todo veículo.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Como ele aprendeu</h3>
+      <p>O kikori parte do BERTimbau, um modelo que já lê português. Um modelo maior, o “professor”, leu milhares de pares e deu uma nota a cada um, seguindo um livro de regras escrito à mão. O kikori estudou essas notas. Quando uma pessoa conferiu o professor, concordou com ele em cerca de 73% dos casos.</p>
+      <dl class="stat about-stats">
+        <div><dt>pares de treino</dt><dd>13 778</dd></div>
+        <div><dt>pares de prova, nunca vistos</dt><dd>578</dd></div>
+        <div><dt>acertos na prova</dt><dd>78%</dd></div>
+        <div><dt>chutando sempre “neutro”</dt><dd>61%</dd></div>
+        <div><dt>elogios encontrados</dt><dd>18 de 47</dd></div>
+      </dl>
+      <p>O ponto fraco é o elogio: na prova, ele achou 18 dos 47 textos a favor. Uma nota perto de zero pode ser um elogio que ele não viu.</p>
+
+      <h3>Uma régua, não um juiz</h3>
+      <p>Toda nota guarda a versão do modelo que a deu. Quando o kikori é treinado de novo, o site dá nota a tudo outra vez, em vez de misturar notas de dois modelos. Uma régua trocada no meio da medição estragaria a comparação entre veículos, que é o único uso honesto dela.</p>
+      <p class="about-links"><a href="como-ler.html#avaliacao">Como ler o gráfico da avaliação</a><a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">O modelo no Hugging Face</a><a href="https://github.com/walteraandrade/kikori" target="_blank" rel="noopener">O treino no GitHub</a></p>
+    </div>
+
+    <div class="about-block" id="cuidados">
+      <h2>Três cuidados</h2>
+      <ol class="about-caveats">
+        <li><b>A avaliação carrega o nome.</b> Compare veículos sobre a mesma pessoa, nunca pessoas entre si.</li>
+        <li><b>A inclinação de um veículo é um julgamento com fontes, não um fato.</b> Um veículo sem inclinação marcada é um que ninguém pesquisou ainda.</li>
+        <li><b>Uma palavra conta textos, não repetições.</b> Três “corrupto” no mesmo texto contam uma vez.</li>
+      </ol>
+    </div>
+
+    <div class="about-block" id="codigo">
+      <h2>Código</h2>
+      <p>Tudo é aberto: a coleta, a contagem, o modelo e as regras que ensinaram o modelo.</p>
+      <p class="about-links"><a href="https://github.com/walteraandrade/rashomon" target="_blank" rel="noopener">rashomon no GitHub</a><a href="https://github.com/walteraandrade/kikori" target="_blank" rel="noopener">kikori no GitHub</a></p>
+    </div>
+
+    <p class="chapter-foot"><span>Sem dados fictícios em produção.</span><span>Nenhuma cópia de artigo guardada.</span></p>
+  </section>
+</main>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>

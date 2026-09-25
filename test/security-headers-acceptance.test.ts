@@ -16,7 +16,7 @@ const vercelConfig = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8'))
 type HeaderEntry = { key: string; value: string }
 type HeadersRule = { source: string; headers: HeaderEntry[] }
 
-const REQUIRED_PATHS = ['/', '/design-5.html', '/como-ler.html']
+const REQUIRED_PATHS = ['/', '/atlas.html', '/como-ler.html', '/sobre.html']
 
 /**
  * Vercel's `headers.source` may be an exact path or a regex-flavoured pattern. Either way it
@@ -67,7 +67,7 @@ describe('security headers (vercel.json)', () => {
     const pairs = vercelConfig.rewrites.map((r: any) => [r.source, r.destination])
     assert.deepEqual(
       new Set(pairs.map((p: string[]) => p.join(' -> '))),
-      new Set(['/api/(.*) -> /api/index', '/ -> /design-5.html']),
+      new Set(['/api/(.*) -> /api/index', '/ -> /atlas.html']),
     )
 
     // no explicit `{ handle: "filesystem" }` entry anywhere in the config; Vercel's implicit

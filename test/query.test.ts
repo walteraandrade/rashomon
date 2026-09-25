@@ -377,10 +377,10 @@ const dayParsers: [string, (q: Record<string, string | undefined>) => { days: nu
 ]
 
 describe('days enumeration acceptance criteria (issue #111)', () => {
-  it('the allowed windows are exactly the ones every <select> in design-5.html offers', () => {
-    const page = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
+  it('the allowed windows are exactly the ones every <select> in atlas.html offers', () => {
+    const page = readFileSync(new URL('../public/atlas.html', import.meta.url), 'utf8')
     const selects = [...page.matchAll(/<select id="(days|testimonyDays|compareDays)"[\s\S]*?<\/select>/g)]
-    assert.equal(selects.length, 3, 'design-5.html should carry one days select per figure')
+    assert.equal(selects.length, 3, 'atlas.html should carry one days select per figure')
     for (const [markup] of selects) {
       const offered = [...markup.matchAll(/value="(\d+)"/g)].map((m) => Number(m[1]))
       assert.deepEqual(offered, DAYS)
@@ -460,9 +460,9 @@ const numbers = (markup: string) => [...markup.matchAll(/<option[^>]*>(\d+)<\/op
 
 describe('parameter enumeration acceptance criteria (issue #127)', () => {
   it('every limit the page sends is a member of LIMITS', () => {
-    const page = readFileSync(new URL('../public/design-5.html', import.meta.url), 'utf8')
+    const page = readFileSync(new URL('../public/atlas.html', import.meta.url), 'utf8')
     const atlas = page.match(/<select id="limit"[\s\S]*?<\/select>/)?.[0]
-    assert.ok(atlas, 'design-5.html should carry the atlas limit select')
+    assert.ok(atlas, 'atlas.html should carry the atlas limit select')
     const offered = numbers(atlas)
     assert.ok(offered.length >= 3)
     for (const v of offered) assert.ok(LIMITS.includes(v), `atlas offers limit=${v}`)

@@ -16,7 +16,7 @@ import type { Rising, RisingTerm } from '../src/ui/format.js'
 // and opening #docsDialog is exercised in test/docs-card.test.ts, alongside the other figures.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
+const design5 = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
 
 const personA = { id: 'lula', name: 'Lula' }
 const personB = { id: 'bolsonaro', name: 'Bolsonaro' }
@@ -171,7 +171,7 @@ describe('an outage in /api/people travels down as peopleError, same as the othe
   })
 })
 
-describe('design-5.html carries the fourth figure card', () => {
+describe('atlas.html carries the fourth figure card', () => {
   it('a <section class="figure rising ..." id="rising"> exists after #compare, with eyebrow "Gráfico 4" and only person/source in its sentence', () => {
     const html = design5()
     const compareIdx = html.indexOf('id="compare"')

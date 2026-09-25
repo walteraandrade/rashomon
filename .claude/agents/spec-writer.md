@@ -13,7 +13,7 @@ Write the spec in English with these sections, in this order:
 1. **Goal**: one sentence.
 2. **API**: exact routes, query parameters with defaults and clamps, response shape as a JSON example. Only optional additions to existing routes; never change existing fields.
 3. **SQL / logic**: the query in words, the edge cases (empty window, person without docs, null tone, unknown kind).
-4. **UI**: which file, which element, what the user sees and does, what happens on empty and loading states. Reference `public/design-5.html` conventions: dark, one gold accent, League Spartan for the person, Inter for text, pt-BR copy.
+4. **UI**: which file, which element, what the user sees and does, what happens on empty and loading states. Reference `public/atlas.html` conventions: dark, one gold accent, League Spartan for the person, Inter for text, pt-BR copy.
 5. **Acceptance criteria**: numbered, each one checkable by a test or by a specific manual step. A criterion that cannot fail is not a criterion.
    - **A documentation criterion names a fact, never a file, a heading, a wording or a count.** "The docs describe `senadoId` and mark senado a default source" is a criterion. "README.md matches `/default sources:.*senado/`" is not: it asserts where the prose sits, so any rewrite breaks it while every fact it cared about still holds. That is how PR #81's README split turned four criteria red without changing a single fact.
    - Documentation lives in `README.md` (the short landing page) and `docs/*.md` (the reference). Never name the page in a criterion — the split moved this prose once already and will again.

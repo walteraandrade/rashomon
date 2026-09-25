@@ -43,6 +43,6 @@ export const scenarios: Scenario[] = [
   s('candidates.default', 'candidates', () => `/api/candidates?days=7&min=5`),
 ]
 
-// What `public/design-5.html` fires on one atlas load, in order. Measured as a group so the
+// What `public/atlas.html` fires on one atlas load, in order. Measured as a group so the
 // report carries the statement count of a whole UI refresh, not only of single routes.
 export const atlasScenarios = ['people', 'graph.default', 'sources.default', 'docs.default', 'candidates.default']

@@ -345,9 +345,9 @@ describe('mount: colour by avaliação is the default', () => {
 
   // Issue #149 AC9: the segment gained a third button (Avaliação) between Lista and the
   // toolbar's closing </div>, so the old two-button literal no longer matches.
-  it('design-5.html has the toggle next to the view switch, pressed by default (issue #149 AC9)', () => {
+  it('atlas.html has the toggle next to the view switch, pressed by default (issue #149 AC9)', () => {
     assert.match(
-      read('design-5.html'),
+      read('atlas.html'),
       /<button id="modeColumns" aria-pressed="false">Lista<\/button><button id="modeStrip" aria-pressed="false">Avaliação<\/button><\/div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação<\/button>/,
     )
   })

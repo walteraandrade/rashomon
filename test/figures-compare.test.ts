@@ -17,7 +17,7 @@ import type { Compare, CompareTerm } from '../src/ui/format.js'
 // test/render.test.ts, rulerLayout in test/layout.test.ts and balanceColor in test/format.test.ts.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
+const design5 = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
 const comoLer = () => readFileSync(join(root, 'public', 'como-ler.html'), 'utf8')
 
 const personA = { id: 'lula', name: 'Lula' }
@@ -75,7 +75,7 @@ describe('the limit control only offers values the route accepts', () => {
 
 describe('the hidden-name note is absent when the count is zero, present with the exact count otherwise', () => {
   // AC8 says the note is "absent from the DOM when the hidden-name count is 0 (or the
-  // equivalent painted note)". design-5.html ships the element and figures/compare.js toggles
+  // equivalent painted note)". atlas.html ships the element and figures/compare.js toggles
   // `hidden` and empties its text, which is the second reading: nothing is announced, and a
   // screen reader skips a `hidden` node exactly as it skips an absent one.
   it('#compareHiddenNote stays hidden and empty when nothing was dropped', async () => {
@@ -403,7 +403,7 @@ describe('no word rendered by the ruler ever opens #docsDialog', () => {
   })
 })
 
-describe('design-5.html carries the third figure card', () => {
+describe('atlas.html carries the third figure card', () => {
   it('a <section class="figure ..." id="compare"> exists after #testimony, with eyebrow "Gráfico 3" and the six sentence controls', () => {
     const html = design5()
     const testimonyIdx = html.indexOf('id="testimony"')

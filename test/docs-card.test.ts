@@ -269,8 +269,8 @@ describe('figure 4 (rising) opens one side, scoped to the last 7 days, and relea
 })
 
 describe('the card that holds the documents: markup and stylesheet', () => {
-  it('design-5.html holds one dialog with the docs container, its title, its grip and a close button', () => {
-    const html = read('design-5.html')
+  it('atlas.html holds one dialog with the docs container, its title, its grip and a close button', () => {
+    const html = read('atlas.html')
     const dialog = html.match(/<dialog class="docs-dialog" id="docsDialog"[^>]*>([\s\S]*?)<\/dialog>/)?.[1] ?? ''
     assert.ok(dialog, 'the dialog must exist')
     assert.match(dialog, /<h2 id="docsTitle"><\/h2>/)

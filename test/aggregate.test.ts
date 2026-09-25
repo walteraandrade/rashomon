@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { buildGraphAggregates, hasGraphAggregates, TOP } from '../src/aggregate.js'
+import { buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
@@ -8,7 +8,8 @@ import { insertDocP } from '../src/store.js'
 import { persons, seed, untrackedPerson } from './fixture.js'
 import './close.js'
 
-// src/aggregate.ts builds graph_scopes / graph_terms_all / graph_terms; graphFor answers
+// src/aggregate.ts builds graph_scopes / graph_terms (graph_terms_all is a session-temp table,
+// never persisted); graphFor answers
 // from them when the recorte fits and from the live query otherwise. The contract is
 // equality: for every recorte the tables can hold, both paths render the same response.
 
@@ -16,6 +17,14 @@ const lula = persons.find((p) => p.id === 'lula')!
 const q = (over: Record<string, string>) => parseQuery({ days: '30', ...over })
 const live = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graph(person, query).text, queries.graph(person, query).values)).rows[0]
 const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graphFast(person, query).text, queries.graphFast(person, query).values)).rows[0]
+
+describe('graph_terms_all as a session-temp table (issue #203)', () => {
+  it('universeQuery creates a temp table on commit drop and issues no delete against it', () => {
+    const text = aggregateQueries.universe(30).text
+    assert.match(text, /create temp table graph_terms_all on commit drop as/)
+    assert.doesNotMatch(text, /delete from graph_terms_all/)
+  })
+})
 
 describe('precomputable', () => {
   it('holds a built window, one source or all, no domain, no lean', () => {

@@ -87,7 +87,7 @@ app.get('/api/compare', async (c) => {
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))
 app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
 
-app.get('/', serveStatic({ path: './public/design-5.html' }))
+app.get('/', serveStatic({ path: './public/atlas.html' }))
 app.use('/*', serveStatic({ root: './public' }))
 
 // Importing `app` in tests never binds a port or migrates; only the entrypoint does.

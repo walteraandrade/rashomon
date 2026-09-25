@@ -9,15 +9,15 @@ import { VERCEL_INSIGHTS_TAG } from './pages.js'
 
 // The "Leitura" redesign: one sentence of controls, the map as the figure, a "Como ler"
 // chapter that defines PMI on the page itself, and one stylesheet shared by every page. These
-// criteria read static markup only (design-5.html, como-ler.html, atlas.css); behaviour goes
+// criteria read static markup only (atlas.html, como-ler.html, atlas.css); behaviour goes
 // through the modules, in the per-module files.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
 
 describe('Leitura UI: the recorte is one sentence', () => {
-  it('design-5.html holds the five controls inside the sentence, the source one as a select fed by SOURCE_SEGMENTS', () => {
-    const html = read('design-5.html')
+  it('atlas.html holds the five controls inside the sentence, the source one as a select fed by SOURCE_SEGMENTS', () => {
+    const html = read('atlas.html')
     const sentence = html.match(/<p class="sentence-line">([\s\S]*?)<\/p>/)?.[1] ?? ''
     for (const id of ['person', 'days', 'source', 'sort', 'limit']) assert.match(sentence, new RegExp(`<select id="${id}"`), `${id} must live in the sentence`)
     assert.doesNotMatch(html, /segSource|class="segbtn"/, 'the source pills are gone; boot() fills <select id="source"> from SOURCE_SEGMENTS')
@@ -25,7 +25,7 @@ describe('Leitura UI: the recorte is one sentence', () => {
   })
 
   it('the old hero, stamp and method block are gone', () => {
-    const html = read('design-5.html')
+    const html = read('atlas.html')
     for (const gone of ['class="intro"', 'id="stamp"', 'class="method"', 'id="chartTitle"', 'class="footer"']) assert.ok(!html.includes(gone), `${gone} must not survive the redesign`)
   })
 })
@@ -52,12 +52,12 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.doesNotMatch(html.replaceAll(VERCEL_INSIGHTS_TAG, ''), /<script/i, 'the reading page runs no JavaScript of its own')
   })
 
-  it('design-5.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
-    const html = read('design-5.html')
+  it('atlas.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
+    const html = read('atlas.html')
     assert.doesNotMatch(html, /id="como-ler"/)
     // Issue #91: compare.html is deleted, the third figure lives on this page instead, so the
     // nav link now points at an in-page anchor rather than a separate file (AC15).
-    assert.match(html, /<nav><a class="help-link" href="como-ler\.html">como ler<\/a><\/nav>/, 'the header still names the shareable guide')
+    assert.match(html, /<nav><a class="help-link" href="como-ler\.html">como ler<\/a>/, 'the header still names the shareable guide')
     assert.match(html, /href="como-ler\.html#atlas"/)
     assert.match(html, /href="como-ler\.html#avaliacao"/)
     assert.match(html, /id="helpDialog"/, 'the atlas intercepts those links into an in-page dialog')
@@ -70,7 +70,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
   })
 
   it("figure 1's key on the page and in the dialog name the same encodings", () => {
-    const html = read('design-5.html')
+    const html = read('atlas.html')
     const dts = (chunk: string) =>
       [...(chunk.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
         m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim(),
@@ -82,7 +82,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
   })
 
   it('the dialog and the shareable page keep the facts the figure itself cannot say', () => {
-    const dialog = read('design-5.html').match(/id="helpDialog"[\s\S]*?<\/dialog>/)?.[0] ?? ''
+    const dialog = read('atlas.html').match(/id="helpDialog"[\s\S]*?<\/dialog>/)?.[0] ?? ''
     const page = read('como-ler.html')
     for (const [hay, label] of [
       [dialog, 'dialog'],
@@ -107,9 +107,9 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     assert.ok(FONT_MONO.startsWith("'IBM Plex Mono'"), 'canvas measurement must use the face the map is painted with')
     assert.match(css, /\.map-svg \.atlas-text \{[^}]*var\(--mono\)/, 'the map paints words in the face layout.js measures them with')
     assert.ok(FONT_DISPLAY.startsWith("'IBM Plex Sans Condensed'"), 'the centre name is measured with the display face')
-    // compare.html is gone (issue #91): the ruler now lives on design-5.html, already in this
+    // compare.html is gone (issue #91): the ruler now lives on atlas.html, already in this
     // loop, so the deleted page's own slot is dropped rather than replaced.
-    for (const page of ['design-5.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*IBM\+Plex\+Sans\+Condensed/, `${page} loads the three faces`)
+    for (const page of ['atlas.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*IBM\+Plex\+Sans\+Condensed/, `${page} loads the three faces`)
   })
 
   it('the mask and ruler swatches use SCALE_MID, not --muted', () => {
@@ -136,8 +136,8 @@ describe('Leitura UI: one stylesheet, one type system', () => {
 })
 
 describe('the page is a sequence of graphs', () => {
-  it('design-5.html carries five figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
-    const html = read('design-5.html')
+  it('atlas.html carries five figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
+    const html = read('atlas.html')
     const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
     // Issue #91 adds a third figure, the ruler comparing two people, after #testimony; issue
     // #151 adds a fourth, the rising ruler, after #compare; issue #147 adds a fifth, the week,
@@ -164,7 +164,7 @@ describe('the page is a sequence of graphs', () => {
   })
 
   it('there is no page-wide outlet filter: no chip under the sentence, and each figure keeps its own controls', () => {
-    const html = read('design-5.html')
+    const html = read('atlas.html')
     assert.doesNotMatch(html, /id="domainClear"/)
     assert.doesNotMatch(html, /id="domainChip"/)
     // Issue #92 gave figure 2 its own sentence (person/days/source, 3 controls) alongside
@@ -188,7 +188,7 @@ describe('the page is a sequence of graphs', () => {
   // issue #147 AC17 (the automatable half; the seven-column render itself is manual): the
   // week's own key names tamanho/posição/clique and, on purpose, no colour encoding.
   it("figure 5's key has no Cor row, unlike figure 4's", () => {
-    const html = read('design-5.html')
+    const html = read('atlas.html')
     const dts = (chunk: string) =>
       [...(chunk.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
         m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim(),
@@ -203,7 +203,7 @@ describe('the page is a sequence of graphs', () => {
 
 describe('the sentence and the stats badge moved into each figure', () => {
   it('#stats no longer lives in header.top; #atlasStats lives in #workspace instead', () => {
-    const html = read('design-5.html')
+    const html = read('atlas.html')
     const header = html.match(/<header class="top">[\s\S]*?<\/header>/)?.[0] ?? ''
     assert.doesNotMatch(header, /id="stats"/, 'header.top no longer describes the whole page with a number')
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
@@ -212,18 +212,18 @@ describe('the sentence and the stats badge moved into each figure', () => {
   })
 
   it('there is no top-level <section class="sentence">', () => {
-    assert.doesNotMatch(read('design-5.html'), /<section class="sentence"/, 'the sentence moved inside each figure\'s own figure-head')
+    assert.doesNotMatch(read('atlas.html'), /<section class="sentence"/, 'the sentence moved inside each figure\'s own figure-head')
   })
 
   it("#workspace's figure-head carries its own sentence-line with person/days/source/sort/limit", () => {
-    const workspace = read('design-5.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const workspace = read('atlas.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const head = workspace.match(/<header class="figure-head">[\s\S]*?<\/header>/)?.[0] ?? ''
     const sentence = head.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
     for (const id of ['person', 'days', 'source', 'sort', 'limit']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must sit inside #workspace's own sentence-line`)
   })
 
   it("#testimony's figure-head carries its own sentence-line with testimonyPerson/testimonyDays/testimonySource", () => {
-    const testimony = read('design-5.html').match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const testimony = read('atlas.html').match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
     const head = testimony.match(/<header class="figure-head">[\s\S]*?<\/header>/)?.[0] ?? ''
     const sentence = head.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
     for (const id of ['testimonyPerson', 'testimonyDays', 'testimonySource']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must sit inside #testimony's own sentence-line`)
@@ -251,7 +251,7 @@ describe('every page finds what it names', () => {
   })
 
   it('the workspace carries an id so a reload can dim it in place instead of blanking the map', () => {
-    assert.match(read('design-5.html'), /<section class="figure workspace" id="workspace"/)
+    assert.match(read('atlas.html'), /<section class="figure workspace" id="workspace"/)
     assert.match(read('atlas.css'), /\.figure\.is-loading \.viewport[^{]*\{[^}]*opacity/)
   })
 
@@ -265,7 +265,7 @@ describe('every page finds what it names', () => {
 
 describe('markup for figure 1\'s third view, Avaliação', () => {
   it('#modeStrip sits in the same segment as #modeMap/#modeColumns, and #keyDefault is unchanged', () => {
-    const html = read('design-5.html')
+    const html = read('atlas.html')
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const segment = workspace.match(/<div class="segment"[^>]*role="group"[^>]*>[\s\S]*?<\/div>/)?.[0] ?? ''
     assert.match(segment, /<button id="modeMap"/)
@@ -281,7 +281,7 @@ describe('markup for figure 1\'s third view, Avaliação', () => {
   })
 
   it('#keyStrip is a second, initially-hidden figure-key with the four Posição/Tamanho/Cor/Clique rows', () => {
-    const workspace = read('design-5.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const workspace = read('atlas.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const keyStrip = workspace.match(/<dl class="figure-key" id="keyStrip"[^>]*>[\s\S]*?<\/dl>/)?.[0]
     assert.ok(keyStrip, '#workspace must carry a second <dl class="figure-key" id="keyStrip">')
     assert.match(keyStrip!, /hidden/, '#keyStrip starts hidden: the default view is the map, not the strip')

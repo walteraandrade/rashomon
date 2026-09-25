@@ -135,8 +135,8 @@ describe('the route and the painter agree on the shape', () => {
 })
 
 describe('the page holds the figure and explains it', () => {
-  it('design-5.html gives the avaliação its own figure: title with the score, the strip, then the lists', () => {
-    const html = read('design-5.html')
+  it('atlas.html gives the avaliação its own figure: title with the score, the strip, then the lists', () => {
+    const html = read('atlas.html')
     const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
     assert.ok(figure, 'the second figure must exist')
     assert.match(figure, /<h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"><\/b><\/h2>/)
@@ -149,7 +149,7 @@ describe('the page holds the figure and explains it', () => {
 
   it('the "Como ler" page defines the scale, the cut and the name bias', () => {
     const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const help = read('design-5.html').match(/id="help-avaliacao"[\s\S]*?(?=<div id="help-comparar")/)?.[0] ?? ''
+    const help = read('atlas.html').match(/id="help-avaliacao"[\s\S]*?(?=<div id="help-comparar")/)?.[0] ?? ''
     assert.match(chapter, /<h2>Gráfico 2 · Avaliação por veículo<\/h2>/)
     assert.match(chapter, /A nota não é de um jornalista nem do GDELT/)
     assert.match(chapter, /modelo treinado só para isso, o <a href="https:\/\/huggingface\.co\/drifting-walter\/kikori" target="_blank" rel="noopener">kikori<\/a>/)
@@ -171,8 +171,8 @@ describe('the page holds the figure and explains it', () => {
     assert.deepEqual(sizes.filter((s) => s === '--t-micro'), [], 'the 11px floor is for SVG labels only')
   })
 
-  it('design-5.html makes the strip the chart of the second figure, and the como-ler page explains it', () => {
-    const html = read('design-5.html')
+  it('atlas.html makes the strip the chart of the second figure, and the como-ler page explains it', () => {
+    const html = read('atlas.html')
     const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
     assert.match(figure, /<\/header>\s*<figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden><\/figure>/)
     const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
@@ -181,7 +181,7 @@ describe('the page holds the figure and explains it', () => {
   })
 
   it('the figure is one column, with no second ruler and no second outlet ranking', () => {
-    const html = read('design-5.html')
+    const html = read('atlas.html')
     const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
     assert.ok(figure, 'the second figure must exist')
     assert.doesNotMatch(figure, /figure-lists/, 'the two-column grid left half the width empty')

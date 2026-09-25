@@ -16,7 +16,7 @@ import type { Week, WeekBucket } from '../src/ui/format.js'
 // #docsDialog with a day is exercised here since it is this figure's own contract.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'design-5.html'), 'utf8')
+const design5 = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
 
 const personA = { id: 'lula', name: 'Lula' }
 const personB = { id: 'bolsonaro', name: 'Bolsonaro' }
@@ -280,7 +280,7 @@ describe('an outage in /api/people travels down as peopleError, same as the othe
   })
 })
 
-describe('design-5.html carries the fifth figure card', () => {
+describe('atlas.html carries the fifth figure card', () => {
   it('a <section class="figure week ..." id="week"> exists after #rising, with eyebrow "Gráfico 5" and only person/source/limit in its sentence', () => {
     const html = design5()
     const risingIdx = html.indexOf('id="rising"')

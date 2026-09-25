@@ -69,7 +69,7 @@ describe('sizeRange', () => {
 })
 
 describe('packing at the atlas term limits', () => {
-  // The three options the sentence in design-5.html offers, with realistically long terms.
+  // The three options the sentence in atlas.html offers, with realistically long terms.
   const words = ['investigacao', 'impeachment', 'revelacoes', 'mensagens', 'relatorio', 'inquerito', 'indicios', 'relatorios', 'anotem', 'acusa', 'fake', 'laranja podre', 'fake news', 'processo', 'ministro', 'decisao', 'tribunal', 'censura', 'impedido votar', 'declara impedido', 'acabar elegendo', 'bandido confiar', 'liminar', 'audiencia']
 
   for (const limit of [12, 18, 24]) {

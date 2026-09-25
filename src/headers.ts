@@ -23,7 +23,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
 }
 
 // Only the HTML entry points: never /api/* and never a static asset.
-export const HTML_PATHS = ['/', '/design-5.html', '/como-ler.html'] as const
+export const HTML_PATHS = ['/', '/atlas.html', '/como-ler.html', '/sobre.html'] as const
 
 /** The exact `headers` array `vercel.json` must hold. */
 export const vercelHeaders = () =>

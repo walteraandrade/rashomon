@@ -5,7 +5,10 @@
   "outputDirectory": null,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/", "destination": "/design-5.html" }
+    { "source": "/", "destination": "/atlas.html" }
+  ],
+  "redirects": [
+    { "source": "/design-5.html", "destination": "/", "permanent": true }
   ],
   "headers": [
     {
@@ -18,7 +21,7 @@
       ]
     },
     {
-      "source": "/design-5.html",
+      "source": "/atlas.html",
       "headers": [
         { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
@@ -28,6 +31,15 @@
     },
     {
       "source": "/como-ler.html",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    },
+    {
+      "source": "/sobre.html",
       "headers": [
         { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },

@@ -161,7 +161,7 @@ describe('the pet: the rules atlas.css holds it to', () => {
   })
 
   it('no landing page hard-codes the pet: it appears only where a painter decides it should', () => {
-    for (const page of ['design-5.html', 'como-ler.html']) {
+    for (const page of ['atlas.html', 'como-ler.html']) {
       assert.doesNotMatch(readPublic(page), /pet-caracara/, `${page} is markup only; the pet is a state, not furniture`)
     }
   })

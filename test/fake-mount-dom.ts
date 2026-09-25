@@ -151,7 +151,7 @@ class FakeBox extends Listenable {
   }
 }
 
-// A real <select>: options come preloaded (the static markup design-5.html already ships), or
+// A real <select>: options come preloaded (the static markup atlas.html already ships), or
 // arrive later through `.add(new Option(...))` (the person selects, built from the fetched
 // list) — the same two paths public/js/figures/*.js actually uses. `applySeed` in both modules
 // only ever assigns `.value` when it already names one of `.options`, so keeping that rule
@@ -202,7 +202,7 @@ class FakeInput extends Listenable {
   }
 }
 
-// Mirrors design-5.html's #days / #testimonyDays exactly: the same three values, and the same
+// Mirrors atlas.html's #days / #testimonyDays exactly: the same three values, and the same
 // `selected` default. A harness that offered a value the page does not have (or defaulted to the
 // first option instead of the marked one) would green-light a seed bug the real page would hit.
 const DAYS_OPTIONS = [

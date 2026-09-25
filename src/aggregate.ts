@@ -13,7 +13,8 @@ const windowScope = (days: number) => sql`
     select d.id, d.source from docs d where d.published_at >= now() - make_interval(days => ${days})
   )`
 
-// Session-temp, dropped on commit; windows build sequentially on one connection so the name never collides.
+// Session-temp, dropped on commit. Safe as a fixed name only while windows build sequentially:
+// a concurrent-window build needs a per-window-unique name, or two windows on one session collide.
 const universeQuery = (days: number) => sql`
   create temp table graph_terms_all on commit drop as
   with ${windowScope(days)},
@@ -98,17 +99,25 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
     or (c_pt >= ${signatureFloor(sql.raw('about'))} and by_signature <= 5)`
 }
 
+// `create table ... as` carries no key, and every personTermsQuery joins the universe on it.
+const universeKey = sql`alter table graph_terms_all add primary key (days, source, term, kind)`
+
+const windowStatements = (days: number, persons: Person[], top = TOP) => [
+  sql`delete from graph_terms where days = ${days}`,
+  sql`delete from graph_scopes where days = ${days}`,
+  universeQuery(days),
+  universeKey,
+  scopesQuery(days, persons),
+  ...persons.map((p) => personTermsQuery(days, p, top)),
+]
+
 const run = (q: { text: string; values: unknown[] }) => db.query(q.text, q.values)
 
 // One window per transaction: readers see the previous build until the new one commits.
 const buildWindow = (days: number, persons: Person[], top: number) =>
-  inTransaction(async () => {
-    await db.query(`delete from graph_terms where days = $1`, [days])
-    await db.query(`delete from graph_scopes where days = $1`, [days])
-    await run(universeQuery(days))
-    await run(scopesQuery(days, persons))
-    await persons.reduce<Promise<void>>(async (acc, p) => (await acc, void (await run(personTermsQuery(days, p, top)))), Promise.resolve())
-  })
+  inTransaction(() =>
+    windowStatements(days, persons, top).reduce<Promise<void>>(async (acc, q) => (await acc, void (await run(q))), Promise.resolve()),
+  )
 
 export type AggregateReport = { windows: number[]; scopes: number; terms: number; ms: number }
 
@@ -138,7 +147,7 @@ export const hasGraphAggregates = async (): Promise<boolean> => {
   return rows[0].built
 }
 
-export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery }
+export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery, window: windowStatements }
 
 const main = async (argv: string[]) => {
   await migrateP()

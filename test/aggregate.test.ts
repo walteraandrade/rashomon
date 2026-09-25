@@ -4,7 +4,7 @@ import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as 
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
-import { insertDocP } from '../src/store.js'
+import { inTransaction, insertDocP } from '../src/store.js'
 import { persons, seed, untrackedPerson } from './fixture.js'
 import './close.js'
 
@@ -23,10 +23,30 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
     assert.deepEqual([...AGGREGATE_TABLES], ['graph_scopes', 'graph_terms'])
   })
 
-  it('universeQuery creates a temp table on commit drop and issues no delete against it', () => {
-    const text = aggregateQueries.universe(30).text
-    assert.match(text, /create temp table graph_terms_all on commit drop as/)
-    assert.doesNotMatch(text, /delete from graph_terms_all/)
+  it('a window creates the universe as a keyed temp table and never deletes from it', () => {
+    const texts = aggregateQueries.window(30, persons).map((s) => s.text)
+    assert.equal(texts.filter((t) => /graph_terms_all/.test(t) && /\bdelete\b/i.test(t)).length, 0)
+    const create = texts.findIndex((t) => /create temp table graph_terms_all on commit drop as/.test(t))
+    const key = texts.findIndex((t) => /alter table graph_terms_all add primary key \(days, source, term, kind\)/.test(t))
+    const firstTerms = texts.findIndex((t) => /insert into graph_terms \(/.test(t))
+    assert.ok(create >= 0 && create < key && key < firstTerms)
+  })
+
+  it('the universe carries its primary key inside the window and is gone after commit', async () => {
+    await seed()
+    const [, , universe, key] = aggregateQueries.window(30, persons)
+    const pk = await inTransaction(async () => {
+      await db.query(universe.text, universe.values)
+      await db.query(key.text, key.values)
+      const { rows } = await db.query<{ n: number }>(
+        `select count(*)::int as n from pg_index where indrelid = 'graph_terms_all'::regclass and indisprimary`,
+      )
+      return rows[0].n
+    })
+    assert.equal(pk, 1)
+    await buildGraphAggregates(persons)
+    const { rows } = await db.query<{ r: string | null }>(`select to_regclass('graph_terms_all') as r`)
+    assert.equal(rows[0].r, null)
   })
 
   it('buildGraphAggregates runs twice back-to-back with no thrown "relation already exists" error', async () => {

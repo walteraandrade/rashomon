@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
+import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
@@ -19,10 +19,20 @@ const live = async (person: typeof lula, query: ReturnType<typeof parseQuery>) =
 const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graphFast(person, query).text, queries.graphFast(person, query).values)).rows[0]
 
 describe('graph_terms_all as a session-temp table (issue #203)', () => {
+  it('AGGREGATE_TABLES is exactly graph_scopes and graph_terms, no graph_terms_all entry', () => {
+    assert.deepEqual([...AGGREGATE_TABLES], ['graph_scopes', 'graph_terms'])
+  })
+
   it('universeQuery creates a temp table on commit drop and issues no delete against it', () => {
     const text = aggregateQueries.universe(30).text
     assert.match(text, /create temp table graph_terms_all on commit drop as/)
     assert.doesNotMatch(text, /delete from graph_terms_all/)
+  })
+
+  it('buildGraphAggregates runs twice back-to-back with no thrown "relation already exists" error', async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+    await assert.doesNotReject(buildGraphAggregates(persons))
   })
 })
 

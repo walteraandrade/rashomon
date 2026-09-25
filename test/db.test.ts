@@ -218,6 +218,28 @@ describe('PG_SSL_CA literal \\n escapes (issue #189)', () => {
   })
 })
 
+describe('graph_terms_all is a temp table, never persisted (issue #203)', () => {
+  before(seed)
+
+  it('leaves no persisted graph_terms_all after migrate on a fresh database', async () => {
+    const { rows } = await db.query<{ r: string | null }>(`select to_regclass('public.graph_terms_all') as r`)
+    assert.equal(rows[0].r, null)
+  })
+
+  it('drops an old-style persisted graph_terms_all left by a previous schema version', async () => {
+    await db.exec(`create table if not exists graph_terms_all (days int not null, source text not null, term text not null, kind text not null, c_t int not null, primary key (days, source, term, kind))`)
+    const { rows: before } = await db.query<{ r: string | null }>(`select to_regclass('public.graph_terms_all') as r`)
+    assert.equal(before[0].r, 'graph_terms_all')
+    await migrateP()
+    const { rows: after } = await db.query<{ r: string | null }>(`select to_regclass('public.graph_terms_all') as r`)
+    assert.equal(after[0].r, null)
+  })
+
+  it('ANALYZED_TABLES no longer lists graph_terms_all', () => {
+    assert.deepEqual([...ANALYZED_TABLES], ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms'])
+  })
+})
+
 describe('read indexes and planner statistics (issue #44)', () => {
   before(seed)
 

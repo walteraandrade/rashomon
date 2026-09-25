@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { buildGraphAggregates, hasGraphAggregates, TOP } from '../src/aggregate.js'
+import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
-import { insertDocP } from '../src/store.js'
+import { inTransaction, insertDocP } from '../src/store.js'
 import { persons, seed, untrackedPerson } from './fixture.js'
 import './close.js'
 
-// src/aggregate.ts builds graph_scopes / graph_terms_all / graph_terms; graphFor answers
+// src/aggregate.ts builds graph_scopes / graph_terms (graph_terms_all is a session-temp table,
+// never persisted); graphFor answers
 // from them when the recorte fits and from the live query otherwise. The contract is
 // equality: for every recorte the tables can hold, both paths render the same response.
 
@@ -16,6 +17,44 @@ const lula = persons.find((p) => p.id === 'lula')!
 const q = (over: Record<string, string>) => parseQuery({ days: '30', ...over })
 const live = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graph(person, query).text, queries.graph(person, query).values)).rows[0]
 const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graphFast(person, query).text, queries.graphFast(person, query).values)).rows[0]
+
+describe('graph_terms_all as a session-temp table (issue #203)', () => {
+  it('AGGREGATE_TABLES is exactly graph_scopes and graph_terms, no graph_terms_all entry', () => {
+    assert.deepEqual([...AGGREGATE_TABLES], ['graph_scopes', 'graph_terms'])
+  })
+
+  it('a window creates the universe as a keyed temp table and never deletes from it', () => {
+    const texts = aggregateQueries.window(30, persons).map((s) => s.text)
+    assert.equal(texts.filter((t) => /graph_terms_all/.test(t) && /\bdelete\b/i.test(t)).length, 0)
+    const create = texts.findIndex((t) => /create temp table graph_terms_all on commit drop as/.test(t))
+    const key = texts.findIndex((t) => /alter table graph_terms_all add primary key \(days, source, term, kind\)/.test(t))
+    const firstTerms = texts.findIndex((t) => /insert into graph_terms \(/.test(t))
+    assert.ok(create >= 0 && create < key && key < firstTerms)
+  })
+
+  it('the universe carries its primary key inside the window and is gone after commit', async () => {
+    await seed()
+    const [, , universe, key] = aggregateQueries.window(30, persons)
+    const pk = await inTransaction(async () => {
+      await db.query(universe.text, universe.values)
+      await db.query(key.text, key.values)
+      const { rows } = await db.query<{ n: number }>(
+        `select count(*)::int as n from pg_index where indrelid = 'graph_terms_all'::regclass and indisprimary`,
+      )
+      return rows[0].n
+    })
+    assert.equal(pk, 1)
+    await buildGraphAggregates(persons)
+    const { rows } = await db.query<{ r: string | null }>(`select to_regclass('graph_terms_all') as r`)
+    assert.equal(rows[0].r, null)
+  })
+
+  it('buildGraphAggregates runs twice back-to-back with no thrown "relation already exists" error', async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+    await assert.doesNotReject(buildGraphAggregates(persons))
+  })
+})
 
 describe('precomputable', () => {
   it('holds a built window, one source or all, no domain, no lean', () => {

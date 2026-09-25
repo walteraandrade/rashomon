@@ -13,13 +13,15 @@ const windowScope = (days: number) => sql`
     select d.id, d.source from docs d where d.published_at >= now() - make_interval(days => ${days})
   )`
 
+// Session-temp, dropped on commit. Safe as a fixed name only while windows build sequentially:
+// a concurrent-window build needs a per-window-unique name, or two windows on one session collide.
 const universeQuery = (days: number) => sql`
+  create temp table graph_terms_all on commit drop as
   with ${windowScope(days)},
   tracked as (
     select s.id, s.source from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )
-  insert into graph_terms_all (days, source, term, kind, c_t)
-  select ${days}::int, coalesce(s.source, 'all'), t.term, t.kind, count(*)::int
+  select ${days}::int as days, coalesce(s.source, 'all') as source, t.term, t.kind, count(*)::int as c_t
   from doc_terms t join tracked s on s.id = t.doc_id
   group by grouping sets ((s.source, t.term, t.kind), (t.term, t.kind))`
 
@@ -49,11 +51,9 @@ const scopesQuery = (days: number, persons: Pick<Person, 'id'>[]) => sql`
   left join u on u.source = w.source
   left join ab on ab.source = w.source and ab.person_id = p.id`
 
-// The most rows any /graph can ask for. The build keeps, per (source, kind), the top `TOP`
-// rows of every ordering the route can request: by count, and by pmi * ln(1 + count) once
-// for each `min` in MINS. Below that ceiling the fast query's own `order by ... limit` reads
-// exactly what the live statement would, because a top-K over a union of kinds is inside the
-// union of each kind's top-K, and a `count >= min` filter is a prefix of the by-count order.
+// The most rows any /graph can ask for. The build keeps, per (source, kind), the top `TOP` rows of
+// every ordering the route can request (by count, and by pmi * ln(1 + count) once per `min` in MINS),
+// so below that ceiling the fast query's own `order by ... limit` reads exactly what the live one would.
 export const TOP = Math.max(...LIMITS)
 
 // Same exclusion as graphQuery's term_p: the person's own name words, and phrases carrying one.
@@ -99,25 +99,32 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
     or (c_pt >= ${signatureFloor(sql.raw('about'))} and by_signature <= 5)`
 }
 
+// `create table ... as` carries no key, and every personTermsQuery joins the universe on it.
+const universeKey = sql`alter table graph_terms_all add primary key (days, source, term, kind)`
+
+const windowStatements = (days: number, persons: Person[], top = TOP) => [
+  sql`delete from graph_terms where days = ${days}`,
+  sql`delete from graph_scopes where days = ${days}`,
+  universeQuery(days),
+  universeKey,
+  scopesQuery(days, persons),
+  ...persons.map((p) => personTermsQuery(days, p, top)),
+]
+
 const run = (q: { text: string; values: unknown[] }) => db.query(q.text, q.values)
 
 // One window per transaction: readers see the previous build until the new one commits.
 const buildWindow = (days: number, persons: Person[], top: number) =>
-  inTransaction(async () => {
-    await db.query(`delete from graph_terms where days = $1`, [days])
-    await db.query(`delete from graph_terms_all where days = $1`, [days])
-    await db.query(`delete from graph_scopes where days = $1`, [days])
-    await run(universeQuery(days))
-    await run(scopesQuery(days, persons))
-    await persons.reduce<Promise<void>>(async (acc, p) => (await acc, void (await run(personTermsQuery(days, p, top)))), Promise.resolve())
-  })
+  inTransaction(() =>
+    windowStatements(days, persons, top).reduce<Promise<void>>(async (acc, q) => (await acc, void (await run(q))), Promise.resolve()),
+  )
 
 export type AggregateReport = { windows: number[]; scopes: number; terms: number; ms: number }
 
 // The tables the build fills, for the owner process (ingest, reindex) to analyze afterwards.
-export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms_all', 'graph_terms'] as const
+export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms'] as const
 
-// Rebuilds the three window tables from docs/doc_terms/doc_persons. Idempotent; the whole
+// Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
 // `top` is the per-ordering ceiling (TOP in production; tests lower it to see the cut).
 // Never analyzes: maintenance belongs to the process that owns DATA_DIR.
@@ -129,7 +136,7 @@ export const buildGraphAggregates = async (persons: Person[], windows: readonly 
   return { windows: [...windows], scopes: s[0].n, terms: t[0].n, ms: performance.now() - started }
 }
 
-// True once any window has been built, in all three tables. `pnpm aggregate --if-missing`
+// True once any window has been built, in both tables. `pnpm aggregate --if-missing`
 // (warm.yml, after a deploy) uses it to skip the build when the last ingest already left the
 // tables full. Scopes alone do not count: graph_terms was emptied by hand under a full
 // graph_scopes once (2026-09-18) and the skip kept the site blank until the next ingest.
@@ -140,7 +147,7 @@ export const hasGraphAggregates = async (): Promise<boolean> => {
   return rows[0].built
 }
 
-export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery }
+export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery, window: windowStatements }
 
 const main = async (argv: string[]) => {
   await migrateP()

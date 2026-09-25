@@ -189,14 +189,7 @@ export const schema = `
       built_at timestamptz not null default now(),
       primary key (days, source, person_id)
     );
-    create table if not exists graph_terms_all (
-      days int not null,
-      source text not null,
-      term text not null,
-      kind text not null,
-      c_t int not null,
-      primary key (days, source, term, kind)
-    );
+    drop table if exists graph_terms_all;
     create table if not exists graph_terms (
       days int not null,
       source text not null,
@@ -222,7 +215,7 @@ export const migrate = (): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlC
 export const migrateP = () => runSql(migrate())
 
 // Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
-export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms_all', 'graph_terms'] as const
+export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms'] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 
 // How many new docs an ingest must write before its statistics refresh is worth the pause.

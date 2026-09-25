@@ -237,21 +237,23 @@ describe('onnx.ts keeps its network-safety gate', () => {
 // real scorer over the model's own fixtures. KIKORI_CHECK=1 runs both dtypes; KIKORI_CHECK=q8
 // or =fp32 runs one. Every other suite keeps using `stub`.
 const check = process.env.KIKORI_CHECK ?? ''
+// The fixtures match this revision only, so the suite pins it whatever the shell holds.
+const FIXTURES_REVISION = 'f0dc5235dd52c6d7c7f6cf3782a0b79e62985e96'
 const dtypes = (['fp32', 'q8'] as const).filter((d) => check === '1' || check === d)
 const tolerance = { fp32: 0.01, q8: 1.5 }
 const expected = { fp32: 'score_fp32', q8: 'score_int8' } as const
 
 describe('kikori fixtures (real model)', { skip: dtypes.length === 0 && 'set KIKORI_CHECK=1 to download the model and run' }, () => {
-  process.env.TESTIMONY_MODEL ??= 'drifting-walter/kikori'
+  const env = (dtype: string) => ({
+    TESTIMONY_MODEL: process.env.TESTIMONY_MODEL ?? 'drifting-walter/kikori',
+    TESTIMONY_REVISION: FIXTURES_REVISION,
+    TESTIMONY_DTYPE: dtype,
+  })
   for (const dtype of dtypes) {
-    it(`${dtype} scores every fixture within ${tolerance[dtype]} of ${expected[dtype]}`, async () => {
-      process.env.TESTIMONY_DTYPE = dtype
+    it(`${dtype} scores every fixture within ${tolerance[dtype]} of ${expected[dtype]}`, () => withEnv(env(dtype), async () => {
       const diffs: { person: string; got: number; want: number }[] = []
       // Each fixture scores as its seed.json person, real aliases and all, so the long fixtures
-      // take the mention window (issue #154). The fixtures are the published revision's own
-      // (kikori's fixtures.json for d03d7853); the eight long ones carry scores recomputed on
-      // the window with that export's fp32 and int8 ONNX on 2026-09-14, the short ones the
-      // numbers kikori shipped.
+      // take the mention window (issue #154); see docs/testimony.md for how their scores were made.
       for (const f of fixtures) {
         const person = seed.find((p) => p.name === f.person)
         assert.ok(person, `${f.person} is not in seed.json`)
@@ -263,6 +265,6 @@ describe('kikori fixtures (real model)', { skip: dtypes.length === 0 && 'set KIK
       assert.deepEqual(off, [], `${dtype}: ${off.length} of ${fixtures.length} fixtures outside tolerance`)
       const mean = diffs.reduce((a, d) => a + Math.abs(d.got - d.want), 0) / diffs.length
       console.log(`${dtype}: n ${diffs.length} mean |dscore| ${mean.toFixed(4)} max ${Math.max(...diffs.map((d) => Math.abs(d.got - d.want))).toFixed(4)}`)
-    })
+    }))
   }
 })

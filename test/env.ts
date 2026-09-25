@@ -2,17 +2,24 @@
 // neither reads the developer's shell nor leaks its own value into the next test. `undefined`
 // means "unset for the duration", which is not the same as "leave alone": every variable the
 // expectation depends on has to be named, or a stray TESTIMONY_REVISION in the ambient
-// environment silently moves the method label a test asserts.
-export const withEnv = async <T = void>(vars: Record<string, string | undefined>, run: () => T | Promise<T>): Promise<T> => {
+// environment silently moves the method label a test asserts. process.env is one global, so
+// calls queue and run one at a time: concurrent callers would each restore a sibling's value.
+let queue: Promise<unknown> = Promise.resolve()
+
+export const withEnv = <T = void>(vars: Record<string, string | undefined>, run: () => T | Promise<T>): Promise<T> => {
   const set = (k: string, v: string | undefined) => {
     if (v === undefined) delete process.env[k]
     else process.env[k] = v
   }
-  const previous = Object.keys(vars).map((k) => [k, process.env[k]] as const)
-  Object.entries(vars).forEach(([k, v]) => set(k, v))
-  try {
-    return await run()
-  } finally {
-    previous.forEach(([k, v]) => set(k, v))
-  }
+  const next = queue.then(async () => {
+    const previous = Object.keys(vars).map((k) => [k, process.env[k]] as const)
+    Object.entries(vars).forEach(([k, v]) => set(k, v))
+    try {
+      return await run()
+    } finally {
+      previous.forEach(([k, v]) => set(k, v))
+    }
+  })
+  queue = next.catch(() => undefined)
+  return next
 }

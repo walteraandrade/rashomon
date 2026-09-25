@@ -22,19 +22,44 @@ const unscoredSql = `
 // `persons` is the tracked list, seed.json in production: it carries `exclude`, which the persons
 // table does not, and the scorer's window needs every alias to land on the right mention. A pair
 // whose person has left the list scores on the row's own aliases.
-export const scoreAll = async (method: string, scorer: Scorer, persons: Person[]): Promise<number> => {
+// Rows reach the database `batch` per insert: one round trip to Supabase costs ~130 ms, the model
+// ~6 ms, so an insert per pair is a 4.5-hour full re-score. A run stopped mid-way loses one batch.
+type Row = [number, string, string, number | null]
+
+const flush = async (rows: Row[]): Promise<void> => {
+  if (rows.length === 0) return
+  const values = rows.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(', ')
+  await db.query(
+    `insert into doc_testimony (doc_id, person_id, method, score) values ${values}
+     on conflict (doc_id, person_id, method) do nothing`,
+    rows.flat(),
+  )
+}
+
+const progress = (done: number, total: number, startedAt: number) => {
+  const seconds = (Date.now() - startedAt) / 1000
+  const rate = done / Math.max(seconds, 0.001)
+  const left = Math.round((total - done) / Math.max(rate, 0.001))
+  process.stderr.write(`scored ${done}/${total} (${rate.toFixed(1)}/s, ~${Math.ceil(left / 60)} min left)\n`)
+}
+
+export const scoreAll = async (method: string, scorer: Scorer, persons: Person[], batch = 500): Promise<number> => {
   const byId = new Map(persons.map((p) => [p.id, p]))
   const { rows } = await db.query<Pair>(unscoredSql, [method])
-  await rows.reduce<Promise<void>>(async (acc, r) => {
-    await acc
+  const startedAt = Date.now()
+  let pending: Row[] = []
+  let done = 0
+  for (const r of rows) {
     const person = byId.get(r.person_id) ?? { id: r.id, name: r.name, aliases: r.aliases }
-    const score = await scorer(r.text, person, persons)
-    await db.query(
-      `insert into doc_testimony (doc_id, person_id, method, score) values ($1, $2, $3, $4)
-       on conflict (doc_id, person_id, method) do nothing`,
-      [r.doc_id, r.person_id, method, score],
-    )
-  }, Promise.resolve())
+    pending.push([r.doc_id, r.person_id, method, await scorer(r.text, person, persons)])
+    done += 1
+    if (pending.length >= batch) {
+      await flush(pending)
+      pending = []
+    }
+    if (done % 1000 === 0) progress(done, rows.length, startedAt)
+  }
+  await flush(pending)
   return rows.length
 }
 

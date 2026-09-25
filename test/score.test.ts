@@ -28,6 +28,16 @@ describe('scoreAll', () => {
     assert.equal(Number(await countRows('stub-fresh')), Number(pairsTotal))
   })
 
+  it('writes every row when the pairs do not divide into whole batches, and none twice', async () => {
+    const pairsTotal = Number((await db.query<{ n: string }>(`select count(*) as n from doc_persons`)).rows[0].n)
+    assert.ok(pairsTotal > 3, `the fixture must hold more pairs than one batch, has ${pairsTotal}`)
+    const scored = await scoreAll('stub-batched', scorers.stub, persons, 3)
+    assert.equal(scored, pairsTotal)
+    assert.equal(Number(await countRows('stub-batched')), pairsTotal)
+    const again = await scoreAll('stub-batched', scorers.stub, persons, 3)
+    assert.equal(again, 0)
+  })
+
   it('is deterministic: the same (text, person) always yields the same score', async () => {
     const score = await scorers.stub('Tarcísio discute geopolítica durante evento internacional', persons[1], persons)
     const scoreAgain = await scorers.stub('Tarcísio discute geopolítica durante evento internacional', persons[1], persons)

@@ -142,6 +142,77 @@ describe('pressing Escape releases the selected word the same way a background c
   })
 })
 
+describe('a control change or a resize keeps the pick and the card in step', () => {
+  it('a control change closes the card this figure opened', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/rising': risingData([risingTerm()]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/rising.js')
+      mount(els.rising, { people, initial: {} })
+      await flush()
+      const [word] = els.risingRuler.querySelectorAll('[data-term]')
+      word.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      els.risingSource.value = 'gdelt'
+      els.risingSource.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'the card closes with the pick it belongs to')
+    })
+  })
+
+  it('a control change on this figure never closes a card another figure opened', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/rising': risingData([risingTerm()]), '/docs': { docs: [], total: 0 } })
+      const docsCard = await import('../src/ui/docs-card.js')
+      const { mount } = await import('../src/ui/figures/rising.js')
+      mount(els.rising, { people, initial: {} })
+      await flush()
+      docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+      await flush()
+      els.risingSource.value = 'gdelt'
+      els.risingSource.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, true, 'the atlas card must survive a change on #risingSource')
+    })
+  })
+
+  it('a resize repaint keeps the pick, and clicking the same word again releases it', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const captured: { target: unknown; cb: () => void }[] = []
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+        cb: () => void
+        constructor(cb: () => void) {
+          this.cb = cb
+        }
+        observe(target: unknown) {
+          captured.push({ target, cb: this.cb })
+        }
+        disconnect() {}
+      }
+      routeFetch(calls, { '/rising': risingData([risingTerm()]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/rising.js')
+      mount(els.rising, { people, initial: {} })
+      await flush()
+      const observers = captured.filter((c) => c.target === els.risingRuler)
+      assert.equal(observers.length, 1)
+      els.risingRuler.querySelectorAll('[data-term]')[0].fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      els.risingRuler.clientWidth = 400
+      observers[0].cb()
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'a resize must not close the card')
+      assert.match(els.risingRuler.innerHTML, /is-selected/, 'the picked word stays selected across a resize repaint')
+      els.risingRuler.querySelectorAll('[data-term]')[0].fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'clicking the same word again releases it')
+    })
+  })
+})
+
 describe('a GET /rising failure paints the ruler error note and never leaves the loading ghost on screen', () => {
   it('rejects the request; the ghost is replaced by the error note', async () => {
     await withFiguresDom(async (els, calls) => {

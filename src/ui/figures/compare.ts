@@ -142,8 +142,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const paint = (result: Compare) => {
+    // A resize repaint calls this with the same object again; only a new dataset clears the pick.
+    const isNewData = result !== data
     data = result
-    selected = null
+    if (isNewData) selected = null
     lastWidth = $('compareRuler').clientWidth || 0
     $('compareStatus').hidden = result.a.person.id !== result.b.person.id
     root.classList.remove('is-loading')
@@ -172,7 +174,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   })
 
   const onControlChange = () => {
-    selected = null
+    figure.release()
     figure.reload()
   }
 

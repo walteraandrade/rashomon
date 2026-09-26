@@ -3,11 +3,12 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
-import { candidatesFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
+import { attentionFor, candidatesFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
 import {
+  parseAttentionQuery,
   parseCandidatesQuery,
   parseCompareQuery,
   parseDocsQuery,
@@ -72,6 +73,7 @@ app.get('/api/people/:id/week', async (c) => c.json(await weekFor(c.get('person'
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
 app.get('/api/people/:id/testimony', async (c) => c.json(await testimonyFor(c.get('person'), parseTestimonyQuery(c.req.query()))))
 app.get('/api/people/:id/lenses', async (c) => c.json(await lensesFor(c.get('person'), parseLensesQuery(c.req.query()))))
+app.get('/api/people/:id/attention', async (c) => c.json(await attentionFor(c.get('person'), parseAttentionQuery(c.req.query()))))
 
 // Not nested under /people/:id: spans two specific people.
 app.get('/api/compare', async (c) => {

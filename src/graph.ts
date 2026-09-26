@@ -20,6 +20,8 @@ export type GraphQuery = {
   sort: 'count' | 'pmi'
   // `testimony=1` adds per-term kikori means; absent by default so the response shape is stable.
   method?: string | null
+  // `communities=1` adds a `community` label to every node; false leaves the response unchanged.
+  communities: boolean
 }
 
 export type DocsQuery = {
@@ -95,7 +97,12 @@ export type WeekQuery = {
   method?: string | null
 }
 
-type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null }
+// No scope: pageviews is a curiosity signal, outside the text pipeline's filters.
+export type AttentionQuery = { days: number }
+
+// `community` only appears in the row shape graphFastQuery renders when q.communities is true;
+// graphFor adds/omits the key on the response object, never leaving it present-but-undefined.
+type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null; community?: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
 type LinkRow = { s: string; t: string; count: number }
@@ -247,8 +254,17 @@ const graphQuery = (person: Person, q: GraphQuery) => {
 // a build: graph_terms can be emptied under it (the 2026-09-18 truncate, a build that died
 // mid-window), so a scope with about > 0 and no term rows also yields zero rows rather than
 // an empty graph. domain/lean never come here: the aggregates know only days and a single source.
+// communities=1 left-joins term_communities on graph_terms' own key; a missing row reads null.
 const graphFastQuery = (person: Person, q: GraphQuery) => {
   const sortKeyExpr = sortKey(q.sort, sql.raw('count'))
+  const communityJoin = q.communities
+    ? sql`
+      left join term_communities tc
+        on tc.days = ${q.days} and tc.source = ${q.source} and tc.person_id = ${person.id}
+        and tc.term = g.term and tc.kind = g.kind`
+    : sql``
+  const communityCol = q.communities ? sql`, tc.community as community` : sql``
+  const communityJson = q.communities ? sql`, 'community', community` : sql``
   return sql`
   with s as (
     select docs, tracked, about from graph_scopes
@@ -257,13 +273,13 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
         select 1 from graph_terms g where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}))
   ),
   scored as (
-    select g.term, g.kind, g.c_pt as count, g.tone,
+    select g.term, g.kind, g.c_pt as count, g.tone${communityCol},
       ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
-    from graph_terms g, s
+    from graph_terms g${communityJoin}, s
     where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}
   ),
   nodes_top as (
-    select term, kind, count,
+    select term, kind, count${q.communities ? sql`, community` : sql``},
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
       ${sortKeyExpr} as sort_key
@@ -283,7 +299,7 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
     s.docs::int as docs,
     s.about::int as about,
     coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded${communityJson})
         order by sort_key desc, term, kind)
       from nodes_top
     ), '[]'::json) as nodes,
@@ -655,6 +671,19 @@ export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number;
   return { days: q.days, candidates: rows.map((r) => ({ ...r, samples: byName.get(r.name) ?? [] })) }
 }
 
+type AttentionRow = { day: string; views: number }
+
+// The simplest reader in this file. day::text avoids serializing a JS Date's full timestamp.
+const attentionQuery = (person: Person, q: AttentionQuery) => sql`
+  select day::text as day, views from person_attention
+  where person_id = ${person.id} and day >= (current_date - ${q.days}::int)
+  order by day`
+
+export const attentionFor = async (person: Person, q: AttentionQuery): Promise<{ days: number; series: AttentionRow[] }> => {
+  const { rows } = await run<AttentionRow>(attentionQuery(person, q))
+  return { days: q.days, series: rows.map((r) => ({ day: r.day, views: r.views })) }
+}
+
 export const risingFor = async (person: Person, q: RisingQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
   const { rows } = await run<RisingAggregates>(risingQuery(person, q))
@@ -691,7 +720,13 @@ export const graphFor = async (person: Person, q: GraphQuery) => {
   return {
     person,
     stats: testimony ? { docs, about, testimony: { method: q.method, ...testimony.overall } } : { docs, about },
-    nodes: nodes.map((t) => ({ id: `${t.kind}:${t.term}`, ...t, ...(testimony ? { testimony: perTerm.get(`${t.kind}:${t.term}`) ?? null } : {}) })),
+    nodes: nodes.map((t) => ({
+      id: `${t.kind}:${t.term}`,
+      ...t,
+      // Absent unless asked; null on the live path or an unbuilt/uncovered term either way.
+      ...(q.communities ? { community: t.community ?? null } : {}),
+      ...(testimony ? { testimony: perTerm.get(`${t.kind}:${t.term}`) ?? null } : {}),
+    })),
     links: [
       ...nodes.map((t) => ({ source: `person:${person.id}`, target: `${t.kind}:${t.term}`, count: t.count })),
       ...links.rows.map((l) => ({ source: l.s, target: l.t, count: l.count })),
@@ -1056,6 +1091,7 @@ export const queries = {
   lenses: lensesQuery,
   week: weekQuery,
   weekTestimony: weekTestimonyQuery,
+  attention: attentionQuery,
 } as const
 
 // The text each builder emits. Numbering follows statement shape, not values, so what a
@@ -1063,13 +1099,14 @@ export const queries = {
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
 const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0, day: '' }
-const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count' }
+const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count', communities: false }
 const sampleLens: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
 const sampleLenses: LensesQuery = { days: 30, kind: 'all', limit: 40, a: sampleLens, b: sampleLens }
 
 export const statements = {
   graph: queries.graph(samplePerson, sampleGraph).text,
   graphFast: queries.graphFast(samplePerson, sampleGraph).text,
+  graphFastCommunities: queries.graphFast(samplePerson, { ...sampleGraph, communities: true }).text,
   links: queries.links(samplePerson, sampleScope, ['word:sample']).text,
   sources: queries.sources(samplePerson, sampleScope).text,
   docs: queries.docs(samplePerson, sampleDocs).text,
@@ -1084,4 +1121,5 @@ export const statements = {
   lenses: queries.lenses(samplePerson, sampleLenses).text,
   week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
+  attention: queries.attention(samplePerson, { days: 30 }).text,
 } as const

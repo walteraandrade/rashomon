@@ -51,7 +51,7 @@ vercel deploy --prod
 set -a && source .env.production && set +a && DATABASE_URL="$POSTGRES_URL_NON_POOLING" pnpm reindex
 ```
 
-Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` and `PG_SSL_CA` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), a `PG_SSL_CA` repository secret (the same PEM CA text `poolConfig` requires), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky and `VERCEL_TOKEN` for the cache delete before the warm (see [Warming the CDN](#warming-the-cdn)); the workflow stops before running `pnpm ingest` if either `DATABASE_URL` or `PG_SSL_CA` is missing. Trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3, clamped to 1..20: Fluid Compute reuses instances, so pool size times concurrent instances must stay under the pooler's limit).
+Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` and `PG_SSL_CA` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `pnpm push` never revises an existing `person_attention` row; only `pnpm ingest` run directly against the target heals a day Wikimedia later corrects. `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), a `PG_SSL_CA` repository secret (the same PEM CA text `poolConfig` requires), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky and `VERCEL_TOKEN` for the cache delete before the warm (see [Warming the CDN](#warming-the-cdn)); the workflow stops before running `pnpm ingest` if either `DATABASE_URL` or `PG_SSL_CA` is missing. Trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3, clamped to 1..20: Fluid Compute reuses instances, so pool size times concurrent instances must stay under the pooler's limit).
 
 `vercel.json` also serves security headers on `/`, `/atlas.html` and `/como-ler.html` — never on `/api/*` or a static asset. The same set lives in `src/headers.ts`, which `src/server.ts` sends on those three paths, so `pnpm dev` and any non-Vercel host are not bare; the JSON copy stays because the CDN serves `public/` without calling the function. `test/security-headers-acceptance.test.ts` fails when the two copies differ by a byte or when Hono stops sending them. `script-src 'self'` forbids inline `<script>` tags and `eval`, so `bundle.js` (a same-origin module script) and the same-origin Vercel Insights tag load, and nothing else can inject script. `style-src` keeps `'self' 'unsafe-inline'` on purpose: `src/ui/render.ts` writes per-value `--size`/`--tone` inline style overrides, and hashing or nonce-ing every one of those is not worth the cost this issue accepted.
 
@@ -97,7 +97,7 @@ transaction open across an arbitrary amount of work. A third bound sits on the d
 - **Reindex.** It reads documents by keyset pagination on the primary key (`where id > $1 order by id
   limit $2`), never materializing more than one page of text, and commits one transaction per page.
 - **Orchestration.** `src/ingest.ts`'s `ingest(persons, names, options)` is an Effect: `migrate`,
-  `pruneRemoved`, `upsertPersons`, `loadPhrases`, `docCount`, `analyzeAfterWrite`,
+  `pruneRemoved`, `upsertPersons`, `loadPhrases`, `pageviews`, `docCount`, `analyzeAfterWrite`,
   `buildGraphAggregates` and `analyzeTables` are the calls whose rejection fails the whole run, each as
   `IngestFailure({ stage })` with its own stage name — never an uncaught defect, since a plain
   `Effect.promise` around a rejecting Promise resumes with `die`, not a typed failure, and would bypass a
@@ -114,7 +114,11 @@ transaction open across an arbitrary amount of work. A third bound sits on the d
   connection (`runSql(SqlClient.SqlClient)`), never opening a second one on the same `DATA_DIR`. A run
   whose `upsertPersons` (or `migrate`) rejects sets `process.exitCode = 1` and closes that connection
   before exiting, rather than continuing to collect against a stale person set; it never calls
-  `process.exit()`, so already-printed log lines survive.
+  `process.exit()`, so already-printed log lines survive. `pageviews` (Wikipedia attention, see
+  [sources](sources.md)) runs as its own stage after the doc-collector loop, on every `pnpm ingest`
+  regardless of which sources were named; a person's own fetch failure is isolated and logged inside
+  the stage (never fails the run), but the stage's own SQL write failing does, as
+  `IngestFailure({ stage: 'pageviews' })`.
 
 **A change to how text is derived ships with a `pnpm reindex`.** Editing `stopwords`, the phrase rules or
 `seed.json` changes nothing already stored: `doc_terms`, `doc_persons` and `doc_candidates` are written
@@ -144,8 +148,9 @@ sole statement of its implicit block, but this path is unverified against the re
 part of the manual round that gates the Effect db PR (issue #184), not of the test suite.
 
 **Measuring size.** `pnpm size` prints every table in `SIZE_TABLES` (`src/size.ts`; wider than
-`ANALYZED_TABLES` — it adds `persons`, `gkg_files`, `phrases` and `phrase_stage`, all of which have
-caused real disk incidents) by `pg_total_relation_size`, plus `pg_database_size` for the database
+`ANALYZED_TABLES` — it adds `persons`, `gkg_files`, `phrases`, `phrase_stage` and `person_attention`,
+all of which have caused real disk incidents or are simply never analyzed/vacuumed by that other
+list) by `pg_total_relation_size`, plus `pg_database_size` for the database
 total, largest first, followed by one JSON line with the same numbers. It is read-only: no
 `analyze`, `vacuum` or write, and no history is kept. `.github/workflows/ingest.yml` runs it after
 every `pnpm ingest` and appends the output to the run summary, so a shrinking-disk trend is visible
@@ -177,6 +182,8 @@ Only the `graph` statement is precomputed. With `testimony=1`, which the page al
 The build runs at the end of `pnpm ingest` and `pnpm reindex`, both of which own `DATA_DIR`, and in `warm.yml` as `pnpm aggregate --if-missing`, which builds only when either persisted table is empty (the first production deploy after the tables appeared, or a `graph_terms` emptied under a full `graph_scopes` — on 2026-09-18 a scopes-only check called that state built and left the site blank until the next ingest) and shares ingest's concurrency group so two builds never run on one database. One transaction per window (`delete` then `insert` for `graph_scopes`/`graph_terms`, a `create temp table` for `graph_terms_all` keyed on `(days, source, term, kind)` before any person reads it, readers see the previous build until commit), one statement for the universe, one for the scopes, one per person for the terms. It is idempotent. After `pnpm push` run `pnpm aggregate` against the same `DATABASE_URL`, or the deployment answers from the live scan until the next scheduled ingest. The persisted tables come from `pnpm migrate`, and `graphFastQuery` needs them to exist: run `pnpm migrate` against production before the deploy that ships this, as with any schema change.
 
 What changes in meaning: the window edge. The live statement cuts at `now()` when the request arrives; the tables cut at `now()` when the build ran, so between two ingests (six hours) a document at the tail of the window stays in a little longer than the live cut would keep it. Documents never enter or leave between builds anyway, since only ingest writes. `graph_scopes.built_at` records the cut. `test/aggregate.test.ts` pins that divergence: a doc inserted after a build shows on the live path only, and the next build makes the two agree again.
+
+`term_communities` (`days, source, person_id, term, kind` primary key) is a third table, written last inside the same window transaction, after that window's `personTermsQuery` calls: for every `(days, source, person)` `graph_terms` was just filled for, `src/aggregate.ts` re-derives the co-occurrence edges over exactly that scope's kept `(term, kind)` rows (the same shape as `linksQuery`, joined against `graph_terms` instead of a request's live `ids`) and hands them to `src/communities.ts`'s pure `communities(edges, seed)` (`graphology` + `graphology-communities-louvain`, both pinned exact), a fixed seed so one library version always partitions one edge list the same way. Every kept term gets a row, including a term with no surviving edge (its own singleton community) — `community` is `null` in `GET /graph?communities=1` only when the whole recorte is unbuilt (the live path) or the community step has not yet covered a built window, never for an isolated word inside a build that ran it. `term_communities` is in `ANALYZED_TABLES` (`src/db.ts`) and in `POST_BUILD_ANALYZED` (`AGGREGATE_TABLES` plus itself), the list ingest and reindex analyze right after `buildGraphAggregates` returns, so its statistics describe the build that just ran rather than the previous one; it is deliberately **not** in `AGGREGATE_TABLES` and does not gate `hasGraphAggregates()`: a community build lagging behind `graph_terms`/`graph_scopes` must never look like a missing aggregate build to `pnpm aggregate --if-missing`, or that flag would re-run the whole expensive window build just to catch communities up. A stale or missing community build degrades to `null`, the same documented value the live path already returns.
 
 ## Warming the CDN
 

@@ -2,12 +2,13 @@ import { Cause, Console, Data, Effect, Exit, Layer } from 'effect'
 import type { HttpClient } from 'effect/unstable/http'
 import { SqlClient } from 'effect/unstable/sql'
 import personsSeed from '../seed.json' with { type: 'json' }
-import { AGGREGATE_TABLES, buildGraphAggregates, type AggregateReport } from './aggregate.js'
+import { buildGraphAggregates, POST_BUILD_ANALYZED, type AggregateReport } from './aggregate.js'
 import { analyzeAfterWrite, analyzeMinDocs, analyzeTables, db, docCount, migrate, runSql, type AnalyzedTable } from './db.js'
 import { collectors, defaultSources } from './collectors/index.js'
 import { fetchClient } from './http.js'
+import { collect as collectPageviews } from './collectors/pageviews.js'
 import { loadPhrases } from './phrases.js'
-import { insertDocs, pruneRemoved, upsertPersons } from './store.js'
+import { insertDocs, pruneRemoved, upsertAttention, upsertPersons } from './store.js'
 import type { Collector, Person, Phrases, RawDoc, Source } from './types.js'
 
 export type SourceResult = { name: string; fetched: number; written: number; enriched: number; failed: number; error?: string }
@@ -19,7 +20,7 @@ export type IngestReport = {
   aggregates: AggregateReport
 }
 
-export type IngestStage = 'migrate' | 'upsertPersons' | 'pruneRemoved' | 'loadPhrases' | 'docCount' | 'analyzeAfterWrite' | 'buildGraphAggregates' | 'analyzeTables'
+export type IngestStage = 'migrate' | 'upsertPersons' | 'pruneRemoved' | 'loadPhrases' | 'docCount' | 'analyzeAfterWrite' | 'buildGraphAggregates' | 'analyzeTables' | 'pageviews'
 export class IngestFailure extends Data.TaggedError('IngestFailure')<{ stage: IngestStage; cause: unknown }> {}
 
 export type IngestOptions = {
@@ -68,6 +69,10 @@ export const ingest = (
     const registry: Registry = { ...collectors, ...options.collectors }
     const sources = yield* Effect.forEach(names, (name) => runSource(name, registry, persons, lexicon), { concurrency: 1 })
     const written = sources.reduce((sum, s) => sum + s.written, 0)
+    // Own stage, not through runSource: a dead Wikipedia title costs only that person, isolated inside collectPageviews; only the write itself is wrapped below.
+    const attentionRows = yield* collectPageviews(persons)
+    yield* upsertAttention(attentionRows).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'pageviews', cause })))
+    yield* Console.log(`[pageviews] wrote ${attentionRows.length} rows`)
     const totalDocs = yield* docCount().pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'docCount', cause })))
     yield* Console.log(`total docs: ${totalDocs}`)
     const analyzed = yield* analyzeAfterWrite(written).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'analyzeAfterWrite', cause })))
@@ -78,7 +83,7 @@ export const ingest = (
     )
     // The window moves even when nothing new was written, so the aggregates are rebuilt every run.
     const aggregates = yield* Effect.tryPromise({ try: () => buildGraphAggregates(persons), catch: (cause) => new IngestFailure({ stage: 'buildGraphAggregates', cause }) })
-    yield* analyzeTables(AGGREGATE_TABLES).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'analyzeTables', cause })))
+    yield* analyzeTables(POST_BUILD_ANALYZED).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'analyzeTables', cause })))
     yield* Console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
     return { removed, sources, totalDocs, analyzed, aggregates } satisfies IngestReport
   })

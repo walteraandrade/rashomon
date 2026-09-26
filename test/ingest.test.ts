@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { after, describe, it } from 'node:test'
-import { Effect, Exit, Layer } from 'effect'
-import { TestConsole } from 'effect/testing'
+import { Effect, Exit, Fiber, Layer } from 'effect'
+import { TestClock, TestConsole } from 'effect/testing'
 import { FetchHttpClient, type HttpClient } from 'effect/unstable/http'
 import { SqlClient, SqlError } from 'effect/unstable/sql'
 import { db, runSql } from '../src/db.js'
@@ -11,7 +11,7 @@ import { RssError } from '../src/collectors/rss.js'
 import { ingest, IngestFailure } from '../src/ingest.js'
 import type { RawDoc, Source } from '../src/types.js'
 import { persons, reseed } from './fixture.js'
-import { failingSql, failureOf, fakeFetch } from './effect.js'
+import { failingSql, failureOf, fakeFetch, json } from './effect.js'
 import { withEnv } from './env.js'
 import { docsText } from './docs.js'
 import './close.js'
@@ -36,13 +36,21 @@ const testLayer = async (match?: RegExp) => {
   )
 }
 
+// Drives ingest() on the fake clock: the pageviews stage's own Effect.sleep(1000) (issue #211,
+// once per person with a `wikipedia` title, the fixture's lula) would otherwise cost every
+// ingest test a real second.
 const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient | SqlClient.SqlClient>, layer: Layer.Layer<HttpClient.HttpClient | SqlClient.SqlClient>) =>
   Effect.gen(function* () {
-    const exit = yield* Effect.exit(effect)
+    const fiber = yield* Effect.forkChild(effect)
+    while (fiber.pollUnsafe() === undefined) {
+      yield* TestClock.adjust(1_000)
+      yield* Effect.promise(() => new Promise<void>((r) => setImmediate(r)))
+    }
+    const exit = yield* Fiber.await(fiber)
     const logs = (yield* TestConsole.logLines).map(String)
     const errors = (yield* TestConsole.errorLines).map(String)
     return { exit, logs, errors }
-  }).pipe(Effect.provide(layer))
+  }).pipe(Effect.provide(layer), Effect.provide(TestClock.layer()))
 
 const doc = (uri: string, text: string): RawDoc => ({ source: 'rss', uri, text, publishedAt: new Date().toISOString(), domain: 'example.org' })
 
@@ -193,6 +201,49 @@ describe('ingest', () => {
   it('fails the whole run with IngestFailure({ stage: "analyzeTables" }), after buildGraphAggregates has already run', async () => {
     const uri = 'https://ingest-test.example/analyzetables1'
     const layer = await testLayer(/^analyze graph_scopes$/)
+    const { exit } = await Effect.runPromise(
+      run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'analyzeTables')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
+    assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "pageviews" }) when the write itself fails, never through a fetch failure (issue #211 AC10)', async () => {
+    const uri = 'https://ingest-test.example/pageviews1'
+    // The pageviews collector must actually produce a row for the write to have something to
+    // fail on: a stub that resolves the wikipedia pageviews endpoint, throws for anything else.
+    const pageviewsFetch = fakeFetch((c) =>
+      c.url.pathname.includes('/pageviews/per-article/') ? json({ items: [{ timestamp: '2026010100', views: 7 }] }) : (() => {
+        throw new Error('no network in tests')
+      })(),
+    )
+    const real = await runSql(SqlClient.SqlClient)
+    const layer = Layer.mergeAll(
+      fetchClient,
+      Layer.succeed(FetchHttpClient.Fetch, pageviewsFetch),
+      Layer.succeed(SqlClient.SqlClient, failingSql(real, /^insert into person_attention/)),
+      TestConsole.layer,
+    )
+    const { exit } = await Effect.runPromise(
+      run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'pageviews')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
+    assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before the pageviews write failed')
+  })
+
+  it('analyzeTables also covers term_communities, written by the same buildGraphAggregates call', async () => {
+    const uri = 'https://ingest-test.example/analyzetables2'
+    const layer = await testLayer(/^analyze term_communities$/)
     const { exit } = await Effect.runPromise(
       run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
     )

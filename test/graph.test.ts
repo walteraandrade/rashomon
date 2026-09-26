@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { before, after, describe, it } from 'node:test'
 import { buildGraphAggregates } from '../src/aggregate.js'
@@ -32,7 +33,7 @@ import { resolveScope } from '../src/outlets.js'
 import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query.js'
 import { inTransaction, insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
-import { docPageText } from './docs.js'
+import { docPageText, docsText } from './docs.js'
 import { futureDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
@@ -46,7 +47,7 @@ const [lula, tarcisio, bolsonaro] = persons
 const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
-const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, min: 1, sort: 'count' }
+const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, min: 1, sort: 'count', communities: false }
 const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', limit: 50, offset: 0, day: '' }
 const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 20, min: 1 }
 const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', bucket: 'week' }
@@ -164,6 +165,57 @@ describe('graphFor', () => {
     const bogus = await graphFor(lula, { ...graphBase, kind: 'bogus' })
     assert.deepEqual(theme.nodes, [])
     assert.deepEqual(bogus.nodes, [])
+  })
+})
+
+// Issue #214: community is added/omitted the same way testimony's method flag is.
+describe('graphFor communities=1', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  it('tags every node on a precomputable recorte', async () => {
+    const g = await graphFor(lula, { ...graphBase, communities: true })
+    assert.ok(g.nodes.length > 0, 'sanity: the default window must have nodes')
+    for (const n of g.nodes) assert.equal(typeof n.community, 'number')
+  })
+
+  it('leaves every node null on a live recorte', async () => {
+    const cases: [string, () => ReturnType<typeof graphFor>][] = [
+      ['domain filter', () => graphFor(lula, { ...graphBase, communities: true, domain: 'g1.globo.com' })],
+      ['days outside DAYS', () => graphFor(lula, { ...graphBase, communities: true, days: 2000 })],
+      ['lean filter', () => graphFor(bolsonaro, { ...wideBase, communities: true, lean: 'right' })],
+      ['multi-source', () => graphFor(lula, { ...graphBase, communities: true, source: 'gnews,rss,gkg' })],
+    ]
+    for (const [label, run] of cases) {
+      const live = await run()
+      assert.ok(live.nodes.length > 0, `sanity: this scope must have nodes (${label})`)
+      for (const n of live.nodes) assert.equal(n.community, null, label)
+    }
+  })
+
+  it('never adds a community key to nodes or signature when communities is not asked', async () => {
+    const g = await graphFor(lula, graphBase)
+    for (const n of g.nodes) assert.ok(!('community' in n))
+    for (const row of g.signature) assert.ok(!('community' in row))
+
+    const live = await graphFor(lula, { ...graphBase, domain: 'g1.globo.com' })
+    assert.ok(live.nodes.length > 0, 'sanity: this live scope must have nodes')
+    for (const n of live.nodes) assert.ok(!('community' in n))
+    for (const row of live.signature) assert.ok(!('community' in row))
+  })
+
+  it('signature never carries a community key even when communities=1', async () => {
+    const g = await graphFor(lula, { ...graphBase, communities: true })
+    assert.ok(g.signature.length > 0, 'sanity: this scope must have a signature')
+    for (const row of g.signature) assert.ok(!('community' in row))
+  })
+
+  it('is documented: communities=1, the null meaning, and signature never tagged', () => {
+    assert.match(docsText, /communities=1/)
+    assert.match(docsText, /community[\s\S]{0,300}null[\s\S]{0,300}(precomputable|built|not (yet )?(built|covered))/i)
+    assert.match(docsText, /communities=1[\s\S]{0,600}signature[\s\S]{0,60}never|signature[\s\S]{0,300}never[\s\S]{0,300}communities/i)
   })
 })
 
@@ -1496,8 +1548,8 @@ describe('compareFor (issue #93)', () => {
     // ("termdiluido", count 3, diluted pmi because lula also uses it) genuinely differs from
     // bolsonaro's own top-pmi term ("cita", count 1, exclusive)
     const scope = { days: 3650, source: 'all', domain: 'testcorp.example', lean: 'all', country: 'all', kind: 'all', limit: 1 } as const
-    const gCount = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'count' })
-    const gPmi = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'pmi' })
+    const gCount = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'count', communities: false })
+    const gPmi = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'pmi', communities: false })
     assert.notEqual(gCount.nodes[0]?.term, gPmi.nodes[0]?.term, "fixture assumption: bolsonaro's own top-count and top-pmi terms differ at this scope")
     const r = await compareFor(bolsonaro, lula, scope)
     assert.ok(r.terms.length > 1)
@@ -1647,13 +1699,58 @@ describe('the kind set query.ts and graph.ts agree on (issue #108)', () => {
 // `statements` is what `pnpm bench` and the SQL-reading tests see; the routes run what
 // `queries` builds. The two only agree because a builder numbers its placeholders by the
 // statement's shape, never by the values, so this pins that the sample text is the route's text.
+// Issue #214: graphFast's default-request text must be untouched; only communities=1 grows it.
+describe('graphFastQuery communities=1 (issue #214)', () => {
+  it('leaves the default (communities: false) statement text unchanged', () => {
+    assert.ok(!/term_communities/.test(statements.graphFast))
+  })
+
+  it('joins term_communities and selects community only when communities is true', () => {
+    assert.ok(/left join term_communities/.test(statements.graphFastCommunities))
+    assert.ok(/'community'/.test(statements.graphFastCommunities))
+    assert.notEqual(statements.graphFastCommunities, statements.graphFast)
+  })
+
+  // Pins the default statement's exact text by hash, so any change to graphFastQuery is
+  // caught here even though the text itself is too long to keep as a readable literal.
+  it('pins graphFast\'s default text by hash', () => {
+    assert.equal(createHash('sha256').update(statements.graphFast).digest('hex'), 'aa7cf8b664f39e3ece3db40a48781662bd25d01deac0bc7c60f252fea282242e')
+  })
+
+  // Pins graphFastCommunities as exactly graphFast plus its three communities=1 insertions
+  // (the join, the two extra selected columns, the extra json field) and nothing else, so a
+  // mutant dropping the join's own `tc.person_id = person.id` predicate is caught: it changes
+  // only the join clause, which this equality still compares character for character.
+  it('pins graphFastCommunities as graphFast with exactly its three communities=1 insertions', () => {
+    // The join inserts three new placeholders ($7-$9), so every placeholder from $7 on in
+    // the base text shifts up by three first, before the join's own literal $7-$9 go in.
+    const shifted = statements.graphFast.replace(/\$(\d+)/g, (_, n) => `$${Number(n) >= 7 ? Number(n) + 3 : Number(n)}`)
+    const withCommunities = shifted
+      .replace(
+        'select g.term, g.kind, g.c_pt as count, g.tone,\n      ln(',
+        'select g.term, g.kind, g.c_pt as count, g.tone, tc.community as community,\n      ln(',
+      )
+      .replace(
+        'from graph_terms g, s',
+        'from graph_terms g\n      left join term_communities tc\n        on tc.days = $7 and tc.source = $8 and tc.person_id = $9\n        and tc.term = g.term and tc.kind = g.kind, s',
+      )
+      .replace('select term, kind, count,\n      round(', 'select term, kind, count, community,\n      round(')
+      .replace(
+        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)",
+        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'community', community)",
+      )
+    assert.equal(statements.graphFastCommunities, withCommunities)
+  })
+})
+
 describe('statements render the same text the routes run (issue #131)', () => {
   const scope = { days: 7, source: 'rss,gkg', domain: 'folha.uol.com.br', lean: 'all', country: 'all' as const, kind: 'word,phrase' }
 
   it('for every builder, with different values', () => {
     const built = {
-      graph: queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 }),
-      graphFast: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 }),
+      graph: queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: false }),
+      graphFast: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: false }),
+      graphFastCommunities: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: true }),
       links: queries.links(lula, scope, ['word:a', 'word:b']),
       sources: queries.sources(lula, scope),
       docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
@@ -1674,6 +1771,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       }),
       week: queries.week(lula, { ...scope, limit: 8 }),
       weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
+      attention: queries.attention(lula, { days: 14 }),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)
@@ -1685,7 +1783,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       const placeholders = text.match(/\$\d+/g) ?? []
       assert.deepEqual(placeholders, placeholders.map((_, i) => `$${i + 1}`), name)
     }
-    const q = queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10 })
+    const q = queries.graph(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: false })
     assert.equal((q.text.match(/\$\d+/g) ?? []).length, q.values.length)
   })
 

@@ -3,7 +3,7 @@ import { insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, RawDoc } from '../src/types.js'
 
 export const persons: Person[] = [
-  { id: 'lula', name: 'Lula', aliases: ['Lula', 'Luiz Inácio'] },
+  { id: 'lula', name: 'Lula', aliases: ['Lula', 'Luiz Inácio'], wikipedia: 'Luiz Inácio Lula da Silva' },
   { id: 'tarcisio', name: 'Tarcísio', aliases: ['Tarcísio', 'Tarcísio de Freitas'] },
   { id: 'bolsonaro', name: 'Bolsonaro', aliases: ['Bolsonaro', 'Jair Bolsonaro'] },
 ]
@@ -277,6 +277,18 @@ export const insertTestimony = async (uri: string, personId: string, method: str
     method,
     score,
   ])
+}
+
+// Direct insert, parallel to insertTestimony: person_attention has no derivation from RawDoc,
+// so tests seed it straight rather than through insertDocP.
+export const attentionRows = async (personId: string, rows: { day: string; views: number }[]) => {
+  for (const { day, views } of rows) {
+    await db.query(
+      `insert into person_attention (person_id, day, views) values ($1, $2, $3)
+       on conflict (person_id, day) do update set views = excluded.views`,
+      [personId, day, views],
+    )
+  }
 }
 
 // Testimony rows for issue #21's /testimony route, layered on top of the existing docs

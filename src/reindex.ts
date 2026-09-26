@@ -1,5 +1,5 @@
 import seedPersons from '../seed.json' with { type: 'json' }
-import { AGGREGATE_TABLES, buildGraphAggregates } from './aggregate.js'
+import { buildGraphAggregates, POST_BUILD_ANALYZED } from './aggregate.js'
 import { analyzeTablesP, db, migrateP } from './db.js'
 import { countryOf, domainOf, nameTokens } from './extract.js'
 import { buildPhrases, loadPhrasesP, resetPhraseStage, stagePhrases } from './phrases.js'
@@ -134,7 +134,7 @@ const main = async () => {
   // Outside reindexAll on purpose: its statement budget is per page of documents, and the
   // aggregates are one build per window per person.
   const aggregates = await buildGraphAggregates(seedPersons)
-  await analyzeTablesP(AGGREGATE_TABLES)
+  await analyzeTablesP(POST_BUILD_ANALYZED)
   console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
   await db.close()
 }

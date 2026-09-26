@@ -62,6 +62,10 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. With `domain=all`
 
 `GET /api/people/:id/graph?…&testimony=1` adds, to the same response, `stats.testimony = { method, score, n }` (the person's mean score over the docs in scope, so it follows `domain`/`lean`, unlike `/testimony`) and `testimony: { score, n } | null` on every node: the mean score of the in-scope docs that carry the term, `null` when none has a non-null score. `method` resolves exactly as on `/testimony`. Without `testimony=1` nothing is added and the response is byte-for-byte what it was. The atlas always sends it and uses it for the "Colorir por avaliação" mask, which colours each word by its distance from the person's own mean rather than from zero, so the name prior cancels out.
 
+### `communities=1`
+
+`GET /api/people/:id/graph?…&communities=1` adds `community: int | null` to every entry in `nodes`, one Louvain partition per precomputed window (see [graph aggregates](operations.md#graph-aggregates)): which words in the same ring travel together. `community` is a non-null integer only when the recorte is precomputable **and** the window's own community build already has a row for that `(term, kind)` pair; it is `null` on the live path (no build exists for this recorte at all) and `null` for any node the community build has not covered yet (a build whose community step has not run, or a term that fell out of `graph_terms`' kept set after community numbers were written for it) — a missing community build degrades to `null`, it never falls back to the live query and never errors. A community number means something only inside one build: nothing compares it across windows, across a rebuild, or across a `graphology-communities-louvain` version bump. `signature` is never tagged, with or without `communities=1`. Without `communities=1` nothing is added and the response is byte-for-byte what it was.
+
 ## sources
 
 `GET /api/people/:id/sources?days=30&source=all&domain=all&lean=all` lists outlets that mention the person: `domain`, `source`, `docs`, `tone` (average GDELT tone, null when unknown), `tone_n`, `lean` and `basis` (both `null` when the domain is absent from `outlets.json`).
@@ -109,6 +113,10 @@ When `?method` is omitted or fails its charset check it resolves through the sam
 ## candidates
 
 `GET /api/candidates?days=7&min=5&limit=50` returns `{ days, candidates }`: person names nobody tracks yet, ranked by doc count in the window. Each candidate is `{ name, count, sources, previous, samples }`: `count` is distinct docs in the window, `sources` distinct sources, `previous` the count in the window of the same length immediately before (so a caller sees what is rising), `samples` up to 3 `{ id, source, text }` docs, newest first. Cross-person by construction, not nested under `/people/:id`. Promotion stays human: add the name to `seed.json` and run `pnpm reindex`. See [how names are discovered](terms.md#candidate-discovery).
+
+## attention
+
+`GET /api/people/:id/attention?days=30` returns `{ days, series }`. `days` snaps through the shared `DAYS` list (`[7, 30, 365]`, default 30) like every other window; no other parameter. `series` holds one `{ day, views }` row per calendar day that has a stored Wikipedia pageview count, ordered ascending by `day` (an ISO `YYYY-MM-DD` string, Wikimedia's own UTC daily bucket, never re-bucketed into `America/Sao_Paulo`); `views` is a non-negative integer. A day never collected is simply absent — there is no zero-fill. A person with no `wikipedia` title in `seed.json`, or with a title but zero rows ever collected, returns `{ days: 30, series: [] }` (HTTP 200). This is a curiosity signal — how much a person is being *looked up*, not how much the corpus writes about her — collected from the Wikimedia pageviews API and stored outside the text pipeline entirely: it carries no `tone`, contributes to no `count`/`pmi`, and appears on no other route's response. Cached with the rolling 6h class (the last path segment is not in the trend list).
 
 ## compare
 

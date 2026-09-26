@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
+import type { AttentionQuery, CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -168,6 +168,8 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   sort: q.sort === 'pmi' ? 'pmi' : 'count',
   // `testimony=1` opts in; the label resolves the same way as /testimony so the two agree.
   method: q.testimony === '1' ? (METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod()) : null,
+  // `communities=1` opts in, exactly like testimony's bare flag: anything else is absent.
+  communities: q.communities === '1',
 })
 
 export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => {
@@ -251,6 +253,10 @@ export const parseLensesQuery = (q: Record<string, string | undefined>): LensesQ
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
   a: parseLens(q.a),
   b: parseLens(q.b),
+})
+
+export const parseAttentionQuery = (q: Record<string, string | undefined>): AttentionQuery => ({
+  days: snapDays(q.days, 30),
 })
 
 export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery => ({

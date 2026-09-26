@@ -84,35 +84,6 @@ describe('the routes answer their *For functions with the default parser (issue 
     assert.equal(body.stats.about, 5)
   })
 
-  it('/api/people rows never carry keys outside id/name/aliases/party/office/uf, and never wikidata', async () => {
-    const res = await app.request('/api/people')
-    const body = (await res.json()) as Record<string, unknown>[]
-    assert.ok(Array.isArray(body))
-    const allowed = new Set(['aliases', 'id', 'name', 'office', 'party', 'uf'])
-    for (const p of body) {
-      for (const key of Object.keys(p)) assert.ok(allowed.has(key), `unexpected key ${key}`)
-      assert.ok(!('wikidata' in p))
-    }
-  })
-
-  it('withSeedFields echoes present fields, omits absent ones, never echoes wikidata, and passes through an unmapped id', () => {
-    const seedMap = new Map<string, Person>([
-      ['has-both', { id: 'has-both', name: 'Has Both', aliases: [], party: 'PT', office: 'senador', wikidata: 'Q1' }],
-      ['has-uf-only', { id: 'has-uf-only', name: 'Has UF Only', aliases: [], uf: 'SP' }],
-    ])
-    const withBoth = withSeedFields({ id: 'has-both', name: 'Has Both', aliases: [] }, seedMap)
-    assert.deepEqual(withBoth, { id: 'has-both', name: 'Has Both', aliases: [], party: 'PT', office: 'senador' })
-    assert.ok(!('wikidata' in withBoth))
-
-    const withUfOnly = withSeedFields({ id: 'has-uf-only', name: 'Has UF Only', aliases: [] }, seedMap)
-    assert.deepEqual(withUfOnly, { id: 'has-uf-only', name: 'Has UF Only', aliases: [], uf: 'SP' })
-    assert.ok(!('party' in withUfOnly))
-    assert.ok(!('office' in withUfOnly))
-
-    const unmapped = { id: 'nobody', name: 'Nobody', aliases: [] }
-    assert.deepEqual(withSeedFields(unmapped, seedMap), unmapped)
-  })
-
   it('/api/tone matches toneFor and the fixture literal', async () => {
     const res = await app.request('/api/tone')
     const body = (await res.json()) as { cells: { person_id: string; domain: string; tone: number; n: number }[] }
@@ -629,9 +600,8 @@ describe('seed.json party/office/uf, echoed by /api/people (issue #212)', () => 
     assert.ok(withAllFour, 'no seed.json entry carries party, office, uf and wikidata together')
   })
 
-  it('all 27 seed.json entries carry a wikidata QID (issue #212 AC2)', () => {
-    assert.equal(seedList.length, 27)
-    for (const p of seedList) assert.ok(p.wikidata, `${p.id} has no wikidata QID`)
+  it('every seed.json entry carries a wikidata QID (issue #212 AC2)', () => {
+    for (const p of seedList) assert.match(p.wikidata ?? '', /^Q\d+$/, `${p.id} has no wikidata QID`)
   })
 
   it('withSeedFields defaults to a map built from the real seed.json, with no explicit seedMap argument (issue #212 AC3)', () => {

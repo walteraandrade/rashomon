@@ -143,7 +143,10 @@ describe('documented facts per route', () => {
     assert.match(docsText, /domain:<host>/)
     assert.match(docsText, /lean:<left\|right\|center>/)
     assert.match(docsText, /source:<name>/)
-    assert.match(docsText, /falls back to `?all`?/)
+    // Specific enough that a generic "falls back to `all`" sentence elsewhere in the docs
+    // (there is one, for the shared source/kind/domain/lean list parameters) cannot satisfy
+    // it: this one must also say what the fallback actually is, the full corpus.
+    assert.match(docsText, /falls? back to `?all`?[^.]{0,20}full corpus/i)
   })
 
   it('/api/people/:id/week (issue #147 AC21/AC22): calendar days, BRT, about + per-day terms, rolling 6h cache', () => {

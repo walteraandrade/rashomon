@@ -1671,6 +1671,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       compare: queries.compare(lula, tarcisio, { ...scope, limit: 5 }),
       week: queries.week(lula, { ...scope, limit: 8 }),
       weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
+      attention: queries.attention(lula, { days: 14 }),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)

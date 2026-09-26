@@ -13,6 +13,7 @@ import {
   pruneRemovedP,
   tonedSources,
   truncateText,
+  upsertAttentionP,
   upsertPersonsP,
   writeBatchDocs,
   writeBatchRows,
@@ -590,6 +591,30 @@ describe('the write-path behaviours store.ts pins for its single implementation'
       names: (await db.query<{ name: string }>(`select name from doc_candidates where doc_id = $1 order by 1`, [docId])).rows.map((r) => r.name),
     })
     assert.deepEqual(await rowsFor(), { persons: [persons[0].id], terms: [{ term: 'exemplo', kind: 'word' }], names: ['Fulano De Tal'] })
+  })
+})
+
+describe('#211: upsertAttention', () => {
+  before(seed)
+
+  it('re-inserting the same (person_id, day) with a different views value updates it in place, never a second row (AC6)', async () => {
+    const [lula] = persons
+    const day = '2026-01-15'
+    await upsertAttentionP([{ person_id: lula.id, day, views: 100 }])
+    await upsertAttentionP([{ person_id: lula.id, day, views: 250 }])
+    const rows = (await db.query<{ views: number }>(`select views from person_attention where person_id = $1 and day = $2`, [lula.id, day])).rows
+    assert.deepEqual(rows, [{ views: 250 }])
+  })
+
+  it('removing a person via pruneRemoved deletes her person_attention rows through the FK cascade (AC7)', async () => {
+    const doomed = { id: 'doomed-attention', name: 'Doomed', aliases: ['Doomed'] }
+    await upsertPersonsP([doomed])
+    await upsertAttentionP([{ person_id: doomed.id, day: '2026-01-15', views: 10 }])
+    const before = (await db.query<{ n: number }>(`select count(*)::int as n from person_attention where person_id = $1`, [doomed.id])).rows[0].n
+    assert.equal(before, 1)
+    await pruneRemovedP(persons)
+    const after = (await db.query<{ n: number }>(`select count(*)::int as n from person_attention where person_id = $1`, [doomed.id])).rows[0].n
+    assert.equal(after, 0)
   })
 })
 

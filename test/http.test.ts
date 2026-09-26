@@ -83,7 +83,7 @@ describe('getBytes request size guard', () => {
     assert.deepEqual([...exit.value.body], [1, 2, 3])
     assert.equal(fetchFn.calls[0].method, 'GET')
     // Effect's client would add traceparent/b3 by default; fetchClient turns that off.
-    assert.deepEqual([...fetchFn.calls[0].headers.entries()], [['user-agent', 'assoc-graph/0.1 (personal research)']])
+    assert.deepEqual([...fetchFn.calls[0].headers.entries()], [['user-agent', 'assoc-graph/0.1 (personal research; https://github.com/walteraandrade/rashomon)']])
   })
 
   it('fails on a declared content-length over the cap before reading any of the body', async () => {

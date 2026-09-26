@@ -97,6 +97,9 @@ export type WeekQuery = {
   method?: string | null
 }
 
+// No scope: pageviews is a curiosity signal, outside the text pipeline's filters.
+export type AttentionQuery = { days: number }
+
 // `community` only appears in the row shape graphFastQuery renders when q.communities is true;
 // graphFor adds/omits the key on the response object, never leaving it present-but-undefined.
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null; community?: number | null }
@@ -650,6 +653,19 @@ export const candidatesFor = async (q: CandidatesQuery): Promise<{ days: number;
   return { days: q.days, candidates: rows.map((r) => ({ ...r, samples: byName.get(r.name) ?? [] })) }
 }
 
+type AttentionRow = { day: string; views: number }
+
+// The simplest reader in this file. day::text avoids serializing a JS Date's full timestamp.
+const attentionQuery = (person: Person, q: AttentionQuery) => sql`
+  select day::text as day, views from person_attention
+  where person_id = ${person.id} and day >= (current_date - ${q.days}::int)
+  order by day`
+
+export const attentionFor = async (person: Person, q: AttentionQuery): Promise<{ days: number; series: AttentionRow[] }> => {
+  const { rows } = await run<AttentionRow>(attentionQuery(person, q))
+  return { days: q.days, series: rows.map((r) => ({ day: r.day, views: r.views })) }
+}
+
 export const risingFor = async (person: Person, q: RisingQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
   const { rows } = await run<RisingAggregates>(risingQuery(person, q))
@@ -940,6 +956,7 @@ export const queries = {
   compare: compareQuery,
   week: weekQuery,
   weekTestimony: weekTestimonyQuery,
+  attention: attentionQuery,
 } as const
 
 // The text each builder emits. Numbering follows statement shape, not values, so what a
@@ -966,4 +983,5 @@ export const statements = {
   compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
   week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
+  attention: queries.attention(samplePerson, { days: 30 }).text,
 } as const

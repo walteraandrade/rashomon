@@ -15,6 +15,7 @@ export const SIZE_TABLES = [
   'phrase_stage',
   'graph_scopes',
   'graph_terms',
+  'person_attention',
   'term_communities',
 ] as const
 

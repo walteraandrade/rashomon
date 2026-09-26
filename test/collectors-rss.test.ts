@@ -109,6 +109,63 @@ describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no gl
   })
 })
 
+describe('rss.ts reads RSS 1.0 (RDF) feeds, whose items sit as siblings of channel', () => {
+  // issue #213
+  it('extracts one RawDoc per item from rdf:RDF, not nested inside channel', async () => {
+    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    assert.equal(exit.value[0].uri, 'https://www.gov.br/planalto/pt-br/1')
+    assert.match(exit.value[0].text, /Planalto anuncia medida/)
+  })
+
+  // issue #213
+  it('uses dc:date as publishedAt when pubDate is absent, matching the fixture date exactly', async () => {
+    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value[0].publishedAt, new Date('2026-09-02T18:34:00Z').toISOString())
+  })
+
+  // issue #213
+  it('falls back to now when an RDF item has neither pubDate nor dc:date, still producing a RawDoc', async () => {
+    const noDateItem = '<item rdf:about="https://www.gov.br/planalto/pt-br/2"><title>Sem data</title><link>https://www.gov.br/planalto/pt-br/2</link><description>Resumo.</description></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(noDateItem), { status: 200 }))
+    const before = Date.now()
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    const publishedAt = new Date(exit.value[0].publishedAt).getTime()
+    assert.ok(publishedAt >= before, 'publishedAt must fall back to roughly now, not throw or drop the doc')
+  })
+
+  // issue #213
+  it('oficial\'s feed list includes Planalto, fetching 5 feeds in total', async () => {
+    const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
+    const exit = await runTest(collectOficial, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 5)
+    const calls = fetchFn.calls.map((c) => c.url.href)
+    assert.ok(calls.includes('https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS'), 'oficial must fetch the Planalto feed')
+  })
+
+  // issue #213
+  it('a doc from Planalto\'s RDF feed still carries source: oficial and no tone field', async () => {
+    const fetchFn = fakeFetch((c) =>
+      c.url.href === 'https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS'
+        ? new Response(rdfBody(), { status: 200 })
+        : new Response(rssBody(), { status: 200 }),
+    )
+    const exit = await runTest(collectOficial, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const planalto = exit.value.find((d: any) => d.uri === 'https://www.gov.br/planalto/pt-br/1')
+    assert.ok(planalto, 'the Planalto RDF item must reach the collected docs')
+    assert.equal(planalto.source, 'oficial')
+    assert.equal('tone' in planalto, false)
+  })
+})
+
 describe('one failing feed short-circuits the whole run and interrupts its siblings', () => {
   it('a second, hanging feed never resolves once the first one fails', async () => {
     const fetchFn = fakeFetch((c) => (c.url.href === 'https://a/' ? new Response('boom', { status: 500 }) : hanging(c)))

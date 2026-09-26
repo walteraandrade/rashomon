@@ -127,6 +127,20 @@ describe('documented facts per collector', () => {
   })
 })
 
+describe('oficial\'s Planalto RDF feed is documented as included, not excluded', () => {
+  // issue #213
+  it('says Planalto is part of oficial, and that oficial (via rss.ts) reads an RDF feed', () => {
+    assert.match(docsText, /oficial[\s\S]{0,400}Planalto/i, 'no page ties Planalto to the oficial family')
+    assert.match(docsText, /(oficial|rss\.ts)[\s\S]{0,400}RDF/i, 'no page says oficial (or rss.ts) reads an RDF feed')
+  })
+
+  // issue #213
+  it('no longer claims Planalto is unsupported/excluded or that rss.ts assumes RSS 2.0 for every feed', () => {
+    assert.doesNotMatch(docsText, /Planalto[\s\S]{0,120}(unsupported|deliberately exclu[ií]d|is exclu[ií]d)/i)
+    assert.doesNotMatch(docsText, /rss\.ts[\s\S]{0,120}assumes RSS 2\.0/i)
+  })
+})
+
 describe('documented facts per route', () => {
   it('/api/compare (issue #93 AC15): the route, its a/b parameters, and the null-vs-"name" distinction', () => {
     assert.match(docsText, /\/api\/compare/)

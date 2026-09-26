@@ -219,7 +219,7 @@ describe('a control change or a resize keeps the pick and the card in step', () 
     })
   })
 
-  it('a control change on this figure never closes a card another figure opened', async () => {
+  it('a pick here, then an atlas card over it, then a control change: the atlas card survives (ownership, not `selected`)', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]), '/docs': { docs: [], total: 0 } })
@@ -227,12 +227,16 @@ describe('a control change or a resize keeps the pick and the card in step', () 
       const { mount } = await import('../src/ui/figures/compare.js')
       mount(els.compare, { people, initial: {} })
       await flush()
+      els.compareRuler.querySelectorAll('[data-term]')[0].fire('click')
+      await flush()
+      assert.equal(docsCard.openedBy('compare'), true)
       docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
       await flush()
+      assert.equal(docsCard.openedBy('compare'), false, 'the atlas now owns the card')
       els.compareDays.value = '7'
       els.compareDays.fire('change')
       await flush(220)
-      assert.equal(els.docsDialog.open, true, 'the atlas card must survive a change on #compareDays')
+      assert.equal(els.docsDialog.open, true, 'the atlas card must survive even though this figure still had a pick')
     })
   })
 
@@ -267,6 +271,44 @@ describe('a control change or a resize keeps the pick and the card in step', () 
       els.compareRuler.querySelectorAll('[data-term]')[0].fire('click')
       await flush()
       assert.equal(els.docsDialog.open, false, 'clicking the same word again releases it')
+    })
+  })
+
+  it('a pick made during the reload debounce closes when the new data lands', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/compare.js')
+      mount(els.compare, { people, initial: {} })
+      await flush()
+      routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]), '/docs': { docs: [], total: 0 } })
+      els.compareDays.value = '7'
+      els.compareDays.fire('change')
+      els.compareRuler.querySelectorAll('[data-term]')[0].fire('click')
+      assert.equal(els.docsDialog.open, true, 'the stale ruler is still clickable inside the debounce')
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'a card opened against the previous recorte must close with the new data')
+    })
+  })
+
+  it('a pick made during the reload debounce closes when that reload fails', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/compare': compareData([{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }]), '/docs': { docs: [], total: 0 } })
+      const { mount } = await import('../src/ui/figures/compare.js')
+      mount(els.compare, { people, initial: {} })
+      await flush()
+      const ok = globalThis.fetch
+      globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+        if (new URL(String(input), 'http://localhost').pathname.endsWith('/compare')) throw new Error('offline')
+        return ok(input as RequestInfo, init)
+      }) as typeof fetch
+      els.compareDays.value = '7'
+      els.compareDays.fire('change')
+      els.compareRuler.querySelectorAll('[data-term]')[0].fire('click')
+      assert.equal(els.docsDialog.open, true)
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'the card must not survive over the error note')
     })
   })
 })

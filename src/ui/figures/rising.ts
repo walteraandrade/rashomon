@@ -113,11 +113,17 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     else paintRisingLoading()
   }
 
+  const dropStalePick = () => {
+    if (docsCard.openedBy('rising')) docsCard.close()
+    selected = null
+  }
+
   const paint = (result: Rising) => {
-    // A resize repaint calls this with the same object again; only a new dataset clears the pick.
+    // A resize repaint calls this with the same object again; only a new dataset clears the pick,
+    // and closes a card picked on the previous recorte during the reload debounce.
     const isNewData = result !== data
     data = result
-    if (isNewData) selected = null
+    if (isNewData) dropStalePick()
     lastWidth = $('risingRuler').clientWidth || 0
     root.classList.remove('is-loading')
     repaint()
@@ -125,6 +131,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const paintError = () => {
     data = null
+    dropStalePick()
     root.classList.remove('is-loading')
     paintRisingRulerError()
     $('risingAbout').textContent = ''

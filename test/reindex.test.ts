@@ -12,7 +12,7 @@ import './close.js'
 // so it lives in its own file: node:test runs one process per file, hence its own database.
 
 const lula = persons[0]
-const wide: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all', country: 'all', kind: 'all', limit: 200, min: 1, sort: 'count', method: null }
+const wide: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all', country: 'all', kind: 'all', limit: 200, min: 1, sort: 'count', method: null, communities: false }
 const termsOfKind = (nodes: { term: string; kind: string }[], kind: string) => nodes.filter((n) => n.kind === kind).map((n) => n.term)
 
 describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => {

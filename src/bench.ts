@@ -167,7 +167,7 @@ const measurePhase = async () => {
   const scope = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
   const docs = { ...scope, term: TERM, kind: 'word', limit: 50, offset: 0, day: '' }
   const plans: [string, Sql][] = [
-    ['graph', queries.graph(person, { ...scope, min: 2, sort: 'count', limit: 40 })],
+    ['graph', queries.graph(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
     ['links', queries.links(person, scope, ids)],
     ['sources', queries.sources(person, scope)],
     ['docs', queries.docs(person, docs)],

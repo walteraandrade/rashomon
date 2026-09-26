@@ -51,6 +51,17 @@ describe('insertDoc country (issue #204)', () => {
     await insertDocP({ source: 'rss', uri: 'https://example.org/country-none', text: 'Lula fala sobre saude', publishedAt: now() }, persons)
     assert.equal(await countryOf('https://example.org/country-none'), null)
   })
+
+  it('insertDoc sets docs.country from domain with no separate write (AC3)', async () => {
+    await insertDocP({ source: 'rss', uri: 'https://sapo.pt/ac3', text: 'Lula visita Coimbra', publishedAt: now(), domain: 'sapo.pt' }, persons)
+    assert.equal(await countryOf('https://sapo.pt/ac3'), 'pt')
+
+    await insertDocP({ source: 'rss', uri: 'https://folha.uol.com.br/ac3', text: 'Lula assina decreto', publishedAt: now(), domain: 'folha.uol.com.br' }, persons)
+    assert.equal(await countryOf('https://folha.uol.com.br/ac3'), 'br')
+
+    await insertDocP({ source: 'rss', uri: 'https://example.org/ac3', text: 'Lula recebe ministros', publishedAt: now(), domain: 'example.org' }, persons)
+    assert.equal(await countryOf('https://example.org/ac3'), null)
+  })
 })
 
 describe('insertDoc persons', () => {

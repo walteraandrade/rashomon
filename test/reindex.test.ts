@@ -161,6 +161,18 @@ describe('reindex backfills country from domain (issue #204)', () => {
     const { countriesBackfilled } = await reindexAll(persons)
     assert.equal(countriesBackfilled, 0)
   })
+
+  it('backfill sets country where domain is not null and country is null, leaves domain-less rows untouched (AC3)', async () => {
+    const ptUri2 = 'https://sapo.pt/ac3-backfill'
+    const noDomainUri2 = 'https://example.org/ac3-backfill-no-domain'
+    await db.query(`insert into docs (source, uri, text, published_at, domain) values ('rss', $1, 'Lula em Faro', now(), 'sapo.pt')`, [ptUri2])
+    await db.query(`insert into docs (source, uri, text, published_at) values ('rss', $1, 'Lula em algum lugar 2', now())`, [noDomainUri2])
+
+    const { countriesBackfilled } = await reindexAll(persons)
+    assert.equal(countriesBackfilled, 1)
+    assert.equal(await countryOf(ptUri2), 'pt')
+    assert.equal(await countryOf(noDomainUri2), null)
+  })
 })
 
 describe('reindex builds the lexicon and tags the corpus with it', () => {

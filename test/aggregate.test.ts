@@ -69,6 +69,13 @@ describe('precomputable', () => {
     for (const days of DAYS) assert.equal(precomputable({ ...base, days }), true)
     assert.equal(precomputable({ ...base, days: 14 }), false, 'a window the build never writes is never probed')
   })
+
+  it('precomputable is true only when country is br, alongside the other default conditions (AC7)', () => {
+    const base = { days: 30, domain: 'all', lean: 'all', source: 'all', country: 'br' as const }
+    assert.equal(precomputable(base), true)
+    assert.equal(precomputable({ ...base, country: 'pt' as const }), false)
+    assert.equal(precomputable({ ...base, country: 'all' as const }), false)
+  })
 })
 
 describe('before a build', () => {
@@ -204,6 +211,25 @@ describe('buildGraphAggregates', () => {
     for (const over of outside) {
       const query = q(over)
       assert.equal(precomputable(query), false)
+      const expected = (await live(lula, query)) as { docs: number; about: number }
+      const result = await graphFor(lula, query)
+      assert.deepEqual({ docs: result.stats.docs, about: result.stats.about }, { docs: expected.docs, about: expected.about })
+    }
+  })
+
+  it('graphFor at the default country reads the fast path and equals the live statement (AC8)', async () => {
+    const query = q({ country: 'br' })
+    assert.equal(precomputable(query), true)
+    assert.deepEqual(await fast(lula, query), await live(lula, query))
+    const expected = (await live(lula, query)) as { docs: number; about: number }
+    const result = await graphFor(lula, query)
+    assert.deepEqual({ docs: result.stats.docs, about: result.stats.about }, { docs: expected.docs, about: expected.about })
+  })
+
+  it('graphFor at country=pt and country=all always falls back to the live statement even after a build (AC9)', async () => {
+    for (const country of ['pt', 'all'] as const) {
+      const query = q({ country })
+      assert.equal(precomputable(query), false, `country=${country} must never be precomputable`)
       const expected = (await live(lula, query)) as { docs: number; about: number }
       const result = await graphFor(lula, query)
       assert.deepEqual({ docs: result.stats.docs, about: result.stats.about }, { docs: expected.docs, about: expected.about })

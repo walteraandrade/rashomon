@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
+import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -223,6 +223,34 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
   ...parseScope(q, { days: 30 }),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
+})
+
+const ALL_LENS: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
+
+// domain:<host> / lean:<left|right|center> / source:<name>; anything else falls back to `all`,
+// same "fall back to a full default" convention as parseDomainList/parseLeanList/parseSourceList.
+export const parseLens = (raw: string | undefined): LensSide => {
+  const v = (raw ?? '').trim()
+  if (v.startsWith('domain:')) {
+    const host = v.slice('domain:'.length)
+    if (DOMAIN_TOKEN.test(host)) return { lens: `domain:${host}`, domain: host, lean: 'all', source: 'all' }
+  } else if (v.startsWith('lean:')) {
+    const value = v.slice('lean:'.length)
+    if ((LEANS as string[]).includes(value)) return { lens: `lean:${value}`, domain: 'all', lean: value, source: 'all' }
+  } else if (v.startsWith('source:')) {
+    const value = v.slice('source:'.length)
+    if (SOURCES.includes(value)) return { lens: `source:${value}`, domain: 'all', lean: 'all', source: value }
+  }
+  return ALL_LENS
+}
+
+// No `min`, limit snaps to SMALL_LIMITS: same reasons as parseCompareQuery.
+export const parseLensesQuery = (q: Record<string, string | undefined>): LensesQuery => ({
+  days: snapDays(q.days, 30),
+  kind: parseKindList(q.kind),
+  limit: snapTo(SMALL_LIMITS, q.limit, 40),
+  a: parseLens(q.a),
+  b: parseLens(q.b),
 })
 
 export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery => ({

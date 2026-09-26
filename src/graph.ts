@@ -129,6 +129,24 @@ type CompareTermRow = {
 }
 type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermRow[] }
 
+// One lens per side, echoed back exactly as normalized so a caller can tell an invalid input fell back to 'all'.
+export type LensSide = { lens: string; domain: string; lean: string; source: string }
+
+// No `min`, both selection criteria always run, no `sort`: same reasons as CompareQuery.
+export type LensesQuery = { days: number; kind: string; limit: number; a: LensSide; b: LensSide }
+type LensTermRow = {
+  term: string
+  kind: string
+  is_name: boolean
+  a_count: number | null
+  a_pmi: number | null
+  a_tone: number | null
+  b_count: number | null
+  b_pmi: number | null
+  b_tone: number | null
+}
+type LensesAggregates = { about_a: number; about_b: number; terms: LensTermRow[] }
+
 // `source` must already be normalized by parseSourceList; an unknown or empty source scopes to
 // zero docs. domain+lean resolve into the effective domain scope; an empty intersection produces
 // an empty array for `= any(...)` and correctly matches nothing.
@@ -903,6 +921,110 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   }
 }
 
+// One person, two independently-scoped lenses (compareQuery flipped): each side gets its own
+// n/term_all too, since the two lenses can cover wildly different document counts. `country`
+// is hardcoded to 'br' -- the route takes no `country` param.
+const lensSideCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQuery) => {
+  const names = nameTokens(person)
+  const { domain } = resolveScope(lens.domain, lens.lean)
+  const scope = sql.raw(`scope_${side}`)
+  const tracked = sql.raw(`tracked_${side}`)
+  const about = sql.raw(`about_${side}`)
+  const n = sql.raw(`n_${side}`)
+  const np = sql.raw(`np_${side}`)
+  const termAll = sql.raw(`term_all_${side}`)
+  const termP = sql.raw(`term_p_${side}`)
+  const scored = sql.raw(`scored_${side}`)
+  const top = sql.raw(`${side}_top`)
+  return sql`
+  ${scope} as (
+    select d.id from docs d
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${lens.source} = 'all' or d.source = any(string_to_array(${lens.source}, ',')))
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+      and (${countryFilter('br')})
+  ),
+  ${tracked} as (
+    select s.id from ${scope} s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
+  ),
+  ${about} as (
+    select dp.doc_id from doc_persons dp join ${scope} s on s.id = dp.doc_id where dp.person_id = ${person.id}
+  ),
+  ${n} as materialized (select count(*)::float8 as total from ${tracked}),
+  ${np} as materialized (select count(*)::float8 as total from ${about}),
+  ${termAll} as materialized (
+    select t.term, t.kind, count(*)::float8 as c_t
+    from doc_terms t join ${tracked} s on s.id = t.doc_id group by 1, 2
+  ),
+  ${termP} as materialized (
+    select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
+    from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+    where not ${isName(sql.raw('t.term'), names)}
+    group by 1, 2
+  ),
+  ${scored} as (
+    select p.term, p.kind, p.c_pt::int as count, p.tone,
+      ln((p.c_pt * ${n}.total) / (${np}.total * a.c_t)) / ln(2) as pmi
+    from ${termP} p join ${termAll} a using (term, kind), ${n}, ${np}
+    where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
+  ),
+  ${top}_count as (
+    select term, kind from ${scored} order by count desc, term, kind limit ${q.limit}
+  ),
+  ${top}_pmi as (
+    select term, kind from ${scored} order by ${pmiRank(sql.raw('count'))} desc, term, kind limit ${q.limit}
+  )`
+}
+
+// `is_name` runs once, against the one person's own name tokens: no a/b divergence is possible.
+const lensesQuery = (person: Person, q: LensesQuery) => sql`
+  with
+  ${lensSideCte('a', person, q.a, q)},
+  ${lensSideCte('b', person, q.b, q)},
+  keys as (
+    select term, kind from a_top_count
+    union select term, kind from a_top_pmi
+    union select term, kind from b_top_count
+    union select term, kind from b_top_pmi
+  ),
+  unioned as (
+    select k.term, k.kind,
+      ${isName(sql.raw('k.term'), nameTokens(person))} as is_name,
+      sa.count as a_count, round(sa.pmi::numeric, 2)::float8 as a_pmi, round(sa.tone::numeric, 2)::float8 as a_tone,
+      sb.count as b_count, round(sb.pmi::numeric, 2)::float8 as b_pmi, round(sb.tone::numeric, 2)::float8 as b_tone
+    from keys k
+    left join scored_a sa using (term, kind)
+    left join scored_b sb using (term, kind)
+  )
+  select
+    (select count(*) from about_a)::int as about_a,
+    (select count(*) from about_b)::int as about_b,
+    coalesce((
+      select json_agg(json_build_object(
+        'term', term, 'kind', kind, 'is_name', is_name,
+        'a_count', a_count, 'a_pmi', a_pmi, 'a_tone', a_tone,
+        'b_count', b_count, 'b_pmi', b_pmi, 'b_tone', b_tone
+      ) order by term, kind)
+      from unioned
+    ), '[]'::json) as terms`
+
+// No aggregate exists for lenses; this always runs live, at every window (deliberate).
+export const lensesFor = async (person: Person, q: LensesQuery) => {
+  const { rows } = await run<LensesAggregates>(lensesQuery(person, q))
+  const { about_a, about_b, terms } = rows[0]
+  return {
+    days: q.days,
+    a: { lens: q.a.lens, about: about_a },
+    b: { lens: q.b.lens, about: about_b },
+    terms: terms.map((t) => ({
+      term: t.term,
+      kind: t.kind,
+      a: t.is_name ? ('name' as const) : t.a_count !== null ? { count: t.a_count, pmi: t.a_pmi!, tone: t.a_tone } : null,
+      b: t.is_name ? ('name' as const) : t.b_count !== null ? { count: t.b_count, pmi: t.b_pmi!, tone: t.b_tone } : null,
+    })),
+  }
+}
+
 // The exact builders the routes run, exported so `pnpm bench` can put each one through
 // EXPLAIN (ANALYZE, BUFFERS).
 export const queries = {
@@ -919,6 +1041,7 @@ export const queries = {
   termTestimony: termTestimonyQuery,
   candidates: candidatesQuery,
   compare: compareQuery,
+  lenses: lensesQuery,
   week: weekQuery,
   weekTestimony: weekTestimonyQuery,
 } as const
@@ -929,6 +1052,8 @@ const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample']
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
 const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0, day: '' }
 const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count' }
+const sampleLens: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
+const sampleLenses: LensesQuery = { days: 30, kind: 'all', limit: 40, a: sampleLens, b: sampleLens }
 
 export const statements = {
   graph: queries.graph(samplePerson, sampleGraph).text,
@@ -944,6 +1069,7 @@ export const statements = {
   termTestimony: queries.termTestimony(samplePerson, sampleScope, 'stub', ['word:sample']).text,
   candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,
   compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
+  lenses: queries.lenses(samplePerson, sampleLenses).text,
   week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
 } as const

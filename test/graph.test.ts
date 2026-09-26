@@ -9,6 +9,7 @@ import {
   docsFor,
   docsWhereSql,
   graphFor,
+  lensesFor,
   queries,
   risingFor,
   sourcesFor,
@@ -20,6 +21,7 @@ import {
   type CompareQuery,
   type DocsQuery,
   type GraphQuery,
+  type LensesQuery,
   type RisingQuery,
   type TestimonyQuery,
   type TimelineQuery,
@@ -51,6 +53,8 @@ const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: '
 const toneBase: ToneQuery = { days: 30, min: 3 }
 const testimonyBase: TestimonyQuery = { days: 30, source: 'all', method: 'stub', min: 3 }
 const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40 }
+const allLens = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
+const lensesBase: LensesQuery = { days: 30, kind: 'all', limit: 40, a: allLens, b: allLens }
 
 const node = (g: Awaited<ReturnType<typeof graphFor>>, id: string) => g.nodes.find((n) => n.id === id)
 const sumOf = (rows: { count: number }[]) => rows.reduce((a, r) => a + r.count, 0)
@@ -1523,6 +1527,67 @@ describe('compareFor (issue #93)', () => {
   })
 })
 
+describe('lensesFor (issue #206)', () => {
+  before(seed)
+
+  const term = (r: Awaited<ReturnType<typeof lensesFor>>, t: string, kind = 'word') => r.terms.find((x) => x.term === t && x.kind === kind)
+
+  it('returns identical a/b term figures when a and b resolve to the same lens', async () => {
+    const lens = { lens: 'domain:folha.uol.com.br', domain: 'folha.uol.com.br', lean: 'all', source: 'all' }
+    const r = await lensesFor(tarcisio, { ...lensesBase, a: lens, b: lens })
+    assert.equal(r.a.lens, lens.lens)
+    assert.equal(r.b.lens, lens.lens)
+    assert.equal(r.a.about, r.b.about)
+    assert.ok(r.terms.length > 0)
+    for (const t of r.terms) assert.deepEqual(t.a, t.b)
+  })
+
+  it('never surfaces a term that is one of the person\'s own name words: excluded from both sides\' selection alike, so a mismatched "name" can never occur', async () => {
+    const r = await lensesFor(lula, { ...lensesBase, days: 365, limit: 100 })
+    const names = nameTokens(lula)
+    for (const t of r.terms) assert.ok(!names.includes(t.term), `${t.term} is one of lula's own name words`)
+  })
+
+  it("carries an exact figure for a term inside a's top lists but absent from b's, as null rather than 0", async () => {
+    // lula's g1.globo.com docs (/1, /5) carry "viaja"/"bahia"; his valor.globo.com doc (/6)
+    // never does -- both domains share "reforma"/"tributaria" instead
+    const a = { lens: 'domain:g1.globo.com', domain: 'g1.globo.com', lean: 'all', source: 'all' }
+    const b = { lens: 'domain:valor.globo.com', domain: 'valor.globo.com', lean: 'all', source: 'all' }
+    const r = await lensesFor(lula, { ...lensesBase, days: 200, a, b })
+    assert.ok(term(r, 'viaja')!.a && term(r, 'viaja')!.a !== 'name')
+    assert.equal(term(r, 'viaja')!.b, null)
+    assert.notDeepEqual(term(r, 'viaja')!.b, { count: 0, pmi: 0, tone: null })
+    assert.deepEqual(term(r, 'reforma')!.a, term(r, 'reforma')!.b)
+  })
+
+  it('yields a non-null tone on a GDELT-sourced lens, and a null tone on a non-GDELT lens', async () => {
+    const a = { lens: 'source:gdelt', domain: 'all', lean: 'all', source: 'gdelt' }
+    const b = { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' }
+    const r = await lensesFor(tarcisio, { ...lensesBase, a, b })
+    const geo = term(r, 'geopolitica')!
+    assert.ok(geo.a && geo.a !== 'name' && geo.a.tone !== null)
+    for (const t of r.terms) {
+      if (t.b && t.b !== 'name') assert.equal(t.b.tone, null)
+    }
+  })
+
+  it('returns about: 0 on both sides and an empty terms list outside any docs window', async () => {
+    const lens = { lens: 'domain:doesnotexist.example', domain: 'doesnotexist.example', lean: 'all', source: 'all' }
+    const r = await lensesFor(lula, { ...lensesBase, a: lens, b: lens })
+    assert.equal(r.a.about, 0)
+    assert.equal(r.b.about, 0)
+    assert.deepEqual(r.terms, [])
+  })
+
+  it("echoes back the query's own a.lens/b.lens labels verbatim (parseLens's fallback happens before lensesFor runs)", async () => {
+    const a = { lens: 'domain:folha.uol.com.br', domain: 'folha.uol.com.br', lean: 'all', source: 'all' }
+    const b = allLens
+    const r = await lensesFor(lula, { ...lensesBase, a, b })
+    assert.equal(r.a.lens, 'domain:folha.uol.com.br')
+    assert.equal(r.b.lens, 'all')
+  })
+})
+
 // docsWhereSql carries its own copy of the kind set, used only to decide whether an
 // unrecognized kind list falls back to matching any kind (issue #108's own postmortem: a stale
 // copy here would silently start treating an unknown token as a known, empty subset instead of
@@ -1572,6 +1637,13 @@ describe('statements render the same text the routes run (issue #131)', () => {
       termTestimony: queries.termTestimony(lula, scope, 'kikori', ['word:a']),
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),
       compare: queries.compare(lula, tarcisio, { ...scope, limit: 5 }),
+      lenses: queries.lenses(lula, {
+        days: scope.days,
+        kind: scope.kind,
+        limit: 5,
+        a: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
+        b: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
+      }),
       week: queries.week(lula, { ...scope, limit: 8 }),
       weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
     }

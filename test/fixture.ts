@@ -220,6 +220,17 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://lentesteste.example/59', text: 'Lula recebe Luiz em evento de posse', publishedAt: daysAgo(3900), domain: 'lentesteste.example' },
   { source: 'rss', uri: 'https://lentesteste.example/60', text: 'Lula recebe Luiz outra vez no palacio', publishedAt: daysAgo(3901), domain: 'lentesteste.example' },
   { source: 'rss', uri: 'https://lentesteste.example/61', text: 'Lula e Inacio se encontram no Planalto', publishedAt: daysAgo(3902), domain: 'lentesteste.example' },
+  // docs 62-63: issue #207's comention fixture. Two more docs naming both Lula and Tarcísio,
+  // inside the default 30-day window, so together with doc /2 ("Lula e Tarcísio disputam a
+  // eleição", day2) the (lula, tarcisio) pair reaches count 3, clearing the default min:3 floor
+  // instead of always sitting one below it. Domain exemplo.pt (reused from docs 56/58) gives
+  // them country='pt', which every other route here excludes by default (country='br'), so
+  // country-blind default-scope literals pinned elsewhere in this fixture (stats.docs/about,
+  // pmi, signature) do not shift; only comentionFor, which this route deliberately never filters
+  // by country, and the explicit country='pt'/'all' tests in the "country filtering" describe
+  // block, see them (the latter's pinned .pt-docs-about-lula count grows from 2 to 4).
+  { source: 'rss', uri: 'https://exemplo.pt/62', text: 'Lula e Tarcísio participam de cúpula lusófona em Lisboa', publishedAt: daysAgo(12), domain: 'exemplo.pt' },
+  { source: 'rss', uri: 'https://exemplo.pt/63', text: 'Lula recebe Tarcísio para agenda bilateral em Lisboa', publishedAt: daysAgo(13), domain: 'exemplo.pt' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

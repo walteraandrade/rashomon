@@ -11,6 +11,7 @@ import {
   SMALL_LIMITS,
   SOURCES,
   parseCandidatesQuery,
+  parseComentionQuery,
   parseCompareQuery,
   parseCountryList,
   parseDocsQuery,
@@ -217,6 +218,31 @@ describe('parseTestimonyQuery (issue #21)', () => {
   })
 })
 
+describe('parseComentionQuery (issue #207)', () => {
+  it('snaps days/min the same as its neighbours, defaulting to 30/3', () => {
+    assert.equal(parseComentionQuery({}).days, 30)
+    assert.equal(parseComentionQuery({ days: 'nope' }).days, 30)
+    assert.equal(parseComentionQuery({ days: '9999' }).days, 365)
+    assert.equal(parseComentionQuery({}).min, 3)
+    assert.equal(parseComentionQuery({ min: 'nope' }).min, 3)
+    assert.equal(parseComentionQuery({ min: '4' }).min, 3)
+    assert.equal(parseComentionQuery({ min: '5000' }).min, 5)
+  })
+
+  it('keeps source/lean at all on an unknown token, and threads a known one through', () => {
+    assert.equal(parseComentionQuery({}).source, 'all')
+    assert.equal(parseComentionQuery({ source: 'bogus' }).source, 'all')
+    assert.equal(parseComentionQuery({ source: 'gnews,bogus' }).source, 'gnews')
+    assert.equal(parseComentionQuery({}).lean, 'all')
+    assert.equal(parseComentionQuery({ lean: 'bogus' }).lean, 'all')
+    assert.equal(parseComentionQuery({ lean: 'left,bogus' }).lean, 'left')
+  })
+
+  it('has no domain, kind, sort or country field', () => {
+    assert.deepEqual(Object.keys(parseComentionQuery({})).sort(), ['days', 'lean', 'min', 'source'])
+  })
+})
+
 describe('parseCompareQuery (issue #93)', () => {
   it('days defaults to 30 and snaps to the nearest allowed window', () => {
     assert.equal(parseCompareQuery({}).days, 30)
@@ -369,6 +395,27 @@ describe('parseDocsQuery.day (issue #147)', () => {
     const nudge = new Date(`${today}T15:00:00.000Z`)
     nudge.setUTCDate(nudge.getUTCDate() + 1)
     assert.equal(parseDocsQuery({ day: brtDate(nudge) }).day, '')
+  })
+})
+
+describe('parseDocsQuery.with (issue #207)', () => {
+  it('drops an unknown with id', () => {
+    assert.equal(parseDocsQuery({ with: 'not-a-tracked-person' }, 'lula').with, '')
+    assert.equal(parseDocsQuery({ with: '' }, 'lula').with, '')
+    assert.equal(parseDocsQuery({}, 'lula').with, '')
+  })
+
+  it('drops with equal to the route\'s own :id', () => {
+    assert.equal(parseDocsQuery({ with: 'lula' }, 'lula').with, '')
+  })
+
+  it('keeps a known other id', () => {
+    assert.equal(parseDocsQuery({ with: 'tarcisio' }, 'lula').with, 'tarcisio')
+  })
+
+  it('falls back to no filter when personId is omitted, like every caller that predates with', () => {
+    assert.equal(parseDocsQuery({ with: 'tarcisio' }).with, 'tarcisio')
+    assert.equal(parseDocsQuery({}).with, '')
   })
 })
 

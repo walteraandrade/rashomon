@@ -1,7 +1,8 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { AttentionQuery, CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
+import personsSeed from '../seed.json' with { type: 'json' }
+import type { AttentionQuery, CandidatesQuery, ComentionQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -143,6 +144,15 @@ export const COUNTRIES = ['br', 'pt']
 
 // Unlike every other shared filter, omitted/all-invalid falls back to 'br' (excludes .pt), not
 // 'all'. Naming both known tokens, or 'all' itself, collapses to 'all'.
+// The id set `with` validates against, like SOURCES/LEANS/KINDS.
+const PERSON_IDS = new Set((personsSeed as { id: string }[]).map((p) => p.id))
+
+// Unknown id, empty, or the route's own :id (self co-mention) fall back to '' -- no filter.
+const withId = (raw: string | undefined, personId: string): string => {
+  const v = (raw ?? '').trim()
+  return v && v !== personId && PERSON_IDS.has(v) ? v : ''
+}
+
 export const parseCountryList = (v: string | undefined): 'br' | 'pt' | 'all' => {
   const tokens = new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => s === 'all' || COUNTRIES.includes(s)))
   if (tokens.has('all') || (tokens.has('br') && tokens.has('pt'))) return 'all'
@@ -172,7 +182,8 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   communities: q.communities === '1',
 })
 
-export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => {
+// personId is the route's own :id, rejecting a self-referential `with`; omitted by every caller that predates it.
+export const parseDocsQuery = (q: Record<string, string | undefined>, personId = ''): DocsQuery => {
   const scope = parseScope(q, { days: 30 })
   return {
     ...scope,
@@ -180,6 +191,7 @@ export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery
     limit: snapTo(LIMITS, q.limit, 50),
     offset: snapTo(OFFSETS, q.offset, 0),
     day: keepDay(q.day, scope.days),
+    with: withId(q.with, personId),
   }
 }
 
@@ -213,6 +225,14 @@ export const parseTestimonyQuery = (q: Record<string, string | undefined>): Test
     min: snapTo(MINS, q.min, 3),
   }
 }
+
+// No domain/kind/sort (see ComentionQuery); min defaults to 3, like /api/tone and /api/rising.
+export const parseComentionQuery = (q: Record<string, string | undefined>): ComentionQuery => ({
+  days: snapDays(q.days, 30),
+  source: parseSourceList(q.source),
+  lean: parseLeanList(q.lean),
+  min: snapTo(MINS, q.min, 3),
+})
 
 // Own literals (7 / 5 / 50), distinct from every other route's defaults.
 export const parseCandidatesQuery = (q: Record<string, string | undefined>): CandidatesQuery => ({

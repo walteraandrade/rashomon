@@ -35,6 +35,7 @@ export type DocsQuery = {
   limit: number
   offset: number
   day: string
+  with: string // other tracked person's id, or '' for no filter; see docsWithPerson
 }
 
 export type RisingQuery = {
@@ -64,6 +65,9 @@ export type ToneQuery = {
   days: number
   min: number
 }
+
+// Cross-person like ToneQuery: no domain, no country, no kind/sort -- a count is not per-term.
+export type ComentionQuery = { days: number; source: string; lean: string; min: number }
 
 export type TestimonyQuery = {
   days: number
@@ -405,12 +409,16 @@ export const docsWhereSql = docsWhere('', 'all').text
 const docsDay = (day: string) =>
   sql`(${day} = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif(${day}, '')::date)`
 
+// '' renders to nothing at all, so a caller who never sends `with` keeps byte-identical SQL.
+const docsWithPerson = (withId: string) =>
+  withId === '' ? sql`` : sql` and exists (select 1 from doc_persons dp2 where dp2.doc_id = d.id and dp2.person_id = ${withId})`
+
 const docsQuery = (person: Person, q: DocsQuery) => sql`
   with ${scopeCte(person, q)}
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
   where ${docsWhere(q.term, q.kind)}
-    and ${docsDay(q.day)}
+    and ${docsDay(q.day)}${docsWithPerson(q.with)}
   order by d.published_at desc, d.id desc
   limit ${q.limit} offset ${q.offset}`
 
@@ -419,7 +427,7 @@ const docsCountQuery = (person: Person, q: DocsQuery) => sql`
   select count(*)::int as total
   from docs d join about a on a.doc_id = d.id
   where ${docsWhere(q.term, q.kind)}
-    and ${docsDay(q.day)}`
+    and ${docsDay(q.day)}${docsWithPerson(q.with)}`
 
 export const docsFor = async (person: Person, q: DocsQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
@@ -490,6 +498,29 @@ export const toneFor = async (q: ToneQuery) => {
   const [cells, people] = await Promise.all([run<ToneCellRow>(toneQuery(q)), run<ToneListRow>(tonePersonsQuery)])
   const domains = [...new Set(cells.rows.map((c) => c.domain))].sort()
   return { persons: people.rows, domains, cells: cells.rows }
+}
+
+type ComentionPairRow = { a: string; b: string; count: number }
+
+// `b.person_id > a.person_id` gives the stable a-before-b ordering the response documents.
+const comentionQuery = (q: ComentionQuery) => {
+  const { domain } = resolveScope('all', q.lean)
+  return sql`
+  select a.person_id as a, b.person_id as b, count(*)::int as count
+  from doc_persons a
+  join doc_persons b on b.doc_id = a.doc_id and b.person_id > a.person_id
+  join docs d on d.id = a.doc_id
+  where d.published_at >= now() - make_interval(days => ${q.days})
+    and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+    and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+  group by a.person_id, b.person_id
+  having count(*) >= ${q.min}
+  order by a.person_id, b.person_id`
+}
+
+export const comentionFor = async (q: ComentionQuery) => {
+  const [pairs, people] = await Promise.all([run<ComentionPairRow>(comentionQuery(q)), run<ToneListRow>(tonePersonsQuery)])
+  return { days: q.days, persons: people.rows, pairs: pairs.rows } // a pair below min is simply absent, never a zero-count row
 }
 
 // Scoped to one person: testimony's PK carries person_id, so the inner join on
@@ -1092,13 +1123,15 @@ export const queries = {
   week: weekQuery,
   weekTestimony: weekTestimonyQuery,
   attention: attentionQuery,
+  comention: comentionQuery,
 } as const
 
 // The text each builder emits. Numbering follows statement shape, not values, so what a
 // sample call renders is byte-for-byte what the handler sends (test/graph.test.ts pins it).
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
 const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
-const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0, day: '' }
+const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0, day: '', with: '' }
+const sampleComention: ComentionQuery = { days: 30, source: 'all', lean: 'all', min: 3 }
 const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count', communities: false }
 const sampleLens: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
 const sampleLenses: LensesQuery = { days: 30, kind: 'all', limit: 40, a: sampleLens, b: sampleLens }
@@ -1122,4 +1155,5 @@ export const statements = {
   week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
   attention: queries.attention(samplePerson, { days: 30 }).text,
+  comention: queries.comention(sampleComention).text,
 } as const

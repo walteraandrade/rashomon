@@ -22,7 +22,7 @@ describe('Vercel-Cache-Tag on /api reads', () => {
   before(seed)
 
   it('tags every cacheable response with CACHE_TAG, so one delete by tag drops them all', async () => {
-    for (const url of ['/api/people', '/api/people/lula/graph', '/api/people/lula/sources', '/api/compare?a=lula&b=bolsonaro']) assert.equal(await tag(url), CACHE_TAG, url)
+    for (const url of ['/api/people', '/api/people/lula/graph', '/api/people/lula/sources', '/api/compare?a=lula&b=bolsonaro', '/api/comention']) assert.equal(await tag(url), CACHE_TAG, url)
   })
 
   it('tags nothing that is not stored', async () => {
@@ -48,6 +48,7 @@ describe('Cache-Control on /api reads', () => {
       '/api/tone',
       '/api/compare?a=lula&b=bolsonaro',
       '/api/people/lula/week',
+      '/api/comention',
     ])
       assert.deepEqual(await header(url), { status: 200, cache: ROLLING }, url)
   })

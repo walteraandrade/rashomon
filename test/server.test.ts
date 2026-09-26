@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
-import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
-import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
+import { comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
+import { parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
 import { insertDocP } from '../src/store.js'
@@ -398,6 +398,42 @@ describe('GET /api/compare (issue #93)', () => {
   })
 })
 
+describe('GET /api/comention (issue #207)', () => {
+  before(seed)
+
+  it('matches comentionFor with the default parser', async () => {
+    const res = await app.request('/api/comention')
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    const direct = await comentionFor(parseComentionQuery({}))
+    assert.deepEqual(JSON.parse(JSON.stringify(direct)), body)
+  })
+
+  it('returns { days, persons, pairs } and nothing else', async () => {
+    const res = await app.request('/api/comention')
+    const body = (await res.json()) as Record<string, unknown>
+    assert.deepEqual(Object.keys(body).sort(), ['days', 'pairs', 'persons'])
+  })
+
+  it('lists every tracked person, and the lula/tarcisio pair clearing the default min', async () => {
+    const res = await app.request('/api/comention')
+    const body = (await res.json()) as { persons: { id: string }[]; pairs: { a: string; b: string; count: number }[] }
+    assert.deepEqual(body.persons.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
+    assert.ok(body.pairs.some((p) => p.a === 'lula' && p.b === 'tarcisio' && p.count === 3))
+  })
+
+  it('threads days/source/lean/min through the query string', async () => {
+    const res = await app.request('/api/comention?min=999')
+    const body = (await res.json()) as { pairs: unknown[] }
+    assert.deepEqual(body.pairs, [])
+  })
+
+  it('is cached, unlike a 404', async () => {
+    const res = await app.request('/api/comention')
+    assert.ok(res.headers.get('cache-control'))
+  })
+})
+
 describe('GET /api/people/:id/lenses (issue #206)', () => {
   before(seed)
 
@@ -548,6 +584,27 @@ describe('GET /api/people/:id/docs day= unfilters on a bad value (issue #147, ke
     const open = (await (await app.request('/api/people/lula/docs')).json()) as { total: number }
     const future = (await (await app.request('/api/people/lula/docs?day=2099-01-01')).json()) as { total: number }
     assert.equal(future.total, open.total)
+  })
+})
+
+describe('GET /api/people/:id/docs?with= (issue #207)', () => {
+  before(seed)
+
+  it('matches docsFor for a known other id', async () => {
+    const res = await app.request('/api/people/lula/docs?with=tarcisio')
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    const direct = await docsFor(lula, parseDocsQuery({ with: 'tarcisio' }, 'lula'))
+    assert.deepEqual(JSON.parse(JSON.stringify(direct)), body)
+    assert.equal((body as { total: number }).total, 1)
+  })
+
+  it('an unknown with id, or with equal to the route\'s own :id, returns byte-identical output to no with at all', async () => {
+    const open = (await (await app.request('/api/people/lula/docs')).json()) as unknown
+    const unknown = (await (await app.request('/api/people/lula/docs?with=nobody-tracked')).json()) as unknown
+    const self = (await (await app.request('/api/people/lula/docs?with=lula')).json()) as unknown
+    assert.deepEqual(unknown, open)
+    assert.deepEqual(self, open)
   })
 })
 

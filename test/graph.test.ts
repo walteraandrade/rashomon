@@ -6,6 +6,7 @@ import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import {
+  comentionFor,
   compareFor,
   docsFor,
   docsWhereSql,
@@ -19,6 +20,7 @@ import {
   timelineFor,
   toneFor,
   weekFor,
+  type ComentionQuery,
   type CompareQuery,
   type DocsQuery,
   type GraphQuery,
@@ -48,7 +50,8 @@ const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
 const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, min: 1, sort: 'count', communities: false }
-const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', limit: 50, offset: 0, day: '' }
+const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', limit: 50, offset: 0, day: '', with: '' }
+const comentionBase: ComentionQuery = { days: 30, source: 'all', lean: 'all', min: 3 }
 const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 20, min: 1 }
 const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
@@ -582,8 +585,9 @@ describe('country filtering', () => {
     const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
     assert.ok(node(gPt, 'word:lusotropicalista'))
     assert.ok(!node(gPt, 'word:colaborativo'))
-    assert.equal(gPt.stats.docs, 2, 'the two .pt docs about lula in the fixture (56 and 58)')
-    assert.equal(gPt.stats.about, 2)
+    // widened by docs /62-/63 (issue #207's comention fixture, also exemplo.pt, also about lula)
+    assert.equal(gPt.stats.docs, 4, 'the four .pt docs about lula in the fixture (56, 58, 62, 63)')
+    assert.equal(gPt.stats.about, 4)
     assert.equal(gAll.stats.docs, gDefault.stats.docs + gPt.stats.docs)
   })
 
@@ -721,6 +725,28 @@ describe('docsFor', () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss,gkg' })
     assert.equal(total, 4)
     assert.ok(found.some((d) => d.source === 'gkg'))
+  })
+
+  // issue #207
+  it('with= restricts to docs that also name the other person', async () => {
+    // doc /2 ("Lula e Tarcísio disputam a eleição") is the only non-.pt doc naming both lula and
+    // tarcisio; docs /62-/63 also do but sit on exemplo.pt, excluded by the default country='br'
+    // scope docsBase already carries, the same way graphFor excludes them (see "country
+    // filtering" above).
+    const { total, docs: found } = await docsFor(lula, { ...docsBase, with: 'tarcisio' })
+    assert.equal(total, 1)
+    assert.equal(found[0].uri, 'at://did:plc:x/post/2')
+  })
+
+  it('with= unchanged output when omitted: byte-identical rendered SQL to before this parameter existed', () => {
+    const preExisting = {
+      docs:
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)\n  order by d.published_at desc, d.id desc\n  limit $17 offset $18",
+      docsCount:
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select count(*)::int as total\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)",
+    }
+    assert.equal(statements.docs, preExisting.docs)
+    assert.equal(statements.docsCount, preExisting.docsCount)
   })
 })
 
@@ -1128,7 +1154,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
 
   const totalFor = async (q: TimelineQuery) =>
-    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, country: q.country, limit: 500, offset: 0, day: '' })).total
+    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, country: q.country, limit: 500, offset: 0, day: '', with: '' })).total
 
   it('a doc exactly one bucket width old lands in the newest bucket, not the second', async () => {
     await withDocs([{ offset: '7 days' }], async () => {
@@ -1292,7 +1318,7 @@ describe('timelineFor: future-dated doc', () => {
   it('keeps the bucket-sum invariant against docsFor total when a doc is future-dated', async () => {
     const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' } as const
     const rows = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
-    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '' })
+    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '', with: '' })
     assert.equal(total, 1, 'sanity: only the future doc falls inside this 30-day window')
     assert.equal(sumOf(rows), total)
   })
@@ -1473,6 +1499,100 @@ describe('testimonyFor (issue #21)', () => {
     // lula has zero bluesky-sourced testimony rows in the fixture
     const noDocs = await testimonyFor(lula, { ...testimonyBase, source: 'bluesky' })
     assert.deepEqual(noDocs.overall, { score: null, n: 0 })
+  })
+})
+
+describe('comentionFor (issue #207)', () => {
+  before(seed)
+
+  const pair = (r: Awaited<ReturnType<typeof comentionFor>>, a: string, b: string) => r.pairs.find((p) => p.a === a && p.b === b)
+
+  it('pairs clear the min floor and order a before b', async () => {
+    // doc /2 ("Lula e Tarcísio disputam a eleição", day2) plus docs /62-/63 (issue #207's
+    // fixture, day12/day13) put (lula, tarcisio) at count 3 in the default 30-day window,
+    // clearing the default min:3 floor exactly, not above it.
+    const r = await comentionFor(comentionBase)
+    assert.deepEqual(pair(r, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 3 })
+    // 'lula' < 'tarcisio' as a plain string, so the pair is keyed a=lula/b=tarcisio and never
+    // the reverse -- asserted the other way round finds nothing.
+    assert.equal(pair(r, 'tarcisio', 'lula'), undefined)
+  })
+
+  it('returns every person even with no pairs, and a pair below min or with zero shared docs is absent', async () => {
+    const r = await comentionFor({ ...comentionBase, min: 999 })
+    assert.deepEqual(
+      r.persons.map((p) => p.id),
+      ['bolsonaro', 'lula', 'tarcisio'],
+    )
+    assert.deepEqual(r.pairs, [])
+  })
+
+  it('a pair below the default floor is absent, but present once min is lowered to its real count', async () => {
+    // doc /37 ("Tarcísio e Bolsonaro debatem aliança...") sits at day35, just outside the
+    // default 30-day window, so (bolsonaro, tarcisio) has zero shared docs there.
+    const r30 = await comentionFor(comentionBase)
+    assert.equal(pair(r30, 'bolsonaro', 'tarcisio'), undefined)
+    // widening the window to 90 days brings doc /37 into scope, at count 1 -- below the
+    // default min:3 floor, so still absent there, but present once min drops to 1.
+    const r90 = await comentionFor({ ...comentionBase, days: 90 })
+    assert.equal(pair(r90, 'bolsonaro', 'tarcisio'), undefined)
+    const r90min1 = await comentionFor({ ...comentionBase, days: 90, min: 1 })
+    assert.deepEqual(pair(r90min1, 'bolsonaro', 'tarcisio'), { a: 'bolsonaro', b: 'tarcisio', count: 1 })
+  })
+
+  it('respects source and lean', async () => {
+    // doc /2 is bluesky; docs /62-/63 are rss; narrowing to a source none of them use drops
+    // the pair entirely, while narrowing to just rss keeps 62/63 (count 2, still below min:3).
+    const wrongSource = await comentionFor({ ...comentionBase, source: 'gkg', min: 1 })
+    assert.equal(pair(wrongSource, 'lula', 'tarcisio'), undefined)
+    const rssOnly = await comentionFor({ ...comentionBase, source: 'rss', min: 1 })
+    assert.deepEqual(pair(rssOnly, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 2 })
+    const allSources = await comentionFor({ ...comentionBase, source: 'bluesky,rss' })
+    assert.deepEqual(pair(allSources, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 3 })
+    // none of docs 2/62/63 sit on a lean-labeled domain (outlets.json has no entry for
+    // ana.bsky.social or exemplo.pt), so any explicit lean excludes the whole pair.
+    const leaned = await comentionFor({ ...comentionBase, lean: 'left', min: 1 })
+    assert.equal(pair(leaned, 'lula', 'tarcisio'), undefined)
+  })
+
+  it('carries no country, kind, domain or sort field, unlike graph/rising', () => {
+    assert.deepEqual(Object.keys(comentionBase).sort(), ['days', 'lean', 'min', 'source'])
+  })
+
+  it('keeps the whole response shape', async () => {
+    const r = await comentionFor(comentionBase)
+    assert.deepEqual(Object.keys(r).sort(), ['days', 'pairs', 'persons'])
+    for (const p of r.persons) assert.deepEqual(Object.keys(p).sort(), ['id', 'name'])
+    for (const row of r.pairs) assert.deepEqual(Object.keys(row).sort(), ['a', 'b', 'count'])
+  })
+})
+
+describe('statements pin comentionFor\'s rendered SQL shape (issue #207)', () => {
+  it('is stable across two calls with different days/min/source/lean values', () => {
+    const a = queries.comention({ days: 7, source: 'rss', lean: 'left', min: 1 })
+    const b = queries.comention({ days: 365, source: 'all', lean: 'all', min: 5 })
+    assert.equal(a.text, b.text)
+    assert.notDeepEqual(a.values, b.values)
+  })
+
+  it('binds exactly as many values as placeholders, numbered in order', () => {
+    const q = queries.comention(comentionBase)
+    const placeholders = q.text.match(/\$\d+/g) ?? []
+    assert.deepEqual(placeholders, placeholders.map((_, i) => `$${i + 1}`))
+    assert.equal(placeholders.length, q.values.length)
+  })
+
+  it('orders pairs so a < b, grouped and floored by min', () => {
+    assert.match(statements.comention, /b\.person_id > a\.person_id/)
+    assert.match(statements.comention, /group by a\.person_id, b\.person_id/)
+    assert.match(statements.comention, /having count\(\*\) >= \$\d+/)
+    assert.match(statements.comention, /order by a\.person_id, b\.person_id/)
+  })
+
+  it('is documented: no domain/kind/sort on this route, and with= on /docs', () => {
+    assert.match(docsText, /comention/)
+    assert.match(docsText, /no `domain`[\s\S]{0,80}`kind`[\s\S]{0,80}`sort`/i)
+    assert.match(docsText, /`with`[\s\S]{0,400}\/api\/people\/:id\/docs/i)
   })
 })
 
@@ -1753,8 +1873,11 @@ describe('statements render the same text the routes run (issue #131)', () => {
       graphFastCommunities: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: true }),
       links: queries.links(lula, scope, ['word:a', 'word:b']),
       sources: queries.sources(lula, scope),
-      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
-      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
+      // `with` stays '' here unlike every other field: it is the one value that changes the
+      // statement's SHAPE (docsWithPerson), not just its bound values, so it must match the
+      // sample to keep this "shape, not value" comparison meaningful.
+      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '', with: '' }),
+      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '', with: '' }),
       timeline: queries.timeline(lula, { ...scope, term: 'x', kind: 'phrase', bucket: 'week' }),
       rising: queries.rising(lula, { ...scope, baseline: 14, min: 1, limit: 5 }),
       tone: queries.tone({ days: 1, min: 1 }),
@@ -1772,6 +1895,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       week: queries.week(lula, { ...scope, limit: 8 }),
       weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
       attention: queries.attention(lula, { days: 14 }),
+      comention: queries.comention({ days: scope.days, source: scope.source, lean: scope.lean, min: 1 }),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)

@@ -1,4 +1,5 @@
 import seedJson from '../seed.json' with { type: 'json' }
+import { communities as louvainCommunities, type CommunityEdge } from './communities.js'
 import { db, migrateP } from './db.js'
 import { nameTokens } from './extract.js'
 import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
@@ -116,11 +117,87 @@ const windowStatements = (days: number, persons: Person[], top = TOP) => [
 
 const run = (q: { text: string; values: unknown[] }) => db.query(q.text, q.values)
 
-// One window per transaction: readers see the previous build until the new one commits.
-const buildWindow = (days: number, persons: Person[], top: number) =>
-  inTransaction(() =>
-    windowStatements(days, persons, top).reduce<Promise<void>>(async (acc, q) => (await acc, void (await run(q))), Promise.resolve()),
+// Fixed: a community number means something only inside one build, never across windows or a library bump.
+const COMMUNITY_SEED = 42
+
+const scopePairsQuery = (days: number) => sql`select distinct source, person_id from graph_terms where days = ${days}`
+
+const keptTermsQuery = (days: number, source: string, personId: string) => sql`
+  select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}`
+
+// linksQuery's join shape against graph_terms' own kept (term, kind) set instead of a live
+// per-request `ids` array, which is why this cannot simply import linksQuery.
+const communityEdgesQuery = (days: number, source: string, personId: string) => sql`
+  with scope as (
+    select d.id from docs d
+    where d.published_at >= now() - make_interval(days => ${days})
+      and ${countryFilter('br')}
+      and (${source} = 'all' or d.source = ${source})
+  ),
+  about as (
+    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${personId}
+  ),
+  kept as (
+    select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
+  ),
+  hits as (
+    select t.doc_id, t.kind || ':' || t.term as id
+    from doc_terms t
+    join kept k on k.kind = t.kind and k.term = t.term
+    join about a on a.doc_id = t.doc_id
   )
+  select a.id as a, b.id as b, count(*)::int as count
+  from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
+  group by 1, 2 having count(*) >= 2`
+
+const insertCommunitiesQuery = (days: number, source: string, personId: string, terms: string[], kinds: string[], communityIds: number[]) => sql`
+  insert into term_communities (days, source, person_id, term, kind, community)
+  select ${days}::int, ${source}, ${personId}, u.term, u.kind, u.community
+  from unnest(${terms}::text[], ${kinds}::text[], ${communityIds}::int[]) as u(term, kind, community)`
+
+// kind never carries a colon, so splitting on the first one recovers term/kind from an id.
+const splitId = (id: string): [kind: string, term: string] => {
+  const at = id.indexOf(':')
+  return [id.slice(0, at), id.slice(at + 1)]
+}
+
+// One Louvain pass per (days, source, person) with graph_terms rows. A term with no surviving
+// edge still gets its own singleton row, via the self-referencing entry communities() expects.
+const buildCommunitiesForWindow = async (days: number) => {
+  await run(sql`delete from term_communities where days = ${days}`)
+  const { rows: pairs } = await run(scopePairsQuery(days))
+  for (const { source, person_id: personId } of pairs as { source: string; person_id: string }[]) {
+    const { rows: kept } = await run(keptTermsQuery(days, source, personId))
+    const keptRows = kept as { term: string; kind: string }[]
+    if (keptRows.length === 0) continue
+    const keptIds = keptRows.map((k) => `${k.kind}:${k.term}`)
+    const { rows: edgeRows } = await run(communityEdgesQuery(days, source, personId))
+    const edges: CommunityEdge[] = [
+      ...(edgeRows as { a: string; b: string; count: number }[]),
+      ...keptIds.map((id) => ({ a: id, b: id, count: 0 })),
+    ]
+    const assignment = louvainCommunities(edges, COMMUNITY_SEED)
+    const terms: string[] = []
+    const kinds: string[] = []
+    const communityIds: number[] = []
+    for (const id of keptIds) {
+      const community = assignment.get(id)
+      if (community === undefined) continue
+      const [kind, term] = splitId(id)
+      terms.push(term)
+      kinds.push(kind)
+      communityIds.push(community)
+    }
+    if (terms.length) await run(insertCommunitiesQuery(days, source, personId, terms, kinds, communityIds))
+  }
+}
+
+// One window per transaction; the community step runs last, over the graph_terms rows just written.
+const buildWindow = async (days: number, persons: Person[], top: number) =>
+  inTransaction(async () => {
+    for (const q of windowStatements(days, persons, top)) await run(q)
+    await buildCommunitiesForWindow(days)
+  })
 
 export type AggregateReport = { windows: number[]; scopes: number; terms: number; ms: number }
 

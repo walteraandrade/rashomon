@@ -28,6 +28,8 @@
     "effect": "4.0.0-rc.117",
     "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",
+    "graphology": "0.26.0",
+    "graphology-communities-louvain": "2.0.2",
     "hono": "^4.13.7",
     "pg": "^8.23.0"
   },

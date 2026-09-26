@@ -8,7 +8,7 @@ import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
 
 const person = (id: string, wikipedia?: string): Person => ({ id, name: id, aliases: [id], ...(wikipedia ? { wikipedia } : {}) })
 
-describe('pageviews collector', () => {
+describe('#211: pageviews collector', () => {
   it('collect([]) resolves to [] with no request', async () => {
     const fetchFn = fakeFetch(() => {
       throw new Error('must never be called')
@@ -29,7 +29,7 @@ describe('pageviews collector', () => {
     assert.equal(fetchFn.calls.length, 0)
   })
 
-  it('a 200 with items maps to { person_id, day, views } rows, UTC day as-is', async () => {
+  it('a 200 with items maps to { person_id, day, views } rows, UTC day as-is (AC8)', async () => {
     const p = person('lula', 'Luiz Inácio Lula da Silva')
     const fetchFn = fakeFetch(() =>
       json({ items: [{ timestamp: '2026092400', views: 1532 }, { timestamp: '2026092300', views: 980 }] }),
@@ -44,7 +44,7 @@ describe('pageviews collector', () => {
     ])
   })
 
-  it('429 then 500 then 200 makes exactly three requests, waiting 4 000ms then 8 000ms', async () => {
+  it('429 then 500 then 200 makes exactly three requests, waiting 4 000ms then 8 000ms, exercised entirely under TestClock (AC8)', async () => {
     const p = person('lula', 'Luiz Inácio Lula da Silva')
     let n = 0
     const fetchFn = fakeFetch(() => {
@@ -80,7 +80,7 @@ describe('pageviews collector', () => {
     assert.ok(logs.includes('[pageviews] Luiz Inácio Lula da Silva: 500, retrying in 8s (attempt 2/3)'))
   })
 
-  it('a 404 for one person skips only that person; a sibling in the same run still gets her rows written', async () => {
+  it('a 404 for one person skips only that person; a sibling in the same run still gets her rows written (AC9)', async () => {
     const a = person('a', 'Titulo Inexistente')
     const b = person('b', 'Titulo Existente')
     const fetchFn = fakeFetch((c) =>

@@ -594,10 +594,10 @@ describe('the write-path behaviours store.ts pins for its single implementation'
   })
 })
 
-describe('upsertAttention', () => {
+describe('#211: upsertAttention', () => {
   before(seed)
 
-  it('re-inserting the same (person_id, day) with a different views value updates it in place, never a second row', async () => {
+  it('re-inserting the same (person_id, day) with a different views value updates it in place, never a second row (AC6)', async () => {
     const [lula] = persons
     const day = '2026-01-15'
     await upsertAttentionP([{ person_id: lula.id, day, views: 100 }])
@@ -606,7 +606,7 @@ describe('upsertAttention', () => {
     assert.deepEqual(rows, [{ views: 250 }])
   })
 
-  it('removing a person via pruneRemoved deletes her person_attention rows through the FK cascade', async () => {
+  it('removing a person via pruneRemoved deletes her person_attention rows through the FK cascade (AC7)', async () => {
     const doomed = { id: 'doomed-attention', name: 'Doomed', aliases: ['Doomed'] }
     await upsertPersonsP([doomed])
     await upsertAttentionP([{ person_id: doomed.id, day: '2026-01-15', views: 10 }])

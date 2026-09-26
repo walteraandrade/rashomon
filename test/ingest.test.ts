@@ -205,7 +205,7 @@ describe('ingest', () => {
     assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
   })
 
-  it('fails the whole run with IngestFailure({ stage: "pageviews" }) when the write itself fails, never through a fetch failure', async () => {
+  it('fails the whole run with IngestFailure({ stage: "pageviews" }) when the write itself fails, never through a fetch failure (issue #211 AC10)', async () => {
     const uri = 'https://ingest-test.example/pageviews1'
     // The pageviews collector must actually produce a row for the write to have something to
     // fail on: a stub that resolves the wikipedia pageviews endpoint, throws for anything else.

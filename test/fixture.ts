@@ -3,7 +3,7 @@ import { insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, RawDoc } from '../src/types.js'
 
 export const persons: Person[] = [
-  { id: 'lula', name: 'Lula', aliases: ['Lula', 'Luiz Inácio'] },
+  { id: 'lula', name: 'Lula', aliases: ['Lula', 'Luiz Inácio'], wikipedia: 'Luiz Inácio Lula da Silva' },
   { id: 'tarcisio', name: 'Tarcísio', aliases: ['Tarcísio', 'Tarcísio de Freitas'] },
   { id: 'bolsonaro', name: 'Bolsonaro', aliases: ['Bolsonaro', 'Jair Bolsonaro'] },
 ]
@@ -258,6 +258,18 @@ export const seedCandidates = async () => {
 
 // doc_id is not known ahead of time (docs get a serial id on insert), so this resolves
 // uri -> doc_id at seed time rather than hardcoding it.
+// Direct insert, parallel to insertTestimony: person_attention has no derivation from RawDoc,
+// so tests seed it straight rather than through insertDocP.
+export const attentionRows = async (personId: string, rows: { day: string; views: number }[]) => {
+  for (const { day, views } of rows) {
+    await db.query(
+      `insert into person_attention (person_id, day, views) values ($1, $2, $3)
+       on conflict (person_id, day) do update set views = excluded.views`,
+      [personId, day, views],
+    )
+  }
+}
+
 export const insertTestimony = async (uri: string, personId: string, method: string, score: number | null) => {
   const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])
   await db.query(`insert into doc_testimony (doc_id, person_id, method, score) values ($1, $2, $3, $4)`, [

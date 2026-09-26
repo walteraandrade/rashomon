@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
+import type { AttentionQuery, CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -223,6 +223,10 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
   ...parseScope(q, { days: 30 }),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
+})
+
+export const parseAttentionQuery = (q: Record<string, string | undefined>): AttentionQuery => ({
+  days: snapDays(q.days, 30),
 })
 
 export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery => ({

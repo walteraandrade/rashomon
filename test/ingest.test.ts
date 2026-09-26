@@ -11,7 +11,7 @@ import { RssError } from '../src/collectors/rss.js'
 import { ingest, IngestFailure } from '../src/ingest.js'
 import type { RawDoc, Source } from '../src/types.js'
 import { persons, reseed } from './fixture.js'
-import { failingSql, failureOf, fakeFetch } from './effect.js'
+import { failingSql, failureOf, fakeFetch, json } from './effect.js'
 import { withEnv } from './env.js'
 import { docsText } from './docs.js'
 import './close.js'
@@ -203,6 +203,34 @@ describe('ingest', () => {
     assert.ok(failure.cause instanceof SqlError.SqlError)
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
     assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "pageviews" }) when the write itself fails, never through a fetch failure', async () => {
+    const uri = 'https://ingest-test.example/pageviews1'
+    // The pageviews collector must actually produce a row for the write to have something to
+    // fail on: a stub that resolves the wikipedia pageviews endpoint, throws for anything else.
+    const pageviewsFetch = fakeFetch((c) =>
+      c.url.pathname.includes('/pageviews/per-article/') ? json({ items: [{ timestamp: '2026010100', views: 7 }] }) : (() => {
+        throw new Error('no network in tests')
+      })(),
+    )
+    const real = await runSql(SqlClient.SqlClient)
+    const layer = Layer.mergeAll(
+      fetchClient,
+      Layer.succeed(FetchHttpClient.Fetch, pageviewsFetch),
+      Layer.succeed(SqlClient.SqlClient, failingSql(real, /^insert into person_attention/)),
+      TestConsole.layer,
+    )
+    const { exit } = await Effect.runPromise(
+      run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'pageviews')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
+    assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before the pageviews write failed')
   })
 
   it('respects names order, one source at a time', async () => {

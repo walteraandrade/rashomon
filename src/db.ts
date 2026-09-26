@@ -203,6 +203,12 @@ export const schema = `
       tone float8,
       primary key (days, source, person_id, term, kind)
     );
+    create table if not exists person_attention (
+      person_id text not null references persons(id) on delete cascade,
+      day date not null,
+      views int not null,
+      primary key (person_id, day)
+    );
 `
 
 // sql.unsafe parses one statement per call, unlike the exec() it replaces.

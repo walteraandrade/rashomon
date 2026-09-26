@@ -2,6 +2,7 @@ import { Cause, Effect, Exit } from 'effect'
 import { SqlClient, type SqlError } from 'effect/unstable/sql'
 import { clampEnv, runInTransaction, runSql } from './db.js'
 import { countryOf, discoverNames, personsMentioned, terms } from './extract.js'
+import type { AttentionRow } from './collectors/pageviews.js'
 import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
 
 // Tone is GDELT-only; a later gkg row must not leak tone into a doc stored by rss/gnews.
@@ -21,6 +22,9 @@ const DELETE_DOC_TERMS_SQL = `delete from doc_terms where doc_id = any($1::int[]
 const DELETE_DOC_CANDIDATES_SQL = `delete from doc_candidates where doc_id = any($1::int[])`
 const DELETE_ORPHAN_DOC_PERSONS_SQL = `delete from doc_persons where not (person_id = any($1::text[]))`
 const DELETE_ORPHAN_PERSONS_SQL = `delete from persons where not (id = any($1::text[])) returning id`
+// A plain overwrite, not `do nothing`: a day Wikimedia corrects after the fact heals on the next run.
+const UPSERT_PERSON_ATTENTION_SQL = `insert into person_attention (person_id, day, views) select * from unnest($1::text[], $2::date[], $3::int[])
+     on conflict (person_id, day) do update set views = excluded.views`
 // On conflict: domain keeps first non-null; tone is null for non-GDELT; longer text wins.
 const UPSERT_DOC_SQL = `insert into docs (source, uri, text, published_at, extra_terms, domain, country, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      on conflict (uri) do update set
@@ -116,6 +120,14 @@ export const pruneRemoved = (ps: Person[]): Effect.Effect<string[], SqlError.Sql
     )
   })
 export const pruneRemovedP = (ps: Person[]) => runSql(pruneRemoved(ps))
+
+export const upsertAttention = (rows: readonly AttentionRow[]): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    if (!rows.length) return
+    const sql = yield* SqlClient.SqlClient
+    yield* sql.unsafe(UPSERT_PERSON_ATTENTION_SQL, [rows.map((r) => r.person_id), rows.map((r) => r.day), rows.map((r) => r.views)])
+  })
+export const upsertAttentionP = (rows: readonly AttentionRow[]) => runSql(upsertAttention(rows))
 
 // Aliases travel as json: `unnest` would mix one person's aliases into the next.
 export const upsertPersons = (ps: Person[], size = writeBatchRows()): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>

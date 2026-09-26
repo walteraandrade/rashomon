@@ -220,10 +220,20 @@ describe('buildGraphAggregates', () => {
   it('graphFor at the default country reads the fast path and equals the live statement (AC8)', async () => {
     const query = q({ country: 'br' })
     assert.equal(precomputable(query), true)
-    assert.deepEqual(await fast(lula, query), await live(lula, query))
+    const fastRow = (await fast(lula, query)) as { docs: number; about: number }
+    const liveRow = (await live(lula, query)) as { docs: number; about: number }
+    assert.deepEqual(fastRow, liveRow)
     const expected = (await live(lula, query)) as { docs: number; about: number }
     const result = await graphFor(lula, query)
     assert.deepEqual({ docs: result.stats.docs, about: result.stats.about }, { docs: expected.docs, about: expected.about })
+
+    // windowScope's baked-in exclusion must match scopeCte's: the fast path (built at
+    // country=br) must be strictly narrower than the live statement at country=all, which
+    // proves the .pt doc inside this window (doc 58) was actually excluded from the build,
+    // not merely absent from a window too old to reach it.
+    const liveAll = (await live(lula, q({ country: 'all' }))) as { docs: number; about: number }
+    assert.ok(liveAll.docs > fastRow.docs, 'country=all live must count more docs than the fast (default) build')
+    assert.ok(liveAll.about >= fastRow.about, 'country=all live must not count fewer "about" docs than the fast (default) build')
   })
 
   it('graphFor at country=pt and country=all always falls back to the live statement even after a build (AC9)', async () => {

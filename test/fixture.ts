@@ -202,6 +202,13 @@ export const docs: RawDoc[] = [
   // kept under the default `br` scope and under `all`, and dropped only by an explicit `pt`.
   { source: 'rss', uri: 'https://exemplo.pt/56', text: 'Lula recebe homenagem lusotropicalista em Lisboa', publishedAt: daysAgo(3800), domain: 'exemplo.pt' },
   { source: 'rss', uri: 'https://example.org/57', text: 'Lula participa de festival colaborativo sem cobertura tradicional', publishedAt: daysAgo(3800) },
+  // doc 58: a second .pt doc, this one inside the default 30-day window (unlike docs 56-57,
+  // which sit past day 3800 so they don't shift any pinned days:30/365/1000/2000 pmi/stats
+  // literal). buildGraphAggregates' windowScope must exclude it from the days:30 build the
+  // same way scopeCte excludes it live, or AC8's fast-vs-live equality at country=br would
+  // pass even with the exclusion missing from windowScope. Vocabulary ("lusotropicalismo")
+  // is unique to this doc, so no pinned literal elsewhere shifts.
+  { source: 'rss', uri: 'https://exemplo.pt/58', text: 'Lula defende lusotropicalismo em discurso na capital', publishedAt: daysAgo(2), domain: 'exemplo.pt' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

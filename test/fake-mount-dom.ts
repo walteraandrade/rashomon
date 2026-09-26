@@ -194,10 +194,16 @@ class FakeSelect extends Listenable {
 }
 
 // A real `<optgroup id="lensesAOutlets">` sits inside `<select id="lensesA">`, so a real
-// `select.options` already sees whatever `<option>`s loadOutlets() writes into it. This stub's
-// select and its outlet optgroup are two separate objects, so writing here mirrors the fill
-// into the paired select's own options (replacing only the domain: ones it owns) — otherwise
-// no seeded/preserved domain value could ever be found among `select.options` in a test.
+// `select.options` already sees whatever `<option>`s loadOutlets() writes into it -- and a real
+// browser drops the select's selectedness to its first option the moment the previously
+// selected `<option>` element is removed, even when a fresh element with the same value is
+// reinserted in the same breath: selectedness lives on the element, not the value, so nothing
+// here re-selects it automatically. Only an explicit `select.value = ...` afterwards, in the
+// production code under test, can restore or preserve it. This stub's select and its outlet
+// optgroup are two separate objects, so writing here has to mirror both halves of that: the
+// fill into the paired select's own options (replacing only the domain: ones it owns), and,
+// when the select's current value was itself one of those domain: options, the same drop to
+// `options[0]` a real browser would perform.
 class FakeOutletGroup extends FakeBox {
   private target: FakeSelect
   private markup = ''
@@ -208,7 +214,9 @@ class FakeOutletGroup extends FakeBox {
   set innerHTML(html: string) {
     this.markup = String(html)
     const opts = [...this.markup.matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(([, value, textContent]) => ({ value, textContent }))
+    const hadDomainSelected = this.target.value.startsWith('domain:')
     this.target.options = [...this.target.options.filter((o) => !o.value.startsWith('domain:')), ...opts]
+    if (hadDomainSelected) this.target.value = this.target.options[0]?.value ?? this.target.value
   }
   get innerHTML() {
     return this.markup
@@ -403,8 +411,8 @@ const lensesIds = () => {
     lensesBOutlets: new FakeOutletGroup('lensesBOutlets', lensesB),
     lensesDays: new FakeSelect('lensesDays', DAYS_OPTIONS),
     lensesLimit: new FakeSelect('lensesLimit', [
-      { value: '20', text: '20', selected: true },
-      { value: '40', text: '40' },
+      { value: '20', text: '20' },
+      { value: '40', text: '40', selected: true },
       { value: '60', text: '60' },
       { value: '100', text: '100' },
     ]),

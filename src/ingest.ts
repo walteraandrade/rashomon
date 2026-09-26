@@ -2,7 +2,7 @@ import { Cause, Console, Data, Effect, Exit, Layer } from 'effect'
 import type { HttpClient } from 'effect/unstable/http'
 import { SqlClient } from 'effect/unstable/sql'
 import personsSeed from '../seed.json' with { type: 'json' }
-import { AGGREGATE_TABLES, buildGraphAggregates, type AggregateReport } from './aggregate.js'
+import { buildGraphAggregates, POST_BUILD_ANALYZED, type AggregateReport } from './aggregate.js'
 import { analyzeAfterWrite, analyzeMinDocs, analyzeTables, db, docCount, migrate, runSql, type AnalyzedTable } from './db.js'
 import { collectors, defaultSources } from './collectors/index.js'
 import { fetchClient } from './http.js'
@@ -83,7 +83,7 @@ export const ingest = (
     )
     // The window moves even when nothing new was written, so the aggregates are rebuilt every run.
     const aggregates = yield* Effect.tryPromise({ try: () => buildGraphAggregates(persons), catch: (cause) => new IngestFailure({ stage: 'buildGraphAggregates', cause }) })
-    yield* analyzeTables(AGGREGATE_TABLES).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'analyzeTables', cause })))
+    yield* analyzeTables(POST_BUILD_ANALYZED).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'analyzeTables', cause })))
     yield* Console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
     return { removed, sources, totalDocs, analyzed, aggregates } satisfies IngestReport
   })

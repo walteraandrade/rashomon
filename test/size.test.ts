@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
-import { db } from '../src/db.js'
+import { ANALYZED_TABLES, db } from '../src/db.js'
 import { collectSizes, SIZE_TABLES } from '../src/size.js'
 import { docsText } from './docs.js'
 import { seed } from './fixture.js'
@@ -21,7 +21,7 @@ const readRepoFile = (relPath: string) => readFileSync(join(repoRoot, relPath), 
 // size plus the database total, wired after pnpm ingest in CI.
 describe('pnpm size', () => {
   // spec criterion: exits 0 against a migrated database and prints one trailing JSON line
-  // whose tables key has exactly the SIZE_TABLES names, each >= 0, plus a total >= 0.
+  // whose tables key has exactly the thirteen SIZE_TABLES names, each >= 0, plus a total >= 0.
   it('exits 0 against a freshly migrated on-disk database and prints a trailing JSON line with every table and a total', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'rashomon-size-'))
     try {
@@ -83,7 +83,7 @@ describe('pnpm size', () => {
       assert.ok(total >= 0)
     })
 
-    it('SIZE_TABLES has exactly the twelve documented table names', () => {
+    it('SIZE_TABLES has exactly the thirteen documented table names', () => {
       assert.deepEqual(
         [...SIZE_TABLES].sort(),
         [
@@ -99,8 +99,15 @@ describe('pnpm size', () => {
           'person_attention',
           'phrase_stage',
           'phrases',
+          'term_communities',
         ].sort(),
       )
+    })
+
+    // spec criterion (docs/operations.md:146): every analyzed table is also a sized one,
+    // so a table maintained by analyze/vacuum is never invisible to the disk-usage report.
+    it('every ANALYZED_TABLES name is also in SIZE_TABLES', () => {
+      for (const t of ANALYZED_TABLES) assert.ok((SIZE_TABLES as readonly string[]).includes(t), t)
     })
   })
 

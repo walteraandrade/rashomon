@@ -85,7 +85,7 @@ describe('insertDoc camara', () => {
   })
 
   it('surfaces in /sources with domain camara.leg.br and null tone', async () => {
-    const wideGraph: GraphQuery = { days: 3100, source: 'all', domain: 'all', lean: 'all', country: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+    const wideGraph: GraphQuery = { days: 3100, source: 'all', domain: 'all', lean: 'all', country: 'all', kind: 'all', limit: 40, min: 1, sort: 'count', communities: false }
     const rows = await sourcesFor(bolsonaro, wideGraph)
     const row = rows.find((r) => r.domain === 'camara.leg.br')
     assert.equal(row?.source, 'camara')

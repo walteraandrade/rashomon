@@ -44,8 +44,6 @@ const attempt = (title: string, n: number): Effect.Effect<PageviewItem[], Error,
     return (yield* parseJson<{ items?: PageviewItem[] }>(text)).items ?? []
   })
 
-// A tagged error (e.g. ResponseTooLarge, a timeout) names its own failure kind via `_tag`,
-// worth keeping alongside `message` even when the latter is not empty; a plain Error has none.
 const errorMessage = (e: Error): string => {
   const tag = (e as { _tag?: unknown })._tag
   return tag ? `${String(tag)}: ${e.message || String(e)}` : e.message || String(e)

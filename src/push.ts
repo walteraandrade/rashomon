@@ -7,13 +7,12 @@ import { poolConfig, schema } from './db.js'
 // Run `pnpm migrate` against the target first.
 type Table = { name: string; columns: string[]; json?: string[]; select?: string[] }
 
-// The minimal shape copy() needs from its target: pg.Pool satisfies it, and so does a test's second PGlite.
+// The minimal shape copy() needs from its target: pg.Pool satisfies it, and so does a test's recording fake.
 export type QueryTarget = { query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> }
 
 const tables: Table[] = [
   { name: 'persons', columns: ['id', 'name', 'aliases'] },
-  // `day` is a `date`: PGlite hands pg a Date at UTC midnight, which pg then serializes in the
-  // process's local TZ, landing it a day early outside UTC. `::text` sidesteps Date entirely.
+  // A `date` read as a JS Date is re-serialized by pg in local TZ, a day early outside UTC.
   { name: 'person_attention', columns: ['person_id', 'day', 'views'], select: ['person_id', 'day::text as day', 'views'] },
   {
     name: 'docs',

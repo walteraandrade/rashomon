@@ -280,6 +280,24 @@ describe('read indexes and planner statistics (issue #44)', () => {
     assert.ok(indexes.includes('doc_testimony_person_idx'), 'person/method index exists')
   })
 
+  it('term_communities exists with the exact primary key (days, source, person_id, term, kind)', async () => {
+    const cols = (
+      await db.query<{ column_name: string }>(
+        `select column_name from information_schema.columns where table_name = 'term_communities'`,
+      )
+    ).rows
+    assert.deepEqual(cols.map((c) => c.column_name).sort(), ['community', 'days', 'kind', 'person_id', 'source', 'term'])
+    const pk = (
+      await db.query<{ column_name: string }>(
+        `select kcu.column_name from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+         where tc.table_name = 'term_communities' and tc.constraint_type = 'PRIMARY KEY'
+         order by kcu.ordinal_position`,
+      )
+    ).rows.map((r) => r.column_name)
+    assert.deepEqual(pk, ['days', 'source', 'person_id', 'term', 'kind'])
+  })
+
   it('adds no redundant index on docs: the rejected candidates are not in the schema', async () => {
     const defs = (await indexDefs('docs')).map((d) => d.indexdef)
     assert.deepEqual(

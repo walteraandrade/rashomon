@@ -47,7 +47,9 @@ export const toDoc = (source: Source) => (item: any): RawDoc | null => {
     source,
     uri,
     text: `${dropOutlet(stripHtml(item.title))}. ${dropOutlet(body(item))}`.replace(/\s+/g, ' '),
-    publishedAt: new Date(text(item.pubDate) || Date.now()).toISOString(),
+    // `new Date(String(Date.now()))` is `Invalid Date` -- a stringified epoch isn't ISO -- so
+    // the final fallback stays a number, matching `new Date(pubDate || Date.now())` before this change.
+    publishedAt: new Date(text(item.pubDate) || text(item['dc:date']) || Date.now()).toISOString(),
     domain: domainOf(outletUrl) ?? domainOf(uri),
   }
 }
@@ -63,7 +65,9 @@ export const fetchFeed = (source: Source) => (url: string) =>
     Effect.flatMap(({ status, body }) => {
       if (status < 200 || status >= 300) return Effect.fail(new RssError({ message: `${source} ${url} ${status}` }))
       const xml = parser.parse(decode(body))
-      return Effect.succeed(asArray<any>(xml?.rss?.channel?.item).map(toDoc(source)).filter((d): d is RawDoc => d !== null))
+      // RSS 1.0 (RDF) sits an item's siblings directly under <rdf:RDF>, not nested in <channel>.
+      const items = [...asArray<any>(xml?.rss?.channel?.item), ...asArray<any>(xml?.['rdf:RDF']?.item)]
+      return Effect.succeed(items.map(toDoc(source)).filter((d): d is RawDoc => d !== null))
     }),
   )
 

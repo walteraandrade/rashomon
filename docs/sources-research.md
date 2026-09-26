@@ -35,7 +35,7 @@ Portuguese.
 | Câmara Notícias — últimas | `https://www.camara.leg.br/noticias/rss/ultimas-noticias` | 200, 20 items |
 | Agência Senado | `https://www12.senado.leg.br/noticias/rss` | 200, 15 items |
 | Agência Brasil — Política | `https://agenciabrasil.ebc.com.br/rss/politica/feed.xml` | 200, 10 items |
-| Planalto | `https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS` | 200, 25 items — RDF, not RSS 2.0; `rss.ts` reads `rss.channel.item` and would return zero |
+| Planalto | `https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS` | 200, 25 items — RDF, not RSS 2.0; `rss.ts` now also reads `rdf:RDF.item` (issue #213), so this feed joins `oficial` |
 
 The other Câmara topic feeds follow the same pattern:
 `/noticias/rss/dinamico/{ADMINISTRACAO-PUBLICA,DIREITO-E-JUSTICA,ECONOMIA,...}`.

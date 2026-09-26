@@ -16,6 +16,10 @@ const bento: Person = { id: 'bento', name: 'Bento Lima', aliases: ['Bento Lima']
 const rssBody = (encoding = 'UTF-8') =>
   `<?xml version="1.0" encoding="${encoding}"?><rss><channel><item><link>https://x/1</link><title>Fulano fala</title></item></channel></rss>`
 
+// Shaped like Planalto's real feed: items sit as siblings of <channel>, not nested inside it.
+const rdfBody = (items = '<item rdf:about="https://www.gov.br/planalto/pt-br/1"><title>Planalto anuncia medida</title><link>https://www.gov.br/planalto/pt-br/1</link><description>Resumo da medida.</description><content:encoded><![CDATA[<p>Texto integral da medida.</p>]]></content:encoded><dc:date>2026-09-02T18:34:00Z</dc:date></item>') =>
+  `<?xml version="1.0" encoding="UTF-8"?><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel rdf:about="https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS"><title>Planalto</title></channel>${items}</rdf:RDF>`
+
 describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no global fetch)', () => {
   it('parses a feed under the cap into docs', async () => {
     const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
@@ -68,6 +72,31 @@ describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no gl
     assert.match(String(error), /rss https:\/\/example\.org\/feed 500/)
   })
 
+  it('parses an RDF (RSS 1.0) feed whose items sit as siblings of channel', async () => {
+    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    assert.equal(exit.value[0].uri, 'https://www.gov.br/planalto/pt-br/1')
+    assert.match(exit.value[0].text, /Planalto anuncia medida/)
+  })
+
+  it('uses dc:date as publishedAt when pubDate is absent', async () => {
+    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value[0].publishedAt, new Date('2026-09-02T18:34:00Z').toISOString())
+  })
+
+  it('falls back to now when an RDF item has neither pubDate nor dc:date', async () => {
+    const noDateItem = '<item rdf:about="https://www.gov.br/planalto/pt-br/2"><title>Sem data</title><link>https://www.gov.br/planalto/pt-br/2</link><description>Resumo.</description></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(noDateItem), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    assert.ok(exit.value[0].publishedAt)
+  })
+
   it('a timed-out feed fails with "<source> <url>: <reason>", so a stalled feed among several is identifiable', async () => {
     const fetchFn = fakeFetch(hanging)
     const exit = await runTest(drain(fetchFeed('rss')('https://example.org/feed'), REQUEST_TIMEOUT_MS), fetchFn)
@@ -97,7 +126,7 @@ describe('rss/juridico/oficial/nicho — each fetches its own hardcoded feed lis
   const cases: [string, Effect.Effect<any[], unknown, any>, number][] = [
     ['rss', collectRss, 8],
     ['juridico', collectJuridico, 3],
-    ['oficial', collectOficial, 4],
+    ['oficial', collectOficial, 5],
     ['nicho', collectNicho, 10],
   ]
 

@@ -84,7 +84,7 @@ describe('documented facts per collector', () => {
     assert.equal(sourceTable.get('camara')?.byDefault, true)
   })
 
-  it('press families (issue #22): the three feed sets, defaultSources membership and the RDF/Planalto exclusion', () => {
+  it('press families (issue #22): the three feed sets, defaultSources membership and RDF/Planalto support', () => {
     const api = docPageText.get('docs/api.md') ?? ''
     for (const source of ['juridico', 'oficial', 'nicho']) assert.match(api, new RegExp('`' + source + '`'))
     assert.match(docsText, /noticias\.stf\.jus\.br/)

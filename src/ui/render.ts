@@ -1097,9 +1097,11 @@ export const paintLensDetail = ({ term, endA, endB }: { term: CompareTerm | null
     return
   }
   const sideHtml = (endLabel: string, v: CompareSide | 'name' | null) =>
-    v && v !== 'name'
-      ? html`<div><dt>${endLabel}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
-      : html`<div><dt>${endLabel}</dt><dd class="empty-hint">nenhum documento</dd></div>`
+    v === 'name'
+      ? html`<div><dt>${endLabel}</dt><dd class="empty-hint">nome da pessoa, fora da régua</dd></div>`
+      : v
+        ? html`<div><dt>${endLabel}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
+        : html`<div><dt>${endLabel}</dt><dd class="empty-hint">nenhum documento</dd></div>`
   el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(endA, term.a)}${sideHtml(endB, term.b)}</dl>`
 }
 

@@ -844,6 +844,15 @@ describe('paintLensDetail', () => {
       assert.match(els.lensesDetail.innerHTML, /<dt>Direita<\/dt><dd class="empty-hint">nenhum documento<\/dd>/)
     })
   })
+
+  it('reads a "name" side as the person\'s own name, never as "nenhum documento"', () => {
+    withFakeDocument(['lensesDetail'], (els) => {
+      const term: CompareTerm = { term: 'lula', kind: 'word', a: 'name', b: 'name' }
+      paintLensDetail({ term, endA: 'Folha de S.Paulo', endB: 'Direita' })
+      assert.doesNotMatch(els.lensesDetail.innerHTML, /nenhum documento/)
+      assert.match(els.lensesDetail.innerHTML, /nome da pessoa/)
+    })
+  })
 })
 
 describe('rulerTerms: the amended balance formula clamps each side at zero before differencing', () => {

@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { Effect, Exit, Fiber } from 'effect'
 import { TestConsole } from 'effect/testing'
 import { collect } from '../src/collectors/pageviews.js'
+import { MAX_RESPONSE_BYTES } from '../src/http.js'
 import type { Person } from '../src/types.js'
 import { drain, fakeFetch, json, runProgram, runTest, tick } from './effect.js'
 
@@ -93,6 +94,24 @@ describe('#211: pageviews collector', () => {
     assert.deepEqual(exit.value.exit.value, [{ person_id: 'lula', day: '2026-09-24', views: 200 }])
   })
 
+  it('a body over the cap fails with ResponseTooLarge, and the error log names it via errorMessage', async () => {
+    const p = person('lula', 'Luiz Inácio Lula da Silva')
+    const fetchFn = fakeFetch(() => new Response(new Uint8Array(1), { status: 200, headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) } }))
+    const program = Effect.gen(function* () {
+      const drained = yield* drain(collect([p]), 20_000)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { drained, errors }
+    })
+    const exit = await runTest(program, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.drained.exit))
+    assert.deepEqual(exit.value.drained.exit.value, [])
+    assert.ok(
+      exit.value.errors.some((line) => line.startsWith('[pageviews] lula: ') && line.includes('ResponseTooLarge')),
+      `expected a [pageviews] error line naming ResponseTooLarge, got: ${exit.value.errors.join(' | ')}`,
+    )
+  })
+
   it('429 then 500 then 200 makes exactly three requests, waiting 4 000ms then 8 000ms, exercised entirely under TestClock (AC8)', async () => {
     const p = person('lula', 'Luiz Inácio Lula da Silva')
     let n = 0
@@ -147,6 +166,9 @@ describe('#211: pageviews collector', () => {
     assert.ok(Exit.isSuccess(exit.value.drained.exit))
     const rows = exit.value.drained.exit.value
     assert.deepEqual(rows, [{ person_id: 'b', day: '2026-09-24', views: 42 }])
-    assert.ok(exit.value.errors.some((line) => line.includes('a') && line.includes('404')), 'logs an error naming the 404 person')
+    assert.ok(
+      exit.value.errors.some((line) => line.startsWith('[pageviews] a: ') && line.includes('404')),
+      'logs an error naming the 404 person',
+    )
   })
 })

@@ -1,4 +1,4 @@
-import { label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
@@ -389,4 +389,32 @@ export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], wi
   const fits = all.filter((t) => t.count === hi).map((t) => fitSize(measure, label(t), maxWidth))
   const top = Math.max(WEEK_SIZE_MIN + 2, Math.min(WEEK_SIZE_MAX, ...fits))
   return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
+}
+
+// The comention matrix (figure 7, #207): a half-matrix, upper triangle only. Genuinely new
+// geometry, not a reuse of swarmBy/pack/rulerLayout/weekLayout — a two-axis grid, no packing.
+export const MATRIX_CELL_MIN = 22
+export const MATRIX_CELL_MAX = 42
+export const MATRIX_ROWHEAD = 140
+
+export type MatrixCell = { a: string; b: string; count: number | null; ink: number }
+export type MatrixLayout = { cellSize: number; cells: MatrixCell[] }
+
+// The matrix's row/column order is `persons` (sorted by name); a pair's a/b order is the id's
+// plain string comparison, an unrelated order, so a lookup always sorts the two ids itself.
+const pairKey = (x: string, y: string) => (x < y ? `${x}\u0000${y}` : `${y}\u0000${x}`)
+
+export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[], width: number): MatrixLayout => {
+  const ids = persons.map((p) => p.id)
+  const cellSize = Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, Math.floor((width - MATRIX_ROWHEAD) / Math.max(1, ids.length))))
+  const byPair = new Map(pairs.map((p) => [pairKey(p.a, p.b), p.count]))
+  const max = pairs.reduce((m, p) => Math.max(m, p.count), 0)
+  const cells: MatrixCell[] = []
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const count = byPair.get(pairKey(ids[i], ids[j])) ?? null
+      cells.push({ a: ids[i], b: ids[j], count, ink: count && max ? Math.max(0.18, count / max) : 0 })
+    }
+  }
+  return { cellSize, cells }
 }

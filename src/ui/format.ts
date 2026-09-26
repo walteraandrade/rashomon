@@ -30,6 +30,11 @@ export type Rising = { days: number; baseline: number; terms: RisingTerm[]; pres
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }
+// /api/comention (issue #207): spans every tracked person, no single `person`. A pair below
+// `min`, or with zero shared docs, is simply absent from `pairs`, never a zero-count row.
+export type ComentionPerson = { id: string; name: string }
+export type ComentionPair = { a: string; b: string; count: number }
+export type Comention = { days: number; persons: ComentionPerson[]; pairs: ComentionPair[] }
 // The raw token /api/people/:id/lenses echoes back, normalized: domain:<host>, lean:<value>,
 // source:<name>, or the fallback 'all'. CompareTerm is reused as-is for `terms`: the API's
 // per-term { term, kind, a, b } shape is identical to /compare's.
@@ -149,6 +154,18 @@ export const relatedTo = (nodes: Term[], links: Link[], id: string | null): { no
     .sort((a, b) => b.count - a.count)
 
 export const domainSuffix = (domain: string) => (domain === 'all' ? '' : ` · ${domain}`)
+
+// The comention matrix's column head, since a column is too narrow for a full name: one letter
+// per word of the name, up to three, upper case. The row head and the docs card still carry the
+// full name, so identity never depends on this abbreviation being unique.
+export const personInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase()
 
 export const trendOf = (c: { count: number; previous: number }) => {
   if (c.previous === 0) return { cls: 'up', text: 'novo' }

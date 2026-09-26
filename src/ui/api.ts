@@ -30,13 +30,16 @@ export const testimonyParams = (opts: GraphOpts) => narrowToTestimony(params(opt
 
 // `domain` travels only when a figure names an outlet; `day` only when figure 5 names a column;
 // `lean` only when a figure 6 lens is `lean:<value>` — /docs already accepts it server-side.
-export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; lean?: string; limit?: string; day?: string }
+export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; lean?: string; limit?: string; day?: string; withId?: string }
 
-export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', lean = '', limit = '5', day = '' }: DocsOpts) => {
+// `withId` (`with` is a reserved word) travels only when the comention matrix names the other
+// person of the pair (issue #207); every other caller keeps sending byte-identical params.
+export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', lean = '', limit = '5', day = '', withId = '' }: DocsOpts) => {
   const q = new URLSearchParams({ days, source, term, kind, limit })
   if (domain) q.set('domain', domain)
   if (lean) q.set('lean', lean)
   if (day) q.set('day', day)
+  if (withId) q.set('with', withId)
   return q
 }
 
@@ -112,3 +115,10 @@ export const lensesParams = ({ a, b, days, limit }: { a: string; b: string; days
   new URLSearchParams({ a, b, days, limit, kind: ATLAS_KINDS })
 
 export const loadLenses = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/lenses?' + queryParams, signal)
+
+// /api/comention (figure 7, issue #207): not nested under /people/:id, spans every tracked
+// person at once, like /api/compare and /api/tone. No `kind`, no `domain`, no `sort`.
+export const comentionParams = ({ days, source, lean, min }: { days: string; source: string; lean: string; min: string }) =>
+  new URLSearchParams({ days, source, lean, min })
+
+export const loadComention = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/comention?' + queryParams, signal)

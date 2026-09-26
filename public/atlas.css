@@ -252,7 +252,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
-.compare .ruler, .compare .detail, .rising .ruler, .rising .note { transition: opacity .16s ease-out; }
+.compare .ruler, .compare .detail, .rising .ruler, .rising .note,
+.lenses .ruler, .lenses .detail { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,

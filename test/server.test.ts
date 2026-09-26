@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Person } from '../src/types.js'
+import personsSeed from '../seed.json' with { type: 'json' }
 
 // The Hono routes in src/server.ts, through app.request(): status codes, error shapes, and
 // that each route answers exactly what its *For function answers for the parsed query. The
@@ -616,5 +617,62 @@ describe('the static pages', () => {
     const res = await app.request('/como-ler.html')
     assert.equal(res.status, 200)
     assert.match(await res.text(), /Como ler o rashomon/)
+  })
+})
+
+describe('seed.json party/office/uf, echoed by /api/people (issue #212)', () => {
+  before(seed)
+  const seedList = personsSeed as Person[]
+
+  it('seed.json carries at least one entry with party, office, uf and wikidata together (issue #212 AC1)', () => {
+    const withAllFour = seedList.find((p) => p.party && p.office && p.uf && p.wikidata)
+    assert.ok(withAllFour, 'no seed.json entry carries party, office, uf and wikidata together')
+  })
+
+  it('all 27 seed.json entries carry a wikidata QID (issue #212 AC2)', () => {
+    assert.equal(seedList.length, 27)
+    for (const p of seedList) assert.ok(p.wikidata, `${p.id} has no wikidata QID`)
+  })
+
+  it('withSeedFields defaults to a map built from the real seed.json, with no explicit seedMap argument (issue #212 AC3)', () => {
+    const real = seedList.find((p) => p.party || p.office || p.uf)
+    assert.ok(real, 'seed.json has no entry with party/office/uf to exercise the default map against')
+    const row = { id: real!.id, name: real!.name, aliases: real!.aliases }
+    const withDefault = withSeedFields(row)
+    if (real!.party) assert.equal(withDefault.party, real!.party)
+    if (real!.office) assert.equal(withDefault.office, real!.office)
+    if (real!.uf) assert.equal(withDefault.uf, real!.uf)
+    assert.ok(!('wikidata' in withDefault), 'withSeedFields must never echo wikidata, even via the default map')
+  })
+
+  it('withSeedFields echoes present fields, omits absent ones, never echoes wikidata, and passes an unmapped id through unchanged (issue #212 AC4)', () => {
+    const seedMap = new Map<string, Person>([
+      ['full', { id: 'full', name: 'Full', aliases: [], party: 'PSOL', office: 'deputada', uf: 'RJ', wikidata: 'Q999' }],
+      ['partial', { id: 'partial', name: 'Partial', aliases: [], office: 'prefeito' }],
+    ])
+
+    const full = withSeedFields({ id: 'full', name: 'Full', aliases: [] }, seedMap)
+    assert.deepEqual(full, { id: 'full', name: 'Full', aliases: [], party: 'PSOL', office: 'deputada', uf: 'RJ' })
+    assert.ok(!('wikidata' in full))
+
+    const partial = withSeedFields({ id: 'partial', name: 'Partial', aliases: [] }, seedMap)
+    assert.deepEqual(partial, { id: 'partial', name: 'Partial', aliases: [], office: 'prefeito' })
+    assert.ok(!('party' in partial))
+    assert.ok(!('uf' in partial))
+
+    const unmapped = { id: 'ghost', name: 'Ghost', aliases: [] }
+    assert.deepEqual(withSeedFields(unmapped, seedMap), unmapped)
+  })
+
+  it('GET /api/people rows carry only id/name/aliases/party/office/uf keys, never wikidata (issue #212 AC5)', async () => {
+    const res = await app.request('/api/people')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Record<string, unknown>[]
+    assert.ok(body.length > 0)
+    const allowed = new Set(['id', 'name', 'aliases', 'party', 'office', 'uf'])
+    for (const p of body) {
+      for (const key of Object.keys(p)) assert.ok(allowed.has(key), `unexpected key '${key}' on /api/people row`)
+      assert.ok(!('wikidata' in p), 'wikidata must never be echoed by /api/people')
+    }
   })
 })

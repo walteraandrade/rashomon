@@ -12,6 +12,9 @@ import { seed } from './fixture.js'
 import './close.js'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+const { DATABASE_URL: _url, POSTGRES_URL: _pg, ...localEnv } = process.env
+const childEnv = (dataDir: string) => ({ ...localEnv, DATA_DIR: dataDir })
+
 const readRepoFile = (relPath: string) => readFileSync(join(repoRoot, relPath), 'utf8')
 
 // Spec for pnpm size (issue 205): a read-only report of every maintained table's on-disk
@@ -22,7 +25,7 @@ describe('pnpm size', () => {
   it('exits 0 against a freshly migrated on-disk database and prints a trailing JSON line with every table and a total', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'rashomon-size-'))
     try {
-      const env = { ...process.env, DATA_DIR: dataDir }
+      const env = childEnv(dataDir)
       const migrate = spawnSync(process.execPath, ['--import', 'tsx', 'src/migrate.ts'], {
         cwd: repoRoot,
         env,
@@ -107,7 +110,7 @@ describe('pnpm size', () => {
     try {
       const result = spawnSync(process.execPath, ['--import', 'tsx', 'src/size.ts'], {
         cwd: repoRoot,
-        env: { ...process.env, DATA_DIR: dataDir },
+        env: childEnv(dataDir),
         encoding: 'utf8',
       })
       assert.equal(result.status, 1)

@@ -43,9 +43,10 @@ jobs:
       # Read-only: table sizes and the database total, so a shrinking-disk trend shows up in
       # the run summary without opening a database client. continue-on-error: a transient
       # failure here must not skip the cache purge/warm below and leave production serving
-      # the pre-ingest CDN copy; the closing fence is written even when `pnpm size` fails.
+      # the pre-ingest CDN copy; the closing fence is written even when `pnpm size` fails, and
+      # the step still reports its failure.
       - run: |
-          { echo '```'; pnpm -s size; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '```'; pnpm -s size; s=$?; echo '```'; exit $s; } >> "$GITHUB_STEP_SUMMARY"
         continue-on-error: true
       # Drops every stored /api object (the `api` tag, src/cache.ts) so the warm below refills
       # them from the origin: no request header bypasses Vercel's CDN, and a plain GET after an

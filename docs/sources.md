@@ -61,4 +61,6 @@ An optional `camaraId` (deputy id from `dadosabertos.camara.leg.br`) enables the
 
 An optional `wikipedia` (the person's pt.wikipedia article title) enables the pageviews stage (`src/collectors/pageviews.ts`, see [operations](operations.md)), a curiosity signal stored in `person_attention` and read back at `/api/people/:id/attention`; it is not a `Collector` and produces no `RawDoc`, so it gains no row in the source table above. A person without `wikipedia` gets no request from that stage.
 
+Optional `party`, `office` and `uf` are hand-edited metadata (party acronym, current office, state), filled where they apply — a person with no current office may omit `office`; a national office may omit `uf`. None feeds a collector or is persisted to the `persons` table; `GET /api/people` echoes whichever of the three a person's seed entry carries, omitting a field entirely rather than sending it as `null`. An optional `wikidata` QID sits alongside them for a human to re-check the other three against Wikidata later; it is never echoed by any route.
+
 Scope is politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline. Run `pnpm reindex` after editing the file.

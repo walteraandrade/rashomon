@@ -4,7 +4,7 @@ import { db } from '../src/db.js'
 import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
 import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
-import { app } from '../src/server.js'
+import { app, withSeedFields } from '../src/server.js'
 import { insertDocP } from '../src/store.js'
 import { withEnv } from './env.js'
 import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates } from './fixture.js'
@@ -12,6 +12,7 @@ import './close.js'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Person } from '../src/types.js'
 
 // The Hono routes in src/server.ts, through app.request(): status codes, error shapes, and
 // that each route answers exactly what its *For function answers for the parsed query. The
@@ -71,8 +72,8 @@ describe('the routes answer their *For functions with the default parser (issue 
     assert.deepEqual(JSON.parse(JSON.stringify(directWeek)), weekBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await risingFor(person, parseRisingQuery({})))), risingBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await toneFor(parseToneQuery({})))), toneBody)
-    const { rows } = await db.query(`select id, name, aliases from persons order by name`)
-    assert.deepEqual(JSON.parse(JSON.stringify(rows)), peopleBody)
+    const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
+    assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => withSeedFields(r)))), peopleBody)
   })
 
   it('/api/people/:id/graph stats are the fixture literals test/graph.test.ts pins', async () => {
@@ -82,11 +83,33 @@ describe('the routes answer their *For functions with the default parser (issue 
     assert.equal(body.stats.about, 5)
   })
 
-  it('/api/people list shape carries no testimony fields', async () => {
+  it('/api/people rows never carry keys outside id/name/aliases/party/office/uf, and never wikidata', async () => {
     const res = await app.request('/api/people')
     const body = (await res.json()) as Record<string, unknown>[]
     assert.ok(Array.isArray(body))
-    for (const p of body) assert.deepEqual(Object.keys(p).sort(), ['aliases', 'id', 'name'])
+    const allowed = new Set(['aliases', 'id', 'name', 'office', 'party', 'uf'])
+    for (const p of body) {
+      for (const key of Object.keys(p)) assert.ok(allowed.has(key), `unexpected key ${key}`)
+      assert.ok(!('wikidata' in p))
+    }
+  })
+
+  it('withSeedFields echoes present fields, omits absent ones, never echoes wikidata, and passes through an unmapped id', () => {
+    const seedMap = new Map<string, Person>([
+      ['has-both', { id: 'has-both', name: 'Has Both', aliases: [], party: 'PT', office: 'senador', wikidata: 'Q1' }],
+      ['has-uf-only', { id: 'has-uf-only', name: 'Has UF Only', aliases: [], uf: 'SP' }],
+    ])
+    const withBoth = withSeedFields({ id: 'has-both', name: 'Has Both', aliases: [] }, seedMap)
+    assert.deepEqual(withBoth, { id: 'has-both', name: 'Has Both', aliases: [], party: 'PT', office: 'senador' })
+    assert.ok(!('wikidata' in withBoth))
+
+    const withUfOnly = withSeedFields({ id: 'has-uf-only', name: 'Has UF Only', aliases: [] }, seedMap)
+    assert.deepEqual(withUfOnly, { id: 'has-uf-only', name: 'Has UF Only', aliases: [], uf: 'SP' })
+    assert.ok(!('party' in withUfOnly))
+    assert.ok(!('office' in withUfOnly))
+
+    const unmapped = { id: 'nobody', name: 'Nobody', aliases: [] }
+    assert.deepEqual(withSeedFields(unmapped, seedMap), unmapped)
   })
 
   it('/api/tone matches toneFor and the fixture literal', async () => {

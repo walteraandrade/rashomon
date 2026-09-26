@@ -144,10 +144,14 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
       // nothing but app.ts, and reaching into no other figure's DOM.
       'figures/lenses.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
+      // Figure 7 (issue #216), attention vs mentions: same shape as figures/lenses.ts, imported
+      // by nothing but app.ts, and reaching into no other figure's DOM.
+      'figures/attention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
         './docs-card.js',
         './figures/atlas.js',
+        './figures/attention.js',
         './figures/compare.js',
         './figures/lenses.js',
         './figures/rising.js',

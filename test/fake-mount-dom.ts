@@ -365,6 +365,17 @@ const weekIds = () => ({
   weekNote: new FakeBox('weekNote'),
 })
 
+// Figure 7 (issue #216): its own person/source selects, the chart host and its note (the lag
+// sentence, or an empty-state note, following week.ts's own #weekNote precedent). No days
+// control -- the figure always sends days=30, like week's own fixed days=7.
+const attentionIds = () => ({
+  attention: new FakeBox('attention'),
+  attentionPerson: new FakeSelect('attentionPerson'),
+  attentionSource: new FakeSelect('attentionSource'),
+  attentionChart: new FakeBox('attentionChart'),
+  attentionNote: new FakeBox('attentionNote'),
+})
+
 // Figure 6 (issue #206): one person select, two lens selects (flat options across every
 // optgroup the real markup groups them into — a FakeSelect has no optgroup concept, and no
 // criterion here needs one), the two optgroup stand-ins loadOutlets() fills dynamically, the
@@ -428,7 +439,8 @@ export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof compareIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof weekIds> &
-  ReturnType<typeof lensesIds>
+  ReturnType<typeof lensesIds> &
+  ReturnType<typeof attentionIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -440,7 +452,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

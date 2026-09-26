@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, centerLabel, pack, packPass, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, centerLabel, pack, packPass, peakDay, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
 
@@ -479,5 +479,38 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     const [column] = weekLayout(measure, [[term('crise', 3)]], 145)
     assert.deepEqual(column.words[0].lines, ['crise'])
     assert.equal(column.words[0].h, Math.round(column.words[0].size * 1.24))
+  })
+})
+
+
+// Issue #216 (figure 7): peakDay is the pure helper both the mentions and the views series
+// share -- each series arrives as one { day, value } pair per calendar day, already reduced to
+// the one number that series scores by (mentions' own count, or a day's pageviews).
+describe('peakDay (issue #216)', () => {
+  it('a single maximum returns that day (AC2)', () => {
+    const series = [
+      { day: '2026-09-01', value: 3 },
+      { day: '2026-09-02', value: 9 },
+      { day: '2026-09-03', value: 1 },
+    ]
+    assert.equal(peakDay(series), '2026-09-02')
+  })
+
+  it('a tie between two or more days sharing the maximum returns the earliest, oldest one (AC2)', () => {
+    const series = [
+      { day: '2026-09-01', value: 5 },
+      { day: '2026-09-02', value: 9 },
+      { day: '2026-09-03', value: 9 },
+    ]
+    assert.equal(peakDay(series), '2026-09-02')
+  })
+
+  it('an all-zero series has no peak, returns null (AC2)', () => {
+    const series = [
+      { day: '2026-09-01', value: 0 },
+      { day: '2026-09-02', value: 0 },
+      { day: '2026-09-03', value: 0 },
+    ]
+    assert.equal(peakDay(series), null)
   })
 })

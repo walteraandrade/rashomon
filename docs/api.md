@@ -19,6 +19,8 @@ Every route is a public, read-only `GET` under `/api`. Query parameters are pars
 
 The contract is stable: `/api/people`, `/api/people/:id/graph` and `/api/people/:id/sources` never lose a field. A new capability is a new route or a new optional parameter, never a breaking change to an existing one.
 
+`GET /api/people` returns `{ id, name, aliases }` per person, plus `party`, `office` and `uf` when that person's `seed.json` entry (see [sources](sources.md#tracked-people)) carries them — each omitted entirely, never `null`, when absent. `wikidata` lives in `seed.json` too but is never echoed here or on any other route.
+
 ## The window (`days`)
 
 `days` takes one of three values: **7**, **30** or **365** — the same three windows every period `<select>` on the site offers. Any other number snaps to the nearest one, ties going to the shorter window: `?days=18` reads as 7, `?days=19` as 30, `?days=197` as 30, `?days=198` as 365, and anything above 365 as 365. A missing or non-numeric value still falls back to the route's own default (30, or 7 on `rising` and `candidates`), so a caller that sends no `days` sees exactly what it always did.

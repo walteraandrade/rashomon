@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
+import personsSeed from '../seed.json' with { type: 'json' }
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
 import { attentionFor, candidatesFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
@@ -23,6 +24,21 @@ import {
 
 const port = Number(process.env.PORT ?? 3210)
 export const app = new Hono<{ Variables: { person: Person } }>()
+
+const seedById = new Map<string, Person>((personsSeed as Person[]).map((p) => [p.id, p]))
+
+// party/office/uf live only in seed.json (see camaraId/senadoId precedent); wikidata never
+// leaves it. seedMap defaults to the real seed so a test can hand withSeedFields a synthetic one.
+export const withSeedFields = (row: Pick<Person, 'id' | 'name' | 'aliases'>, seedMap = seedById): Person => {
+  const seed = seedMap.get(row.id)
+  if (!seed) return row
+  return {
+    ...row,
+    ...(seed.party ? { party: seed.party } : {}),
+    ...(seed.office ? { office: seed.office } : {}),
+    ...(seed.uf ? { uf: seed.uf } : {}),
+  }
+}
 
 // PERF=1: one JSON line per request, x-perf-* and server-timing headers; does not alter
 // response bytes.
@@ -54,7 +70,7 @@ for (const path of HTML_PATHS)
 
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
-  return c.json(rows)
+  return c.json(rows.map((r) => withSeedFields(r)))
 })
 
 // Every /api/people/:id/* route needs the same lookup and the same 404 shape.

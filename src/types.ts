@@ -6,7 +6,19 @@ import type { BlueskyError } from './collectors/bluesky.js'
 import type { GkgError } from './collectors/gkg.js'
 import type { RssError } from './collectors/rss.js'
 
-export type Person = { id: string; name: string; aliases: string[]; exclude?: string[]; camaraId?: string; senadoId?: string; wikipedia?: string }
+export type Person = {
+  id: string
+  name: string
+  aliases: string[]
+  exclude?: string[]
+  camaraId?: string
+  senadoId?: string
+  wikipedia?: string
+  party?: string
+  office?: string
+  uf?: string
+  wikidata?: string
+}
 export type Source = 'bluesky' | 'gdelt' | 'rss' | 'gnews' | 'gkg' | 'camara' | 'senado' | 'juridico' | 'oficial' | 'nicho'
 export type RawDoc = {
   source: Source

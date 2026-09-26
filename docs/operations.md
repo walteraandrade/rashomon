@@ -372,7 +372,7 @@ Every `/api/*` GET is public, read-only and depends on data that only changes wh
 
 | Route | `s-maxage` | Why |
 |---|---|---|
-| `/api/people` | 24h | The only route with no `now()` in its SQL. It changes when `seed.json` changes, which means an edit, a `pnpm reindex` and a push. |
+| `/api/people` | 24h | The only route with no `now()` in its SQL. The list of people and their aliases changes with an edit, a `pnpm reindex` and a `pnpm push`; `party`, `office` and `uf` change with an edit and a redeploy (a restart locally), no database write. |
 | `graph`, `sources`, `docs`, `timeline`, `week`, `testimony`, `/api/tone`, `/api/compare` | 6h | Default window `days=30` (7 on `week`); 6h is ~1% of a 30-day window. |
 | `rising`, `/api/candidates` | 1h | Default window `days=7` and both are read as "what changed lately"; 1% of 7 days is ~1.7h, rounded down. |
 

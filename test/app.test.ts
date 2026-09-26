@@ -326,3 +326,25 @@ describe("figure 5 (week) joins app.ts's bootstrap, same bare/prefixed conventio
     })
   })
 })
+
+describe('figure 6 (lenses) has no bare a=/b= fallback, unlike figure 3\'s a', () => {
+  it('a bare a= never seeds lensesA; lenses.b= still seeds lensesB', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/api/people': people,
+        '/graph': emptyGraph(personA),
+        '/sources': [],
+        '/testimony': emptyTestimony,
+        '/lenses': { days: 30, a: { lens: 'all', about: 0 }, b: { lens: 'lean:right', about: 0 }, terms: [] },
+      })
+      await withLocation('?a=lean:left&lenses.b=lean:right', () => appModule.boot())
+      await flush()
+      const lensesCall = calls.find((u) => u.includes('/lenses'))
+      assert.ok(lensesCall, 'figure 6 must have requested /lenses')
+      const qs = new URL(lensesCall!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'all', 'a bare a= must never leak into the lenses figure (keys: [\'a\', null])')
+      assert.equal(qs.get('b'), 'lean:right', 'lenses.b= (prefixed) must still seed it')
+    })
+  })
+})

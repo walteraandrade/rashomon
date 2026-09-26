@@ -73,9 +73,14 @@ describe('#211: GET /api/people/:id/attention', () => {
   })
 
   it('docs/api.md names the route, its days parameter/default and the { days, series } / { day, views } shape (AC12)', () => {
-    assert.match(docsText, /\/api\/people\/:id\/attention/)
-    assert.match(docsText, /days.*30/)
-    assert.match(docsText, /\bseries\b/)
-    assert.match(docsText, /\bday\b.*\bviews\b/)
+    const match = /## attention\n[\s\S]*?(?=\n## |$)/.exec(docsText)
+    assert.ok(match, 'docs/api.md has an attention section')
+    const section = match[0]
+    assert.match(section, /\/api\/people\/:id\/attention/)
+    assert.match(section, /days[\s\S]*?30/)
+    assert.match(section, /\bseries\b/)
+    assert.match(section, /\bday\b[\s\S]*?\bviews\b/)
+    assert.match(section, /\{ days, series \}/)
+    assert.match(section, /\{ day, views \}/)
   })
 })

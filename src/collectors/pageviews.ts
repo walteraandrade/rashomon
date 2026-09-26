@@ -13,7 +13,7 @@ const isoStamp = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '')
 const pageviewsUrl = (title: string) => {
   const now = new Date()
   const start = new Date(now.getTime() - windowDays * 86_400_000)
-  return `${base}/${encodeURIComponent(title)}/daily/${isoStamp(start)}/${isoStamp(now)}`
+  return `${base}/${encodeURIComponent(title.trim().replace(/ /g, '_'))}/daily/${isoStamp(start)}/${isoStamp(now)}`
 }
 
 export type AttentionRow = { person_id: string; day: string; views: number }
@@ -47,7 +47,9 @@ const collectPerson = (person: Person): Effect.Effect<AttentionRow[], never, Htt
     )
     yield* Console.log(`[pageviews] ${person.id}: ${items.length} days`)
     yield* Effect.sleep(pauseMs)
-    return items.map((item) => ({ person_id: person.id, day: dayOf(item.timestamp), views: item.views }))
+    return items
+      .filter((item) => Number.isInteger(item.views) && item.views >= 0 && /^\d{8}/.test(item.timestamp))
+      .map((item) => ({ person_id: person.id, day: dayOf(item.timestamp), views: item.views }))
   })
 
 export const collect = (persons: Person[]): Effect.Effect<AttentionRow[], never, HttpClient.HttpClient> =>

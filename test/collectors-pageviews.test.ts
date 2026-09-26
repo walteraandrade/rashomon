@@ -42,6 +42,23 @@ describe('#211: pageviews collector', () => {
       { person_id: 'lula', day: '2026-09-24', views: 1532 },
       { person_id: 'lula', day: '2026-09-23', views: 980 },
     ])
+    assert.ok(fetchFn.calls[0]?.url.pathname.includes('Luiz_In%C3%A1cio_Lula_da_Silva'), 'spaces become underscores before encoding')
+  })
+
+  it('drops an item that fails the storable shape (e.g. views: null) and keeps the valid one', async () => {
+    const p = person('lula', 'Luiz Inácio Lula da Silva')
+    const fetchFn = fakeFetch(() =>
+      json({
+        items: [
+          { timestamp: '2026092400', views: 1532 },
+          { timestamp: '2026092300', views: null },
+        ],
+      }),
+    )
+    const exit = await runTest(drain(collect([p]), 1_000), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.exit))
+    assert.deepEqual(exit.value.exit.value, [{ person_id: 'lula', day: '2026-09-24', views: 1532 }])
   })
 
   it('429 then 500 then 200 makes exactly three requests, waiting 4 000ms then 8 000ms, exercised entirely under TestClock (AC8)', async () => {
@@ -84,7 +101,7 @@ describe('#211: pageviews collector', () => {
     const a = person('a', 'Titulo Inexistente')
     const b = person('b', 'Titulo Existente')
     const fetchFn = fakeFetch((c) =>
-      c.url.pathname.includes(encodeURIComponent('Titulo Inexistente'))
+      c.url.pathname.includes(encodeURIComponent('Titulo_Inexistente'))
         ? new Response('not found', { status: 404 })
         : json({ items: [{ timestamp: '2026092400', views: 42 }] }),
     )

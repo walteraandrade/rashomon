@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { after, describe, it } from 'node:test'
-import { Effect, Exit, Layer } from 'effect'
-import { TestConsole } from 'effect/testing'
+import { Effect, Exit, Fiber, Layer } from 'effect'
+import { TestClock, TestConsole } from 'effect/testing'
 import { FetchHttpClient, type HttpClient } from 'effect/unstable/http'
 import { SqlClient, SqlError } from 'effect/unstable/sql'
 import { db, runSql } from '../src/db.js'
@@ -36,13 +36,21 @@ const testLayer = async (match?: RegExp) => {
   )
 }
 
+// Drives ingest() on the fake clock: the pageviews stage's own Effect.sleep(1000) (issue #211,
+// once per person with a `wikipedia` title, the fixture's lula) would otherwise cost every
+// ingest test a real second.
 const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient | SqlClient.SqlClient>, layer: Layer.Layer<HttpClient.HttpClient | SqlClient.SqlClient>) =>
   Effect.gen(function* () {
-    const exit = yield* Effect.exit(effect)
+    const fiber = yield* Effect.forkChild(effect)
+    while (fiber.pollUnsafe() === undefined) {
+      yield* TestClock.adjust(1_000)
+      yield* Effect.promise(() => new Promise<void>((r) => setImmediate(r)))
+    }
+    const exit = yield* Fiber.await(fiber)
     const logs = (yield* TestConsole.logLines).map(String)
     const errors = (yield* TestConsole.errorLines).map(String)
     return { exit, logs, errors }
-  }).pipe(Effect.provide(layer))
+  }).pipe(Effect.provide(layer), Effect.provide(TestClock.layer()))
 
 const doc = (uri: string, text: string): RawDoc => ({ source: 'rss', uri, text, publishedAt: new Date().toISOString(), domain: 'example.org' })
 

@@ -16,6 +16,10 @@ import {
   paintDocs,
   paintDocsHead,
   paintDocsLoading,
+  paintLensDetail,
+  paintLensRuler,
+  paintLensRulerError,
+  paintLensesLoading,
   paintOutletsLoading,
   paintRisingLoading,
   paintRisingRuler,
@@ -44,7 +48,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { signed, termMask, type Compare, type CompareTerm, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -74,6 +78,7 @@ const sample = {
 const lula = { id: 'lula', name: 'Lula' }
 const bolsonaro = { id: 'bolsonaro', name: 'Jair Bolsonaro' }
 const compareData = (terms: CompareTerm[]): Compare => ({ days: 365, a: { person: lula, about: 900 }, b: { person: bolsonaro, about: 700 }, terms })
+const lensesData = (terms: CompareTerm[], a = 'all', b = 'lean:right'): Lenses => ({ days: 30, a: { lens: a, about: 900 }, b: { lens: b, about: 700 }, terms })
 const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
 
 const term = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 12, pmi: 1.4 }
@@ -765,6 +770,78 @@ describe('rulerTerms / paintRuler: a term where either side is the string "name"
       assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="lula"/)
       assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="bolsonaro"/)
       assert.match(els.compareRuler.innerHTML, /data-term="reforma"/)
+    })
+  })
+})
+
+describe('paintLensRuler (figure 6, issue #206): empty-state markup and own-name hidden count', () => {
+  it('paints "Nenhuma palavra neste recorte." when terms is empty', () => {
+    withFakeDocument(['lensesRuler'], (els) => {
+      const { hiddenCount, shown, overflowCount } = paintLensRuler({ data: lensesData([]), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
+      assert.match(els.lensesRuler.innerHTML, /Nenhuma palavra neste recorte\./)
+      assert.equal(hiddenCount, 0)
+      assert.equal(shown, 0)
+      assert.equal(overflowCount, 0)
+    })
+  })
+
+  it('drops a term that is "name" on either side and reports it in hiddenCount, same as paintRuler', () => {
+    withFakeDocument(['lensesRuler'], (els) => {
+      const terms: CompareTerm[] = [
+        { term: 'lula', kind: 'word', a: 'name', b: 'name' },
+        { term: 'reforma', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 2, pmi: 0.5, tone: null } },
+      ]
+      const { hiddenCount } = paintLensRuler({ data: lensesData(terms), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
+      assert.equal(hiddenCount, 1)
+      assert.doesNotMatch(els.lensesRuler.innerHTML, /data-term="lula"/)
+      assert.match(els.lensesRuler.innerHTML, /data-term="reforma"/)
+    })
+  })
+
+  it('positions by pmi always, with no measure parameter to switch it', () => {
+    withFakeDocument(['lensesRuler'], (els) => {
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 40, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } }]
+      paintLensRuler({ data: lensesData(terms), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
+      const byPmi = rulerTerms(terms, 'pmi').items[0].balance
+      const byCount = rulerTerms(terms, 'count').items[0].balance
+      assert.notEqual(byPmi, byCount, 'fixture assumption: pmi and count order this term differently')
+      assert.match(els.lensesRuler.innerHTML, /data-term="reforma"/)
+    })
+  })
+})
+
+describe('paintLensRulerError / paintLensesLoading', () => {
+  it('paintLensRulerError paints the failure note', () => {
+    withFakeDocument(['lensesRuler'], (els) => {
+      paintLensRulerError()
+      assert.match(els.lensesRuler.innerHTML, /Não foi possível carregar as lentes/)
+    })
+  })
+
+  it('paintLensesLoading paints a ghost, never the word Carregando', () => {
+    withFakeDocument(['lensesRuler', 'lensesDetail'], (els) => {
+      paintLensesLoading()
+      assert.match(els.lensesRuler.innerHTML, /ghost-field/)
+      assert.doesNotMatch(els.lensesRuler.innerHTML, /Carregando/)
+      assert.match(els.lensesDetail.innerHTML, /ghost-field/)
+    })
+  })
+})
+
+describe('paintLensDetail', () => {
+  it('shows the empty hint when no term is selected', () => {
+    withFakeDocument(['lensesDetail'], (els) => {
+      paintLensDetail({ term: null, endA: 'Tudo', endB: 'Direita' })
+      assert.match(els.lensesDetail.innerHTML, /Clique numa palavra/)
+    })
+  })
+
+  it('labels each side by its lens, not by a person, and reads "nenhum documento" for a null side', () => {
+    withFakeDocument(['lensesDetail'], (els) => {
+      const term: CompareTerm = { term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }
+      paintLensDetail({ term, endA: 'Folha de S.Paulo', endB: 'Direita' })
+      assert.match(els.lensesDetail.innerHTML, /<dt>Folha de S\.Paulo<\/dt>/)
+      assert.match(els.lensesDetail.innerHTML, /<dt>Direita<\/dt><dd class="empty-hint">nenhum documento<\/dd>/)
     })
   })
 })

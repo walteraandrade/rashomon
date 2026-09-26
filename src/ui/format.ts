@@ -30,6 +30,12 @@ export type Rising = { days: number; baseline: number; terms: RisingTerm[]; pres
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }
+// The raw token /api/people/:id/lenses echoes back, normalized: domain:<host>, lean:<value>,
+// source:<name>, or the fallback 'all'. CompareTerm is reused as-is for `terms`: the API's
+// per-term { term, kind, a, b } shape is identical to /compare's.
+export type Lens = string
+export type LensSide = { lens: Lens; about: number }
+export type Lenses = { days: number; a: LensSide; b: LensSide; terms: CompareTerm[] }
 // The inspector's own 7-bar sparkline (issue #147): 'loading' paints a ghost, 'ready' the
 // counts /timeline returned, 'error' leaves the hole empty rather than inventing bars.
 export type SparklineState = 'loading' | 'ready' | 'error'
@@ -116,6 +122,20 @@ export const score = (n: { pmi?: number; count?: number }, sort: string) =>
   sort === 'pmi' ? Number(n.pmi || 0) * Math.log1p(Number(n.count || 0)) : Number(n.count || 0)
 
 export const scoreName = (sort: string) => (sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
+
+const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
+
+// Turns a lens token (echoed back by /api/people/:id/lenses, always normalized) into the prose
+// the ruler's own end labels and #lensesStatus need: a domain's bare host, a lean's pt-BR name,
+// a source's own label, or "Tudo" for the 'all' fallback.
+export const lensLabel = (lens: Lens): string => {
+  if (lens === 'all') return 'Tudo'
+  const [prefix, value] = [lens.slice(0, lens.indexOf(':')), lens.slice(lens.indexOf(':') + 1)]
+  if (prefix === 'domain') return value
+  if (prefix === 'lean') return LEAN_LABELS[value] ?? value
+  if (prefix === 'source') return sourceLabels[value] ?? value
+  return lens
+}
 
 export const matching = (n: { kind?: string; term: string }, query: unknown) => normalize(label(n)).includes(normalize(query))
 

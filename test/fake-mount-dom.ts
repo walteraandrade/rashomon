@@ -335,7 +335,66 @@ const weekIds = () => ({
   weekNote: new FakeBox('weekNote'),
 })
 
-export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds> & ReturnType<typeof risingIds> & ReturnType<typeof weekIds>
+// Figure 6 (issue #206): one person select, two lens selects (flat options across every
+// optgroup the real markup groups them into — a FakeSelect has no optgroup concept, and no
+// criterion here needs one), the two optgroup stand-ins loadOutlets() fills dynamically, the
+// days/limit selects, the ruler host, detail/status/hidden-note lines.
+const lensesIds = () => ({
+  lenses: new FakeBox('lenses'),
+  lensesPerson: new FakeSelect('lensesPerson'),
+  lensesA: new FakeSelect('lensesA', [
+    { value: 'all', text: 'Tudo', selected: true },
+    { value: 'lean:left', text: 'Esquerda' },
+    { value: 'lean:center', text: 'Centro' },
+    { value: 'lean:right', text: 'Direita' },
+    { value: 'source:bluesky', text: 'Bluesky' },
+    { value: 'source:gdelt', text: 'GDELT' },
+    { value: 'source:rss', text: 'RSS' },
+    { value: 'source:gnews', text: 'Google News' },
+    { value: 'source:gkg', text: 'GKG' },
+    { value: 'source:camara', text: 'Câmara' },
+    { value: 'source:senado', text: 'Senado' },
+    { value: 'source:juridico', text: 'Jurídico' },
+    { value: 'source:oficial', text: 'Oficial' },
+    { value: 'source:nicho', text: 'Nicho' },
+  ]),
+  lensesB: new FakeSelect('lensesB', [
+    { value: 'all', text: 'Tudo', selected: true },
+    { value: 'lean:left', text: 'Esquerda' },
+    { value: 'lean:center', text: 'Centro' },
+    { value: 'lean:right', text: 'Direita' },
+    { value: 'source:bluesky', text: 'Bluesky' },
+    { value: 'source:gdelt', text: 'GDELT' },
+    { value: 'source:rss', text: 'RSS' },
+    { value: 'source:gnews', text: 'Google News' },
+    { value: 'source:gkg', text: 'GKG' },
+    { value: 'source:camara', text: 'Câmara' },
+    { value: 'source:senado', text: 'Senado' },
+    { value: 'source:juridico', text: 'Jurídico' },
+    { value: 'source:oficial', text: 'Oficial' },
+    { value: 'source:nicho', text: 'Nicho' },
+  ]),
+  lensesAOutlets: new FakeBox('lensesAOutlets'),
+  lensesBOutlets: new FakeBox('lensesBOutlets'),
+  lensesDays: new FakeSelect('lensesDays', DAYS_OPTIONS),
+  lensesLimit: new FakeSelect('lensesLimit', [
+    { value: '20', text: '20', selected: true },
+    { value: '40', text: '40' },
+    { value: '60', text: '60' },
+    { value: '100', text: '100' },
+  ]),
+  lensesStatus: new FakeBox('lensesStatus'),
+  lensesRuler: new FakeBox('lensesRuler'),
+  lensesDetail: new FakeBox('lensesDetail'),
+  lensesHiddenNote: new FakeBox('lensesHiddenNote'),
+})
+
+export type Elements = ReturnType<typeof atlasIds> &
+  ReturnType<typeof testimonyIds> &
+  ReturnType<typeof compareIds> &
+  ReturnType<typeof risingIds> &
+  ReturnType<typeof weekIds> &
+  ReturnType<typeof lensesIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -347,7 +406,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

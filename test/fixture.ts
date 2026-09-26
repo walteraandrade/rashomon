@@ -209,6 +209,17 @@ export const docs: RawDoc[] = [
   // pass even with the exclusion missing from windowScope. Vocabulary ("lusotropicalismo")
   // is unique to this doc, so no pinned literal elsewhere shifts.
   { source: 'rss', uri: 'https://exemplo.pt/58', text: 'Lula defende lusotropicalismo em discurso na capital', publishedAt: daysAgo(2), domain: 'exemplo.pt' },
+  // docs 59-61: issue #206 gap fix -- lensesFor's `names` CTE must cap each side's own-name
+  // union at `limit`, never leave it unbounded. contentWords keeps "luiz"/"inacio" (4/6 chars),
+  // both split from lula's alias "Luiz Inácio", so nameTokens(lula) matches them as ordinary
+  // vocabulary here, same as "lula" itself. On this one domain alone lula's own-name terms are
+  // "lula" (count 3), "luiz" (count 2), "inacio" (count 1) -- three distinct terms, so a lens
+  // pair both scoped to this domain at limit=1 would union all three (unbounded) but must cap
+  // to just "lula" (the top-1 by count) once capped. A fresh domain, dated past every other
+  // pinned window (>3800 days), so nothing else shifts.
+  { source: 'rss', uri: 'https://lentesteste.example/59', text: 'Lula recebe Luiz em evento de posse', publishedAt: daysAgo(3900), domain: 'lentesteste.example' },
+  { source: 'rss', uri: 'https://lentesteste.example/60', text: 'Lula recebe Luiz outra vez no palacio', publishedAt: daysAgo(3901), domain: 'lentesteste.example' },
+  { source: 'rss', uri: 'https://lentesteste.example/61', text: 'Lula e Inacio se encontram no Planalto', publishedAt: daysAgo(3902), domain: 'lentesteste.example' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

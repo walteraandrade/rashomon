@@ -1587,6 +1587,26 @@ describe('lensesFor (issue #206)', () => {
     assert.deepEqual(r.terms, [])
   })
 
+  it('caps each side\'s own-name union at limit, so terms never carry more than 2 * limit "name" rows (issue #206 gap fix)', async () => {
+    // this one fixture domain alone has three distinct own-name terms for lula ("lula",
+    // "luiz", "inacio"): with a and b both scoped to it, an unbounded `names` CTE would union
+    // all three regardless of limit; capped, each side keeps only its own top-1 by count
+    // ("lula", the highest), so the union collapses to one term.
+    const lens = { lens: 'domain:lentesteste.example', domain: 'lentesteste.example', lean: 'all', source: 'all' }
+    const r = await lensesFor(lula, { ...lensesBase, days: 3950, limit: 1, a: lens, b: lens })
+    const names = r.terms.filter((t) => t.a === 'name')
+    assert.ok(names.length <= 2 * 1, `expected at most 2 own-name terms at limit=1, got ${names.length}`)
+    assert.deepEqual(names.map((t) => t.term), ['lula'])
+  })
+
+  it('a limit high enough to cover every own-name term still never exceeds 2 * limit', async () => {
+    const lens = { lens: 'domain:lentesteste.example', domain: 'lentesteste.example', lean: 'all', source: 'all' }
+    const r = await lensesFor(lula, { ...lensesBase, days: 3950, limit: 40, a: lens, b: lens })
+    const names = r.terms.filter((t) => t.a === 'name')
+    assert.ok(names.length <= 2 * 40)
+    assert.deepEqual(names.map((t) => t.term).sort(), ['inacio', 'luiz', 'lula'].sort())
+  })
+
   it("echoes back the query's own a.lens/b.lens labels verbatim (parseLens's fallback happens before lensesFor runs)", async () => {
     const a = { lens: 'domain:folha.uol.com.br', domain: 'folha.uol.com.br', lean: 'all', source: 'all' }
     const b = allLens

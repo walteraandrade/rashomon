@@ -980,9 +980,17 @@ const lensesQuery = (person: Person, q: LensesQuery) => sql`
   with
   ${lensSideCte('a', person, q.a, q)},
   ${lensSideCte('b', person, q.b, q)},
-  names as (
+  names_a as (
     select term, kind from scored_a where ${isName(sql.raw('term'), nameTokens(person))}
-    union select term, kind from scored_b where ${isName(sql.raw('term'), nameTokens(person))}
+    order by count desc, term, kind limit ${q.limit}
+  ),
+  names_b as (
+    select term, kind from scored_b where ${isName(sql.raw('term'), nameTokens(person))}
+    order by count desc, term, kind limit ${q.limit}
+  ),
+  names as (
+    select term, kind from names_a
+    union select term, kind from names_b
   ),
   keys as (
     select term, kind from a_top_count

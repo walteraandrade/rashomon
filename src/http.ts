@@ -1,7 +1,7 @@
 import { Data, Effect, Layer, Stream } from 'effect'
 import { FetchHttpClient, HttpClient, HttpClientError } from 'effect/unstable/http'
 
-export const headers = { 'user-agent': 'assoc-graph/0.1 (personal research)' }
+export const headers = { 'user-agent': 'assoc-graph/0.1 (personal research; https://github.com/walteraandrade/rashomon)' }
 
 // Shared wire-size ceiling for every unbounded network read in the collector layer: getBytes
 // here (gdelt, camara, senado, rss and gkg's zip fetch all read through it). A literal, not

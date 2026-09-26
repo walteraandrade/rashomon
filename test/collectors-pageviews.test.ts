@@ -61,6 +61,38 @@ describe('#211: pageviews collector', () => {
     assert.deepEqual(exit.value.exit.value, [{ person_id: 'lula', day: '2026-09-24', views: 1532 }])
   })
 
+  it('drops an item whose timestamp spells an impossible calendar day (e.g. month 13)', async () => {
+    const p = person('lula', 'Luiz Inácio Lula da Silva')
+    const fetchFn = fakeFetch(() =>
+      json({
+        items: [
+          { timestamp: '2026092400', views: 1532 },
+          { timestamp: '2026132400', views: 999 },
+        ],
+      }),
+    )
+    const exit = await runTest(drain(collect([p]), 1_000), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.exit))
+    assert.deepEqual(exit.value.exit.value, [{ person_id: 'lula', day: '2026-09-24', views: 1532 }])
+  })
+
+  it('two items landing on the same calendar day keep only the last value', async () => {
+    const p = person('lula', 'Luiz Inácio Lula da Silva')
+    const fetchFn = fakeFetch(() =>
+      json({
+        items: [
+          { timestamp: '2026092400', views: 100 },
+          { timestamp: '2026092412', views: 200 },
+        ],
+      }),
+    )
+    const exit = await runTest(drain(collect([p]), 1_000), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.exit))
+    assert.deepEqual(exit.value.exit.value, [{ person_id: 'lula', day: '2026-09-24', views: 200 }])
+  })
+
   it('429 then 500 then 200 makes exactly three requests, waiting 4 000ms then 8 000ms, exercised entirely under TestClock (AC8)', async () => {
     const p = person('lula', 'Luiz Inácio Lula da Silva')
     let n = 0

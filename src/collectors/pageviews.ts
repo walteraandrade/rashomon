@@ -23,6 +23,12 @@ type PageviewItem = { timestamp: string; views: number }
 // Wikimedia's own YYYYMMDDHH, read as a UTC calendar day as-is, never re-bucketed into BRT.
 const dayOf = (timestamp: string): string => `${timestamp.slice(0, 4)}-${timestamp.slice(4, 6)}-${timestamp.slice(6, 8)}`
 
+// Rejects a day the fields cannot spell (month 13, Feb 30, ...) via a round trip through Date's UTC parser.
+const isValidDay = (day: string): boolean => {
+  const d = new Date(`${day}T00:00:00.000Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === day
+}
+
 // 429/5xx retried up to 3 times, mirroring camara.ts's backoff shape (4s, 8s, 12s).
 const attempt = (title: string, n: number): Effect.Effect<PageviewItem[], Error, HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -47,9 +53,11 @@ const collectPerson = (person: Person): Effect.Effect<AttentionRow[], never, Htt
     )
     yield* Console.log(`[pageviews] ${person.id}: ${items.length} days`)
     yield* Effect.sleep(pauseMs)
-    return items
-      .filter((item) => Number.isInteger(item.views) && item.views >= 0 && /^\d{8}/.test(item.timestamp))
+    const rows = items
+      .filter((item) => Number.isInteger(item.views) && item.views >= 0 && /^\d{8}/.test(item.timestamp) && isValidDay(dayOf(item.timestamp)))
       .map((item) => ({ person_id: person.id, day: dayOf(item.timestamp), views: item.views }))
+    // unnest's own on-conflict update rejects a duplicate (person_id, day) twice in one statement.
+    return [...new Map(rows.map((r) => [r.day, r])).values()]
   })
 
 export const collect = (persons: Person[]): Effect.Effect<AttentionRow[], never, HttpClient.HttpClient> =>

@@ -258,6 +258,16 @@ export const seedCandidates = async () => {
 
 // doc_id is not known ahead of time (docs get a serial id on insert), so this resolves
 // uri -> doc_id at seed time rather than hardcoding it.
+export const insertTestimony = async (uri: string, personId: string, method: string, score: number | null) => {
+  const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])
+  await db.query(`insert into doc_testimony (doc_id, person_id, method, score) values ($1, $2, $3, $4)`, [
+    rows[0].id,
+    personId,
+    method,
+    score,
+  ])
+}
+
 // Direct insert, parallel to insertTestimony: person_attention has no derivation from RawDoc,
 // so tests seed it straight rather than through insertDocP.
 export const attentionRows = async (personId: string, rows: { day: string; views: number }[]) => {
@@ -268,16 +278,6 @@ export const attentionRows = async (personId: string, rows: { day: string; views
       [personId, day, views],
     )
   }
-}
-
-export const insertTestimony = async (uri: string, personId: string, method: string, score: number | null) => {
-  const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])
-  await db.query(`insert into doc_testimony (doc_id, person_id, method, score) values ($1, $2, $3, $4)`, [
-    rows[0].id,
-    personId,
-    method,
-    score,
-  ])
 }
 
 // Testimony rows for issue #21's /testimony route, layered on top of the existing docs

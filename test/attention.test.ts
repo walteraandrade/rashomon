@@ -32,12 +32,13 @@ describe('#211: GET /api/people/:id/attention', () => {
     assert.equal(res.status, 200)
     const body = await res.json()
     assert.deepEqual(body, JSON.parse(JSON.stringify(await attentionFor(lula, parseAttentionQuery({ days: '30' })))))
-    assert.equal(body.days, 30)
-    assert.deepEqual(
-      body.series.filter((r: { day: string }) => r.day === recentDay || r.day === olderDay),
-      body.series,
-    )
-    assert.ok(body.series[0].day < body.series[1].day, 'ascending by day')
+    assert.deepEqual(body, {
+      days: 30,
+      series: [
+        { day: olderDay, views: 980 },
+        { day: recentDay, views: 1532 },
+      ],
+    })
   })
 
   it('excludes a row outside the days:30 window, and includes it at days:365 (AC2)', async () => {

@@ -254,10 +254,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
 .compare .ruler, .compare .detail, .rising .ruler, .rising .note,
-.lenses .ruler, .lenses .detail { transition: opacity .16s ease-out; }
+.lenses .ruler, .lenses .detail, .agenda .agenda-grid { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
+.figure.is-loading .agenda-grid,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
@@ -316,6 +317,9 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .map-svg.is-masked .atlas-word, .map-svg.is-masked .atlas-word.is-neighbor { --wc: var(--mask, var(--muted)); }
 .map-svg.is-masked .atlas-word.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
 .mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--hostile), color-mix(in srgb, var(--scale-mid) 50%, transparent), var(--favor)); }
+/* Figure 7's own key swatch: muted to full ink, the exact ramp an agenda cell's own share reads
+   through -- no new hue, matching the site's "colour means something" rule. */
+.ink-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--muted), var(--ink)); }
 .underline { stroke: var(--wc, var(--accent)); stroke-width: 1.5; opacity: 0; }
 .atlas-word.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
@@ -742,6 +746,27 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-overflow .quiet-button b { margin-left: 6px; font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; }
 .week-overflow .quiet-button.is-selected { color: var(--ink); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); font-weight: 600; }
 #weekNote { margin-top: var(--space-3); }
+
+/* ---------- agenda (figure 7, domain × person coverage share, issue #208): a plain table --
+   the mark is a percentage, not a position to lay out, so it earns no swarm/ruler of its own.
+   Ink only: no new hue, share alone drives how dark a cell's own number reads. */
+.agenda-grid { display: block; margin-top: 18px; }
+.agenda-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.agenda-table { border-collapse: collapse; font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
+.agenda-table th, .agenda-table td { padding: 6px var(--space-3); border-bottom: 1px solid var(--line); text-align: left; }
+.agenda-table thead th { color: var(--muted); font-weight: 500; vertical-align: bottom; }
+.agenda-table tbody th { color: var(--ink); font-weight: 500; }
+.agenda-table tbody th .d { margin-right: 6px; }
+.agenda-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.agenda-cell.is-empty { color: var(--muted); text-align: center; }
+.agenda-pick { border: 0; background: none; padding: 2px 4px; font: inherit; cursor: pointer; color: color-mix(in srgb, var(--ink) var(--share, 0%), var(--muted)); }
+.agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: underline; }
+.agenda-pick.is-active { color: var(--accent); font-weight: 600; text-decoration: none; }
+.agenda-grid > .note { margin-top: var(--space-3); }
+/* Ink weight, not a lean colour: a small neutral chip beside the domain name it labels. */
+.lean-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-family: var(--mono); font-size: var(--t-micro); font-weight: 500; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); vertical-align: middle; }
+.agenda-ghost { display: flex; flex-direction: column; gap: var(--space-3); padding-top: 6px; }
+.agenda-ghost-row { display: flex; align-items: center; gap: var(--space-4); }
 
 /* ---------- the pet ---------- */
 /* The one raster on a site that otherwise draws every limit with type. It is allowed exactly

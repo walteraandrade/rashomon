@@ -1,4 +1,5 @@
 import { mountDocsCard } from './docs-card.js'
+import { mount as mountAgenda } from './figures/agenda.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountLenses } from './figures/lenses.js'
@@ -6,7 +7,16 @@ import { mount as mountRising } from './figures/rising.js'
 import { mount as mountTestimony } from './figures/testimony.js'
 import { mount as mountWeek } from './figures/week.js'
 import { mountHelp } from './help.js'
-import { paintAtlasLoading, paintCompareLoading, paintLensesLoading, paintOutletsLoading, paintRisingLoading, paintTestimonyLoading, paintWeekLoading } from './render.js'
+import {
+  paintAgendaLoading,
+  paintAtlasLoading,
+  paintCompareLoading,
+  paintLensesLoading,
+  paintOutletsLoading,
+  paintRisingLoading,
+  paintTestimonyLoading,
+  paintWeekLoading,
+} from './render.js'
 import * as api from './api.js'
 
 type Person = { id: string; name: string }
@@ -39,6 +49,9 @@ const FIGURES: FigureEntry[] = [
   // days stays fixed at 7, never seeded: figure 5 has no period control (issue #147 §4).
   { id: 'week', sectionId: 'week', keys: ['person', 'source', 'limit'], noticeId: 'weekNote', mount: mountWeek },
   { id: 'lenses', sectionId: 'lenses', keys: ['person', ['a', null], ['b', null], 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
+  // Spans every tracked person at once, so no 'person' key: the route's own persons list feeds
+  // the grid's columns.
+  { id: 'agenda', sectionId: 'agenda', keys: ['days', 'source'], noticeId: 'agendaGrid', mount: mountAgenda },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.
@@ -66,6 +79,7 @@ const paintBootLoading = () => {
   paintRisingLoading()
   paintWeekLoading()
   paintLensesLoading()
+  paintAgendaLoading()
 }
 
 export const boot = async () => {

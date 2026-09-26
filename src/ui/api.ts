@@ -112,3 +112,11 @@ export const lensesParams = ({ a, b, days, limit }: { a: string; b: string; days
   new URLSearchParams({ a, b, days, limit, kind: ATLAS_KINDS })
 
 export const loadLenses = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/lenses?' + queryParams, signal)
+
+// /api/agenda is not nested under /people/:id: one call ranks every tracked person's share of
+// the top domains at once. `min` stays at the route's own default (5); no UI control.
+export const AGENDA_MIN = 5
+
+export const agendaParams = ({ days, source }: { days: string; source: string }) => new URLSearchParams({ days, source })
+
+export const loadAgenda = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/agenda?' + queryParams, signal)

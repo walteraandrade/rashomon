@@ -254,10 +254,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
 .compare .ruler, .compare .detail, .rising .ruler, .rising .note,
-.lenses .ruler, .lenses .detail { transition: opacity .16s ease-out; }
+.lenses .ruler, .lenses .detail, .attention .attention-chart, .attention .note { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
+.figure.is-loading .attention-chart,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
@@ -473,7 +474,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 }
 @media (prefers-reduced-motion: reduce) {
   .docs-dialog[open] { animation: none; }
-  .atlas-glow, .atlas-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card { transition: none; }
+  .atlas-glow, .atlas-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card,
+  .attention-glow, .attention-hit { transition: none; }
   .ghost-field { animation: none; }
 }
 .docs-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 18px 22px var(--space-4); }
@@ -742,6 +744,32 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-overflow .quiet-button b { margin-left: 6px; font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; }
 .week-overflow .quiet-button.is-selected { color: var(--ink); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); font-weight: 600; }
 #weekNote { margin-top: var(--space-3); }
+
+/* ---------- the attention figure (figure 7, wikipedia pageviews against press mentions,
+   issue #216): two rows on one shared day axis, each scaled off its own maximum -- pageviews
+   and documents live in different orders of magnitude and are never read as one number against
+   the other. [data-row] tells the rows apart; there is no second colour pair here, only --ink
+   for mentions and --accent for views, the same live-control hue the rest of the page already
+   uses for "the thing that changed". Same glow/hit/text triad as the ruler and the week; the
+   axis reuses marks.ts's shared axis() with cls="attention" (.attention-axis/.attention-tick). ---------- */
+.attention-chart { margin: 18px 0 0; padding: 6px 0 10px; }
+.attention-row { margin-bottom: var(--space-4); }
+.attention-row:last-child { margin-bottom: 0; }
+.attention-row-head { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); padding-bottom: var(--space-1); }
+.attention-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.attention-axis { stroke: var(--line); stroke-width: 2; }
+.attention-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+.attention-mark { cursor: pointer; outline: none; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.attention-row[data-row="views"] .attention-mark { --wc: var(--accent); }
+.attention-glow, .attention-hit { fill: transparent; rx: 4px; }
+.attention-glow { filter: blur(7px); transition: fill .16s ease-out; }
+.attention-hit { filter: blur(2px); transition: fill .16s ease-out; }
+.attention-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
+.attention-mark:hover .attention-glow, .attention-mark:focus-visible .attention-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
+.attention-mark:hover .attention-hit, .attention-mark:focus-visible .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
+.attention-mark.is-selected .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
+.attention-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
+#attentionNote { margin-bottom: var(--space-3); }
 
 /* ---------- the pet ---------- */
 /* The one raster on a site that otherwise draws every limit with type. It is allowed exactly

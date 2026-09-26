@@ -153,6 +153,21 @@
     <div class="detail" id="lensesDetail"><span class="empty-hint">Clique numa palavra para ver os números das duas lentes.</span></div>
     <p class="note" id="lensesHiddenNote" hidden></p>
   </section>
+
+  <section class="figure attention" id="attention" aria-labelledby="attentionTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="attentionTitle">Atenção e menções</h2></div>
+      <p class="figure-sub">Quanto se buscou o nome na Wikipédia contra quanto se escreveu sobre a pessoa, dia a dia. <a href="como-ler.html#atencao">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt>Posição</dt><dd>o dia, o mesmo eixo nas duas linhas</dd></div>
+        <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>intensidade própria de cada linha, numa escala só dela</dd></div>
+        <div><dt>Clique</dt><dd>documentos do dia, na linha de menções</dd></div>
+      </dl>
+      <div class="sentence"><p class="sentence-line">Curiosidade e menções sobre <span class="pick"><select id="attentionPerson" aria-label="Pessoa (atenção)"></select></span> nos últimos 30 dias, em <span class="keep"><span class="pick"><select id="attentionSource" aria-label="Fonte (atenção)"></select></span>.</span></p></div>
+    </header>
+    <p class="note" id="attentionNote"></p>
+    <figure class="attention-chart" id="attentionChart" aria-label="Pageviews da Wikipédia e menções por dia" hidden></figure>
+  </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
   <div class="docs-dialog-head" id="docsGrip"><div><span class="eyebrow" id="docsKicker">Documentos</span><h2 id="docsTitle"></h2></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
@@ -222,6 +237,11 @@
       <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara as duas lentes escolhidas para a mesma pessoa, do mesmo jeito que o gráfico 3 compara duas pessoas: a posição diz de qual lente a palavra é mais, o tamanho é documentos das duas lentes somados. Clique abre os textos das duas lentes.</p>
       <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". O nome da pessoa não entra na régua; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas, já que é a mesma pessoa nos dois lados.</p>
       <p>Uma lente inválida ou vazia volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
+    </div>
+    <div id="help-atencao">
+      <h3>Gráfico 7 · Atenção e menções</h3>
+      <p>Uma linha traz quantas pessoas visitaram a página da Wikipédia da pessoa, dia a dia: curiosidade, não opinião. A outra traz quantos textos a citam naquele mesmo dia. As duas nunca são comparadas como um número contra o outro: vivem em ordens de grandeza diferentes, cada uma na sua própria escala.</p>
+      <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever. Sem pico em nenhuma das duas (pessoa sem página rastreada, ou janela vazia), não há frase, só uma nota. Clique abre os textos do dia, do lado de menções; pageviews não têm texto próprio para abrir.</p>
     </div>
     <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
     <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>

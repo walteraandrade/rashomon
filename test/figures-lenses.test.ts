@@ -352,6 +352,68 @@ describe('a control change while the initial /sources is still in flight is neve
       assert.equal(qs.get('a'), 'source:rss', 'the request actually sent must carry the value the reader picked')
     })
   })
+
+  it("a domain seed -- the one actually deferred to loadOutlets' own continuation -- is overridden by a change made before /sources resolves", async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const release = controlledSources(calls, {
+        '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }],
+        '/lenses': lensesData([]),
+      })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { a: 'domain:folha.uol.com.br' } })
+      await flush()
+      // The domain seed's own <option> does not exist yet -- nothing to apply synchronously.
+      assert.equal(els.lensesA.value, 'all')
+      els.lensesA.value = 'source:rss'
+      els.lensesA.fire('change')
+      await flush()
+      release()
+      await flush(220)
+      assert.equal(els.lensesA.value, 'source:rss', "loadOutlets' own continuation must not reapply the deferred domain seed once the reader has touched lensesA")
+      const lastLenses = calls.filter((u) => u.includes('/lenses')).pop()
+      const qs = new URL(lastLenses!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'source:rss')
+    })
+  })
+
+  it('with no interaction at all, the deferred domain seed does land once /sources fills the option in', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const release = controlledSources(calls, {
+        '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }],
+        '/lenses': lensesData([]),
+      })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { a: 'domain:folha.uol.com.br' } })
+      await flush()
+      release()
+      await flush(220)
+      assert.equal(els.lensesA.value, 'domain:folha.uol.com.br')
+      const lastLenses = calls.filter((u) => u.includes('/lenses')).pop()
+      const qs = new URL(lastLenses!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'domain:folha.uol.com.br')
+    })
+  })
+
+  it('a lensesLimit change while /sources is in flight does not discard the deferred domain seed for A (nit 2)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const release = controlledSources(calls, {
+        '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }],
+        '/lenses': lensesData([]),
+      })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { a: 'domain:folha.uol.com.br' } })
+      await flush()
+      els.lensesLimit.value = '60'
+      els.lensesLimit.fire('change')
+      await flush()
+      release()
+      await flush(220)
+      assert.equal(els.lensesA.value, 'domain:folha.uol.com.br', "a lensesLimit change says nothing about which domain A/B should show, so it must not discard A's own pending seed")
+    })
+  })
 })
 
 describe('a stale /sources response never overwrites a newer person/window\'s optgroup (PR #226, gap 2)', () => {
@@ -399,6 +461,53 @@ describe('a stale /sources response never overwrites a newer person/window\'s op
       assert.equal(els.lensesA.value, 'domain:folha.uol.com.br', "personA's stale response must not have reset the select")
     })
   })
+
+  it('a days race that returns to its starting value (30 -> 7 -> 30, same person) is caught only by the generation counter, never by the person/days-changed check alone', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      let releaseFirst: (() => void) | undefined
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let sourcesCalls = 0
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        const path = new URL(url, 'http://localhost').pathname
+        if (path.endsWith('/sources')) {
+          sourcesCalls++
+          // The mount-time call (days=30) is gated to resolve last, after both the days=7 and
+          // the days=30-again calls that follow -- so by the time it resumes, `$('lensesDays')`
+          // reads '30' again too: only a monotonic generation counter, not a captured-days
+          // comparison, can still tell this response is the stale one.
+          if (sourcesCalls === 1) {
+            await firstGate
+            return jsonResponse([{ domain: 'stale.example', docs: 1 }]) as unknown as Response
+          }
+          return jsonResponse([{ domain: 'fresh.example', docs: 1 }]) as unknown as Response
+        }
+        if (path.endsWith('/lenses')) return jsonResponse(lensesData([])) as unknown as Response
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people: [personA], initial: { days: '30' } })
+      await flush()
+      els.lensesDays.value = '7'
+      els.lensesDays.fire('change')
+      await flush(220)
+      els.lensesDays.value = '30'
+      els.lensesDays.fire('change')
+      await flush(220)
+      assert.ok(
+        els.lensesA.options.some((o: { value: string }) => o.value === 'domain:fresh.example'),
+        'the latest (days=30-again) response must have filled the optgroup'
+      )
+      releaseFirst!()
+      await flush(220)
+      assert.ok(
+        !els.lensesA.options.some((o: { value: string }) => o.value === 'domain:stale.example'),
+        "the mount-time call's stale response, resolving last, must never land even though days matches again"
+      )
+    })
+  })
 })
 
 describe('a control change releases the docs card this figure owns, never just the pick (PR #226, gap 3)', () => {
@@ -444,6 +553,44 @@ describe('a control change releases the docs card this figure owns, never just t
       assert.equal(els.docsDialog.open, true, "another figure's card must survive even though this figure still had a pick")
     })
   })
+
+  it('changing lensesPerson closes a card this figure opened', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: { count: 2, pmi: 0.4, tone: null } }]
+      routeFetch(calls, { '/lenses': lensesData(terms), '/sources': [] })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: {} })
+      await flush()
+      const [word] = els.lensesRuler.querySelectorAll('[data-term]')
+      word.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the lenses card is open')
+      els.lensesPerson.value = personB.id
+      els.lensesPerson.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'the card this figure opened must close with the person change')
+    })
+  })
+
+  it('changing lensesDays closes a card this figure opened', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: { count: 2, pmi: 0.4, tone: null } }]
+      routeFetch(calls, { '/lenses': lensesData(terms), '/sources': [] })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people: [personA], initial: {} })
+      await flush()
+      const [word] = els.lensesRuler.querySelectorAll('[data-term]')
+      word.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the lenses card is open')
+      els.lensesDays.value = '7'
+      els.lensesDays.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'the card this figure opened must close with the days change')
+    })
+  })
 })
 
 describe('a resize repaint keeps the pick and the open card; a second click on the same word still releases it (PR #226, gap 4)', () => {
@@ -481,6 +628,51 @@ describe('a resize repaint keeps the pick and the open card; a second click on t
       mark()!.fire('click')
       await flush()
       assert.equal(els.docsDialog.open, false, 'a second click on the same word must still release it, after a resize repaint in between')
+    })
+  })
+})
+
+describe('a pick made mid-reload, against the still-old lens labels, is closed by the next paint (PR #226, gap 5)', () => {
+  it('re-picking the same word while a control-triggered reload is in flight opens a stale-lens card that the arriving data must close', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: { count: 2, pmi: 0.4, tone: null } }]
+      let releaseSecond: (() => void) | undefined
+      let lensesCalls = 0
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        const path = new URL(url, 'http://localhost').pathname
+        if (path.endsWith('/lenses')) {
+          lensesCalls++
+          if (lensesCalls === 2) {
+            await new Promise<void>((r) => (releaseSecond = r))
+            return jsonResponse(lensesData(terms, 'lean:left')) as unknown as Response
+          }
+          return jsonResponse(lensesData(terms)) as unknown as Response
+        }
+        if (path.endsWith('/sources')) return jsonResponse([]) as unknown as Response
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people: [personA], initial: {} })
+      await flush()
+      const mark = () => [...els.lensesRuler.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark()!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the first pick opens the card')
+      els.lensesA.value = 'lean:left'
+      els.lensesA.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, "the control change's own release() already closed the first card")
+      // The reload's own /lenses fetch (the second call) is still gated; re-pick against the
+      // still-old `data` (the first result, lens 'all'/'lean:right'), reopening the card.
+      mark()!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'a pick made mid-reload reopens the card, against the still-old lens labels')
+      releaseSecond!()
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'the next paint must close the stale-lens card it did not open, not leave it showing the old recorte')
     })
   })
 })

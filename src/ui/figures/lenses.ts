@@ -171,10 +171,15 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const paint = (result: Lenses) => {
     // A resize repaint calls this with the same object again (figure.ts's own repaint());
-    // only a genuinely new dataset clears the pick, or a resize would close the reader's card.
+    // only a genuinely new dataset clears the pick. A pick made between a control change and
+    // this new data landing opened its own card against the old lens labels; that card must
+    // close here too, or it survives showing rows from a recorte no control asks for any more.
     const isNewData = result !== data
     data = result
-    if (isNewData) selected = null
+    if (isNewData) {
+      if (docsCard.openedBy('lenses')) docsCard.close()
+      selected = null
+    }
     lastWidth = $('lensesRuler').clientWidth || 0
     $('lensesStatus').hidden = result.a.lens !== result.b.lens
     root.classList.remove('is-loading')
@@ -208,14 +213,28 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     onRelease: releaseSelection,
   })
 
-  // Set once the reader touches a control, so the initial seed's own deferred continuation
-  // never overwrites whatever she picked, however late its await settles.
-  let touched = false
+  // Set per select, only by an actual change to that select (or to the person, which can
+  // invalidate a domain on either side), so the initial seed's own deferred continuation never
+  // overwrites whichever one the reader touched -- but a lensesLimit/lensesDays change, neither
+  // of which says anything about which domain either side should show, discards neither.
+  let touchedA = false
+  let touchedB = false
 
   // figure.release() (week.ts's own pattern), not just `selected = null`: a control here must
   // not shut a card the atlas or the compare ruler is showing, or leave one open with stale rows.
-  const onControlChange = () => {
-    touched = true
+  const onLensAChange = () => {
+    touchedA = true
+    figure.release()
+    figure.reload()
+  }
+
+  const onLensBChange = () => {
+    touchedB = true
+    figure.release()
+    figure.reload()
+  }
+
+  const onLimitChange = () => {
     figure.release()
     figure.reload()
   }
@@ -225,8 +244,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   // The domain optgroup is rebuilt by loadOutlets whenever the person or the window changes; a
   // currently-selected domain that survives the refill is kept, else the select falls back to
   // 'all' explicitly. Exits early, leaving both selects untouched, when loadOutlets wrote
-  // nothing (a stale response) -- `touched` itself is irrelevant here, since the two callers
-  // set it before awaiting this, and this preserve-or-'all' step is their own response to it.
+  // nothing (a stale response).
   const refreshOutletsPreserving = async () => {
     const prevA = $('lensesA').value
     const prevB = $('lensesB').value
@@ -237,14 +255,15 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const onPersonChange = async () => {
-    touched = true
+    // A new person may not have the domain either side is currently seeded to land on.
+    touchedA = true
+    touchedB = true
     figure.release()
     await refreshOutletsPreserving()
     figure.reload()
   }
 
   const onDaysChange = async () => {
-    touched = true
     figure.release()
     await refreshOutletsPreserving()
     figure.reload()
@@ -262,14 +281,16 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   if (!isDomainSeed(initial.a)) applySeed($('lensesA'), initial.a)
   if (!isDomainSeed(initial.b)) applySeed($('lensesB'), initial.b)
 
-  for (const id of ['lensesA', 'lensesB', 'lensesLimit']) $(id).addEventListener('change', onControlChange)
+  $('lensesA').addEventListener('change', onLensAChange)
+  $('lensesB').addEventListener('change', onLensBChange)
+  $('lensesLimit').addEventListener('change', onLimitChange)
   $('lensesDays').addEventListener('change', onDaysChange)
   $('lensesPerson').addEventListener('change', onPersonChange)
 
   loadOutlets().then((applied) => {
-    if (applied && !touched) {
-      if (isDomainSeed(initial.a)) applySeed($('lensesA'), initial.a)
-      if (isDomainSeed(initial.b)) applySeed($('lensesB'), initial.b)
+    if (applied) {
+      if (isDomainSeed(initial.a) && !touchedA) applySeed($('lensesA'), initial.a)
+      if (isDomainSeed(initial.b) && !touchedB) applySeed($('lensesB'), initial.b)
     }
     figure.load()
   })

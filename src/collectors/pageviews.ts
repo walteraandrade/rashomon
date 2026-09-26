@@ -34,7 +34,6 @@ const attempt = (title: string, n: number): Effect.Effect<PageviewItem[], Error,
       yield* Effect.sleep(wait)
       return yield* attempt(title, n + 1)
     }
-    if (status === 404) return []
     if (status < 200 || status >= 300) return yield* Effect.fail(new Error(`pageviews ${status}: ${text.trim().slice(0, 120)}`))
     return (yield* parseJson<{ items?: PageviewItem[] }>(text)).items ?? []
   })

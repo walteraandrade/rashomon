@@ -9,6 +9,7 @@ type Table = { name: string; columns: string[]; json?: string[] }
 
 const tables: Table[] = [
   { name: 'persons', columns: ['id', 'name', 'aliases'] },
+  { name: 'person_attention', columns: ['person_id', 'day', 'views'] },
   {
     name: 'docs',
     columns: ['id', 'source', 'uri', 'text', 'published_at', 'collected_at', 'extra_terms', 'domain', 'tone', 'extra_names'],

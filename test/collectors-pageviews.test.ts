@@ -89,15 +89,15 @@ describe('pageviews collector', () => {
         : json({ items: [{ timestamp: '2026092400', views: 42 }] }),
     )
     const program = Effect.gen(function* () {
-      const fiber = yield* Effect.forkChild(collect([a, b]))
-      yield* tick()
-      yield* tick(1_000)
-      yield* tick(1_000)
-      return yield* Fiber.await(fiber)
+      const drained = yield* drain(collect([a, b]), 1_000)
+      const errors = (yield* TestConsole.errorLines).map(String)
+      return { drained, errors }
     })
-    const inner = await runTest(program, fetchFn)
-    assert.ok(Exit.isSuccess(inner))
-    const rows = Exit.isSuccess(inner) && Exit.isSuccess(inner.value) ? inner.value.value : []
+    const exit = await runTest(program, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(Exit.isSuccess(exit.value.drained.exit))
+    const rows = exit.value.drained.exit.value
     assert.deepEqual(rows, [{ person_id: 'b', day: '2026-09-24', views: 42 }])
+    assert.ok(exit.value.errors.some((line) => line.includes('a') && line.includes('404')), 'logs an error naming the 404 person')
   })
 })

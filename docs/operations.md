@@ -97,7 +97,7 @@ transaction open across an arbitrary amount of work. A third bound sits on the d
 - **Reindex.** It reads documents by keyset pagination on the primary key (`where id > $1 order by id
   limit $2`), never materializing more than one page of text, and commits one transaction per page.
 - **Orchestration.** `src/ingest.ts`'s `ingest(persons, names, options)` is an Effect: `migrate`,
-  `pruneRemoved`, `upsertPersons`, `loadPhrases`, `docCount`, `analyzeAfterWrite`,
+  `pruneRemoved`, `upsertPersons`, `loadPhrases`, `docCount`, `analyzeAfterWrite`, `pageviews`,
   `buildGraphAggregates` and `analyzeTables` are the calls whose rejection fails the whole run, each as
   `IngestFailure({ stage })` with its own stage name — never an uncaught defect, since a plain
   `Effect.promise` around a rejecting Promise resumes with `die`, not a typed failure, and would bypass a
@@ -114,7 +114,11 @@ transaction open across an arbitrary amount of work. A third bound sits on the d
   connection (`runSql(SqlClient.SqlClient)`), never opening a second one on the same `DATA_DIR`. A run
   whose `upsertPersons` (or `migrate`) rejects sets `process.exitCode = 1` and closes that connection
   before exiting, rather than continuing to collect against a stale person set; it never calls
-  `process.exit()`, so already-printed log lines survive.
+  `process.exit()`, so already-printed log lines survive. `pageviews` (Wikipedia attention, see
+  [sources](sources.md)) runs as its own stage after the doc-collector loop, on every `pnpm ingest`
+  regardless of which sources were named; a person's own fetch failure is isolated and logged inside
+  the stage (never fails the run), but the stage's own SQL write failing does, as
+  `IngestFailure({ stage: 'pageviews' })`.
 
 **A change to how text is derived ships with a `pnpm reindex`.** Editing `stopwords`, the phrase rules or
 `seed.json` changes nothing already stored: `doc_terms`, `doc_persons` and `doc_candidates` are written

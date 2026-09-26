@@ -21,7 +21,7 @@ const readRepoFile = (relPath: string) => readFileSync(join(repoRoot, relPath), 
 // size plus the database total, wired after pnpm ingest in CI.
 describe('pnpm size', () => {
   // spec criterion: exits 0 against a migrated database and prints one trailing JSON line
-  // whose tables key has exactly the eleven SIZE_TABLES names, each >= 0, plus a total >= 0.
+  // whose tables key has exactly the SIZE_TABLES names, each >= 0, plus a total >= 0.
   it('exits 0 against a freshly migrated on-disk database and prints a trailing JSON line with every table and a total', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'rashomon-size-'))
     try {
@@ -83,7 +83,7 @@ describe('pnpm size', () => {
       assert.ok(total >= 0)
     })
 
-    it('SIZE_TABLES has exactly the eleven documented table names', () => {
+    it('SIZE_TABLES has exactly the twelve documented table names', () => {
       assert.deepEqual(
         [...SIZE_TABLES].sort(),
         [
@@ -96,6 +96,7 @@ describe('pnpm size', () => {
           'graph_scopes',
           'graph_terms',
           'persons',
+          'person_attention',
           'phrase_stage',
           'phrases',
         ].sort(),

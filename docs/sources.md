@@ -59,4 +59,6 @@ A document often arrives twice — a `gnews` headline first, the publisher's own
 
 An optional `camaraId` (deputy id from `dadosabertos.camara.leg.br`) enables the `camara` collector for that person, `senadoId` (senator code from `dadosabertos.senado.leg.br`) enables `senado`; a person may carry either, both, or neither, and is skipped by a collector whose id it lacks.
 
+An optional `wikipedia` (the person's pt.wikipedia article title) enables the pageviews stage (`src/collectors/pageviews.ts`, see [operations](operations.md)), a curiosity signal stored in `person_attention` and read back at `/api/people/:id/attention`; it is not a `Collector` and produces no `RawDoc`, so it gains no row in the source table above. A person without `wikipedia` gets no request from that stage.
+
 Scope is politicians and public figures of the political sphere only. People removed from the seed are pruned on the next `pnpm ingest`; their docs stay as PMI baseline. Run `pnpm reindex` after editing the file.

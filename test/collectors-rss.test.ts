@@ -16,10 +16,13 @@ const bento: Person = { id: 'bento', name: 'Bento Lima', aliases: ['Bento Lima']
 const rssBody = (encoding = 'UTF-8') =>
   `<?xml version="1.0" encoding="${encoding}"?><rss><channel><item><link>https://x/1</link><title>Fulano fala</title></item></channel></rss>`
 
-// Shaped like Planalto's real feed: items sit as siblings of <channel>, not nested inside it,
-// and content:encoded carries its own inline xmlns:content attribute.
-const rdfBody = (items = '<item rdf:about="https://www.gov.br/planalto/pt-br/1"><title>Planalto anuncia medida</title><link>https://www.gov.br/planalto/pt-br/1</link><description>Resumo da medida.</description><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Texto integral da medida.</p>]]></content:encoded><dc:date>2026-09-02T18:34:00Z</dc:date></item>') =>
-  `<?xml version="1.0" encoding="UTF-8"?><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel rdf:about="https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS"><title>Planalto</title></channel>${items}</rdf:RDF>`
+// Shaped like Planalto's real feed: a default rdf:RSS-1.0 namespace on the root, an <items>/<rdf:Seq>
+// index inside <channel> (Planalto's feed carries one), items sitting as siblings of <channel> rather
+// than nested inside it, and content:encoded carrying its own inline xmlns:content attribute. The
+// default item's plain <description> is deliberately shorter than its CDATA <content:encoded>, so
+// body()'s "longer wins" rule picks the full text, not the summary.
+const rdfBody = (items = '<item rdf:about="https://www.gov.br/planalto/pt-br/1"><title>Planalto anuncia medida</title><link>https://www.gov.br/planalto/pt-br/1</link><description>Resumo da medida.</description><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Texto integral da medida, com o detalhamento completo do ato assinado hoje.</p>]]></content:encoded><dc:date>2026-09-02T18:34:00Z</dc:date></item>') =>
+  `<?xml version="1.0" encoding="UTF-8"?><rdf:RDF xmlns="http://purl.org/rss/1.0/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel rdf:about="https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS"><title>Planalto</title><items><rdf:Seq><rdf:li rdf:resource="https://www.gov.br/planalto/pt-br/1"/></rdf:Seq></items></channel>${items}</rdf:RDF>`
 
 describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no global fetch)', () => {
   it('parses a feed under the cap into docs', async () => {
@@ -113,6 +116,33 @@ describe('RSS 1.0 (RDF) support for oficial/Planalto (issue #213)', () => {
     const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
     assert.ok(Exit.isSuccess(exit))
     assert.equal(exit.value[0].publishedAt, new Date('2026-09-02T18:34:00Z').toISOString())
+  })
+
+  // The default fixture's <description> is a short summary and its <content:encoded> CDATA is the
+  // full article; body()'s "longer wins" rule must pick the CDATA, and the <items>/<rdf:Seq> index
+  // plus the default rdf:RSS-1.0 namespace on the root (both real Planalto shapes) must not confuse it.
+  it('picks the longer content:encoded CDATA body over the short description, unbothered by the items/rdf:Seq index or the default namespace', async () => {
+    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    assert.match(exit.value[0].text, /Texto integral/)
+    assert.doesNotMatch(exit.value[0].text, /Resumo da medida/)
+  })
+
+  // Review fix: dc:date/pubDate that fails to parse must fall back to now, not die with
+  // RangeError from toISOString() on an Invalid Date -- which previously escaped fetchFeed and,
+  // through Effect.forEach's fail-fast, dropped every sibling oficial feed in the same run.
+  it('falls back to now when dc:date is present but unparseable, instead of throwing RangeError', async () => {
+    const badDateItem = '<item rdf:about="https://www.gov.br/planalto/pt-br/4"><title>Data invalida</title><link>https://www.gov.br/planalto/pt-br/4</link><description>Resumo.</description><dc:date>not-a-date</dc:date></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(badDateItem), { status: 200 }))
+    const before = Date.now()
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    const publishedAt = new Date(exit.value[0].publishedAt).getTime()
+    assert.ok(publishedAt >= before)
+    assert.ok(publishedAt <= Date.now() + 1000)
   })
 
   it('toDoc falls back to dc:date, not now, when pubDate is absent', () => {
@@ -296,6 +326,20 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
     })
     assert.match(doc?.text ?? '', /^Manchete curta\. Corpo inteiro/)
     assert.ok((doc?.text.length ?? 0) > 400)
+  })
+
+  // Review fix: a <title xml:lang="pt">Medida</title> parses to {'#text': 'Medida', '@_xml:lang': 'pt'}
+  // with ignoreAttributes: false, the same shape content:encoded already unwraps with `text()`.
+  // Feeding that object straight to stripHtml stringified it as the literal "[object Object]".
+  it('unwraps a title carrying its own attribute (e.g. xml:lang), never leaking "[object Object]"', () => {
+    const doc = toDoc('rss')({
+      link: 'https://example.org/lang',
+      title: { '#text': 'Medida provisória é sancionada', '@_xml:lang': 'pt' },
+      description: 'Resumo.',
+    })
+    assert.ok(doc)
+    assert.doesNotMatch(doc!.text, /object Object/i)
+    assert.match(doc!.text, /^Medida provisória/)
   })
 })
 

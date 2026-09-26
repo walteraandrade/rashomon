@@ -45,13 +45,13 @@ export const toDoc = (source: Source) => (item: any): RawDoc | null => {
   const outletUrl = item.source?.['@_url'] as string | undefined
   const outletName = text(item.source).trim()
   const dropOutlet = (s: string) => (outletName ? s.replace(new RegExp(`(\\s+-)?\\s*${escapeRe(outletName)}`, 'g'), ' ') : s)
+  const date = new Date(text(item.pubDate) || text(item['dc:date']) || Date.now())
   return {
     source,
     uri,
-    text: `${dropOutlet(stripHtml(item.title))}. ${dropOutlet(body(item))}`.replace(/\s+/g, ' '),
-    // `new Date(String(Date.now()))` is `Invalid Date` -- a stringified epoch isn't ISO -- so
-    // the final fallback stays a number, matching `new Date(pubDate || Date.now())` before this change.
-    publishedAt: new Date(text(item.pubDate) || text(item['dc:date']) || Date.now()).toISOString(),
+    text: `${dropOutlet(stripHtml(text(item.title)))}. ${dropOutlet(body(item))}`.replace(/\s+/g, ' '),
+    // An unparseable pubDate/dc:date must never die with RangeError from toISOString(): fall back to now.
+    publishedAt: (Number.isNaN(date.getTime()) ? new Date() : date).toISOString(),
     domain: domainOf(outletUrl) ?? domainOf(uri),
   }
 }

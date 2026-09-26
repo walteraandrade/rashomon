@@ -49,6 +49,7 @@ import {
   wordMarkup,
 } from '../src/ui/render.js'
 import { signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -800,12 +801,38 @@ describe('paintLensRuler (figure 6, issue #206): empty-state markup and own-name
 
   it('positions by pmi always, with no measure parameter to switch it', () => {
     withFakeDocument(['lensesRuler'], (els) => {
-      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 40, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } }]
+      // Two terms whose pmi- and count-based orderings disagree in opposite directions:
+      // "reforma" leans to b by pmi (5 > 0.1) but to a by count (40 > 2); "eleicao" leans to a
+      // by pmi (5 > 0.1) but to b by count (2 < 40). Positioning by count would place each word
+      // on the opposite side of where pmi puts it, so asserting only that the node exists (the
+      // previous version of this test) passes even if paintLensRuler were fed 'count' instead.
+      const terms: CompareTerm[] = [
+        { term: 'reforma', kind: 'word', a: { count: 40, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } },
+        { term: 'eleicao', kind: 'word', a: { count: 2, pmi: 5, tone: null }, b: { count: 40, pmi: 0.1, tone: null } },
+      ]
+      const byPmi = rulerTerms(terms, 'pmi')
+      const byCount = rulerTerms(terms, 'count')
+      assert.notEqual(byPmi.items[0].balance, byCount.items[0].balance, 'fixture assumption: pmi and count order "reforma" differently')
+      assert.ok(byPmi.items[0].balance > 0 && byCount.items[0].balance < 0, 'fixture assumption: pmi and count put "reforma" on opposite sides')
+      assert.ok(byPmi.items[1].balance < 0 && byCount.items[1].balance > 0, 'fixture assumption: pmi and count put "eleicao" on opposite sides')
+
       paintLensRuler({ data: lensesData(terms), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
-      const byPmi = rulerTerms(terms, 'pmi').items[0].balance
-      const byCount = rulerTerms(terms, 'count').items[0].balance
-      assert.notEqual(byPmi, byCount, 'fixture assumption: pmi and count order this term differently')
-      assert.match(els.lensesRuler.innerHTML, /data-term="reforma"/)
+      const expected = rulerLayout(metrics, byPmi.items, 860)
+      const xOf = (term: string) => {
+        const m = new RegExp(`<g[^>]*transform="translate\\(([-\\d.]+),[^)]*\\)"[^>]*data-term="${term}"`).exec(els.lensesRuler.innerHTML)
+        assert.ok(m, `expected a rendered word for "${term}"`)
+        return Number(m![1])
+      }
+      for (const term of ['reforma', 'eleicao']) {
+        const expectedWord = expected.words.find((w) => w.term === term)
+        assert.ok(expectedWord, `rulerLayout must place "${term}"`)
+        assert.equal(xOf(term), expectedWord!.x, `"${term}" must sit exactly where rulerLayout put it from the pmi-ranked items, never the count-ranked ones`)
+      }
+      // "reforma" leans toward b (positive balance) so it sits right of centre; "eleicao"
+      // leans toward a so it sits left of centre -- the opposite of what a count-based
+      // ordering would produce.
+      assert.ok(xOf('reforma') > expected.x(0), '"reforma" must sit on the b side, matching its pmi balance')
+      assert.ok(xOf('eleicao') < expected.x(0), '"eleicao" must sit on the a side, matching its pmi balance')
     })
   })
 })

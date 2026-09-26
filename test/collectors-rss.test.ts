@@ -152,6 +152,89 @@ describe('rss.ts reads RSS 1.0 (RDF) feeds, whose items sit as siblings of chann
   })
 })
 
+describe('RSS 1.0 (RDF) support for oficial/Planalto — acceptance criteria', () => {
+  // issue #213 AC1: fetchFeed, given an rdf:RDF fixture whose items are siblings of channel
+  // (not nested inside it), produces one RawDoc per item. Two items here, distinct from the
+  // single-item fixture used elsewhere in this file, so the count genuinely proves "per item".
+  it('fetchFeed extracts one RawDoc per item from an rdf:RDF feed whose items sit as channel siblings', async () => {
+    const twoItems =
+      '<item rdf:about="https://www.gov.br/planalto/pt-br/10"><title>Primeira nota</title><link>https://www.gov.br/planalto/pt-br/10</link><description>Resumo um.</description></item>' +
+      '<item rdf:about="https://www.gov.br/planalto/pt-br/11"><title>Segunda nota</title><link>https://www.gov.br/planalto/pt-br/11</link><description>Resumo dois.</description></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(twoItems), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 2)
+    assert.deepEqual(
+      exit.value.map((d: any) => d.uri).sort(),
+      ['https://www.gov.br/planalto/pt-br/10', 'https://www.gov.br/planalto/pt-br/11'],
+    )
+  })
+
+  // issue #213 AC2: a toDoc call on an RDF item whose dc:date is set and whose pubDate is absent
+  // produces a publishedAt matching that date exactly, not the current time. Exercises toDoc
+  // directly, the shape the parser hands it, rather than going through fetchFeed.
+  it('toDoc falls back to dc:date, not now, when pubDate is absent', () => {
+    const doc = toDoc('oficial')({
+      link: 'https://www.gov.br/planalto/pt-br/1',
+      title: 'Planalto anuncia medida',
+      description: 'Resumo da medida.',
+      'dc:date': '2026-09-02T18:34:00Z',
+    })
+    assert.ok(doc)
+    assert.equal(doc!.publishedAt, new Date('2026-09-02T18:34:00Z').toISOString())
+    const parsed = new Date(doc!.publishedAt)
+    assert.equal(parsed.getUTCFullYear(), 2026)
+    assert.equal(parsed.getUTCMonth(), 8) // September, 0-indexed
+    assert.equal(parsed.getUTCDate(), 2)
+  })
+
+  // issue #213 AC3: an RDF item with neither pubDate nor dc:date still produces a RawDoc (never
+  // null, never throws), publishedAt falling back to the current time -- the same path RSS 2.0
+  // already takes.
+  it('toDoc still returns a RawDoc, falling back to now, when both pubDate and dc:date are absent', () => {
+    const before = Date.now()
+    const doc = toDoc('oficial')({
+      link: 'https://www.gov.br/planalto/pt-br/2',
+      title: 'Sem data',
+      description: 'Resumo.',
+    })
+    assert.ok(doc, 'toDoc must not return null merely for a missing date')
+    assert.ok(new Date(doc!.publishedAt).getTime() >= before)
+  })
+
+  // issue #213 AC4: oficial.ts's feeds array includes the Planalto URL, and oficial now fetches
+  // 5 feeds (up from 4). feeds itself is not exported, so this is checked through
+  // collectOficial's observable behaviour: exactly 5 distinct requests, one of them Planalto's.
+  it('oficial fetches 5 distinct feeds, one of them the Planalto URL', async () => {
+    const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
+    const exit = await runTest(collectOficial, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const urls = fetchFn.calls.map((c) => c.url.href)
+    assert.equal(urls.length, 5)
+    assert.equal(new Set(urls).size, 5, 'oficial must fetch 5 distinct feeds')
+    assert.ok(urls.includes('https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS'))
+  })
+
+  // issue #213 AC5: every oficial doc, Planalto's included, still carries source: 'oficial' and
+  // no tone field. Planalto's own URL is served the RDF fixture here, so this actually exercises
+  // the RDF parse path rather than only the shared RSS 2.0 stub every other feed gets.
+  it('every oficial doc carries source oficial and no tone, including the one from Planalto\'s RDF feed', async () => {
+    const fetchFn = fakeFetch((c) =>
+      c.url.href === 'https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS'
+        ? new Response(rdfBody(), { status: 200 })
+        : new Response(rssBody(), { status: 200 }),
+    )
+    const exit = await runTest(collectOficial, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 5)
+    for (const doc of exit.value) {
+      assert.equal(doc.source, 'oficial')
+      assert.equal('tone' in doc, false)
+    }
+    assert.ok(exit.value.some((d: any) => d.uri === 'https://www.gov.br/planalto/pt-br/1'), 'the Planalto RDF item must reach the collected docs')
+  })
+})
+
 describe('one failing feed short-circuits the whole run and interrupts its siblings', () => {
   it('a second, hanging feed never resolves once the first one fails', async () => {
     const fetchFn = fakeFetch((c) => (c.url.href === 'https://a/' ? new Response('boom', { status: 500 }) : hanging(c)))

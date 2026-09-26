@@ -168,6 +168,8 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   sort: q.sort === 'pmi' ? 'pmi' : 'count',
   // `testimony=1` opts in; the label resolves the same way as /testimony so the two agree.
   method: q.testimony === '1' ? (METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod()) : null,
+  // `communities=1` opts in, exactly like testimony's bare flag: anything else is absent.
+  communities: q.communities === '1',
 })
 
 export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => {

@@ -38,7 +38,7 @@ const FIGURES: FigureEntry[] = [
   { id: 'rising', sectionId: 'rising', keys: ['person', 'source'], noticeId: 'risingAbout', mount: mountRising },
   // days stays fixed at 7, never seeded: figure 5 has no period control (issue #147 §4).
   { id: 'week', sectionId: 'week', keys: ['person', 'source', 'limit'], noticeId: 'weekNote', mount: mountWeek },
-  { id: 'lenses', sectionId: 'lenses', keys: ['person', 'a', 'b', 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
+  { id: 'lenses', sectionId: 'lenses', keys: ['person', ['a', null], ['b', null], 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.

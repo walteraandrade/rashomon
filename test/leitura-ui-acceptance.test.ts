@@ -136,13 +136,13 @@ describe('Leitura UI: one stylesheet, one type system', () => {
 })
 
 describe('the page is a sequence of graphs', () => {
-  it('atlas.html carries five figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
+  it('atlas.html carries six figures, each with a numbered eyebrow, a title and a subtitle, and no side column', () => {
     const html = read('atlas.html')
     const figures = [...html.matchAll(/<section class="figure[^"]*" id="([^"]+)"/g)].map((m) => m[1])
     // Issue #91 adds a third figure, the ruler comparing two people, after #testimony; issue
     // #151 adds a fourth, the rising ruler, after #compare; issue #147 adds a fifth, the week,
-    // after #rising.
-    assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'rising', 'week'])
+    // after #rising; issue #206 adds a sixth, the lenses ruler, after #week.
+    assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses'])
     // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
     // <b id="testimonyLabel"> in figure 2's own heading below.
     assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
@@ -150,8 +150,9 @@ describe('the page is a sequence of graphs', () => {
     assert.match(html, /<span class="eyebrow">Gráfico 3<\/span><h2 id="compareTitle">/)
     assert.match(html, /<span class="eyebrow">Gráfico 4<\/span><h2 id="risingTitle">/)
     assert.match(html, /<span class="eyebrow">Gráfico 5<\/span><h2 id="weekTitle">/)
-    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 5)
-    for (const id of ['workspace', 'testimony', 'compare', 'rising', 'week']) {
+    assert.match(html, /<span class="eyebrow">Gráfico 6<\/span><h2 id="lensesTitle">/)
+    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 6)
+    for (const id of ['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
       // Issue #149 AC8 gave #workspace's default key an id="keyDefault" (a sibling id="keyStrip"
       // now follows it), so the match tolerates an id attribute rather than only the bare tag.
@@ -170,19 +171,22 @@ describe('the page is a sequence of graphs', () => {
     // Issue #92 gave figure 2 its own sentence (person/days/source, 3 controls) alongside
     // figure 1's original five; issue #91 adds figure 3's own six (compareA/B/days/source/
     // measure/limit); issue #151 adds figure 4's own two (risingPerson/risingSource); issue
-    // #147 adds figure 5's own three (weekPerson/weekSource/weekLimit) — the shared count is
-    // 19 now, split per figure below.
-    assert.equal(html.match(/<span class="pick">/g)?.length, 19)
+    // #147 adds figure 5's own three (weekPerson/weekSource/weekLimit); issue #206 adds figure
+    // 6's own five (lensesPerson/lensesA/lensesB/lensesDays/lensesLimit) — the shared count is
+    // 24 now, split per figure below.
+    assert.equal(html.match(/<span class="pick">/g)?.length, 24)
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
     const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
     const rising = html.match(/id="rising"[\s\S]*?<\/section>/)?.[0] ?? ''
     const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const lenses = html.match(/id="lenses"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.equal(workspace.match(/<span class="pick">/g)?.length, 5, "figure 1's sentence keeps its five controls")
     assert.equal(testimony.match(/<span class="pick">/g)?.length, 3, "figure 2's own sentence has person/days/source, no sort/limit")
     assert.equal(compare.match(/<span class="pick">/g)?.length, 6, "figure 3's own sentence has both people, days, source, measure and limit")
     assert.equal(rising.match(/<span class="pick">/g)?.length, 2, "figure 4's own sentence has only person and source; days/baseline/kind/limit/min stay fixed")
     assert.equal(week.match(/<span class="pick">/g)?.length, 3, "figure 5's own sentence has person, source and limit; days stays fixed at 7, no period select")
+    assert.equal(lenses.match(/<span class="pick">/g)?.length, 5, "figure 6's own sentence has person, both lenses, days and limit")
   })
 
   // issue #147 AC17 (the automatable half; the seven-column render itself is manual): the

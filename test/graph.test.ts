@@ -1548,6 +1548,20 @@ describe('lensesFor (issue #206)', () => {
     for (const t of r.terms) assert.ok(!names.includes(t.term), `${t.term} is one of lula's own name words`)
   })
 
+  // A term that is one of the tracked person's own name words is "name" on both sides always
+  // (issue #206 AC4). Doc /2 ("Lula e Tarcísio disputam a eleição") gives tarcisio's own docs the
+  // word "lula" as ordinary vocabulary elsewhere in the fixture (see compareFor's "tarcisio" case
+  // for the symmetric example), so scoping lula's own lens union widely enough should be able to
+  // pull "lula" into his own keys the same way compareFor pulls "tarcisio" into lula's keys.
+  it('a term that is one of the tracked person\'s own name words reads the string "name" on both sides, never absent and never a figure (issue #206 AC4)', async () => {
+    const r = await lensesFor(lula, { ...lensesBase, days: 365, limit: 100 })
+    const names = nameTokens(lula)
+    const nameTerm = r.terms.find((t) => names.includes(t.term))
+    assert.ok(nameTerm, `expected at least one of lula's own name words (${names.join(', ')}) among the union of both lenses' top lists`)
+    assert.equal(nameTerm!.a, 'name')
+    assert.equal(nameTerm!.b, 'name')
+  })
+
   it("carries an exact figure for a term inside a's top lists but absent from b's, as null rather than 0", async () => {
     // lula's g1.globo.com docs (/1, /5) carry "viaja"/"bahia"; his valor.globo.com doc (/6)
     // never does -- both domains share "reforma"/"tributaria" instead

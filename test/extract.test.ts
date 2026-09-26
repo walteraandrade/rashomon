@@ -162,15 +162,9 @@ describe('domainOf', () => {
   })
 })
 
-describe('countryOf (issue #204)', () => {
+// issue #204
+describe('countryOf', () => {
   it('reads pt/br off the domain suffix and undefined otherwise', () => {
-    assert.equal(countryOf('sapo.pt'), 'pt')
-    assert.equal(countryOf('folha.uol.com.br'), 'br')
-    assert.equal(countryOf('g1.globo.com'), undefined)
-    assert.equal(countryOf(undefined), undefined)
-  })
-
-  it('countryOf returns pt for a .pt domain, br for a .br domain, and undefined for any other domain or undefined input (AC2)', () => {
     assert.equal(countryOf('sapo.pt'), 'pt')
     assert.equal(countryOf('folha.uol.com.br'), 'br')
     assert.equal(countryOf('g1.globo.com'), undefined)

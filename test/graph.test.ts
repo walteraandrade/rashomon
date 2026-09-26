@@ -489,7 +489,8 @@ describe('lean filtering (issue #26)', () => {
   })
 })
 
-describe('country filtering (issue #204)', () => {
+// issue #204
+describe('country filtering', () => {
   before(seed)
 
   const veryWide = 3900
@@ -519,10 +520,15 @@ describe('country filtering (issue #204)', () => {
     assert.ok(!node(gPt, 'word:colaborativo'), 'an explicit country=pt must exclude a null-country doc')
   })
 
-  it('country=pt returns only .pt-country docs', async () => {
+  it('country=pt returns only .pt-country docs, and all is default plus pt', async () => {
+    const gDefault = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
+    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
     const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
     assert.ok(node(gPt, 'word:lusotropicalista'))
     assert.ok(!node(gPt, 'word:colaborativo'))
+    assert.equal(gPt.stats.docs, 2, 'the two .pt docs about lula in the fixture (56 and 58)')
+    assert.equal(gPt.stats.about, 2)
+    assert.equal(gAll.stats.docs, gDefault.stats.docs + gPt.stats.docs)
   })
 
   it('sourcesFor excludes exemplo.pt by default and includes it at country=all', async () => {
@@ -561,29 +567,6 @@ describe('country filtering (issue #204)', () => {
     assert.ok(withPt.buckets.some((b) => b.terms.some((t) => t.term === 'lusotropicalista')))
   })
 
-  it('graph excludes a .pt-country doc from stats.docs, stats.about and every node by default, includes them at country=all, and only-.pt at country=pt (AC5)', async () => {
-    const gDefault = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
-    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
-    const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
-
-    assert.ok(!node(gDefault, 'word:lusotropicalista'))
-    assert.ok(node(gAll, 'word:lusotropicalista'))
-    assert.ok(node(gPt, 'word:lusotropicalista'))
-
-    assert.equal(gPt.stats.docs, 2, 'country=pt must count exactly the two .pt docs about lula in the fixture (56 and 58)')
-    assert.equal(gPt.stats.about, 2, 'country=pt must count exactly the two .pt docs about lula')
-    assert.equal(gAll.stats.docs, gDefault.stats.docs + gPt.stats.docs, 'country=all must equal default plus the .pt docs it folds back in')
-  })
-
-  it('a null-country doc is kept under the default scope and country=all, and dropped under country=pt (AC6)', async () => {
-    const gDefault = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
-    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
-    const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
-
-    assert.ok(node(gDefault, 'word:colaborativo'), 'null-country doc must count under the default scope')
-    assert.ok(node(gAll, 'word:colaborativo'), 'null-country doc must count under country=all')
-    assert.ok(!node(gPt, 'word:colaborativo'), 'null-country doc must be excluded under country=pt')
-  })
 })
 
 describe('docsFor', () => {

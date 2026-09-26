@@ -291,19 +291,8 @@ describe('read indexes and planner statistics (issue #44)', () => {
     assert.ok(defs.some((d) => /btree \(domain\)/.test(d)))
   })
 
-  it('docs.country is a nullable text column with its own index (issue #204)', async () => {
-    const cols = (
-      await db.query<{ is_nullable: string; data_type: string }>(
-        `select is_nullable, data_type from information_schema.columns where table_name = 'docs' and column_name = 'country'`,
-      )
-    ).rows
-    assert.equal(cols[0]?.is_nullable, 'YES')
-    assert.equal(cols[0]?.data_type, 'text')
-    const defs = (await indexDefs('docs')).map((d) => d.indexdef)
-    assert.ok(defs.some((d) => /btree \(country\)/.test(d)))
-  })
-
-  it('migrate adds docs.country (nullable text) and docs_country_idx on a fresh database (AC1)', async () => {
+  // issue #204
+  it('docs.country is a nullable text column with its own index', async () => {
     const cols = (
       await db.query<{ is_nullable: string; data_type: string }>(
         `select is_nullable, data_type from information_schema.columns where table_name = 'docs' and column_name = 'country'`,
@@ -312,8 +301,8 @@ describe('read indexes and planner statistics (issue #44)', () => {
     assert.equal(cols.length, 1, 'docs.country must exist')
     assert.equal(cols[0].is_nullable, 'YES')
     assert.equal(cols[0].data_type, 'text')
-    const idx = await db.query<{ indexname: string }>(`select indexname from pg_indexes where tablename = 'docs' and indexname = 'docs_country_idx'`)
-    assert.equal(idx.rows.length, 1, 'docs_country_idx must exist')
+    const defs = await indexDefs('docs')
+    assert.ok(defs.some((d) => d.indexname === 'docs_country_idx' && /btree \(country\)/.test(d.indexdef)))
   })
 
   // The fixture is far too small for the planner to prefer an index on its own, so this

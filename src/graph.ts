@@ -2,7 +2,7 @@ import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
 import { DAYS } from './query.js'
-import { isName, pmiRank, signatureFloor, sortKey } from './scoring.js'
+import { countryFilter, isName, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
 
@@ -133,10 +133,6 @@ type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermR
 // zero docs. domain+lean resolve into the effective domain scope; an empty intersection produces
 // an empty array for `= any(...)` and correctly matches nothing.
 type Scope = { days: number; source: string; domain: string; lean: string; country: 'br' | 'pt' | 'all' }
-// Bound as a value, not branched in JS, so rendered SQL shape never depends on which country was
-// requested. 'br' keeps null-country docs too (`is distinct from`); 'pt' excludes them; 'all' is unfiltered.
-const countryFilter = (country: 'br' | 'pt' | 'all') =>
-  sql`(${country} = 'all' or (${country} = 'pt' and d.country = 'pt') or (${country} = 'br' and d.country is distinct from 'pt'))`
 const scopeCte = (person: Person, q: Scope) => {
   const { domain } = resolveScope(q.domain, q.lean)
   return sql`

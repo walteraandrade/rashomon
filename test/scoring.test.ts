@@ -56,8 +56,8 @@ describe('scoring fragments', () => {
 })
 
 describe('scoring.ts is the single home for the pmi ordering, signature floor and own-name filter', () => {
-  it('exports exactly pmiRank, sortKey, signatureFloor, isName and no namePhrase', () => {
-    assert.deepEqual(Object.keys(scoring).sort(), ['isName', 'pmiRank', 'signatureFloor', 'sortKey'])
+  it('exports exactly pmiRank, sortKey, signatureFloor, isName, countryFilter and no namePhrase', () => {
+    assert.deepEqual(Object.keys(scoring).sort(), ['countryFilter', 'isName', 'pmiRank', 'signatureFloor', 'sortKey'])
   })
 
   it('the docs state the pmi-ordering and signature-floor formulas live in src/scoring.ts', () => {

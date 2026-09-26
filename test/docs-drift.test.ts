@@ -148,20 +148,23 @@ describe('documented facts per route', () => {
     assert.doesNotMatch(docsText, /`week`[\s\S]{0,40}1h trend|trend class[\s\S]{0,40}`week`/)
   })
 
-  it('docs/api.md documents country as a shared filter that defaults to br, not all (issue #204)', () => {
+  // issue #204
+  it('docs/api.md documents country as a shared filter that defaults to br, not all', () => {
     assert.match(docsText, /`country`/)
     assert.match(docsText, /\bbr\b/)
     assert.match(docsText, /\bpt\b/)
     assert.match(docsText, /falls back to `?br`?|default.*differs|does not fall back to `?all`?/i)
   })
 
-  it('docs/api.md states the null-country keep/drop rule as a fact, not a code reference (issue #204)', () => {
+  // issue #204
+  it('docs/api.md states the null-country keep/drop rule as a fact, not a code reference', () => {
     assert.match(docsText, /not yet classified|unclassified|null.?-?country/i)
     assert.match(docsText, /kept.*(default|`?all`?)|(default|`?all`?).*kept/i)
     assert.match(docsText, /dropped.*`?pt`?|`?pt`?.*drop/i)
   })
 
-  it('docs/api.md states the aggregate tables hold only the default country universe (issue #204)', () => {
+  // issue #204
+  it('docs/api.md states the aggregate tables hold only the default country universe', () => {
     assert.match(docsText, /aggregate table[\s\S]{0,200}\b(br|default)\b/i)
     assert.match(docsText, /`?pt`?.*live|live.*`?pt`?/i)
   })

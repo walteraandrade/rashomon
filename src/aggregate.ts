@@ -2,7 +2,7 @@ import seedJson from '../seed.json' with { type: 'json' }
 import { db, migrateP } from './db.js'
 import { nameTokens } from './extract.js'
 import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
-import { isName, pmiRank, signatureFloor } from './scoring.js'
+import { countryFilter, isName, pmiRank, signatureFloor } from './scoring.js'
 import { sql } from './sql.js'
 import { inTransaction } from './store.js'
 import type { Person } from './types.js'
@@ -13,7 +13,7 @@ const windowScope = (days: number) => sql`
   scope as (
     select d.id, d.source from docs d
     where d.published_at >= now() - make_interval(days => ${days})
-      and d.country is distinct from 'pt'
+      and ${countryFilter('br')}
   )`
 
 // Session-temp, dropped on commit. Safe as a fixed name only while windows build sequentially:

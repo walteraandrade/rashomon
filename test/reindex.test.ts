@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { describe, it, before } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import { ANALYZED_TABLES, db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import { graphFor, type GraphQuery } from '../src/graph.js'
 import { reindexAll } from '../src/reindex.js'
 import { MAX_DOC_CHARS, insertDocP, truncateText } from '../src/store.js'
-import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, seed } from './fixture.js'
+import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
@@ -138,8 +138,10 @@ describe('reindex caps the text of rows stored before the cap (issue #128)', () 
   })
 })
 
-describe('reindex backfills country from domain (issue #204)', () => {
+// issue #204
+describe('reindex backfills country from domain', () => {
   before(seed)
+  after(reseed)
   const ptUri = 'https://sapo.pt/backfill'
   const brUri = 'https://folha.uol.com.br/backfill'
   const noDomainUri = 'https://example.org/backfill-no-domain'
@@ -160,18 +162,6 @@ describe('reindex backfills country from domain (issue #204)', () => {
   it('reports zero on a second run', async () => {
     const { countriesBackfilled } = await reindexAll(persons)
     assert.equal(countriesBackfilled, 0)
-  })
-
-  it('backfill sets country where domain is not null and country is null, leaves domain-less rows untouched (AC3)', async () => {
-    const ptUri2 = 'https://sapo.pt/ac3-backfill'
-    const noDomainUri2 = 'https://example.org/ac3-backfill-no-domain'
-    await db.query(`insert into docs (source, uri, text, published_at, domain) values ('rss', $1, 'Lula em Faro', now(), 'sapo.pt')`, [ptUri2])
-    await db.query(`insert into docs (source, uri, text, published_at) values ('rss', $1, 'Lula em algum lugar 2', now())`, [noDomainUri2])
-
-    const { countriesBackfilled } = await reindexAll(persons)
-    assert.equal(countriesBackfilled, 1)
-    assert.equal(await countryOf(ptUri2), 'pt')
-    assert.equal(await countryOf(noDomainUri2), null)
   })
 })
 

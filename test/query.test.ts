@@ -348,40 +348,8 @@ describe('parseScope (issue #195)', () => {
   })
 })
 
-describe('parseCountryList (issue #204)', () => {
-  it('omitted or fully-invalid country falls back to br, not all (AC4)', () => {
-    assert.equal(parseCountryList(undefined), 'br')
-    assert.equal(parseCountryList(''), 'br')
-    assert.equal(parseCountryList('xx'), 'br')
-  })
-
-  it('country=all parses to all (AC4)', () => {
-    assert.equal(parseCountryList('all'), 'all')
-  })
-
-  it('country=pt parses to pt (AC4)', () => {
-    assert.equal(parseCountryList('pt'), 'pt')
-  })
-
-  it('naming both br and pt, or including all, collapses to all (AC4)', () => {
-    assert.equal(parseCountryList('br,pt'), 'all')
-    assert.equal(parseCountryList('all,pt'), 'all')
-    assert.equal(parseCountryList('pt,br,all'), 'all')
-  })
-
-  it('parseScope and every route parser (graph, docs, rising, timeline, compare, week) agree on country (AC4)', () => {
-    const cases: Record<string, 'br' | 'pt' | 'all'> = { '': 'br', xx: 'br', all: 'all', pt: 'pt', 'br,pt': 'all' }
-    for (const [input, expected] of Object.entries(cases)) {
-      const q = { country: input }
-      assert.equal(parseScope(q, { days: 30 }).country, expected, `parseScope(${input})`)
-      for (const parse of [parseQuery, parseDocsQuery, parseRisingQuery, parseTimelineQuery, parseCompareQuery, parseWeekQuery]) {
-        assert.equal(parse(q).country, expected, `${parse.name}(${input})`)
-      }
-    }
-  })
-})
-
-describe('parseCountryList (issue #204)', () => {
+// issue #204
+describe('parseCountryList', () => {
   it('falls back to br, not all, when omitted or entirely invalid -- unlike every other shared filter', () => {
     assert.equal(parseCountryList(undefined), 'br')
     assert.equal(parseCountryList(''), 'br')
@@ -400,6 +368,7 @@ describe('parseCountryList (issue #204)', () => {
     assert.equal(parseCountryList('br,pt'), 'all')
     assert.equal(parseCountryList('pt,br'), 'all')
     assert.equal(parseCountryList('all,pt'), 'all')
+    assert.equal(parseCountryList('pt,br,all'), 'all')
   })
 
   it('drops an unknown token silently and honors the survivor, rather than falling back', () => {
@@ -408,6 +377,17 @@ describe('parseCountryList (issue #204)', () => {
 
   it('is case-sensitive: BR is not a known token', () => {
     assert.equal(parseCountryList('BR'), 'br')
+  })
+
+  it('parseScope and every route parser (graph, docs, rising, timeline, compare, week) agree on country', () => {
+    const cases: Record<string, 'br' | 'pt' | 'all'> = { '': 'br', xx: 'br', all: 'all', pt: 'pt', 'br,pt': 'all' }
+    for (const [input, expected] of Object.entries(cases)) {
+      const q = { country: input }
+      assert.equal(parseScope(q, { days: 30 }).country, expected, `parseScope(${input})`)
+      for (const parse of [parseQuery, parseDocsQuery, parseRisingQuery, parseTimelineQuery, parseCompareQuery, parseWeekQuery]) {
+        assert.equal(parse(q).country, expected, `${parse.name}(${input})`)
+      }
+    }
   })
 })
 

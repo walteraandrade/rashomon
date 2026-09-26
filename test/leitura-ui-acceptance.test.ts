@@ -52,6 +52,17 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.doesNotMatch(html.replaceAll(VERCEL_INSIGHTS_TAG, ''), /<script/i, 'the reading page runs no JavaScript of its own')
   })
 
+  // AC11: como-ler.html carries a paragraph, in pt-BR, describing the org term kind, reachable
+  // from the guide (the chapter with id="como-ler" is the same content help.ts opens inside
+  // #helpDialog — see test/help.test.ts — so any paragraph inside it is reachable that way).
+  it("como-ler.html describes the org term kind in pt-BR, inside the guide's own chapter (issue #209 AC11)", () => {
+    const html = read('como-ler.html')
+    const chapter = html.match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.ok(chapter, 'the chapter must exist with id="como-ler"')
+    assert.match(chapter, /organiza[cç][aãoõ]/i, 'the chapter must mention organizações in pt-BR')
+    assert.match(chapter, /GDELT/, 'the paragraph must name GDELT as the source')
+  })
+
   it('atlas.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
     const html = read('atlas.html')
     assert.doesNotMatch(html, /id="como-ler"/)

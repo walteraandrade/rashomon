@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { candidatesQuery, compareParams, docsParams, endpoint, json, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, candidatesQuery, compareParams, docsParams, endpoint, json, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -224,5 +224,13 @@ describe('sparklineParams / loadTimeline, the inspector sparkline', () => {
     const calls = stubFetch(true, [])
     await loadTimeline('lula', sparklineParams('reforma', 'word'))
     assert.equal(calls[0].url, '/api/people/lula/timeline?' + sparklineParams('reforma', 'word').toString())
+  })
+})
+
+// AC12: ATLAS_KINDS becomes 'word,hashtag,phrase,org' — the atlas page's own kind= request
+// grows to the full four-kind set, additive over the pre-#209 three.
+describe('ATLAS_KINDS gains org (issue #209 AC12)', () => {
+  it("ATLAS_KINDS equals 'word,hashtag,phrase,org'", () => {
+    assert.equal(ATLAS_KINDS, 'word,hashtag,phrase,org')
   })
 })

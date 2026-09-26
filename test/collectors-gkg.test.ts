@@ -448,3 +448,70 @@ describe('gkg log lines are unchanged text, read through TestConsole (issue #183
     assert.ok(log.includes(`[gkg] ${latest}: missing (404)`))
   })
 })
+
+// Verifier suite for issue #209: written from the approved spec's acceptance criteria alone.
+// A GKG row is built here from the spec's own column layout (V1Persons at index 11, V1Organizations
+// at index 13, V2Tone at index 15), independent of the fixture's own gkgRow() helper.
+describe('collect(): V1Organizations becomes an org term kind (issue #209, verifier)', () => {
+  before(migrateP)
+
+  const orgRow = (slot: string, orgs: string, themes = '') => {
+    const cols = new Array(27).fill('')
+    cols[3] = 'verifier.example'
+    cols[4] = `https://verifier.example/${slot}`
+    cols[7] = themes
+    cols[11] = ''
+    cols[13] = orgs
+    cols[15] = '0.5'
+    cols[25] = 'srclc:por'
+    cols[26] = `<PAGE_TITLE>Verifier ${slot}</PAGE_TITLE>`
+    return cols.join('\t')
+  }
+
+  it('a V1Organizations field with "Petrobras;Banco Central" yields org terms normalized and deduplicated (AC1)', async () => {
+    const slot = '20260916000000'
+    const fetchFn = gkgFetch(slot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, 'Petrobras;Banco Central')) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of exit.value) {
+      assert.ok(d.extraTerms?.some((t) => t.term === 'petrobras' && t.kind === 'org'))
+      assert.ok(d.extraTerms?.some((t) => t.term === 'banco central' && t.kind === 'org'))
+      assert.equal(d.extraTerms?.length, 2)
+    }
+  })
+
+  it('an empty V1Organizations field yields extraTerms: [] (AC2)', async () => {
+    const slot = '20260916001500'
+    const fetchFn = gkgFetch(slot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, '')) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [])
+  })
+
+  it('the same organization repeated with differing case and accents yields exactly one org term (AC3)', async () => {
+    const slot = '20260916003000'
+    const fetchFn = gkgFetch(slot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, 'Ministério da Saúde;MINISTERIO DA SAUDE;ministério da saúde')) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [{ term: 'ministerio da saude', kind: 'org' }])
+  })
+
+  it('a themes-only row still yields extraTerms: [], while a row also carrying organizations yields org terms (AC8)', async () => {
+    const themesOnlySlot = '20260916004500'
+    const themesOnlyFetch = gkgFetch(themesOnlySlot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, '', 'TAX_FNCACT_JUDGE;WB_678_ECONOMY')) }), { status: 200 }))
+    const themesExit = await runTest(collect, themesOnlyFetch)
+    assert.ok(Exit.isSuccess(themesExit))
+    assert.ok(themesExit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of themesExit.value) assert.deepEqual(d.extraTerms, [])
+
+    const mixedSlot = '20260916010000'
+    const mixedFetch = gkgFetch(mixedSlot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, 'Petrobras', 'TAX_FNCACT_JUDGE')) }), { status: 200 }))
+    const mixedExit = await runTest(collect, mixedFetch)
+    assert.ok(Exit.isSuccess(mixedExit))
+    assert.ok(mixedExit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of mixedExit.value) assert.deepEqual(d.extraTerms, [{ term: 'petrobras', kind: 'org' }])
+  })
+})

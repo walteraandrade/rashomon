@@ -78,6 +78,11 @@ describe('kinds / sourceLabels', () => {
     assert.deepEqual(kinds, { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' })
   })
 
+  // AC13: kinds gains an org entry ('Organização'), used by wordMarkup's <title> tooltip.
+  it("kinds carries an org entry, 'Organização' (issue #209 AC13)", () => {
+    assert.equal(kinds.org, 'Organização')
+  })
+
   it('sourceLabels never leaves the raw internal token "all" unlabeled in pt-BR UI copy', () => {
     assert.equal(sourceLabels.all, 'todas as fontes')
     assert.notEqual(sourceLabels.all, 'all')

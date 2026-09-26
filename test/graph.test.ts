@@ -124,6 +124,40 @@ describe('graphFor', () => {
     assert.ok(!all.nodes.some((n) => n.kind === 'org' && n.term === 'lula'))
   })
 
+  // Verifier suite for issue #209, written independently against fixture doc 62 (a gkg doc
+  // about lula carrying org:petrobras, org:banco central and org:lula). petrobras and banco
+  // central each occur in exactly that one doc, globally, and nowhere else in the fixture: a
+  // count of 1 apiece is verifiable without reading src/graph.ts, and since both share the same
+  // (count, doc-set) they must share the same pmi under any correct implementation of the
+  // documented log2-lift formula, regardless of the exact universe size.
+  describe('org term kind, scored like any other (issue #209 AC5/AC6, verifier)', () => {
+    const orgWindow = { ...graphBase, days: 4001, limit: 400 }
+
+    it('kind=org returns only org nodes, scored by the same count/pmi/tone rules as any other kind (AC5)', async () => {
+      const only = await graphFor(lula, { ...orgWindow, kind: 'org' })
+      assert.ok(only.nodes.length > 0, 'sanity: at least one org node must come back')
+      assert.ok(only.nodes.every((n) => n.kind === 'org'), 'kind=org must never return a non-org node')
+
+      const petrobras = node(only, 'org:petrobras')
+      const bancoCentral = node(only, 'org:banco central')
+      assert.ok(petrobras, 'org:petrobras must be present')
+      assert.ok(bancoCentral, 'org:banco central must be present')
+      assert.equal(petrobras?.count, 1, 'petrobras occurs in exactly one doc in the whole fixture')
+      assert.equal(bancoCentral?.count, 1, 'banco central occurs in exactly one doc in the whole fixture')
+      assert.ok(Number.isFinite(petrobras?.pmi) && (petrobras?.pmi ?? 0) > 0, 'pmi must be a finite, positive number for a term unique to this person')
+      assert.equal(petrobras?.pmi, bancoCentral?.pmi, 'same count and the same single contributing doc must yield the same pmi under the documented formula, regardless of the universe size')
+      assert.equal(petrobras?.tone, 0.3, "the only contributing doc's own tone (fixture doc 62) must be the term's average tone")
+    })
+
+    it("an org term equal to the person's own alias is dropped from her graph, like any other kind (AC6)", async () => {
+      const only = await graphFor(lula, { ...orgWindow, kind: 'org' })
+      assert.ok(!only.nodes.some((n) => n.term === 'lula'), "'lula' must never appear as an org node for lula, her own alias")
+      const all = await graphFor(lula, orgWindow)
+      assert.ok(!all.nodes.some((n) => n.kind === 'org' && n.term === 'lula'), "'lula' must be dropped from the org kind under an unfiltered kind query too")
+      assert.equal(node(all, 'org:petrobras')?.kind, 'org', 'petrobras must still surface, unfiltered, as an org node')
+    })
+  })
+
   it('averages GDELT tone per term and leaves it null otherwise', async () => {
     const g = await graphFor(tarcisio, graphBase)
     assert.equal(node(g, 'word:rodovia')?.tone, -1.5)

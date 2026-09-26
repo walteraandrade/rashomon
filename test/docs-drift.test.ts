@@ -317,6 +317,14 @@ describe('docs facts', () => {
     assert.match(around, /(gone|removed|deleted|no longer)/i, 'docs must say index.html is gone')
   })
 
+  // AC10: org is sourced only from GDELT/gkg and never derived from text for any other source.
+  it('the docs state org is sourced only from GDELT/gkg, never derived for any other source (issue #209 AC10)', () => {
+    assert.match(docsText, /\borg\b[\s\S]{0,400}\bGDELT\b/, 'the docs must state org comes from GDELT, in prose near the word org')
+    const idx = docsText.search(/\borg\b[\s\S]{0,400}\bGDELT\b/)
+    const around = docsText.slice(Math.max(0, idx - 50), idx + 500)
+    assert.match(around, /never|only|no other source/i, 'the docs must state org is exclusive to GDELT, not merely mentioned alongside it')
+  })
+
   it('CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     assert.doesNotMatch(claude, /theme codes[^\n]*(stay|remain) in the API/i, 'CLAUDE.md must not describe theme codes staying in the API any more')

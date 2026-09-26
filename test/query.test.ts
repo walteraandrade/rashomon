@@ -98,6 +98,35 @@ describe('parseKindList', () => {
   })
 })
 
+// AC4: KINDS gains 'org', parseKindList resolves it (alone and alongside another kind) unchanged,
+// and an unrecognized token still falls back to 'all'.
+describe('KINDS includes org (issue #209 AC4)', () => {
+  it('KINDS includes org', () => {
+    assert.ok(KINDS.includes('org'), 'src/query.ts KINDS must include org')
+  })
+
+  it("parseKindList('org') and parseKindList('word,org') both resolve to strings containing org unchanged", () => {
+    assert.match(parseKindList('org'), /\borg\b/)
+    assert.match(parseKindList('word,org'), /\borg\b/)
+    assert.equal(parseKindList('org'), 'org')
+    assert.equal(parseKindList('word,org'), 'word,org')
+  })
+
+  it("parseKindList('bogus') still falls back to 'all'", () => {
+    assert.equal(parseKindList('bogus'), 'all')
+  })
+
+  // tsc enforces the union at compile time (pnpm typecheck); this pins the same fact in the
+  // source text, so a regression is caught by pnpm test too.
+  it("src/types.ts's Term['kind'] union includes 'org'", () => {
+    const types = readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8')
+    const m = /export type Term = \{[^}]*kind:\s*([^}]+)\}/.exec(types)
+    assert.ok(m, 'Term type must be declared in src/types.ts')
+    const union = [...m![1].matchAll(/'(\w+)'/g)].map((x) => x[1])
+    assert.ok(union.includes('org'), `Term.kind union must include 'org', got ${JSON.stringify(union)}`)
+  })
+})
+
 // issues #24/#25: parseRisingQuery/parseTimelineQuery
 // must accept 'camara' and 'senado' too, so they cannot silently drift from SOURCES again.
 describe('parseRisingQuery/parseTimelineQuery source', () => {

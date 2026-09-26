@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { before, describe, it } from 'node:test'
+import { after, before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
 import { purgeThemes, resolveTarget } from '../src/purge.js'
-import { docs, insertTestimony, seed } from './fixture.js'
+import { docs, insertTestimony, reseed, seed } from './fixture.js'
 import './close.js'
 
 // main() itself is never imported by tests (it calls process.argv, migrate() and db.close());
@@ -106,5 +106,28 @@ describe('purge themes (issue #108)', () => {
 
     const { rows: extra } = await db.query<{ extra_terms: unknown[] }>(`select extra_terms from docs where id = $1`, [docId])
     assert.deepEqual(extra[0].extra_terms, [])
+  })
+})
+
+// Verifier suite for AC7, written independently against a doc the builder's own tests never
+// touch (docs[6]), so it exercises purgeThemes' selective-strip behaviour from scratch.
+describe('purge themes strips only theme elements, keeps org (issue #209 AC7, verifier)', () => {
+  after(reseed)
+
+  it('removes a theme element and its doc_terms row while leaving a live org element and its doc_terms row intact', async () => {
+    const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[6].uri])
+    const docId = rows[0].id
+
+    await db.query(`update docs set extra_terms = '[{"term":"wb_econ","kind":"theme"},{"term":"ministerio","kind":"org"}]'::jsonb where id = $1`, [docId])
+    await db.query(`insert into doc_terms (doc_id, term, kind) values ($1, 'wb_econ', 'theme') on conflict do nothing`, [docId])
+    await db.query(`insert into doc_terms (doc_id, term, kind) values ($1, 'ministerio', 'org') on conflict do nothing`, [docId])
+
+    await purgeThemes()
+
+    const { rows: extra } = await db.query<{ extra_terms: { term: string; kind: string }[] }>(`select extra_terms from docs where id = $1`, [docId])
+    assert.deepEqual(extra[0].extra_terms, [{ term: 'ministerio', kind: 'org' }])
+
+    const { rows: termRows } = await db.query<{ term: string; kind: string }>(`select term, kind from doc_terms where doc_id = $1 and kind in ('theme', 'org') order by kind`, [docId])
+    assert.deepEqual(termRows, [{ term: 'ministerio', kind: 'org' }])
   })
 })

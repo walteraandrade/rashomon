@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
-import { docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
-import { parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
+import { agendaFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
+import { parseAgendaQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
 import { insertDocP } from '../src/store.js'
@@ -34,9 +34,9 @@ const testimony = async (qs = '') => {
 describe('the routes answer their *For functions with the default parser (issue #21 AC14)', () => {
   before(seed)
 
-  it('graph, sources, docs, timeline, rising, tone and people', async () => {
+  it('graph, sources, docs, timeline, rising, tone, agenda and people', async () => {
     const id = 'tarcisio'
-    const [graphRes, sourcesRes, docsRes, timelineRes, weekRes, risingRes, toneRes, peopleRes] = await Promise.all([
+    const [graphRes, sourcesRes, docsRes, timelineRes, weekRes, risingRes, toneRes, agendaRes, peopleRes] = await Promise.all([
       app.request(`/api/people/${id}/graph`),
       app.request(`/api/people/${id}/sources`),
       app.request(`/api/people/${id}/docs`),
@@ -44,9 +44,10 @@ describe('the routes answer their *For functions with the default parser (issue 
       app.request(`/api/people/${id}/week`),
       app.request(`/api/people/${id}/rising`),
       app.request(`/api/tone`),
+      app.request(`/api/agenda`),
       app.request(`/api/people`),
     ])
-    const [graphBody, sourcesBody, docsBody, timelineBody, weekBody, risingBody, toneBody, peopleBody] = await Promise.all([
+    const [graphBody, sourcesBody, docsBody, timelineBody, weekBody, risingBody, toneBody, agendaBody, peopleBody] = await Promise.all([
       graphRes.json(),
       sourcesRes.json(),
       docsRes.json(),
@@ -54,6 +55,7 @@ describe('the routes answer their *For functions with the default parser (issue 
       weekRes.json(),
       risingRes.json(),
       toneRes.json(),
+      agendaRes.json(),
       peopleRes.json(),
     ])
 
@@ -73,6 +75,7 @@ describe('the routes answer their *For functions with the default parser (issue 
     assert.deepEqual(JSON.parse(JSON.stringify(directWeek)), weekBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await risingFor(person, parseRisingQuery({})))), risingBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await toneFor(parseToneQuery({})))), toneBody)
+    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor(parseAgendaQuery({})))), agendaBody)
     const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
     assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => withSeedFields(r)))), peopleBody)
   })
@@ -90,6 +93,15 @@ describe('the routes answer their *For functions with the default parser (issue 
     const cell = body.cells.find((c) => c.person_id === 'tarcisio' && c.domain === 'estadao.com.br')
     assert.deepEqual(cell, { person_id: 'tarcisio', domain: 'estadao.com.br', tone: -1, n: 3 })
     assert.deepEqual(JSON.parse(JSON.stringify(await toneFor({ days: 30, min: 3 }))), body)
+  })
+
+  it('/api/agenda matches agendaFor and the fixture literal', async () => {
+    // min=1 is a MINS member, so it survives parseAgendaQuery's snap unchanged
+    const res = await app.request('/api/agenda?days=30&min=1')
+    const body = (await res.json()) as { cells: { person_id: string; domain: string; docs: number; share: number }[] }
+    const cell = body.cells.find((c) => c.person_id === 'tarcisio' && c.domain === 'estadao.com.br')
+    assert.deepEqual(cell, { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor({ days: 30, source: 'all', min: 1, limit: 30 }))), body)
   })
 
   // Issue #108: 'theme' left the recognized kind set, so kind=theme must be a plain

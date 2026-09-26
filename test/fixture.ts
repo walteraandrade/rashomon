@@ -220,6 +220,40 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://lentesteste.example/59', text: 'Lula recebe Luiz em evento de posse', publishedAt: daysAgo(3900), domain: 'lentesteste.example' },
   { source: 'rss', uri: 'https://lentesteste.example/60', text: 'Lula recebe Luiz outra vez no palacio', publishedAt: daysAgo(3901), domain: 'lentesteste.example' },
   { source: 'rss', uri: 'https://lentesteste.example/61', text: 'Lula e Inacio se encontram no Planalto', publishedAt: daysAgo(3902), domain: 'lentesteste.example' },
+  // docs 62-66: issue #208's /api/agenda fixture, on metropoles.com, a domain unused
+  // elsewhere in the fixture. 3 lula-only docs (2 gnews, 1 rss) and 2 tarcisio-only docs (rss),
+  // no doc naming two people, so the domain's tracked-doc total (5) equals docs_lula (3) +
+  // docs_tarcisio (2) exactly -- the clean share-arithmetic case (0.6/0.4) AC3 pins, and also
+  // the exact min=5 boundary ("at min domain included", the counterpart to estadao.com.br's
+  // 4-tracked-doc below-min-by-one case above). Filtering source=gnews or source=rss narrows
+  // both docs_lula/docs_tarcisio and the domain total together, without any doc surviving one
+  // filter and not the other. Dated 4300+ days ago, past every window (widest 3902, docs
+  // 59-61) any pinned literal elsewhere reaches, so a test must open a wide `days` directly
+  // through agendaFor (never through the snapped DAYS list) to see them.
+  { source: 'gnews', uri: 'https://metropoles.com/62', text: 'Lula debate pauta economica em evento reservado', publishedAt: daysAgo(4300), domain: 'metropoles.com' },
+  { source: 'gnews', uri: 'https://metropoles.com/63', text: 'Lula recebe apoio de aliados para nova pauta', publishedAt: daysAgo(4301), domain: 'metropoles.com' },
+  { source: 'rss', uri: 'https://metropoles.com/64', text: 'Lula participa de reuniao internacional intensa', publishedAt: daysAgo(4302), domain: 'metropoles.com' },
+  { source: 'rss', uri: 'https://metropoles.com/65', text: 'Tarcisio discute cronograma estadual em reuniao', publishedAt: daysAgo(4303), domain: 'metropoles.com' },
+  { source: 'rss', uri: 'https://metropoles.com/66', text: 'Tarcisio anuncia novo decreto de obras publicas', publishedAt: daysAgo(4304), domain: 'metropoles.com' },
+  // docs 67-72/73-78: issue #208's /api/agenda truncation and tie-break fixture. Two domains,
+  // each with a tracked-doc total of 6 (a tie), one per person and neither shared with the
+  // other, both on source='camara' -- the only other camara doc in the fixture (doc 39,
+  // camara.leg.br) totals 1, well below either, so it never outranks them. Alphabetically
+  // agendasecundaria.example sorts before correiostado.example, so `agendaFor` with limit=1
+  // must return exactly agendasecundaria.example, proving the tie is broken by domain name
+  // ascending, never by insertion order. Dated 4305+ days ago, past docs 62-66 above.
+  { source: 'camara', uri: 'https://correiostado.example/67', text: 'Bolsonaro recebe apoiadores em ato de rua', publishedAt: daysAgo(4305), domain: 'correiostado.example' },
+  { source: 'camara', uri: 'https://correiostado.example/68', text: 'Bolsonaro comenta verba de campanha em entrevista', publishedAt: daysAgo(4306), domain: 'correiostado.example' },
+  { source: 'camara', uri: 'https://correiostado.example/69', text: 'Bolsonaro participa de comicio em praca publica', publishedAt: daysAgo(4307), domain: 'correiostado.example' },
+  { source: 'camara', uri: 'https://correiostado.example/70', text: 'Bolsonaro defende projeto de seguranca no interior', publishedAt: daysAgo(4308), domain: 'correiostado.example' },
+  { source: 'camara', uri: 'https://correiostado.example/71', text: 'Bolsonaro recebe homenagem em cerimonia militar', publishedAt: daysAgo(4309), domain: 'correiostado.example' },
+  { source: 'camara', uri: 'https://correiostado.example/72', text: 'Bolsonaro anuncia apoio a candidatura regional', publishedAt: daysAgo(4310), domain: 'correiostado.example' },
+  { source: 'camara', uri: 'https://agendasecundaria.example/73', text: 'Lula recebe prefeitos em reuniao de repasses', publishedAt: daysAgo(4311), domain: 'agendasecundaria.example' },
+  { source: 'camara', uri: 'https://agendasecundaria.example/74', text: 'Lula anuncia cronograma de obras rodoviarias', publishedAt: daysAgo(4312), domain: 'agendasecundaria.example' },
+  { source: 'camara', uri: 'https://agendasecundaria.example/75', text: 'Lula participa de encontro sobre concessoes', publishedAt: daysAgo(4313), domain: 'agendasecundaria.example' },
+  { source: 'camara', uri: 'https://agendasecundaria.example/76', text: 'Lula discute plano de infraestrutura regional', publishedAt: daysAgo(4314), domain: 'agendasecundaria.example' },
+  { source: 'camara', uri: 'https://agendasecundaria.example/77', text: 'Lula recebe governadores em pauta federativa', publishedAt: daysAgo(4315), domain: 'agendasecundaria.example' },
+  { source: 'camara', uri: 'https://agendasecundaria.example/78', text: 'Lula sanciona decreto sobre repasses estaduais', publishedAt: daysAgo(4316), domain: 'agendasecundaria.example' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

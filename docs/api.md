@@ -13,6 +13,7 @@ Every route is a public, read-only `GET` under `/api`. Query parameters are pars
 | `/api/people/:id/week` | top terms per calendar day in Brazil |
 | `/api/people/:id/testimony` | kikori scores, overall and per outlet |
 | `/api/tone` | GDELT tone per (person, outlet), across everybody |
+| `/api/agenda` | each outlet's own tracked coverage, split by person, across everybody |
 | `/api/candidates` | untracked names worth adding to `seed.json` |
 | `/api/compare` | exact count/PMI/tone for two people, over the union of their strongest terms |
 | `/api/people/:id/lenses` | one person, exact count/PMI/tone under two independently-scoped lenses |
@@ -111,6 +112,12 @@ When `?method` is omitted or fails its charset check it resolves through the sam
 ## tone
 
 `GET /api/tone?days=30&min=3` returns `{ persons, domains, cells }` across every tracked person (not nested under `/people/:id`). `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted distinct set of domains that appear in `cells` (a domain that never clears `min` never appears). `cells` holds one `{ person_id, domain, tone, n }` row per `(person, domain)` pair with at least `min` toned docs in the window; `tone` is the average, rounded to 2 decimals, `n` is the toned-doc count. [Tone is GDELT-only](terms.md#domain-and-tone), so non-GDELT docs never contribute to `tone` or `n` here.
+
+## agenda
+
+`GET /api/agenda?days=30&source=all&min=5` returns `{ days, persons, domains, cells }` across every tracked person (not nested under `/people/:id`, like `/tone`). No `domain`, `lean` or `limit` parameter: the top-30-domains cap is the route's own fixed behavior, not a page control, and `domain`/`lean` would pre-filter the very rows this route ranks. `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted, deduplicated set of the top 30 domains by tracked-doc total that clear `min`; a domain below `min`, or one that clears it but ranks outside the top 30, never appears in `domains` or `cells` — ties in the ranking break by domain name ascending.
+
+`cells` holds one `{ person_id, domain, docs, share }` row per `(person, domain)` pair with at least one tracked doc on a domain that made the cut: `docs` is that person's own distinct tracked-doc count on that domain in the window/source scope, `share` is `docs` divided by the domain's own total distinct tracked-doc count (naming any tracked person, not just this one), rounded to 2 decimals — relative to the **outlet's** own tracked coverage, not to the person's total coverage elsewhere. A domain whose docs each name exactly one tracked person has its shares sum to 1.0; a doc naming two tracked people is counted once toward that domain's own total but once in each of those two people's own `docs`, so the domain's shares can sum above 1.0 — expected, not a bug. Cached at the same rolling 6h class as `/api/tone` and `/api/graph`.
 
 ## candidates
 

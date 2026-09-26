@@ -16,8 +16,9 @@ const bento: Person = { id: 'bento', name: 'Bento Lima', aliases: ['Bento Lima']
 const rssBody = (encoding = 'UTF-8') =>
   `<?xml version="1.0" encoding="${encoding}"?><rss><channel><item><link>https://x/1</link><title>Fulano fala</title></item></channel></rss>`
 
-// Shaped like Planalto's real feed: items sit as siblings of <channel>, not nested inside it.
-const rdfBody = (items = '<item rdf:about="https://www.gov.br/planalto/pt-br/1"><title>Planalto anuncia medida</title><link>https://www.gov.br/planalto/pt-br/1</link><description>Resumo da medida.</description><content:encoded><![CDATA[<p>Texto integral da medida.</p>]]></content:encoded><dc:date>2026-09-02T18:34:00Z</dc:date></item>') =>
+// Shaped like Planalto's real feed: items sit as siblings of <channel>, not nested inside it,
+// and content:encoded carries its own inline xmlns:content attribute.
+const rdfBody = (items = '<item rdf:about="https://www.gov.br/planalto/pt-br/1"><title>Planalto anuncia medida</title><link>https://www.gov.br/planalto/pt-br/1</link><description>Resumo da medida.</description><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Texto integral da medida.</p>]]></content:encoded><dc:date>2026-09-02T18:34:00Z</dc:date></item>') =>
   `<?xml version="1.0" encoding="UTF-8"?><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel rdf:about="https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS"><title>Planalto</title></channel>${items}</rdf:RDF>`
 
 describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no global fetch)', () => {
@@ -72,31 +73,6 @@ describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no gl
     assert.match(String(error), /rss https:\/\/example\.org\/feed 500/)
   })
 
-  it('parses an RDF (RSS 1.0) feed whose items sit as siblings of channel', async () => {
-    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
-    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
-    assert.ok(Exit.isSuccess(exit))
-    assert.equal(exit.value.length, 1)
-    assert.equal(exit.value[0].uri, 'https://www.gov.br/planalto/pt-br/1')
-    assert.match(exit.value[0].text, /Planalto anuncia medida/)
-  })
-
-  it('uses dc:date as publishedAt when pubDate is absent', async () => {
-    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
-    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
-    assert.ok(Exit.isSuccess(exit))
-    assert.equal(exit.value[0].publishedAt, new Date('2026-09-02T18:34:00Z').toISOString())
-  })
-
-  it('falls back to now when an RDF item has neither pubDate nor dc:date', async () => {
-    const noDateItem = '<item rdf:about="https://www.gov.br/planalto/pt-br/2"><title>Sem data</title><link>https://www.gov.br/planalto/pt-br/2</link><description>Resumo.</description></item>'
-    const fetchFn = fakeFetch(() => new Response(rdfBody(noDateItem), { status: 200 }))
-    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
-    assert.ok(Exit.isSuccess(exit))
-    assert.equal(exit.value.length, 1)
-    assert.ok(exit.value[0].publishedAt)
-  })
-
   it('a timed-out feed fails with "<source> <url>: <reason>", so a stalled feed among several is identifiable', async () => {
     const fetchFn = fakeFetch(hanging)
     const exit = await runTest(drain(fetchFeed('rss')('https://example.org/feed'), REQUEST_TIMEOUT_MS), fetchFn)
@@ -138,6 +114,16 @@ describe('rss.ts reads RSS 1.0 (RDF) feeds, whose items sit as siblings of chann
     assert.equal(exit.value.length, 1)
     const publishedAt = new Date(exit.value[0].publishedAt).getTime()
     assert.ok(publishedAt >= before, 'publishedAt must fall back to roughly now, not throw or drop the doc')
+  })
+
+  // issue #213
+  it('keeps the content:encoded body through the real parser when the element carries its own inline xmlns and description is empty', async () => {
+    const item = '<item rdf:about="https://www.gov.br/planalto/pt-br/3"><title>Medida provisória</title><link>https://www.gov.br/planalto/pt-br/3</link><description></description><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Texto integral da medida.</p>]]></content:encoded></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(item), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.match(exit.value[0].text, /Texto integral da medida/)
+    assert.doesNotMatch(exit.value[0].text, /object Object/i)
   })
 
   // issue #213
@@ -237,6 +223,23 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
 
   it('strips the HTML and decodes entities, exactly as description already was', () => {
     assert.equal(body({ 'content:encoded': '<p>Lula &amp; Bolsonaro</p><p>no Congresso</p>' }), 'Lula & Bolsonaro no Congresso')
+  })
+
+  it('unwraps content:encoded when it carries its own inline xmlns attribute (Planalto\'s real shape), never leaking "[object Object]"', () => {
+    // With ignoreAttributes: false, fast-xml-parser turns an element carrying its own attribute
+    // into {'#text': ..., '@_xmlns:content': ...} instead of a bare string.
+    const item = { description: '', 'content:encoded': { '#text': '<p>Texto integral da medida.</p>', '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/' } }
+    assert.match(body(item), /Texto integral da medida/)
+    assert.doesNotMatch(body(item), /object Object/i)
+  })
+
+  it('still prefers the longer content:encoded over a shorter description when content:encoded carries an inline xmlns', () => {
+    const item = {
+      description: 'Resumo curto.',
+      'content:encoded': { '#text': `<p>${'Texto integral da medida com muito mais conteúdo. '.repeat(10)}</p>`, '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/' },
+    }
+    assert.match(body(item), /^Texto integral da medida/)
+    assert.ok(body(item).length > 'Resumo curto.'.length)
   })
 
   it('reaches the RawDoc: toDoc builds text from title plus the full body', () => {

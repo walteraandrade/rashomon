@@ -32,8 +32,10 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // `content:encoded` is the full article body; description wins only when it is longer.
 export const body = (item: any) => {
-  const encoded = stripHtml(item['content:encoded'])
-  const description = stripHtml(item.description)
+  // content:encoded can arrive as {'#text': ..., '@_xmlns:content': ...} when the element
+  // carries its own inline xmlns (Planalto's feed does), so unwrap with `text` before stripping.
+  const encoded = stripHtml(text(item['content:encoded']))
+  const description = stripHtml(text(item.description))
   return encoded.length > description.length ? encoded : description
 }
 

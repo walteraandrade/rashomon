@@ -294,11 +294,11 @@ describe('docs/operations.md states the dependency and size facts', () => {
 })
 
 describe('docs facts', () => {
-  it("kind's documented accepted values are exactly hashtag, word and phrase, never theme", () => {
+  it("kind's documented accepted values are exactly hashtag, org, phrase and word, never theme (issue #209)", () => {
     const m = /`kind`:\s*([^.\n]*)/.exec(docsText)
     assert.ok(m, 'no page documents what values `kind` accepts')
     const values = [...m![1].matchAll(/`(\w+)`/g)].map((x) => x[1]).sort()
-    assert.deepEqual(values, ['hashtag', 'phrase', 'word'], "docs/api.md's kind line must list exactly hashtag, word and phrase")
+    assert.deepEqual(values, ['hashtag', 'org', 'phrase', 'word'], "docs/api.md's kind line must list exactly hashtag, org, phrase and word")
   })
 
   it('pnpm purge themes is documented, and what it clears is documented alongside it', () => {

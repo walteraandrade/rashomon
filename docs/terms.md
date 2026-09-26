@@ -85,6 +85,10 @@ things said *about* the person, they are the person. `src/graph.ts` does it with
 test on the phrase's words, guarded by a `position(' ' in term)` check so the single-word rows
 that dominate `doc_terms` never pay for it.
 
+## Organizations
+
+`org` is a fourth term kind, sourced only from GDELT: `src/collectors/gkg.ts` reads a gkg row's `V1Organizations` column (index 13), splits it on `;`, normalizes and dedupes each name per doc, and tags every one `kind: 'org'`. No other source ever produces an `org` term — the way `tone` stays null off GDELT, `org` stays empty off GDELT. It is filtered by the same own-name rule as any other kind (`isName` in `src/scoring.ts`): an organization equal to a tracked person's alias word, or a multi-word one sharing every word with the person's name tokens, is dropped from that person's graph. `pnpm purge themes` clears legacy `theme`-kind elements from `docs.extra_terms` without touching a live `org` element stored alongside one.
+
 ## Candidate discovery
 
 Names are discovered when a doc is inserted (`insertDoc`) and stored in `doc_candidates (doc_id, name)`, normalized like aliases (lowercase, no accents). `gkg` docs take the V1Persons column of the GKG CSV (index 11), kept in `docs.extra_names`; every other source uses a cheap, noisy heuristic: runs of two or more capitalized words (`de/da/do/das/dos` allowed inside) that do not open a sentence, where only `.`, `!`, `?` and a line break end a sentence and a colon, comma, quote or dash merely ends the run. A name equal to a tracked alias or `exclude` entry is not a candidate (exact match, so "Michelle Bolsonaro" still surfaces while only a bare "Bolsonaro" is tracked). `pnpm reindex` recomputes the table from stored docs with the current `seed.json`; gkg rows inserted before this table existed have an empty `extra_names` and contribute no candidates until re-ingested.

@@ -10,6 +10,7 @@
     "aggregate": "tsx src/aggregate.ts",
     "warm": "tsx src/warm.ts",
     "purge": "tsx src/purge.ts",
+    "size": "tsx src/size.ts",
     "score": "tsx src/score.ts",
     "export-docs": "tsx src/export-docs.ts",
     "bench": "tsx src/bench.ts",

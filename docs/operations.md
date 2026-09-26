@@ -143,7 +143,15 @@ over `@effect/sql-pg`'s extended-query protocol, unprepared; PostgreSQL accepts 
 sole statement of its implicit block, but this path is unverified against the real server and is
 part of the manual round that gates the Effect db PR (issue #184), not of the test suite.
 
-**Measuring it.** `pnpm bench:writes` builds a deterministic synthetic corpus (the same
+**Measuring size.** `pnpm size` prints every table in `SIZE_TABLES` (`src/size.ts`; wider than
+`ANALYZED_TABLES` — it adds `persons`, `gkg_files`, `phrases` and `phrase_stage`, all of which have
+caused real disk incidents) by `pg_total_relation_size`, plus `pg_database_size` for the database
+total, largest first, followed by one JSON line with the same numbers. It is read-only: no
+`analyze`, `vacuum` or write, and no history is kept. `.github/workflows/ingest.yml` runs it after
+every `pnpm ingest` and appends the output to the run summary, so a shrinking-disk trend is visible
+across runs without opening a database client.
+
+**Measuring writes.** `pnpm bench:writes` builds a deterministic synthetic corpus (the same
 `src/bench-corpus.ts` as `pnpm bench`) in its own `DATA_DIR`, then reports statements sent to PGlite,
 throughput, peak RSS, peak heap and database size for an ingest and for two consecutive reindexes. Like
 `pnpm bench` it refuses to open `./data/pg`. Knobs: `BENCH_WRITES_DOCS` (20000), `BENCH_WRITES_DATA_DIR`

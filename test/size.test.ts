@@ -119,16 +119,25 @@ describe('pnpm size', () => {
     }
   })
 
-  // spec criterion: .github/workflows/ingest.yml runs pnpm size after pnpm ingest and
-  // appends its output to $GITHUB_STEP_SUMMARY.
+  // spec criterion: .github/workflows/ingest.yml runs pnpm size after pnpm ingest, pipes its
+  // output to $GITHUB_STEP_SUMMARY and tolerates a failure there without failing the job (so
+  // a transient size-step error never skips the cache purge/warm steps below it).
   describe('.github/workflows/ingest.yml', () => {
     it('runs pnpm size after pnpm ingest and pipes its output to the step summary', () => {
       const workflow = readRepoFile('.github/workflows/ingest.yml')
-      const ingestIdx = workflow.indexOf('pnpm ingest')
-      const sizeIdx = workflow.indexOf('pnpm size')
+      const ingestIdx = workflow.indexOf('- run: pnpm ingest')
+      const sizeIdx = workflow.indexOf('pnpm -s size')
       assert.ok(ingestIdx > -1)
       assert.ok(sizeIdx > ingestIdx)
-      assert.match(workflow, /pnpm size[^\n]*GITHUB_STEP_SUMMARY/)
+      assert.match(workflow, /pnpm -s size[^\n]*GITHUB_STEP_SUMMARY/)
+    })
+
+    it('does not fail the job when pnpm size fails', () => {
+      const workflow = readRepoFile('.github/workflows/ingest.yml')
+      const sizeIdx = workflow.indexOf('pnpm -s size')
+      const nextStepIdx = workflow.indexOf('- run:', sizeIdx)
+      const stepSlice = workflow.slice(sizeIdx, nextStepIdx > -1 ? nextStepIdx : undefined)
+      assert.match(stepSlice, /continue-on-error:\s*true/)
     })
   })
 

@@ -41,8 +41,12 @@ jobs:
       - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
       - run: pnpm ingest ${{ inputs.sources }}
       # Read-only: table sizes and the database total, so a shrinking-disk trend shows up in
-      # the run summary without opening a database client.
-      - run: echo '```' >> "$GITHUB_STEP_SUMMARY" && pnpm size >> "$GITHUB_STEP_SUMMARY" && echo '```' >> "$GITHUB_STEP_SUMMARY"
+      # the run summary without opening a database client. continue-on-error: a transient
+      # failure here must not skip the cache purge/warm below and leave production serving
+      # the pre-ingest CDN copy; the closing fence is written even when `pnpm size` fails.
+      - run: |
+          { echo '```'; pnpm -s size; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
       # Drops every stored /api object (the `api` tag, src/cache.ts) so the warm below refills
       # them from the origin: no request header bypasses Vercel's CDN, and a plain GET after an
       # ingest would only confirm the pre-ingest copy.

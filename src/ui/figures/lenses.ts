@@ -113,21 +113,28 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   // Top-80 domains for this person (same /sources call figure 2 already makes), used only to
-  // fill the two lens selects' own "Veículo" optgroup; a transient failure here leaves whatever
-  // options were already there, and never blocks the figure's own load().
-  const loadOutlets = async () => {
-    if (peopleError || !people.length) return
+  // fill the two lens selects' own "Veículo" optgroup; a transient failure never blocks the
+  // figure's own load(). The generation counter plus the captured person/days guard against a
+  // stale response writing another person's or window's hosts in; `false` means nothing wrote.
+  let outletsGen = 0
+  const loadOutlets = async (): Promise<boolean> => {
+    if (peopleError || !people.length) return false
     const id = personId()
-    if (!id) return
+    if (!id) return false
+    const days = $('lensesDays').value
+    const gen = ++outletsGen
     try {
-      const rows: OutletRow[] = await api.loadSources(id, api.sourcesParams({ days: $('lensesDays').value, sort: 'count', limit: '80', source: 'all' }))
+      const rows: OutletRow[] = await api.loadSources(id, api.sourcesParams({ days, sort: 'count', limit: '80', source: 'all' }))
+      if (gen !== outletsGen || personId() !== id || $('lensesDays').value !== days) return false
       const seen = new Set<string>()
       const domains = rows.filter((r) => r.domain && !seen.has(r.domain) && seen.add(r.domain))
       const optionsHtml = html`${domains.map((r) => html`<option value="domain:${r.domain}">${r.domain}</option>`)}`
       if ($('lensesAOutlets')) $('lensesAOutlets').innerHTML = optionsHtml
       if ($('lensesBOutlets')) $('lensesBOutlets').innerHTML = optionsHtml
+      return true
     } catch {
       // Leaves the selects with whatever options they already had.
+      return false
     }
   }
 
@@ -163,8 +170,11 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const paint = (result: Lenses) => {
+    // A resize repaint calls this with the same object again (figure.ts's own repaint());
+    // only a genuinely new dataset clears the pick, or a resize would close the reader's card.
+    const isNewData = result !== data
     data = result
-    selected = null
+    if (isNewData) selected = null
     lastWidth = $('lensesRuler').clientWidth || 0
     $('lensesStatus').hidden = result.a.lens !== result.b.lens
     root.classList.remove('is-loading')
@@ -198,49 +208,69 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     onRelease: releaseSelection,
   })
 
+  // Set once the reader touches a control, so the initial seed's own deferred continuation
+  // never overwrites whatever she picked, however late its await settles.
+  let touched = false
+
+  // figure.release() (week.ts's own pattern), not just `selected = null`: a control here must
+  // not shut a card the atlas or the compare ruler is showing, or leave one open with stale rows.
   const onControlChange = () => {
-    selected = null
+    touched = true
+    figure.release()
     figure.reload()
   }
 
   const hasOption = (select: any, value: string) => [...select.options].some((o: any) => o.value === value)
 
-  // The domain optgroup is rebuilt by loadOutlets whenever the person or the window changes;
-  // a currently-selected domain that survives the refill is kept, otherwise the select falls
-  // back to 'all' explicitly rather than whatever option the browser's own reset lands on.
+  // The domain optgroup is rebuilt by loadOutlets whenever the person or the window changes; a
+  // currently-selected domain that survives the refill is kept, else the select falls back to
+  // 'all' explicitly. Exits early, leaving both selects untouched, when loadOutlets wrote
+  // nothing (a stale response) -- `touched` itself is irrelevant here, since the two callers
+  // set it before awaiting this, and this preserve-or-'all' step is their own response to it.
   const refreshOutletsPreserving = async () => {
     const prevA = $('lensesA').value
     const prevB = $('lensesB').value
-    await loadOutlets()
+    const applied = await loadOutlets()
+    if (!applied) return
     $('lensesA').value = hasOption($('lensesA'), prevA) ? prevA : 'all'
     $('lensesB').value = hasOption($('lensesB'), prevB) ? prevB : 'all'
   }
 
   const onPersonChange = async () => {
-    selected = null
+    touched = true
+    figure.release()
     await refreshOutletsPreserving()
     figure.reload()
   }
 
   const onDaysChange = async () => {
-    selected = null
+    touched = true
+    figure.release()
     await refreshOutletsPreserving()
     figure.reload()
   }
+
+  const isDomainSeed = (v: string | undefined): v is string => typeof v === 'string' && v.startsWith('domain:')
 
   $('lensesPerson').innerHTML = ''
   for (const p of people) $('lensesPerson').add(new Option(p.name, p.id))
   $('lensesPerson').value = resolvePerson(people, initial.person)
   applySeed($('lensesDays'), initial.days)
   applySeed($('lensesLimit'), initial.limit)
+  // A domain seed's own <option> does not exist until loadOutlets fills it in; only that kind
+  // is deferred below, so lean:/source:/all seeds apply now, before the reader can touch a control.
+  if (!isDomainSeed(initial.a)) applySeed($('lensesA'), initial.a)
+  if (!isDomainSeed(initial.b)) applySeed($('lensesB'), initial.b)
 
   for (const id of ['lensesA', 'lensesB', 'lensesLimit']) $(id).addEventListener('change', onControlChange)
   $('lensesDays').addEventListener('change', onDaysChange)
   $('lensesPerson').addEventListener('change', onPersonChange)
 
-  loadOutlets().then(() => {
-    applySeed($('lensesA'), initial.a)
-    applySeed($('lensesB'), initial.b)
+  loadOutlets().then((applied) => {
+    if (applied && !touched) {
+      if (isDomainSeed(initial.a)) applySeed($('lensesA'), initial.a)
+      if (isDomainSeed(initial.b)) applySeed($('lensesB'), initial.b)
+    }
     figure.load()
   })
 }

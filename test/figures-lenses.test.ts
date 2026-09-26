@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { clearScopes } from '../src/ui/state.js'
 import { SOURCES } from '../src/query.js'
-import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
+import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { CompareTerm, Lenses } from '../src/ui/format.js'
 
@@ -26,6 +26,22 @@ const lensesData = (terms: CompareTerm[], a = 'all', b = 'lean:right'): Lenses =
   b: { lens: b, about: 5 },
   terms,
 })
+
+// A /sources response the test releases on its own timing, so a criterion can drive an actual
+// race against loadOutlets' own await -- routeFetch alone always resolves immediately.
+const controlledSources = (calls: string[], byPath: Record<string, unknown>) => {
+  let release: (() => void) | undefined
+  const gate = new Promise<void>((r) => (release = r))
+  globalThis.fetch = (async (input: unknown) => {
+    const url = String(input)
+    calls.push(url)
+    const path = new URL(url, 'http://localhost').pathname
+    if (path.endsWith('/sources')) await gate
+    for (const [suffix, data] of Object.entries(byPath)) if (path.endsWith(suffix)) return jsonResponse(data) as unknown as Response
+    return jsonResponse({}) as unknown as Response
+  }) as typeof fetch
+  return () => release!()
+}
 
 describe('figures/lenses.js is importable outside a browser, touches document only inside mount, exports exactly mount', async () => {
   assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document defined at import time')
@@ -308,5 +324,163 @@ describe('atlas.html carries the sixth figure card', () => {
       const values = [...body.matchAll(/<option value="source:([^"]+)">/g)].map(([, v]) => v)
       assert.deepEqual(values, SOURCES, 'the Fonte optgroup must offer exactly SOURCES, in order')
     }
+  })
+})
+
+describe('a control change while the initial /sources is still in flight is never overwritten by the pending seed (PR #226, gap 1)', () => {
+  it('the reader\'s own lensesA change survives the mount-time seed continuation, whichever order the awaits settle in', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const release = controlledSources(calls, {
+        '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }],
+        '/lenses': lensesData([]),
+      })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { a: 'lean:left' } })
+      await flush()
+      // The non-domain seed applies synchronously, before loadOutlets' own /sources await --
+      // it must not wait on that request at all.
+      assert.equal(els.lensesA.value, 'lean:left')
+      els.lensesA.value = 'source:rss'
+      els.lensesA.fire('change')
+      await flush()
+      release()
+      await flush(220)
+      assert.equal(els.lensesA.value, 'source:rss', "the pending mount continuation must not reset the reader's own change back to the seed")
+      const lastLenses = calls.filter((u) => u.includes('/lenses')).pop()
+      const qs = new URL(lastLenses!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'source:rss', 'the request actually sent must carry the value the reader picked')
+    })
+  })
+})
+
+describe('a stale /sources response never overwrites a newer person/window\'s optgroup (PR #226, gap 2)', () => {
+  it('two /sources calls, the first (personA) resolving after the second (personB): the optgroup ends up with only personB\'s hosts, and a domain personB has stays selected', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      let releaseFirst: (() => void) | undefined
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let sourcesCalls = 0
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        const path = new URL(url, 'http://localhost').pathname
+        if (path.endsWith('/sources')) {
+          sourcesCalls++
+          if (sourcesCalls === 1) {
+            await firstGate
+            return jsonResponse([{ domain: 'g1.globo.com', docs: 4 }]) as unknown as Response
+          }
+          return jsonResponse([{ domain: 'folha.uol.com.br', docs: 12 }]) as unknown as Response
+        }
+        if (path.endsWith('/lenses')) return jsonResponse(lensesData([])) as unknown as Response
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { person: personA.id } })
+      await flush()
+      // Switch to personB before personA's own (first) /sources call has resolved.
+      els.lensesPerson.value = personB.id
+      els.lensesPerson.fire('change')
+      await flush(220)
+      // personB's /sources resolves second but before personA's stale first call.
+      assert.equal(els.lensesA.value, 'all', "before personA's stale response ever lands, folha isn't selected yet unless seeded")
+      els.lensesA.value = 'domain:folha.uol.com.br'
+      releaseFirst!()
+      await flush(220)
+      assert.ok(
+        els.lensesA.options.some((o: { value: string }) => o.value === 'domain:folha.uol.com.br'),
+        "personB's own domain must still be offered"
+      )
+      assert.ok(
+        !els.lensesA.options.some((o: { value: string }) => o.value === 'domain:g1.globo.com'),
+        "personA's stale domain must never land in the optgroup after personB's own fill"
+      )
+      assert.equal(els.lensesA.value, 'domain:folha.uol.com.br', "personA's stale response must not have reset the select")
+    })
+  })
+})
+
+describe('a control change releases the docs card this figure owns, never just the pick (PR #226, gap 3)', () => {
+  it('changing lensesA closes a card this figure opened', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: { count: 2, pmi: 0.4, tone: null } }]
+      routeFetch(calls, { '/lenses': lensesData(terms), '/sources': [] })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people: [personA], initial: {} })
+      await flush()
+      const [word] = els.lensesRuler.querySelectorAll('[data-term]')
+      word.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the lenses card is open')
+      els.lensesA.value = 'lean:left'
+      els.lensesA.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, false, 'the card this figure opened must close with the control change')
+    })
+  })
+
+  it("a card owned by another figure ('atlas') survives a lensesA change (ownership, not selected)", async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: { count: 2, pmi: 0.4, tone: null } }]
+      routeFetch(calls, { '/lenses': lensesData(terms), '/sources': [] })
+      const docsCard = await import('../src/ui/docs-card.js')
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people: [personA], initial: {} })
+      await flush()
+      const [word] = els.lensesRuler.querySelectorAll('[data-term]')
+      word.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'the lenses card is open')
+      assert.equal(docsCard.openedBy('lenses'), true)
+      docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: personA.id, personName: personA.name, label: personA.name, query: new URLSearchParams({ days: '30' }) }] })
+      await flush()
+      assert.equal(docsCard.openedBy('lenses'), false, 'the atlas now owns the card')
+      els.lensesA.value = 'lean:left'
+      els.lensesA.fire('change')
+      await flush(220)
+      assert.equal(els.docsDialog.open, true, "another figure's card must survive even though this figure still had a pick")
+    })
+  })
+})
+
+describe('a resize repaint keeps the pick and the open card; a second click on the same word still releases it (PR #226, gap 4)', () => {
+  it('the runtime\'s own ResizeObserver on #lensesRuler repaints without clearing selected or closing the card', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const captured: { target: unknown; cb: () => void }[] = []
+      class CapturingResizeObserver {
+        cb: () => void
+        constructor(cb: () => void) {
+          this.cb = cb
+        }
+        observe(target: unknown) {
+          captured.push({ target, cb: this.cb })
+        }
+        disconnect() {}
+      }
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = CapturingResizeObserver
+      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: { count: 2, pmi: 0.4, tone: null } }]
+      routeFetch(calls, { '/lenses': lensesData(terms), '/sources': [] })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people: [personA], initial: {} })
+      await flush()
+      const rulerObservers = captured.filter((c) => c.target === els.lensesRuler)
+      assert.equal(rulerObservers.length, 1, 'exactly one ResizeObserver must observe #lensesRuler, the runtime\'s own')
+      const mark = () => [...els.lensesRuler.querySelectorAll('[data-term]')].find((el: any) => el.dataset.term === 'reforma')
+      mark()!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'picking a word opens the card')
+      els.lensesRuler.clientWidth = 400
+      rulerObservers[0].cb()
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'a resize must not close the card this figure opened')
+      assert.match(els.lensesRuler.innerHTML, /is-selected/, 'the picked word stays selected across a resize repaint')
+      mark()!.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'a second click on the same word must still release it, after a resize repaint in between')
+    })
   })
 })

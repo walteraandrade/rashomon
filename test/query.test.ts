@@ -79,7 +79,7 @@ describe('parseSourceList (issue #8)', () => {
   })
 })
 
-// The kind list travels like the source list: a caller can ask for any subset of the three
+// The kind list travels like the source list: a caller can ask for any subset of the four
 // kinds, an unknown token is dropped and an all-unknown or missing list falls back to all.
 describe('parseKindList', () => {
   it('parses a comma-separated list, drops unknown tokens and falls back to all', () => {
@@ -89,6 +89,12 @@ describe('parseKindList', () => {
     assert.equal(parseKindList(undefined), 'all')
     assert.equal(parseKindList('word,word'), 'word', 'duplicates collapse, as in parseSourceList')
     assert.equal(parseQuery({ kind: 'word,phrase' }).kind, 'word,phrase')
+  })
+
+  // Issue #209: org (GDELT's V1Organizations) joins hashtag/word/phrase as a fourth accepted kind.
+  it('accepts org, alongside or on its own', () => {
+    assert.equal(parseKindList('org'), 'org')
+    assert.equal(parseKindList('word,org'), 'word,org')
   })
 })
 
@@ -447,13 +453,15 @@ describe('parseCountryList', () => {
 })
 
 describe('KINDS (issue #108)', () => {
-  it('is the same set the page sends as ATLAS_KINDS (issue #195)', () => {
-    assert.deepEqual(new Set(ATLAS_KINDS.split(',')), new Set(KINDS))
+  // Issue #209 adds org to KINDS without touching ATLAS_KINDS, so the sets no longer match
+  // exactly: org is accepted by the API before the atlas requests it.
+  it("is ATLAS_KINDS's set plus org (issue #195/#209)", () => {
+    assert.deepEqual(new Set(KINDS), new Set([...ATLAS_KINDS.split(','), 'org']))
   })
 
-  it('no longer accepts the token theme', () => {
+  it('no longer accepts the token theme, and now also accepts org', () => {
     assert.ok(!KINDS.includes('theme'))
-    assert.deepEqual(KINDS, ['hashtag', 'word', 'phrase'])
+    assert.deepEqual(KINDS, ['hashtag', 'word', 'phrase', 'org'])
   })
 })
 

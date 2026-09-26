@@ -390,7 +390,7 @@ export const sourcesFor = async (person: Person, q: GraphQuery) => {
 const docsWhere = (term: string, kind: string) => sql`(
     ${term} = '' or exists (
       select 1 from doc_terms t where t.doc_id = d.id and t.term = ${term}
-        and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase']))
+        and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase', 'org']))
     )
   )`
 export const docsWhereSql = docsWhere('', 'all').text

@@ -179,6 +179,8 @@ describe('buildGraphAggregates', () => {
     { min: '3' },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
+    { kind: 'org' }, // issue #209: org flows through the same top-K build/PMI/signature path, no branch
+    { kind: 'org,word' },
     { source: 'rss' },
     { source: 'gkg', days: '7' },
     { source: 'bluesky', sort: 'pmi', min: '1' },
@@ -276,7 +278,7 @@ describe('the ceiling on graph_terms', () => {
       for (const days of DAYS)
         for (const sort of ['count', 'pmi'])
           for (const min of MINS)
-            for (const kind of ['all', 'word', 'phrase,hashtag'])
+            for (const kind of ['all', 'word', 'phrase,hashtag', 'org'])
               for (const limit of limits) {
                 const query = q({ days: String(days), sort, min: String(min), kind, limit: String(limit) })
                 assert.deepEqual(await fast(person, query), await live(person, query), `${person.id} ${JSON.stringify({ days, sort, min, kind, limit })}`)

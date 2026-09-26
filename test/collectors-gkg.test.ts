@@ -164,11 +164,12 @@ describe('latestSlot', () => {
   })
 })
 
-const gkgRow = (slot: string, extra: Partial<Record<'domain' | 'themes', string>> = {}) => {
+const gkgRow = (slot: string, extra: Partial<Record<'domain' | 'themes' | 'orgs', string>> = {}) => {
   const cols = new Array(27).fill('')
   cols[3] = extra.domain ?? 'example.org'
   cols[4] = `https://example.org/${slot}`
   cols[7] = extra.themes ?? ''
+  cols[13] = extra.orgs ?? ''
   cols[15] = '1.0'
   cols[25] = 'srclc:por'
   cols[26] = `<PAGE_TITLE>Doc ${slot}</PAGE_TITLE>`
@@ -220,15 +221,64 @@ describe('collect() records no slot whose payload carried no documents', () => {
   })
 })
 
-// Issue #108: GDELT's V2Themes column is no longer read into extraTerms at all, even when the
-// row carries one.
-describe('collect() drops GDELT themes: extraTerms is always [] (issue #108)', () => {
+// Issue #108: GDELT's V2Themes column is never read into extraTerms. Issue #209: V1Organizations
+// (a different column) is, as a new 'org' term kind.
+describe('collect(): V2Themes stays unread, V1Organizations becomes org terms (issue #108/#209)', () => {
   before(migrateP)
 
-  const latest = '20260911130000'
+  // Each test needs its own slot, 15 minutes (one slotMs) apart: gkg_files (checked by collect()
+  // to skip already-processed slots) is a table shared across every test in this describe, not
+  // reset between them, and slotDate/slotName both truncate to the minute, dropping seconds.
 
-  it('returns every doc with extraTerms: [] even though the row carries themes', async () => {
+  it('returns every doc with extraTerms: [] when only themes are present, no organizations (issue #108)', async () => {
+    const latest = '20260911130000'
     const fetchFn = gkgFetch(latest, (slot) => new Response(zipSync({ 'entry.csv': strToU8(gkgRow(slot, { themes: 'TAX_FNCACT_JUDGE;WB_678_ECONOMY' })) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [])
+  })
+
+  it('returns org terms from V1Organizations, normalized and deduplicated, while themes are still ignored (issue #209 AC1/AC3)', async () => {
+    const latest = '20260911131500'
+    const fetchFn = gkgFetch(
+      latest,
+      (slot) => new Response(zipSync({ 'entry.csv': strToU8(gkgRow(slot, { themes: 'TAX_FNCACT_JUDGE', orgs: 'Petrobras;Banco Central;PETROBRAS' })) }), { status: 200 }),
+    )
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')
+    for (const d of exit.value) {
+      assert.deepEqual(d.extraTerms, [
+        { term: 'petrobras', kind: 'org' },
+        { term: 'banco central', kind: 'org' },
+      ])
+    }
+  })
+
+  it('returns extraTerms: [] for an empty V1Organizations field (issue #209 AC2)', async () => {
+    const latest = '20260911133000'
+    const fetchFn = gkgFetch(latest, (slot) => new Response(zipSync({ 'entry.csv': strToU8(gkgRow(slot, { orgs: '' })) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [])
+  })
+
+  // V1Persons is column 11, V2Persons (unused) is 12, V1Organizations is 13: content placed one
+  // column early (12, not 13) must never be read as an organization, pinning the off-by-one risk.
+  it('reads organizations from column 13 only, never column 12 (issue #209 off-by-one guard)', async () => {
+    const latest = '20260911134500'
+    const fetchFn = gkgFetch(latest, (slot) => {
+      const cols = new Array(27).fill('')
+      cols[3] = 'example.org'
+      cols[4] = `https://example.org/${slot}`
+      cols[12] = 'Petrobras'
+      cols[15] = '1.0'
+      cols[25] = 'srclc:por'
+      cols[26] = `<PAGE_TITLE>Doc ${slot}</PAGE_TITLE>`
+      return new Response(zipSync({ 'entry.csv': strToU8(cols.join('\t')) }), { status: 200 })
+    })
     const exit = await runTest(collect, fetchFn)
     assert.ok(Exit.isSuccess(exit))
     assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')

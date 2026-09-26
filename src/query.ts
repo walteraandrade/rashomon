@@ -129,7 +129,7 @@ const parseList = (keep: (token: string) => boolean) => (v: string | undefined):
 
 export const parseSourceList = parseList((s) => SOURCES.includes(s))
 
-export const KINDS = ['hashtag', 'word', 'phrase']
+export const KINDS = ['hashtag', 'word', 'phrase', 'org']
 
 export const parseKindList = parseList((s) => KINDS.includes(s))
 

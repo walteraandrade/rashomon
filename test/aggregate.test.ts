@@ -343,6 +343,16 @@ describe('term_communities (issue #214)', () => {
     assert.ok(withCommunities.nodes.some((n) => typeof n.community === 'number'), 'sanity: a built window must tag at least one node')
 
     await db.query(`delete from term_communities where days = 30 and source = 'all' and person_id = 'lula'`)
+
+    // Pin that the fast query itself (not a live-query fallback) is what answers with null
+    // communities: a mutant adding an `exists (select 1 from term_communities ...)` guard to
+    // graphFastQuery would otherwise send this recorte live and still pass the assertions below.
+    const fastQuery = queries.graphFast(lula, q({ communities: '1' }))
+    const { rows: fastRows } = await db.query<{ nodes: { community: number | null }[] }>(fastQuery.text, fastQuery.values)
+    assert.equal(fastRows.length, 1)
+    assert.ok(fastRows[0].nodes.length > 0)
+    assert.ok(fastRows[0].nodes.every((n) => n.community === null))
+
     const degraded = await graphFor(lula, q({ communities: '1' }))
     assert.ok(degraded.nodes.length > 0)
     assert.ok(degraded.nodes.every((n) => n.community === null))

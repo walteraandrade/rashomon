@@ -204,6 +204,8 @@ export type AggregateReport = { windows: number[]; scopes: number; terms: number
 // The tables the build fills, for the owner process (ingest, reindex) to analyze afterwards.
 export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms'] as const
 
+export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities'] as const
+
 // Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
 // `top` is the per-ordering ceiling (TOP in production; tests lower it to see the cut).

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { before, after, describe, it } from 'node:test'
 import { buildGraphAggregates } from '../src/aggregate.js'
@@ -1615,6 +1616,37 @@ describe('graphFastQuery communities=1 (issue #214)', () => {
     assert.ok(/left join term_communities/.test(statements.graphFastCommunities))
     assert.ok(/'community'/.test(statements.graphFastCommunities))
     assert.notEqual(statements.graphFastCommunities, statements.graphFast)
+  })
+
+  // Pins the default statement's exact text by hash, so any change to graphFastQuery is
+  // caught here even though the text itself is too long to keep as a readable literal.
+  it('pins graphFast\'s default text by hash', () => {
+    assert.equal(createHash('sha256').update(statements.graphFast).digest('hex'), 'aa7cf8b664f39e3ece3db40a48781662bd25d01deac0bc7c60f252fea282242e')
+  })
+
+  // Pins graphFastCommunities as exactly graphFast plus its three communities=1 insertions
+  // (the join, the two extra selected columns, the extra json field) and nothing else, so a
+  // mutant dropping the join's own `tc.person_id = person.id` predicate is caught: it changes
+  // only the join clause, which this equality still compares character for character.
+  it('pins graphFastCommunities as graphFast with exactly its three communities=1 insertions', () => {
+    // The join inserts three new placeholders ($7-$9), so every placeholder from $7 on in
+    // the base text shifts up by three first, before the join's own literal $7-$9 go in.
+    const shifted = statements.graphFast.replace(/\$(\d+)/g, (_, n) => `$${Number(n) >= 7 ? Number(n) + 3 : Number(n)}`)
+    const withCommunities = shifted
+      .replace(
+        'select g.term, g.kind, g.c_pt as count, g.tone,\n      ln(',
+        'select g.term, g.kind, g.c_pt as count, g.tone, tc.community as community,\n      ln(',
+      )
+      .replace(
+        'from graph_terms g, s',
+        'from graph_terms g\n      left join term_communities tc\n        on tc.days = $7 and tc.source = $8 and tc.person_id = $9\n        and tc.term = g.term and tc.kind = g.kind, s',
+      )
+      .replace('select term, kind, count,\n      round(', 'select term, kind, count, community,\n      round(')
+      .replace(
+        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)",
+        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'community', community)",
+      )
+    assert.equal(statements.graphFastCommunities, withCommunities)
   })
 })
 

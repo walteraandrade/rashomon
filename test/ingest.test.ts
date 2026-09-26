@@ -205,6 +205,21 @@ describe('ingest', () => {
     assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
   })
 
+  it('analyzeTables also covers term_communities, written by the same buildGraphAggregates call', async () => {
+    const uri = 'https://ingest-test.example/analyzetables2'
+    const layer = await testLayer(/^analyze term_communities$/)
+    const { exit } = await Effect.runPromise(
+      run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } }), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'analyzeTables')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
+    assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
+  })
+
   it('respects names order, one source at a time', async () => {
     const order: string[] = []
     const slow = (name: string, ms: number) =>

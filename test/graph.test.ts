@@ -177,15 +177,28 @@ describe('graphFor communities=1', () => {
   })
 
   it('leaves every node null on a live recorte', async () => {
-    const live = await graphFor(lula, { ...graphBase, communities: true, domain: 'g1.globo.com' })
-    assert.ok(live.nodes.length > 0, 'sanity: this scope must have nodes')
-    for (const n of live.nodes) assert.equal(n.community, null)
+    const cases: [string, () => ReturnType<typeof graphFor>][] = [
+      ['domain filter', () => graphFor(lula, { ...graphBase, communities: true, domain: 'g1.globo.com' })],
+      ['days outside DAYS', () => graphFor(lula, { ...graphBase, communities: true, days: 2000 })],
+      ['lean filter', () => graphFor(bolsonaro, { ...wideBase, communities: true, lean: 'right' })],
+      ['multi-source', () => graphFor(lula, { ...graphBase, communities: true, source: 'gnews,rss,gkg' })],
+    ]
+    for (const [label, run] of cases) {
+      const live = await run()
+      assert.ok(live.nodes.length > 0, `sanity: this scope must have nodes (${label})`)
+      for (const n of live.nodes) assert.equal(n.community, null, label)
+    }
   })
 
   it('never adds a community key to nodes or signature when communities is not asked', async () => {
     const g = await graphFor(lula, graphBase)
     for (const n of g.nodes) assert.ok(!('community' in n))
     for (const row of g.signature) assert.ok(!('community' in row))
+
+    const live = await graphFor(lula, { ...graphBase, domain: 'g1.globo.com' })
+    assert.ok(live.nodes.length > 0, 'sanity: this live scope must have nodes')
+    for (const n of live.nodes) assert.ok(!('community' in n))
+    for (const row of live.signature) assert.ok(!('community' in row))
   })
 
   it('signature never carries a community key even when communities=1', async () => {

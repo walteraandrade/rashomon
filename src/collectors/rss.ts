@@ -32,8 +32,7 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // `content:encoded` is the full article body; description wins only when it is longer.
 export const body = (item: any) => {
-  // content:encoded can arrive as {'#text': ..., '@_xmlns:content': ...} when the element
-  // carries its own inline xmlns (Planalto's feed does), so unwrap with `text` before stripping.
+  // An element carrying its own inline xmlns (Planalto's content:encoded) parses as {'#text', '@_xmlns:...'}.
   const encoded = stripHtml(text(item['content:encoded']))
   const description = stripHtml(text(item.description))
   return encoded.length > description.length ? encoded : description
@@ -50,7 +49,6 @@ export const toDoc = (source: Source) => (item: any): RawDoc | null => {
     source,
     uri,
     text: `${dropOutlet(stripHtml(text(item.title)))}. ${dropOutlet(body(item))}`.replace(/\s+/g, ' '),
-    // An unparseable pubDate/dc:date must never die with RangeError from toISOString(): fall back to now.
     publishedAt: (Number.isNaN(date.getTime()) ? new Date() : date).toISOString(),
     domain: domainOf(outletUrl) ?? domainOf(uri),
   }

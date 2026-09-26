@@ -37,12 +37,13 @@ Before this the ranges were `[1, 200]`, `[1, 1000]`, `[1, 365]` and `[0, 1000000
 
 ## Shared filters
 
-`source`, `kind`, `domain` and `lean` each take a comma-separated list, matching a doc whose value is any of the listed ones. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all`. A single token behaves exactly as it always did.
+`source`, `kind`, `domain`, `lean` and `country` each take a comma-separated list, matching a doc whose value is any of the listed ones. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all` — **except `country`**, which falls back to `br` instead (see below). A single token behaves exactly as it always did.
 
 - `source`: `bluesky`, `gdelt`, `rss`, `gnews`, `gkg`, `camara`, `senado`, `juridico`, `oficial`, `nicho`. See [sources](sources.md).
 - `kind`: `hashtag`, `word`, `phrase`. The atlas at `/` sends `word,hashtag,phrase`, the full set.
 - `domain`: one outlet host, or one Bluesky author handle.
 - `lean`: `left`, `right`, `center`, additive on `graph`, `docs`, `rising`, `timeline` and `sources`. See [editorial lean](terms.md#editorial-lean).
+- `country`: `br` or `pt`, threaded through `graph`, `sources`, `docs`, `rising`, `timeline`, `week` and `compare` (not `tone` or `testimony`, which never took `domain`/`lean` either). Unlike every other shared filter, an omitted or all-invalid `country` does **not** fall back to `all`: it falls back to `br`, which excludes every `.pt`-registered domain from `stats.docs`, `stats.about` and every node's `count`/`pmi`. `country=all` is the explicit way to fold `.pt` docs back in; `country=pt` asks for `.pt` docs only; naming both `br` and `pt` (or `all` itself) collapses to `all`. A document not yet classified by domain, or whose domain is neither `.br` nor `.pt`, is kept under the default `br` scope and under `all`, and dropped only by an explicit `country=pt`. The graph aggregate tables (see [graph aggregates](operations.md#graph-aggregates)) hold only the default `br` universe; `country=pt` and `country=all` always run the live statement, never the precomputed one.
 
 `domain` and `lean` intersect: when both are given, only docs whose domain satisfies `domain` *and* is labeled with one of the requested `lean` values are counted; an empty intersection returns zero docs, not `all`.
 

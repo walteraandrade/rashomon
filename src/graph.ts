@@ -13,6 +13,7 @@ export type GraphQuery = {
   source: string
   domain: string
   lean: string
+  country: 'br' | 'pt' | 'all'
   kind: string
   limit: number
   min: number
@@ -28,6 +29,7 @@ export type DocsQuery = {
   source: string
   domain: string
   lean: string
+  country: 'br' | 'pt' | 'all'
   limit: number
   offset: number
   day: string
@@ -39,6 +41,7 @@ export type RisingQuery = {
   source: string
   domain: string
   lean: string
+  country: 'br' | 'pt' | 'all'
   kind: string
   limit: number
   min: number
@@ -51,6 +54,7 @@ export type TimelineQuery = {
   source: string
   domain: string
   lean: string
+  country: 'br' | 'pt' | 'all'
   bucket: 'day' | 'week'
 }
 
@@ -74,6 +78,7 @@ export type CompareQuery = {
   source: string
   domain: string
   lean: string
+  country: 'br' | 'pt' | 'all'
   kind: string
   limit: number
 }
@@ -83,6 +88,7 @@ export type WeekQuery = {
   source: string
   domain: string
   lean: string
+  country: 'br' | 'pt' | 'all'
   kind: string
   limit: number
   // `testimony=1` adds a per-bucket kikori mean; absent by default, mirroring GraphQuery.method.
@@ -126,7 +132,11 @@ type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermR
 // `source` must already be normalized by parseSourceList; an unknown or empty source scopes to
 // zero docs. domain+lean resolve into the effective domain scope; an empty intersection produces
 // an empty array for `= any(...)` and correctly matches nothing.
-type Scope = { days: number; source: string; domain: string; lean: string }
+type Scope = { days: number; source: string; domain: string; lean: string; country: 'br' | 'pt' | 'all' }
+// Bound as a value, not branched in JS, so rendered SQL shape never depends on which country was
+// requested. 'br' keeps null-country docs too (`is distinct from`); 'pt' excludes them; 'all' is unfiltered.
+const countryFilter = (country: 'br' | 'pt' | 'all') =>
+  sql`(${country} = 'all' or (${country} = 'pt' and d.country = 'pt') or (${country} = 'br' and d.country is distinct from 'pt'))`
 const scopeCte = (person: Person, q: Scope) => {
   const { domain } = resolveScope(q.domain, q.lean)
   return sql`
@@ -135,6 +145,7 @@ const scopeCte = (person: Person, q: Scope) => {
     where d.published_at >= now() - make_interval(days => ${q.days})
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+      and (${countryFilter(q.country)})
   ),
   about as (
     select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
@@ -269,9 +280,10 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
   from s`
 }
 
-// A recorte the aggregates can hold: a built window, no domain, no lean, one source or all.
-export const precomputable = (q: Pick<GraphQuery, 'days' | 'domain' | 'lean' | 'source'>) =>
-  DAYS.includes(q.days) && q.domain === 'all' && q.lean === 'all' && !q.source.includes(',')
+// A recorte the aggregates can hold: a built window, no domain, no lean, one source or all,
+// and the default country scope (the aggregate tables bake in country = 'br' unconditionally).
+export const precomputable = (q: Pick<GraphQuery, 'days' | 'domain' | 'lean' | 'source' | 'country'>) =>
+  DAYS.includes(q.days) && q.domain === 'all' && q.lean === 'all' && !q.source.includes(',') && q.country === 'br'
 
 // The term list arrives as `kind:term` ids (what the route names a node) and is matched as
 // (kind, term) pairs: an expression like `kind || ':' || term = any(...)` has no index, and the
@@ -528,6 +540,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
     where d.published_at >= now() - make_interval(days => ${q.days})
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+      and (${countryFilter(q.country)})
   ),
   recent_about as (
     select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
@@ -538,6 +551,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
       and d.published_at >= now() - make_interval(days => ${q.days}::int + ${q.baseline}::int)
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+      and (${countryFilter(q.country)})
   ),
   baseline_about as (
     select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
@@ -683,6 +697,7 @@ const compareScopeCte = (q: CompareQuery) => {
     where d.published_at >= now() - make_interval(days => ${q.days})
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+      and (${countryFilter(q.country)})
   ),
   tracked as (
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
@@ -792,6 +807,7 @@ const weekScopeCte = (q: WeekQuery) => {
     where d.published_at >= ((select today from today) - (${q.days}::int - 1))::timestamp at time zone 'America/Sao_Paulo'
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+      and (${countryFilter(q.country)})
   ),
   kept as (
     select s.id, s.day from scoped s join dates dt on dt.day = s.day
@@ -914,7 +930,7 @@ export const queries = {
 // The text each builder emits. Numbering follows statement shape, not values, so what a
 // sample call renders is byte-for-byte what the handler sends (test/graph.test.ts pins it).
 const samplePerson: Person = { id: 'sample', name: 'Sample', aliases: ['Sample'] }
-const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all' }
+const sampleScope = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
 const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, offset: 0, day: '' }
 const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count' }
 

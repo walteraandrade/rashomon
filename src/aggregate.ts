@@ -7,10 +7,13 @@ import { sql } from './sql.js'
 import { inTransaction } from './store.js'
 import type { Person } from './types.js'
 
-// grouping sets: one row per source plus one with source null, which becomes 'all'.
+// grouping sets: one row per source plus one with source null, which becomes 'all'. No country
+// axis here: this always precomputes the default (country=br) scope; 'pt'/'all' fall back live.
 const windowScope = (days: number) => sql`
   scope as (
-    select d.id, d.source from docs d where d.published_at >= now() - make_interval(days => ${days})
+    select d.id, d.source from docs d
+    where d.published_at >= now() - make_interval(days => ${days})
+      and d.country is distinct from 'pt'
   )`
 
 // Session-temp, dropped on commit. Safe as a fixed name only while windows build sequentially:

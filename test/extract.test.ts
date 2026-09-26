@@ -7,6 +7,7 @@ import {
   capitalizedRuns,
   collocations,
   contentWords,
+  countryOf,
   discoverNames,
   domainOf,
   hashtags,
@@ -158,6 +159,15 @@ describe('domainOf', () => {
     assert.equal(domainOf('https://www.g1.globo.com/politica/x'), 'g1.globo.com')
     assert.equal(domainOf('https://www1.folha.uol.com.br/x'), 'folha.uol.com.br')
     assert.equal(domainOf('not a url'), undefined)
+  })
+})
+
+describe('countryOf (issue #204)', () => {
+  it('reads pt/br off the domain suffix and undefined otherwise', () => {
+    assert.equal(countryOf('sapo.pt'), 'pt')
+    assert.equal(countryOf('folha.uol.com.br'), 'br')
+    assert.equal(countryOf('g1.globo.com'), undefined)
+    assert.equal(countryOf(undefined), undefined)
   })
 })
 

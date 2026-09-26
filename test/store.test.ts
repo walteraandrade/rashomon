@@ -28,11 +28,30 @@ import './close.js'
 // src/db.ts loads.
 
 const [, tarcisio] = persons
-const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0, day: '' }
+const base: DocsQuery = { term: '', kind: 'all', days: 3100, source: 'all', domain: 'all', lean: 'all', country: 'all', limit: 50, offset: 0, day: '' }
 const now = () => new Date().toISOString()
 const stored = async (uri: string) =>
   (await db.query<{ source: string; tone: number | null }>(`select source, tone from docs where uri = $1`, [uri])).rows[0]
 const textOf = async (uri: string) => (await db.query<{ text: string }>(`select text from docs where uri = $1`, [uri])).rows[0]?.text ?? null
+
+describe('insertDoc country (issue #204)', () => {
+  before(seed)
+  const countryOf = async (uri: string) => (await db.query<{ country: string | null }>(`select country from docs where uri = $1`, [uri])).rows[0]?.country
+
+  it('sets country from domain with no separate write', async () => {
+    await insertDocP({ source: 'rss', uri: 'https://sapo.pt/country', text: 'Lula visita Lisboa', publishedAt: now(), domain: 'sapo.pt' }, persons)
+    assert.equal(await countryOf('https://sapo.pt/country'), 'pt')
+
+    await insertDocP({ source: 'rss', uri: 'https://folha.uol.com.br/country', text: 'Lula fala sobre reformas', publishedAt: now(), domain: 'folha.uol.com.br' }, persons)
+    assert.equal(await countryOf('https://folha.uol.com.br/country'), 'br')
+
+    await insertDocP({ source: 'rss', uri: 'https://example.org/country-null', text: 'Lula fala sobre economia', publishedAt: now(), domain: 'example.org' }, persons)
+    assert.equal(await countryOf('https://example.org/country-null'), null)
+
+    await insertDocP({ source: 'rss', uri: 'https://example.org/country-none', text: 'Lula fala sobre saude', publishedAt: now() }, persons)
+    assert.equal(await countryOf('https://example.org/country-none'), null)
+  })
+})
 
 describe('insertDoc persons', () => {
   const flavio = { id: 'flavio-bolsonaro', name: 'Flávio Bolsonaro', aliases: ['Flávio Bolsonaro'] }
@@ -64,7 +83,7 @@ describe('insertDoc camara', () => {
   })
 
   it('surfaces in /sources with domain camara.leg.br and null tone', async () => {
-    const wideGraph: GraphQuery = { days: 3100, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
+    const wideGraph: GraphQuery = { days: 3100, source: 'all', domain: 'all', lean: 'all', country: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
     const rows = await sourcesFor(bolsonaro, wideGraph)
     const row = rows.find((r) => r.domain === 'camara.leg.br')
     assert.equal(row?.source, 'camara')

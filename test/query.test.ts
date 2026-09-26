@@ -12,6 +12,7 @@ import {
   SOURCES,
   parseCandidatesQuery,
   parseCompareQuery,
+  parseCountryList,
   parseDocsQuery,
   parseDomainList,
   parseKindList,
@@ -330,20 +331,50 @@ describe('parseCandidatesQuery (issue #32)', () => {
 
 describe('parseScope (issue #195)', () => {
   it('snaps days onto DAYS with the given default and normalizes the four lists', () => {
-    assert.deepEqual(parseScope({}, { days: 7 }), { days: 7, source: 'all', domain: 'all', lean: 'all', kind: 'all' })
+    assert.deepEqual(parseScope({}, { days: 7 }), { days: 7, source: 'all', domain: 'all', lean: 'all', kind: 'all', country: 'br' })
     assert.deepEqual(
       parseScope({ days: '40', source: 'rss, gkg,rss', domain: 'g1.globo.com,BAD HOST', lean: 'left,nope', kind: 'word,theme' }, { days: 30 }),
-      { days: 30, source: 'rss,gkg', domain: 'g1.globo.com', lean: 'left', kind: 'word' },
+      { days: 30, source: 'rss,gkg', domain: 'g1.globo.com', lean: 'left', kind: 'word', country: 'br' },
     )
   })
 
   it('is the recorte every route with those fields reads', () => {
-    const q = { days: '365', source: 'gkg,rss', domain: 'g1.globo.com', lean: 'right', kind: 'phrase' }
+    const q = { days: '365', source: 'gkg,rss', domain: 'g1.globo.com', lean: 'right', kind: 'phrase', country: 'all' }
     const scope = parseScope(q, { days: 30 })
     for (const parse of [parseQuery, parseDocsQuery, parseRisingQuery, parseTimelineQuery, parseCompareQuery, parseWeekQuery]) {
-      const { days, source, domain, lean, kind } = parse(q)
-      assert.deepEqual({ days, source, domain, lean, kind }, scope, parse.name)
+      const { days, source, domain, lean, kind, country } = parse(q)
+      assert.deepEqual({ days, source, domain, lean, kind, country }, scope, parse.name)
     }
+  })
+})
+
+describe('parseCountryList (issue #204)', () => {
+  it('falls back to br, not all, when omitted or entirely invalid -- unlike every other shared filter', () => {
+    assert.equal(parseCountryList(undefined), 'br')
+    assert.equal(parseCountryList(''), 'br')
+    assert.equal(parseCountryList('xx'), 'br')
+  })
+
+  it('all is the explicit opt-in to include .pt docs', () => {
+    assert.equal(parseCountryList('all'), 'all')
+  })
+
+  it('pt alone asks for .pt docs only', () => {
+    assert.equal(parseCountryList('pt'), 'pt')
+  })
+
+  it('collapses to all when both known tokens are named, or all is named alongside another', () => {
+    assert.equal(parseCountryList('br,pt'), 'all')
+    assert.equal(parseCountryList('pt,br'), 'all')
+    assert.equal(parseCountryList('all,pt'), 'all')
+  })
+
+  it('drops an unknown token silently and honors the survivor, rather than falling back', () => {
+    assert.equal(parseCountryList('pt,xx'), 'pt')
+  })
+
+  it('is case-sensitive: BR is not a known token', () => {
+    assert.equal(parseCountryList('BR'), 'br')
   })
 })
 

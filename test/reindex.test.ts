@@ -12,7 +12,7 @@ import './close.js'
 // so it lives in its own file: node:test runs one process per file, hence its own database.
 
 const lula = persons[0]
-const wide: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 200, min: 1, sort: 'count', method: null }
+const wide: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all', country: 'all', kind: 'all', limit: 200, min: 1, sort: 'count', method: null }
 const termsOfKind = (nodes: { term: string; kind: string }[], kind: string) => nodes.filter((n) => n.kind === kind).map((n) => n.term)
 
 describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => {
@@ -135,6 +135,31 @@ describe('reindex caps the text of rows stored before the cap (issue #128)', () 
   it('reports zero on a second run, since nothing is over the cap any more', async () => {
     const { capped } = await reindexAll(persons)
     assert.equal(capped, 0)
+  })
+})
+
+describe('reindex backfills country from domain (issue #204)', () => {
+  before(seed)
+  const ptUri = 'https://sapo.pt/backfill'
+  const brUri = 'https://folha.uol.com.br/backfill'
+  const noDomainUri = 'https://example.org/backfill-no-domain'
+  const countryOf = async (uri: string) => (await db.query<{ country: string | null }>(`select country from docs where uri = $1`, [uri])).rows[0]?.country
+
+  it('sets country on rows with a domain and null country, leaves domain-less rows alone', async () => {
+    await db.query(`insert into docs (source, uri, text, published_at, domain) values ('rss', $1, 'Lula em Lisboa', now(), 'sapo.pt')`, [ptUri])
+    await db.query(`insert into docs (source, uri, text, published_at, domain) values ('rss', $1, 'Lula em Brasilia', now(), 'folha.uol.com.br')`, [brUri])
+    await db.query(`insert into docs (source, uri, text, published_at) values ('rss', $1, 'Lula em algum lugar', now())`, [noDomainUri])
+
+    const { countriesBackfilled } = await reindexAll(persons)
+    assert.equal(countriesBackfilled, 2)
+    assert.equal(await countryOf(ptUri), 'pt')
+    assert.equal(await countryOf(brUri), 'br')
+    assert.equal(await countryOf(noDomainUri), null)
+  })
+
+  it('reports zero on a second run', async () => {
+    const { countriesBackfilled } = await reindexAll(persons)
+    assert.equal(countriesBackfilled, 0)
   })
 })
 

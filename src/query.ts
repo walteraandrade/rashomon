@@ -139,7 +139,18 @@ export const parseDomainList = parseList((s) => DOMAIN_TOKEN.test(s))
 
 export const parseLeanList = parseList((s) => (LEANS as string[]).includes(s))
 
-export type Scope = { days: number; source: string; domain: string; lean: string; kind: string }
+export const COUNTRIES = ['br', 'pt']
+
+// Unlike every other shared filter, omitted/all-invalid falls back to 'br' (excludes .pt), not
+// 'all'. Naming both known tokens, or 'all' itself, collapses to 'all'.
+export const parseCountryList = (v: string | undefined): 'br' | 'pt' | 'all' => {
+  const tokens = new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => s === 'all' || COUNTRIES.includes(s)))
+  if (tokens.has('all') || (tokens.has('br') && tokens.has('pt'))) return 'all'
+  if (tokens.has('pt')) return 'pt'
+  return 'br'
+}
+
+export type Scope = { days: number; source: string; domain: string; lean: string; kind: string; country: 'br' | 'pt' | 'all' }
 
 export const parseScope = (q: Record<string, string | undefined>, { days }: { days: number }): Scope => ({
   days: snapDays(q.days, days),
@@ -147,6 +158,7 @@ export const parseScope = (q: Record<string, string | undefined>, { days }: { da
   domain: parseDomainList(q.domain),
   lean: parseLeanList(q.lean),
   kind: parseKindList(q.kind),
+  country: parseCountryList(q.country),
 })
 
 export const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({

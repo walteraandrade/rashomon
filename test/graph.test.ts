@@ -44,13 +44,13 @@ const [lula, tarcisio, bolsonaro] = persons
 const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
-const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
-const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0, day: '' }
-const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 20, min: 1 }
-const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
+const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, min: 1, sort: 'count' }
+const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', limit: 50, offset: 0, day: '' }
+const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 20, min: 1 }
+const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
 const testimonyBase: TestimonyQuery = { days: 30, source: 'all', method: 'stub', min: 3 }
-const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40 }
+const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40 }
 
 const node = (g: Awaited<ReturnType<typeof graphFor>>, id: string) => g.nodes.find((n) => n.id === id)
 const sumOf = (rows: { count: number }[]) => rows.reduce((a, r) => a + r.count, 0)
@@ -489,6 +489,79 @@ describe('lean filtering (issue #26)', () => {
   })
 })
 
+describe('country filtering (issue #204)', () => {
+  before(seed)
+
+  const veryWide = 3900
+
+  it('excludes a .pt doc by default and includes it at country=all', async () => {
+    const g = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
+    assert.ok(!node(g, 'word:lusotropicalista'), 'the .pt-domain doc must not surface by default')
+
+    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
+    assert.ok(node(gAll, 'word:lusotropicalista'), 'country=all must fold the .pt doc back in')
+
+    const { total, docs: found } = await docsFor(lula, { ...docsBase, days: veryWide, term: 'lusotropicalista' })
+    assert.equal(total, 0)
+    const allDocs = await docsFor(lula, { ...docsBase, days: veryWide, term: 'lusotropicalista', country: 'all' })
+    assert.equal(allDocs.total, 1)
+    assert.equal(found.length, 0)
+  })
+
+  it('keeps a null-country doc (no domain) under the default scope and under all, drops it under pt', async () => {
+    const g = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
+    assert.ok(node(g, 'word:colaborativo'), 'a doc with no domain must count under the default scope')
+
+    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
+    assert.ok(node(gAll, 'word:colaborativo'))
+
+    const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
+    assert.ok(!node(gPt, 'word:colaborativo'), 'an explicit country=pt must exclude a null-country doc')
+  })
+
+  it('country=pt returns only .pt-country docs', async () => {
+    const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
+    assert.ok(node(gPt, 'word:lusotropicalista'))
+    assert.ok(!node(gPt, 'word:colaborativo'))
+  })
+
+  it('sourcesFor excludes exemplo.pt by default and includes it at country=all', async () => {
+    const rows = await sourcesFor(lula, { ...graphBase, days: veryWide })
+    assert.ok(!rows.some((r) => r.domain === 'exemplo.pt'))
+    const rowsAll = await sourcesFor(lula, { ...graphBase, days: veryWide, country: 'all' })
+    assert.ok(rowsAll.some((r) => r.domain === 'exemplo.pt'))
+  })
+
+  it('risingFor excludes the .pt term by default and includes it at country=all', async () => {
+    const q: RisingQuery = { ...risingBase, days: veryWide, baseline: 1, limit: 100 }
+    const r = await risingFor(lula, q)
+    assert.ok(!r.terms.some((t) => t.term === 'lusotropicalista'))
+    const rAll = await risingFor(lula, { ...q, country: 'all' })
+    assert.ok(rAll.terms.some((t) => t.term === 'lusotropicalista'))
+  })
+
+  it('timelineFor excludes the .pt doc by default and includes it at country=all', async () => {
+    const q: TimelineQuery = { ...timelineBase, days: veryWide, term: 'lusotropicalista' }
+    assert.equal(sumOf(await timelineFor(lula, q)), 0)
+    assert.equal(sumOf(await timelineFor(lula, { ...q, country: 'all' })), 1)
+  })
+
+  it('compareFor excludes the .pt term by default and includes it at country=all', async () => {
+    const c = await compareFor(lula, bolsonaro, { ...compareBase, days: veryWide, limit: 100 })
+    assert.ok(!c.terms.some((t) => t.term === 'lusotropicalista'))
+    const cAll = await compareFor(lula, bolsonaro, { ...compareBase, days: veryWide, limit: 100, country: 'all' })
+    assert.ok(cAll.terms.some((t) => t.term === 'lusotropicalista'))
+  })
+
+  it('weekFor excludes the .pt doc by default and includes it at country=all', async () => {
+    const days = 3810
+    const withoutPt = await weekFor(lula, { ...weekBase, days, limit: 40 })
+    assert.ok(!withoutPt.buckets.some((b) => b.terms.some((t) => t.term === 'lusotropicalista')))
+    const withPt = await weekFor(lula, { ...weekBase, days, limit: 40, country: 'all' })
+    assert.ok(withPt.buckets.some((b) => b.terms.some((t) => t.term === 'lusotropicalista')))
+  })
+})
+
 describe('docsFor', () => {
   before(seed)
 
@@ -846,7 +919,7 @@ describe('/rising\'s about totals and raw counts', () => {
 describe('timelineFor (issue #4)', () => {
   before(seed)
 
-  const golpe = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all', lean: 'all' } as const
+  const golpe = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all', lean: 'all', country: 'br' } as const
 
   it('returns ceil(days/bucket_days) buckets, oldest first, for the default window', async () => {
     const rows = await timelineFor(lula, timelineBase)
@@ -992,7 +1065,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
 
   const totalFor = async (q: TimelineQuery) =>
-    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, limit: 500, offset: 0, day: '' })).total
+    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, country: q.country, limit: 500, offset: 0, day: '' })).total
 
   it('a doc exactly one bucket width old lands in the newest bucket, not the second', async () => {
     await withDocs([{ offset: '7 days' }], async () => {
@@ -1154,7 +1227,7 @@ describe('timelineFor: future-dated doc', () => {
   })
 
   it('keeps the bucket-sum invariant against docsFor total when a doc is future-dated', async () => {
-    const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all' } as const
+    const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' } as const
     const rows = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
     const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '' })
     assert.equal(total, 1, 'sanity: only the future doc falls inside this 30-day window')
@@ -1411,7 +1484,7 @@ describe('compareFor (issue #93)', () => {
     // scoped to a domain used by no other fixture doc: bolsonaro's own top-count term
     // ("termdiluido", count 3, diluted pmi because lula also uses it) genuinely differs from
     // bolsonaro's own top-pmi term ("cita", count 1, exclusive)
-    const scope = { days: 3650, source: 'all', domain: 'testcorp.example', lean: 'all', kind: 'all', limit: 1 } as const
+    const scope = { days: 3650, source: 'all', domain: 'testcorp.example', lean: 'all', country: 'all', kind: 'all', limit: 1 } as const
     const gCount = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'count' })
     const gPmi = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'pmi' })
     assert.notEqual(gCount.nodes[0]?.term, gPmi.nodes[0]?.term, "fixture assumption: bolsonaro's own top-count and top-pmi terms differ at this scope")
@@ -1475,7 +1548,7 @@ describe('the kind set query.ts and graph.ts agree on (issue #108)', () => {
 // `queries` builds. The two only agree because a builder numbers its placeholders by the
 // statement's shape, never by the values, so this pins that the sample text is the route's text.
 describe('statements render the same text the routes run (issue #131)', () => {
-  const scope = { days: 7, source: 'rss,gkg', domain: 'folha.uol.com.br', lean: 'all', kind: 'word,phrase' }
+  const scope = { days: 7, source: 'rss,gkg', domain: 'folha.uol.com.br', lean: 'all', country: 'all' as const, kind: 'word,phrase' }
 
   it('for every builder, with different values', () => {
     const built = {
@@ -2345,7 +2418,7 @@ describe('testimony level asymmetries survive the merge (issue #48)', () => {
   })
 })
 
-const weekBase: WeekQuery = { days: 7, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 8 }
+const weekBase: WeekQuery = { days: 7, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 8 }
 
 const brtYmd = (value: Date | string) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 

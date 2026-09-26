@@ -57,13 +57,15 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
 })
 
 describe('precomputable', () => {
-  it('holds a built window, one source or all, no domain, no lean', () => {
-    const base = { days: 30, domain: 'all', lean: 'all', source: 'all' }
+  it('holds a built window, one source or all, no domain, no lean, the default country scope', () => {
+    const base = { days: 30, domain: 'all', lean: 'all', source: 'all', country: 'br' as const }
     assert.equal(precomputable(base), true)
     assert.equal(precomputable({ ...base, source: 'rss' }), true)
     assert.equal(precomputable({ ...base, source: 'rss,gkg' }), false)
     assert.equal(precomputable({ ...base, domain: 'folha.uol.com.br' }), false)
     assert.equal(precomputable({ ...base, lean: 'left' }), false)
+    assert.equal(precomputable({ ...base, country: 'pt' }), false)
+    assert.equal(precomputable({ ...base, country: 'all' }), false)
     for (const days of DAYS) assert.equal(precomputable({ ...base, days }), true)
     assert.equal(precomputable({ ...base, days: 14 }), false, 'a window the build never writes is never probed')
   })
@@ -180,6 +182,7 @@ describe('buildGraphAggregates', () => {
     { source: 'gkg', days: '7' },
     { source: 'bluesky', sort: 'pmi', min: '1' },
     { source: 'senado' },
+    { country: 'br' },
   ]
 
   for (const person of persons)
@@ -190,8 +193,14 @@ describe('buildGraphAggregates', () => {
         assert.deepEqual(await fast(person, query), await live(person, query))
       })
 
-  it('falls back to the live query for a domain, a lean or a source list', async () => {
-    const outside: Record<string, string>[] = [{ domain: 'example.org' }, { lean: 'left' }, { source: 'rss,gkg' }]
+  it('falls back to the live query for a domain, a lean, a source list, or an explicit country', async () => {
+    const outside: Record<string, string>[] = [
+      { domain: 'example.org' },
+      { lean: 'left' },
+      { source: 'rss,gkg' },
+      { country: 'pt' },
+      { country: 'all' },
+    ]
     for (const over of outside) {
       const query = q(over)
       assert.equal(precomputable(query), false)

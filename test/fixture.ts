@@ -193,6 +193,15 @@ export const docs: RawDoc[] = [
   // only two doc_persons rows, bolsonaro from the head and lula from past the 2000th character,
   // so export-docs can show each person her own window, neither of them the text.
   { source: 'juridico', uri: 'https://noticias.stf.jus.br/55', text: longText, publishedAt: daysAgo(3700), domain: 'noticias.stf.jus.br' },
+  // docs 56-57: issue #204's country fixture. Dated 3800+ days ago, past every window any other
+  // pinned literal reaches (3700, doc 55), so a test must open its own wide-enough window
+  // (>= 3800 days) to see them; nothing pinned elsewhere shifts. Both name lula, with vocabulary
+  // ("lusotropicalista", "colaborativo") unused elsewhere in the fixture. Doc 56's `.pt` domain
+  // is the default-excluded case; doc 57 has no domain at all (country stays null), the
+  // "unclassified stays in scope by default" case -- countryOf(undefined) is undefined, so it is
+  // kept under the default `br` scope and under `all`, and dropped only by an explicit `pt`.
+  { source: 'rss', uri: 'https://exemplo.pt/56', text: 'Lula recebe homenagem lusotropicalista em Lisboa', publishedAt: daysAgo(3800), domain: 'exemplo.pt' },
+  { source: 'rss', uri: 'https://example.org/57', text: 'Lula participa de festival colaborativo sem cobertura tradicional', publishedAt: daysAgo(3800) },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

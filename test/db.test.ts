@@ -291,6 +291,18 @@ describe('read indexes and planner statistics (issue #44)', () => {
     assert.ok(defs.some((d) => /btree \(domain\)/.test(d)))
   })
 
+  it('docs.country is a nullable text column with its own index (issue #204)', async () => {
+    const cols = (
+      await db.query<{ is_nullable: string; data_type: string }>(
+        `select is_nullable, data_type from information_schema.columns where table_name = 'docs' and column_name = 'country'`,
+      )
+    ).rows
+    assert.equal(cols[0]?.is_nullable, 'YES')
+    assert.equal(cols[0]?.data_type, 'text')
+    const defs = (await indexDefs('docs')).map((d) => d.indexdef)
+    assert.ok(defs.some((d) => /btree \(country\)/.test(d)))
+  })
+
   // The fixture is far too small for the planner to prefer an index on its own, so this
   // asserts the access path exists and covers (person_id, doc_id) -- the shape every
   // person-scoped route needs -- not that the planner picks it at this row count. The

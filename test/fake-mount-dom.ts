@@ -193,6 +193,28 @@ class FakeSelect extends Listenable {
   }
 }
 
+// A real `<optgroup id="lensesAOutlets">` sits inside `<select id="lensesA">`, so a real
+// `select.options` already sees whatever `<option>`s loadOutlets() writes into it. This stub's
+// select and its outlet optgroup are two separate objects, so writing here mirrors the fill
+// into the paired select's own options (replacing only the domain: ones it owns) — otherwise
+// no seeded/preserved domain value could ever be found among `select.options` in a test.
+class FakeOutletGroup extends FakeBox {
+  private target: FakeSelect
+  private markup = ''
+  constructor(id: string, target: FakeSelect) {
+    super(id)
+    this.target = target
+  }
+  set innerHTML(html: string) {
+    this.markup = String(html)
+    const opts = [...this.markup.matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(([, value, textContent]) => ({ value, textContent }))
+    this.target.options = [...this.target.options.filter((o) => !o.value.startsWith('domain:')), ...opts]
+  }
+  get innerHTML() {
+    return this.markup
+  }
+}
+
 class FakeInput extends Listenable {
   id: string
   value = ''
@@ -339,10 +361,8 @@ const weekIds = () => ({
 // optgroup the real markup groups them into — a FakeSelect has no optgroup concept, and no
 // criterion here needs one), the two optgroup stand-ins loadOutlets() fills dynamically, the
 // days/limit selects, the ruler host, detail/status/hidden-note lines.
-const lensesIds = () => ({
-  lenses: new FakeBox('lenses'),
-  lensesPerson: new FakeSelect('lensesPerson'),
-  lensesA: new FakeSelect('lensesA', [
+const lensesIds = () => {
+  const lensesA = new FakeSelect('lensesA', [
     { value: 'all', text: 'Tudo', selected: true },
     { value: 'lean:left', text: 'Esquerda' },
     { value: 'lean:center', text: 'Centro' },
@@ -357,8 +377,8 @@ const lensesIds = () => ({
     { value: 'source:juridico', text: 'Jurídico' },
     { value: 'source:oficial', text: 'Oficial' },
     { value: 'source:nicho', text: 'Nicho' },
-  ]),
-  lensesB: new FakeSelect('lensesB', [
+  ])
+  const lensesB = new FakeSelect('lensesB', [
     { value: 'all', text: 'Tudo', selected: true },
     { value: 'lean:left', text: 'Esquerda' },
     { value: 'lean:center', text: 'Centro' },
@@ -373,21 +393,27 @@ const lensesIds = () => ({
     { value: 'source:juridico', text: 'Jurídico' },
     { value: 'source:oficial', text: 'Oficial' },
     { value: 'source:nicho', text: 'Nicho' },
-  ]),
-  lensesAOutlets: new FakeBox('lensesAOutlets'),
-  lensesBOutlets: new FakeBox('lensesBOutlets'),
-  lensesDays: new FakeSelect('lensesDays', DAYS_OPTIONS),
-  lensesLimit: new FakeSelect('lensesLimit', [
-    { value: '20', text: '20', selected: true },
-    { value: '40', text: '40' },
-    { value: '60', text: '60' },
-    { value: '100', text: '100' },
-  ]),
-  lensesStatus: new FakeBox('lensesStatus'),
-  lensesRuler: new FakeBox('lensesRuler'),
-  lensesDetail: new FakeBox('lensesDetail'),
-  lensesHiddenNote: new FakeBox('lensesHiddenNote'),
-})
+  ])
+  return {
+    lenses: new FakeBox('lenses'),
+    lensesPerson: new FakeSelect('lensesPerson'),
+    lensesA,
+    lensesB,
+    lensesAOutlets: new FakeOutletGroup('lensesAOutlets', lensesA),
+    lensesBOutlets: new FakeOutletGroup('lensesBOutlets', lensesB),
+    lensesDays: new FakeSelect('lensesDays', DAYS_OPTIONS),
+    lensesLimit: new FakeSelect('lensesLimit', [
+      { value: '20', text: '20', selected: true },
+      { value: '40', text: '40' },
+      { value: '60', text: '60' },
+      { value: '100', text: '100' },
+    ]),
+    lensesStatus: new FakeBox('lensesStatus'),
+    lensesRuler: new FakeBox('lensesRuler'),
+    lensesDetail: new FakeBox('lensesDetail'),
+    lensesHiddenNote: new FakeBox('lensesHiddenNote'),
+  }
+}
 
 export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof testimonyIds> &

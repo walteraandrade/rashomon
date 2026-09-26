@@ -103,6 +103,84 @@ describe('changing a lens control triggers exactly one new /lenses call with the
   })
 })
 
+describe('a seeded domain lens survives loadOutlets\' own optgroup fill (validator gap #2)', () => {
+  it('applies the pending a= seed after /sources fills the Veículo optgroup, and sends it on the /lenses request', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/lenses': lensesData([]),
+        '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }, { domain: 'g1.globo.com', docs: 4 }],
+      })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { a: 'domain:folha.uol.com.br' } })
+      await flush()
+      assert.equal(els.lensesA.value, 'domain:folha.uol.com.br', 'the seed must survive the optgroup fill')
+      const url = calls.find((u) => u.includes('/lenses'))
+      const qs = new URL(url!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'domain:folha.uol.com.br')
+    })
+  })
+})
+
+describe('changing the tracked person keeps the previous domain only if the new person has it (validator gap #3)', () => {
+  it('drops the previous domain, falling back to all, when the new person\'s outlets do not have it', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/lenses': lensesData([]), '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }] })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { a: 'domain:folha.uol.com.br' } })
+      await flush()
+      assert.equal(els.lensesA.value, 'domain:folha.uol.com.br')
+      routeFetch(calls, { '/lenses': lensesData([]), '/sources': [{ domain: 'g1.globo.com', docs: 4 }] })
+      const before = calls.length
+      els.lensesPerson.value = 'bolsonaro'
+      els.lensesPerson.fire('change')
+      await flush(220)
+      assert.equal(els.lensesA.value, 'all', "folha.uol.com.br isn't among bolsonaro's own outlets")
+      const url = calls.slice(before).find((u) => u.includes('/lenses'))
+      const qs = new URL(url!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'all', 'the request must carry the same value the select shows, never a stale domain')
+    })
+  })
+
+  it("keeps the previous domain when the new person's own outlets still have it", async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/lenses': lensesData([]), '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }] })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: { a: 'domain:folha.uol.com.br' } })
+      await flush()
+      routeFetch(calls, { '/lenses': lensesData([]), '/sources': [{ domain: 'folha.uol.com.br', docs: 7 }] })
+      const before = calls.length
+      els.lensesPerson.value = 'bolsonaro'
+      els.lensesPerson.fire('change')
+      await flush(220)
+      assert.equal(els.lensesA.value, 'domain:folha.uol.com.br')
+      const url = calls.slice(before).find((u) => u.includes('/lenses'))
+      const qs = new URL(url!, 'http://localhost').searchParams
+      assert.equal(qs.get('a'), 'domain:folha.uol.com.br')
+    })
+  })
+})
+
+describe('changing lensesDays re-fetches /sources too, since its own window changed (validator gap #3)', () => {
+  it('requests /sources again after a lensesDays change', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/lenses': lensesData([]), '/sources': [{ domain: 'folha.uol.com.br', docs: 12 }] })
+      const { mount } = await import('../src/ui/figures/lenses.js')
+      mount(els.lenses, { people, initial: {} })
+      await flush()
+      const before = calls.length
+      els.lensesDays.value = '365'
+      els.lensesDays.fire('change')
+      await flush(220)
+      const sourcesCalls = calls.slice(before).filter((u) => u.includes('/sources'))
+      assert.ok(sourcesCalls.length >= 1, 'a days change must re-fetch /sources, which the outlet optgroup is scoped by')
+    })
+  })
+})
+
 describe('#lensesStatus becomes visible only when a.lens === b.lens on the response', () => {
   it('shows the same-recorte notice when both sides resolve to the same lens', async () => {
     await withFiguresDom(async (els, calls) => {

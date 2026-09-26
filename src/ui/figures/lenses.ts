@@ -203,26 +203,47 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     figure.reload()
   }
 
-  const onPersonChange = () => {
+  const hasOption = (select: any, value: string) => [...select.options].some((o: any) => o.value === value)
+
+  // The domain optgroup is rebuilt by loadOutlets whenever the person or the window changes;
+  // a currently-selected domain that survives the refill is kept, otherwise the select falls
+  // back to 'all' explicitly rather than whatever option the browser's own reset lands on.
+  const refreshOutletsPreserving = async () => {
+    const prevA = $('lensesA').value
+    const prevB = $('lensesB').value
+    await loadOutlets()
+    $('lensesA').value = hasOption($('lensesA'), prevA) ? prevA : 'all'
+    $('lensesB').value = hasOption($('lensesB'), prevB) ? prevB : 'all'
+  }
+
+  const onPersonChange = async () => {
     selected = null
-    loadOutlets()
+    await refreshOutletsPreserving()
+    figure.reload()
+  }
+
+  const onDaysChange = async () => {
+    selected = null
+    await refreshOutletsPreserving()
     figure.reload()
   }
 
   $('lensesPerson').innerHTML = ''
   for (const p of people) $('lensesPerson').add(new Option(p.name, p.id))
   $('lensesPerson').value = resolvePerson(people, initial.person)
-  applySeed($('lensesA'), initial.a)
-  applySeed($('lensesB'), initial.b)
   applySeed($('lensesDays'), initial.days)
   applySeed($('lensesLimit'), initial.limit)
   // The API's own default is 40 (parseLensesQuery), not the static markup's 20 — set it
   // explicitly here rather than editing atlas.html's own `selected` attribute.
   if (initial.limit === undefined) $('lensesLimit').value = '40'
 
-  for (const id of ['lensesA', 'lensesB', 'lensesDays', 'lensesLimit']) $(id).addEventListener('change', onControlChange)
+  for (const id of ['lensesA', 'lensesB', 'lensesLimit']) $(id).addEventListener('change', onControlChange)
+  $('lensesDays').addEventListener('change', onDaysChange)
   $('lensesPerson').addEventListener('change', onPersonChange)
 
-  loadOutlets()
-  figure.load()
+  loadOutlets().then(() => {
+    applySeed($('lensesA'), initial.a)
+    applySeed($('lensesB'), initial.b)
+    figure.load()
+  })
 }

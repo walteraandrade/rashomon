@@ -225,6 +225,17 @@ describe('documented facts per route', () => {
     assert.match(docsText, /never\s*`?null`?|rather than sending it as `?null`?/i, 'the docs must say an absent field is never sent as null')
   })
 
+  it('docs/sources.md (issue #212): tracked-people paragraph names party/office/uf/wikidata, says they are unpersisted and how they refresh', () => {
+    const sources = docPageText.get('docs/sources.md') ?? ''
+    assert.match(sources, /`party`,?\s*`office`(,|\s+and)\s*`uf`/, 'party/office/uf must be named together as the hand-edited metadata fields')
+    assert.match(sources, /`wikidata`/, 'wikidata must be documented as a seed.json field')
+    assert.match(sources, /feeds? no collector|none feeds a collector/i, 'the docs must say these fields feed no collector')
+    assert.match(sources, /(none|not|nor)[\s\S]{0,60}persisted/i, 'the docs must say these fields are not persisted to the persons table')
+    assert.match(sources, /need no `?pnpm reindex`?/i, 'the docs must say these fields need no pnpm reindex')
+    assert.match(sources, /reloads `?seed\.json`?/i, 'the docs must say these fields reach /api/people when the server reloads seed.json')
+    assert.match(sources, /redeploy/i, 'the docs must name a redeploy (or local restart) as the refresh path')
+  })
+
   it('/api/people (issue #212 AC7): docs/api.md names party/office/uf as optional, additive fields on GET /api/people', () => {
     const api = docPageText.get('docs/api.md') ?? ''
     assert.match(api, /GET \/api\/people[\s\S]{0,300}`party`[\s\S]{0,100}`office`[\s\S]{0,100}`uf`/, 'docs/api.md must name party/office/uf as fields of GET /api/people')

@@ -3,7 +3,7 @@
   { "id": "flavio-bolsonaro", "name": "Flávio Bolsonaro", "aliases": ["Flávio Bolsonaro"], "senadoId": "5894", "party": "PL", "office": "senador", "uf": "RJ", "wikidata": "Q10283057" },
   { "id": "tarcisio", "name": "Tarcísio", "aliases": ["Tarcísio", "Tarcísio de Freitas"], "party": "Republicanos", "office": "governador", "uf": "SP", "wikidata": "Q60392579" },
   { "id": "ratinho-junior", "name": "Ratinho Junior", "aliases": ["Ratinho Junior", "Ratinho Jr", "Carlos Massa Ratinho Junior"], "party": "PSD", "office": "governador", "uf": "PR", "wikidata": "Q10357567" },
-  { "id": "caiado", "name": "Ronaldo Caiado", "aliases": ["Caiado", "Ronaldo Caiado"], "party": "União Brasil", "wikidata": "Q10364348" },
+  { "id": "caiado", "name": "Ronaldo Caiado", "aliases": ["Caiado", "Ronaldo Caiado"], "party": "PSD", "wikidata": "Q10364348" },
   { "id": "zema", "name": "Romeu Zema", "aliases": ["Zema", "Romeu Zema"], "party": "Novo", "wikidata": "Q57092113" },
   { "id": "eduardo-leite", "name": "Eduardo Leite", "aliases": ["Eduardo Leite"], "party": "PSD", "office": "governador", "uf": "RS", "wikidata": "Q16337390" },
   { "id": "michelle-bolsonaro", "name": "Michelle Bolsonaro", "aliases": ["Michelle Bolsonaro"], "wikidata": "Q57911283" },

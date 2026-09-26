@@ -44,12 +44,16 @@ const attempt = (title: string, n: number): Effect.Effect<PageviewItem[], Error,
     return (yield* parseJson<{ items?: PageviewItem[] }>(text)).items ?? []
   })
 
+// A tagged error (e.g. ResponseTooLarge, a timeout) can reach here with an empty `message`;
+// its `_tag` is the fallback so the log line never reads "[pageviews] lula: ".
+const errorMessage = (e: Error): string => e.message || String((e as { _tag?: unknown })._tag ?? e)
+
 // A person's failure costs that person's rows and a log line, never the run.
 const collectPerson = (person: Person): Effect.Effect<AttentionRow[], never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     if (!person.wikipedia) return []
     const items = yield* attempt(person.wikipedia, 1).pipe(
-      Effect.catch((e) => Console.error(`[pageviews] ${person.id}: ${e.message}`).pipe(Effect.as([] as PageviewItem[]))),
+      Effect.catch((e) => Console.error(`[pageviews] ${person.id}: ${errorMessage(e)}`).pipe(Effect.as([] as PageviewItem[]))),
     )
     yield* Console.log(`[pageviews] ${person.id}: ${items.length} days`)
     yield* Effect.sleep(pauseMs)

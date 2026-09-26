@@ -97,7 +97,7 @@ transaction open across an arbitrary amount of work. A third bound sits on the d
 - **Reindex.** It reads documents by keyset pagination on the primary key (`where id > $1 order by id
   limit $2`), never materializing more than one page of text, and commits one transaction per page.
 - **Orchestration.** `src/ingest.ts`'s `ingest(persons, names, options)` is an Effect: `migrate`,
-  `pruneRemoved`, `upsertPersons`, `loadPhrases`, `docCount`, `analyzeAfterWrite`, `pageviews`,
+  `pruneRemoved`, `upsertPersons`, `loadPhrases`, `pageviews`, `docCount`, `analyzeAfterWrite`,
   `buildGraphAggregates` and `analyzeTables` are the calls whose rejection fails the whole run, each as
   `IngestFailure({ stage })` with its own stage name — never an uncaught defect, since a plain
   `Effect.promise` around a rejecting Promise resumes with `die`, not a typed failure, and would bypass a

@@ -31,6 +31,7 @@ import {
   type Doc,
   type Graph,
   type Layout,
+  type Lenses,
   type Link,
   type Measure,
   type OutletRow,
@@ -1028,6 +1029,82 @@ export const paintRisingRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar os termos em alta.</p>'
 }
 
+// Figure 6 (issue #206): one person, two independently-scoped lenses on the compare ruler's own
+// body. Unlike paintRuler, position is always pmi * ln(1 + count) — there is no measure select on
+// this figure — and the two ends are lens labels (lensLabel), not people.
+export const paintLensRuler = ({
+  data,
+  endA,
+  endB,
+  metrics,
+  selected,
+  onPick,
+  width = 860,
+}: {
+  data: Lenses
+  endA: string
+  endB: string
+  metrics: Measure
+  selected: { term: string; kind: string } | null
+  onPick: (term: string, kind: string) => void
+  width?: number
+}) => {
+  const ruler = $('lensesRuler')
+  const { items, hiddenCount } = rulerTerms(data.terms, 'pmi')
+  if (!items.length) {
+    ruler.hidden = false
+    ruler.classList.remove('is-loading')
+    ruler.setAttribute('aria-busy', 'false')
+    ruler.innerHTML = '<p class="note">Nenhuma palavra neste recorte.</p>'
+    return { hiddenCount, shown: 0, overflowCount: 0 }
+  }
+  ruler.hidden = false
+  ruler.classList.remove('is-loading')
+  ruler.setAttribute('aria-busy', 'false')
+  const note = html`<p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem das duas lentes somados. Toque numa palavra para ver os números das duas lentes.</p>`
+  const { shown, overflowCount } = paintRulerBody({
+    elementId: 'lensesRuler',
+    items,
+    metrics,
+    selected,
+    onPick,
+    width,
+    endA,
+    endB,
+    axisLabels: [`Só de ${endA}`, 'dividida', `Só de ${endB}`],
+    ariaLabel: `Régua comparando ${endA} e ${endB} para a mesma pessoa`,
+    note,
+  })
+  return { hiddenCount, shown, overflowCount }
+}
+
+export const paintLensRulerError = () => {
+  const ruler = $('lensesRuler')
+  if (!ruler) return
+  ruler.hidden = false
+  ruler.classList.remove('is-loading')
+  ruler.setAttribute('aria-busy', 'false')
+  ruler.innerHTML = '<p class="note">Não foi possível carregar as lentes.</p>'
+}
+
+// Selected word's numbers on both lenses; a null side reads "nenhum documento" (measured zero),
+// mirroring paintCompareDetail but keyed by lens label prose instead of a PersonRef.
+export const paintLensDetail = ({ term, endA, endB }: { term: CompareTerm | null; endA: string; endB: string }) => {
+  const el = $('lensesDetail')
+  if (!el) return
+  if (!term) {
+    el.innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números das duas lentes.</span>'
+    return
+  }
+  const sideHtml = (endLabel: string, v: CompareSide | 'name' | null) =>
+    v === 'name'
+      ? html`<div><dt>${endLabel}</dt><dd class="empty-hint">nome da pessoa, fora da régua</dd></div>`
+      : v
+        ? html`<div><dt>${endLabel}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
+        : html`<div><dt>${endLabel}</dt><dd class="empty-hint">nenhum documento</dd></div>`
+  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(endA, term.a)}${sideHtml(endB, term.b)}</dl>`
+}
+
 const RULER_GHOST_WORDS: [number, number, number, number][] = [
   [110, -14, 86, 20],
   [210, 12, 64, 16],
@@ -1081,6 +1158,31 @@ export const paintRisingLoading = () => {
   )}</div><p class="sr-only">Lendo os termos em alta.</p>`
   const about = $('risingAbout')
   if (about) about.textContent = ''
+}
+
+// Figure 6's own boot/reload ghost: the same ruler geometry, inside #lensesRuler, plus
+// #lensesDetail's own ghost (two sides, same shape paintCompareLoading's #compareDetail ghost
+// paints).
+export const paintLensesLoading = () => {
+  const ruler = $('lensesRuler')
+  if (ruler) {
+    ruler.hidden = false
+    ruler.classList.remove('is-loading')
+    ruler.setAttribute('aria-busy', 'true')
+    const width = 860
+    const height = 88
+    const half = 44
+    const pad = 28
+    ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div>${frame(
+      { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}` },
+      html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => pad + ((b + 1) / 2) * (width - 2 * pad)), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
+        ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
+      )}`,
+    )}</div><p class="sr-only">Lendo as lentes.</p>`
+  }
+  const detail = $('lensesDetail')
+  if (!detail) return
+  detail.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostBar('ghost-title')}<dl class="detail-sides"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div></dl></div>`
 }
 
 // Selected word's numbers on both sides; a null side reads "nenhum documento" (measured zero).

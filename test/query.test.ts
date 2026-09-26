@@ -17,6 +17,8 @@ import {
   parseDomainList,
   parseKindList,
   parseLeanList,
+  parseLens,
+  parseLensesQuery,
   parseQuery,
   parseRisingQuery,
   parseScope,
@@ -239,6 +241,59 @@ describe('parseCompareQuery (issue #93)', () => {
     assert.equal(parseCompareQuery({ domain: 'g1.globo.com,bogus host' }).domain, 'g1.globo.com')
     assert.equal(parseCompareQuery({ lean: 'left,bogus' }).lean, 'left')
     assert.equal(parseCompareQuery({ kind: 'word,bogus' }).kind, 'word')
+  })
+})
+
+describe('parseLens / parseLensesQuery (issue #206)', () => {
+  it('parses a domain: lens with a valid host', () => {
+    assert.deepEqual(parseLens('domain:folha.uol.com.br'), { lens: 'domain:folha.uol.com.br', domain: 'folha.uol.com.br', lean: 'all', source: 'all' })
+  })
+
+  it('parses a lean: lens with a known value', () => {
+    assert.deepEqual(parseLens('lean:right'), { lens: 'lean:right', domain: 'all', lean: 'right', source: 'all' })
+  })
+
+  it('parses a source: lens with a known source', () => {
+    assert.deepEqual(parseLens('source:gkg'), { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' })
+  })
+
+  it('falls back to all on a malformed domain, an unknown lean, an unknown source, an unknown prefix, or an absent value', () => {
+    const all = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
+    assert.deepEqual(parseLens('domain:NOT VALID'), all)
+    assert.deepEqual(parseLens('lean:nonsense'), all)
+    assert.deepEqual(parseLens('source:bogus'), all)
+    assert.deepEqual(parseLens('bogus:x'), all)
+    assert.deepEqual(parseLens(undefined), all)
+    assert.deepEqual(parseLens(''), all)
+  })
+
+  it('lean: accepts only one value, not a list', () => {
+    assert.deepEqual(parseLens('lean:left,right'), { lens: 'all', domain: 'all', lean: 'all', source: 'all' })
+  })
+
+  it('days snaps to the nearest allowed window, defaulting to 30', () => {
+    assert.equal(parseLensesQuery({}).days, 30)
+    assert.equal(parseLensesQuery({ days: '9999' }).days, 365)
+  })
+
+  it('kind defaults to all and delegates to the shared list parser', () => {
+    assert.equal(parseLensesQuery({}).kind, 'all')
+    assert.equal(parseLensesQuery({ kind: 'word,bogus' }).kind, 'word')
+  })
+
+  it('limit defaults to 40 and snaps to SMALL_LIMITS, same ceiling as compare', () => {
+    assert.equal(parseLensesQuery({}).limit, 40)
+    assert.equal(parseLensesQuery({ limit: '9999' }).limit, 100)
+  })
+
+  it('has no min field, like CompareQuery', () => {
+    assert.ok(!('min' in parseLensesQuery({})))
+  })
+
+  it('resolves a and b independently', () => {
+    const q = parseLensesQuery({ a: 'domain:folha.uol.com.br', b: 'lean:right' })
+    assert.equal(q.a.lens, 'domain:folha.uol.com.br')
+    assert.equal(q.b.lens, 'lean:right')
   })
 })
 

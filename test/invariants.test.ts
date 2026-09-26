@@ -141,7 +141,21 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       // Figure 5, the week: same shape again, imported by nothing but app.ts.
       'figures/week.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './layout.js', './render.js'],
-      'app.ts': ['./api.js', './docs-card.js', './figures/atlas.js', './figures/compare.js', './figures/rising.js', './figures/testimony.js', './figures/week.js', './help.js', './render.js'],
+      // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
+      // nothing but app.ts, and reaching into no other figure's DOM.
+      'figures/lenses.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
+      'app.ts': [
+        './api.js',
+        './docs-card.js',
+        './figures/atlas.js',
+        './figures/compare.js',
+        './figures/lenses.js',
+        './figures/rising.js',
+        './figures/testimony.js',
+        './figures/week.js',
+        './help.js',
+        './render.js',
+      ],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
     for (const [file, allowed] of Object.entries(expected)) {

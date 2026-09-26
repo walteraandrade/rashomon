@@ -218,6 +218,7 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
    gets an explicit height; the sentence's line-height is what keeps daylight between lines. */
 .sentence-line { font-family: var(--mono); font-size: var(--t-base); line-height: var(--lh-chip); font-weight: 400; max-width: 1120px; }
 .pick { display: inline-block; position: relative; max-width: 100%; vertical-align: baseline; margin: 0; }
+.keep { white-space: nowrap; }
 /* The chevron is drawn in CSS so it follows --accent; a data-URI SVG cannot read a token. */
 .pick::after { content: ''; position: absolute; right: .55em; top: 50%; width: .32em; height: .32em; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
 .pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 1px solid var(--line); border-radius: 2px; padding: 0 1.25em 0 .5em; height: 1.6em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.5em; font-weight: 500; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s, border-color .12s; }
@@ -252,7 +253,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
-.compare .ruler, .compare .detail, .rising .ruler, .rising .note { transition: opacity .16s ease-out; }
+.compare .ruler, .compare .detail, .rising .ruler, .rising .note,
+.lenses .ruler, .lenses .detail { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,

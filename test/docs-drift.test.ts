@@ -138,6 +138,17 @@ describe('documented facts per route', () => {
     assert.match(docsText, /own name word/)
   })
 
+  it('/api/people/:id/lenses (issue #206 AC13): the route exists, a lens is domain/lean/source, and an invalid lens falls back to the full corpus', () => {
+    assert.match(docsText, /\/api\/people\/:id\/lenses/)
+    assert.match(docsText, /domain:<host>/)
+    assert.match(docsText, /lean:<left\|right\|center>/)
+    assert.match(docsText, /source:<name>/)
+    // Specific enough that a generic "falls back to `all`" sentence elsewhere in the docs
+    // (there is one, for the shared source/kind/domain/lean list parameters) cannot satisfy
+    // it: this one must also say what the fallback actually is, the full corpus.
+    assert.match(docsText, /falls? back to `?all`?[^.]{0,20}full corpus/i)
+  })
+
   it('/api/people/:id/week (issue #147 AC21/AC22): calendar days, BRT, about + per-day terms, rolling 6h cache', () => {
     assert.match(docsText, /\/api\/people\/:id\/week/)
     assert.match(docsText, /America\/Sao_Paulo/)

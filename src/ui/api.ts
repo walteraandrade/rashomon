@@ -28,12 +28,14 @@ export const narrowToTestimony = (graphParams: URLSearchParams) =>
 
 export const testimonyParams = (opts: GraphOpts) => narrowToTestimony(params(opts))
 
-// `domain` travels only when a figure names an outlet; `day` only when figure 5 names a column.
-export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; limit?: string; day?: string }
+// `domain` travels only when a figure names an outlet; `day` only when figure 5 names a column;
+// `lean` only when a figure 6 lens is `lean:<value>` — /docs already accepts it server-side.
+export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; lean?: string; limit?: string; day?: string }
 
-export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', limit = '5', day = '' }: DocsOpts) => {
+export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', lean = '', limit = '5', day = '' }: DocsOpts) => {
   const q = new URLSearchParams({ days, source, term, kind, limit })
   if (domain) q.set('domain', domain)
+  if (lean) q.set('lean', lean)
   if (day) q.set('day', day)
   return q
 }
@@ -102,3 +104,11 @@ export const loadWeek = (personId: string, queryParams: URLSearchParams, signal?
 export const sparklineParams = (term: string, kind: string, source = 'all') => new URLSearchParams({ term, kind, days: '7', bucket: 'day', source })
 
 export const loadTimeline = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/timeline?' + queryParams, signal)
+
+// /api/people/:id/lenses (figure 6, issue #206): one person, two independently-scoped lenses.
+// `a`/`b` travel as raw tokens (domain:<host>, lean:<value>, source:<name>, or all); the server
+// parses and echoes back the normalized one, never the malformed input.
+export const lensesParams = ({ a, b, days, limit }: { a: string; b: string; days: string; limit: string }) =>
+  new URLSearchParams({ a, b, days, limit, kind: ATLAS_KINDS })
+
+export const loadLenses = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/lenses?' + queryParams, signal)

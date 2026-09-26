@@ -193,6 +193,36 @@ class FakeSelect extends Listenable {
   }
 }
 
+// A real `<optgroup id="lensesAOutlets">` sits inside `<select id="lensesA">`, so a real
+// `select.options` already sees whatever `<option>`s loadOutlets() writes into it -- and a real
+// browser drops the select's selectedness to its first option the moment the previously
+// selected `<option>` element is removed, even when a fresh element with the same value is
+// reinserted in the same breath: selectedness lives on the element, not the value, so nothing
+// here re-selects it automatically. Only an explicit `select.value = ...` afterwards, in the
+// production code under test, can restore or preserve it. This stub's select and its outlet
+// optgroup are two separate objects, so writing here has to mirror both halves of that: the
+// fill into the paired select's own options (replacing only the domain: ones it owns), and,
+// when the select's current value was itself one of those domain: options, the same drop to
+// `options[0]` a real browser would perform.
+class FakeOutletGroup extends FakeBox {
+  private target: FakeSelect
+  private markup = ''
+  constructor(id: string, target: FakeSelect) {
+    super(id)
+    this.target = target
+  }
+  set innerHTML(html: string) {
+    this.markup = String(html)
+    const opts = [...this.markup.matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(([, value, textContent]) => ({ value, textContent }))
+    const hadDomainSelected = this.target.value.startsWith('domain:')
+    this.target.options = [...this.target.options.filter((o) => !o.value.startsWith('domain:')), ...opts]
+    if (hadDomainSelected) this.target.value = this.target.options[0]?.value ?? this.target.value
+  }
+  get innerHTML() {
+    return this.markup
+  }
+}
+
 class FakeInput extends Listenable {
   id: string
   value = ''
@@ -335,7 +365,70 @@ const weekIds = () => ({
   weekNote: new FakeBox('weekNote'),
 })
 
-export type Elements = ReturnType<typeof atlasIds> & ReturnType<typeof testimonyIds> & ReturnType<typeof compareIds> & ReturnType<typeof risingIds> & ReturnType<typeof weekIds>
+// Figure 6 (issue #206): one person select, two lens selects (flat options across every
+// optgroup the real markup groups them into — a FakeSelect has no optgroup concept, and no
+// criterion here needs one), the two optgroup stand-ins loadOutlets() fills dynamically, the
+// days/limit selects, the ruler host, detail/status/hidden-note lines.
+const lensesIds = () => {
+  const lensesA = new FakeSelect('lensesA', [
+    { value: 'all', text: 'Tudo', selected: true },
+    { value: 'lean:left', text: 'Esquerda' },
+    { value: 'lean:center', text: 'Centro' },
+    { value: 'lean:right', text: 'Direita' },
+    { value: 'source:bluesky', text: 'Bluesky' },
+    { value: 'source:gdelt', text: 'GDELT' },
+    { value: 'source:rss', text: 'RSS' },
+    { value: 'source:gnews', text: 'Google News' },
+    { value: 'source:gkg', text: 'GKG' },
+    { value: 'source:camara', text: 'Câmara' },
+    { value: 'source:senado', text: 'Senado' },
+    { value: 'source:juridico', text: 'Jurídico' },
+    { value: 'source:oficial', text: 'Oficial' },
+    { value: 'source:nicho', text: 'Nicho' },
+  ])
+  const lensesB = new FakeSelect('lensesB', [
+    { value: 'all', text: 'Tudo', selected: true },
+    { value: 'lean:left', text: 'Esquerda' },
+    { value: 'lean:center', text: 'Centro' },
+    { value: 'lean:right', text: 'Direita' },
+    { value: 'source:bluesky', text: 'Bluesky' },
+    { value: 'source:gdelt', text: 'GDELT' },
+    { value: 'source:rss', text: 'RSS' },
+    { value: 'source:gnews', text: 'Google News' },
+    { value: 'source:gkg', text: 'GKG' },
+    { value: 'source:camara', text: 'Câmara' },
+    { value: 'source:senado', text: 'Senado' },
+    { value: 'source:juridico', text: 'Jurídico' },
+    { value: 'source:oficial', text: 'Oficial' },
+    { value: 'source:nicho', text: 'Nicho' },
+  ])
+  return {
+    lenses: new FakeBox('lenses'),
+    lensesPerson: new FakeSelect('lensesPerson'),
+    lensesA,
+    lensesB,
+    lensesAOutlets: new FakeOutletGroup('lensesAOutlets', lensesA),
+    lensesBOutlets: new FakeOutletGroup('lensesBOutlets', lensesB),
+    lensesDays: new FakeSelect('lensesDays', DAYS_OPTIONS),
+    lensesLimit: new FakeSelect('lensesLimit', [
+      { value: '20', text: '20' },
+      { value: '40', text: '40', selected: true },
+      { value: '60', text: '60' },
+      { value: '100', text: '100' },
+    ]),
+    lensesStatus: new FakeBox('lensesStatus'),
+    lensesRuler: new FakeBox('lensesRuler'),
+    lensesDetail: new FakeBox('lensesDetail'),
+    lensesHiddenNote: new FakeBox('lensesHiddenNote'),
+  }
+}
+
+export type Elements = ReturnType<typeof atlasIds> &
+  ReturnType<typeof testimonyIds> &
+  ReturnType<typeof compareIds> &
+  ReturnType<typeof risingIds> &
+  ReturnType<typeof weekIds> &
+  ReturnType<typeof lensesIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -347,7 +440,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

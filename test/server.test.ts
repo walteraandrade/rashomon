@@ -403,6 +403,43 @@ describe('GET /api/compare (issue #93)', () => {
   })
 })
 
+describe('GET /api/people/:id/lenses (issue #206)', () => {
+  before(seed)
+
+  it('an unknown id returns 404 with { error: "person not found" }, the same shape as every other /:id/* route', async () => {
+    const res = await app.request('/api/people/does-not-exist/lenses')
+    assert.equal(res.status, 404)
+    assert.deepEqual(await res.json(), { error: 'person not found' })
+  })
+
+  it('echoes back the normalized a/b lens tokens', async () => {
+    const res = await app.request('/api/people/tarcisio/lenses?a=domain:folha.uol.com.br&b=lean:right')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { a: { lens: string }; b: { lens: string } }
+    assert.equal(body.a.lens, 'domain:folha.uol.com.br')
+    assert.equal(body.b.lens, 'lean:right')
+  })
+
+  it('an unparseable lens (bad syntax, unknown lean, or omitted) falls back to "all" and still returns 200', async () => {
+    for (const url of [
+      '/api/people/tarcisio/lenses?a=domain:NOT VALID',
+      '/api/people/tarcisio/lenses?a=lean:nonsense',
+      '/api/people/tarcisio/lenses',
+    ]) {
+      const res = await app.request(encodeURI(url))
+      assert.equal(res.status, 200, url)
+      const body = (await res.json()) as { a: { lens: string } }
+      assert.equal(body.a.lens, 'all', url)
+    }
+  })
+
+  it('returns a body of exactly { days, a, b, terms }', async () => {
+    const res = await app.request('/api/people/lula/lenses')
+    const body = (await res.json()) as Record<string, unknown>
+    assert.deepEqual(Object.keys(body).sort(), ['a', 'b', 'days', 'terms'])
+  })
+})
+
 describe('GET /api/candidates (issue #32)', () => {
   before(seedCandidates)
   after(reseed)

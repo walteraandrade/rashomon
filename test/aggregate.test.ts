@@ -285,3 +285,71 @@ describe('the ceiling on graph_terms', () => {
     assert.equal(await count(), full)
   })
 })
+
+// Issue #214: one Louvain pass per (days, source, person) graph_terms holds rows for.
+describe('term_communities (issue #214)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  it('AGGREGATE_TABLES stays exactly graph_scopes and graph_terms; term_communities never gates it', () => {
+    assert.deepEqual([...AGGREGATE_TABLES], ['graph_scopes', 'graph_terms'])
+  })
+
+  it('hasGraphAggregates only names graph_scopes and graph_terms', async () => {
+    assert.equal(await hasGraphAggregates(), true)
+    await db.query(`delete from term_communities`)
+    assert.equal(await hasGraphAggregates(), true, 'an emptied term_communities must not read as a missing build')
+    await buildGraphAggregates(persons)
+  })
+
+  it('buildGraphAggregates writes a term_communities row for every graph_terms row it built', async () => {
+    const { rows: missing } = await db.query<{ n: number }>(`
+      select count(*)::int as n from graph_terms g
+      where not exists (
+        select 1 from term_communities c
+        where c.days = g.days and c.source = g.source and c.person_id = g.person_id and c.term = g.term and c.kind = g.kind
+      )`)
+    assert.equal(missing[0].n, 0)
+  })
+
+  it('a term unique to one document (no surviving co-occurrence edge) still gets its own community', async () => {
+    const { rows } = await db.query<{ community: number | null }>(
+      `select community from term_communities where days = 30 and source = 'all' and person_id = 'lula' and term = 'eleicao' and kind = 'word'`,
+    )
+    assert.equal(rows.length, 1)
+    assert.equal(typeof rows[0].community, 'number')
+  })
+
+  it('a term never kept by graph_terms stays absent from term_communities too', async () => {
+    const { rows } = await db.query<{ n: number }>(
+      `select count(*)::int as n from term_communities where days = 30 and source = 'all' and person_id = 'lula' and term = 'congresso'`,
+    )
+    assert.equal(rows[0].n, 0)
+  })
+
+  it('reforma and tributaria co-occur (docs /1 and /6) and land in the same community', async () => {
+    const { rows } = await db.query<{ term: string; community: number }>(
+      `select term, community from term_communities where days = 30 and source = 'all' and person_id = 'lula' and term in ('reforma', 'tributaria') and kind = 'word'`,
+    )
+    assert.equal(rows.length, 2)
+    assert.equal(rows[0].community, rows[1].community)
+  })
+
+  it('a deleted term_communities window still answers /graph?communities=1 with community: null on every node, and the rest of the response is unaffected', async () => {
+    const withCommunities = await graphFor(lula, q({ communities: '1' }))
+    assert.ok(withCommunities.nodes.length > 0, 'sanity: the default window must have nodes')
+    assert.ok(withCommunities.nodes.some((n) => typeof n.community === 'number'), 'sanity: a built window must tag at least one node')
+
+    await db.query(`delete from term_communities where days = 30 and source = 'all' and person_id = 'lula'`)
+    const degraded = await graphFor(lula, q({ communities: '1' }))
+    assert.ok(degraded.nodes.length > 0)
+    assert.ok(degraded.nodes.every((n) => n.community === null))
+    assert.deepEqual(
+      { nodes: degraded.nodes.map(({ community, ...rest }) => rest), stats: degraded.stats, signature: degraded.signature },
+      { nodes: withCommunities.nodes.map(({ community, ...rest }) => rest), stats: withCommunities.stats, signature: withCommunities.signature },
+    )
+    await buildGraphAggregates(persons)
+  })
+})

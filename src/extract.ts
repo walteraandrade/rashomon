@@ -163,6 +163,13 @@ export const domainOf = (uri: string | undefined): string | undefined => {
   }
 }
 
+export const countryOf = (domain: string | undefined): 'br' | 'pt' | undefined => {
+  if (!domain) return undefined
+  if (domain.endsWith('.pt')) return 'pt'
+  if (domain.endsWith('.br')) return 'br'
+  return undefined
+}
+
 // Cheap, noisy heuristic: a run of two or more capitalized words, particles allowed in between,
 // that does not open a sentence (the first word of a sentence is capitalized for grammar, not
 // because it is a name). gkg docs skip this and use the V1Persons column.

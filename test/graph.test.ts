@@ -44,13 +44,13 @@ const [lula, tarcisio, bolsonaro] = persons
 const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
-const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40, min: 1, sort: 'count' }
-const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', limit: 50, offset: 0, day: '' }
-const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 20, min: 1 }
-const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', bucket: 'week' }
+const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, min: 1, sort: 'count' }
+const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', limit: 50, offset: 0, day: '' }
+const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 20, min: 1 }
+const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
 const testimonyBase: TestimonyQuery = { days: 30, source: 'all', method: 'stub', min: 3 }
-const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 40 }
+const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40 }
 
 const node = (g: Awaited<ReturnType<typeof graphFor>>, id: string) => g.nodes.find((n) => n.id === id)
 const sumOf = (rows: { count: number }[]) => rows.reduce((a, r) => a + r.count, 0)
@@ -489,6 +489,86 @@ describe('lean filtering (issue #26)', () => {
   })
 })
 
+// issue #204
+describe('country filtering', () => {
+  before(seed)
+
+  const veryWide = 3900
+
+  it('excludes a .pt doc by default and includes it at country=all', async () => {
+    const g = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
+    assert.ok(!node(g, 'word:lusotropicalista'), 'the .pt-domain doc must not surface by default')
+
+    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
+    assert.ok(node(gAll, 'word:lusotropicalista'), 'country=all must fold the .pt doc back in')
+
+    const { total, docs: found } = await docsFor(lula, { ...docsBase, days: veryWide, term: 'lusotropicalista' })
+    assert.equal(total, 0)
+    const allDocs = await docsFor(lula, { ...docsBase, days: veryWide, term: 'lusotropicalista', country: 'all' })
+    assert.equal(allDocs.total, 1)
+    assert.equal(found.length, 0)
+  })
+
+  it('keeps a null-country doc (no domain) under the default scope and under all, drops it under pt', async () => {
+    const g = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
+    assert.ok(node(g, 'word:colaborativo'), 'a doc with no domain must count under the default scope')
+
+    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
+    assert.ok(node(gAll, 'word:colaborativo'))
+
+    const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
+    assert.ok(!node(gPt, 'word:colaborativo'), 'an explicit country=pt must exclude a null-country doc')
+  })
+
+  it('country=pt returns only .pt-country docs, and all is default plus pt', async () => {
+    const gDefault = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200 })
+    const gAll = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'all' })
+    const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
+    assert.ok(node(gPt, 'word:lusotropicalista'))
+    assert.ok(!node(gPt, 'word:colaborativo'))
+    assert.equal(gPt.stats.docs, 2, 'the two .pt docs about lula in the fixture (56 and 58)')
+    assert.equal(gPt.stats.about, 2)
+    assert.equal(gAll.stats.docs, gDefault.stats.docs + gPt.stats.docs)
+  })
+
+  it('sourcesFor excludes exemplo.pt by default and includes it at country=all', async () => {
+    const rows = await sourcesFor(lula, { ...graphBase, days: veryWide })
+    assert.ok(!rows.some((r) => r.domain === 'exemplo.pt'))
+    const rowsAll = await sourcesFor(lula, { ...graphBase, days: veryWide, country: 'all' })
+    assert.ok(rowsAll.some((r) => r.domain === 'exemplo.pt'))
+  })
+
+  it('risingFor excludes the .pt term by default and includes it at country=all', async () => {
+    const q: RisingQuery = { ...risingBase, days: veryWide, baseline: 1, limit: 100 }
+    const r = await risingFor(lula, q)
+    assert.ok(!r.terms.some((t) => t.term === 'lusotropicalista'))
+    const rAll = await risingFor(lula, { ...q, country: 'all' })
+    assert.ok(rAll.terms.some((t) => t.term === 'lusotropicalista'))
+  })
+
+  it('timelineFor excludes the .pt doc by default and includes it at country=all', async () => {
+    const q: TimelineQuery = { ...timelineBase, days: veryWide, term: 'lusotropicalista' }
+    assert.equal(sumOf(await timelineFor(lula, q)), 0)
+    assert.equal(sumOf(await timelineFor(lula, { ...q, country: 'all' })), 1)
+  })
+
+  it('compareFor excludes the .pt term by default and includes it at country=all', async () => {
+    const c = await compareFor(lula, bolsonaro, { ...compareBase, days: veryWide, limit: 100 })
+    assert.ok(!c.terms.some((t) => t.term === 'lusotropicalista'))
+    const cAll = await compareFor(lula, bolsonaro, { ...compareBase, days: veryWide, limit: 100, country: 'all' })
+    assert.ok(cAll.terms.some((t) => t.term === 'lusotropicalista'))
+  })
+
+  it('weekFor excludes the .pt doc by default and includes it at country=all', async () => {
+    const days = 3810
+    const withoutPt = await weekFor(lula, { ...weekBase, days, limit: 40 })
+    assert.ok(!withoutPt.buckets.some((b) => b.terms.some((t) => t.term === 'lusotropicalista')))
+    const withPt = await weekFor(lula, { ...weekBase, days, limit: 40, country: 'all' })
+    assert.ok(withPt.buckets.some((b) => b.terms.some((t) => t.term === 'lusotropicalista')))
+  })
+
+})
+
 describe('docsFor', () => {
   before(seed)
 
@@ -846,7 +926,7 @@ describe('/rising\'s about totals and raw counts', () => {
 describe('timelineFor (issue #4)', () => {
   before(seed)
 
-  const golpe = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all', lean: 'all' } as const
+  const golpe = { term: 'golpe', kind: 'word', days: 2140, source: 'all', domain: 'all', lean: 'all', country: 'br' } as const
 
   it('returns ceil(days/bucket_days) buckets, oldest first, for the default window', async () => {
     const rows = await timelineFor(lula, timelineBase)
@@ -992,7 +1072,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
 
   const totalFor = async (q: TimelineQuery) =>
-    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, limit: 500, offset: 0, day: '' })).total
+    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, country: q.country, limit: 500, offset: 0, day: '' })).total
 
   it('a doc exactly one bucket width old lands in the newest bucket, not the second', async () => {
     await withDocs([{ offset: '7 days' }], async () => {
@@ -1154,7 +1234,7 @@ describe('timelineFor: future-dated doc', () => {
   })
 
   it('keeps the bucket-sum invariant against docsFor total when a doc is future-dated', async () => {
-    const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all' } as const
+    const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' } as const
     const rows = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
     const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '' })
     assert.equal(total, 1, 'sanity: only the future doc falls inside this 30-day window')
@@ -1411,7 +1491,7 @@ describe('compareFor (issue #93)', () => {
     // scoped to a domain used by no other fixture doc: bolsonaro's own top-count term
     // ("termdiluido", count 3, diluted pmi because lula also uses it) genuinely differs from
     // bolsonaro's own top-pmi term ("cita", count 1, exclusive)
-    const scope = { days: 3650, source: 'all', domain: 'testcorp.example', lean: 'all', kind: 'all', limit: 1 } as const
+    const scope = { days: 3650, source: 'all', domain: 'testcorp.example', lean: 'all', country: 'all', kind: 'all', limit: 1 } as const
     const gCount = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'count' })
     const gPmi = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'pmi' })
     assert.notEqual(gCount.nodes[0]?.term, gPmi.nodes[0]?.term, "fixture assumption: bolsonaro's own top-count and top-pmi terms differ at this scope")
@@ -1475,7 +1555,7 @@ describe('the kind set query.ts and graph.ts agree on (issue #108)', () => {
 // `queries` builds. The two only agree because a builder numbers its placeholders by the
 // statement's shape, never by the values, so this pins that the sample text is the route's text.
 describe('statements render the same text the routes run (issue #131)', () => {
-  const scope = { days: 7, source: 'rss,gkg', domain: 'folha.uol.com.br', lean: 'all', kind: 'word,phrase' }
+  const scope = { days: 7, source: 'rss,gkg', domain: 'folha.uol.com.br', lean: 'all', country: 'all' as const, kind: 'word,phrase' }
 
   it('for every builder, with different values', () => {
     const built = {
@@ -1564,6 +1644,7 @@ const scopeCte = `
     where d.published_at >= now() - make_interval(days => $2)
       and ($3 = 'all' or d.source = any(string_to_array($3, ',')))
       and ($4 = 'all' or d.domain = any(string_to_array($4, ',')))
+      and ($5 = 'all' or ($5 = 'pt' and d.country = 'pt') or ($5 = 'br' and d.country is distinct from 'pt'))
   ),
   about as (
     select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $1
@@ -1585,18 +1666,18 @@ const termsSql = `
   term_p as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where ($5 = 'all' or t.kind = $5) and not (t.term = any($6::text[]))
+    where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
     group by 1, 2
   ),
   scored as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
-    where p.c_pt >= $7
+    where p.c_pt >= $8
   )
   select term, kind, count, round(pmi::numeric, 2)::float8 as pmi, round(tone::numeric, 2)::float8 as tone from scored
-  order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term
-  limit $9`
+  order by (case when $9 = 'pmi' then pmi * ln(1 + count) else count end) desc, term
+  limit $10`
 
 const signatureSql = `
   with ${scopeCte}, ${trackedCte},
@@ -1609,7 +1690,7 @@ const signatureSql = `
   term_p as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt
     from doc_terms t join about a on a.doc_id = t.doc_id
-    where not (t.term = any($5::text[]))
+    where not (t.term = any($6::text[]))
     group by 1, 2
   ),
   scored as (
@@ -1630,9 +1711,9 @@ const splitGraph = async (person: Person, q: GraphQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)
   const [terms, stats, signature] = await Promise.all([
-    db.query<Record<string, unknown>>(termsSql, [person.id, q.days, q.source, domain, q.kind, exclude, q.min, q.sort, q.limit]),
-    db.query<Record<string, unknown>>(statsSql, [person.id, q.days, q.source, domain]),
-    db.query<Record<string, unknown>>(signatureSql, [person.id, q.days, q.source, domain, exclude]),
+    db.query<Record<string, unknown>>(termsSql, [person.id, q.days, q.source, domain, q.country, q.kind, exclude, q.min, q.sort, q.limit]),
+    db.query<Record<string, unknown>>(statsSql, [person.id, q.days, q.source, domain, q.country]),
+    db.query<Record<string, unknown>>(signatureSql, [person.id, q.days, q.source, domain, q.country, exclude]),
   ])
   return { stats: stats.rows[0], nodes: terms.rows, signature: signature.rows }
 }
@@ -1736,7 +1817,7 @@ const referenceGraphSql = `
   term_p as materialized (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not (t.term = any($6::text[]))
+    where not (t.term = any($7::text[]))
     group by 1, 2
   ),
   term_all as materialized (
@@ -1747,16 +1828,16 @@ const referenceGraphSql = `
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
-    where p.c_pt >= $7 and ($5 = 'all' or p.kind = $5)
+    where p.c_pt >= $8 and ($6 = 'all' or p.kind = $6)
   ),
   nodes_top as (
     select term, kind, count,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
-      (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) as sort_key
+      (case when $9 = 'pmi' then pmi * ln(1 + count) else count end) as sort_key
     from nodes_scored
-    order by (case when $8 = 'pmi' then pmi * ln(1 + count) else count end) desc, term, kind
-    limit $9
+    order by (case when $9 = 'pmi' then pmi * ln(1 + count) else count end) desc, term, kind
+    limit $10
   ),
   signature_scored as (
     select p.term, p.kind, p.c_pt::int as count,
@@ -1790,7 +1871,7 @@ const referenceLinksSql = `
   from doc_terms a
   join doc_terms b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
   join about x on x.doc_id = a.doc_id
-  where (a.kind || ':' || a.term) = any($5::text[]) and (b.kind || ':' || b.term) = any($5::text[])
+  where (a.kind || ':' || a.term) = any($6::text[]) and (b.kind || ':' || b.term) = any($6::text[])
   group by 1, 2 having count(distinct a.doc_id) >= 2`
 
 const referenceRisingSql = `
@@ -1800,6 +1881,7 @@ const referenceRisingSql = `
     where d.published_at >= now() - make_interval(days => $2)
       and ($4 = 'all' or d.source = $4)
       and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+      and ($6 = 'all' or ($6 = 'pt' and d.country = 'pt') or ($6 = 'br' and d.country is distinct from 'pt'))
   ),
   recent_about as (
     select dp.doc_id from doc_persons dp join recent_scope s on s.id = dp.doc_id where dp.person_id = $1
@@ -1810,6 +1892,7 @@ const referenceRisingSql = `
       and d.published_at >= now() - make_interval(days => $2 + $3)
       and ($4 = 'all' or d.source = $4)
       and ($5 = 'all' or d.domain = any(string_to_array($5, ',')))
+      and ($6 = 'all' or ($6 = 'pt' and d.country = 'pt') or ($6 = 'br' and d.country is distinct from 'pt'))
   ),
   baseline_about as (
     select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = $1
@@ -1817,13 +1900,13 @@ const referenceRisingSql = `
   recent_terms as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_recent
     from doc_terms t join recent_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
+    where ($7 = 'all' or t.kind = $7) and not (t.term = any($8::text[]))
     group by 1, 2
   ),
   baseline_terms as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_baseline
     from doc_terms t join baseline_about a on a.doc_id = t.doc_id
-    where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
+    where ($7 = 'all' or t.kind = $7) and not (t.term = any($8::text[]))
     group by 1, 2
   )
   select r.term, r.kind,
@@ -1833,9 +1916,9 @@ const referenceRisingSql = `
     coalesce(b.c_baseline, 0)::int as count_baseline_raw,
     round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift
   from recent_terms r left join baseline_terms b using (term, kind)
-  where r.c_recent >= $8
+  where r.c_recent >= $9
   order by lift desc, term, kind
-  limit $9`
+  limit $10`
 
 // No `tone is not null`, exactly as before #47.
 const referenceToneSql = `
@@ -1860,6 +1943,7 @@ const referenceGraph = async (person: Person, q: GraphQuery) => {
     q.days,
     q.source,
     domain,
+    q.country,
     q.kind,
     exclude,
     q.min,
@@ -1868,7 +1952,9 @@ const referenceGraph = async (person: Person, q: GraphQuery) => {
   ])
   const { docs, about, nodes, signature } = rows[0]
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
-  const links = ids.length ? await db.query<{ s: string; t: string; count: number }>(referenceLinksSql, [person.id, q.days, q.source, domain, ids]) : { rows: [] }
+  const links = ids.length
+    ? await db.query<{ s: string; t: string; count: number }>(referenceLinksSql, [person.id, q.days, q.source, domain, q.country, ids])
+    : { rows: [] }
   return {
     stats: { docs, about },
     signature,
@@ -1886,6 +1972,7 @@ const referenceRising = async (person: Person, q: RisingQuery) => {
     q.baseline,
     q.source,
     domain,
+    q.country,
     q.kind,
     nameTokens(person),
     q.min,
@@ -2345,7 +2432,7 @@ describe('testimony level asymmetries survive the merge (issue #48)', () => {
   })
 })
 
-const weekBase: WeekQuery = { days: 7, source: 'all', domain: 'all', lean: 'all', kind: 'all', limit: 8 }
+const weekBase: WeekQuery = { days: 7, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 8 }
 
 const brtYmd = (value: Date | string) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 

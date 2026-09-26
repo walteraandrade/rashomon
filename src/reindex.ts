@@ -1,7 +1,7 @@
 import seedPersons from '../seed.json' with { type: 'json' }
 import { AGGREGATE_TABLES, buildGraphAggregates } from './aggregate.js'
 import { analyzeTablesP, db, migrateP } from './db.js'
-import { domainOf, nameTokens } from './extract.js'
+import { countryOf, domainOf, nameTokens } from './extract.js'
 import { buildPhrases, loadPhrasesP, resetPhraseStage, stagePhrases } from './phrases.js'
 import { MAX_DOC_CHARS, derive, inBatches, inTransaction, truncateText, upsertPersonsP, writeBatchDocs, writeDerivedP } from './store.js'
 import type { Person, Source, Term } from './types.js'
@@ -53,6 +53,33 @@ const backfillDomains = async (size: number) => {
   }
 }
 
+// Rows with domain is null are left untouched: no signal to derive a country from yet.
+const backfillCountries = async (size: number) => {
+  let after = 0
+  let filled = 0
+  for (;;) {
+    const { rows } = await db.query<{ id: number; domain: string }>(
+      `select id, domain from docs where domain is not null and country is null and id > $1 order by id limit $2`,
+      [after, size],
+    )
+    if (!rows.length) return filled
+    const found = rows.flatMap((r) => {
+      const country = countryOf(r.domain)
+      return country ? [{ id: r.id, country }] : []
+    })
+    await inTransaction(() =>
+      inBatches(found, size, (b) =>
+        db.query(`update docs set country = u.country from unnest($1::int[], $2::text[]) as u(id, country) where docs.id = u.id`, [
+          b.map((x) => x.id),
+          b.map((x) => x.country),
+        ]),
+      ),
+    )
+    after = rows[rows.length - 1].id
+    filled += found.length
+  }
+}
+
 // Reindex cuts docs.text over MAX_DOC_CHARS with the same truncateText ingest uses.
 // `length(text)` is Postgres's character count; any row it selects does shrink.
 const capTexts = async (size: number) => {
@@ -76,6 +103,7 @@ const capTexts = async (size: number) => {
 export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => {
   await upsertPersonsP(persons)
   const backfilled = await backfillDomains(size)
+  const countriesBackfilled = await backfillCountries(size)
   const capped = await capTexts(size)
   // Corpus is read twice: lexicon cannot exist until every doc is counted, and no doc can be
   // tagged until the lexicon does. phrase_stage is scratch, so no transaction.
@@ -91,13 +119,14 @@ export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => 
     ),
   )
   const analyzed = await analyzeTablesP()
-  return { docs, backfilled, capped, analyzed, phrases }
+  return { docs, backfilled, countriesBackfilled, capped, analyzed, phrases }
 }
 
 const main = async () => {
   await migrateP()
-  const { docs, backfilled, capped, analyzed, phrases } = await reindexAll(seedPersons)
+  const { docs, backfilled, countriesBackfilled, capped, analyzed, phrases } = await reindexAll(seedPersons)
   if (backfilled) console.log(`backfilled domain for ${backfilled} docs`)
+  if (countriesBackfilled) console.log(`backfilled country for ${countriesBackfilled} docs`)
   if (capped) console.log(`capped text of ${capped} docs at ${MAX_DOC_CHARS} chars`)
   console.log(`reindexed ${docs} docs`)
   console.log(`kept ${phrases} phrases`)

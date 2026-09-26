@@ -233,9 +233,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('lensesPerson').value = resolvePerson(people, initial.person)
   applySeed($('lensesDays'), initial.days)
   applySeed($('lensesLimit'), initial.limit)
-  // The API's own default is 40 (parseLensesQuery), not the static markup's 20 — set it
-  // explicitly here rather than editing atlas.html's own `selected` attribute.
-  if (initial.limit === undefined) $('lensesLimit').value = '40'
 
   for (const id of ['lensesA', 'lensesB', 'lensesLimit']) $(id).addEventListener('change', onControlChange)
   $('lensesDays').addEventListener('change', onDaysChange)

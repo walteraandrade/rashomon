@@ -54,7 +54,7 @@ describe('(mount): fetches /lenses with the selected person, a, b, days and limi
       assert.equal(qs.get('a'), 'all')
       assert.equal(qs.get('b'), 'all')
       assert.equal(qs.get('days'), '30')
-      assert.equal(qs.get('limit'), '40', "the API default is 40, not the static markup's 20")
+      assert.equal(qs.get('limit'), '40', "the markup's own selected option is 40, matching the API's own default")
       assert.equal(qs.get('kind'), 'word,hashtag,phrase')
     })
   })

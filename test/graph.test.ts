@@ -1542,12 +1542,6 @@ describe('lensesFor (issue #206)', () => {
     for (const t of r.terms) assert.deepEqual(t.a, t.b)
   })
 
-  it('never surfaces a term that is one of the person\'s own name words: excluded from both sides\' selection alike, so a mismatched "name" can never occur', async () => {
-    const r = await lensesFor(lula, { ...lensesBase, days: 365, limit: 100 })
-    const names = nameTokens(lula)
-    for (const t of r.terms) assert.ok(!names.includes(t.term), `${t.term} is one of lula's own name words`)
-  })
-
   // A term that is one of the tracked person's own name words is "name" on both sides always
   // (issue #206 AC4). Doc /2 ("Lula e Tarcísio disputam a eleição") gives tarcisio's own docs the
   // word "lula" as ordinary vocabulary elsewhere in the fixture (see compareFor's "tarcisio" case

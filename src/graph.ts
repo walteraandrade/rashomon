@@ -959,7 +959,6 @@ const lensSideCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQ
   ${termP} as materialized (
     select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
     from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not ${isName(sql.raw('t.term'), names)}
     group by 1, 2
   ),
   ${scored} as (
@@ -969,10 +968,10 @@ const lensSideCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQ
     where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
   ),
   ${top}_count as (
-    select term, kind from ${scored} order by count desc, term, kind limit ${q.limit}
+    select term, kind from ${scored} where not ${isName(sql.raw('term'), names)} order by count desc, term, kind limit ${q.limit}
   ),
   ${top}_pmi as (
-    select term, kind from ${scored} order by ${pmiRank(sql.raw('count'))} desc, term, kind limit ${q.limit}
+    select term, kind from ${scored} where not ${isName(sql.raw('term'), names)} order by ${pmiRank(sql.raw('count'))} desc, term, kind limit ${q.limit}
   )`
 }
 
@@ -981,11 +980,16 @@ const lensesQuery = (person: Person, q: LensesQuery) => sql`
   with
   ${lensSideCte('a', person, q.a, q)},
   ${lensSideCte('b', person, q.b, q)},
+  names as (
+    select term, kind from scored_a where ${isName(sql.raw('term'), nameTokens(person))}
+    union select term, kind from scored_b where ${isName(sql.raw('term'), nameTokens(person))}
+  ),
   keys as (
     select term, kind from a_top_count
     union select term, kind from a_top_pmi
     union select term, kind from b_top_count
     union select term, kind from b_top_pmi
+    union select term, kind from names
   ),
   unioned as (
     select k.term, k.kind,

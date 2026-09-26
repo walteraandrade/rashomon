@@ -32,8 +32,9 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // `content:encoded` is the full article body; description wins only when it is longer.
 export const body = (item: any) => {
-  const encoded = stripHtml(item['content:encoded'])
-  const description = stripHtml(item.description)
+  // An element carrying its own inline xmlns (Planalto's content:encoded) parses as {'#text', '@_xmlns:...'}.
+  const encoded = stripHtml(text(item['content:encoded']))
+  const description = stripHtml(text(item.description))
   return encoded.length > description.length ? encoded : description
 }
 
@@ -43,11 +44,12 @@ export const toDoc = (source: Source) => (item: any): RawDoc | null => {
   const outletUrl = item.source?.['@_url'] as string | undefined
   const outletName = text(item.source).trim()
   const dropOutlet = (s: string) => (outletName ? s.replace(new RegExp(`(\\s+-)?\\s*${escapeRe(outletName)}`, 'g'), ' ') : s)
+  const date = new Date(text(item.pubDate) || text(item['dc:date']) || Date.now())
   return {
     source,
     uri,
-    text: `${dropOutlet(stripHtml(item.title))}. ${dropOutlet(body(item))}`.replace(/\s+/g, ' '),
-    publishedAt: new Date(text(item.pubDate) || Date.now()).toISOString(),
+    text: `${dropOutlet(stripHtml(text(item.title)))}. ${dropOutlet(body(item))}`.replace(/\s+/g, ' '),
+    publishedAt: (Number.isNaN(date.getTime()) ? new Date() : date).toISOString(),
     domain: domainOf(outletUrl) ?? domainOf(uri),
   }
 }
@@ -63,7 +65,9 @@ export const fetchFeed = (source: Source) => (url: string) =>
     Effect.flatMap(({ status, body }) => {
       if (status < 200 || status >= 300) return Effect.fail(new RssError({ message: `${source} ${url} ${status}` }))
       const xml = parser.parse(decode(body))
-      return Effect.succeed(asArray<any>(xml?.rss?.channel?.item).map(toDoc(source)).filter((d): d is RawDoc => d !== null))
+      // RSS 1.0 (RDF) sits an item's siblings directly under <rdf:RDF>, not nested in <channel>.
+      const items = [...asArray<any>(xml?.rss?.channel?.item), ...asArray<any>(xml?.['rdf:RDF']?.item)]
+      return Effect.succeed(items.map(toDoc(source)).filter((d): d is RawDoc => d !== null))
     }),
   )
 

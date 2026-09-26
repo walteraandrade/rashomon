@@ -84,7 +84,7 @@ describe('documented facts per collector', () => {
     assert.equal(sourceTable.get('camara')?.byDefault, true)
   })
 
-  it('press families (issue #22): the three feed sets, defaultSources membership and the RDF/Planalto exclusion', () => {
+  it('press families (issue #22): the three feed sets, defaultSources membership and RDF/Planalto support', () => {
     const api = docPageText.get('docs/api.md') ?? ''
     for (const source of ['juridico', 'oficial', 'nicho']) assert.match(api, new RegExp('`' + source + '`'))
     assert.match(docsText, /noticias\.stf\.jus\.br/)
@@ -124,6 +124,20 @@ describe('documented facts per collector', () => {
 
   it('every collector\'s network read is timeout-bounded, not only gdelt/camara/senado/bluesky', () => {
     assert.match(docsText, /every collector's network read is.{0,20}timeout-bounded/i)
+  })
+})
+
+describe('oficial\'s Planalto RDF feed is documented as included, not excluded', () => {
+  // issue #213
+  it('says Planalto is part of oficial, and that oficial (via rss.ts) reads an RDF feed', () => {
+    assert.match(docsText, /oficial[\s\S]{0,400}Planalto/i, 'no page ties Planalto to the oficial family')
+    assert.match(docsText, /(oficial|rss\.ts)[\s\S]{0,400}RDF/i, 'no page says oficial (or rss.ts) reads an RDF feed')
+  })
+
+  // issue #213
+  it('no longer claims Planalto is unsupported/excluded or that rss.ts assumes RSS 2.0 for every feed', () => {
+    assert.doesNotMatch(docsText, /Planalto[\s\S]{0,120}(unsupported|deliberately exclu[ií]d|is exclu[ií]d)/i)
+    assert.doesNotMatch(docsText, /rss\.ts[\s\S]{0,120}assumes RSS 2\.0/i)
   })
 })
 

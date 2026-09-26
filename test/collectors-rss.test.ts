@@ -16,6 +16,14 @@ const bento: Person = { id: 'bento', name: 'Bento Lima', aliases: ['Bento Lima']
 const rssBody = (encoding = 'UTF-8') =>
   `<?xml version="1.0" encoding="${encoding}"?><rss><channel><item><link>https://x/1</link><title>Fulano fala</title></item></channel></rss>`
 
+// Shaped like Planalto's real feed: a default rdf:RSS-1.0 namespace on the root, an <items>/<rdf:Seq>
+// index inside <channel> (Planalto's feed carries one), items sitting as siblings of <channel> rather
+// than nested inside it, and content:encoded carrying its own inline xmlns:content attribute. The
+// default item's plain <description> is deliberately shorter than its CDATA <content:encoded>, so
+// body()'s "longer wins" rule picks the full text, not the summary.
+const rdfBody = (items = '<item rdf:about="https://www.gov.br/planalto/pt-br/1"><title>Planalto anuncia medida</title><link>https://www.gov.br/planalto/pt-br/1</link><description>Resumo da medida.</description><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Texto integral da medida, com o detalhamento completo do ato assinado hoje.</p>]]></content:encoded><dc:date>2026-09-02T18:34:00Z</dc:date></item>') =>
+  `<?xml version="1.0" encoding="UTF-8"?><rdf:RDF xmlns="http://purl.org/rss/1.0/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel rdf:about="https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS"><title>Planalto</title><items><rdf:Seq><rdf:li rdf:resource="https://www.gov.br/planalto/pt-br/1"/></rdf:Seq></items></channel>${items}</rdf:RDF>`
+
 describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no global fetch)', () => {
   it('parses a feed under the cap into docs', async () => {
     const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
@@ -80,6 +88,145 @@ describe('fetchFeed — behaviour, driven through a stub HttpClient.Fetch (no gl
   })
 })
 
+describe('RSS 1.0 (RDF) support for oficial/Planalto (issue #213)', () => {
+  // AC1: fetchFeed, given an rdf:RDF fixture whose items are siblings of channel (not nested
+  // inside it), produces one RawDoc per item. Two items, so the count genuinely proves "per
+  // item" rather than merely "does not crash on one".
+  it('fetchFeed extracts one RawDoc per item from an rdf:RDF feed whose items sit as channel siblings', async () => {
+    const twoItems =
+      '<item rdf:about="https://www.gov.br/planalto/pt-br/10"><title>Primeira nota</title><link>https://www.gov.br/planalto/pt-br/10</link><description>Resumo um.</description></item>' +
+      '<item rdf:about="https://www.gov.br/planalto/pt-br/11"><title>Segunda nota</title><link>https://www.gov.br/planalto/pt-br/11</link><description>Resumo dois.</description></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(twoItems), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 2)
+    assert.deepEqual(
+      exit.value.map((d: any) => d.uri).sort(),
+      ['https://www.gov.br/planalto/pt-br/10', 'https://www.gov.br/planalto/pt-br/11'],
+    )
+    const primeira = exit.value.find((d: any) => d.uri === 'https://www.gov.br/planalto/pt-br/10')
+    assert.ok(primeira)
+    assert.match(primeira.text, /Primeira nota/)
+  })
+
+  // AC2: dc:date as publishedAt when pubDate is absent, exercised both through the full
+  // fetchFeed/parser pipeline and directly against toDoc's own fallback logic.
+  it('fetchFeed uses dc:date as publishedAt when pubDate is absent, matching the fixture date exactly', async () => {
+    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value[0].publishedAt, new Date('2026-09-02T18:34:00Z').toISOString())
+  })
+
+  // The default fixture's <description> is a short summary and its <content:encoded> CDATA is the
+  // full article; body()'s "longer wins" rule must pick the CDATA, and the <items>/<rdf:Seq> index
+  // plus the default rdf:RSS-1.0 namespace on the root (both real Planalto shapes) must not confuse it.
+  it('picks the longer content:encoded CDATA body over the short description, unbothered by the items/rdf:Seq index or the default namespace', async () => {
+    const fetchFn = fakeFetch(() => new Response(rdfBody(), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    assert.match(exit.value[0].text, /Texto integral/)
+    assert.doesNotMatch(exit.value[0].text, /Resumo da medida/)
+  })
+
+  // Review fix: dc:date/pubDate that fails to parse must fall back to now, not die with
+  // RangeError from toISOString() on an Invalid Date -- which previously escaped fetchFeed and,
+  // through Effect.forEach's fail-fast, dropped every sibling oficial feed in the same run.
+  it('falls back to now when dc:date is present but unparseable, instead of throwing RangeError', async () => {
+    const badDateItem = '<item rdf:about="https://www.gov.br/planalto/pt-br/4"><title>Data invalida</title><link>https://www.gov.br/planalto/pt-br/4</link><description>Resumo.</description><dc:date>not-a-date</dc:date></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(badDateItem), { status: 200 }))
+    const before = Date.now()
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    const publishedAt = new Date(exit.value[0].publishedAt).getTime()
+    assert.ok(publishedAt >= before)
+    assert.ok(publishedAt <= Date.now() + 1000)
+  })
+
+  it('toDoc falls back to dc:date, not now, when pubDate is absent', () => {
+    const doc = toDoc('oficial')({
+      link: 'https://www.gov.br/planalto/pt-br/1',
+      title: 'Planalto anuncia medida',
+      description: 'Resumo da medida.',
+      'dc:date': '2026-09-02T18:34:00Z',
+    })
+    assert.ok(doc)
+    assert.equal(doc!.publishedAt, new Date('2026-09-02T18:34:00Z').toISOString())
+    const parsed = new Date(doc!.publishedAt)
+    assert.equal(parsed.getUTCFullYear(), 2026)
+    assert.equal(parsed.getUTCMonth(), 8) // September, 0-indexed
+    assert.equal(parsed.getUTCDate(), 2)
+  })
+
+  // AC3: neither pubDate nor dc:date still produces a RawDoc (never null, never throws),
+  // publishedAt falling back to roughly now -- the same path RSS 2.0 already takes. Both
+  // through fetchFeed's full parse and directly against toDoc.
+  it('fetchFeed falls back to now when an RDF item has neither pubDate nor dc:date, still producing a RawDoc', async () => {
+    const noDateItem = '<item rdf:about="https://www.gov.br/planalto/pt-br/2"><title>Sem data</title><link>https://www.gov.br/planalto/pt-br/2</link><description>Resumo.</description></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(noDateItem), { status: 200 }))
+    const before = Date.now()
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 1)
+    const publishedAt = new Date(exit.value[0].publishedAt).getTime()
+    assert.ok(publishedAt >= before, 'publishedAt must fall back to roughly now, not throw or drop the doc')
+  })
+
+  it('toDoc still returns a RawDoc, falling back to now, when both pubDate and dc:date are absent', () => {
+    const before = Date.now()
+    const doc = toDoc('oficial')({
+      link: 'https://www.gov.br/planalto/pt-br/2',
+      title: 'Sem data',
+      description: 'Resumo.',
+    })
+    assert.ok(doc, 'toDoc must not return null merely for a missing date')
+    assert.ok(new Date(doc!.publishedAt).getTime() >= before)
+  })
+
+  it('keeps the content:encoded body through the real parser when the element carries its own inline xmlns and description is empty', async () => {
+    const item = '<item rdf:about="https://www.gov.br/planalto/pt-br/3"><title>Medida provisória</title><link>https://www.gov.br/planalto/pt-br/3</link><description></description><content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Texto integral da medida.</p>]]></content:encoded></item>'
+    const fetchFn = fakeFetch(() => new Response(rdfBody(item), { status: 200 }))
+    const exit = await runTest(fetchFeed('oficial')('https://example.org/rdf-feed'), fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.match(exit.value[0].text, /Texto integral da medida/)
+    assert.doesNotMatch(exit.value[0].text, /object Object/i)
+  })
+
+  // AC4: oficial.ts's feeds array includes the Planalto URL, and oficial now fetches 5 feeds
+  // (up from 4). feeds itself is not exported, so this is checked through collectOficial's
+  // observable behaviour: exactly 5 distinct requests, one of them Planalto's.
+  it('oficial fetches 5 distinct feeds, one of them the Planalto URL', async () => {
+    const fetchFn = fakeFetch(() => new Response(rssBody(), { status: 200 }))
+    const exit = await runTest(collectOficial, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    const urls = fetchFn.calls.map((c) => c.url.href)
+    assert.equal(urls.length, 5)
+    assert.equal(new Set(urls).size, 5, 'oficial must fetch 5 distinct feeds')
+    assert.ok(urls.includes('https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS'))
+  })
+
+  // AC5: every oficial doc, Planalto's included, still carries source: 'oficial' and no tone
+  // field. Planalto's own URL is served the RDF fixture here, so this actually exercises the
+  // RDF parse path rather than only the shared RSS 2.0 stub every other feed gets.
+  it('every oficial doc carries source oficial and no tone, including the one from Planalto\'s RDF feed', async () => {
+    const fetchFn = fakeFetch((c) =>
+      c.url.href === 'https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS'
+        ? new Response(rdfBody(), { status: 200 })
+        : new Response(rssBody(), { status: 200 }),
+    )
+    const exit = await runTest(collectOficial, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.length, 5)
+    for (const doc of exit.value) {
+      assert.equal(doc.source, 'oficial')
+      assert.equal('tone' in doc, false)
+    }
+    assert.ok(exit.value.some((d: any) => d.uri === 'https://www.gov.br/planalto/pt-br/1'), 'the Planalto RDF item must reach the collected docs')
+  })
+})
+
 describe('one failing feed short-circuits the whole run and interrupts its siblings', () => {
   it('a second, hanging feed never resolves once the first one fails', async () => {
     const fetchFn = fakeFetch((c) => (c.url.href === 'https://a/' ? new Response('boom', { status: 500 }) : hanging(c)))
@@ -97,7 +244,7 @@ describe('rss/juridico/oficial/nicho — each fetches its own hardcoded feed lis
   const cases: [string, Effect.Effect<any[], unknown, any>, number][] = [
     ['rss', collectRss, 8],
     ['juridico', collectJuridico, 3],
-    ['oficial', collectOficial, 4],
+    ['oficial', collectOficial, 5],
     ['nicho', collectNicho, 10],
   ]
 
@@ -153,6 +300,23 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
     assert.equal(body({ 'content:encoded': '<p>Lula &amp; Bolsonaro</p><p>no Congresso</p>' }), 'Lula & Bolsonaro no Congresso')
   })
 
+  it('unwraps content:encoded when it carries its own inline xmlns attribute (Planalto\'s real shape), never leaking "[object Object]"', () => {
+    // With ignoreAttributes: false, fast-xml-parser turns an element carrying its own attribute
+    // into {'#text': ..., '@_xmlns:content': ...} instead of a bare string.
+    const item = { description: '', 'content:encoded': { '#text': '<p>Texto integral da medida.</p>', '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/' } }
+    assert.match(body(item), /Texto integral da medida/)
+    assert.doesNotMatch(body(item), /object Object/i)
+  })
+
+  it('still prefers the longer content:encoded over a shorter description when content:encoded carries an inline xmlns', () => {
+    const item = {
+      description: 'Resumo curto.',
+      'content:encoded': { '#text': `<p>${'Texto integral da medida com muito mais conteúdo. '.repeat(10)}</p>`, '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/' },
+    }
+    assert.match(body(item), /^Texto integral da medida/)
+    assert.ok(body(item).length > 'Resumo curto.'.length)
+  })
+
   it('reaches the RawDoc: toDoc builds text from title plus the full body', () => {
     const doc = toDoc('rss')({
       link: 'https://example.org/full',
@@ -162,6 +326,20 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
     })
     assert.match(doc?.text ?? '', /^Manchete curta\. Corpo inteiro/)
     assert.ok((doc?.text.length ?? 0) > 400)
+  })
+
+  // Review fix: a <title xml:lang="pt">Medida</title> parses to {'#text': 'Medida', '@_xml:lang': 'pt'}
+  // with ignoreAttributes: false, the same shape content:encoded already unwraps with `text()`.
+  // Feeding that object straight to stripHtml stringified it as the literal "[object Object]".
+  it('unwraps a title carrying its own attribute (e.g. xml:lang), never leaking "[object Object]"', () => {
+    const doc = toDoc('rss')({
+      link: 'https://example.org/lang',
+      title: { '#text': 'Medida provisória é sancionada', '@_xml:lang': 'pt' },
+      description: 'Resumo.',
+    })
+    assert.ok(doc)
+    assert.doesNotMatch(doc!.text, /object Object/i)
+    assert.match(doc!.text, /^Medida provisória/)
   })
 })
 

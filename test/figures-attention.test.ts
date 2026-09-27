@@ -107,6 +107,30 @@ describe('a person with an empty /attention response (AC9)', () => {
   })
 })
 
+// Spec §3 rule 3: padding is only ever needed on the /attention side. A UTC day present in the
+// mentions axis but missing from /attention's own series (not every day backfilled) is padded
+// to { day, views: 0 } here -- distinct from AC9's fully-empty case, this exercises a *mixed*
+// series where only some days are missing.
+describe('a day missing from /attention but present in /timeline is padded to zero views (spec §3.3)', () => {
+  it('the lag sentence is computed against the padded series, not against the raw (shorter) /attention payload', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        // Mentions peak on the 14th; /attention only reports the 16th (the 14th and 15th are
+        // missing, e.g. not yet backfilled), so those two days must be padded to views: 0
+        // before peakDay runs, leaving the views peak on the 16th.
+        '/attention': attentionData([{ day: '2026-08-16', views: 500 }]),
+        '/timeline': timelineData([timelineBucket('2026-08-14', 40), timelineBucket('2026-08-15', 2), timelineBucket('2026-08-16', 2)]),
+      })
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush()
+      assert.match(els.attentionNote.textContent, /a imprensa veio 2 dias antes/)
+      assert.doesNotMatch(els.attentionChart.innerHTML, /sem dado de pageviews para esta pessoa/, 'a partially-populated series is not the empty-/attention case')
+    })
+  })
+})
+
 describe('clicking a day column opens the docs card with that day (AC8)', () => {
   it('sends day=<column UTC date>, term="", the full kind set and the figure own source, owned by "attention"; a second click releases it', async () => {
     await withFiguresDom(async (els, calls) => {

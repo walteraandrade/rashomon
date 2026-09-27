@@ -821,7 +821,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   color: var(--ink);
   cursor: pointer;
 }
-.comention-listitem b { font-family: var(--mono); font-weight: 600; color: var(--accent); margin-right: var(--space-2); font-variant-numeric: tabular-nums; }
+.comention-listitem b { font-family: var(--mono); font-weight: 600; color: var(--ink); margin-right: var(--space-2); font-variant-numeric: tabular-nums; }
 .comention-listitem.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 
 /* ---------- the pet ---------- */

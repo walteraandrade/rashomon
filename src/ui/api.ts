@@ -7,15 +7,15 @@ export const ATLAS_KINDS = 'word,hashtag,phrase'
 
 export type GraphOpts = { days: string; sort: string; limit: string; source: string; kind?: string; min?: string }
 
-// `testimony=1` asks /graph for per-term kikori means; always included so a mask toggle never
-// refetches. No `domain`: the atlas always answers for the whole recorte.
+// `testimony=1`/`communities=1` ask /graph for kikori means and term communities; always
+// included so cycling either colouring never refetches. No `domain`: the atlas answers whole.
 export const params = ({ days, sort, limit, source, kind = ATLAS_KINDS, min = '2' }: GraphOpts) =>
-  new URLSearchParams({ days, sort, limit, min, source, kind, testimony: '1' })
+  new URLSearchParams({ days, sort, limit, min, source, kind, testimony: '1', communities: '1' })
 
-// Drop sort, limit and testimony so a term-ordering change does not evict the outlet list.
+// Drop sort, limit, testimony and communities so a term-ordering change does not evict the outlet list.
 export const narrowToSources = (graphParams: URLSearchParams) => {
   const p = new URLSearchParams(graphParams)
-  for (const ignored of ['domain', 'sort', 'limit', 'testimony']) p.delete(ignored)
+  for (const ignored of ['domain', 'sort', 'limit', 'testimony', 'communities']) p.delete(ignored)
   return p
 }
 

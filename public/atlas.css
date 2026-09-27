@@ -57,6 +57,16 @@
      balanceColor, whose ends resolve to these exact colours. */
   --cmp-a: #7fa8ff;
   --cmp-b: #ff9d6b;
+  /* The tema mask (issue #217): six discrete slots for term communities, a Louvain build's own
+     grouping, never comparable across builds. Fixed order, distinct from each other and from
+     --hostile/--favor/--cmp-a/--cmp-b, each >=4.5:1 against --bg. A 7th+ community paints --muted
+     via themeMask's null return, so a 7th slot is never needed. */
+  --theme-1: #3987e5;
+  --theme-2: #dd543c;
+  --theme-3: #199e70;
+  --theme-4: #b35bd1;
+  --theme-5: #d55181;
+  --theme-6: #9085e9;
 
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
   --display: 'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif;
@@ -240,6 +250,12 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .figure-key > div { min-width: 12ch; max-width: 28ch; }
 .figure-key dt { display: flex; align-items: center; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: none; color: var(--accent); }
 .figure-key dd { margin-top: var(--space-1); font-family: var(--mono); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: none; }
+/* The tema key documents the second colour encoding only while the tema mask is on and the
+   figure is not in strip mode -- toggled from script (atlas.ts's render() and toggleMask()),
+   not CSS, since is-themed can linger on a hidden viewport's leftover svg regardless of mode
+   (paintSelection paints both panes). A sibling dl, not a row inside #keyDefault, so #keyDefault
+   stays exactly the four rows test/leitura-ui-acceptance.test.ts pins (Tamanho/Cor/Posição/
+   Clique, unchanged). */
 .key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
@@ -317,6 +333,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .map-svg.is-masked .atlas-word, .map-svg.is-masked .atlas-word.is-neighbor { --wc: var(--mask, var(--muted)); }
 .map-svg.is-masked .atlas-word.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
 .mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--hostile), color-mix(in srgb, var(--scale-mid) 50%, transparent), var(--favor)); }
+/* The tema mask: same shape as the mask above, one discrete --theme token per word instead of a
+   continuous --mask gradient. Mutually exclusive with is-masked -- paintSelection never sets both. */
+.map-svg.is-themed .atlas-word, .map-svg.is-themed .atlas-word.is-neighbor { --wc: var(--theme, var(--muted)); }
+.map-svg.is-themed .atlas-word.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
+.theme-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--theme-1) 0 16.67%, var(--theme-2) 16.67% 33.33%, var(--theme-3) 33.33% 50%, var(--theme-4) 50% 66.67%, var(--theme-5) 66.67% 83.33%, var(--theme-6) 83.33% 100%); } /* six hard stops, not a continuous ramp: communities carry no order for the gradient to imply */
 .underline { stroke: var(--wc, var(--accent)); stroke-width: 1.5; opacity: 0; }
 .atlas-word.is-selected .underline { opacity: 1; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
@@ -395,6 +416,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .column-person:hover { background: color-mix(in srgb, var(--accent) 13%, var(--soft)); }
 .column-card strong { color: var(--wc); }
 .columns.is-masked .column-card { --wc: var(--mask, var(--muted)); }
+.columns.is-themed .column-card { --wc: var(--theme, var(--muted)); }
 
 /* ---------- the lists under the strip ---------- */
 .outlets { min-width: 0; padding-top: var(--space-1); }

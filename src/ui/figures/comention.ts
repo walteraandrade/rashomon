@@ -43,12 +43,17 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     paintComention({ data, width, selected, onPick: pick })
   }
 
+  // The grid orders a cell's a/b by row/column (name order, matrixLayout) while the ranked
+  // list orders a pair's a/b by id (comentionFor's own SQL order); when the two disagree for a
+  // pair, comparing raw a/b would lose the selection across the 700px breakpoint. Normalize
+  // before storing and before comparing, matching paintComention's own normalization.
   const pick = (a: string, b: string) => {
-    if (selected && selected.a === a && selected.b === b) {
+    const [x, y] = a < b ? [a, b] : [b, a]
+    if (selected && selected.a === x && selected.b === y) {
       figure.release()
       return
     }
-    selected = { a, b }
+    selected = { a: x, b: y }
     repaint()
     showDocs(a, b)
   }

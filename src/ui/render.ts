@@ -1341,9 +1341,20 @@ export const paintWeekError = () => {
 // Comention matrix (figure 7, #207): ink weight only, no --hostile/--favor/--cmp-a/--cmp-b.
 export type ComentionSelection = { a: string; b: string } | null
 
+// The grid's cells key a/b by row/column (name order, matrixLayout) while the ranked list's
+// pairs key a/b by id (comentionFor's own SQL order); the two disagree whenever name order and
+// id order disagree for a pair. Normalize both sides before comparing so a pair selected in one
+// markup still reads as selected in the other.
+const normalizePair = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a])
+const isPairSelected = (selected: ComentionSelection, a: string, b: string) => {
+  if (!selected) return false
+  const [x, y] = normalizePair(a, b)
+  return selected.a === x && selected.b === y
+}
+
 const comentionCellMarkup = (row: { id: string; name: string }, col: { id: string; name: string }, cell: { a: string; b: string; count: number | null; ink: number }, selected: ComentionSelection) => {
   if (cell.count === null) return html`<span class="comention-cell is-empty" aria-hidden="true"></span>`
-  const isSelected = !!selected && selected.a === cell.a && selected.b === cell.b
+  const isSelected = isPairSelected(selected, cell.a, cell.b)
   return html`<button type="button" class="comention-cell${isSelected ? ' is-selected' : ''}" style="--w:${cell.ink}" data-a="${cell.a}" data-b="${cell.b}" aria-pressed="${isSelected}" aria-label="${row.name} e ${col.name}: ${fmt(cell.count)} textos juntos">${fmt(cell.count)}</button>`
 }
 
@@ -1381,7 +1392,7 @@ export const paintComention = ({ data, width, selected, onPick }: { data: Coment
     <ol class="comention-list">${ranked.map((pair) => {
       const a = persons.find((p) => p.id === pair.a)
       const b = persons.find((p) => p.id === pair.b)
-      const isSelected = !!selected && selected.a === pair.a && selected.b === pair.b
+      const isSelected = isPairSelected(selected, pair.a, pair.b)
       return html`<li><button type="button" class="comention-listitem${isSelected ? ' is-selected' : ''}" data-a="${pair.a}" data-b="${pair.b}" aria-pressed="${isSelected}"><b>${fmt(pair.count)}</b> ${a?.name ?? pair.a} × ${b?.name ?? pair.b}</button></li>`
     })}</ol>`
   for (const el of queryAll('[data-a]', root)) el.addEventListener('click', () => onPick(String(el.dataset.a), String(el.dataset.b)))

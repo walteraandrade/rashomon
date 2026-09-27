@@ -1366,6 +1366,32 @@ describe('paintComention / paintComentionLoading / paintComentionError, figure 7
       assert.match(els.comentionMatrix.innerHTML, /Não foi possível carregar quem aparece junto/)
     })
   })
+
+  // The grid keys a cell's a/b by row/column (name order) while the ranked list keys a pair's
+  // a/b by id (comentionFor's own SQL order, b.person_id > a.person_id). Here the two persons
+  // are named the opposite of their id order (Zeta Pessoa is listed first, id 'zeta'; Alpha
+  // Pessoa second, id 'alpha'), so the grid cell's a/b (name order) is the exact reverse of the
+  // pair's a/b (id order) -- the mismatch the bug hinges on.
+  it('marks the same pair is-selected in both the grid and the list, even when name order and id order disagree', () => {
+    const mismatched = [
+      { id: 'zeta', name: 'Zeta Pessoa' },
+      { id: 'alpha', name: 'Alpha Pessoa' },
+    ]
+    const data: Comention = { days: 30, persons: mismatched, pairs: [{ a: 'alpha', b: 'zeta', count: 4 }] }
+    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
+      // The pair as comentionFor would report it (id order: 'alpha' < 'zeta').
+      paintComention({ data, width: 900, selected: { a: 'alpha', b: 'zeta' }, onPick: () => {} })
+      const html = els.comentionMatrix.innerHTML
+      // The grid cell is keyed by row/column (name) order: row 'zeta' (Zeta Pessoa, listed
+      // first), column 'alpha' (Alpha Pessoa) -- the reverse of the selected pair's a/b.
+      const cellMatch = /<button[^>]*data-a="zeta" data-b="alpha"[^>]*>/.exec(html)
+      assert.ok(cellMatch, 'must paint the zeta/alpha cell')
+      assert.match(cellMatch![0], /is-selected/, 'the grid cell must read is-selected despite its a/b being the reverse of the selected pair')
+      const listMatch = /<button[^>]*class="comention-listitem[^"]*"[^>]*data-a="alpha" data-b="zeta"[^>]*>/.exec(html)
+      assert.ok(listMatch, 'must paint the alpha/zeta list item')
+      assert.match(listMatch![0], /is-selected/, 'the list item must also read is-selected for the same pair')
+    })
+  })
 })
 
 // Issue #174.

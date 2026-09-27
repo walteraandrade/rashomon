@@ -436,3 +436,38 @@ describe('the pmi ordering, signature floor and own-name filter live only in src
     assert.ok(scoringSentence, 'CLAUDE.md must describe src/scoring.ts and the pmi ordering together')
   })
 })
+
+// AC12 (issue #207): CLAUDE.md's public/atlas.html bullet is exhaustive over every figure on
+// the page, so a builder who adds one without updating it leaves the repo's own map of itself
+// wrong. The spec drafted this criterion naming "six" figures, before issue #206's lenses ruler
+// landed as figure 6; the fact worth pinning is that the enumeration is exhaustive and current
+// (matching the real figure count on the page) and names #comention with its DOM id and its
+// docs-card entry point at the same level of detail every other figure gets there -- not the
+// stale literal count, which the spec fixed before #206 shipped.
+describe('CLAUDE.md documents the comention figure (issue #207)', () => {
+  const claudeMd = () => srcSource('../CLAUDE.md')
+  // The whole bullet is one very long line, so a per-line split (used for src/scoring.ts above)
+  // cannot isolate one figure's own clause -- windowed regexes anchored on `#comention` instead.
+  const figureIds = () => [...atlasPage().matchAll(/class="figure[^"]*"\s+id="([a-z]+)"/g)].map(([, id]) => id)
+
+  it("CLAUDE.md's atlas.html bullet enumerates every .figure section actually on the page, comention included", () => {
+    const ids = figureIds()
+    assert.ok(ids.includes('comention'), 'public/atlas.html must carry a #comention .figure section')
+    const md = claudeMd()
+    for (const id of ids) assert.match(md, new RegExp('`#' + id + '`'), `CLAUDE.md's atlas.html bullet must name #${id}`)
+  })
+
+  it('names #comention as a 27×27 half-matrix from GET /api/comention, ink-weight only (exposure, not evaluation)', () => {
+    const md = claudeMd()
+    assert.match(md, /`#comention`[\s\S]{0,80}27×27 half-matrix/)
+    assert.match(md, /`#comention`[\s\S]{0,300}GET \/api\/comention/)
+    assert.match(md, /`#comention`[\s\S]{0,400}`--ink` only/)
+    assert.match(md, /`#comention`[\s\S]{0,700}exposure, not evaluation/)
+  })
+
+  it("describes #comention's docs-card entry point: a filled cell opens one side via with=, never two columns", () => {
+    const md = claudeMd()
+    assert.match(md, /`#comention`[\s\S]{0,1000}one side[\s\S]{0,150}with=/)
+    assert.match(md, /`#comention`[\s\S]{0,1000}never two columns/)
+  })
+})

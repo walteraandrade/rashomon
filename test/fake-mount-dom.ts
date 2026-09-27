@@ -68,6 +68,16 @@ const dataTermStubs = (html: string) =>
 // bare listenable per occurrence is the whole stub.
 const personDocsStubs = (html: string) => [...html.matchAll(/data-person-docs/g)].map(() => new Listenable())
 
+// The comention matrix's cells (issue #207): a filled cell carries both data-a and data-b (the
+// pair's own person ids), matched adjacently the way paintComention emits them, on both the
+// grid's <button> and the narrow-viewport list's own <button> for the same pair.
+const dataABStubs = (html: string) =>
+  [...html.matchAll(/<button[^>]*\bdata-a="([^"]*)"[^>]*\bdata-b="([^"]*)"[^>]*>/g)].map(([, a, b]) => {
+    const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
+    stub.dataset = { a, b }
+    return stub
+  })
+
 // A generic node: covers every button/div/dialog id both figures touch. `innerHTML` is kept
 // as plain text (this harness parses nothing beyond the two data-* attributes above), which is
 // enough since no criterion here asserts markup shape — only requests and control wiring.
@@ -86,7 +96,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-a'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> | ReturnType<typeof dataABStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -119,10 +129,10 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-a') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
-    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : dataStubs(this.html, attr)
+    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : attr === 'data-a' ? dataABStubs(this.html) : dataStubs(this.html, attr)
     this.domainStubs.push({ attr, html: this.html, stubs })
     return stubs
   }
@@ -133,6 +143,7 @@ class FakeBox extends Listenable {
     if (selector === '[data-col]') return this.stubsFor('data-col')
     if (selector === '[data-node]') return this.stubsFor('data-node')
     if (selector === '[data-person-docs]') return this.stubsFor('data-person-docs')
+    if (selector === '[data-a]') return this.stubsFor('data-a')
     return []
   }
   style: Record<string, string> = {}
@@ -423,12 +434,36 @@ const lensesIds = () => {
   }
 }
 
+// Figure 7 (issue #207): its own source/lean/min selects (days reuses the shared DAYS_OPTIONS
+// convention), the matrix host and its about caption. No person control -- a shared count is
+// never one person's.
+const comentionIds = () => ({
+  comention: new FakeBox('comention'),
+  comentionDays: new FakeSelect('comentionDays', DAYS_OPTIONS),
+  comentionSource: new FakeSelect('comentionSource'),
+  comentionLean: new FakeSelect('comentionLean', [
+    { value: 'all', text: 'todo o viés', selected: true },
+    { value: 'left', text: 'esquerda' },
+    { value: 'center', text: 'centro' },
+    { value: 'right', text: 'direita' },
+  ]),
+  comentionMin: new FakeSelect('comentionMin', [
+    { value: '1', text: '1' },
+    { value: '2', text: '2' },
+    { value: '3', text: '3', selected: true },
+    { value: '5', text: '5' },
+  ]),
+  comentionMatrix: new FakeBox('comentionMatrix'),
+  comentionAbout: new FakeBox('comentionAbout'),
+})
+
 export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof testimonyIds> &
   ReturnType<typeof compareIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof weekIds> &
-  ReturnType<typeof lensesIds>
+  ReturnType<typeof lensesIds> &
+  ReturnType<typeof comentionIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -440,7 +475,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...comentionIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

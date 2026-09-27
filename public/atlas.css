@@ -457,6 +457,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .outlet .t { min-width: 40px; text-align: center; border-radius: 2px; padding: 2px 5px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
 .outlet .t:empty { visibility: hidden; }
 .outlets .note { margin: var(--space-3) 0 0; }
+/* The focused outlet's own neighbours list rides the .stat pattern's dt/dd shape but is a list,
+   not one measurement, so it spans every column of the grid and each pair drops out of .stat
+   dd's big number size onto its own line instead of running together. */
+.outlet-grid dl.metric.stat { grid-column: 1 / -1; margin: var(--space-2) 0 0; padding-bottom: var(--space-3); }
+.outlet-grid dl.metric.stat dd { font-size: var(--t-sm); }
+.outlet-neighbor { display: block; color: var(--muted); font-variant-numeric: tabular-nums; }
+.outlet-neighbor .n { color: var(--ink); }
+.outlet-neighbor + .outlet-neighbor { margin-top: 2px; }
 .testimony-lists { min-width: 0; font-family: var(--mono); font-size: var(--t-sm); color: var(--muted); }
 
 /* Figure 2's answer: one stat pair, the number at h2 rank because it is what the whole figure is

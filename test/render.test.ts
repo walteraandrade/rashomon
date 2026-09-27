@@ -1043,6 +1043,37 @@ describe('regression: an opposite-signed-but-real term on both sides never pins 
   })
 })
 
+describe('rulerTerms copies bridge, and the ruler-bridge mark (issue #219 AC7)', () => {
+  it('rulerTerms attaches bridge onto its emitted item only when the source CompareTerm carries it', () => {
+    const terms = [
+      { term: 'ponte', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.9 },
+      { term: 'sembridge', kind: 'word', a: side(10, 1), b: side(10, 1) },
+    ] as (CompareTerm & { bridge?: number })[]
+    const { items } = rulerTerms(terms as CompareTerm[], 'count') as { items: (typeof terms[number] & { balance: number; combined: number })[] }
+    assert.equal(items.find((i) => i.term === 'ponte')?.bridge, 0.9)
+    assert.equal(items.find((i) => i.term === 'sembridge')?.bridge, undefined)
+  })
+
+  it('a term at or above the bridge threshold paints with class="ruler-bridge"; a term below it does not', () => {
+    const terms = [
+      { term: 'ponteforte', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.6 },
+      { term: 'pontefraca', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.1 },
+    ] as (CompareTerm & { bridge: number })[]
+    withFakeDocument(['compareRuler'], (els) => {
+      paintRuler({ data: compareData(terms as CompareTerm[]), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
+      const html = els.compareRuler.innerHTML
+      const tagFor = (term: string) => {
+        const idx = html.indexOf(`data-term="${term}"`)
+        const start = html.lastIndexOf('<g', idx)
+        const end = html.indexOf('>', idx)
+        return html.slice(start, end + 1)
+      }
+      assert.match(tagFor('ponteforte'), /ruler-bridge/, 'a term with bridge >= 0.5 must carry the ruler-bridge mark')
+      assert.doesNotMatch(tagFor('pontefraca'), /ruler-bridge/, 'a term below the bridge threshold must not carry the mark')
+    })
+  })
+})
+
 describe('rulerTerms / paintRuler: a term where either side is the string "name" is absent from the rendered set (issue #91 AC7)', () => {
   it('rulerTerms drops it and counts it as hidden, for either side', () => {
     const terms: CompareTerm[] = [
@@ -1175,6 +1206,38 @@ describe('paintLensDetail', () => {
       paintLensDetail({ term, endA: 'Folha de S.Paulo', endB: 'Direita' })
       assert.doesNotMatch(els.lensesDetail.innerHTML, /nenhum documento/)
       assert.match(els.lensesDetail.innerHTML, /nome da pessoa/)
+    })
+  })
+
+  it('names a bridge term with "ponte" when its bridge is at or above the threshold (issue #219 AC14)', () => {
+    withFakeDocument(['lensesDetail'], (els) => {
+      const bridging = { term: 'ponte', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.7 } as CompareTerm & { bridge: number }
+      paintLensDetail({ term: bridging, endA: 'Folha de S.Paulo', endB: 'Direita' })
+      assert.match(els.lensesDetail.innerHTML, /ponte/i)
+      const notBridging = { term: 'comum', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.1 } as CompareTerm & { bridge: number }
+      paintLensDetail({ term: notBridging, endA: 'Folha de S.Paulo', endB: 'Direita' })
+      assert.doesNotMatch(els.lensesDetail.innerHTML, /ponte/i)
+    })
+  })
+})
+
+describe('paintLensRuler carries the ruler-bridge mark through the shared body (issue #219 AC14)', () => {
+  it('a lens ruler term with bridge >= 0.5 paints with class="ruler-bridge"', () => {
+    const terms = [
+      { term: 'ponteforte', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.6 },
+      { term: 'pontefraca', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.1 },
+    ] as (CompareTerm & { bridge: number })[]
+    withFakeDocument(['lensesRuler'], (els) => {
+      paintLensRuler({ data: lensesData(terms as CompareTerm[]), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
+      const html = els.lensesRuler.innerHTML
+      const tagFor = (term: string) => {
+        const idx = html.indexOf(`data-term="${term}"`)
+        const start = html.lastIndexOf('<g', idx)
+        const end = html.indexOf('>', idx)
+        return html.slice(start, end + 1)
+      }
+      assert.match(tagFor('ponteforte'), /ruler-bridge/)
+      assert.doesNotMatch(tagFor('pontefraca'), /ruler-bridge/)
     })
   })
 })

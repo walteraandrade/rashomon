@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { ATLAS_KINDS, attentionParams, candidatesQuery, compareParams, docsParams, endpoint, json, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams, candidatesQuery, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -195,6 +195,13 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(qp.get('kind'), 'word,hashtag,phrase')
     assert.equal(qp.has('domain'), false)
     assert.equal(qp.has('lean'), false)
+  })
+
+  it('compareParams and lensesParams always send bridges=1, no toggle (issue #219 AC4/AC14)', () => {
+    const compareQp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' })
+    assert.equal(compareQp.get('bridges'), '1')
+    const lensesQp = lensesParams({ a: 'all', b: 'lean:right', days: '30', limit: '40' })
+    assert.equal(lensesQp.get('bridges'), '1')
   })
 })
 

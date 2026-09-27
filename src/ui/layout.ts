@@ -1,4 +1,4 @@
-import { label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { fmt, label, score, type Box, type CenterBox, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
@@ -389,4 +389,56 @@ export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], wi
   const fits = all.filter((t) => t.count === hi).map((t) => fitSize(measure, label(t), maxWidth))
   const top = Math.max(WEEK_SIZE_MIN + 2, Math.min(WEEK_SIZE_MAX, ...fits))
   return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
+}
+
+// Figure 7 (issue #216): the day with the maximum value in a { day, value } series, oldest day
+// winning a tie, or null on an all-zero series -- a peak of zero is no peak at all. Shared by
+// both the mentions series (its own count) and the Wikipedia pageviews series (its own views),
+// each already reduced to the one number it scores by.
+export type AttentionSeriesPoint = { day: string; value: number }
+
+export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
+  let best: AttentionSeriesPoint | null = null
+  for (const point of series) if (point.value > 0 && (!best || point.value > best.value)) best = point
+  return best?.day ?? null
+}
+
+export const ATTENTION_SIZE_MIN = 10
+export const ATTENTION_SIZE_MAX = 30
+export const ATTENTION_ROW_WIDTH = 640
+
+// One ramp per row, each computed off its own maximum only: mentions and pageviews differ by
+// orders of magnitude and are never allowed to distort one another (issue #216 AC4).
+const attentionSizes = (values: number[]): number[] => {
+  const max = Math.max(0, ...values)
+  if (max <= 0) return values.map(() => ATTENTION_SIZE_MIN)
+  return values.map((v) => Math.round(ATTENTION_SIZE_MIN + (ATTENTION_SIZE_MAX - ATTENTION_SIZE_MIN) * (Math.max(0, v) / max)))
+}
+
+export type AttentionMark = { day: string; x: number; size: number; w: number; h: number; text: string }
+export type AttentionRows = { width: number; mentions: AttentionMark[]; views: AttentionMark[] }
+
+// Same glow/hit/text triad as the ruler's and the week's own marks: a box sized to fit the
+// formatted number at this mark's own size, never the raw font-size ramp alone.
+const attentionBox = (measure: Measure, value: number, size: number) => {
+  const text = fmt(value)
+  const w = Math.round(measure(text, size, FONT_MONO, 500)) + 14
+  const h = Math.round(size * 1.3)
+  return { text, w, h }
+}
+
+// A day axis is monotonic and non-overlapping, so a fixed column grid replaces a beeswarm here.
+// Both series must already be padded to the same day count by the caller (figures/attention.ts
+// derives and aligns the calendar days; this function only lays out whatever it is handed).
+export const attentionLayout = (measure: Measure, mentions: { day: string; count: number }[], views: { day: string; views: number }[], width = ATTENTION_ROW_WIDTH): AttentionRows => {
+  const n = Math.max(mentions.length, views.length, 1)
+  const step = width / n
+  const x = (i: number) => Math.round(step * (i + 0.5))
+  const mentionSizes = attentionSizes(mentions.map((m) => m.count))
+  const viewSizes = attentionSizes(views.map((v) => v.views))
+  return {
+    width,
+    mentions: mentions.map((m, i) => ({ day: m.day, x: x(i), size: mentionSizes[i], ...attentionBox(measure, m.count, mentionSizes[i]) })),
+    views: views.map((v, i) => ({ day: v.day, x: x(i), size: viewSizes[i], ...attentionBox(measure, v.views, viewSizes[i]) })),
+  }
 }

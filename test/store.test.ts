@@ -281,6 +281,20 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
     assert.deepEqual(await insertDocsP([group[0], group[2]], persons, 2), { written: 0, enriched: 0, failed: 0 })
     assert.deepEqual(await derivedCounts(uris[0]), counts)
   })
+
+  // A lone UTF-16 surrogate (no partner to pair with) survives as a JS string, but
+  // JSON.stringify escapes it as \ud800 and jsonb rejects that escape with 22P02 -- unlike a
+  // well-formed string, which round-trips through jsonb unchanged. The per-doc replay isolates
+  // it exactly like the foreign-key failure above: the doc itself fails, its group-mate lands.
+  it('isolates a doc whose text holds a lone UTF-16 surrogate: it fails, its group-mate lands', async () => {
+    const surrogateGroup = [
+      { source: 'rss' as const, uri: 'https://example.org/surrogate/a', text: 'lula fala \ud800 sobre a pauta', publishedAt: now(), domain: 'example.org' },
+      { source: 'rss' as const, uri: 'https://example.org/surrogate/b', text: 'lula fala sobre a pauta normal', publishedAt: now(), domain: 'example.org' },
+    ]
+    assert.deepEqual(await insertDocsP(surrogateGroup, persons, 2), { written: 1, enriched: 0, failed: 1 })
+    assert.equal(await derivedCounts(surrogateGroup[0].uri), null)
+    assert.equal((await derivedCounts(surrogateGroup[1].uri))?.persons, 1)
+  })
 })
 
 describe('uriLayers splits duplicate uris into separate, uri-unique layers', () => {

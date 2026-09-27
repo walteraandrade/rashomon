@@ -83,9 +83,11 @@ transaction open across an arbitrary amount of work. A third bound sits on the d
 - **Batches.** Person, term and candidate rows go in through `unnest`, one statement per batch instead of
   one per row, with `on conflict do nothing` so replaying a batch is a no-op rather than a duplicate-key
   failure. The person seed is upserted the same way, from json, because `unnest` on a `text[][]` would
-  flatten one person's aliases into the next. The document upsert itself is batched the same way: one
-  multi-row statement per `writeBatch` chunk (`uriLayers` splits out a repeated uri, since one statement
-  cannot conflict-update the same row twice), instead of one `insert ... on conflict` per document.
+  flatten one person's aliases into the next. The document upsert itself is batched too, but as one
+  `jsonb_to_recordset($1::jsonb)` call per `writeBatch` chunk rather than `unnest` — the driver rejects an
+  all-null or mixed-type array, which a batch of documents with nullable columns routinely is, so the whole
+  chunk binds as one jsonb value instead (`uriLayers` splits out a repeated uri, since one statement cannot
+  conflict-update the same row twice), instead of one `insert ... on conflict` per document.
 - **Transactions.** `insertDoc` writes a document and everything derived from it in one transaction: a
   document can never end up in `docs` without the person, term and candidate rows it implies. `pnpm ingest`
   uses the bulk form, which commits a group of documents at a time; a group that fails rolls back whole and

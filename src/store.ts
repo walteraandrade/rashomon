@@ -36,7 +36,7 @@ const UPSERT_DOC_SQL = `insert into docs (source, uri, text, published_at, extra
         or docs.country is distinct from coalesce(docs.country, excluded.country)
         or docs.tone is distinct from (case when docs.source = any($10::text[]) then coalesce(docs.tone, excluded.tone) else null end)
         or length(excluded.text) > length(docs.text)
-     returning id, (xmax = 0) as inserted, (text = $3) as took_incoming`
+     returning id, source, extra_terms, extra_names, (xmax = 0) as inserted, (text = $3) as took_incoming`
 const upsertDocParams = (doc: RawDoc) => [
   doc.source,
   doc.uri,
@@ -49,7 +49,7 @@ const upsertDocParams = (doc: RawDoc) => [
   JSON.stringify(doc.extraNames ?? []),
   tonedSources,
 ]
-type UpsertRow = { id: number; inserted: boolean; took_incoming: boolean }
+type UpsertRow = { id: number; source: Source; extra_terms: Term[]; extra_names: string[]; inserted: boolean; took_incoming: boolean }
 
 export const writeBatchRows = () => clampEnv(process.env.WRITE_BATCH_ROWS, 500, 1, 10_000)
 export const writeBatchDocs = () => clampEnv(process.env.WRITE_BATCH_DOCS, 200, 1, 5_000)
@@ -170,7 +170,7 @@ const writeBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps: Perso
         const result = outcome(row)
         if (result === 'unchanged') return a
         return {
-          derived: [...a.derived, derive(row.id, doc, ps, lexicon)],
+          derived: [...a.derived, derive(row.id, { ...doc, source: row.source, extraTerms: row.extra_terms, extraNames: row.extra_names }, ps, lexicon)],
           stale: result === 'enriched' ? [...a.stale, row.id] : a.stale,
           written: a.written + (result === 'inserted' ? 1 : 0),
           enriched: a.enriched + (result === 'enriched' ? 1 : 0),

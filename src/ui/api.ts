@@ -2,8 +2,11 @@ import { routeOf, span } from './perf.js'
 
 export const endpoint = (personId: string) => '/api/people/' + encodeURIComponent(personId)
 
-// word,hashtag,phrase — the full set. GDELT themes are no longer collected or served.
-export const ATLAS_KINDS = 'word,hashtag,phrase'
+// word,hashtag,phrase,org — the full set the atlas (figure 1) requests. GDELT themes are no longer collected or served.
+export const ATLAS_KINDS = 'word,hashtag,phrase,org'
+
+// The fixed set figures 3, 4, 5 and 6 send, unaffected by ATLAS_KINDS gaining org.
+const FIXED_KINDS = 'word,hashtag,phrase'
 
 export type GraphOpts = { days: string; sort: string; limit: string; source: string; kind?: string; min?: string }
 
@@ -81,21 +84,21 @@ export const loadCandidates = (queryParams: URLSearchParams, signal?: AbortSigna
 
 // /api/compare is not nested under /people/:id; both person ids travel as query params.
 export const compareParams = ({ a, b, days, source, limit }: { a: string; b: string; days: string; source: string; limit: string }) =>
-  new URLSearchParams({ a, b, days, source, limit, kind: ATLAS_KINDS })
+  new URLSearchParams({ a, b, days, source, limit, kind: FIXED_KINDS })
 
 export const loadCompare = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/compare?' + queryParams, signal)
 
 // days/baseline/limit/min stay at the route's own defaults — the figure never exposes them —
 // sent explicitly so the figure keeps working the day the server default changes again.
 export const risingParams = ({ source }: { source: string }) =>
-  new URLSearchParams({ days: '7', baseline: '30', source, kind: ATLAS_KINDS, limit: '40', min: '3' })
+  new URLSearchParams({ days: '7', baseline: '30', source, kind: FIXED_KINDS, limit: '40', min: '3' })
 
 export const loadRising = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
   json(endpoint(personId) + '/rising?' + queryParams, signal)
 
 // days stays fixed at 7, never exposed as a control (issue #147 §4); limit is the only figure
-// value, kind the full atlas set.
-export const weekParams = ({ source, limit }: { source: string; limit: string }) => new URLSearchParams({ days: '7', source, kind: ATLAS_KINDS, limit })
+// value, kind the fixed word/hashtag/phrase set.
+export const weekParams = ({ source, limit }: { source: string; limit: string }) => new URLSearchParams({ days: '7', source, kind: FIXED_KINDS, limit })
 
 export const loadWeek = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/week?' + queryParams, signal)
 
@@ -109,7 +112,7 @@ export const loadTimeline = (personId: string, queryParams: URLSearchParams, sig
 // `a`/`b` travel as raw tokens (domain:<host>, lean:<value>, source:<name>, or all); the server
 // parses and echoes back the normalized one, never the malformed input.
 export const lensesParams = ({ a, b, days, limit }: { a: string; b: string; days: string; limit: string }) =>
-  new URLSearchParams({ a, b, days, limit, kind: ATLAS_KINDS })
+  new URLSearchParams({ a, b, days, limit, kind: FIXED_KINDS })
 
 export const loadLenses = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/lenses?' + queryParams, signal)
 

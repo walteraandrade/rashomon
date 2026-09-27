@@ -92,7 +92,7 @@ export const weekDayLabel = (startIso: string) => {
   return `${weekday} ${day}`
 }
 
-export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' }
+export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão', org: 'Organização' }
 
 export const sourceLabels: Record<string, string> = {
   all: 'todas as fontes',

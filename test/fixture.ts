@@ -220,6 +220,24 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://lentesteste.example/59', text: 'Lula recebe Luiz em evento de posse', publishedAt: daysAgo(3900), domain: 'lentesteste.example' },
   { source: 'rss', uri: 'https://lentesteste.example/60', text: 'Lula recebe Luiz outra vez no palacio', publishedAt: daysAgo(3901), domain: 'lentesteste.example' },
   { source: 'rss', uri: 'https://lentesteste.example/61', text: 'Lula e Inacio se encontram no Planalto', publishedAt: daysAgo(3902), domain: 'lentesteste.example' },
+  // doc 62: issue #209's org-kind fixture, a gkg doc about lula carrying two extraTerms of kind
+  // 'org' (as the collector would produce from V1Organizations). Dated past every other pinned
+  // window (>3902 days), so nothing else shifts; vocabulary ("assina", "convenio") unused
+  // elsewhere in the fixture.
+  {
+    source: 'gkg',
+    uri: 'https://gdeltproject.org/62',
+    text: 'Lula assina convenio em cerimonia oficial',
+    publishedAt: daysAgo(4000),
+    domain: 'gdeltproject.org',
+    tone: 0.3,
+    extraTerms: [
+      { term: 'petrobras', kind: 'org' },
+      { term: 'banco central', kind: 'org' },
+      // Same bare word as lula's own alias: must be dropped from her graph like any own-name term.
+      { term: 'lula', kind: 'org' },
+    ],
+  },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

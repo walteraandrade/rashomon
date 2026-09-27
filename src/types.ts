@@ -34,11 +34,11 @@ export type RawDoc = {
 // collector error type is a visible addition here; gkg and rss raise their own tagged class.
 export type CollectorError = ResponseTooLarge | BlueskyError | GkgError | RssError | HttpClientError.HttpClientError | Schema.SchemaError | Cause.TimeoutError
 export type Collector = (persons: Person[]) => Effect.Effect<RawDoc[], CollectorError, HttpClient.HttpClient | SqlClient.SqlClient>
-export type Term = { term: string; kind: 'hashtag' | 'word' | 'phrase' }
+export type Term = { term: string; kind: 'hashtag' | 'word' | 'phrase' | 'org' }
 // A 'phrase' term is several words read as one unit: a proper noun the writer capitalized
 // ('alexandre de moraes'), or a collocation the corpus itself shows sticking together
-// ('primeiro turno'). The lexicon of the latter is built by `pnpm reindex` (src/phrases.ts)
-// and passed back into extraction, so ingest and reindex tag the same pairs.
+// ('primeiro turno'). The lexicon of the latter is built by `pnpm reindex` (src/phrases.ts) and
+// passed back into extraction. 'org' is GDELT-only, read from a gkg row, never derived from text.
 export type Phrases = ReadonlySet<string>
 // `persons` is every tracked person: the window around the mention (src/scorers/window.ts) needs
 // the other aliases that claim a span first, and the person's own `exclude` names.

@@ -618,6 +618,15 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
     assert.doesNotMatch(String(wordMarkup(placed({ testimony: { score: -4.9, n: 2 } }), 'count', person.score)), /--mask/, 'under the floor: title yes, colour no')
   })
 
+  // AC13: wordMarkup's <g class="atlas-word"> carries a data-kind attribute matching the node's
+  // own kind, org included, so atlas.css's dashed-underline rule can target it.
+  it('wordMarkup carries data-kind matching the node kind, for word/hashtag/phrase/org (issue #209 AC13)', () => {
+    for (const kind of ['word', 'hashtag', 'phrase', 'org']) {
+      const markup = String(wordMarkup(placed({ kind }), 'count', person.score))
+      assert.match(markup, new RegExp(`<g class="atlas-word"[^>]*\\sdata-kind="${kind}"`), `expected data-kind="${kind}" for a ${kind} node`)
+    }
+  })
+
   it('paintColumns colours cards the same way and spells the score out', () => {
     withFakeDocument(['columns'], (els) => {
       const nodes = [

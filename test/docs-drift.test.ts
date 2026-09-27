@@ -294,11 +294,11 @@ describe('docs/operations.md states the dependency and size facts', () => {
 })
 
 describe('docs facts', () => {
-  it("kind's documented accepted values are exactly hashtag, word and phrase, never theme", () => {
+  it("kind's documented accepted values are exactly hashtag, org, phrase and word, never theme (issue #209)", () => {
     const m = /`kind`:\s*([^.\n]*)/.exec(docsText)
     assert.ok(m, 'no page documents what values `kind` accepts')
     const values = [...m![1].matchAll(/`(\w+)`/g)].map((x) => x[1]).sort()
-    assert.deepEqual(values, ['hashtag', 'phrase', 'word'], "docs/api.md's kind line must list exactly hashtag, word and phrase")
+    assert.deepEqual(values, ['hashtag', 'org', 'phrase', 'word'], "docs/api.md's kind line must list exactly hashtag, org, phrase and word")
   })
 
   it('pnpm purge themes is documented, and what it clears is documented alongside it', () => {
@@ -315,6 +315,14 @@ describe('docs facts', () => {
     const around = docsText.slice(Math.max(0, idx - 80), idx + 160)
     assert.doesNotMatch(around, /reachable only by name/i, 'docs must stop describing index.html as reachable legacy UI')
     assert.match(around, /(gone|removed|deleted|no longer)/i, 'docs must say index.html is gone')
+  })
+
+  // AC10: org is sourced only from GDELT/gkg and never derived from text for any other source.
+  it('the docs state org is sourced only from GDELT/gkg, never derived for any other source (issue #209 AC10)', () => {
+    assert.match(docsText, /\borg\b[\s\S]{0,400}\bGDELT\b/, 'the docs must state org comes from GDELT, in prose near the word org')
+    const idx = docsText.search(/\borg\b[\s\S]{0,400}\bGDELT\b/)
+    const around = docsText.slice(Math.max(0, idx - 50), idx + 500)
+    assert.match(around, /never|only|no other source/i, 'the docs must state org is exclusive to GDELT, not merely mentioned alongside it')
   })
 
   it('CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
@@ -335,9 +343,9 @@ describe('docs facts', () => {
     assert.doesNotMatch(apiTs, /atlas-legacy\.html/)
   })
 
-  it('ATLAS_KINDS itself is unchanged', () => {
+  it('ATLAS_KINDS now requests org too (issue #209)', () => {
     const apiTs = readFileSync(join(root, 'src/ui/api.ts'), 'utf8')
-    assert.match(apiTs, /ATLAS_KINDS = 'word,hashtag,phrase'/)
+    assert.match(apiTs, /ATLAS_KINDS = 'word,hashtag,phrase,org'/)
   })
 
 })

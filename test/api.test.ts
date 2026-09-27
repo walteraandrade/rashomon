@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { attentionParams, candidatesQuery, compareParams, docsParams, endpoint, json, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams, candidatesQuery, compareParams, docsParams, endpoint, json, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -88,8 +88,8 @@ describe('params', () => {
     assert.equal(p.get('sort'), 'pmi')
     assert.equal(p.get('limit'), '18')
     assert.equal(p.get('min'), '2')
-    // Not 'all': the atlas names the three kinds it wants (see ATLAS_KINDS in api.js).
-    assert.equal(p.get('kind'), 'word,hashtag,phrase')
+    // Not 'all': the atlas names the four kinds it wants (see ATLAS_KINDS in api.js).
+    assert.equal(p.get('kind'), 'word,hashtag,phrase,org')
     assert.equal(p.get('source'), 'all')
     // No outlet: picking one is a reading inside the second figure, so it never reaches a route.
     assert.equal(p.has('domain'), false)
@@ -255,5 +255,13 @@ describe('sparklineParams / loadTimeline, the inspector sparkline', () => {
     const calls = stubFetch(true, [])
     await loadTimeline('lula', sparklineParams('reforma', 'word'))
     assert.equal(calls[0].url, '/api/people/lula/timeline?' + sparklineParams('reforma', 'word').toString())
+  })
+})
+
+// AC12: ATLAS_KINDS becomes 'word,hashtag,phrase,org' — the atlas page's own kind= request
+// grows to the full four-kind set, additive over the pre-#209 three.
+describe('ATLAS_KINDS gains org (issue #209 AC12)', () => {
+  it("ATLAS_KINDS equals 'word,hashtag,phrase,org'", () => {
+    assert.equal(ATLAS_KINDS, 'word,hashtag,phrase,org')
   })
 })

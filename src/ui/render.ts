@@ -24,6 +24,8 @@ import {
   testimonyFocus,
   testimonyPosition,
   trendOf,
+  type AttentionDay,
+  type AttentionMentionDay,
   type Candidate,
   type Compare,
   type CompareSide,
@@ -50,7 +52,7 @@ import {
   weekDayIso,
   weekDayLabel,
 } from './format.js'
-import { FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, rulerLayout, routesFrom, swarm, weekLayout, type RulerItem, type WeekColumnLayout } from './layout.js'
+import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, peakDay, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
 import { axis, frame, overflowList } from './marks.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
@@ -1333,5 +1335,114 @@ export const paintWeekError = () => {
   chart.setAttribute('aria-busy', 'false')
   chart.innerHTML = html`<p class="note">Não foi possível carregar a semana.</p>`
   const note = $('weekNote')
+  if (note) note.textContent = ''
+}
+
+// Figure 7 (issue #216): Wikipedia pageviews against press mentions. Each row draws its own
+// svg with its own axis (marks.ts's shared axis(), cls="attention"), the same tick geometry in
+// both -- attentionLayout sizes each row off its own maximum only, so the two are never read as
+// one scale. The peak-to-peak lag is a note, never a causal claim, never drawn when either
+// series has no peak. Same glow/hit/text triad as the ruler's and the week's own marks.
+const ATTENTION_ROW_HEIGHT = 64
+
+const dayWord = (n: number) => (n === 1 ? 'dia' : 'dias')
+
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+
+// lag > 0: views peaked after mentions (press led). lag < 0: views peaked first (public led).
+const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
+  const lag = daysBetween(mentionsPeak, viewsPeak)
+  if (lag > 0) return `a imprensa veio ${lag} ${dayWord(lag)} antes`
+  if (lag < 0) return `o público buscou ${Math.abs(lag)} ${dayWord(Math.abs(lag))} antes`
+  return 'os dois picos caíram no mesmo dia'
+}
+
+const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => {
+  if (mentionsPeak && viewsPeak) return attentionLagSentence(mentionsPeak, viewsPeak)
+  if (mentionsPeak && !viewsPeak) return 'sem dado de pageviews para esta pessoa'
+  if (!mentionsPeak && viewsPeak) return 'sem dado de menções para esta pessoa nesta janela'
+  return 'sem dado suficiente para comparar atenção e menções nesta janela'
+}
+
+const attentionMarkMarkup = (mark: AttentionMark, half: number, selected: string | null, unit: string) => {
+  const isSelected = selected === mark.day
+  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" style="--size:${mark.size}px" transform="translate(${mark.x},${half})" data-day="${mark.day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${mark.day}, ${mark.text} ${unit}"><title>${mark.day} · ${mark.text} ${unit}</title><rect class="attention-glow" x="${-mark.w / 2 - 4}" y="${-mark.h / 2 - 3}" width="${mark.w + 8}" height="${mark.h + 6}"/><rect class="attention-hit" x="${-mark.w / 2}" y="${-mark.h / 2}" width="${mark.w}" height="${mark.h}"/><text class="attention-text" text-anchor="middle" dominant-baseline="central">${mark.text}</text></g>`
+}
+
+const attentionRowMarkup = (row: 'mentions' | 'views', marks: AttentionMark[], width: number, selected: string | null, headLabel: string, total: number, unit: string) => {
+  const half = ATTENTION_ROW_HEIGHT / 2
+  return html`<div class="attention-row" data-row="${row}"><div class="attention-row-head"><span>${headLabel}</span><span>${fmt(total)} ${unit}</span></div>${frame(
+    { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}`, role: 'group', ariaLabel: headLabel },
+    html`${axis({ x0: 0, x1: width, y: half, ticks: marks.map((m) => m.x), cls: 'attention' })}${marks.map((m) => attentionMarkMarkup(m, half, selected, unit))}`,
+  )}</div>`
+}
+
+export const paintAttention = ({
+  mentions,
+  views,
+  metrics,
+  selected,
+  onPick,
+}: {
+  mentions: AttentionMentionDay[]
+  views: AttentionDay[]
+  metrics: Measure
+  selected: string | null
+  onPick: (day: string) => void
+}) => {
+  const chart = $('attentionChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'false')
+  const layout = attentionLayout(metrics, mentions, views, ATTENTION_ROW_WIDTH)
+  const mentionsTotal = mentions.reduce((a, m) => a + m.count, 0)
+  const viewsTotal = views.reduce((a, v) => a + v.views, 0)
+  chart.innerHTML = html`${attentionRowMarkup('mentions', layout.mentions, layout.width, selected, 'Menções', mentionsTotal, 'documentos')}${attentionRowMarkup('views', layout.views, layout.width, selected, 'Pageviews (Wikipédia)', viewsTotal, 'visualizações')}`
+  for (const el of queryAll('[data-day]', chart)) {
+    const pick = () => onPick(String(el.dataset.day))
+    el.addEventListener('click', pick)
+    el.addEventListener('keydown', (event) => {
+      const e = event as KeyboardEvent
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        pick()
+      }
+    })
+  }
+  const note = $('attentionNote')
+  const mentionsPeak = peakDay(mentions.map((m) => ({ day: m.day, value: m.count })))
+  const viewsPeak = peakDay(views.map((v) => ({ day: v.day, value: v.views })))
+  if (note) note.textContent = attentionNoteText(mentionsPeak, viewsPeak)
+}
+
+const ATTENTION_GHOST_X = [60, 160, 260, 360, 460, 560]
+
+export const paintAttentionLoading = () => {
+  const chart = $('attentionChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'true')
+  const width = ATTENTION_ROW_WIDTH
+  const half = ATTENTION_ROW_HEIGHT / 2
+  const ghostRow = (row: 'mentions' | 'views') =>
+    html`<div class="attention-row" data-row="${row}">${ghostBar('ghost-line is-short')}${frame(
+      { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}` },
+      html`${axis({ x0: 0, x1: width, y: half, ticks: ATTENTION_GHOST_X, cls: 'attention' })}${ATTENTION_GHOST_X.map((x) => html`<rect class="ghost" x="${x - 14}" y="${half - 10}" width="28" height="20" rx="5"/>`)}`,
+    )}</div>`
+  chart.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostRow('mentions')}${ghostRow('views')}</div><p class="sr-only">Lendo a atenção.</p>`
+  const note = $('attentionNote')
+  if (note) note.textContent = ''
+}
+
+export const paintAttentionError = () => {
+  const chart = $('attentionChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'false')
+  chart.innerHTML = html`<p class="note">Não foi possível carregar a atenção.</p>`
+  const note = $('attentionNote')
   if (note) note.textContent = ''
 }

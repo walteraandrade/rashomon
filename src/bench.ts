@@ -156,6 +156,8 @@ const measurePhase = async () => {
   const dbBytes = (await db.query<{ bytes: number }>(`select pg_database_size(current_database())::int as bytes`)).rows[0].bytes
 
   const person = persons.find((p) => p.id === PERSON)!
+  const compareWith = persons.find((p) => p.id === (PERSON === 'tarcisio' ? 'lula' : 'tarcisio'))
+  if (!compareWith) throw new Error(`bench compare needs a person other than ${PERSON}`)
   const ids = (
     await db.query<{ id: string }>(
       `select kind || ':' || term as id from doc_terms t join doc_persons p on p.doc_id = t.doc_id
@@ -178,6 +180,20 @@ const measurePhase = async () => {
     ['tone', queries.tone({ days: 30, min: 3 })],
     ['testimonySummary', queries.testimonySummary(person, { days: 30, source: 'all', method: 'stub', min: 3 })],
     ['candidates', queries.candidates({ days: 7, min: 5, limit: 50 })],
+    ['graphFast', queries.graphFast(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
+    ['agenda', queries.agenda({ days: 30, source: 'all', min: 5, limit: 30 })],
+    ['compare', queries.compare(person, compareWith, { ...scope, limit: 40 })],
+    ['lenses', queries.lenses(person, {
+      days: 30,
+      kind: 'all',
+      limit: 40,
+      a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
+      b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
+    })],
+    ['comention', queries.comention({ days: 30, source: 'all', lean: 'all', min: 3 })],
+    ['attention', queries.attention(person, { days: 30 })],
+    ['termTestimony', queries.termTestimony(person, scope, 'stub', ids)],
+    ['weekTestimony', queries.weekTestimony(person, { ...scope, days: 7, limit: 8 }, 'stub')],
   ]
 
   const explained: [string, string][] = []

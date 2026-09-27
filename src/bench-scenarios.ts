@@ -41,6 +41,12 @@ export const scenarios: Scenario[] = [
 
   s('rising.default', 'rising', (p) => `/api/people/${p}/rising?days=7&baseline=30`),
   s('candidates.default', 'candidates', () => `/api/candidates?days=7&min=5`),
+
+  s('compare.default', 'compare', (p) => `/api/compare?a=${p}&b=${p === 'tarcisio' ? 'lula' : 'tarcisio'}&days=30`),
+  s('lenses.default', 'lenses', (p) => `/api/people/${p}/lenses?days=30&a=source:gkg&b=source:rss`),
+  s('agenda.default', 'agenda', () => `/api/agenda?days=30`),
+  s('comention.default', 'comention', () => `/api/comention?days=30`),
+  s('attention.default', 'attention', (p) => `/api/people/${p}/attention?days=30`),
 ]
 
 // What `public/atlas.html` fires on one atlas load, in order. Measured as a group so the

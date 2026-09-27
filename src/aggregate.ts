@@ -217,7 +217,7 @@ const outletTermsQuery = (days: number, person: Person, top = OUTLET_TERMS_TOP) 
   p as (
     select a.domain, t.term, t.kind, count(*)::int as c_pt
     from doc_terms t join about a on a.id = t.doc_id
-    where a.domain is not null and not ${isName(sql.raw('t.term'), exclude)}
+    where a.domain is not null and a.domain <> '' and not ${isName(sql.raw('t.term'), exclude)}
     group by a.domain, t.term, t.kind
     having count(*) >= ${OUTLET_TERMS_FLOOR}
   ),

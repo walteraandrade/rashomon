@@ -376,7 +376,7 @@ export const paintOutlets = ({
     const neighborLines = r.neighbors.slice(0, 5)
     return html`${button}<dl class="metric stat"><div><dt>Vocabulário mais parecido com</dt><dd>${
       neighborLines.length
-        ? neighborLines.map((nb) => html`<span class="outlet-neighbor">${nb.domain} — <span class="n">${nb.similarity.toFixed(2)}</span></span>`)
+        ? neighborLines.map((nb) => html`<span class="outlet-neighbor">${nb.domain} · <span class="n">${nb.similarity.toFixed(2)}</span></span>`)
         : 'Nenhum veículo com vocabulário parecido neste recorte'
     }</dd></div></dl>`
   }
@@ -406,7 +406,7 @@ export const paintOutlets = ({
     ...(ungrouped.length ? [groupMarkup('Sem agrupamento suficiente', ungrouped)] : []),
   ]
   $('outletList').innerHTML = merged.length
-    ? html`${groupSections}<p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si. Grupos e vocabulário parecido vêm da construção da janela, não da consulta ao vivo — podem ficar desatualizados entre construções.</p>`
+    ? html`${groupSections}<p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si. Grupos e vocabulário parecido vêm da construção da janela, não da consulta ao vivo, e podem ficar desatualizados entre construções.</p>`
     : '<p class="note">Nenhum veículo neste recorte.</p>'
   queryAll('[data-domain]', $('outletList')).forEach((el) =>
     el.addEventListener('click', () => {

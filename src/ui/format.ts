@@ -331,7 +331,9 @@ export const mergeOutlets = (
   for (const r of rows) {
     const domain = r.domain ?? r.source ?? ''
     if (!domain) continue
-    const entry = byDomain.get(domain) ?? { domain, sources: [], docs: 0, field: r.field ?? null, neighbors: r.neighbors ?? [] }
+    const entry = byDomain.get(domain) ?? { domain, sources: [], docs: 0, field: null, neighbors: [] }
+    if (entry.field === null && r.field != null) entry.field = r.field
+    if (!entry.neighbors.length && r.neighbors?.length) entry.neighbors = r.neighbors
     if (r.source && !entry.sources.includes(r.source)) entry.sources.push(r.source)
     entry.docs += r.docs
     byDomain.set(domain, entry)

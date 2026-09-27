@@ -351,13 +351,14 @@ describe('paintOutlets groups by field and lists a focused outlet\'s neighbours 
     assert.ok(markup.indexOf('a.example') < markup.indexOf('Sem agrupamento suficiente'))
   })
 
-  it('the focused outlet\'s own row lists its neighbours as domain — similarity, or the empty-neighbours line (AC13)', () => {
+  it('the focused outlet\'s own row lists its neighbours as domain and similarity, or the empty-neighbours line (AC13)', () => {
     const focused = withFakeDocument(['domainLabel', 'outletList'], (els) => {
       paintOutlets({ rows, testimony: null, domain: 'a.example', onPick: () => {} })
       return els.outletList.innerHTML
     })
     assert.match(focused, /Vocabulário mais parecido com/)
     assert.match(focused, /b\.example[\s\S]{0,20}0[.,]50/)
+    assert.doesNotMatch(focused, /—/)
 
     const empty = withFakeDocument(['domainLabel', 'outletList'], (els) => {
       paintOutlets({ rows, testimony: null, domain: 'c.example', onPick: () => {} })

@@ -429,6 +429,18 @@ describe('testimonyFocus / foldTestimonyDomains / mergeOutlets: one outlet acros
       { domain: 'g1.globo.com', sources: ['gnews', 'rss'], docs: 5, score: null, n: 0, field: 1, neighbors: [{ domain: 'bbc.com', similarity: 0.5 }] },
     ])
   })
+
+  it('mergeOutlets backfills field/neighbors when the first row for a domain lacks them', () => {
+    const merged = mergeOutlets(
+      [
+        { domain: 'g1.globo.com', source: 'rss', docs: 2, tone: null },
+        { domain: 'g1.globo.com', source: 'gnews', docs: 3, tone: null, field: 1, neighbors: [{ domain: 'bbc.com', similarity: 0.5 }] },
+      ],
+      [],
+    )
+    assert.equal(merged[0].field, 1)
+    assert.deepEqual(merged[0].neighbors, [{ domain: 'bbc.com', similarity: 0.5 }])
+  })
 })
 
 describe('balanceColor: a red/grey-analogue two-hue ramp (issue #91 AC4)', () => {

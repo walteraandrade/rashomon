@@ -218,6 +218,21 @@ export const schema = `
       community int not null,
       primary key (days, source, person_id, term, kind)
     );
+    create table if not exists outlet_fields (
+      days int not null,
+      person_id text not null references persons(id) on delete cascade,
+      domain text not null,
+      field int not null,
+      primary key (days, person_id, domain)
+    );
+    create table if not exists outlet_neighbors (
+      days int not null,
+      person_id text not null references persons(id) on delete cascade,
+      domain text not null,
+      neighbor text not null,
+      similarity float8 not null,
+      primary key (days, person_id, domain, neighbor)
+    );
 `
 
 // sql.unsafe parses one statement per call, unlike the exec() it replaces.
@@ -232,7 +247,18 @@ export const migrate = (): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlC
 export const migrateP = () => runSql(migrate())
 
 // Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
-export const ANALYZED_TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities'] as const
+export const ANALYZED_TABLES = [
+  'docs',
+  'doc_persons',
+  'doc_terms',
+  'doc_candidates',
+  'doc_testimony',
+  'graph_scopes',
+  'graph_terms',
+  'term_communities',
+  'outlet_fields',
+  'outlet_neighbors',
+] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 
 // How many new docs an ingest must write before its statistics refresh is worth the pause.

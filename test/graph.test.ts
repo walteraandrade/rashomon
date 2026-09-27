@@ -469,6 +469,14 @@ describe('senado source (issue #25)', () => {
 describe('sourcesFor', () => {
   before(seed)
 
+  it('docs/api.md names field and neighbors as additive, build-time, and possibly stale relative to the live row (AC10)', () => {
+    const section = /## sources\n[\s\S]*?(?=\n## |$)/.exec(docsText)?.[0] ?? ''
+    assert.match(section, /\bfield\b/)
+    assert.match(section, /\bneighbors\b/)
+    assert.match(section, /window'?s own aggregate build|not the live query/i)
+    assert.match(section, /stale/i)
+  })
+
   it('lists outlets that mention the person with doc counts and tone', async () => {
     const rows = await sourcesFor(tarcisio, graphBase)
     const folha = rows.find((r) => r.domain === 'folha.uol.com.br')
@@ -485,6 +493,63 @@ describe('sourcesFor', () => {
     const rows = await sourcesFor(lula, graphBase)
     assert.ok(!rows.some((r) => r.domain?.endsWith('.bsky.social')), 'no handle may surface as a domain')
     assert.deepEqual(rows.filter((r) => r.source === 'bluesky').map((r) => r.domain), [null])
+  })
+
+  // Issue #218: field/neighbors are additive to every existing row shape, always present, and
+  // null/[] (never absent, never null for neighbors) on a person/window with no aggregate build.
+  it('sources rows carry field and neighbors, additive to every existing field', async () => {
+    const rows = await sourcesFor(tarcisio, graphBase)
+    assert.ok(rows.length > 0)
+    for (const row of rows) {
+      assert.ok('field' in row)
+      assert.ok('neighbors' in row)
+      assert.ok(Array.isArray(row.neighbors), 'neighbors must always be an array, never null')
+      assert.ok(row.field === null || typeof row.field === 'number')
+    }
+    const { docs, tone, tone_n, source, domain, lean, basis } = rows[0]
+    assert.ok(docs !== undefined && tone !== undefined && tone_n !== undefined)
+    assert.ok(source !== undefined && domain !== undefined && lean !== undefined && basis !== undefined)
+  })
+
+  it('a domain with no built aggregate for the window gets field: null, neighbors: []', async () => {
+    await db.query(`delete from outlet_fields`)
+    await db.query(`delete from outlet_neighbors`)
+    const rows = await sourcesFor(tarcisio, graphBase)
+    assert.ok(rows.length > 0)
+    for (const row of rows) {
+      assert.equal(row.field, null)
+      assert.deepEqual(row.neighbors, [])
+    }
+    await buildGraphAggregates(persons)
+  })
+
+  it('sourcesFor rows are the pre-#218 shape plus only field/neighbors, every existing field unchanged in name and meaning (AC7)', async () => {
+    const rows = await sourcesFor(tarcisio, graphBase)
+    assert.ok(rows.length > 0)
+    for (const row of rows) {
+      assert.deepEqual(
+        Object.keys(row).sort(),
+        ['basis', 'docs', 'domain', 'field', 'lean', 'neighbors', 'source', 'tone', 'tone_n'].sort(),
+      )
+    }
+    const folha = rows.find((r) => r.domain === 'folha.uol.com.br')
+    assert.equal(folha?.docs, 1)
+    assert.equal(folha?.tone, -1.5)
+    assert.equal(folha?.tone_n, 1)
+  })
+
+  it('a window/person with no built aggregate, or a domain the build dropped, gets field: null, neighbors: [] -- never absent, never null for neighbors (AC8)', async () => {
+    await db.query(`delete from outlet_fields`)
+    await db.query(`delete from outlet_neighbors`)
+    const rows = await sourcesFor(tarcisio, graphBase)
+    assert.ok(rows.length > 0)
+    for (const row of rows) {
+      assert.ok('field' in row, 'field must always be present, never absent')
+      assert.ok('neighbors' in row, 'neighbors must always be present, never absent')
+      assert.equal(row.field, null)
+      assert.deepEqual(row.neighbors, [])
+    }
+    await buildGraphAggregates(persons)
   })
 })
 

@@ -1,9 +1,9 @@
 import seedJson from '../seed.json' with { type: 'json' }
-import { communities as louvainCommunities, type CommunityEdge } from './communities.js'
+import { communities as louvainCommunities, neighbors as outletNeighbors, type CommunityEdge, type OutletPair } from './communities.js'
 import { db, migrateP } from './db.js'
 import { nameTokens } from './extract.js'
 import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
-import { countryFilter, isName, pmiRank, signatureFloor } from './scoring.js'
+import { countryFilter, isName, outletDomain, pmiRank, signatureFloor } from './scoring.js'
 import { sql } from './sql.js'
 import { inTransaction } from './store.js'
 import type { Person } from './types.js'
@@ -198,11 +198,91 @@ const buildCommunitiesForWindow = async (days: number) => {
   }
 }
 
-// One window per transaction; the community step runs last, over the graph_terms rows just written.
+// Issue #218: each domain's top-40 terms about one person, source='all' only, a fixed
+// build-time floor (c_pt >= 3). PMI reuses the person's own source='all' about/tracked totals.
+const OUTLET_TERMS_TOP = 40
+const OUTLET_TERMS_FLOOR = 3
+const OUTLET_NEIGHBOR_TOP = 5
+
+const outletTermsQuery = (days: number, person: Person, top = OUTLET_TERMS_TOP) => {
+  const exclude = nameTokens(person)
+  return sql`
+  with ${windowScope(days)},
+  about as (
+    select s.id, ${outletDomain} as domain
+    from scope s
+    join docs d on d.id = s.id
+    join doc_persons dp on dp.doc_id = s.id and dp.person_id = ${person.id}
+  ),
+  p as (
+    select a.domain, t.term, t.kind, count(*)::int as c_pt
+    from doc_terms t join about a on a.id = t.doc_id
+    where a.domain is not null and a.domain <> '' and not ${isName(sql.raw('t.term'), exclude)}
+    group by a.domain, t.term, t.kind
+    having count(*) >= ${OUTLET_TERMS_FLOOR}
+  ),
+  scored as (
+    select p.domain, p.term, p.kind, p.c_pt,
+      ln((p.c_pt::float8 * gs.tracked::float8) / (gs.about::float8 * ta.c_t::float8)) / ln(2) as pmi
+    from p
+    join graph_terms_all ta on ta.days = ${days}::int and ta.source = 'all' and ta.term = p.term and ta.kind = p.kind
+    join graph_scopes gs on gs.days = ${days}::int and gs.source = 'all' and gs.person_id = ${person.id}
+  ),
+  ranked as (
+    select domain, term, kind, c_pt,
+      row_number() over (partition by domain order by ${pmiRank(sql.raw('c_pt'))} desc, term, kind) as rn
+    from scored
+  )
+  select domain, term, kind, c_pt from ranked where rn <= ${top} order by domain, kind, term`
+}
+
+const insertOutletFieldsQuery = (days: number, personId: string, domains: string[], fields: number[]) => sql`
+  insert into outlet_fields (days, person_id, domain, field)
+  select ${days}::int, ${personId}, u.domain, u.field
+  from unnest(${domains}::text[], ${fields}::int[]) as u(domain, field)`
+
+const insertOutletNeighborsQuery = (days: number, personId: string, pairs: OutletPair[]) => sql`
+  insert into outlet_neighbors (days, person_id, domain, neighbor, similarity)
+  select ${days}::int, ${personId}, u.domain, u.neighbor, u.similarity
+  from unnest(${pairs.map((p) => p.domain)}::text[], ${pairs.map((p) => p.neighbor)}::text[], ${pairs.map((p) => p.similarity)}::float8[])
+    as u(domain, neighbor, similarity)`
+
+// One neighbours/Louvain pass per (days, person); a self-loop gives an isolated domain its field.
+const buildOutletFieldsForWindow = async (days: number, persons: Person[]) => {
+  await run(sql`delete from outlet_fields where days = ${days}`)
+  await run(sql`delete from outlet_neighbors where days = ${days}`)
+  for (const person of persons) {
+    const { rows } = await run(outletTermsQuery(days, person))
+    const termRows = rows as { domain: string; term: string; kind: string; c_pt: number }[]
+    if (termRows.length === 0) continue
+    const sets = new Map<string, Set<string>>()
+    for (const r of termRows) {
+      if (!sets.has(r.domain)) sets.set(r.domain, new Set())
+      sets.get(r.domain)!.add(`${r.kind}:${r.term}`)
+    }
+    const { pairs, edges } = outletNeighbors(sets, OUTLET_NEIGHBOR_TOP)
+    const connected = new Set(edges.flatMap((e) => [e.a, e.b]))
+    const withLoops: CommunityEdge[] = [...edges, ...[...sets.keys()].filter((d) => !connected.has(d)).map((d) => ({ a: d, b: d, count: 0 }))]
+    const assignment = louvainCommunities(withLoops, COMMUNITY_SEED)
+    const domains: string[] = []
+    const fields: number[] = []
+    for (const domain of sets.keys()) {
+      const field = assignment.get(domain)
+      if (field === undefined) continue
+      domains.push(domain)
+      fields.push(field)
+    }
+    if (domains.length) await run(insertOutletFieldsQuery(days, person.id, domains, fields))
+    if (pairs.length) await run(insertOutletNeighborsQuery(days, person.id, pairs))
+  }
+}
+
+// One window per transaction; communities run last over graph_terms, outlet fields/neighbours after.
 const buildWindow = async (days: number, persons: Person[], top: number) =>
   inTransaction(async () => {
     for (const q of windowStatements(days, persons, top)) await run(q)
     await buildCommunitiesForWindow(days)
+    await buildOutletFieldsForWindow(days, persons)
   })
 
 export type AggregateReport = { windows: number[]; scopes: number; terms: number; ms: number }
@@ -210,7 +290,7 @@ export type AggregateReport = { windows: number[]; scopes: number; terms: number
 // The tables the build fills, for the owner process (ingest, reindex) to analyze afterwards.
 export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms'] as const
 
-export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities'] as const
+export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'outlet_fields', 'outlet_neighbors'] as const
 
 // Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
@@ -235,7 +315,14 @@ export const hasGraphAggregates = async (): Promise<boolean> => {
   return rows[0].built
 }
 
-export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery, window: windowStatements, communityEdges: communityEdgesQuery }
+export const queries = {
+  universe: universeQuery,
+  scopes: scopesQuery,
+  personTerms: personTermsQuery,
+  window: windowStatements,
+  communityEdges: communityEdgesQuery,
+  outletTerms: outletTermsQuery,
+}
 
 const main = async (argv: string[]) => {
   await migrateP()

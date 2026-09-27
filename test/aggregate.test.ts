@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
-import { graphFor, precomputable, queries } from '../src/graph.js'
+import { graphFor, precomputable, queries, sourcesFor } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
 import { inTransaction, insertDocP } from '../src/store.js'
 import { persons, reseed, seed, untrackedPerson } from './fixture.js'
@@ -443,5 +443,182 @@ describe('org-kind terms inside a build window (issue #209)', () => {
     const row = (await fast(lula, q({ kind: 'org', days: '7' }))) as { nodes: { term: string; kind: string }[] } | undefined
     assert.ok(row, 'the fast path must answer this recorte')
     assert.equal(row!.nodes.some((n) => n.term === 'lula'), false)
+  })
+})
+
+// Issue #218: outlet fields and neighbours, one per (days, person, domain), built alongside
+// term_communities inside the same window transaction. tarcisio is the fixture person these
+// docs are about; all dated inside the default 7/30-day windows, undone by after(reseed) so no
+// other describe block in this file (or any other test file) ever sees them.
+describe('outlet fields and neighbours (issue #218)', () => {
+  const tarcisio = persons.find((p) => p.id === 'tarcisio')!
+
+  // Six domains, three docs each, every doc naming tarcisio and carrying "colheita" once: every
+  // pair among them has an identical (word:colheita) term set, so every pairwise Jaccard ties
+  // at 1 -- the fixture for both "two domains share a term" and the top-5-neighbours cap.
+  const colheitaDomains = ['agroinforme.example', 'campovoz.example', 'celeiro.example', 'fazendapress.example', 'ruralnoticias.example', 'sitioinforme.example']
+
+  // A domain sharing nothing with the colheita group: its own singleton field, zero neighbours.
+  const portoDocs = [
+    { source: 'rss' as const, uri: 'https://portovento.example/1', text: 'Tarcísio inaugura terminal de cabotagem no porto', publishedAt: daysAgo(1), domain: 'portovento.example' },
+    { source: 'rss' as const, uri: 'https://portovento.example/2', text: 'Tarcísio detalha plano de cabotagem maritima', publishedAt: daysAgo(2), domain: 'portovento.example' },
+    { source: 'rss' as const, uri: 'https://portovento.example/3', text: 'Tarcísio recebe autoridades sobre cabotagem interna', publishedAt: daysAgo(3), domain: 'portovento.example' },
+  ]
+
+  // Only two docs -- below the 3-doc/3-count floor, so "colheita" never reaches count 3 here
+  // and the domain gets no outlet_fields/outlet_neighbors row at all.
+  const belowFloorDocs = [
+    { source: 'rss' as const, uri: 'https://riomarginal.example/1', text: 'Tarcísio visita riomarginal para debate sobre colheita', publishedAt: daysAgo(1), domain: 'riomarginal.example' },
+    { source: 'rss' as const, uri: 'https://riomarginal.example/2', text: 'Tarcísio reforça riomarginal e colheita em nota', publishedAt: daysAgo(2), domain: 'riomarginal.example' },
+  ]
+
+  before(async () => {
+    await seed()
+    // Same three sentences on every domain, so every one of the six carries the identical
+    // (word:*) set -- every pairwise Jaccard ties at exactly 1.
+    const colheitaTexts = ['Tarcísio comenta a colheita em relato regional', 'Tarcísio acompanha a colheita em nota recente', 'Tarcísio celebra a colheita em declaração pública']
+    for (const domain of colheitaDomains)
+      for (let i = 0; i < colheitaTexts.length; i++)
+        await insertDocP({ source: 'rss', uri: `https://${domain}/${i}`, text: colheitaTexts[i], publishedAt: daysAgo(i + 1), domain }, persons)
+    for (const d of portoDocs) await insertDocP(d, persons)
+    for (const d of belowFloorDocs) await insertDocP(d, persons)
+    await buildGraphAggregates(persons)
+  })
+  after(async () => {
+    await reseed()
+    await buildGraphAggregates(persons)
+  })
+
+  const fieldsFor = async (domain: string) =>
+    (await db.query<{ field: number }>(`select field from outlet_fields where days = 30 and person_id = 'tarcisio' and domain = $1`, [domain])).rows
+
+  const neighborsFor = async (domain: string) =>
+    (
+      await db.query<{ neighbor: string; similarity: number }>(
+        `select neighbor, similarity from outlet_neighbors where days = 30 and person_id = 'tarcisio' and domain = $1 order by similarity desc, neighbor`,
+        [domain],
+      )
+    ).rows
+
+  it('outlet_fields and outlet_neighbors rebuild idempotently', async () => {
+    const fieldsBefore = (await db.query(`select * from outlet_fields order by days, person_id, domain`)).rows
+    const neighborsBefore = (await db.query(`select * from outlet_neighbors order by days, person_id, domain, neighbor`)).rows
+    await buildGraphAggregates(persons)
+    const fieldsAfter = (await db.query(`select * from outlet_fields order by days, person_id, domain`)).rows
+    const neighborsAfter = (await db.query(`select * from outlet_neighbors order by days, person_id, domain, neighbor`)).rows
+    assert.deepEqual(fieldsAfter, fieldsBefore)
+    assert.deepEqual(neighborsAfter, neighborsBefore)
+    const { rows: dupFields } = await db.query<{ n: number }>(
+      `select count(*)::int as n from (select days, person_id, domain, count(*) c from outlet_fields group by 1,2,3 having count(*) > 1) x`,
+    )
+    const { rows: dupNeighbors } = await db.query<{ n: number }>(
+      `select count(*)::int as n from (select days, person_id, domain, neighbor, count(*) c from outlet_neighbors group by 1,2,3,4 having count(*) > 1) x`,
+    )
+    assert.equal(dupFields[0].n, 0)
+    assert.equal(dupNeighbors[0].n, 0)
+  })
+
+  it('a domain below the doc floor gets no field or neighbour row', async () => {
+    assert.deepEqual(await fieldsFor('riomarginal.example'), [])
+    const { rows } = await db.query<{ n: number }>(
+      `select count(*)::int as n from outlet_neighbors where days = 30 and person_id = 'tarcisio' and (domain = 'riomarginal.example' or neighbor = 'riomarginal.example')`,
+    )
+    assert.equal(rows[0].n, 0)
+  })
+
+  it('two domains sharing a term get a nonzero similarity; a non-overlapping pair gets none', async () => {
+    const rows = await neighborsFor('campovoz.example')
+    assert.ok(rows.some((r) => r.neighbor === 'agroinforme.example' && r.similarity > 0))
+    assert.ok(!rows.some((r) => r.neighbor === 'portovento.example'), 'a domain sharing no term must not surface as a neighbour')
+    const { rows: cross } = await db.query<{ n: number }>(
+      `select count(*)::int as n from outlet_neighbors
+       where days = 30 and person_id = 'tarcisio'
+         and (domain = 'portovento.example' or neighbor = 'portovento.example')`,
+    )
+    assert.equal(cross[0].n, 0)
+  })
+
+  it('a domain with a term set but no surviving edge still gets a field', async () => {
+    const rows = await fieldsFor('portovento.example')
+    assert.equal(rows.length, 1)
+    assert.equal(typeof rows[0].field, 'number')
+  })
+
+  it('neighbors are capped at 5 per domain, ordered by similarity desc then domain asc', async () => {
+    const rows = await neighborsFor('campovoz.example')
+    assert.equal(rows.length, 5, 'six colheita domains means five possible neighbours, all capped at 5')
+    assert.ok(rows.every((r) => r.similarity === 1), 'every colheita domain shares the identical single-term set')
+    const expected = colheitaDomains.filter((d) => d !== 'campovoz.example').sort()
+    assert.deepEqual(rows.map((r) => r.neighbor), expected)
+  })
+
+  it('GET-shaped: sourcesFor rides the same build, field/neighbors additive to every existing row', async () => {
+    const rows = await sourcesFor(tarcisio, q({}))
+    const campo = rows.find((r) => r.domain === 'campovoz.example')
+    assert.ok(campo)
+    assert.equal(typeof campo!.field, 'number')
+    assert.equal(campo!.neighbors.length, 5)
+    assert.ok(campo!.neighbors.every((n) => n.similarity === 1))
+    const below = rows.find((r) => r.domain === 'riomarginal.example')
+    assert.ok(below)
+    assert.equal(below!.field, null)
+    assert.deepEqual(below!.neighbors, [])
+  })
+
+  it('sourcesFor off the build universe (source, country, domain, lean) returns field: null and neighbors: []', async () => {
+    const overs: Record<string, string>[] = [{ source: 'gnews' }, { country: 'all' }, { lean: 'right' }, { domain: 'campovoz.example' }]
+    for (const over of overs) {
+      const rows = await sourcesFor(tarcisio, q(over))
+      assert.ok(rows.every((r) => r.field === null && r.neighbors.length === 0), JSON.stringify(over))
+    }
+  })
+
+  it('buildGraphAggregates run twice back-to-back does not throw and leaves no duplicate rows (AC3)', async () => {
+    await assert.doesNotReject(buildGraphAggregates(persons))
+    const { rows: dupFields } = await db.query<{ n: number }>(
+      `select count(*)::int as n from (select days, person_id, domain, count(*) c from outlet_fields group by 1,2,3 having count(*) > 1) x`,
+    )
+    const { rows: dupNeighbors } = await db.query<{ n: number }>(
+      `select count(*)::int as n from (select days, person_id, domain, neighbor, count(*) c from outlet_neighbors group by 1,2,3,4 having count(*) > 1) x`,
+    )
+    assert.equal(dupFields[0].n, 0)
+    assert.equal(dupNeighbors[0].n, 0)
+  })
+
+  it('two domains sharing a term get similarity > 0 in outlet_neighbors; a domain sharing no term with either produces no row against them (AC4)', async () => {
+    const rows = await neighborsFor('agroinforme.example')
+    const toCampovoz = rows.find((r) => r.neighbor === 'campovoz.example')
+    assert.ok(toCampovoz && toCampovoz.similarity > 0)
+    assert.ok(!rows.some((r) => r.neighbor === 'portovento.example'))
+    const { rows: crossCount } = await db.query<{ n: number }>(
+      `select count(*)::int as n from outlet_neighbors where days = 30 and person_id = 'tarcisio'
+       and ((domain = 'agroinforme.example' and neighbor = 'portovento.example') or (domain = 'portovento.example' and neighbor = 'agroinforme.example'))`,
+    )
+    assert.equal(crossCount[0].n, 0)
+  })
+
+  it('a domain below the 3-doc floor never appears as domain or neighbor in outlet_fields/outlet_neighbors for that window/person (AC5)', async () => {
+    assert.deepEqual(await fieldsFor('riomarginal.example'), [])
+    const { rows } = await db.query<{ n: number }>(
+      `select count(*)::int as n from outlet_neighbors where days = 30 and person_id = 'tarcisio'
+       and (domain = 'riomarginal.example' or neighbor = 'riomarginal.example')`,
+    )
+    assert.equal(rows[0].n, 0)
+  })
+
+  it('every domain with a nonempty term set gets exactly one outlet_fields row, including a Louvain singleton with zero surviving edges (AC6)', async () => {
+    const singleton = await fieldsFor('portovento.example')
+    assert.equal(singleton.length, 1)
+    assert.equal(typeof singleton[0].field, 'number')
+    const grouped = await fieldsFor('campovoz.example')
+    assert.equal(grouped.length, 1)
+    assert.equal(typeof grouped[0].field, 'number')
+  })
+
+  it('neighbors are ordered similarity desc then domain asc, a tied group pinning the tie-break (AC9)', async () => {
+    const rows = await neighborsFor('campovoz.example')
+    assert.ok(rows.every((r) => r.similarity === 1), 'every colheita domain ties at similarity 1')
+    const expected = colheitaDomains.filter((d) => d !== 'campovoz.example').sort()
+    assert.deepEqual(rows.map((r) => r.neighbor), expected, 'tied similarity must fall back to domain ascending')
   })
 })

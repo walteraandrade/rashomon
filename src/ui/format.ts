@@ -9,7 +9,17 @@ export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
 export type Doc = { source?: string; uri?: unknown; domain?: string | null; text?: string }
-export type OutletRow = { domain?: string | null; source?: string | null; label?: string | null; docs: number; tone?: number | null }
+// field/neighbors (issue #218): from the window's own aggregate build, not the live query.
+export type OutletNeighbor = { domain: string; similarity: number }
+export type OutletRow = {
+  domain?: string | null
+  source?: string | null
+  label?: string | null
+  docs: number
+  tone?: number | null
+  field?: number | null
+  neighbors?: OutletNeighbor[]
+}
 export type Sample = { id: string; source: string; text: string }
 export type Candidate = { name: string; count: number; sources: number; previous: number; samples: Sample[] }
 export type TestimonyOverall = { score: number | null; n: number }
@@ -315,13 +325,15 @@ export const foldTestimonyDomains = (rows: TestimonyDomainRow[]): { domain: stri
 export const mergeOutlets = (
   rows: OutletRow[],
   testimonyRows: TestimonyDomainRow[],
-): { domain: string; sources: string[]; docs: number; score: number | null; n: number }[] => {
+): { domain: string; sources: string[]; docs: number; score: number | null; n: number; field: number | null; neighbors: OutletNeighbor[] }[] => {
   const scored = new Map(foldTestimonyDomains(testimonyRows).map((d) => [d.domain, d]))
-  const byDomain = new Map<string, { domain: string; sources: string[]; docs: number }>()
+  const byDomain = new Map<string, { domain: string; sources: string[]; docs: number; field: number | null; neighbors: OutletNeighbor[] }>()
   for (const r of rows) {
     const domain = r.domain ?? r.source ?? ''
     if (!domain) continue
-    const entry = byDomain.get(domain) ?? { domain, sources: [], docs: 0 }
+    const entry = byDomain.get(domain) ?? { domain, sources: [], docs: 0, field: null, neighbors: [] }
+    if (entry.field === null && r.field != null) entry.field = r.field
+    if (!entry.neighbors.length && r.neighbors?.length) entry.neighbors = r.neighbors
     if (r.source && !entry.sources.includes(r.source)) entry.sources.push(r.source)
     entry.docs += r.docs
     byDomain.set(domain, entry)

@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import tls from 'node:tls'
 import { after, before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { AGGREGATE_TABLES, POST_BUILD_ANALYZED } from '../src/aggregate.js'
 import { ANALYZED_TABLES, analyzeAfterWrite, analyzeAfterWriteP, analyzeMinDocs, analyzeTables, analyzeTablesP, db, docCount, migrate, migrateP, poolConfig, runSql } from '../src/db.js'
 import { docsText } from './docs.js'
 import { failingSql } from './effect.js'
@@ -236,7 +237,65 @@ describe('graph_terms_all is a temp table, never persisted (issue #203)', () => 
   })
 
   it('ANALYZED_TABLES no longer lists graph_terms_all', () => {
-    assert.deepEqual([...ANALYZED_TABLES], ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities'])
+    assert.deepEqual(
+      [...ANALYZED_TABLES],
+      ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'outlet_fields', 'outlet_neighbors'],
+    )
+  })
+})
+
+describe('outlet_fields and outlet_neighbors schema and table membership (issue #218)', () => {
+  before(seed)
+
+  it('outlet_fields exists with exactly (days int, person_id text, domain text, field int) and that primary key (AC1)', async () => {
+    const cols = (
+      await db.query<{ column_name: string; data_type: string }>(
+        `select column_name, data_type from information_schema.columns where table_name = 'outlet_fields'`,
+      )
+    ).rows
+    assert.deepEqual(
+      cols.map((c) => [c.column_name, c.data_type]).sort(),
+      [['days', 'integer'], ['domain', 'text'], ['field', 'integer'], ['person_id', 'text']].sort(),
+    )
+    const pk = (
+      await db.query<{ column_name: string }>(
+        `select kcu.column_name from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+         where tc.table_name = 'outlet_fields' and tc.constraint_type = 'PRIMARY KEY'
+         order by kcu.ordinal_position`,
+      )
+    ).rows.map((r) => r.column_name)
+    assert.deepEqual(pk, ['days', 'person_id', 'domain'])
+  })
+
+  it('outlet_neighbors exists with exactly (days int, person_id text, domain text, neighbor text, similarity float8) and that primary key (AC1)', async () => {
+    const cols = (
+      await db.query<{ column_name: string; data_type: string }>(
+        `select column_name, data_type from information_schema.columns where table_name = 'outlet_neighbors'`,
+      )
+    ).rows
+    assert.deepEqual(
+      cols.map((c) => [c.column_name, c.data_type]).sort(),
+      [['days', 'integer'], ['domain', 'text'], ['neighbor', 'text'], ['person_id', 'text'], ['similarity', 'double precision']].sort(),
+    )
+    const pk = (
+      await db.query<{ column_name: string }>(
+        `select kcu.column_name from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+         where tc.table_name = 'outlet_neighbors' and tc.constraint_type = 'PRIMARY KEY'
+         order by kcu.ordinal_position`,
+      )
+    ).rows.map((r) => r.column_name)
+    assert.deepEqual(pk, ['days', 'person_id', 'domain', 'neighbor'])
+  })
+
+  it('outlet_fields/outlet_neighbors are not members of AGGREGATE_TABLES, but are members of POST_BUILD_ANALYZED and ANALYZED_TABLES (AC2)', () => {
+    assert.ok(!AGGREGATE_TABLES.includes('outlet_fields' as (typeof AGGREGATE_TABLES)[number]))
+    assert.ok(!AGGREGATE_TABLES.includes('outlet_neighbors' as (typeof AGGREGATE_TABLES)[number]))
+    assert.ok(POST_BUILD_ANALYZED.includes('outlet_fields' as (typeof POST_BUILD_ANALYZED)[number]))
+    assert.ok(POST_BUILD_ANALYZED.includes('outlet_neighbors' as (typeof POST_BUILD_ANALYZED)[number]))
+    assert.ok(ANALYZED_TABLES.includes('outlet_fields'))
+    assert.ok(ANALYZED_TABLES.includes('outlet_neighbors'))
   })
 })
 
@@ -296,6 +355,34 @@ describe('read indexes and planner statistics (issue #44)', () => {
       )
     ).rows.map((r) => r.column_name)
     assert.deepEqual(pk, ['days', 'source', 'person_id', 'term', 'kind'])
+  })
+
+  it('outlet_fields exists with the exact primary key (days, person_id, domain)', async () => {
+    const cols = (await db.query<{ column_name: string }>(`select column_name from information_schema.columns where table_name = 'outlet_fields'`)).rows
+    assert.deepEqual(cols.map((c) => c.column_name).sort(), ['days', 'domain', 'field', 'person_id'])
+    const pk = (
+      await db.query<{ column_name: string }>(
+        `select kcu.column_name from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+         where tc.table_name = 'outlet_fields' and tc.constraint_type = 'PRIMARY KEY'
+         order by kcu.ordinal_position`,
+      )
+    ).rows.map((r) => r.column_name)
+    assert.deepEqual(pk, ['days', 'person_id', 'domain'])
+  })
+
+  it('outlet_neighbors exists with the exact primary key (days, person_id, domain, neighbor)', async () => {
+    const cols = (await db.query<{ column_name: string }>(`select column_name from information_schema.columns where table_name = 'outlet_neighbors'`)).rows
+    assert.deepEqual(cols.map((c) => c.column_name).sort(), ['days', 'domain', 'neighbor', 'person_id', 'similarity'])
+    const pk = (
+      await db.query<{ column_name: string }>(
+        `select kcu.column_name from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+         where tc.table_name = 'outlet_neighbors' and tc.constraint_type = 'PRIMARY KEY'
+         order by kcu.ordinal_position`,
+      )
+    ).rows.map((r) => r.column_name)
+    assert.deepEqual(pk, ['days', 'person_id', 'domain', 'neighbor'])
   })
 
   it('adds no redundant index on docs: the rejected candidates are not in the schema', async () => {

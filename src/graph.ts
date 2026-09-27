@@ -121,7 +121,16 @@ export type AttentionQuery = { days: number }
 // graphFor adds/omits the key on the response object, never leaving it present-but-undefined.
 type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null; community?: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
-type SourceRow = { domain: string | null; source: string; docs: number; tone: number | null; tone_n: number }
+// field/neighbors: issue #218, from the window's own aggregate build, never the live query.
+type SourceRow = {
+  domain: string | null
+  source: string
+  docs: number
+  tone: number | null
+  tone_n: number
+  field: number | null
+  neighbors: { domain: string; similarity: number }[]
+}
 type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
 type GraphAggregates = Stats & { nodes: TermRow[]; signature: SignatureRow[] }
@@ -452,12 +461,25 @@ const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: strin
 
 type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: { id: string; score: number; n: number }[] }
 
-const sourcesQuery = (person: Person, q: Scope) => sql`
+// field/neighbors are keyed by (days, person, domain) alone; null/[] when this window/domain
+// has no outlet_fields/outlet_neighbors row, or when the request is not the build's own universe
+// (source=all, country=br, no domain/lean) -- bound as a flag so the statement text never branches.
+const sourcesQuery = (person: Person, q: Scope) => {
+  const built = q.source === 'all' && q.country === 'br' && q.domain === 'all' && q.lean === 'all'
+  return sql`
   with ${scopeCte(person, q)}
   select ${outletDomain} as domain, d.source, count(*)::int as docs,
-    round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as tone_n
+    round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as tone_n,
+    of.field as field, coalesce(onb.neighbors, '[]'::jsonb) as neighbors
   from docs d join about a on a.doc_id = d.id
-  group by 1, 2 order by docs desc, domain limit 80`
+  left join outlet_fields of on ${built}::boolean and of.days = ${q.days}::int and of.person_id = ${person.id} and of.domain = ${outletDomain}
+  left join (
+    select domain, jsonb_agg(jsonb_build_object('domain', neighbor, 'similarity', similarity) order by similarity desc, neighbor) as neighbors
+    from outlet_neighbors where ${built}::boolean and days = ${q.days}::int and person_id = ${person.id}
+    group by domain
+  ) onb on onb.domain = ${outletDomain}
+  group by 1, 2, of.field, onb.neighbors order by docs desc, domain limit 80`
+}
 
 export const sourcesFor = async (person: Person, q: GraphQuery) => {
   const { rows } = await run<SourceRow>(sourcesQuery(person, q))

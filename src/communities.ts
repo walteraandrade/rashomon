@@ -1,4 +1,4 @@
-// Pure graph metrics (Louvain, betweenness): no SQL, no DB import. Callers: aggregate.ts, graph.ts.
+// Pure graph metrics (Louvain, betweenness, Jaccard neighbours): no SQL, no DB import. Callers: aggregate.ts, graph.ts.
 import { UndirectedGraph as UndirectedGraphImport } from 'graphology'
 import louvainImport from 'graphology-communities-louvain'
 import betweennessCentralityImport from 'graphology-metrics/centrality/betweenness.js'
@@ -53,4 +53,39 @@ export const betweenness = (edges: readonly CommunityEdge[]): Map<string, number
   if (g.order === 0) return new Map()
   const raw = betweennessCentrality(g, { getEdgeWeight: null })
   return new Map(Object.entries(raw))
+}
+
+export type OutletPair = { domain: string; neighbor: string; similarity: number }
+
+// Jaccard over each domain's term-id set; zero-similarity pairs are dropped, not stored as zero.
+// A domain with no surviving pair gets no entry -- the caller adds its own self-loop.
+// `edges` holds every non-zero pair once, undirected; topK caps only `pairs`, never the graph Louvain sees.
+export const neighbors = (sets: ReadonlyMap<string, ReadonlySet<string>>, topK: number): { pairs: OutletPair[]; edges: CommunityEdge[] } => {
+  const domains = [...sets.keys()]
+  const byDomain = new Map<string, OutletPair[]>(domains.map((d) => [d, []]))
+  const edges: CommunityEdge[] = []
+  for (let i = 0; i < domains.length; i++) {
+    for (let j = i + 1; j < domains.length; j++) {
+      const a = domains[i]
+      const b = domains[j]
+      const setA = sets.get(a)!
+      const setB = sets.get(b)!
+      let intersection = 0
+      for (const id of setA) if (setB.has(id)) intersection++
+      const union = setA.size + setB.size - intersection
+      const similarity = union === 0 ? 0 : intersection / union
+      if (similarity <= 0) continue
+      edges.push({ a, b, count: similarity })
+      byDomain.get(a)!.push({ domain: a, neighbor: b, similarity })
+      byDomain.get(b)!.push({ domain: b, neighbor: a, similarity })
+    }
+  }
+  const byName = (x: OutletPair, y: OutletPair) => (x.neighbor < y.neighbor ? -1 : x.neighbor > y.neighbor ? 1 : 0)
+  const pairs = domains.flatMap((d) =>
+    byDomain
+      .get(d)!
+      .sort((x, y) => y.similarity - x.similarity || byName(x, y))
+      .slice(0, topK),
+  )
+  return { pairs, edges }
 }

@@ -34,6 +34,19 @@ describe('bench harness stats', () => {
     assert.equal(compare(base, report([['graph', 7, 80, 'x'], ['graph', 30, 170, 'y'], ['docs', 7, 10, 'z']]), ['graph']).kept, false)
     assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y'], ['docs', 7, 10, 'other']]), ['graph']).kept, false)
     assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['docs', 7, 10, 'z']]), ['graph']).kept, false)
+    assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y']]), ['graph']).kept, true)
+    assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y']]), ['graph'], 0.2, true).kept, false)
+  })
+
+  it('a timed-out side is never diffed, and a timed-out candidate is never fast', () => {
+    const base = report([['aggregate', 30, 600000, 'timeout'], ['graphFast', 30, 5, 'empty']])
+    base.cells[0].timedOut = true
+    const r = compare(base, report([['aggregate', 30, 9000, 'rows'], ['graphFast', 30, 4, 'full']]), ['aggregate'])
+    assert.equal(r.kept, true)
+    assert.equal(r.unverified.length, 2)
+    const slow = report([['aggregate', 30, 600000, 'timeout'], ['graphFast', 30, 4, 'empty']])
+    slow.cells[0].timedOut = true
+    assert.equal(compare(base, slow, ['aggregate']).kept, false)
   })
 })
 

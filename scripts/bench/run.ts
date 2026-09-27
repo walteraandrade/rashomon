@@ -142,8 +142,9 @@ const measurePhase = async (scale: string, work: string) => {
   }
 
   // Built even when not measured, or already measured by an earlier child: graphFast reads it.
+  // Neither asked for: no build at all, and no aggregate cell.
   const buildOnce = (w: number) => aggregate.buildGraphAggregates(persons, [w])
-  for (const w of windows) {
+  for (const w of wanted.has(BUILD_CASE) || wanted.has('graphFast') ? windows : []) {
     const key = cellKey(BUILD_CASE, w)
     if (dead.has(key)) continue
     await emit({ start: key })

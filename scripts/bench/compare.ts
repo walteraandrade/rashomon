@@ -8,17 +8,18 @@ const { values: args, positionals } = parseArgs({
     cases: { type: 'string', default: '' },
     gain: { type: 'string', default: '0.2' },
     all: { type: 'boolean', default: false },
+    strict: { type: 'boolean', default: false },
   },
 })
 
 const [basePath, candPath] = positionals
-if (!basePath || !candPath) throw new Error('usage: compare.ts <base.json> <cand.json> --cases a,b [--gain 0.2] [--all]')
+if (!basePath || !candPath) throw new Error('usage: compare.ts <base.json> <cand.json> --cases a,b [--gain 0.2] [--all] [--strict]')
 
 const load = async (p: string) => JSON.parse(await readFile(p, 'utf8')) as Report
 const base = await load(basePath)
 const cand = await load(candPath)
 const targets = args.cases.split(',').filter(Boolean)
-const r = compare(base, cand, targets, Number(args.gain))
+const r = compare(base, cand, targets, Number(args.gain), args.strict)
 
 const out = [
   `base ${base.meta.rev} (calibration ${base.meta.calibrationMs.toFixed(0)} ms) vs candidate ${cand.meta.rev} (calibration ${cand.meta.calibrationMs.toFixed(0)} ms)`,

@@ -40,6 +40,11 @@ export type Lenses = { days: number; a: LensSide; b: LensSide; terms: CompareTer
 // counts /timeline returned, 'error' leaves the hole empty rather than inventing bars.
 export type SparklineState = 'loading' | 'ready' | 'error'
 export type Sparkline = { state: SparklineState; counts?: number[] }
+// Figure 7 (issue #216): two independently-scaled series sharing one day axis. Field names
+// never overlap (views vs count) so neither reads as sharing the other's scale.
+export type AttentionDay = { day: string; views: number }
+export type Attention = { days: number; series: AttentionDay[] }
+export type AttentionMentionDay = { day: string; count: number }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 

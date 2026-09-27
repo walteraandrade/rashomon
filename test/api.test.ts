@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { candidatesQuery, compareParams, docsParams, endpoint, json, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { attentionParams, candidatesQuery, compareParams, docsParams, endpoint, json, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -209,6 +209,23 @@ describe('weekParams / loadWeek stay fixed at days=7', () => {
     const calls = stubFetch(true, {})
     await loadWeek('lula', weekParams({ source: 'all', limit: '8' }))
     assert.equal(calls[0].url, '/api/people/lula/week?' + weekParams({ source: 'all', limit: '8' }).toString())
+  })
+})
+
+// Issue #216 (figure 7, attention vs mentions): attentionParams always sends days=30, the
+// route's only window, never exposed as a control -- same fixed-window precedent as
+// weekParams' days=7 above.
+describe('attentionParams / loadAttention stay fixed at days=30 (issue #216)', () => {
+  it('attentionParams always sends days=30 regardless of any other input (AC5)', () => {
+    assert.equal(attentionParams({}).get('days'), '30')
+    // Passing an unrelated/extra field must not change the fixed window either.
+    assert.equal(attentionParams({ source: 'gdelt' } as any).get('days'), '30')
+  })
+
+  it('loadAttention calls GET /api/people/:id/attention', async () => {
+    const calls = stubFetch(true, { days: 30, series: [] })
+    await loadAttention('lula', attentionParams({}))
+    assert.equal(calls[0].url, '/api/people/lula/attention?' + attentionParams({}).toString())
   })
 })
 

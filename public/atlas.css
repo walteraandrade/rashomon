@@ -761,7 +761,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .agenda-cell.is-empty { color: var(--muted); text-align: center; }
 .agenda-pick { border: 0; background: none; padding: 2px 4px; font: inherit; cursor: pointer; color: color-mix(in srgb, var(--ink) var(--share, 0%), var(--muted)); }
 .agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: underline; }
-.agenda-pick.is-active { color: var(--accent); font-weight: 600; text-decoration: none; }
+.agenda-pick.is-active { font-weight: 600; text-decoration: none; background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 .agenda-grid > .note { margin-top: var(--space-3); }
 /* Ink weight, not a lean colour: a small neutral chip beside the domain name it labels. */
 .lean-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); vertical-align: middle; }

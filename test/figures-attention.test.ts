@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { attentionParams } from '../src/ui/api.js'
 import { clearScopes } from '../src/ui/state.js'
-import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
+import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 
 // src/ui/figures/attention.ts, figure 7 (issue #216): its own mount(), wired twice through
@@ -179,6 +179,132 @@ describe('clicking a day column opens the docs card with that day (AC8)', () => 
       mark.fire('click')
       await flush()
       assert.equal(els.docsDialog.open, true, 'a day with zero mentions still opens the docs card')
+    })
+  })
+
+  it('a background click on the chart (not a day column) releases the pick and resets aria-pressed (AC8, validator NIT)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/attention': attentionData([{ day: '2026-08-15', views: 100 }]),
+        '/timeline': timelineData([timelineBucket('2026-08-15', 4)]),
+        '/docs': { docs: [], total: 0 },
+      })
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush()
+      const mark = [...els.attentionChart.querySelectorAll('[data-day]')].find((el: any) => el.dataset.day === '2026-08-15')
+      assert.ok(mark, 'a day column must be reachable by its data-day stub')
+      mark.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      assert.match(String(els.attentionChart.innerHTML), /data-day="2026-08-15"[^>]*aria-pressed="true"/)
+      els.attentionChart.fire('click', { target: { closest: () => null } })
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'a background click releases the pick and closes the card')
+      assert.match(String(els.attentionChart.innerHTML), /data-day="2026-08-15"[^>]*aria-pressed="false"/)
+    })
+  })
+
+  it('pressing Escape releases the pick and closes the card (AC8, validator NIT)', async () => {
+    await withFiguresDom(async (els, calls, fireDocumentKeydown) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/attention': attentionData([{ day: '2026-08-15', views: 100 }]),
+        '/timeline': timelineData([timelineBucket('2026-08-15', 4)]),
+        '/docs': { docs: [], total: 0 },
+      })
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush()
+      const mark = [...els.attentionChart.querySelectorAll('[data-day]')].find((el: any) => el.dataset.day === '2026-08-15')
+      assert.ok(mark, 'a day column must be reachable by its data-day stub')
+      mark.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true)
+      fireDocumentKeydown('Escape')
+      await flush()
+      assert.equal(els.docsDialog.open, false, 'Escape must release the pick and close the card')
+    })
+  })
+})
+
+// Validator round-2 SHOULD (a/b/c): the two independent fetches (mentions, attention) can
+// settle in either order, fail independently, or race a person/source change. Each must never
+// paint a state that mixes the wrong recorte or misreports "no data" for an outage.
+describe('the two independent fetches never mix recortes or misreport an outage as empty data', () => {
+  // A routeFetch variant that lets /timeline settle well before /attention, so a test can flush
+  // past the first without the second, and observe the views row still marked as loading.
+  const staggeredFetch = (fetchCalls: string[], fast: Record<string, unknown>, slowPath: string, slowData: unknown) => {
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input)
+      fetchCalls.push(url)
+      const path = new URL(url, 'http://localhost').pathname
+      if (path.endsWith(slowPath)) {
+        await new Promise((r) => setTimeout(r, 80))
+        return jsonResponse(slowData) as unknown as Response
+      }
+      for (const [suffix, data] of Object.entries(fast)) if (path.endsWith(suffix)) return jsonResponse(data) as unknown as Response
+      return jsonResponse({}) as unknown as Response
+    }) as typeof fetch
+  }
+
+  it('/timeline resolving first never states "sem dado de pageviews" while /attention is still in flight', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      staggeredFetch(calls, { '/timeline': timelineData([timelineBucket('2026-08-15', 4)]) }, '/attention', attentionData([{ day: '2026-08-15', views: 900 }]))
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush(20)
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /sem dado de pageviews para esta pessoa/, '/attention has not answered yet -- that is not the same as an empty response')
+      assert.match(String(els.attentionChart.innerHTML), /data-row="mentions"/, 'the mentions row already paints from the settled /timeline')
+      await flush(90)
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /sem dado de pageviews para esta pessoa/, 'once /attention settles with real views, still not the empty-pageviews case')
+    })
+  })
+
+  it('an /attention failure states its own error note, never "sem dado de pageviews" (an outage is not "no wikipedia page")', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        const path = new URL(url, 'http://localhost').pathname
+        if (path.endsWith('/attention')) return { ok: false, status: 500, json: async () => ({}) } as unknown as Response
+        if (path.endsWith('/timeline')) return jsonResponse(timelineData([timelineBucket('2026-08-15', 4)])) as unknown as Response
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush(40)
+      assert.match(String(els.attentionChart.innerHTML), /Não foi possível carregar os pageviews\./)
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /sem dado de pageviews para esta pessoa/, 'an outage must not be misreported as "no wikipedia page"')
+      assert.match(String(els.attentionChart.innerHTML), /data-row="mentions"/, 'the mentions row is untouched by the views row error')
+    })
+  })
+
+  it('a person change while /attention is still in flight never paints the new person\'s mentions against the previous person\'s stale views', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/timeline': timelineData([timelineBucket('2026-08-15', 4)]),
+        '/attention': attentionData([{ day: '2026-08-15', views: 12345 }]),
+      })
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush(20)
+      assert.match(String(els.attentionChart.innerHTML), /12\.345/, 'lula\'s own views must have painted once')
+
+      staggeredFetch(calls, { '/timeline': timelineData([timelineBucket('2026-08-20', 7)]) }, '/attention', attentionData([{ day: '2026-08-20', views: 999 }]))
+      els.attentionPerson.value = 'bolsonaro'
+      els.attentionPerson.fire('change')
+      // debounce(load) waits ~140ms before the reload even starts; the fast /timeline settles
+      // soon after, well before the slow /attention (+80ms of its own).
+      await flush(180)
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /12\.345/, "lula's stale views must not survive the reset")
+      assert.match(String(els.attentionChart.innerHTML), /class="ghost"/, "the views row ghosts on its own while /attention for the new person is still in flight")
+      await flush(100)
+      assert.match(String(els.attentionChart.innerHTML), /999/, "bolsonaro's own views paint once /attention settles")
     })
   })
 })

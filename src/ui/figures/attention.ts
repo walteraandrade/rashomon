@@ -38,9 +38,18 @@ const resolvePerson = (people: Person[], seeded: string | undefined) =>
 export const mount = (root: FigureRoot, { people, initial, peopleError = null }: { people: Person[]; initial: Seed; peopleError?: PeopleError }) => {
   let mentionsBuckets: TimelineBucket[] | null = null
   let attentionSeries: { day: string; views: number }[] | null = null
+  // Distinct from "never fetched yet": a real /attention failure states its own error note.
+  let attentionErrored = false
   let selected: string | null = null
   let metrics: ReturnType<typeof createCanvasMeasure> | null = null
   const measured = () => (metrics ??= createCanvasMeasure())
+
+  let chartWidth = 0
+  const measureWidth = () => {
+    const width = $('attention')?.clientWidth
+    if (width) chartWidth = width
+    return chartWidth || undefined
+  }
 
   const personId = () => $('attentionPerson').value
   const source = () => $('attentionSource').value
@@ -62,7 +71,16 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     // (no wikipedia alias, or not yet backfilled) is padded to zero here (spec §3.3).
     const viewsByDay = new Map((attentionSeries ?? []).map((s) => [s.day, s.views]))
     const views = mentions.map((m) => ({ day: m.day, views: viewsByDay.get(m.day) ?? 0 }))
-    paintAttention({ mentions, views, metrics: measured(), selected, onPick: pick })
+    paintAttention({
+      mentions,
+      views,
+      metrics: measured(),
+      selected,
+      onPick: pick,
+      width: measureWidth(),
+      viewsLoading: !attentionErrored && attentionSeries === null,
+      viewsError: attentionErrored,
+    })
   }
 
   const pick = (day: string) => {
@@ -101,6 +119,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const paintUnavailable = () => {
     mentionsBuckets = null
     attentionSeries = null
+    attentionErrored = false
     $('attentionChart').hidden = true
     $('attentionChart').innerHTML = ''
     $('attentionNote').textContent = peopleError ? 'Falha de rede ou base indisponível.' : 'Nenhuma pessoa cadastrada.'
@@ -125,7 +144,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const ghost = () => {
     if (mentionsBuckets) root.classList.add('is-loading')
-    else paintAttentionLoading()
+    else paintAttentionLoading(measureWidth())
   }
 
   const paintMentions = (buckets: TimelineBucket[]) => {
@@ -142,14 +161,14 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const paintAttentionData = (data: Attention) => {
     attentionSeries = data.series
+    attentionErrored = false
     root.classList.remove('is-loading')
     repaint()
   }
 
-  // /attention itself always answers 200 with an empty series (spec §2); a network failure here
-  // still must not blank the mentions row, so it degrades to "no pageviews" rather than an error.
   const paintAttentionErrorData = () => {
-    attentionSeries = []
+    attentionSeries = null
+    attentionErrored = true
     root.classList.remove('is-loading')
     repaint()
   }
@@ -180,14 +199,26 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     detail: (_data, queryParams) => ({ person: queryParams.get('person') }),
   })
 
+  // A fresh recorte must never paint one series against the other's stale, previous-person
+  // data while the two independent fetches race.
+  const reset = () => {
+    mentionsBuckets = null
+    attentionSeries = null
+    attentionErrored = false
+  }
+
   const load = () => {
+    reset()
     selected = null
     figure.load()
     mentionsFigure.load()
   }
 
+  // week.ts/compare.ts's same move: release before reload, so a control change never leaves
+  // another recorte's docs card open.
   const onControlChange = () => {
-    selected = null
+    figure.release()
+    reset()
     figure.reload()
     mentionsFigure.reload()
   }

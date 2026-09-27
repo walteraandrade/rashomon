@@ -775,7 +775,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   padding-bottom: 4px;
   font-family: var(--mono);
   font-weight: 500;
-  font-size: var(--t-micro);
+  font-size: var(--t-2xs);
   color: var(--muted);
 }
 .comention-cell {
@@ -791,18 +791,20 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   border-radius: 2px;
   font-family: var(--mono);
   font-weight: 500;
-  font-size: var(--t-micro);
+  font-size: var(--t-2xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) calc(var(--w, 0) * 30%), var(--panel));
   cursor: pointer;
+  overflow: hidden;
 }
 .comention-cell.is-empty, .comention-cell.is-blank { cursor: default; background: transparent; border-color: transparent; }
 .comention-cell.is-blank { border: none; }
 .comention-cell:hover:not(.is-empty):not(.is-blank), .comention-cell:focus-visible { border-color: var(--accent); outline: none; }
-.comention-cell.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 35%, var(--panel)); color: var(--accent-ink); }
+.comention-cell.is-selected { border-color: var(--accent); }
 .comention-cell.ghost { background: var(--soft); border-color: var(--line); }
 .comention-grid.is-ghost { opacity: 0.6; }
+.comention-list.is-ghost { opacity: 0.6; }
 #comentionAbout { margin-top: var(--space-3); }
 /* The narrow-viewport fallback: count first, then the pair, ranked high to low. Hidden above
    700px, where the matrix itself is legible (same breakpoint the week figure uses). */
@@ -823,6 +825,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 }
 .comention-listitem b { font-family: var(--mono); font-weight: 600; color: var(--ink); margin-right: var(--space-2); font-variant-numeric: tabular-nums; }
 .comention-listitem.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
+.comention-listitem.ghost { background: var(--soft); min-height: 2.3em; }
 
 /* ---------- the pet ---------- */
 /* The one raster on a site that otherwise draws every limit with type. It is allowed exactly

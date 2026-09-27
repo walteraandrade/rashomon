@@ -393,7 +393,7 @@ export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], wi
 
 // The comention matrix (figure 7, #207): a half-matrix, upper triangle only. Genuinely new
 // geometry, not a reuse of swarmBy/pack/rulerLayout/weekLayout — a two-axis grid, no packing.
-export const MATRIX_CELL_MIN = 22
+export const MATRIX_CELL_MIN = 26
 export const MATRIX_CELL_MAX = 42
 export const MATRIX_ROWHEAD = 140
 

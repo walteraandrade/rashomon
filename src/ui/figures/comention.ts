@@ -55,7 +55,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     }
     selected = { a: x, b: y }
     repaint()
-    showDocs(a, b)
+    showDocs(x, y)
   }
 
   const releaseSelection = () => {

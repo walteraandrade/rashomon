@@ -1358,6 +1358,16 @@ describe('paintComention / paintComentionLoading / paintComentionError, figure 7
     })
   })
 
+  // atlas.css hides .comention-grid and shows .comention-list below 700px; a ghost of the grid
+  // alone left a phone's first load looking like an empty figure (issue #235 review).
+  it('paintComentionLoading also paints a ghost .comention-list, so a phone-width first load is not empty', () => {
+    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
+      paintComentionLoading()
+      assert.match(els.comentionMatrix.innerHTML, /comention-list is-ghost/)
+      assert.match(els.comentionMatrix.innerHTML, /<li><span class="comention-listitem ghost"><\/span><\/li>/)
+    })
+  })
+
   it('paintComentionError paints the "could not load" note', () => {
     withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
       els.comentionMatrix.hidden = true

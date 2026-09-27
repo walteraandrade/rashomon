@@ -84,7 +84,15 @@ app.use('/api/people/:id/*', async (c, next) => {
 
 app.get('/api/people/:id/graph', async (c) => c.json(await graphFor(c.get('person'), parseQuery(c.req.query()))))
 app.get('/api/people/:id/sources', async (c) => c.json(await sourcesFor(c.get('person'), parseQuery(c.req.query()))))
-app.get('/api/people/:id/docs', async (c) => c.json(await docsFor(c.get('person'), parseDocsQuery(c.req.query(), c.req.param('id')))))
+app.get('/api/people/:id/docs', async (c) => {
+  const q = parseDocsQuery(c.req.query(), c.req.param('id'))
+  // Existence against the live persons table, the /api/compare pattern below, not seed.json.
+  if (q.with !== '') {
+    const { rows } = await db.query(`select 1 from persons where id = $1`, [q.with])
+    if (!rows[0]) q.with = ''
+  }
+  return c.json(await docsFor(c.get('person'), q))
+})
 app.get('/api/people/:id/timeline', async (c) => c.json(await timelineFor(c.get('person'), parseTimelineQuery(c.req.query()))))
 app.get('/api/people/:id/week', async (c) => c.json(await weekFor(c.get('person'), parseWeekQuery(c.req.query()))))
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))

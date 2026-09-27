@@ -399,8 +399,12 @@ describe('parseDocsQuery.day (issue #147)', () => {
 })
 
 describe('parseDocsQuery.with (issue #207)', () => {
-  it('drops an unknown with id', () => {
-    assert.equal(parseDocsQuery({ with: 'not-a-tracked-person' }, 'lula').with, '')
+  // The parser only trims and rejects the route's own :id (self co-mention); it no longer
+  // validates against a tracked-person id set. Existence is a table lookup the /api/people/:id/docs
+  // handler makes against the live persons table (server.ts), the same pattern /api/compare uses,
+  // so a seed.json edit never lags the next deploy (issue #235 review).
+  it('trims and keeps an id even when it names no tracked person -- the parser does not check existence', () => {
+    assert.equal(parseDocsQuery({ with: 'not-a-tracked-person' }, 'lula').with, 'not-a-tracked-person')
     assert.equal(parseDocsQuery({ with: '' }, 'lula').with, '')
     assert.equal(parseDocsQuery({}, 'lula').with, '')
   })
@@ -409,8 +413,9 @@ describe('parseDocsQuery.with (issue #207)', () => {
     assert.equal(parseDocsQuery({ with: 'lula' }, 'lula').with, '')
   })
 
-  it('keeps a known other id', () => {
+  it('keeps another id, trimmed', () => {
     assert.equal(parseDocsQuery({ with: 'tarcisio' }, 'lula').with, 'tarcisio')
+    assert.equal(parseDocsQuery({ with: '  tarcisio  ' }, 'lula').with, 'tarcisio')
   })
 
   it('falls back to no filter when personId is omitted, like every caller that predates with', () => {

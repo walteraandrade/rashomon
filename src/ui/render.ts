@@ -1375,8 +1375,8 @@ export const paintComention = ({ data, width, selected, onPick }: { data: Coment
       <div class="comention-rowhead">${row.name}</div>
       ${persons.map((col, j) => {
         if (i >= j) return html`<span class="comention-cell is-blank" aria-hidden="true"></span>`
-        // matrixLayout keys a cell by the matrix's own row/column order (i < j here), not by
-        // the pair's a/b order (person_id), which the cell itself still carries.
+        // The cell carries row/column order (ids[i]/ids[j]), not the pair's own a/b (person_id);
+        // a caller needing the pair's a/b must normalize it, as pick() in comention.ts does.
         return comentionCellMarkup(row, col, cellAt.get(`${row.id}\u0000${col.id}`)!, selected)
       })}
     </div>`,
@@ -1401,6 +1401,8 @@ export const paintComention = ({ data, width, selected, onPick }: { data: Coment
 }
 
 const COMENTION_GHOST_N = 27
+// .comention-list's own ghost -- atlas.css hides the grid below 700px, so it needs one too.
+const COMENTION_LIST_GHOST_N = 6
 
 export const paintComentionLoading = () => {
   const root = $('comentionMatrix')
@@ -1411,7 +1413,10 @@ export const paintComentionLoading = () => {
   root.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="comention-grid is-ghost">${Array.from(
     { length: COMENTION_GHOST_N },
     () => html`<div class="comention-row">${Array.from({ length: COMENTION_GHOST_N }, () => html`<span class="comention-cell ghost"></span>`)}</div>`,
-  )}</div></div><p class="sr-only">Lendo quem aparece junto.</p>`
+  )}</div><ol class="comention-list is-ghost">${Array.from(
+    { length: COMENTION_LIST_GHOST_N },
+    () => html`<li><span class="comention-listitem ghost"></span></li>`,
+  )}</ol></div><p class="sr-only">Lendo quem aparece junto.</p>`
   const about = $('comentionAbout')
   if (about) about.textContent = ''
 }

@@ -1,7 +1,6 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import personsSeed from '../seed.json' with { type: 'json' }
 import type { AttentionQuery, CandidatesQuery, ComentionQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
@@ -142,17 +141,15 @@ export const parseLeanList = parseList((s) => (LEANS as string[]).includes(s))
 
 export const COUNTRIES = ['br', 'pt']
 
-// Unlike every other shared filter, omitted/all-invalid falls back to 'br' (excludes .pt), not
-// 'all'. Naming both known tokens, or 'all' itself, collapses to 'all'.
-// The id set `with` validates against, like SOURCES/LEANS/KINDS.
-const PERSON_IDS = new Set((personsSeed as { id: string }[]).map((p) => p.id))
-
-// Unknown id, empty, or the route's own :id (self co-mention) fall back to '' -- no filter.
+// Empty, or the route's own :id (self co-mention), falls back to '' -- no filter. Existence is
+// the handler's own table lookup (server.ts), not checked here, so a seed.json edit never lags a deploy.
 const withId = (raw: string | undefined, personId: string): string => {
   const v = (raw ?? '').trim()
-  return v && v !== personId && PERSON_IDS.has(v) ? v : ''
+  return v && v !== personId ? v : ''
 }
 
+// Unlike every other shared filter, omitted/all-invalid falls back to 'br' (excludes .pt), not
+// 'all'. Naming both known tokens, or 'all' itself, collapses to 'all'.
 export const parseCountryList = (v: string | undefined): 'br' | 'pt' | 'all' => {
   const tokens = new Set((v ?? '').split(',').map((s) => s.trim()).filter((s) => s === 'all' || COUNTRIES.includes(s)))
   if (tokens.has('all') || (tokens.has('br') && tokens.has('pt'))) return 'all'

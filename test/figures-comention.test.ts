@@ -133,3 +133,51 @@ describe('clicking a filled matrix cell opens the docs card with one side (issue
     })
   })
 })
+
+describe('the grid cell and the ranked list item for the same pair open the same docs (issue #235 review)', () => {
+  // dino's name (Aline) sorts before bolsonaro's (Zeca), the reverse of their id order
+  // (bolsonaro < dino): matrixLayout's row/column order follows the names, so the grid's cell
+  // carries data-a="dino" data-b="bolsonaro" (row, then column), while /api/comention's own
+  // pairs -- and so the ranked list -- carry the pair's own a/b, the smaller id first:
+  // data-a="bolsonaro" data-b="dino". Both must still open the same side of the same pair.
+  const dino = { id: 'dino', name: 'Aline' }
+  const bolsonaro = { id: 'bolsonaro', name: 'Zeca' }
+
+  it('open with the same side (a=bolsonaro, with=dino) whichever one is clicked', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/api/comention': { days: 30, persons: [dino, bolsonaro], pairs: [{ a: 'bolsonaro', b: 'dino', count: 5 }] } as any })
+      const { mount } = await import('../src/ui/figures/comention.js')
+      mount(els.comention, { people: [dino, bolsonaro], initial: {} })
+      await flush()
+
+      const gridCell = [...els.comentionMatrix.querySelectorAll('[data-a]')].find((c: any) => c.dataset.a === 'dino' && c.dataset.b === 'bolsonaro')
+      assert.ok(gridCell, 'the grid orders this pair a=dino, b=bolsonaro (row/column order)')
+      gridCell.fire('click')
+      await flush()
+      const gridDocsUrl = calls.find((u) => u.includes('/docs?'))
+      assert.ok(gridDocsUrl, 'clicking the grid cell must open the docs card')
+      assert.match(gridDocsUrl!, /\/api\/people\/bolsonaro\/docs\?/, 'opens the pair\'s a (smaller id), not the row person')
+      assert.equal(new URL(gridDocsUrl!, 'http://localhost').searchParams.get('with'), 'dino')
+
+      // Release the grid pick before picking the list item for the same pair.
+      gridCell.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, false)
+      calls.length = 0
+      // Both picks resolve to the exact same docs request, so the docs-card scope memo would
+      // otherwise answer the list click from cache with no new fetch to inspect -- clear it so
+      // the second pick's request is observable too.
+      clearScopes()
+
+      const listItem = [...els.comentionMatrix.querySelectorAll('[data-a]')].find((c: any) => c.dataset.a === 'bolsonaro' && c.dataset.b === 'dino')
+      assert.ok(listItem, 'the ranked list carries the pair\'s own a=bolsonaro, b=dino')
+      listItem.fire('click')
+      await flush()
+      assert.equal(els.docsDialog.open, true, 'clicking the list item must open the docs card')
+      const listDocsUrl = calls.find((u) => u.includes('/docs?'))
+      assert.ok(listDocsUrl, 'clicking the list item must issue a docs request')
+      assert.equal(listDocsUrl, gridDocsUrl, 'the grid and the list must open the exact same docs request for this pair')
+    })
+  })
+})

@@ -5,7 +5,7 @@ import { comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, to
 import { parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
-import { insertDocP } from '../src/store.js'
+import { insertDocP, upsertPersonsP } from '../src/store.js'
 import { withEnv } from './env.js'
 import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates } from './fixture.js'
 import './close.js'
@@ -616,6 +616,39 @@ describe('GET /api/people/:id/docs?with= (issue #207)', () => {
     const self = (await (await app.request('/api/people/lula/docs?with=lula')).json()) as unknown
     assert.deepEqual(unknown, open)
     assert.deepEqual(self, open)
+  })
+})
+
+// The parser (query.ts) no longer validates `with` against a seed.json-frozen id set: this
+// handler does the lookup itself, against the live persons table, the window a seed edit and
+// the next deploy used to open (issue #235 review).
+describe('GET /api/people/:id/docs?with= validates against the persons table, not seed.json (issue #235 review)', () => {
+  const ghost: Person = { id: 'ghost-not-in-seed', name: 'Ghost', aliases: ['Ghost'] }
+
+  before(async () => {
+    await seed()
+    assert.ok(!(personsSeed as Person[]).some((p) => p.id === ghost.id), 'sanity: this id must not be in seed.json')
+    await upsertPersonsP([...persons, ghost])
+    await insertDocP(
+      { source: 'rss', uri: 'https://example.org/ghost-1', text: 'Lula e o Ghost debatem juntos', publishedAt: new Date().toISOString(), domain: 'example.org' },
+      [...persons, ghost],
+    )
+  })
+  after(reseed)
+
+  it('filters correctly for an id present in the persons table but absent from seed.json', async () => {
+    const res = await app.request('/api/people/lula/docs?with=ghost-not-in-seed')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { total: number }
+    assert.equal(body.total, 1, 'with= must still filter for an id the seed.json-frozen set would have dropped')
+    const direct = await docsFor(lula, parseDocsQuery({ with: 'ghost-not-in-seed' }, 'lula'))
+    assert.equal(direct.total, body.total)
+  })
+
+  it('an id in neither the table nor seed.json still falls back to no filter', async () => {
+    const open = (await (await app.request('/api/people/lula/docs')).json()) as unknown
+    const unknown = (await (await app.request('/api/people/lula/docs?with=totally-unknown-id')).json()) as unknown
+    assert.deepEqual(unknown, open)
   })
 })
 

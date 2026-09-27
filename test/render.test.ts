@@ -48,7 +48,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -708,6 +708,179 @@ describe('drawMap threads ranking into every placed word, and themeLegend names 
       assert.match(span, /não tem temas calculados/)
       assert.doesNotMatch(span, /textos avaliados/, 'the tema key must never borrow maskLegend\'s MASK_MIN document-count wording')
     })
+  })
+})
+
+describe('theme mask acceptance (issue #217)', () => {
+  const person = { method: 'kikori:q8', score: -2.4, n: 500 }
+  const placed = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9, ...over })
+
+  it('paintSelection sets is-masked xor is-themed per MaskState, never both, and off sets neither (issue #217 AC4)', () => {
+    const base = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, personTestimony: { method: 'kikori', score: -3, n: 20 } }
+    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
+      paintSelection({ ...base, mask: 'avaliacao' })
+      assert.deepEqual([els.columns.classes['is-masked'], els.columns.classes['is-themed']], [true, false])
+      paintSelection({ ...base, mask: 'tema' })
+      assert.deepEqual([els.columns.classes['is-masked'], els.columns.classes['is-themed']], [false, true])
+      paintSelection({ ...base, mask: 'off' })
+      assert.deepEqual([els.columns.classes['is-masked'], els.columns.classes['is-themed']], [false, false])
+    })
+  })
+
+  it('paintSelection: avaliação still requires a person mean, unaffected by the MaskState signature change (issue #217 AC4)', () => {
+    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
+      paintSelection({ nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, mask: 'avaliacao', personTestimony: { method: 'kikori', score: null, n: 0 } })
+      assert.equal(els.columns.classes['is-masked'], false, 'no mean to compare against: no masking even in avaliação state')
+    })
+  })
+
+  it('wordMarkup emits --theme only in addition to (never instead of) an existing --mask style (issue #217 AC5)', () => {
+    const ranking = new Map([[7, 1]])
+    const both = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: 7 }), 'count', person.score, ranking))
+    assert.match(both, /--mask:rgb\(255,122,138\)/)
+    assert.match(both, /--theme:var\(--theme-1\)/)
+    const maskOnly = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: null }), 'count', person.score, ranking))
+    assert.match(maskOnly, /--mask:/)
+    assert.doesNotMatch(maskOnly, /--theme/)
+    const themeOnly = String(wordMarkup(placed({ community: 7 }), 'count', person.score, ranking))
+    assert.doesNotMatch(themeOnly, /--mask/)
+    assert.match(themeOnly, /--theme:var\(--theme-1\)/)
+    const neither = String(wordMarkup(placed({}), 'count', person.score, ranking))
+    assert.doesNotMatch(neither, /--mask/)
+    assert.doesNotMatch(neither, /--theme/)
+  })
+
+  it('paintColumns applies the same --theme rule to .column-card (issue #217 AC5)', () => {
+    withFakeDocument(['columns'], (els) => {
+      const ranking = new Map([[7, 1]])
+      const nodes = [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 7 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: null },
+      ]
+      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, ranking })
+      assert.match(els.columns.innerHTML, /data-col="word:a" style="--theme:var\(--theme-1\)">/)
+      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/)
+    })
+  })
+
+  it('drawMap threads its ranking parameter into every placed word, not just the first (issue #217 AC6)', () => {
+    const layout = {
+      placed: [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 11, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: 22, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 },
+      ],
+      overflow: [],
+      center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
+    }
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      const ranking = communityRanking(layout.placed)
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
+      const wordBlock = (id: string) => els.viewport.innerHTML.match(new RegExp(`<g class="atlas-word"[^]*?data-node="${id}"[^]*?</g>`))?.[0] ?? ''
+      assert.match(wordBlock('word:a'), /--theme:var\(--theme-1\)/)
+      assert.match(wordBlock('word:b'), /--theme:var\(--theme-2\)/)
+    })
+  })
+
+  it('the community-mates list needs tema mode, a non-null community on the focused term, and a mate on the map; a null community renders nothing (issue #217 AC7)', () => {
+    const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 5 }
+    const stf = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 5 }
+    const solo = { id: 'word:solo', term: 'solo', kind: 'word', count: 15, pmi: 1.1, community: null }
+    const graph = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf, solo], links: [] }
+    const render = (mask: 'avaliacao' | 'tema' | 'off' | undefined, selected: string, nodes = [golpe, stf, solo]) =>
+      withFakeDocument(['inspector'], (els) => {
+        inspect({ graph, nodes, links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, mask })
+        return els.inspector.innerHTML
+      })
+    assert.match(render('tema', golpe.id), /No mesmo tema/, 'tema mode, non-null community, a mate present: the list appears')
+    assert.doesNotMatch(render('avaliacao', golpe.id), /No mesmo tema/, 'wrong mask state: nothing')
+    assert.doesNotMatch(render('off', golpe.id), /No mesmo tema/, 'off: nothing')
+    assert.doesNotMatch(render('tema', solo.id), /No mesmo tema/, 'focused term has a null community: nothing, never an empty heading')
+    assert.doesNotMatch(render('tema', golpe.id, [golpe, solo]), /No mesmo tema/, 'no other node shares the community: nothing')
+  })
+
+  it('a community-mate entry is reachable through onChoose by a real click, the same wiring .related buttons use (issue #217 AC8)', async () => {
+    const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 5 }
+    const stf = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 5 }
+    const graph = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf], links: [] }
+    await withFiguresDom(async (els) => {
+      const chosen: string[] = []
+      inspect({ graph, nodes: [golpe, stf], links: [], selected: golpe.id, sort: 'pmi', daysLabel: '30 dias', onChoose: (id) => chosen.push(id), mask: 'tema' })
+      const mate = els.inspector.querySelectorAll('[data-related]').find((el: any) => el.dataset.related === stf.id)
+      assert.ok(mate, 'the community mate must be a real, queryable [data-related] node')
+      mate.fire('click')
+      assert.deepEqual(chosen, [stf.id])
+    })
+  })
+
+  it("when every node's community is null or the field is absent entirely, tema state paints no --theme and the key states the build has no communities, distinct from the MASK_MIN wording (issue #217 AC13)", () => {
+    const layout = {
+      placed: [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: null, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 }, // field absent entirely
+      ],
+      overflow: [],
+      center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
+    }
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      const ranking = communityRanking(layout.placed)
+      assert.equal(ranking.size, 0)
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
+      assert.doesNotMatch(els.viewport.innerHTML, /--theme/)
+      const span = els.legend.innerHTML.match(/<span id="themeLegend" hidden>([^<]*)<\/span>/)?.[1] ?? ''
+      assert.match(span, /não tem temas|sem temas|não têm temas/i, 'names build coverage')
+      assert.doesNotMatch(span, /\d+ textos avaliados/, 'never the MASK_MIN document-count floor wording')
+    })
+  })
+})
+
+describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)', () => {
+  const cssRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+  const cssPath = join(cssRoot, 'public', 'atlas.css')
+  const css = readFileSync(cssPath, 'utf8')
+  const hexOf = (name: string) => css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1]
+
+  const srgbToLinear = (c: number) => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  }
+  const luminance = (hex: string) => {
+    const n = hex.replace('#', '')
+    const r = parseInt(n.slice(0, 2), 16)
+    const g = parseInt(n.slice(2, 4), 16)
+    const b = parseInt(n.slice(4, 6), 16)
+    return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b)
+  }
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  it('atlas.css declares --theme-1..--theme-6, each meeting 4.5:1 against --bg (issue #217 AC14)', () => {
+    const bg = hexOf('bg')
+    assert.ok(bg, '--bg must be declared')
+    const themeHexes = [1, 2, 3, 4, 5, 6].map((i) => hexOf(`theme-${i}`))
+    for (const [i, hex] of themeHexes.entries()) {
+      assert.ok(hex, `--theme-${i + 1} must be declared as a hex colour`)
+      assert.ok(contrast(hex as string, bg as string) >= 4.5, `--theme-${i + 1} (${hex}) must meet 4.5:1 against --bg (${bg})`)
+    }
+  })
+
+  it('the six --theme-* tokens are pairwise distinct, and distinct from --hostile/--favor/--cmp-a/--cmp-b (issue #217 AC14)', () => {
+    const named = { hostile: hexOf('hostile'), favor: hexOf('favor'), 'cmp-a': hexOf('cmp-a'), 'cmp-b': hexOf('cmp-b') }
+    for (const [k, v] of Object.entries(named)) assert.ok(v, `--${k} must be declared`)
+    const themes = [1, 2, 3, 4, 5, 6].map((i) => [`theme-${i}`, hexOf(`theme-${i}`)] as const)
+    const all = [...Object.entries(named), ...themes]
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const [nameA, hexA] = all[i]
+        const [nameB, hexB] = all[j]
+        if (nameA.startsWith('theme-') && nameB.startsWith('theme-')) {
+          assert.notEqual(hexA, hexB, `${nameA} and ${nameB} must not share a colour`)
+        } else if (nameA.startsWith('theme-') || nameB.startsWith('theme-')) {
+          assert.notEqual(hexA, hexB, `${nameA} and ${nameB} must not share a colour`)
+        }
+      }
+    }
   })
 })
 

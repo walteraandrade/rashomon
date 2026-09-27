@@ -319,6 +319,62 @@ describe('the tema colours: communityRanking and themeMask (issue #217 AC2/AC3)'
   })
 })
 
+describe('theme mask contract (issue #217)', () => {
+  it('Term accepts an optional community: number | null field, and omitting it is valid too (issue #217 AC1)', () => {
+    const withNumber: import('../src/ui/format.js').Term = { id: 'word:a', term: 'a', kind: 'word', count: 1, pmi: 1, community: 4 }
+    const withNull: import('../src/ui/format.js').Term = { id: 'word:b', term: 'b', kind: 'word', count: 1, pmi: 1, community: null }
+    const withoutField: import('../src/ui/format.js').Term = { id: 'word:c', term: 'c', kind: 'word', count: 1, pmi: 1 }
+    assert.equal(withNumber.community, 4)
+    assert.equal(withNull.community, null)
+    assert.equal(withoutField.community, undefined)
+  })
+
+  it('communityRanking ranks the top 6 distinct communities by node count descending, ascending id breaking a tie (issue #217 AC2)', () => {
+    const nodes = [
+      ...Array.from({ length: 6 }, () => ({ community: 40 })),
+      ...Array.from({ length: 3 }, () => ({ community: 10 })),
+      ...Array.from({ length: 3 }, () => ({ community: 20 })), // ties with 10 at 3: 10 wins (lower id)
+      ...Array.from({ length: 2 }, () => ({ community: 30 })),
+      { community: 50 },
+      { community: 60 },
+      { community: 70 }, // 8th distinct community, cut
+      { community: null },
+      { community: undefined },
+    ]
+    const ranking = communityRanking(nodes)
+    assert.deepEqual(
+      [...ranking.entries()],
+      [
+        [40, 1],
+        [10, 2],
+        [20, 3],
+        [30, 4],
+        [50, 5],
+        [60, 6],
+      ],
+    )
+    assert.equal(ranking.size, 6)
+    assert.equal(ranking.has(70), false, 'a 7th+ distinct community never enters the ranking')
+  })
+
+  it('communityRanking on an empty node list, or one with no non-null community, ranks to an empty map (issue #217 AC2)', () => {
+    assert.equal(communityRanking([]).size, 0)
+    assert.equal(communityRanking([{ community: null }, {}, { community: undefined }]).size, 0)
+  })
+
+  it('themeMask returns null for null/undefined community, a CSS token for a top-6 community, and null (not a muted literal) past the top 6 (issue #217 AC3)', () => {
+    const ranking = communityRanking([{ community: 1 }, { community: 1 }, { community: 2 }])
+    assert.equal(themeMask({ community: null }, ranking), null)
+    assert.equal(themeMask({ community: undefined }, ranking), null)
+    assert.equal(themeMask({}, ranking), null)
+    assert.equal(themeMask({ community: 1 }, ranking), 'var(--theme-1)')
+    assert.equal(themeMask({ community: 2 }, ranking), 'var(--theme-2)')
+    const overflowRanking = communityRanking(Array.from({ length: 7 }, (_, i) => ({ community: i })))
+    assert.equal(themeMask({ community: 6 }, overflowRanking), null, 'community 6 is the 7th distinct id, outside the top 6')
+    assert.notEqual(themeMask({ community: 0 }, overflowRanking), null)
+  })
+})
+
 describe('testimonyFocus / foldTestimonyDomains / mergeOutlets: one outlet across its sources', () => {
   it('testimonyFocus folds one outlet across its sources, weighted by texts', () => {
     const rows = [

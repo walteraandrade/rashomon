@@ -177,6 +177,64 @@ describe('figure 1: the mask control cycles avaliação → tema → off → ava
   })
 })
 
+describe('mask cycle verifier suite (issue #217 AC9/AC10/AC11)', () => {
+  const graphWith = (nodes: unknown[]) => ({ person: persons[1], nodes, links: [], stats: { about: 5, testimony: { method: 'kikori', score: -0.5, n: 8 } } })
+
+  it('handlers.mask cycles avaliação -> tema -> off -> avaliação in that fixed order and wraps, driven through createHandlers via a real control click (issue #217 AC9)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      const seen: string[] = []
+      for (let i = 0; i < 5; i++) {
+        seen.push(els.mask.textContent)
+        els.mask.fire('click')
+      }
+      assert.deepEqual(seen, ['Colorir por avaliação', 'Colorir por tema', 'Sem cor', 'Colorir por avaliação', 'Colorir por tema'], 'five presses trace the fixed cycle, wrapping once')
+    })
+  })
+
+  it('the label text and aria-pressed pair update together on every cycle step (issue #217 AC10)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      const steps: [string, string][] = [
+        ['Colorir por avaliação', 'true'],
+        ['Colorir por tema', 'true'],
+        ['Sem cor', 'false'],
+      ]
+      for (const [label, pressed] of steps) {
+        assert.equal(els.mask.textContent, label)
+        assert.equal(els.mask.getAttribute('aria-pressed'), pressed)
+        els.mask.fire('click')
+      }
+    })
+  })
+
+  it('the control stays hidden in strip mode and the chosen state (tema) survives the round trip, from a fresh mount (issue #217 AC11)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2, testimony: { score: 1.1, n: 6 } }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.equal(els.mask.hidden, false, 'map mode: the control is visible')
+      els.mask.fire('click') // avaliação -> tema
+      els.mask.fire('click') // tema -> off
+      els.modeStrip.fire('click')
+      assert.equal(els.mask.hidden, true)
+      els.modeMap.fire('click')
+      assert.equal(els.mask.hidden, false)
+      assert.equal(els.mask.textContent, 'Sem cor', 'off survives the round trip through strip mode just as tema does')
+    })
+  })
+})
+
 // Issue #217: /graph nodes may carry a community; the atlas ranks the top 6 and colours by it.
 describe('figure 1: "no mesmo tema" (issue #217 AC7/AC8)', () => {
   it('lists a term\'s community mates only in tema mode, and each one is reachable via a click', async () => {

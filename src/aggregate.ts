@@ -123,32 +123,38 @@ const COMMUNITY_SEED = 42
 const scopePairsQuery = (days: number) => sql`select distinct source, person_id from graph_terms where days = ${days}`
 
 const keptTermsQuery = (days: number, source: string, personId: string) => sql`
-  select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}`
+  select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
+  order by kind, term`
 
-// linksQuery's join shape against graph_terms' own kept (term, kind) set instead of a live
-// per-request `ids` array, which is why this cannot simply import linksQuery.
+// Pairs each doc's own kept term ids with themselves via unnest, against graph_terms' own kept
+// (term, kind) set instead of a live per-request `ids` array — not linksQuery's self-join shape,
+// which is why this cannot simply import linksQuery.
+// Louvain's partition depends on edge order, so both this and keptTermsQuery sort theirs.
+// Pairs come from each doc's own kept ids, never a self-join of all hits on doc_id: the
+// planner misestimates that join and nested-loops it. Driving from `about` skips docs without the person.
 const communityEdgesQuery = (days: number, source: string, personId: string) => sql`
-  with scope as (
-    select d.id from docs d
-    where d.published_at >= now() - make_interval(days => ${days})
+  with about as materialized (
+    select dp.doc_id from doc_persons dp join docs d on d.id = dp.doc_id
+    where dp.person_id = ${personId}
+      and d.published_at >= now() - make_interval(days => ${days})
       and ${countryFilter('br')}
       and (${source} = 'all' or d.source = ${source})
   ),
-  about as (
-    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${personId}
+  kept as materialized (
+    select kind || ':' || term as id, term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
   ),
-  kept as (
-    select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
-  ),
-  hits as (
-    select t.doc_id, t.kind || ':' || t.term as id
-    from doc_terms t
+  doc_ids as (
+    select t.doc_id, array_agg(k.id) as ids
+    from about a
+    join doc_terms t on t.doc_id = a.doc_id
     join kept k on k.kind = t.kind and k.term = t.term
-    join about a on a.doc_id = t.doc_id
+    group by t.doc_id
   )
-  select a.id as a, b.id as b, count(*)::int as count
-  from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
-  group by 1, 2 having count(*) >= 2`
+  select a, b, count(*)::int as count
+  from doc_ids, unnest(ids) a, unnest(ids) b
+  where a < b
+  group by 1, 2 having count(*) >= 2
+  order by 1, 2`
 
 const insertCommunitiesQuery = (days: number, source: string, personId: string, terms: string[], kinds: string[], communityIds: number[]) => sql`
   insert into term_communities (days, source, person_id, term, kind, community)
@@ -229,7 +235,7 @@ export const hasGraphAggregates = async (): Promise<boolean> => {
   return rows[0].built
 }
 
-export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery, window: windowStatements }
+export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery, window: windowStatements, communityEdges: communityEdgesQuery }
 
 const main = async (argv: string[]) => {
   await migrateP()

@@ -50,19 +50,21 @@ describe('bounded write batches (issue #50)', () => {
   })
 
   it('spends a handful of statements per group of documents, not one per row', async () => {
-    // 4 upserts + 1 doc_persons batch + 1 doc_terms batch. The transaction itself (begin/commit,
-    // or a savepoint for a nested one) runs through the SqlClient driver's own connection, not
-    // through db.exec, so it never reaches this counter. Coverage that insertDocs still spends
-    // one transaction per group -- a failing group rolls back without disturbing another group's
-    // writes -- lives behaviourally in test/store.test.ts ("insertDocs groups documents into
-    // bounded transactions", "insertDocs replays a group with one failing doc: the good docs still land").
-    assert.equal(await statements(() => insertDocsP(docs(4, 'group'), persons, 4)), 6)
-    // Same documents with the row bound at 1, which is what the old per-row path cost:
-    // 4 upserts + 4 person rows + 8 term rows.
+    // 1 multi-row doc upsert + 1 doc_persons batch + 1 doc_terms batch. The transaction itself
+    // (begin/commit, or a savepoint for a nested one) runs through the SqlClient driver's own
+    // connection, not through db.exec, so it never reaches this counter. Coverage that
+    // insertDocs still spends one transaction per group -- a failing group rolls back without
+    // disturbing another group's writes -- lives behaviourally in test/store.test.ts
+    // ("insertDocs groups documents into bounded transactions", "insertDocs replays a group
+    // with one failing doc: the good docs still land").
+    assert.equal(await statements(() => insertDocsP(docs(4, 'group'), persons, 4)), 3)
+    // Same documents with the row bound at 1: the doc upsert stays one statement (still batched
+    // by group, not by WRITE_BATCH_ROWS), but the derived writes fall back to one per row --
+    // 1 upsert + 4 person rows + 8 term rows.
     process.env.WRITE_BATCH_ROWS = '1'
     const unbatched = await statements(() => insertDocsP(docs(4, 'unbatched'), persons, 4))
     delete process.env.WRITE_BATCH_ROWS
-    assert.equal(unbatched, 16)
+    assert.equal(unbatched, 13)
   })
 
   it('a failing group rolls back its own transaction only: an untouched group before and after it still lands whole', async () => {
@@ -86,8 +88,8 @@ describe('bounded write batches (issue #50)', () => {
   it('grows its statement count with the number of groups, not with the number of documents', async () => {
     const one = await statements(() => insertDocsP(docs(8, 'one-group'), persons, 8))
     const four = await statements(() => insertDocsP(docs(8, 'four-groups'), persons, 2))
-    assert.equal(one, 10)
-    assert.equal(four, 4 * 4)
+    assert.equal(one, 3)
+    assert.equal(four, 4 * 3)
   })
 
   it('reindexes in a fixed number of statements per page, whatever the corpus size', async () => {

@@ -1,9 +1,6 @@
-// A searchable face over an existing <select>. The select stays the value store every seed,
-// test and change listener already reads (its `.value`, its `.options`, its `change` event);
-// this only hides it and puts a text input plus a filtered listbox in its place. Picking an
-// option writes the select's value and dispatches its own `change`, so nothing upstream knows
-// the difference. Grouping comes from the select's own <optgroup>s, read at every open, so a
-// refill of those groups (loadOutlets in figures/lenses.ts) needs no notice here.
+// A searchable face over an existing <select>, which stays the value store: a pick writes its
+// value and dispatches its own `change`. Groups are its <optgroup>s, re-read at every open, so
+// a refill (loadOutlets in figures/lenses.ts) needs no notice here.
 
 import { html, normalize } from './format.js'
 

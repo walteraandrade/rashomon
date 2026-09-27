@@ -2,11 +2,17 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { MINS } from '../src/query.js'
 import * as scoring from '../src/scoring.js'
-import { isName, pmiRank, signatureFloor, sortKey } from '../src/scoring.js'
+import { isName, pmiLog2, pmiRank, signatureFloor, sortKey } from '../src/scoring.js'
 import { sql } from '../src/sql.js'
 import { docsText } from './docs.js'
 
 describe('scoring fragments', () => {
+  it('pmiLog2 renders the raw PMI and binds nothing when given raw columns', () => {
+    const frag = pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql.raw('np.total'), sql.raw('a.c_t'))
+    assert.equal(frag.text, 'ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2)')
+    assert.deepEqual(frag.values, [])
+  })
+
   it('pmiRank renders pmi * ln(1 + <count>) and binds nothing', () => {
     const frag = pmiRank(sql.raw('c_pt'))
     assert.equal(frag.text, 'pmi * ln(1 + c_pt)')
@@ -56,8 +62,8 @@ describe('scoring fragments', () => {
 })
 
 describe('scoring.ts is the single home for the pmi ordering, signature floor and own-name filter', () => {
-  it('exports exactly pmiRank, sortKey, signatureFloor, isName, countryFilter, outletDomain and no namePhrase', () => {
-    assert.deepEqual(Object.keys(scoring).sort(), ['countryFilter', 'isName', 'outletDomain', 'pmiRank', 'signatureFloor', 'sortKey'])
+  it('exports exactly pmiLog2, pmiRank, sortKey, signatureFloor, isName, countryFilter, outletDomain and no namePhrase', () => {
+    assert.deepEqual(Object.keys(scoring).sort(), ['countryFilter', 'isName', 'outletDomain', 'pmiLog2', 'pmiRank', 'signatureFloor', 'sortKey'])
   })
 
   it('the docs state the pmi-ordering and signature-floor formulas live in src/scoring.ts', () => {

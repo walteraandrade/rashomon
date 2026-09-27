@@ -15,6 +15,7 @@ import {
   truncateText,
   upsertAttentionP,
   upsertPersonsP,
+  uriLayers,
   writeBatchDocs,
   writeBatchRows,
   writeDerivedP,
@@ -279,6 +280,83 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
     const counts = await derivedCounts(uris[0])
     assert.deepEqual(await insertDocsP([group[0], group[2]], persons, 2), { written: 0, enriched: 0, failed: 0 })
     assert.deepEqual(await derivedCounts(uris[0]), counts)
+  })
+
+  // A lone UTF-16 surrogate (no partner to pair with) survives as a JS string, but
+  // JSON.stringify escapes it as \ud800 and jsonb rejects that escape with 22P02 -- unlike a
+  // well-formed string, which round-trips through jsonb unchanged. The per-doc replay isolates
+  // it exactly like the foreign-key failure above: the doc itself fails, its group-mate lands.
+  it('isolates a doc whose text holds a lone UTF-16 surrogate: it fails, its group-mate lands', async () => {
+    const surrogateGroup = [
+      { source: 'rss' as const, uri: 'https://example.org/surrogate/a', text: 'lula fala \ud800 sobre a pauta', publishedAt: now(), domain: 'example.org' },
+      { source: 'rss' as const, uri: 'https://example.org/surrogate/b', text: 'lula fala sobre a pauta normal', publishedAt: now(), domain: 'example.org' },
+    ]
+    assert.deepEqual(await insertDocsP(surrogateGroup, persons, 2), { written: 1, enriched: 0, failed: 1 })
+    assert.equal(await derivedCounts(surrogateGroup[0].uri), null)
+    assert.equal((await derivedCounts(surrogateGroup[1].uri))?.persons, 1)
+  })
+})
+
+describe('uriLayers splits duplicate uris into separate, uri-unique layers', () => {
+  it('keeps a single layer when every uri is unique', () => {
+    const xs = [{ uri: 'a' }, { uri: 'b' }, { uri: 'c' }]
+    assert.deepEqual(uriLayers(xs), [xs])
+  })
+
+  it('pushes a repeated uri into its own later layer, in order of appearance', () => {
+    const a1 = { uri: 'a', n: 1 }
+    const b1 = { uri: 'b', n: 2 }
+    const a2 = { uri: 'a', n: 3 }
+    const a3 = { uri: 'a', n: 4 }
+    assert.deepEqual(uriLayers([a1, b1, a2, a3]), [[a1, b1], [a2], [a3]])
+  })
+
+  it('returns no layers for an empty list', () => {
+    assert.deepEqual(uriLayers([]), [])
+  })
+})
+
+// A multi-row upsert cannot affect the same uri twice in one statement (uriLayers); the
+// batched writer must still land the same outcome as separate insertDocP calls would.
+describe('insertDocs replays a duplicate uri within one batch like sequential upserts', () => {
+  before(seed)
+  const uri = 'https://example.org/dup-in-batch'
+  const other = 'https://example.org/dup-in-batch-other'
+  const short = { source: 'rss' as const, uri, text: 'Lula fala sobre a reforma', publishedAt: now(), domain: 'example.org' }
+  const long = {
+    source: 'rss' as const,
+    uri,
+    text: 'Lula fala sobre a reforma tributaria e detalha o texto enviado ao Congresso nesta semana',
+    publishedAt: now(),
+    domain: 'example.org',
+  }
+  const sibling = { source: 'rss' as const, uri: other, text: 'Lula anuncia investimento em Santos', publishedAt: now(), domain: 'example.org' }
+
+  it('counts the first occurrence as written and the later, longer one as enriched', async () => {
+    const totals = await insertDocsP([short, sibling, long], persons, 10)
+    assert.deepEqual(totals, { written: 2, enriched: 1, failed: 0 })
+    assert.equal(await textOf(uri), long.text)
+    assert.ok((await termsOf(uri)).includes('tributaria'))
+  })
+
+  it('matches what applying the two docs one insertDocP call at a time would give', async () => {
+    const uriB = 'https://example.org/dup-in-batch-sequential'
+    const seqA = { source: 'rss' as const, uri: uriB, text: 'Lula fala sobre a reforma', publishedAt: now(), domain: 'example.org' }
+    const seqB = {
+      source: 'rss' as const,
+      uri: uriB,
+      text: 'Lula fala sobre a reforma tributaria e detalha o texto enviado ao Congresso nesta semana',
+      publishedAt: now(),
+      domain: 'example.org',
+    }
+    const wA = await insertDocP(seqA, persons)
+    const wB = await insertDocP(seqB, persons)
+    const batchUri = 'https://example.org/dup-in-batch-comparable'
+    const batchA = { ...seqA, uri: batchUri }
+    const batchB = { ...seqB, uri: batchUri }
+    const totals = await insertDocsP([batchA, batchB], persons, 10)
+    assert.deepEqual(totals, { written: wA ? 1 : 0, enriched: wB ? 0 : 1, failed: 0 })
+    assert.equal(await textOf(batchUri), await textOf(uriB))
   })
 })
 

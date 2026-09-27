@@ -2,7 +2,7 @@ import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
 import { DAYS } from './query.js'
-import { countryFilter, isName, outletDomain, pmiRank, signatureFloor, sortKey } from './scoring.js'
+import { countryFilter, isName, outletDomain, pmiLog2, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
 
@@ -225,7 +225,7 @@ const graphQuery = (person: Person, q: GraphQuery) => {
   ),
   nodes_scored as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
-      ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
+      ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql.raw('np.total'), sql.raw('a.c_t'))} as pmi
     from term_p p join term_all a using (term, kind), n, np
     where p.c_pt >= ${q.min} and (${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ',')))
   ),
@@ -240,7 +240,7 @@ const graphQuery = (person: Person, q: GraphQuery) => {
   ),
   signature_scored as (
     select p.term, p.kind, p.c_pt::int as count,
-      ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
+      ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql.raw('np.total'), sql.raw('a.c_t'))} as pmi
     from term_p p join term_all a using (term, kind), n, np
     where p.c_pt >= ${signatureFloor(sql.raw('np.total'))}
   ),
@@ -518,27 +518,31 @@ export const toneFor = async (q: ToneQuery) => {
 // people counts once in domain_totals but once per person in cells, so shares can sum above 1.
 // Always scoped to country='br', like lensesQuery: no country parameter on this route.
 const agendaQuery = (q: AgendaQuery) => sql`
-  with scope as (
+  with scope as materialized (
     select d.id, ${outletDomain} as domain from docs d
     where d.published_at >= now() - make_interval(days => ${q.days})
       and ${outletDomain} is not null
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${countryFilter('br')})
   ),
+  per_doc as materialized (
+    select s.domain, s.id as doc_id, dp.person_id
+    from scope s
+    join doc_persons dp on dp.doc_id = s.id
+  ),
   domain_totals as (
-    select s.domain, count(distinct dp.doc_id)::int as total
-    from scope s join doc_persons dp on dp.doc_id = s.id
-    group by s.domain
-    having count(distinct dp.doc_id) >= ${q.min}
-    order by total desc, s.domain asc
+    select domain, count(distinct doc_id)::int as total
+    from per_doc
+    group by domain
+    having count(distinct doc_id) >= ${q.min}
+    order by total desc, domain asc
     limit ${q.limit}
   ),
   cells as (
-    select dp.person_id, s.domain, count(distinct dp.doc_id)::int as docs
-    from scope s
-    join doc_persons dp on dp.doc_id = s.id
-    join domain_totals dt on dt.domain = s.domain
-    group by dp.person_id, s.domain
+    select person_id, domain, count(*)::int as docs
+    from per_doc
+    join domain_totals using (domain)
+    group by person_id, domain
   )
   select c.person_id, c.domain, c.docs,
     round(c.docs::numeric / dt.total::numeric, 2)::float8 as share
@@ -717,23 +721,21 @@ export type Candidate = CandidateRow & { samples: Omit<CandidateSampleRow, 'name
 
 // Cross-person: candidates are names nobody tracks, so there is no person_id to scope by.
 const candidatesQuery = (q: CandidatesQuery) => sql`
-  with recent as (
-    select c.name, count(distinct c.doc_id)::int as count, count(distinct d.source)::int as sources
-    from doc_candidates c join docs d on d.id = c.doc_id
-    where d.published_at >= now() - make_interval(days => ${q.days})
-    group by c.name
-    having count(distinct c.doc_id) >= ${q.min}
-  ),
-  previous as (
-    select c.name, count(distinct c.doc_id)::int as count
-    from doc_candidates c join docs d on d.id = c.doc_id
-    where d.published_at < now() - make_interval(days => ${q.days})
-      and d.published_at >= now() - make_interval(days => 2 * ${q.days})
-    group by c.name
+  with tagged as (
+    select c.name, c.doc_id, d.source,
+      d.published_at >= now() - make_interval(days => ${q.days}) as is_recent
+    from doc_candidates c
+    join docs d on d.id = c.doc_id
+    where d.published_at >= now() - make_interval(days => ${q.days}::int * 2)
   )
-  select r.name, r.count, r.sources, coalesce(p.count, 0)::int as previous
-  from recent r left join previous p using (name)
-  order by r.count desc, r.name
+  select name,
+    count(distinct doc_id) filter (where is_recent)::int as count,
+    count(distinct source) filter (where is_recent)::int as sources,
+    count(distinct doc_id) filter (where not is_recent)::int as previous
+  from tagged
+  group by name
+  having count(distinct doc_id) filter (where is_recent) >= ${q.min}
+  order by count desc, name
   limit ${q.limit}`
 
 const candidateSamplesQuery = (names: string[], days: number) => sql`
@@ -860,7 +862,7 @@ const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
   ),
   ${scored} as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
-      ln((p.c_pt * n.total) / (${np}.total * a.c_t)) / ln(2) as pmi
+      ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql`${np}.total`, sql.raw('a.c_t'))} as pmi
     from ${termP} p join term_all a using (term, kind), n, ${np}
     where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
   ),
@@ -946,36 +948,44 @@ const weekScopeCte = (q: WeekQuery) => {
   )`
 }
 
+// `t.doc_id = any(array(select id from person_kept))` repeats `t.doc_id = pk.id`. Without
+// it the planner underestimates person_kept once the window passes about 14 days and
+// hash-joins a sequential scan of doc_terms, which wipes the gain at days=30.
 const weekQuery = (person: Person, q: WeekQuery) => {
   const exclude = nameTokens(person)
   return sql`
   with ${weekScopeCte(q)},
-  about_days as (
-    select k.day, count(*)::int as about
+  person_kept as materialized (
+    select k.day, k.id
     from kept k
     join doc_persons dp on dp.doc_id = k.id and dp.person_id = ${person.id}
-    group by 1
+  ),
+  about_days as (
+    select day, count(*)::int as about from person_kept group by 1
   ),
   ranked as (
     select day, term, kind, count,
       row_number() over (partition by day order by count desc, term, kind) as rn
     from (
-      select k.day, t.term, t.kind, count(*)::int as count
-      from kept k
-      join doc_persons dp on dp.doc_id = k.id and dp.person_id = ${person.id}
-      join doc_terms t on t.doc_id = k.id
+      select pk.day, t.term, t.kind, count(*)::int as count
+      from person_kept pk
+      join doc_terms t on t.doc_id = pk.id and t.doc_id = any(array(select id from person_kept))
       where not ${isName(sql.raw('t.term'), exclude)}
         and (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ',')))
-      group by k.day, t.term, t.kind
+      group by pk.day, t.term, t.kind
     ) g
+  ),
+  by_day as (
+    select day,
+      json_agg(json_build_object('term', term, 'kind', kind, 'count', count) order by count desc, term, kind) as terms
+    from ranked
+    where rn <= ${q.limit}
+    group by day
   )
-  select dt.start, coalesce(a.about, 0)::int as about,
-    coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count) order by count desc, term, kind)
-      from ranked r where r.day = dt.day and r.rn <= ${q.limit}
-    ), '[]'::json) as terms
+  select dt.start, coalesce(a.about, 0)::int as about, coalesce(b.terms, '[]'::json) as terms
   from dates dt
   left join about_days a on a.day = dt.day
+  left join by_day b on b.day = dt.day
   order by dt.day`
 }
 
@@ -1081,7 +1091,7 @@ const lensSideCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQ
   ),
   ${scored} as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
-      ln((p.c_pt * ${n}.total) / (${np}.total * a.c_t)) / ln(2) as pmi
+      ${pmiLog2(sql.raw('p.c_pt'), sql`${n}.total`, sql`${np}.total`, sql.raw('a.c_t'))} as pmi
     from ${termP} p join ${termAll} a using (term, kind), ${n}, ${np}
     where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
   ),

@@ -112,6 +112,7 @@ describe('purge themes (issue #108)', () => {
 // Verifier suite for AC7, written independently against a doc the builder's own tests never
 // touch (docs[6]), so it exercises purgeThemes' selective-strip behaviour from scratch.
 describe('purge themes strips only theme elements, keeps org (issue #209 AC7, verifier)', () => {
+  before(seed)
   after(reseed)
 
   it('removes a theme element and its doc_terms row while leaving a live org element and its doc_terms row intact', async () => {

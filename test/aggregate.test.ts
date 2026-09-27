@@ -409,7 +409,10 @@ describe('org-kind terms inside a build window (issue #209)', () => {
     )
     await buildGraphAggregates(persons)
   })
-  after(reseed)
+  after(async () => {
+    await reseed()
+    await buildGraphAggregates(persons)
+  })
 
   it('graph_terms holds org rows once a doc inside a build window carries one', async () => {
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_terms where kind = 'org'`)

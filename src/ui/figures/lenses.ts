@@ -7,6 +7,7 @@ import { html, kinds, lensLabel, type Lenses, type Measure, type OutletRow } fro
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintLensDetail, paintLensRuler, paintLensRulerError, paintLensesLoading } from '../render.js'
 import { runFigure } from '../figure.js'
+import { attachCombobox, type Combobox } from '../combobox.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
 
@@ -252,6 +253,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     if (!applied) return
     $('lensesA').value = hasOption($('lensesA'), prevA) ? prevA : 'all'
     $('lensesB').value = hasOption($('lensesB'), prevB) ? prevB : 'all'
+    combos.forEach((c) => c.sync())
   }
 
   const onPersonChange = async () => {
@@ -271,6 +273,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const isDomainSeed = (v: string | undefined): v is string => typeof v === 'string' && v.startsWith('domain:')
 
+  // The two lens selects hold up to 80 outlets each, so they get a searchable face; attached
+  // after the synchronous seeds below so the input opens showing the seeded label.
+  const combos: Combobox[] = []
+
   $('lensesPerson').innerHTML = ''
   for (const p of people) $('lensesPerson').add(new Option(p.name, p.id))
   $('lensesPerson').value = resolvePerson(people, initial.person)
@@ -280,6 +286,9 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   // is deferred below, so lean:/source:/all seeds apply now, before the reader can touch a control.
   if (!isDomainSeed(initial.a)) applySeed($('lensesA'), initial.a)
   if (!isDomainSeed(initial.b)) applySeed($('lensesB'), initial.b)
+  for (const side of ['A', 'B']) {
+    if ($(`lenses${side}Input`) && $(`lenses${side}List`)) combos.push(attachCombobox({ select: $(`lenses${side}`), input: $(`lenses${side}Input`), list: $(`lenses${side}List`) }))
+  }
 
   $('lensesA').addEventListener('change', onLensAChange)
   $('lensesB').addEventListener('change', onLensBChange)
@@ -291,6 +300,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     if (applied) {
       if (isDomainSeed(initial.a) && !touchedA) applySeed($('lensesA'), initial.a)
       if (isDomainSeed(initial.b) && !touchedB) applySeed($('lensesB'), initial.b)
+      combos.forEach((c) => c.sync())
     }
     figure.load()
   })

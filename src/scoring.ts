@@ -22,3 +22,8 @@ export const isName = (col: Sql, names: string[]): Sql =>
 // requested. 'br' keeps null-country docs too (`is distinct from`); 'pt' excludes them; 'all' is unfiltered.
 export const countryFilter = (country: 'br' | 'pt' | 'all'): Sql =>
   sql`(${country} = 'all' or (${country} = 'pt' and d.country = 'pt') or (${country} = 'br' and d.country is distinct from 'pt'))`
+
+// A Bluesky doc's `domain` is its author's handle, an account rather than an outlet, so every
+// ranking of outlets (`/sources`, `/testimony`'s by_domain, `/agenda`) reads it as null. A
+// `domain=<handle>` filter on `/docs` or a `domain:<handle>` lens still matches the stored value.
+export const outletDomain: Sql = sql`(case when d.source = 'bluesky' then null else d.domain end)`

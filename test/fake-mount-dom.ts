@@ -457,6 +457,10 @@ const lensesIds = () => {
     lensesB,
     lensesAOutlets: new FakeOutletGroup('lensesAOutlets', lensesA),
     lensesBOutlets: new FakeOutletGroup('lensesBOutlets', lensesB),
+    lensesAInput: new FakeBox('lensesAInput'),
+    lensesAList: new FakeBox('lensesAList'),
+    lensesBInput: new FakeBox('lensesBInput'),
+    lensesBList: new FakeBox('lensesBList'),
     lensesDays: new FakeSelect('lensesDays', DAYS_OPTIONS),
     lensesLimit: new FakeSelect('lensesLimit', [
       { value: '20', text: '20' },

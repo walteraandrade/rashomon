@@ -366,10 +366,14 @@ export const paintOutlets = ({
   $('outletList').classList.remove('is-loading')
   $('outletList').setAttribute('aria-busy', 'false')
   $('outletList').innerHTML = merged.length
-    ? html`<div class="outlet-grid">${merged.map(
-        (r) =>
-          html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}"><span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span></button>`,
-      )}</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
+    ? html`<div class="outlet-grid">${merged.map((r) => {
+        const cells = html`<span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span>`
+        // A row keyed by a source name folds that source's host-less docs (Bluesky posts, whose
+        // stored domain is an author handle): a count, never an outlet to focus on.
+        return r.sources.includes(r.domain)
+          ? html`<span class="outlet is-static" title="Textos sem veículo nesta fonte">${cells}</span>`
+          : html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}">${cells}</button>`
+      })}</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
     : '<p class="note">Nenhum veículo neste recorte.</p>'
   queryAll('[data-domain]', $('outletList')).forEach((el) =>
     el.addEventListener('click', () => {

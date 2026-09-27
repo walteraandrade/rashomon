@@ -476,8 +476,45 @@ describe('sourcesFor', () => {
     assert.equal(folha?.tone, -1.5)
     assert.equal(folha?.tone_n, 1)
     const bsky = rows.find((r) => r.source === 'bluesky')
-    assert.equal(bsky?.domain, 'ana.bsky.social')
+    assert.equal(bsky?.domain, null, "a Bluesky author's handle is never an outlet")
+    assert.equal(bsky?.docs, 1)
     assert.equal(bsky?.tone, null)
+  })
+
+  it('folds every Bluesky handle into one null-domain row per source, never one row per author', async () => {
+    const rows = await sourcesFor(lula, graphBase)
+    assert.ok(!rows.some((r) => r.domain?.endsWith('.bsky.social')), 'no handle may surface as a domain')
+    assert.deepEqual(rows.filter((r) => r.source === 'bluesky').map((r) => r.domain), [null])
+  })
+})
+
+describe('a Bluesky handle is never an outlet (outletDomain)', () => {
+  let seeded: Promise<void> | null = null
+  const seedAll = () =>
+    (seeded ??= (async () => {
+      await seed()
+      // ana.bsky.social's post (doc /2, 2 days ago) names lula and tarcisio; scored for lula
+      // under its own method so no other suite's by_domain totals shift.
+      await insertTestimony('at://did:plc:x/post/2', 'lula', 'bsky-only', 7)
+    })())
+  before(seedAll)
+
+  it('agendaFor never ranks a handle as a domain, even with min at 1', async () => {
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.ok(!r.domains.some((d) => d.endsWith('.bsky.social')), `handles leaked: ${r.domains.join(', ')}`)
+    assert.ok(!r.cells.some((c) => c.domain.endsWith('.bsky.social')))
+  })
+
+  it('testimonyFor keeps a Bluesky score in overall and by_source but never in by_domain', async () => {
+    const r = await testimonyFor(lula, { ...testimonyBase, method: 'bsky-only', min: 1 })
+    assert.deepEqual(r.overall, { score: 7, n: 1 })
+    assert.deepEqual(r.by_source, [{ source: 'bluesky', score: 7, n: 1 }])
+    assert.deepEqual(r.by_domain, [], 'the handle must not become a by_domain row')
+  })
+
+  it('docsFor still filters by the stored handle, so a domain:<handle> lens keeps working', async () => {
+    const { docs } = await docsFor(lula, { ...docsBase, domain: 'ana.bsky.social' })
+    assert.deepEqual(docs.map((d) => d.domain), ['ana.bsky.social'])
   })
 })
 

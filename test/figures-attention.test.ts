@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { attentionParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams } from '../src/ui/api.js'
 import { clearScopes } from '../src/ui/state.js'
 import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
@@ -48,7 +48,7 @@ describe('attentionParams stays fixed at days=30 (AC5, api.test.ts carries the d
 })
 
 describe('(mount): fetches /attention and a term-less /timeline with the figure own recorte', () => {
-  it('requests /timeline with no term (or term=""), kind=word,hashtag,phrase, days=30, bucket=day and the selected source (AC6)', async () => {
+  it('requests /timeline with no term (or term=""), kind=ATLAS_KINDS, days=30, bucket=day and the selected source (AC6)', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, {
@@ -63,7 +63,7 @@ describe('(mount): fetches /attention and a term-less /timeline with the figure 
       assert.match(url!, /\/api\/people\/bolsonaro\/timeline\?/)
       const qs = new URL(url!, 'http://localhost').searchParams
       assert.ok(!qs.has('term') || qs.get('term') === '', 'the mentions series is never filtered to one term')
-      assert.equal(qs.get('kind'), 'word,hashtag,phrase')
+      assert.equal(qs.get('kind'), ATLAS_KINDS)
       assert.equal(qs.get('days'), '30')
       assert.equal(qs.get('bucket'), 'day')
       assert.equal(qs.get('source'), 'gdelt')
@@ -199,7 +199,7 @@ describe('clicking a day column opens the docs card with that day (AC8)', () => 
       const qs = new URL(docsUrl!, 'http://localhost').searchParams
       assert.equal(qs.get('day'), '2026-08-15')
       assert.equal(qs.get('term'), '')
-      assert.equal(qs.get('kind'), 'word,hashtag,phrase')
+      assert.equal(qs.get('kind'), ATLAS_KINDS)
       assert.equal(qs.get('source'), 'gdelt')
       assert.equal(els.docsDialog.open, true)
       assert.equal(docsCard.openedBy('attention'), true)

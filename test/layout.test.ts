@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, pack, packPass, peakDay, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
 
@@ -482,7 +482,6 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
   })
 })
 
-
 // Issue #216 (figure 7): peakDay is the pure helper both the mentions and the views series
 // share -- each series arrives as one { day, value } pair per calendar day, already reduced to
 // the one number that series scores by (mentions' own count, or a day's pageviews).
@@ -571,5 +570,32 @@ describe('attentionLayout (issue #216), no adjacent overlap on a 30-day grid', (
     const viewSizes = layout.views.map((v) => v.size)
     assert.equal(mentionSizes[2], Math.max(...mentionSizes), "mentions' own peak day (index 2) must render at its own row's ceiling")
     assert.equal(viewSizes[0], Math.max(...viewSizes), "views' own peak day (index 0) must render at its own row's ceiling")
+  })
+})
+
+describe('matrixLayout (figure 9, issue #207)', () => {
+  it('keys a pair by its own a/b, independent of the row/column order the persons array gives, pinning the positional-key bug hit while building', () => {
+    // persons is name-ordered ("Ana" < "Bia" < "Rita"), which here differs from the id order the
+    // pair travels in (a=lula, b=tarcisio, alphabetically 'lula' < 'tarcisio' regardless of name).
+    const persons = [
+      { id: 'tarcisio', name: 'Ana' },
+      { id: 'lula', name: 'Bia' },
+      { id: 'bolsonaro', name: 'Rita' },
+    ]
+    const { cellSize, cells } = matrixLayout(persons, [{ a: 'lula', b: 'tarcisio', count: 4 }], 900)
+    assert.equal(cells.length, (persons.length * (persons.length - 1)) / 2, 'one cell per upper-triangle slot, a<b in row/column order')
+    const filled = cells.filter((c) => c.count !== null)
+    assert.equal(filled.length, 1, 'exactly one non-null cell')
+    assert.deepEqual(filled[0], { a: 'tarcisio', b: 'lula', count: 4, ink: 1 })
+    for (const c of cells) if (c.a !== 'tarcisio' || c.b !== 'lula') assert.equal(c.count, null, `${c.a}/${c.b} must be null`)
+    assert.ok(cellSize >= MATRIX_CELL_MIN && cellSize <= MATRIX_CELL_MAX)
+  })
+
+  it('clamps cellSize to MATRIX_CELL_MIN/MAX regardless of how narrow or wide the container is', () => {
+    const persons = Array.from({ length: 27 }, (_, i) => ({ id: `p${i}`, name: `P${i}` }))
+    const narrow = matrixLayout(persons, [], 10)
+    assert.equal(narrow.cellSize, MATRIX_CELL_MIN)
+    const wide = matrixLayout(persons, [], 4000)
+    assert.equal(wide.cellSize, MATRIX_CELL_MAX)
   })
 })

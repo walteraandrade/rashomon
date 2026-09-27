@@ -186,6 +186,22 @@
     </header>
     <figure class="agenda-grid" id="agendaGrid" aria-label="Fatia de cobertura por veículo e por pessoa" hidden></figure>
   </section>
+
+  <section class="figure comention" id="comention" aria-labelledby="comentionTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 9</span><h2 id="comentionTitle">Quem aparece junto</h2></div>
+      <p class="figure-sub">Quantos textos citam duas pessoas rastreadas ao mesmo tempo, na mesma janela. <a href="como-ler.html#junto">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt>Célula</dt><dd>textos que citam as duas pessoas juntas na janela</dd></div>
+        <div><dt>Cor</dt><dd>mais clara, mais textos; nunca é avaliação</dd></div>
+        <div><dt>Clique</dt><dd>os textos daquele par</dd></div>
+        <div><dt>Nota</dt><dd>aparecer junto não é concordar</dd></div>
+      </dl>
+      <div class="sentence"><p class="sentence-line">Pares de pessoas citadas juntas nos <span class="keep"><span class="pick"><select id="comentionDays" aria-label="Período (quem aparece junto)"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="365">último ano</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="comentionSource" aria-label="Fonte (quem aparece junto)"></select></span>,</span> por <span class="keep"><span class="pick"><select id="comentionLean" aria-label="Viés (quem aparece junto)"><option value="all" selected>todo o viés</option><option value="left">esquerda</option><option value="center">centro</option><option value="right">direita</option></select></span>.</span> Mostrar pares com <span class="pick"><select id="comentionMin" aria-label="Mínimo de textos em comum"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option></select></span> textos em comum ou mais.</p></div>
+    </header>
+    <figure class="comention-body" id="comentionMatrix" aria-label="Matriz de pares de pessoas citadas juntas" hidden></figure>
+    <p class="note" id="comentionAbout"></p>
+  </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
   <div class="docs-dialog-head" id="docsGrip"><div><span class="eyebrow" id="docsKicker">Documentos</span><h2 id="docsTitle"></h2></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
@@ -267,6 +283,11 @@
       <h3>Gráfico 8 · Agenda por veículo</h3>
       <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total.</p>
       <p>A soma de uma linha pode passar de 100%: um documento que cita duas pessoas acompanhadas conta para as duas, uma vez cada. Um veículo com poucos documentos rastreados nem entra na tabela. Clique numa célula abre os documentos daquela pessoa naquele veículo.</p>
+    </div>
+    <div id="help-junto">
+      <h3>Gráfico 9 · Quem aparece junto</h3>
+      <p>Cada célula conta os textos que citam as duas pessoas ao mesmo tempo, na mesma janela. Aparecer junto não é concordar: a célula não diz se as duas foram citadas a favor, contra ou uma da outra, só que o mesmo texto falou das duas.</p>
+      <p>O mínimo escolhido na frase esconde os pares com poucos textos em comum: um par abaixo dele fica em branco na matriz, não desaparece dela. Clicar numa célula preenchida abre os textos daquele par; clique de novo, ou fora da matriz, fecha.</p>
     </div>
     <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
     <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
-import { agendaFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
-import { parseAgendaQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
+import { agendaFor, comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
+import { parseAgendaQuery, parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
-import { insertDocP } from '../src/store.js'
+import { insertDocP, upsertPersonsP } from '../src/store.js'
 import { withEnv } from './env.js'
 import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates } from './fixture.js'
 import './close.js'
@@ -83,8 +83,8 @@ describe('the routes answer their *For functions with the default parser (issue 
   it('/api/people/:id/graph stats are the fixture literals test/graph.test.ts pins', async () => {
     const res = await app.request('/api/people/lula/graph')
     const body = (await res.json()) as { stats: { docs: number; about: number } }
-    assert.equal(body.stats.docs, 14)
-    assert.equal(body.stats.about, 5)
+    assert.equal(body.stats.docs, 16)
+    assert.equal(body.stats.about, 7)
   })
 
   it('/api/tone matches toneFor and the fixture literal', async () => {
@@ -416,6 +416,53 @@ describe('GET /api/compare (issue #93)', () => {
   })
 })
 
+describe('GET /api/comention (issue #207)', () => {
+  before(seed)
+
+  it('matches comentionFor with the default parser', async () => {
+    const res = await app.request('/api/comention')
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    const direct = await comentionFor(parseComentionQuery({}))
+    assert.deepEqual(JSON.parse(JSON.stringify(direct)), body)
+  })
+
+  it('returns { days, persons, pairs } and nothing else', async () => {
+    const res = await app.request('/api/comention')
+    const body = (await res.json()) as Record<string, unknown>
+    assert.deepEqual(Object.keys(body).sort(), ['days', 'pairs', 'persons'])
+  })
+
+  it('lists every tracked person, and the lula/tarcisio pair clearing the default min', async () => {
+    const res = await app.request('/api/comention')
+    const body = (await res.json()) as { persons: { id: string }[]; pairs: { a: string; b: string; count: number }[] }
+    assert.deepEqual(body.persons.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
+    assert.ok(body.pairs.some((p) => p.a === 'lula' && p.b === 'tarcisio' && p.count === 3))
+  })
+
+  it('threads days/source/lean/min through the query string', async () => {
+    const res = await app.request('/api/comention?min=999')
+    const body = (await res.json()) as { pairs: unknown[] }
+    assert.deepEqual(body.pairs, [])
+  })
+
+  it('is cached, unlike a 404', async () => {
+    const res = await app.request('/api/comention')
+    assert.ok(res.headers.get('cache-control'))
+  })
+
+  it('agrees with /docs?with= for every pair: a matrix cell and its documents never disagree', async () => {
+    const res = await app.request('/api/comention?min=1')
+    const body = (await res.json()) as { pairs: { a: string; b: string; count: number }[] }
+    assert.ok(body.pairs.length > 0)
+    for (const { a, b, count } of body.pairs) {
+      const docsRes = await app.request(`/api/people/${a}/docs?with=${b}&limit=200`)
+      const docsBody = (await docsRes.json()) as { total: number }
+      assert.equal(docsBody.total, count, `${a}/${b}`)
+    }
+  })
+})
+
 describe('GET /api/people/:id/lenses (issue #206)', () => {
   before(seed)
 
@@ -566,6 +613,60 @@ describe('GET /api/people/:id/docs day= unfilters on a bad value (issue #147, ke
     const open = (await (await app.request('/api/people/lula/docs')).json()) as { total: number }
     const future = (await (await app.request('/api/people/lula/docs?day=2099-01-01')).json()) as { total: number }
     assert.equal(future.total, open.total)
+  })
+})
+
+describe('GET /api/people/:id/docs?with= (issue #207)', () => {
+  before(seed)
+
+  it('matches docsFor for a known other id', async () => {
+    const res = await app.request('/api/people/lula/docs?with=tarcisio')
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    const direct = await docsFor(lula, parseDocsQuery({ with: 'tarcisio' }, 'lula'))
+    assert.deepEqual(JSON.parse(JSON.stringify(direct)), body)
+    assert.equal((body as { total: number }).total, 3)
+  })
+
+  it('an unknown with id, or with equal to the route\'s own :id, returns byte-identical output to no with at all', async () => {
+    const open = (await (await app.request('/api/people/lula/docs')).json()) as unknown
+    const unknown = (await (await app.request('/api/people/lula/docs?with=nobody-tracked')).json()) as unknown
+    const self = (await (await app.request('/api/people/lula/docs?with=lula')).json()) as unknown
+    assert.deepEqual(unknown, open)
+    assert.deepEqual(self, open)
+  })
+})
+
+// The parser (query.ts) no longer validates `with` against a seed.json-frozen id set: this
+// handler does the lookup itself, against the live persons table, the window a seed edit and
+// the next deploy used to open (issue #235 review).
+describe('GET /api/people/:id/docs?with= validates against the persons table, not seed.json (issue #235 review)', () => {
+  const ghost: Person = { id: 'ghost-not-in-seed', name: 'Ghost', aliases: ['Ghost'] }
+
+  before(async () => {
+    await seed()
+    assert.ok(!(personsSeed as Person[]).some((p) => p.id === ghost.id), 'sanity: this id must not be in seed.json')
+    await upsertPersonsP([...persons, ghost])
+    await insertDocP(
+      { source: 'rss', uri: 'https://example.org/ghost-1', text: 'Lula e o Ghost debatem juntos', publishedAt: new Date().toISOString(), domain: 'example.org' },
+      [...persons, ghost],
+    )
+  })
+  after(reseed)
+
+  it('filters correctly for an id present in the persons table but absent from seed.json', async () => {
+    const res = await app.request('/api/people/lula/docs?with=ghost-not-in-seed')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { total: number }
+    assert.equal(body.total, 1, 'with= must still filter for an id the seed.json-frozen set would have dropped')
+    const direct = await docsFor(lula, parseDocsQuery({ with: 'ghost-not-in-seed' }, 'lula'))
+    assert.equal(direct.total, body.total)
+  })
+
+  it('an id in neither the table nor seed.json still falls back to no filter', async () => {
+    const open = (await (await app.request('/api/people/lula/docs')).json()) as unknown
+    const unknown = (await (await app.request('/api/people/lula/docs?with=totally-unknown-id')).json()) as unknown
+    assert.deepEqual(unknown, open)
   })
 })
 

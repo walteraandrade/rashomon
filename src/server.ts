@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import personsSeed from '../seed.json' with { type: 'json' }
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
-import { agendaFor, attentionFor, candidatesFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
+import { agendaFor, attentionFor, candidatesFor, comentionFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
@@ -12,6 +12,7 @@ import {
   parseAgendaQuery,
   parseAttentionQuery,
   parseCandidatesQuery,
+  parseComentionQuery,
   parseCompareQuery,
   parseDocsQuery,
   parseLensesQuery,
@@ -84,7 +85,15 @@ app.use('/api/people/:id/*', async (c, next) => {
 
 app.get('/api/people/:id/graph', async (c) => c.json(await graphFor(c.get('person'), parseQuery(c.req.query()))))
 app.get('/api/people/:id/sources', async (c) => c.json(await sourcesFor(c.get('person'), parseQuery(c.req.query()))))
-app.get('/api/people/:id/docs', async (c) => c.json(await docsFor(c.get('person'), parseDocsQuery(c.req.query()))))
+app.get('/api/people/:id/docs', async (c) => {
+  const q = parseDocsQuery(c.req.query(), c.req.param('id'))
+  // Existence against the live persons table, the /api/compare pattern below, not seed.json.
+  if (q.with !== '') {
+    const { rows } = await db.query(`select 1 from persons where id = $1`, [q.with])
+    if (!rows[0]) q.with = ''
+  }
+  return c.json(await docsFor(c.get('person'), q))
+})
 app.get('/api/people/:id/timeline', async (c) => c.json(await timelineFor(c.get('person'), parseTimelineQuery(c.req.query()))))
 app.get('/api/people/:id/week', async (c) => c.json(await weekFor(c.get('person'), parseWeekQuery(c.req.query()))))
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
@@ -108,6 +117,7 @@ app.get('/api/compare', async (c) => {
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))
 app.get('/api/agenda', async (c) => c.json(await agendaFor(parseAgendaQuery(c.req.query()))))
 app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
+app.get('/api/comention', async (c) => c.json(await comentionFor(parseComentionQuery(c.req.query())))) // spans every tracked person, like /api/tone
 
 app.get('/', serveStatic({ path: './public/atlas.html' }))
 app.use('/*', serveStatic({ root: './public' }))

@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { AgendaQuery, AttentionQuery, CandidatesQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
+import type { AgendaQuery, AttentionQuery, CandidatesQuery, ComentionQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -141,6 +141,13 @@ export const parseLeanList = parseList((s) => (LEANS as string[]).includes(s))
 
 export const COUNTRIES = ['br', 'pt']
 
+// Empty, or the route's own :id (self co-mention), falls back to '' -- no filter. Existence is
+// the handler's own table lookup (server.ts), not checked here, so a seed.json edit never lags a deploy.
+const withId = (raw: string | undefined, personId: string): string => {
+  const v = (raw ?? '').trim()
+  return v && v !== personId ? v : ''
+}
+
 // Unlike every other shared filter, omitted/all-invalid falls back to 'br' (excludes .pt), not
 // 'all'. Naming both known tokens, or 'all' itself, collapses to 'all'.
 export const parseCountryList = (v: string | undefined): 'br' | 'pt' | 'all' => {
@@ -172,7 +179,8 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
   communities: q.communities === '1',
 })
 
-export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery => {
+// personId is the route's own :id, rejecting a self-referential `with`; omitted by every caller that predates it.
+export const parseDocsQuery = (q: Record<string, string | undefined>, personId = ''): DocsQuery => {
   const scope = parseScope(q, { days: 30 })
   return {
     ...scope,
@@ -180,6 +188,7 @@ export const parseDocsQuery = (q: Record<string, string | undefined>): DocsQuery
     limit: snapTo(LIMITS, q.limit, 50),
     offset: snapTo(OFFSETS, q.offset, 0),
     day: keepDay(q.day, scope.days),
+    with: withId(q.with, personId),
   }
 }
 
@@ -223,6 +232,14 @@ export const parseTestimonyQuery = (q: Record<string, string | undefined>): Test
     min: snapTo(MINS, q.min, 3),
   }
 }
+
+// No domain/kind/sort (see ComentionQuery); min defaults to 3, like /api/tone and /api/rising.
+export const parseComentionQuery = (q: Record<string, string | undefined>): ComentionQuery => ({
+  days: snapDays(q.days, 30),
+  source: parseSourceList(q.source),
+  lean: parseLeanList(q.lean),
+  min: snapTo(MINS, q.min, 3),
+})
 
 // Own literals (7 / 5 / 50), distinct from every other route's defaults.
 export const parseCandidatesQuery = (q: Record<string, string | undefined>): CandidatesQuery => ({

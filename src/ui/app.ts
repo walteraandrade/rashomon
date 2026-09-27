@@ -2,6 +2,7 @@ import { mountDocsCard } from './docs-card.js'
 import { mount as mountAgenda } from './figures/agenda.js'
 import { mount as mountAttention } from './figures/attention.js'
 import { mount as mountAtlas } from './figures/atlas.js'
+import { mount as mountComention } from './figures/comention.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountLenses } from './figures/lenses.js'
 import { mount as mountRising } from './figures/rising.js'
@@ -12,6 +13,7 @@ import {
   paintAgendaLoading,
   paintAtlasLoading,
   paintAttentionLoading,
+  paintComentionLoading,
   paintCompareLoading,
   paintLensesLoading,
   paintOutletsLoading,
@@ -56,6 +58,8 @@ const FIGURES: FigureEntry[] = [
   // Spans every tracked person at once, so no 'person' key: the route's own persons list feeds
   // the grid's columns.
   { id: 'agenda', sectionId: 'agenda', keys: ['days', 'source'], noticeId: 'agendaGrid', mount: mountAgenda },
+  // Spans every tracked person, so there is no `person` key here.
+  { id: 'comention', sectionId: 'comention', keys: ['days', 'source', ['lean', null], ['min', null]], noticeId: 'comentionAbout', mount: mountComention },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.
@@ -85,6 +89,7 @@ const paintBootLoading = () => {
   paintLensesLoading()
   paintAttentionLoading()
   paintAgendaLoading()
+  paintComentionLoading()
 }
 
 export const boot = async () => {

@@ -281,6 +281,15 @@ export const docs: RawDoc[] = [
   { source: 'gnews', uri: 'https://agendadupla.example/80', text: 'Lula debate reforma tributaria em agenda economica', publishedAt: daysAgo(4317), domain: 'agendadupla.example' },
   { source: 'gnews', uri: 'https://agendadupla.example/81', text: 'Lula recebe ministros para revisar cronograma', publishedAt: daysAgo(4318), domain: 'agendadupla.example' },
   { source: 'gnews', uri: 'https://agendadupla.example/82', text: 'Lula e Tarcísio discutem parceria em evento conjunto', publishedAt: daysAgo(4319), domain: 'agendadupla.example' },
+  // docs 83-84: issue #207's comention fixture. Two more docs naming both Lula and Tarcísio,
+  // inside the default 30-day window, so together with doc /2 ("Lula e Tarcísio disputam a
+  // eleição", day2) the (lula, tarcisio) pair reaches count 3, clearing the default min:3 floor
+  // instead of always sitting one below it. Domain exemplo.com.br (a fresh, non-lean-labeled
+  // .br domain) keeps them under comentionQuery's country=br scope: comentionFor's count and
+  // /api/people/<a>/docs?with=<b>'s total must agree, and the latter runs through parseScope's
+  // own country=br default, so a .pt doc here would make the matrix cell and its docs disagree.
+  { source: 'rss', uri: 'https://exemplo.com.br/83', text: 'Lula e Tarcísio participam de cúpula lusófona em Lisboa', publishedAt: daysAgo(12), domain: 'exemplo.com.br' },
+  { source: 'rss', uri: 'https://exemplo.com.br/84', text: 'Lula recebe Tarcísio para agenda bilateral em Lisboa', publishedAt: daysAgo(13), domain: 'exemplo.com.br' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

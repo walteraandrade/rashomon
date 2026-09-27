@@ -1,4 +1,4 @@
-// #docsDialog, shared by all five figures. Knows nothing about any figure; takes kicker, title
+// #docsDialog, shared by every figure. Knows nothing about any figure; takes kicker, title
 // and one or two sides in each request, plus the opener's name so a figure can tell its own card
 // from another's. The only path to GET /docs; opens on deliberate click only.
 

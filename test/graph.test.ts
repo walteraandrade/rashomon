@@ -7,6 +7,7 @@ import { db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import {
   agendaFor,
+  comentionFor,
   compareFor,
   docsFor,
   docsWhereSql,
@@ -21,6 +22,7 @@ import {
   toneFor,
   weekFor,
   type AgendaQuery,
+  type ComentionQuery,
   type CompareQuery,
   type DocsQuery,
   type GraphQuery,
@@ -50,7 +52,8 @@ const nobody: Person = { id: 'nobody', name: 'Nobody', aliases: ['Nobody'] }
 const pmi = (cPt: number, cT: number, n: number, np: number) => Math.round(Math.log2((cPt * n) / (np * cT)) * 100) / 100
 
 const graphBase: GraphQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, min: 1, sort: 'count', communities: false }
-const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', limit: 50, offset: 0, day: '' }
+const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', limit: 50, offset: 0, day: '', with: '' }
+const comentionBase: ComentionQuery = { days: 30, source: 'all', lean: 'all', min: 3 }
 const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 20, min: 1 }
 const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
@@ -69,17 +72,18 @@ describe('graphFor', () => {
   it('counts docs in the window and docs about the person', async () => {
     const g = await graphFor(lula, graphBase)
     // days:30 also picks up docs /30-/36 (tarcisio gdelt/rss tone fixtures for issue #5; doc /37
-    // sits at day 35, just outside this window) and doc /38 (gkg, about lula, issue #8's
-    // press-vs-network fixture), widening both the person-agnostic scope (docs 13 -> 14) and about (4 -> 5)
-    assert.equal(g.stats.docs, 14)
-    assert.equal(g.stats.about, 5)
+    // sits at day 35, just outside this window), doc /38 (gkg, about lula, issue #8's
+    // press-vs-network fixture) and docs /83-/84 (issue #207's comention fixture, about lula and
+    // tarcisio), widening both the person-agnostic scope (docs 13 -> 16) and about (4 -> 7)
+    assert.equal(g.stats.docs, 16)
+    assert.equal(g.stats.about, 7)
   })
 
   it('widens with the window', async () => {
     // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const g = await graphFor(lula, { ...graphBase, days: 365 })
-    assert.equal(g.stats.docs, 19)
-    assert.equal(g.stats.about, 9)
+    assert.equal(g.stats.docs, 21)
+    assert.equal(g.stats.about, 11)
   })
 
   it('never lists the person name as a term', async () => {
@@ -89,11 +93,11 @@ describe('graphFor', () => {
 
   it('computes pmi as log2 lift against the docs about tracked people', async () => {
     const g = await graphFor(lula, graphBase)
-    // pmi's n is the tracked universe, not stats.docs: of the 14 docs in the window, doc /4
+    // pmi's n is the tracked universe, not stats.docs: of the 16 docs in the window, doc /4
     // ("Congresso avança na pauta econômica") names nobody tracked, so it carries no terms and
-    // cannot contribute to the denominator either -> n is 13
-    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 13, 5))
-    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 13, 5))
+    // cannot contribute to the denominator either -> n is 15
+    assert.equal(node(g, 'word:reforma')?.pmi, pmi(3, 3, 15, 7))
+    assert.equal(node(g, 'word:eleicao')?.pmi, pmi(1, 1, 15, 7))
     assert.equal(node(g, 'word:congresso'), undefined)
   })
 
@@ -177,7 +181,10 @@ describe('graphFor', () => {
 
   it('honours min and limit', async () => {
     const g = await graphFor(lula, { ...graphBase, min: 2 })
-    assert.deepEqual(g.nodes.map((n) => n.term).sort(), ['reforma', 'tributaria'])
+    // 'lisboa' and 'tarcisio' each reach count 2 from docs /83-/84 (issue #207's comention
+    // fixture); 'tarcisio' is another tracked person's name, not lula's own, so it is not
+    // excluded from lula's own graph.
+    assert.deepEqual(g.nodes.map((n) => n.term).sort(), ['lisboa', 'reforma', 'tarcisio', 'tributaria'])
     const one = await graphFor(lula, { ...graphBase, limit: 1 })
     assert.equal(one.nodes.length, 1)
   })
@@ -281,13 +288,18 @@ describe('graphFor communities=1', () => {
 describe('signature (issue #6)', () => {
   before(seed)
 
-  it('default 30-day scope for lula yields exactly the reforma signature, at the count floor of max(3, 5% of about)', async () => {
+  it('default 30-day scope for lula yields the reforma and tarcisio signature, at the count floor of max(3, 5% of about)', async () => {
     const g = await graphFor(lula, graphBase)
-    // issue #6's spec-pinned 0.58 became 1.49 when docs /36 and /38 widened n.total to 14 and np
-    // to 5; issue #52 then removed doc /4 (names nobody tracked, so it carries no terms) from
-    // pmi's universe, leaving n = 13 and pmi = log2(3*13/(5*3)) = 1.38.
-    assert.deepEqual(g.signature, [{ term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 13, 5) }])
-    assert.equal(g.signature[0].pmi, 1.38)
+    // docs /83-/84 (issue #207's comention fixture) widen n to 15 and np to 7, and add a second
+    // signature entry: 'tarcisio' also reaches count 3 (docs /2, /83, /84) -- another tracked
+    // person's name, not lula's own, so it survives the own-name filter. Its word-total across n
+    // (cT, mostly tarcisio's own coverage) is 11, giving a much lower pmi than reforma's.
+    assert.deepEqual(g.signature, [
+      { term: 'reforma', kind: 'word', count: 3, pmi: pmi(3, 3, 15, 7) },
+      { term: 'tarcisio', kind: 'word', count: 3, pmi: pmi(3, 11, 15, 7) },
+    ])
+    assert.equal(g.signature[0].pmi, 1.1)
+    assert.equal(g.signature[1].pmi, -0.77)
   })
 
   it('signature never contains one of the person own name tokens', async () => {
@@ -312,10 +324,10 @@ describe('signature (issue #6)', () => {
     const terms = g.signature.map((s) => s.term)
     assert.equal(new Set(terms).size, terms.length, 'no duplicate/padded rows')
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each) and, incidentally, a 3rd "defende"
-    // (docs /6, /15 and /17 all use it), widening the tie set from 6 to 9 candidate terms; 28 docs
-    // sit in this window, of which doc /4 names nobody tracked and is outside pmi's universe, so
-    // n is 27; np is 18
-    const expectedPmi = pmi(3, 3, 27, 18)
+    // (docs /6, /15 and /17 all use it), widening the tie set from 6 to 9 candidate terms; 30 docs
+    // sit in this window (widened by docs /83-/84, issue #207's comention fixture), of which
+    // doc /4 names nobody tracked and is outside pmi's universe, so n is 29; np is 20
+    const expectedPmi = pmi(3, 3, 29, 20)
     assert.deepEqual(g.signature, [
       { term: 'defende', kind: 'word', count: 3, pmi: expectedPmi },
       { term: 'desemprego', kind: 'word', count: 3, pmi: expectedPmi },
@@ -335,9 +347,9 @@ describe('signature (issue #6)', () => {
   it('signature orders by pmi desc, ties broken by term ascending', async () => {
     const g = await graphFor(lula, { ...graphBase, days: 1000 })
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others;
-    // 25 docs sit in this window, of which doc /4 names nobody tracked and is outside pmi's
-    // universe, so n is 24; np is 15
-    const tie = pmi(3, 3, 24, 15)
+    // 27 docs sit in this window (widened by docs /83-/84, issue #207's comention fixture), of
+    // which doc /4 names nobody tracked and is outside pmi's universe, so n is 26; np is 17
+    const tie = pmi(3, 3, 26, 17)
     assert.deepEqual(g.signature, [
       { term: 'desemprego', kind: 'word', count: 3, pmi: tie },
       { term: 'estabilidade', kind: 'word', count: 3, pmi: tie },
@@ -360,18 +372,19 @@ describe('multi-source filtering (issue #8)', () => {
   it('a comma-separated list counts only docs whose source is in the list', async () => {
     const g = await graphFor(lula, { ...graphBase, source: 'gnews,rss,gkg' })
     // hand-counted from the fixture: within the default 30-day window, gnews has docs /1,/6
-    // (about lula) and /3 (not about lula); rss has /4 (not about lula), /7, /36 (about tarcisio);
-    // gkg has /38 (about lula) -> 7 docs in scope, 4 about lula (/1, /6, /7, /38)
-    assert.equal(g.stats.docs, 7)
-    assert.equal(g.stats.about, 4)
+    // (about lula) and /3 (not about lula); rss has /4 (not about lula), /7, /36 (about
+    // tarcisio), /83, /84 (about lula and tarcisio, issue #207's comention fixture); gkg has
+    // /38 (about lula) -> 9 docs in scope, 6 about lula (/1, /6, /7, /38, /83, /84)
+    assert.equal(g.stats.docs, 9)
+    assert.equal(g.stats.about, 6)
   })
 
   it('sourcesFor and docsFor agree with the same hand-counted scope', async () => {
     const rows = await sourcesFor(lula, { ...graphBase, source: 'gnews,rss,gkg' })
-    assert.equal(rows.reduce((acc, r) => acc + r.docs, 0), 4)
+    assert.equal(rows.reduce((acc, r) => acc + r.docs, 0), 6)
     assert.ok(rows.every((r) => r.source === 'gnews' || r.source === 'rss' || r.source === 'gkg'))
     const { total, docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss,gkg' })
-    assert.equal(total, 4)
+    assert.equal(total, 6)
     assert.ok(found.every((d) => d.source === 'gnews' || d.source === 'rss' || d.source === 'gkg'))
   })
 
@@ -641,7 +654,7 @@ describe('country filtering', () => {
     const gPt = await graphFor(lula, { ...graphBase, days: veryWide, limit: 200, country: 'pt' })
     assert.ok(node(gPt, 'word:lusotropicalista'))
     assert.ok(!node(gPt, 'word:colaborativo'))
-    assert.equal(gPt.stats.docs, 2, 'the two .pt docs about lula in the fixture (56 and 58)')
+    assert.equal(gPt.stats.docs, 2, 'the two .pt docs about lula in the fixture (56, 58)')
     assert.equal(gPt.stats.about, 2)
     assert.equal(gAll.stats.docs, gDefault.stats.docs + gPt.stats.docs)
   })
@@ -689,9 +702,10 @@ describe('docsFor', () => {
 
   it('returns every doc about the person in the window, newest first, ties broken by id desc, when no term is given', async () => {
     const { total, docs: found } = await docsFor(lula, docsBase)
-    // widened by doc /38 (gkg, day1, issue #8's press-vs-network fixture)
-    assert.equal(total, 5)
-    assert.equal(found.length, 5)
+    // widened by doc /38 (gkg, day1, issue #8's press-vs-network fixture) and docs /83-/84
+    // (issue #207's comention fixture, day12/13)
+    assert.equal(total, 7)
+    assert.equal(found.length, 7)
     for (let i = 1; i < found.length; i++) {
       const prevTime = new Date(found[i - 1].published_at).getTime()
       const curTime = new Date(found[i].published_at).getTime()
@@ -720,8 +734,8 @@ describe('docsFor', () => {
   it('widens with the window', async () => {
     // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const { total, docs: found } = await docsFor(lula, { ...docsBase, days: 365 })
-    assert.equal(total, 9)
-    assert.equal(found.length, 9)
+    assert.equal(total, 11)
+    assert.equal(found.length, 11)
   })
 
   it('filters by source', async () => {
@@ -772,14 +786,36 @@ describe('docsFor', () => {
 
   it('a comma-separated source list returns only docs whose source is in the list', async () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss' })
-    assert.equal(total, 3)
+    // widened by docs /83-/84 (rss, issue #207's comention fixture)
+    assert.equal(total, 5)
     assert.ok(found.every((d) => d.source === 'gnews' || d.source === 'rss'))
   })
 
   it('adding gkg to the list includes the gkg doc', async () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss,gkg' })
-    assert.equal(total, 4)
+    assert.equal(total, 6)
     assert.ok(found.some((d) => d.source === 'gkg'))
+  })
+
+  // issue #207
+  it('with= restricts to docs that also name the other person', async () => {
+    // docs /2, /83 and /84 all name both lula and tarcisio inside docsBase's default 30-day,
+    // country='br' window (docs 83/84 sit on exemplo.com.br, so they are in scope, matching
+    // comentionFor's own country='br' count for this pair -- see "comentionFor" below).
+    const { total, docs: found } = await docsFor(lula, { ...docsBase, with: 'tarcisio' })
+    assert.equal(total, 3)
+    assert.ok(found.some((d) => d.uri === 'at://did:plc:x/post/2'))
+  })
+
+  it('with= unchanged output when omitted: byte-identical rendered SQL to before this parameter existed', () => {
+    const preExisting = {
+      docs:
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)\n  order by d.published_at desc, d.id desc\n  limit $17 offset $18",
+      docsCount:
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select count(*)::int as total\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)",
+    }
+    assert.equal(statements.docs, preExisting.docs)
+    assert.equal(statements.docsCount, preExisting.docsCount)
   })
 })
 
@@ -802,13 +838,15 @@ describe('risingFor (issue #3)', () => {
     // doc /38 (gkg, day1, issue #8's press-vs-network fixture) adds six single-mention terms
     // ("assina", "estrangeira", "expandir", "parceria", "setor", "tecnologico") to the recent
     // window, each tying by lift with the existing single-mention terms in its tier and
-    // interleaving alphabetically within that tier.
+    // interleaving alphabetically within that tier. Docs /83-/84 (issue #207's comention
+    // fixture, baseline-window) give "tarcisio" a baseline count too, dropping its lift below
+    // "defende"'s and moving it to the very end.
     assert.deepEqual(
       r.terms.map((t) => `${t.kind}:${t.term}`),
       [
         'word:reforma', 'word:tributaria', 'word:anuncia', 'word:assina', 'word:disputam', 'word:eleicao',
-        'word:estrangeira', 'word:expandir', 'word:parceria', 'hashtag:reforma', 'word:setor', 'word:tarcisio',
-        'word:tecnologico', 'word:defende',
+        'word:estrangeira', 'word:expandir', 'word:parceria', 'hashtag:reforma', 'word:setor',
+        'word:tecnologico', 'word:defende', 'word:tarcisio',
       ],
     )
   })
@@ -913,12 +951,13 @@ describe('risingFor (issue #3)', () => {
     assert.deepEqual(r.terms[0], full.terms[0])
   })
 
-  // /1, /2, /6, /7, /38 name lula inside the last 7 days; /17 (day31) and /18 (day35) are its
-  // only baseline-window (8-37 days ago) docs -- /19 (day50) falls outside the 30-day baseline.
+  // /1, /2, /6, /7, /38 name lula inside the last 7 days; /17 (day31), /18 (day35), /83 (day12)
+  // and /84 (day13, both issue #207's comention fixture) are its baseline-window (8-37 days ago)
+  // docs -- /19 (day50) falls outside the 30-day baseline.
   it('about.recent/about.baseline match a hand-counted distinct-doc total for lula', async () => {
     const r = await risingFor(lula, risingBase)
     assert.equal(r.about.recent, 5)
-    assert.equal(r.about.baseline, 2)
+    assert.equal(r.about.baseline, 4)
   })
 
   // words_* are the totals the page divides by, counted before `min` and `limit`: with no limit
@@ -932,8 +971,9 @@ describe('risingFor (issue #3)', () => {
     assert.equal(full.about.words_recent, recentSum)
     const baselineSum = full.terms.reduce((n, t) => n + t.count_baseline_raw, 0)
     assert.ok(full.about.words_baseline >= baselineSum, 'baseline-only terms count too')
-    // /17 (day31) and /18 (day35) are lula's baseline docs: "estabilidade fiscal" text, 4 rows each.
-    assert.equal(full.about.words_baseline, 8)
+    // /17 (day31) and /18 (day35) are lula's baseline docs: "estabilidade fiscal" text, 4 rows
+    // each (8); /83 and /84 (issue #207's comention fixture) add 5 word rows each (10) -> 18.
+    assert.equal(full.about.words_baseline, 18)
     assert.equal(full.about.words_recent, 17)
   })
 
@@ -1055,7 +1095,7 @@ describe('timelineFor (issue #4)', () => {
   it('bucket counts sum to the equivalent docsFor total', async () => {
     const rows = await timelineFor(lula, timelineBase)
     const { total } = await docsFor(lula, { ...docsBase, limit: 200 })
-    assert.equal(total, 5, 'sanity: known fixture total for lula in the default window')
+    assert.equal(total, 7, 'sanity: known fixture total for lula in the default window')
     assert.equal(sumOf(rows), total)
 
     const scoped = await timelineFor(bolsonaro, { ...timelineBase, ...golpe })
@@ -1187,7 +1227,7 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
 
   const totalFor = async (q: TimelineQuery) =>
-    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, country: q.country, limit: 500, offset: 0, day: '' })).total
+    (await docsFor(bolsonaro, { term: q.term, kind: q.kind, days: q.days, source: q.source, domain: q.domain, lean: q.lean, country: q.country, limit: 500, offset: 0, day: '', with: '' })).total
 
   it('a doc exactly one bucket width old lands in the newest bucket, not the second', async () => {
     await withDocs([{ offset: '7 days' }], async () => {
@@ -1351,7 +1391,7 @@ describe('timelineFor: future-dated doc', () => {
   it('keeps the bucket-sum invariant against docsFor total when a doc is future-dated', async () => {
     const q = { term: 'golpe', kind: 'word', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' } as const
     const rows = await timelineFor(bolsonaro, { ...q, bucket: 'week' })
-    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '' })
+    const { total } = await docsFor(bolsonaro, { ...q, limit: 50, offset: 0, day: '', with: '' })
     assert.equal(total, 1, 'sanity: only the future doc falls inside this 30-day window')
     assert.equal(sumOf(rows), total)
   })
@@ -1817,6 +1857,100 @@ describe('testimonyFor (issue #21)', () => {
   })
 })
 
+describe('comentionFor (issue #207)', () => {
+  before(seed)
+
+  const pair = (r: Awaited<ReturnType<typeof comentionFor>>, a: string, b: string) => r.pairs.find((p) => p.a === a && p.b === b)
+
+  it('pairs clear the min floor and order a before b', async () => {
+    // doc /2 ("Lula e Tarcísio disputam a eleição", day2) plus docs /83-/84 (issue #207's
+    // fixture, day12/day13) put (lula, tarcisio) at count 3 in the default 30-day window,
+    // clearing the default min:3 floor exactly, not above it.
+    const r = await comentionFor(comentionBase)
+    assert.deepEqual(pair(r, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 3 })
+    // 'lula' < 'tarcisio' as a plain string, so the pair is keyed a=lula/b=tarcisio and never
+    // the reverse -- asserted the other way round finds nothing.
+    assert.equal(pair(r, 'tarcisio', 'lula'), undefined)
+  })
+
+  it('returns every person even with no pairs, and a pair below min or with zero shared docs is absent', async () => {
+    const r = await comentionFor({ ...comentionBase, min: 999 })
+    assert.deepEqual(
+      r.persons.map((p) => p.id),
+      ['bolsonaro', 'lula', 'tarcisio'],
+    )
+    assert.deepEqual(r.pairs, [])
+  })
+
+  it('a pair below the default floor is absent, but present once min is lowered to its real count', async () => {
+    // doc /37 ("Tarcísio e Bolsonaro debatem aliança...") sits at day35, just outside the
+    // default 30-day window, so (bolsonaro, tarcisio) has zero shared docs there.
+    const r30 = await comentionFor(comentionBase)
+    assert.equal(pair(r30, 'bolsonaro', 'tarcisio'), undefined)
+    // widening the window to 90 days brings doc /37 into scope, at count 1 -- below the
+    // default min:3 floor, so still absent there, but present once min drops to 1.
+    const r90 = await comentionFor({ ...comentionBase, days: 90 })
+    assert.equal(pair(r90, 'bolsonaro', 'tarcisio'), undefined)
+    const r90min1 = await comentionFor({ ...comentionBase, days: 90, min: 1 })
+    assert.deepEqual(pair(r90min1, 'bolsonaro', 'tarcisio'), { a: 'bolsonaro', b: 'tarcisio', count: 1 })
+  })
+
+  it('respects source and lean', async () => {
+    // doc /2 is bluesky; docs /83-/84 are rss; narrowing to a source none of them use drops
+    // the pair entirely, while narrowing to just rss keeps 83/84 (count 2, still below min:3).
+    const wrongSource = await comentionFor({ ...comentionBase, source: 'gkg', min: 1 })
+    assert.equal(pair(wrongSource, 'lula', 'tarcisio'), undefined)
+    const rssOnly = await comentionFor({ ...comentionBase, source: 'rss', min: 1 })
+    assert.deepEqual(pair(rssOnly, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 2 })
+    const allSources = await comentionFor({ ...comentionBase, source: 'bluesky,rss' })
+    assert.deepEqual(pair(allSources, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 3 })
+    // none of docs 2/83/84 sit on a lean-labeled domain (outlets.json has no entry for
+    // ana.bsky.social or exemplo.com.br), so any explicit lean excludes the whole pair.
+    const leaned = await comentionFor({ ...comentionBase, lean: 'left', min: 1 })
+    assert.equal(pair(leaned, 'lula', 'tarcisio'), undefined)
+  })
+
+  it('carries no country, kind, domain or sort field, unlike graph/rising', () => {
+    assert.deepEqual(Object.keys(comentionBase).sort(), ['days', 'lean', 'min', 'source'])
+  })
+
+  it('keeps the whole response shape', async () => {
+    const r = await comentionFor(comentionBase)
+    assert.deepEqual(Object.keys(r).sort(), ['days', 'pairs', 'persons'])
+    for (const p of r.persons) assert.deepEqual(Object.keys(p).sort(), ['id', 'name'])
+    for (const row of r.pairs) assert.deepEqual(Object.keys(row).sort(), ['a', 'b', 'count'])
+  })
+})
+
+describe('statements pin comentionFor\'s rendered SQL shape (issue #207)', () => {
+  it('is stable across two calls with different days/min/source/lean values', () => {
+    const a = queries.comention({ days: 7, source: 'rss', lean: 'left', min: 1 })
+    const b = queries.comention({ days: 365, source: 'all', lean: 'all', min: 5 })
+    assert.equal(a.text, b.text)
+    assert.notDeepEqual(a.values, b.values)
+  })
+
+  it('binds exactly as many values as placeholders, numbered in order', () => {
+    const q = queries.comention(comentionBase)
+    const placeholders = q.text.match(/\$\d+/g) ?? []
+    assert.deepEqual(placeholders, placeholders.map((_, i) => `$${i + 1}`))
+    assert.equal(placeholders.length, q.values.length)
+  })
+
+  it('orders pairs so a < b, grouped and floored by min', () => {
+    assert.match(statements.comention, /b\.person_id > a\.person_id/)
+    assert.match(statements.comention, /group by a\.person_id, b\.person_id/)
+    assert.match(statements.comention, /having count\(\*\) >= \$\d+/)
+    assert.match(statements.comention, /order by a\.person_id, b\.person_id/)
+  })
+
+  it('is documented: no domain/kind/sort on this route, and with= on /docs', () => {
+    assert.match(docsText, /comention/)
+    assert.match(docsText, /no `domain`[\s\S]{0,80}`kind`[\s\S]{0,80}`sort`/i)
+    assert.match(docsText, /`with`[\s\S]{0,400}\/api\/people\/:id\/docs/i)
+  })
+})
+
 describe('compareFor (issue #93)', () => {
   before(seed)
 
@@ -1827,7 +1961,7 @@ describe('compareFor (issue #93)', () => {
     // so "reforma" (lula-only in that window) must carry a real object on a
     const r = await compareFor(lula, bolsonaro, compareBase)
     assert.equal(r.b.about, 0)
-    assert.deepEqual(term(r, 'reforma'), { term: 'reforma', kind: 'word', a: { count: 3, pmi: 1.38, tone: null }, b: null })
+    assert.deepEqual(term(r, 'reforma'), { term: 'reforma', kind: 'word', a: { count: 3, pmi: 1.1, tone: null }, b: null })
     assert.notDeepEqual(term(r, 'reforma')!.b, { count: 0, pmi: 0, tone: null })
   })
 
@@ -1841,12 +1975,13 @@ describe('compareFor (issue #93)', () => {
   })
 
   it('marks a side\'s own name word as "name" while the other side may still have a real figure', async () => {
-    // doc /2 ("Lula e Tarcísio disputam a eleição") gives lula's own docs the word "tarcisio"
-    // as ordinary vocabulary, while it is tarcisio's own name word
+    // doc /2 ("Lula e Tarcísio disputam a eleição") and docs /83-/84 (issue #207's comention
+    // fixture) give lula's own docs the word "tarcisio" as ordinary vocabulary, while it is
+    // tarcisio's own name word
     const r = await compareFor(tarcisio, lula, compareBase)
     const row = term(r, 'tarcisio')!
     assert.equal(row.a, 'name')
-    assert.deepEqual(row.b, { count: 1, pmi: -1.79, tone: null })
+    assert.deepEqual(row.b, { count: 3, pmi: -0.77, tone: null })
   })
 
   it("matches graphFor's about for the same query, on both sides", async () => {
@@ -2094,8 +2229,11 @@ describe('statements render the same text the routes run (issue #131)', () => {
       graphFastCommunities: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: true }),
       links: queries.links(lula, scope, ['word:a', 'word:b']),
       sources: queries.sources(lula, scope),
-      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
-      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '' }),
+      // `with` stays '' here unlike every other field: it is the one value that changes the
+      // statement's SHAPE (docsWithPerson), not just its bound values, so it must match the
+      // sample to keep this "shape, not value" comparison meaningful.
+      docs: queries.docs(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '', with: '' }),
+      docsCount: queries.docsCount(lula, { ...scope, term: 'x', kind: 'phrase', limit: 10, offset: 20, day: '', with: '' }),
       timeline: queries.timeline(lula, { ...scope, term: 'x', kind: 'phrase', bucket: 'week' }),
       rising: queries.rising(lula, { ...scope, baseline: 14, min: 1, limit: 5 }),
       tone: queries.tone({ days: 1, min: 1 }),
@@ -2114,6 +2252,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       week: queries.week(lula, { ...scope, limit: 8 }),
       weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
       attention: queries.attention(lula, { days: 14 }),
+      comention: queries.comention({ days: scope.days, source: scope.source, lean: scope.lean, min: 1 }),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)

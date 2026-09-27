@@ -1473,7 +1473,7 @@ describe('agendaFor (issue #208)', () => {
     assert.deepEqual([...r.domains].sort(), r.domains)
   })
 
-  it('truncates by tracked-doc total descending, ties broken by domain name ascending, never a domain that failed min', async () => {
+  it('truncates by tracked-doc total descending, ties broken by domain name ascending', async () => {
     // agendasecundaria.example and correiostado.example both total 6 (a tie, broken
     // alphabetically); the fixture's other source='camara' doc (camara.leg.br) totals only 1
     // and must never outrank either even though it would fit inside a wider limit

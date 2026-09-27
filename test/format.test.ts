@@ -407,14 +407,27 @@ describe('testimonyFocus / foldTestimonyDomains / mergeOutlets: one outlet acros
       ],
     )
     assert.deepEqual(merged, [
-      { domain: 'g1.globo.com', sources: ['gnews', 'rss'], docs: 18, score: -3.25, n: 4 },
-      { domain: 'small.example', sources: ['rss'], docs: 2, score: null, n: 0 },
+      { domain: 'g1.globo.com', sources: ['gnews', 'rss'], docs: 18, score: -3.25, n: 4, field: null, neighbors: [] },
+      { domain: 'small.example', sources: ['rss'], docs: 2, score: null, n: 0, field: null, neighbors: [] },
     ])
   })
 
   it('mergeOutlets survives a missing testimony payload', () => {
     const merged = mergeOutlets([{ domain: 'g1.globo.com', source: 'gnews', docs: 4, tone: null }], [])
-    assert.deepEqual(merged, [{ domain: 'g1.globo.com', sources: ['gnews'], docs: 4, score: null, n: 0 }])
+    assert.deepEqual(merged, [{ domain: 'g1.globo.com', sources: ['gnews'], docs: 4, score: null, n: 0, field: null, neighbors: [] }])
+  })
+
+  it('mergeOutlets carries field/neighbors additively, first non-undefined value seen for that domain (issue #218)', () => {
+    const merged = mergeOutlets(
+      [
+        { domain: 'g1.globo.com', source: 'gnews', docs: 3, tone: null, field: 1, neighbors: [{ domain: 'bbc.com', similarity: 0.5 }] },
+        { domain: 'g1.globo.com', source: 'rss', docs: 2, tone: null },
+      ],
+      [],
+    )
+    assert.deepEqual(merged, [
+      { domain: 'g1.globo.com', sources: ['gnews', 'rss'], docs: 5, score: null, n: 0, field: 1, neighbors: [{ domain: 'bbc.com', similarity: 0.5 }] },
+    ])
   })
 })
 

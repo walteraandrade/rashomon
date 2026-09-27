@@ -365,15 +365,48 @@ export const paintOutlets = ({
   const merged = mergeOutlets(rows, testimony?.by_domain ?? [])
   $('outletList').classList.remove('is-loading')
   $('outletList').setAttribute('aria-busy', 'false')
+  const outletRow = (r: (typeof merged)[number]) => {
+    const cells = html`<span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span>`
+    // A row keyed by a source name folds that source's host-less docs (Bluesky posts, whose
+    // stored domain is an author handle): a count, never an outlet to focus on.
+    const button = r.sources.includes(r.domain)
+      ? html`<span class="outlet is-static" title="Textos sem veículo nesta fonte">${cells}</span>`
+      : html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}">${cells}</button>`
+    if (r.domain !== domain) return button
+    const neighborLines = r.neighbors.slice(0, 5)
+    return html`${button}<dl class="metric stat"><div><dt>Vocabulário mais parecido com</dt><dd>${
+      neighborLines.length
+        ? neighborLines.map((nb) => html`<span class="outlet-neighbor">${nb.domain} — <span class="n">${nb.similarity.toFixed(2)}</span></span>`)
+        : 'Nenhum veículo com vocabulário parecido neste recorte'
+    }</dd></div></dl>`
+  }
+  // Groups by field: a numbered group's eyebrow names its top-3 domains (by docs desc), never
+  // the field int itself; field: null rows form their own trailing, unnumbered group.
+  const groups = new Map<number, (typeof merged)[number][]>()
+  const ungrouped: (typeof merged)[number][] = []
+  for (const r of merged) {
+    if (r.field === null || r.field === undefined) ungrouped.push(r)
+    else {
+      const g = groups.get(r.field) ?? []
+      g.push(r)
+      groups.set(r.field, g)
+    }
+  }
+  const groupMarkup = (eyebrow: string, group: (typeof merged)[number][]) =>
+    html`<p class="eyebrow">${eyebrow}</p><div class="outlet-grid">${group.map(outletRow)}</div>`
+  const groupSections = [
+    ...[...groups.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, g]) =>
+        groupMarkup(
+          `grupo · ${g.slice().sort((a, b) => b.docs - a.docs || a.domain.localeCompare(b.domain)).slice(0, 3).map((r) => r.domain).join(', ')}`,
+          g,
+        ),
+      ),
+    ...(ungrouped.length ? [groupMarkup('Sem agrupamento suficiente', ungrouped)] : []),
+  ]
   $('outletList').innerHTML = merged.length
-    ? html`<div class="outlet-grid">${merged.map((r) => {
-        const cells = html`<span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span>`
-        // A row keyed by a source name folds that source's host-less docs (Bluesky posts, whose
-        // stored domain is an author handle): a count, never an outlet to focus on.
-        return r.sources.includes(r.domain)
-          ? html`<span class="outlet is-static" title="Textos sem veículo nesta fonte">${cells}</span>`
-          : html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}">${cells}</button>`
-      })}</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
+    ? html`${groupSections}<p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si. Grupos e vocabulário parecido vêm da construção da janela, não da consulta ao vivo — podem ficar desatualizados entre construções.</p>`
     : '<p class="note">Nenhum veículo neste recorte.</p>'
   queryAll('[data-domain]', $('outletList')).forEach((el) =>
     el.addEventListener('click', () => {

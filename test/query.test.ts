@@ -482,10 +482,8 @@ describe('parseCountryList', () => {
 })
 
 describe('KINDS (issue #108)', () => {
-  // Issue #209 adds org to KINDS without touching ATLAS_KINDS, so the sets no longer match
-  // exactly: org is accepted by the API before the atlas requests it.
-  it("is ATLAS_KINDS's set plus org (issue #195/#209)", () => {
-    assert.deepEqual(new Set(KINDS), new Set([...ATLAS_KINDS.split(','), 'org']))
+  it("matches ATLAS_KINDS's set exactly (issue #195/#209)", () => {
+    assert.deepEqual(new Set(KINDS), new Set(ATLAS_KINDS.split(',')))
   })
 
   it('no longer accepts the token theme, and now also accepts org', () => {

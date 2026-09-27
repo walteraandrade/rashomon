@@ -75,7 +75,7 @@ describe('normalize', () => {
 
 describe('kinds / sourceLabels', () => {
   it('kinds carries a pt-BR label for every graph node kind', () => {
-    assert.deepEqual(kinds, { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' })
+    assert.deepEqual(kinds, { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão', org: 'Organização' })
   })
 
   // AC13: kinds gains an org entry ('Organização'), used by wordMarkup's <title> tooltip.

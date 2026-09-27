@@ -343,9 +343,9 @@ describe('docs facts', () => {
     assert.doesNotMatch(apiTs, /atlas-legacy\.html/)
   })
 
-  it('ATLAS_KINDS itself is unchanged', () => {
+  it('ATLAS_KINDS now requests org too (issue #209)', () => {
     const apiTs = readFileSync(join(root, 'src/ui/api.ts'), 'utf8')
-    assert.match(apiTs, /ATLAS_KINDS = 'word,hashtag,phrase'/)
+    assert.match(apiTs, /ATLAS_KINDS = 'word,hashtag,phrase,org'/)
   })
 
 })

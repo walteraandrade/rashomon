@@ -164,6 +164,16 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(narrowToSources(p).has('communities'), false)
   })
 
+  it('params() sends communities=1 unconditionally, for every source/sort combination (issue #217 AC12)', () => {
+    for (const source of ['all', 'gnews', 'bluesky']) {
+      for (const sort of ['count', 'pmi']) {
+        const qp = params({ ...opts, source, sort })
+        assert.equal(qp.get('communities'), '1', `communities=1 must travel with source=${source} sort=${sort}`)
+        assert.equal(qp.get('testimony'), '1', 'testimony=1 must still be there too')
+      }
+    }
+  })
+
   // The second figure used to write a page-wide filter: clicking an outlet down there narrowed
   // the atlas, the header and the documents above it. The outlet is now a reading inside its own
   // figure, so no querystring the page builds may carry one.
@@ -188,24 +198,6 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
   })
 })
 
-describe('params() always asks for communities alongside testimony (issue #217 AC12)', () => {
-  const opts = { days: '30', sort: 'count', limit: '18', source: 'all' }
-
-  it('params() sends communities=1 unconditionally, for every source/sort/limit combination (issue #217 AC12)', () => {
-    for (const source of ['all', 'gnews', 'bluesky']) {
-      for (const sort of ['count', 'pmi']) {
-        const qp = params({ ...opts, source, sort })
-        assert.equal(qp.get('communities'), '1', `communities=1 must travel with source=${source} sort=${sort}`)
-        assert.equal(qp.get('testimony'), '1', 'testimony=1 must still be there too')
-      }
-    }
-  })
-
-  it('sourcesParams and testimonyParams never carry communities: only the graph query reads it (issue #217 AC12)', () => {
-    assert.equal(sourcesParams(opts).has('communities'), false)
-    assert.equal(testimonyParams(opts).has('communities'), false)
-  })
-})
 
 describe('weekParams / loadWeek stay fixed at days=7', () => {
   it('weekParams sends days=7, the full kind set, plus the chosen source and limit', () => {

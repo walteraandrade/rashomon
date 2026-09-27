@@ -154,12 +154,13 @@ describe('the inspector carries no documents button', () => {
 })
 
 describe('inspect: "no mesmo tema" (issue #217 AC7)', () => {
-  const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 }
-  const stf = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 }
-  const reforma = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, community: 9 }
+  type NodeWithCommunity = { id: string; term: string; kind: string; count: number; pmi: number; community: number | null }
+  const golpe: NodeWithCommunity = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 }
+  const stf: NodeWithCommunity = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 }
+  const reforma: NodeWithCommunity = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, community: 9 }
   const graphWith = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf, reforma], links: [] }
 
-  const paintWith = (mask: 'avaliacao' | 'tema' | 'off' | undefined, selected: string | null, nodes = [golpe, stf, reforma]) =>
+  const paintWith = (mask: 'avaliacao' | 'tema' | 'off' | undefined, selected: string | null, nodes: NodeWithCommunity[] = [golpe, stf, reforma]) =>
     withFakeDocument(['inspector'], (els) => {
       inspect({ graph: graphWith, nodes, links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, mask })
       return els.inspector.innerHTML
@@ -172,6 +173,11 @@ describe('inspect: "no mesmo tema" (issue #217 AC7)', () => {
     assert.doesNotMatch(paintWith(undefined, golpe.id), /No mesmo tema/, 'no mask state handed in: same as off')
     assert.doesNotMatch(paintWith('tema', reforma.id), /No mesmo tema/, 'no other node shares community 9')
     assert.doesNotMatch(paintWith('tema', golpe.id, [golpe, reforma]), /No mesmo tema/, 'fewer than two members sharing the community renders nothing')
+  })
+
+  it('the focused term itself having no community renders nothing, never an empty heading (issue #217 AC7)', () => {
+    const solo = { id: 'word:solo', term: 'solo', kind: 'word', count: 15, pmi: 1.1, community: null }
+    assert.doesNotMatch(paintWith('tema', solo.id, [golpe, stf, solo]), /No mesmo tema/, "the focused term's own null community: nothing")
   })
 
   it('lists every community mate, never the focused term itself', () => {
@@ -711,28 +717,9 @@ describe('drawMap threads ranking into every placed word, and themeLegend names 
   })
 })
 
-describe('theme mask acceptance (issue #217)', () => {
+describe('theme mask acceptance: coverage beyond the builder\'s own tests (issue #217)', () => {
   const person = { method: 'kikori:q8', score: -2.4, n: 500 }
   const placed = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9, ...over })
-
-  it('paintSelection sets is-masked xor is-themed per MaskState, never both, and off sets neither (issue #217 AC4)', () => {
-    const base = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, personTestimony: { method: 'kikori', score: -3, n: 20 } }
-    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
-      paintSelection({ ...base, mask: 'avaliacao' })
-      assert.deepEqual([els.columns.classes['is-masked'], els.columns.classes['is-themed']], [true, false])
-      paintSelection({ ...base, mask: 'tema' })
-      assert.deepEqual([els.columns.classes['is-masked'], els.columns.classes['is-themed']], [false, true])
-      paintSelection({ ...base, mask: 'off' })
-      assert.deepEqual([els.columns.classes['is-masked'], els.columns.classes['is-themed']], [false, false])
-    })
-  })
-
-  it('paintSelection: avaliação still requires a person mean, unaffected by the MaskState signature change (issue #217 AC4)', () => {
-    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
-      paintSelection({ nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, mask: 'avaliacao', personTestimony: { method: 'kikori', score: null, n: 0 } })
-      assert.equal(els.columns.classes['is-masked'], false, 'no mean to compare against: no masking even in avaliação state')
-    })
-  })
 
   it('wordMarkup emits --theme only in addition to (never instead of) an existing --mask style (issue #217 AC5)', () => {
     const ranking = new Map([[7, 1]])
@@ -779,23 +766,6 @@ describe('theme mask acceptance (issue #217)', () => {
       assert.match(wordBlock('word:a'), /--theme:var\(--theme-1\)/)
       assert.match(wordBlock('word:b'), /--theme:var\(--theme-2\)/)
     })
-  })
-
-  it('the community-mates list needs tema mode, a non-null community on the focused term, and a mate on the map; a null community renders nothing (issue #217 AC7)', () => {
-    const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 5 }
-    const stf = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 5 }
-    const solo = { id: 'word:solo', term: 'solo', kind: 'word', count: 15, pmi: 1.1, community: null }
-    const graph = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf, solo], links: [] }
-    const render = (mask: 'avaliacao' | 'tema' | 'off' | undefined, selected: string, nodes = [golpe, stf, solo]) =>
-      withFakeDocument(['inspector'], (els) => {
-        inspect({ graph, nodes, links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, mask })
-        return els.inspector.innerHTML
-      })
-    assert.match(render('tema', golpe.id), /No mesmo tema/, 'tema mode, non-null community, a mate present: the list appears')
-    assert.doesNotMatch(render('avaliacao', golpe.id), /No mesmo tema/, 'wrong mask state: nothing')
-    assert.doesNotMatch(render('off', golpe.id), /No mesmo tema/, 'off: nothing')
-    assert.doesNotMatch(render('tema', solo.id), /No mesmo tema/, 'focused term has a null community: nothing, never an empty heading')
-    assert.doesNotMatch(render('tema', golpe.id, [golpe, solo]), /No mesmo tema/, 'no other node shares the community: nothing')
   })
 
   it('a community-mate entry is reachable through onChoose by a real click, the same wiring .related buttons use (issue #217 AC8)', async () => {

@@ -544,11 +544,11 @@ describe('GET /api/candidates (issue #32)', () => {
   })
 
   // days=14 until issue #111 enumerated the windows; 30 is the next one up and still wide
-  // enough to swallow the previous window this criterion is about.
+  // enough to swallow the previous window and c10 (day 18).
   it('a longer window moves the previous docs into the count', async () => {
     const { candidates } = await get('?days=30&min=2')
     const renan = candidates.find((c) => c.name === 'renan calheiros')!
-    assert.equal(renan.count, 4)
+    assert.equal(renan.count, 5)
     assert.equal(renan.previous, 0)
   })
 

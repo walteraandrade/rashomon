@@ -541,6 +541,7 @@ const agendaQuery = (q: AgendaQuery) => sql`
   cells as (
     select person_id, domain, count(*)::int as docs
     from per_doc
+    join domain_totals using (domain)
     group by person_id, domain
   )
   select c.person_id, c.domain, c.docs,
@@ -734,7 +735,6 @@ const candidatesQuery = (q: CandidatesQuery) => sql`
   from tagged
   group by name
   having count(distinct doc_id) filter (where is_recent) >= ${q.min}
-    and count(distinct doc_id) filter (where is_recent) > 0
   order by count desc, name
   limit ${q.limit}`
 
@@ -948,6 +948,9 @@ const weekScopeCte = (q: WeekQuery) => {
   )`
 }
 
+// `t.doc_id = any(array(select id from person_kept))` repeats `t.doc_id = pk.id`. Without
+// it the planner underestimates person_kept once the window passes about 14 days and
+// hash-joins a sequential scan of doc_terms, which wipes the gain at days=30.
 const weekQuery = (person: Person, q: WeekQuery) => {
   const exclude = nameTokens(person)
   return sql`
@@ -966,7 +969,7 @@ const weekQuery = (person: Person, q: WeekQuery) => {
     from (
       select pk.day, t.term, t.kind, count(*)::int as count
       from person_kept pk
-      join doc_terms t on t.doc_id = pk.id
+      join doc_terms t on t.doc_id = pk.id and t.doc_id = any(array(select id from person_kept))
       where not ${isName(sql.raw('t.term'), exclude)}
         and (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ',')))
       group by pk.day, t.term, t.kind

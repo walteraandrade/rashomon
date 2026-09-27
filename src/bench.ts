@@ -156,6 +156,8 @@ const measurePhase = async () => {
   const dbBytes = (await db.query<{ bytes: number }>(`select pg_database_size(current_database())::int as bytes`)).rows[0].bytes
 
   const person = persons.find((p) => p.id === PERSON)!
+  const compareWith = persons.find((p) => p.id === (PERSON === 'tarcisio' ? 'lula' : 'tarcisio'))
+  if (!compareWith) throw new Error(`bench compare needs a person other than ${PERSON}`)
   const ids = (
     await db.query<{ id: string }>(
       `select kind || ':' || term as id from doc_terms t join doc_persons p on p.doc_id = t.doc_id
@@ -180,7 +182,7 @@ const measurePhase = async () => {
     ['candidates', queries.candidates({ days: 7, min: 5, limit: 50 })],
     ['graphFast', queries.graphFast(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
     ['agenda', queries.agenda({ days: 30, source: 'all', min: 5, limit: 30 })],
-    ['compare', queries.compare(person, persons.find((p) => p.id === 'tarcisio')!, { ...scope, limit: 40 })],
+    ['compare', queries.compare(person, compareWith, { ...scope, limit: 40 })],
     ['lenses', queries.lenses(person, {
       days: 30,
       kind: 'all',

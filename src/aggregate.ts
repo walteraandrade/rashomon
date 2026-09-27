@@ -126,8 +126,9 @@ const keptTermsQuery = (days: number, source: string, personId: string) => sql`
   select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
   order by kind, term`
 
-// linksQuery's join shape against graph_terms' own kept (term, kind) set instead of a live
-// per-request `ids` array, which is why this cannot simply import linksQuery.
+// Pairs each doc's own kept term ids with themselves via unnest, against graph_terms' own kept
+// (term, kind) set instead of a live per-request `ids` array — not linksQuery's self-join shape,
+// which is why this cannot simply import linksQuery.
 // Louvain's partition depends on edge order, so both this and keptTermsQuery sort theirs.
 // Pairs come from each doc's own kept ids, never a self-join of all hits on doc_id: the
 // planner misestimates that join and nested-loops it. Driving from `about` skips docs without the person.

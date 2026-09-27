@@ -17,6 +17,8 @@ export const SIZE_TABLES = [
   'graph_terms',
   'person_attention',
   'term_communities',
+  'outlet_fields',
+  'outlet_neighbors',
 ] as const
 
 export type SizeReport = { tables: Record<string, number>; total: number }

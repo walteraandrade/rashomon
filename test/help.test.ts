@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { closeHelp, mountHelp, openHelp } from '../src/ui/help.js'
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const atlasPage = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
 
 type Link = {
   getAttribute: (name: string) => string | null
@@ -156,5 +162,30 @@ describe('help.ts: como-ler.html clicks stay on the atlas', () => {
       closeHelp()
       assert.equal(dialog.open, false)
     })
+  })
+
+  // issue #207: figure 7's "Como ler" link (como-ler.html#junto) must resolve like every other
+  // figure's, not fall through HELP_SECTIONS and scroll nowhere.
+  it("openHelp('#junto') opens the dialog at figure 7's section", () => {
+    withHelpDom(({ dialog, scrolled }) => {
+      mountHelp()
+      openHelp('#junto')
+      assert.equal(dialog.open, true)
+      assert.deepEqual(scrolled, ['help-junto'])
+    })
+  })
+
+  it('every como-ler.html#<x> link in public/atlas.html resolves through openHelp and has a matching id="help-<x>"', () => {
+    const html = atlasPage()
+    const hashes = [...html.matchAll(/como-ler\.html#([\w-]+)/g)].map((m) => m[1])
+    assert.ok(hashes.length > 0, 'atlas.html must link to como-ler.html at least once')
+    for (const hash of hashes) {
+      assert.match(html, new RegExp(`id="help-${hash}"`), `atlas.html has no id="help-${hash}" for the como-ler.html#${hash} link`)
+      withHelpDom(({ scrolled }) => {
+        mountHelp()
+        openHelp(`#${hash}`)
+        assert.deepEqual(scrolled, [`help-${hash}`], `openHelp('#${hash}') must scroll to #help-${hash}, not fall through HELP_SECTIONS`)
+      })
+    }
   })
 })

@@ -68,6 +68,15 @@ const dataTermStubs = (html: string) =>
 // bare listenable per occurrence is the whole stub.
 const personDocsStubs = (html: string) => [...html.matchAll(/data-person-docs/g)].map(() => new Listenable())
 
+// Figure 7's grid cells (issue #208): one <button> per (person, domain) pair, carrying both
+// attributes on the same tag the way paintRuler's data-term/data-kind marks do.
+const dataPersonStubs = (html: string) =>
+  [...html.matchAll(/<button[^>]*\bdata-person="([^"]*)"[^>]*\bdata-domain="([^"]*)"[^>]*>/g)].map(([, person, domain]) => {
+    const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
+    stub.dataset = { person, domain }
+    return stub
+  })
+
 // A generic node: covers every button/div/dialog id both figures touch. `innerHTML` is kept
 // as plain text (this harness parses nothing beyond the two data-* attributes above), which is
 // enough since no criterion here asserts markup shape — only requests and control wiring.
@@ -86,7 +95,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-person'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> | ReturnType<typeof dataPersonStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -119,10 +128,10 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-person') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
-    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : dataStubs(this.html, attr)
+    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : attr === 'data-person' ? dataPersonStubs(this.html) : dataStubs(this.html, attr)
     this.domainStubs.push({ attr, html: this.html, stubs })
     return stubs
   }
@@ -132,6 +141,7 @@ class FakeBox extends Listenable {
     if (selector === '[data-term]') return this.stubsFor('data-term')
     if (selector === '[data-col]') return this.stubsFor('data-col')
     if (selector === '[data-node]') return this.stubsFor('data-node')
+    if (selector === '[data-person]') return this.stubsFor('data-person')
     if (selector === '[data-person-docs]') return this.stubsFor('data-person-docs')
     return []
   }
@@ -423,12 +433,22 @@ const lensesIds = () => {
   }
 }
 
+// Figure 7 (issue #208), the agenda grid: no person select -- it spans every tracked person at
+// once, only its own days/source and the grid host.
+const agendaIds = () => ({
+  agenda: new FakeBox('agenda'),
+  agendaDays: new FakeSelect('agendaDays', DAYS_OPTIONS),
+  agendaSource: new FakeSelect('agendaSource'),
+  agendaGrid: new FakeBox('agendaGrid'),
+})
+
 export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof testimonyIds> &
   ReturnType<typeof compareIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof weekIds> &
-  ReturnType<typeof lensesIds>
+  ReturnType<typeof lensesIds> &
+  ReturnType<typeof agendaIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -440,7 +460,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...agendaIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

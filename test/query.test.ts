@@ -210,6 +210,15 @@ describe('parseAgendaQuery (issue #208)', () => {
   it('has no domain, lean or kind field: those parameters are out of scope for this route', () => {
     assert.deepEqual(Object.keys(parseAgendaQuery({})).sort(), ['days', 'limit', 'min', 'source'])
   })
+
+  it('days snaps to DAYS, min snaps to MINS (default 5), source parses via parseSourceList, limit is always the fixed constant (issue #208 AC12)', () => {
+    assert.equal(parseAgendaQuery({ days: '45' }).days, 30)
+    assert.equal(parseAgendaQuery({ min: '7' }).min, 5)
+    assert.equal(parseAgendaQuery({ source: 'rss,bogus' }).source, 'rss')
+    assert.equal(parseAgendaQuery({ source: 'bogus' }).source, 'all')
+    for (const q of [{}, { limit: '1' }, { domain: 'g1.globo.com' }, { lean: 'left' }, { kind: 'word' }, { limit: '1', domain: 'x', lean: 'left', kind: 'word' }])
+      assert.equal(parseAgendaQuery(q).limit, 30)
+  })
 })
 
 describe('parseTestimonyQuery (issue #21)', () => {

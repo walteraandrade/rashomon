@@ -111,7 +111,11 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
 
   it('the import graph is acyclic and matches the documented direction, including src/ui/figures/', () => {
     const expected: Record<string, string[]> = {
-      'format.ts': [],
+      // Issue #208: figure 7's grid needs a domain's lean for its badge, and the route itself
+      // carries no lean field (out of scope for that issue), so agendaRows reads outlets.json
+      // directly -- a data import, not a ui-module one, so it adds no edge to the acyclic
+      // module graph this test otherwise enforces.
+      'format.ts': ['../../outlets.json'],
       'state.ts': ['./perf.js'],
       'perf.ts': [],
       'api.ts': ['./perf.js'],
@@ -144,9 +148,13 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
       // nothing but app.ts, and reaching into no other figure's DOM.
       'figures/lenses.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
+      // Figure 7 (issue #208), the agenda grid: same shape again, imported by nothing but
+      // app.ts, and reaching into no other figure's DOM.
+      'figures/agenda.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
         './docs-card.js',
+        './figures/agenda.js',
         './figures/atlas.js',
         './figures/compare.js',
         './figures/lenses.js',

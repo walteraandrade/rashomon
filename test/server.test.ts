@@ -104,6 +104,12 @@ describe('the routes answer their *For functions with the default parser (issue 
     assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor({ days: 30, source: 'all', min: 1, limit: 30 }))), body)
   })
 
+  it('GET /api/agenda with no query string is byte-identical to agendaFor(parseAgendaQuery({})) (issue #208 AC11)', async () => {
+    const res = await app.request('/api/agenda')
+    const body = await res.json()
+    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor(parseAgendaQuery({})))), body)
+  })
+
   // Issue #108: 'theme' left the recognized kind set, so kind=theme must be a plain
   // unrecognized token on every route, never a route error.
   it('GET /graph, /docs, /rising and /timeline?kind=theme all still return 200', async () => {

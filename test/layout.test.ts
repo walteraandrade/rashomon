@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, centerLabel, pack, packPass, peakDay, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, pack, packPass, peakDay, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
 
@@ -512,5 +512,56 @@ describe('peakDay (issue #216)', () => {
       { day: '2026-09-03', value: 0 },
     ]
     assert.equal(peakDay(series), null)
+  })
+})
+
+// Issue #216 (figure 7), validator round-1 blocker: 30 columns at 640px (or fewer, wider ones
+// on mobile at 343px) must never let one day's mark box reach into its neighbour's -- the
+// original text-sized mark (10-30px numbers in 50-122px boxes) overlapped 29 of 30 adjacent
+// pairs at realistic values (views 4 210-51 000, mentions 12-120) and stacked their hit rects.
+describe('attentionLayout (issue #216), no adjacent overlap on a 30-day grid', () => {
+  const days = (n: number) => Array.from({ length: n }, (_, i) => `2026-08-${String(i + 1).padStart(2, '0')}`)
+  const mentions = (n: number) => days(n).map((day, i) => ({ day, count: 12 + ((i * 37) % 108) }))
+  const views = (n: number) => days(n).map((day, i) => ({ day, views: 4210 + ((i * 4013) % 46790) }))
+
+  const assertNoOverlap = (marks: { x: number; barW: number }[], label: string) => {
+    const sorted = [...marks].sort((a, b) => a.x - b.x)
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]
+      const cur = sorted[i]
+      const prevRight = prev.x + prev.barW / 2
+      const curLeft = cur.x - cur.barW / 2
+      assert.ok(curLeft >= prevRight, `${label}: day ${i} overlaps day ${i - 1} (prev right ${prevRight}, cur left ${curLeft})`)
+    }
+  }
+
+  it('30 days, 5-digit views, width 640: no two adjacent marks overlap in either row', () => {
+    const layout = attentionLayout(measure, mentions(30), views(30), 640)
+    assertNoOverlap(layout.mentions, 'mentions')
+    assertNoOverlap(layout.views, 'views')
+  })
+
+  it('30 days, 5-digit views, width 343 (mobile): no two adjacent marks overlap in either row', () => {
+    const layout = attentionLayout(measure, mentions(30), views(30), 343)
+    assertNoOverlap(layout.mentions, 'mentions')
+    assertNoOverlap(layout.views, 'views')
+  })
+
+  it("each row's largest day renders at that row's own ceiling size (AC4)", () => {
+    const mentionSeries = [
+      { day: '2026-08-01', count: 3 },
+      { day: '2026-08-02', count: 3 },
+      { day: '2026-08-03', count: 40 },
+    ]
+    const viewSeries = [
+      { day: '2026-08-01', views: 50000 },
+      { day: '2026-08-02', views: 1000 },
+      { day: '2026-08-03', views: 1000 },
+    ]
+    const layout = attentionLayout(measure, mentionSeries, viewSeries, 640)
+    const mentionSizes = layout.mentions.map((m) => m.size)
+    const viewSizes = layout.views.map((v) => v.size)
+    assert.equal(mentionSizes[2], Math.max(...mentionSizes), "mentions' own peak day (index 2) must render at its own row's ceiling")
+    assert.equal(viewSizes[0], Math.max(...viewSizes), "views' own peak day (index 0) must render at its own row's ceiling")
   })
 })

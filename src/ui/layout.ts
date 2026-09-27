@@ -403,42 +403,37 @@ export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
   return best?.day ?? null
 }
 
-export const ATTENTION_SIZE_MIN = 10
-export const ATTENTION_SIZE_MAX = 30
 export const ATTENTION_ROW_WIDTH = 640
+// Bar height, not font size: width is bounded by the column step, never by a label's own width.
+export const ATTENTION_BAR_MIN = 3
+export const ATTENTION_BAR_MAX = 44
+// Gap a bar always leaves before its neighbour's, so two adjacent columns can never touch.
+const ATTENTION_BAR_GAP = 3
+const ATTENTION_BAR_MIN_WIDTH = 2
 
-// One ramp per row, each computed off its own maximum only: mentions and pageviews differ by
-// orders of magnitude and are never allowed to distort one another (issue #216 AC4).
+// One ramp per row, off its own maximum only (issue #216 AC4).
 const attentionSizes = (values: number[]): number[] => {
   const max = Math.max(0, ...values)
-  if (max <= 0) return values.map(() => ATTENTION_SIZE_MIN)
-  return values.map((v) => Math.round(ATTENTION_SIZE_MIN + (ATTENTION_SIZE_MAX - ATTENTION_SIZE_MIN) * (Math.max(0, v) / max)))
+  if (max <= 0) return values.map(() => ATTENTION_BAR_MIN)
+  return values.map((v) => Math.round(ATTENTION_BAR_MIN + (ATTENTION_BAR_MAX - ATTENTION_BAR_MIN) * (Math.max(0, v) / max)))
 }
 
-export type AttentionMark = { day: string; x: number; size: number; w: number; h: number; text: string }
+// `size` is the bar's height; `barW` its width, capped to the step. `text` is a <title>/aria-label only.
+export type AttentionMark = { day: string; x: number; size: number; barW: number; text: string }
 export type AttentionRows = { width: number; mentions: AttentionMark[]; views: AttentionMark[] }
 
-// Same glow/hit/text triad as the ruler's and the week's own marks: a box sized to fit the
-// formatted number at this mark's own size, never the raw font-size ramp alone.
-const attentionBox = (measure: Measure, value: number, size: number) => {
-  const text = fmt(value)
-  const w = Math.round(measure(text, size, FONT_MONO, 500)) + 14
-  const h = Math.round(size * 1.3)
-  return { text, w, h }
-}
-
-// A day axis is monotonic and non-overlapping, so a fixed column grid replaces a beeswarm here.
-// Both series must already be padded to the same day count by the caller (figures/attention.ts
-// derives and aligns the calendar days; this function only lays out whatever it is handed).
+// A day axis is monotonic, so a fixed column grid replaces a beeswarm. Both series arrive
+// already day-aligned and zero-padded. `measure` is unused but kept for a uniform signature.
 export const attentionLayout = (measure: Measure, mentions: { day: string; count: number }[], views: { day: string; views: number }[], width = ATTENTION_ROW_WIDTH): AttentionRows => {
   const n = Math.max(mentions.length, views.length, 1)
   const step = width / n
   const x = (i: number) => Math.round(step * (i + 0.5))
+  const barW = Math.max(ATTENTION_BAR_MIN_WIDTH, Math.round(step - ATTENTION_BAR_GAP))
   const mentionSizes = attentionSizes(mentions.map((m) => m.count))
   const viewSizes = attentionSizes(views.map((v) => v.views))
   return {
     width,
-    mentions: mentions.map((m, i) => ({ day: m.day, x: x(i), size: mentionSizes[i], ...attentionBox(measure, m.count, mentionSizes[i]) })),
-    views: views.map((v, i) => ({ day: v.day, x: x(i), size: viewSizes[i], ...attentionBox(measure, v.views, viewSizes[i]) })),
+    mentions: mentions.map((m, i) => ({ day: m.day, x: x(i), size: mentionSizes[i], barW, text: fmt(m.count) })),
+    views: views.map((v, i) => ({ day: v.day, x: x(i), size: viewSizes[i], barW, text: fmt(v.views) })),
   }
 }

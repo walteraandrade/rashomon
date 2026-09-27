@@ -56,8 +56,8 @@ describe('scoring fragments', () => {
 })
 
 describe('scoring.ts is the single home for the pmi ordering, signature floor and own-name filter', () => {
-  it('exports exactly pmiRank, sortKey, signatureFloor, isName, countryFilter and no namePhrase', () => {
-    assert.deepEqual(Object.keys(scoring).sort(), ['countryFilter', 'isName', 'pmiRank', 'signatureFloor', 'sortKey'])
+  it('exports exactly pmiRank, sortKey, signatureFloor, isName, countryFilter, outletDomain and no namePhrase', () => {
+    assert.deepEqual(Object.keys(scoring).sort(), ['countryFilter', 'isName', 'outletDomain', 'pmiRank', 'signatureFloor', 'sortKey'])
   })
 
   it('the docs state the pmi-ordering and signature-floor formulas live in src/scoring.ts', () => {
@@ -66,5 +66,12 @@ describe('scoring.ts is the single home for the pmi ordering, signature floor an
     assert.ok(paragraph, 'a docs paragraph must name src/scoring.ts')
     assert.ok(paragraph.includes('ln(1 + count)'), 'the paragraph naming src/scoring.ts must state the pmi-ordering formula')
     assert.ok(paragraph.includes('greatest(3'), 'the paragraph naming src/scoring.ts must state the signature-floor formula')
+  })
+})
+
+describe('outletDomain', () => {
+  it("reads a Bluesky doc's domain (its author's handle) as null and every other source's as stored", () => {
+    assert.equal(scoring.outletDomain.text, "(case when d.source = 'bluesky' then null else d.domain end)")
+    assert.deepEqual(scoring.outletDomain.values, [])
   })
 })

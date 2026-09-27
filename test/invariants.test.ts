@@ -123,6 +123,9 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // The SVG frame/axis/overflow-list builders render.ts once hand-wrote per figure live in
       // their own DOM-free module, imported only by render.ts.
       'marks.ts': ['./format.js'],
+      // The searchable face over a <select> (figure 6's two lens controls): DOM-level, but
+      // builds its list with format.ts's tag only and never fetches or paints a figure.
+      'combobox.ts': ['./format.js'],
       'render.ts': ['./format.js', './layout.js', './marks.js'],
       // The documents card and the in-page guide belong to no figure; both sit next to the
       // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
@@ -147,7 +150,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'figures/week.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './layout.js', './render.js'],
       // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
       // nothing but app.ts, and reaching into no other figure's DOM.
-      'figures/lenses.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
+      'figures/lenses.ts': ['./api.js', './combobox.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       // Figure 7 (issue #216), attention vs mentions: same shape as figures/lenses.ts, imported
       // by nothing but app.ts, and reaching into no other figure's DOM.
       'figures/attention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],

@@ -2,7 +2,7 @@ import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
 import { DAYS } from './query.js'
-import { countryFilter, isName, pmiRank, signatureFloor, sortKey } from './scoring.js'
+import { countryFilter, isName, outletDomain, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
 
@@ -390,7 +390,7 @@ type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: {
 
 const sourcesQuery = (person: Person, q: Scope) => sql`
   with ${scopeCte(person, q)}
-  select d.domain, d.source, count(*)::int as docs,
+  select ${outletDomain} as domain, d.source, count(*)::int as docs,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as tone_n
   from docs d join about a on a.doc_id = d.id
   group by 1, 2 order by docs desc, domain limit 80`
@@ -519,9 +519,9 @@ export const toneFor = async (q: ToneQuery) => {
 // Always scoped to country='br', like lensesQuery: no country parameter on this route.
 const agendaQuery = (q: AgendaQuery) => sql`
   with scope as (
-    select d.id, d.domain from docs d
+    select d.id, ${outletDomain} as domain from docs d
     where d.published_at >= now() - make_interval(days => ${q.days})
-      and d.domain is not null
+      and ${outletDomain} is not null
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
       and (${countryFilter('br')})
   ),
@@ -580,7 +580,7 @@ export const comentionFor = async (q: ComentionQuery) => {
 // Inner join (not left join) means an unscored pair contributes nothing anywhere.
 const testimonyScopeCte = (person: Person, q: TestimonyQuery) => sql`
   scope as (
-    select d.source, d.domain, dt.score
+    select d.source, ${outletDomain} as domain, dt.score
     from doc_persons dp
     join docs d on d.id = dp.doc_id
     join doc_testimony dt on dt.doc_id = dp.doc_id and dt.person_id = dp.person_id and dt.method = ${q.method}

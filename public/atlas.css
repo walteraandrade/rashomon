@@ -233,6 +233,17 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
 .pick::after { content: ''; position: absolute; right: .55em; top: 50%; width: .32em; height: .32em; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
 .pick select { appearance: none; -webkit-appearance: none; max-width: 100%; background: var(--soft); border: 1px solid var(--line); border-radius: 2px; padding: 0 1.25em 0 .5em; height: 1.6em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.5em; font-weight: 500; cursor: pointer; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s, border-color .12s; }
 .pick select:hover { background-color: var(--line); border-color: var(--muted); color: var(--ink); }
+/* A searchable select (src/ui/combobox.ts): the <select> stays as the value store and hides,
+   the input takes its exact face, the listbox drops below it inside the same .pick. */
+.combo-input { appearance: none; -webkit-appearance: none; max-width: 100%; min-width: 7ch; background: var(--soft); border: 1px solid var(--line); border-radius: 2px; padding: 0 1.25em 0 .5em; height: 1.6em; color: var(--accent); font-family: inherit; font-size: inherit; line-height: 1.5em; font-weight: 500; cursor: text; text-overflow: ellipsis; field-sizing: content; vertical-align: baseline; transition: background-color .12s, border-color .12s; }
+.combo-input:hover, .combo-input:focus { background-color: var(--line); border-color: var(--muted); color: var(--ink); }
+.combo-input::placeholder { color: var(--muted); font-weight: 400; }
+.combo-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 100%; width: max-content; max-width: min(28rem, 90vw); max-height: 40vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: var(--space-1) 0; font-size: var(--t-sm); font-weight: 400; line-height: 1.4; text-align: left; }
+.combo-group { padding: var(--space-2) var(--space-3) var(--space-1); }
+.combo-option { padding: 3px var(--space-3); cursor: pointer; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combo-option:hover, .combo-option.is-active { background: color-mix(in srgb, var(--accent) 14%, var(--soft)); color: var(--accent); }
+.combo-option[aria-selected="true"] { font-weight: 600; }
+.combo-empty { padding: var(--space-2) var(--space-3); color: var(--muted); font-size: var(--t-xs); }
 select option { background: var(--panel); color: var(--ink); font-size: var(--t-base); }
 .status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); min-height: 22px; }
 .status { font-family: var(--mono); font-size: var(--t-sm); color: var(--muted); }
@@ -434,6 +445,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #outletList { max-height: 420px; overflow-y: auto; scrollbar-width: thin; padding-bottom: var(--space-4); font-family: var(--mono); font-size: var(--t-sm); color: var(--muted); }
 .outlet { transition: background-color .16s ease-out, color .16s ease-out; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: var(--space-1) 0; font-size: var(--t-xs); color: inherit; }
 .outlet:hover { color: var(--accent); }
+.outlet.is-static { color: var(--muted); cursor: default; }
+.outlet.is-static:hover { color: var(--muted); }
 /* The focused outlet sits on a wash of its own avaliação colour, the same one its chip on the
    right already carries. It used to draw a 3px bar down its left edge; the wash says the same
    thing without a line, which is the rule everywhere else on this page. */

@@ -153,12 +153,15 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(p.has('method'), false, 'the server resolves the default method; the client never guesses a label')
   })
 
-  it('the graph query asks for testimony and the sources/testimony queries do not echo it', () => {
+  it('the graph query asks for testimony and communities, and the sources/testimony queries echo neither (issue #217 AC12)', () => {
     const p = params(opts)
     assert.equal(p.get('testimony'), '1')
+    assert.equal(p.get('communities'), '1')
     assert.equal(narrowToTestimony(p).has('testimony'), false)
     assert.equal(testimonyParams(opts).has('testimony'), false)
     assert.equal(narrowToSources(p).has('testimony'), false)
+    assert.equal(narrowToTestimony(p).has('communities'), false)
+    assert.equal(narrowToSources(p).has('communities'), false)
   })
 
   // The second figure used to write a page-wide filter: clicking an outlet down there narrowed

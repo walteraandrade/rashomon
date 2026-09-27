@@ -19,6 +19,7 @@ import {
   signed,
   sourceLabels,
   termMask,
+  themeMask,
   testimonyClass,
   testimonyColor,
   testimonyFocus,
@@ -33,6 +34,7 @@ import {
   type Layout,
   type Lenses,
   type Link,
+  type MaskState,
   type Measure,
   type OutletRow,
   type PersonRef,
@@ -68,12 +70,12 @@ export const createCanvasMeasure = (): Measure => {
   }
 }
 
-// `--mask` is set when personScore is provided; atlas.css only reads it when the mask is on.
-export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | null = null) => {
+export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | null = null, ranking: Map<number, number> = new Map()) => {
   const mask = termMask(p, personScore)
+  const theme = themeMask(p, ranking)
   const t = p.testimony
   const testimonyNote = t ? ` · avaliação ${signed(t.score)} em ${fmt(t.n)} textos` : ''
-  return html`<g class="atlas-word" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}" data-node="${p.id}" role="button" tabindex="0" aria-pressed="false" aria-label="${label(p)}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${label(p)} · ${kinds[p.kind] || p.kind || 'Tipo desconhecido'} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="atlas-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}"/><rect class="atlas-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}"/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => html`<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${line}</tspan>`)}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
+  return html`<g class="atlas-word" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}${theme ? `;--theme:${theme}` : ''}" data-node="${p.id}" role="button" tabindex="0" aria-pressed="false" aria-label="${label(p)}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${label(p)} · ${kinds[p.kind] || p.kind || 'Tipo desconhecido'} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="atlas-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}"/><rect class="atlas-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}"/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => html`<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${line}</tspan>`)}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
 }
 
 // The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
@@ -81,6 +83,12 @@ const maskLegend = (person: PersonTestimony | undefined) =>
   person && person.score !== null
     ? html`<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
     : html`<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
+
+// Names build coverage, never a document-count floor, so it reads nothing like maskLegend's MASK_MIN copy.
+const themeLegend = (ranking: Map<number, number>, builtAt?: string) =>
+  ranking.size > 0
+    ? html`<span id="themeLegend" hidden>Cor = tema: palavras que caminharam juntas nesta construção do grafo. Os números não têm nome e não são comparáveis entre construções${builtAt ? ` (construída em ${builtAt})` : ''}.</span>`
+    : html`<span id="themeLegend" hidden>Esta construção não tem temas calculados para este recorte.</span>`
 
 // Plain elements need explicit keyboard handling that <button> would have provided automatically.
 const wirePersonDocs = (el: Element, onShowPerson: () => void) => {
@@ -104,6 +112,7 @@ export const drawMap = ({
   onChoose,
   onShowPerson = () => {},
   personTestimony,
+  ranking = new Map(),
 }: {
   layout: Layout
   personName: string
@@ -113,10 +122,11 @@ export const drawMap = ({
   onChoose: (id: string) => void
   onShowPerson?: () => void
   personTestimony?: PersonTestimony
+  ranking?: Map<number, number>
 }) => {
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
-  const mapBody = html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text>`
+  const mapBody = html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null, ranking))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text>`
   $('viewport').innerHTML = html`<div class="map-stage">${frame({ cls: 'map-svg', viewBox: '-430 -402 860 804', ariaLabel: `Mapa de palavras associadas a ${personName}` }, mapBody)}</div>`
   $('overflow').hidden = mode !== 'map' || !overflow.length
   $('overflow').innerHTML = overflow.length
@@ -134,7 +144,7 @@ export const drawMap = ({
         }
       })
   }
-  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span><span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}`
+  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span><span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}${themeLegend(ranking)}`
 }
 
 // Repaints selection classes, search note, edge routes and the columns view.
@@ -150,8 +160,9 @@ export const paintSelection = ({
   onShowPerson,
   personName,
   about,
-  mask = false,
+  mask = 'avaliacao',
   personTestimony,
+  ranking = new Map(),
 }: {
   nodes: Term[]
   links: Link[]
@@ -164,16 +175,20 @@ export const paintSelection = ({
   onShowPerson?: () => void
   personName?: string
   about?: number
-  mask?: boolean
+  mask?: MaskState
   personTestimony?: PersonTestimony
+  ranking?: Map<number, number>
 }) => {
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
-  // The mask is a class on the surfaces; without a person mean there is nothing to compare.
-  const masked = mask && personTestimony?.score !== null && personTestimony?.score !== undefined
+  const masked = mask === 'avaliacao' && personTestimony?.score !== null && personTestimony?.score !== undefined
+  const themed = mask === 'tema'
   $('viewport').querySelector('svg')?.classList.toggle('is-masked', masked)
+  $('viewport').querySelector('svg')?.classList.toggle('is-themed', themed)
   $('columns').classList.toggle('is-masked', masked)
-  if ($('maskLegend')) $('maskLegend').hidden = !mask
+  $('columns').classList.toggle('is-themed', themed)
+  if ($('maskLegend')) $('maskLegend').hidden = mask !== 'avaliacao'
+  if ($('themeLegend')) $('themeLegend').hidden = mask !== 'tema'
   for (const el of queryAll('[data-node]')) {
     const n = nodes.find((n) => n.id === el.dataset.node)
     if (!n) continue
@@ -205,7 +220,7 @@ export const paintSelection = ({
     }
   }
   // The list is repainted whole, so the person's own row must travel with it.
-  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson, personName, about, personTestimony })
+  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson, personName, about, personTestimony, ranking })
 }
 
 export const paintColumns = ({
@@ -220,6 +235,7 @@ export const paintColumns = ({
   personName = '',
   about,
   personTestimony,
+  ranking = new Map(),
 }: {
   nodes: Term[]
   links: Link[]
@@ -232,6 +248,7 @@ export const paintColumns = ({
   personName?: string
   about?: number
   personTestimony?: PersonTestimony
+  ranking?: Map<number, number>
 }) => {
   if (mode !== 'columns' || !nodes.length) return
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
@@ -240,8 +257,11 @@ export const paintColumns = ({
   $('columns').innerHTML = html`${personRow}${nodes.map((n, i) => {
     const dim = normalizedSearch ? !matching(n, search) : selected && n.id !== selected && !related.has(n.id)
     const mask = termMask(n, personTestimony?.score ?? null)
+    const theme = themeMask(n, ranking)
     const t = n.testimony
-    return html`<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${n.id}"${mask ? html` style="--mask:${mask}"` : ''}><span>${String(i + 1).padStart(2, '0')} · ${kinds[n.kind] || n.kind || 'Tipo desconhecido'} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${label(n)}</strong></button>`
+    return html`<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${n.id}"${
+      mask && theme ? html` style="--mask:${mask};--theme:${theme}"` : mask ? html` style="--mask:${mask}"` : theme ? html` style="--theme:${theme}"` : ''
+    }><span>${String(i + 1).padStart(2, '0')} · ${kinds[n.kind] || n.kind || 'Tipo desconhecido'} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${label(n)}</strong></button>`
   })}`
   queryAll('[data-col]', $('columns')).forEach((el) => el.addEventListener('click', () => onChoose(String(el.dataset.col))))
   queryAll('[data-person-docs]', $('columns')).forEach((el) => wirePersonDocs(el, onShowPerson))
@@ -291,6 +311,7 @@ export const inspect = ({
   daysLabel,
   onChoose,
   sparkline,
+  mask,
 }: {
   graph: Graph | null
   nodes: Term[]
@@ -300,13 +321,17 @@ export const inspect = ({
   daysLabel: string
   onChoose: (id: string) => void
   sparkline?: Sparkline
+  mask?: MaskState
 }) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML = html`<p class="eyebrow">A pessoa no centro</p><h3>${graph?.person?.name || ''}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p><p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
   } else {
     const related = relatedTo(nodes, links, n.id)
-    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}${sparklineMarkup(sparkline)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>`
+    // Only in tema mode, and only when another node on the map shares the community — never an empty heading.
+    const communityMates =
+      mask === 'tema' && n.community !== null && n.community !== undefined ? nodes.filter((o) => o.id !== n.id && o.community === n.community) : []
+    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}${sparklineMarkup(sparkline)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>${communityMates.length ? html`<p class="eyebrow">No mesmo tema</p><div class="related">${relatedButtons(communityMates.map((node) => ({ node })), sort, false)}</div>` : ''}`
   }
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {

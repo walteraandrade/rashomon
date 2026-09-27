@@ -153,6 +153,35 @@ describe('the inspector carries no documents button', () => {
 
 })
 
+describe('inspect: "no mesmo tema" (issue #217 AC7)', () => {
+  const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 }
+  const stf = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 }
+  const reforma = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, community: 9 }
+  const graphWith = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf, reforma], links: [] }
+
+  const paintWith = (mask: 'avaliacao' | 'tema' | 'off' | undefined, selected: string | null, nodes = [golpe, stf, reforma]) =>
+    withFakeDocument(['inspector'], (els) => {
+      inspect({ graph: graphWith, nodes, links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, mask })
+      return els.inspector.innerHTML
+    })
+
+  it('renders only when mask is tema, the focused term has a community, and another node on the map shares it', () => {
+    assert.match(paintWith('tema', golpe.id), /No mesmo tema/)
+    assert.doesNotMatch(paintWith('avaliacao', golpe.id), /No mesmo tema/, 'avaliação mode never shows the tema list')
+    assert.doesNotMatch(paintWith('off', golpe.id), /No mesmo tema/)
+    assert.doesNotMatch(paintWith(undefined, golpe.id), /No mesmo tema/, 'no mask state handed in: same as off')
+    assert.doesNotMatch(paintWith('tema', reforma.id), /No mesmo tema/, 'no other node shares community 9')
+    assert.doesNotMatch(paintWith('tema', golpe.id, [golpe, reforma]), /No mesmo tema/, 'fewer than two members sharing the community renders nothing')
+  })
+
+  it('lists every community mate, never the focused term itself', () => {
+    const html = paintWith('tema', golpe.id)
+    assert.match(html, /data-related="word:stf"/)
+    assert.doesNotMatch(html, /data-related="word:golpe"/, 'the focused term never lists itself')
+    assert.doesNotMatch(html, /data-related="word:reforma"/, 'reforma is a different community')
+  })
+})
+
 describe("the person's own entry points to her documents", () => {
   const layout = {
     placed: [{ id: term.id, term: 'reforma', kind: 'word', count: 12, pmi: 1.4, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['reforma'], lineHeight: 22, rank: 0, score: 1.4 }],
@@ -603,7 +632,7 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
   })
 
   it('paintSelection masks only when the person has a mean to compare against', () => {
-    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, mask: true }
+    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, mask: 'avaliacao' as const }
     withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
       paintSelection({ ...args, personTestimony: { method: 'kikori', score: -2.1, n: 40 } })
       assert.equal(els.columns.classes['is-masked'], true)
@@ -611,6 +640,73 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
       assert.equal(els.columns.classes['is-masked'], false, 'no mean: the words keep their ink instead of all going grey')
       paintSelection({ ...args, personTestimony: undefined })
       assert.equal(els.columns.classes['is-masked'], false)
+    })
+  })
+
+  it('paintSelection: MaskState is three-way and mutually exclusive (issue #217 AC4)', () => {
+    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, personTestimony: { method: 'kikori', score: -2.1, n: 40 } }
+    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
+      paintSelection({ ...args, mask: 'avaliacao' })
+      assert.equal(els.columns.classes['is-masked'], true)
+      assert.equal(els.columns.classes['is-themed'], false)
+      paintSelection({ ...args, mask: 'tema' })
+      assert.equal(els.columns.classes['is-masked'], false)
+      assert.equal(els.columns.classes['is-themed'], true)
+      paintSelection({ ...args, mask: 'off' })
+      assert.equal(els.columns.classes['is-masked'], false)
+      assert.equal(els.columns.classes['is-themed'], false)
+    })
+  })
+
+  it('wordMarkup and paintColumns emit --theme only when the node is inside the ranking, in addition to --mask (issue #217 AC3/AC5)', () => {
+    const ranking = new Map([[3, 1]])
+    const themed = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: 3 }), 'count', person.score, ranking))
+    assert.match(themed, /--mask:rgb\(255,122,138\)/)
+    assert.match(themed, /--theme:var\(--theme-1\)/)
+    const untouchedCommunity = String(wordMarkup(placed({ community: 9 }), 'count', person.score, ranking))
+    assert.doesNotMatch(untouchedCommunity, /--theme/, 'a community outside the ranking paints no --theme, not a muted literal')
+    const nullCommunity = String(wordMarkup(placed({ community: null }), 'count', person.score, ranking))
+    assert.doesNotMatch(nullCommunity, /--theme/)
+
+    withFakeDocument(['columns'], (els) => {
+      const nodes = [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: 0.1, n: 20 }, community: 3 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, testimony: null, community: 9 },
+      ]
+      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, personTestimony: person, ranking })
+      assert.match(els.columns.innerHTML, /data-col="word:a" style="--mask:rgb\(116,220,134\);--theme:var\(--theme-1\)">/)
+      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/, 'community outside the ranking and no testimony: no style attribute')
+    })
+  })
+})
+
+describe('drawMap threads ranking into every placed word, and themeLegend names build coverage (issue #217 AC6/AC13)', () => {
+  const layout = {
+    placed: [
+      { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 3, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
+      { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: null, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 },
+    ],
+    overflow: [],
+    center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
+  }
+  const themeLegendSpan = (markup: string) => markup.match(/<span id="themeLegend" hidden>([^<]*)<\/span>/)?.[1] ?? ''
+
+  it('a top-6 community produces at least one --theme style in the painted SVG, and the legend names it', () => {
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      const ranking = new Map([[3, 1]])
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
+      assert.match(els.viewport.innerHTML, /--theme:var\(--theme-1\)/)
+      assert.match(themeLegendSpan(els.legend.innerHTML), /caminharam juntas/)
+    })
+  })
+
+  it('no ranking handed in: no --theme anywhere, and the key states the build has no communities for this recorte', () => {
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {} })
+      assert.doesNotMatch(els.viewport.innerHTML, /--theme/)
+      const span = themeLegendSpan(els.legend.innerHTML)
+      assert.match(span, /não tem temas calculados/)
+      assert.doesNotMatch(span, /textos avaliados/, 'the tema key must never borrow maskLegend\'s MASK_MIN document-count wording')
     })
   })
 })

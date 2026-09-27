@@ -2,7 +2,7 @@
 // hands it a root element, so node:test can import the pieces without a document.
 
 import * as api from '../api.js'
-import { fmt, html, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type Measure, type Sparkline, type Term } from '../format.js'
+import { communityRanking, fmt, html, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type MaskState, type Measure, type Sparkline, type Term } from '../format.js'
 import { centerLabel, pack } from '../layout.js'
 import {
   createCanvasMeasure,
@@ -35,6 +35,10 @@ const OUTAGE =
   '<div class="empty"><img class="pet" src="/pet-caracara-perched.png" alt="" width="26" height="37">Falha de rede ou base indisponível.<br>Nenhum grafo fictício será exibido.<br><br><button class="quiet-button" id="retry">Tentar novamente</button></div>'
 
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
+
+const MASK_CYCLE: MaskState[] = ['avaliacao', 'tema', 'off']
+const nextMask = (state: MaskState): MaskState => MASK_CYCLE[(MASK_CYCLE.indexOf(state) + 1) % MASK_CYCLE.length]
+const MASK_LABELS: Record<MaskState, string> = { avaliacao: 'Colorir por avaliação', tema: 'Colorir por tema', off: 'Sem cor' }
 
 export type HandlerActions = {
   paintCurrentSelection?: () => void
@@ -160,7 +164,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   let measure: Measure | null = null
   const layoutCache = new Map<string, Layout>()
   let selected: string | null = null
-  let mask = true
+  let mask: MaskState = 'avaliacao'
+  let ranking = new Map<number, number>()
   let zoom = 1
   let source = SOURCE_SEGMENTS.some(([v]) => v === initial.source) ? (initial.source as string) : 'all'
   let requestId = 0
@@ -186,8 +191,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     selected = id
   }
   const getMask = () => mask
-  const setMask = (on: boolean) => {
-    mask = on
+  const setMask = (next: MaskState) => {
+    mask = next
   }
 
   const getLayout = () => {
@@ -234,10 +239,10 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const paintCurrentSelection = () =>
-    paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: graph?.person?.name ?? '', about: graph?.stats?.about, mask: getMask(), personTestimony: graph?.stats?.testimony })
+    paintSelection({ nodes, links, selected: getSelected(), search: $('search').value, layout: currentLayout, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: graph?.person?.name ?? '', about: graph?.stats?.about, mask: getMask(), personTestimony: graph?.stats?.testimony, ranking })
 
   const paintCurrentInspector = () =>
-    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id), sparkline })
+    inspect({ graph, nodes, links, selected: getSelected(), sort: $('sort').value, daysLabel: daysLabel(), onChoose: (id) => handlers.pick(id), sparkline, mask: getMask() })
 
   // Figure 1's inspector sparkline (issue #147 AC20): the last 7 rolling days for the word in
   // focus, independent of the atlas's own days chip. Person-in-focus never calls this.
@@ -264,7 +269,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const drawCurrentMap = () => {
     const current = graph as Graph
     currentLayout = getLayout()
-    drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personTestimony: current.stats?.testimony })
+    drawMap({ layout: currentLayout, personName: current.person.name, about: current.stats?.about, mode, sort: $('sort').value, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personTestimony: current.stats?.testimony, ranking })
     resizeMap()
     paintCurrentSelection()
     $('viewport').scrollLeft = Math.max(0, ($('viewport').scrollWidth - $('viewport').clientWidth) / 2)
@@ -316,6 +321,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     if (busy || !graph) return
     const current = graph
     nodes = current.nodes.slice(0, Number($('limit').value))
+    ranking = communityRanking(nodes)
     const ids = new Set(nodes.map((n) => n.id))
     links = current.links.filter((l) => ids.has(l.source) && ids.has(l.target))
     const previouslySelected = getSelected()
@@ -323,7 +329,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $('modeMap').setAttribute('aria-pressed', String(mode === 'map'))
     $('modeColumns').setAttribute('aria-pressed', String(mode === 'columns'))
     $('modeStrip').setAttribute('aria-pressed', String(mode === 'strip'))
-    $('mask').setAttribute('aria-pressed', String(getMask()))
+    $('mask').textContent = MASK_LABELS[getMask()]
+    $('mask').setAttribute('aria-pressed', String(getMask() !== 'off'))
     $('viewport').hidden = mode !== 'map'
     $('columns').hidden = mode !== 'columns'
     $('atlasStrip').hidden = mode !== 'strip'
@@ -337,7 +344,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     if (nodes.length) {
       if (!currentLayout || mode === 'map') drawCurrentMap()
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
-      paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony })
+      paintColumns({ nodes, links, selected: getSelected(), search: $('search').value, sort: $('sort').value, mode, onChoose: (id) => handlers.pick(id), onShowPerson: showPersonDocs, personName: current.person.name, about: current.stats?.about, personTestimony: current.stats?.testimony, ranking })
       if (mode === 'strip') {
         lastStripWidth = $('atlasStrip').clientWidth || 0
         paintTermStrip({ nodes, personTestimony: current.stats?.testimony, onChoose: (id) => handlers.pick(id), search: $('search').value, width: lastStripWidth || undefined })
@@ -394,6 +401,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     graph = null
     nodes = []
     links = []
+    ranking = new Map()
     $('status').classList.remove('error')
     // An outage shows the error illustration; retry reloads the page (the only path back to
     // app.ts, which fetches the person list once and hands it down).
@@ -486,9 +494,13 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
       $('source').value = value
     },
     toggleMask: () => {
-      setMask(!getMask())
-      $('mask').setAttribute('aria-pressed', String(getMask()))
-      if (graph && !busy) paintCurrentSelection()
+      setMask(nextMask(getMask()))
+      $('mask').textContent = MASK_LABELS[getMask()]
+      $('mask').setAttribute('aria-pressed', String(getMask() !== 'off'))
+      if (graph && !busy) {
+        paintCurrentSelection()
+        paintCurrentInspector()
+      }
     },
     closeDocs: () => docsCard.close(),
     docsOpen: docsCard.isOpen,

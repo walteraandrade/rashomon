@@ -825,6 +825,23 @@ describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)',
     return (hi + 0.05) / (lo + 0.05)
   }
 
+  const hexToHue = (hex: string) => {
+    const n = hex.replace('#', '')
+    const r = parseInt(n.slice(0, 2), 16) / 255
+    const g = parseInt(n.slice(2, 4), 16) / 255
+    const b = parseInt(n.slice(4, 6), 16) / 255
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    if (max === min) return 0
+    const d = max - min
+    const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return h * 60
+  }
+  const hueDistance = (a: number, b: number) => {
+    const d = Math.abs(a - b) % 360
+    return Math.min(d, 360 - d)
+  }
+
   it('atlas.css declares --theme-1..--theme-6, each meeting 4.5:1 against --bg (issue #217 AC14)', () => {
     const bg = hexOf('bg')
     assert.ok(bg, '--bg must be declared')
@@ -851,6 +868,31 @@ describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)',
         }
       }
     }
+  })
+
+  it('every --theme-* token sits at least 30° of hue away from --accent, so none reads as the live control (code review fix #3)', () => {
+    const accent = hexOf('accent')
+    assert.ok(accent, '--accent must be declared')
+    const accentHue = hexToHue(accent as string)
+    for (const i of [1, 2, 3, 4, 5, 6]) {
+      const hex = hexOf(`theme-${i}`)
+      assert.ok(hex, `--theme-${i} must be declared`)
+      const d = hueDistance(hexToHue(hex as string), accentHue)
+      assert.ok(d >= 30, `--theme-${i} (${hex}) must sit at least 30° of hue from --accent (${accent}), got ${d.toFixed(1)}°`)
+    }
+  })
+
+  it('.map-svg.is-themed .atlas-word and .columns.is-themed .column-card both fall back to --muted, so an uncoloured node never vanishes (code review fix #4)', () => {
+    assert.match(
+      css,
+      /\.map-svg\.is-themed \.atlas-word[^{]*\{[^}]*--wc:\s*var\(--theme,\s*var\(--muted\)\)/,
+      'the atlas map must keep the --muted fallback on --wc in tema mode',
+    )
+    assert.match(
+      css,
+      /\.columns\.is-themed \.column-card\s*\{[^}]*--wc:\s*var\(--theme,\s*var\(--muted\)\)/,
+      'the columns list must keep the --muted fallback on --wc in tema mode',
+    )
   })
 })
 

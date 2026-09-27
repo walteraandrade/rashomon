@@ -36,6 +36,7 @@ import {
   liftBalance,
   liftOfPerson,
   rareRisers,
+  attentionDayLabel,
   paintAttention,
   paintAttentionError,
   paintAttentionLoading,
@@ -1506,5 +1507,54 @@ describe('paintAttention / paintAttentionLoading / paintAttentionError, figure 7
       assert.match(dataHtml, /data-row="views"/)
       assert.match(dataHtml, /attention-axis/)
     })
+  })
+
+  // Spec §4: both rows of a day share one click target; only the mentions mark stays reachable
+  // by keyboard/AT, or the day count would double to 60.
+  it('exactly 30 marks stay in the tab order on a 30-day paint; the views row drops out of the tab order and the accessibility tree', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(3, 30), views: viewsSeries(7, 9000, 30), metrics, selected: null, onPick: () => {} })
+      const html = String(els.attentionChart.innerHTML)
+      assert.equal([...html.matchAll(/data-day="/g)].length, 60, 'both rows still carry one mark per day')
+      assert.equal([...html.matchAll(/tabindex="0"/g)].length, 30, 'only the mentions row stays in the tab order')
+      assert.equal([...html.matchAll(/tabindex="-1"/g)].length, 30, 'the views row drops out of the tab order')
+      assert.equal([...html.matchAll(/aria-hidden="true"/g)].length, 30, 'the views row drops out of the accessibility tree')
+    })
+  })
+
+  it("the mentions mark's accessible name is the pt-BR day label plus both series' own values, never the raw ISO date", () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(1, 9000), metrics, selected: null, onPick: () => {} })
+      const html = String(els.attentionChart.innerHTML)
+      const label = `${attentionDayLabel(day(1))}, 40 documentos, 9.000 visualizações`
+      assert.ok(html.includes(`aria-label="${label}"`), `expected aria-label ${JSON.stringify(label)} in ${html}`)
+      assert.doesNotMatch(html, /aria-label="2026-08-01/, 'the raw ISO date must not leak into the accessible name')
+    })
+  })
+
+  it('viewsLoading paints aria-busy="true" and its own sr-only note; a full paint clears both (AC10)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(1), views: [], metrics, selected: null, onPick: () => {}, viewsLoading: true })
+      assert.equal(els.attentionChart.getAttribute('aria-busy'), 'true')
+      assert.match(els.attentionChart.innerHTML, /Lendo os pageviews\./)
+
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(4, 9000), metrics, selected: null, onPick: () => {} })
+      assert.equal(els.attentionChart.getAttribute('aria-busy'), 'false')
+      assert.doesNotMatch(els.attentionChart.innerHTML, /Lendo os pageviews\./)
+    })
+  })
+})
+
+// --accent is reserved for the live control elsewhere on the page (CLAUDE.md); the views row
+// must never carry a colour rule of its own -- the row head already names the row.
+describe('atlas.css never gives the attention views row --accent', () => {
+  const root = dirname(dirname(fileURLToPath(import.meta.url)))
+  const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+
+  it('carries no data-row="views" .attention-mark rule, and no rule anywhere in the attention block reads var(--accent)', () => {
+    const block = css.match(/\/\* -+ the attention figure[\s\S]*?-+ \*\/[\s\S]*?(?=\n\/\* -+|$)/)?.[0] ?? ''
+    assert.ok(block, 'the attention figure CSS block must exist')
+    assert.doesNotMatch(block, /data-row="views"\s*\.attention-mark/)
+    assert.doesNotMatch(block, /var\(--accent\)/)
   })
 })

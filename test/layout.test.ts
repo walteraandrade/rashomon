@@ -505,6 +505,15 @@ describe('peakDay (issue #216)', () => {
     assert.equal(peakDay(series), '2026-09-02')
   })
 
+  it('a tie fed in reversed order still returns the oldest day, never the one the loop met first (AC2)', () => {
+    const series = [
+      { day: '2026-09-03', value: 9 },
+      { day: '2026-09-02', value: 5 },
+      { day: '2026-09-01', value: 9 },
+    ]
+    assert.equal(peakDay(series), '2026-09-01')
+  })
+
   it('an all-zero series has no peak, returns null (AC2)', () => {
     const series = [
       { day: '2026-09-01', value: 0 },
@@ -515,10 +524,9 @@ describe('peakDay (issue #216)', () => {
   })
 })
 
-// Issue #216 (figure 7), validator round-1 blocker: 30 columns at 640px (or fewer, wider ones
-// on mobile at 343px) must never let one day's mark box reach into its neighbour's -- the
-// original text-sized mark (10-30px numbers in 50-122px boxes) overlapped 29 of 30 adjacent
-// pairs at realistic values (views 4 210-51 000, mentions 12-120) and stacked their hit rects.
+// Issue #216 (figure 7): 30 columns at 640px (or fewer, wider ones on mobile at 343px) must
+// never let one day's mark box reach into its neighbour's, at realistic values (views
+// 4 210-51 000, mentions 12-120).
 describe('attentionLayout (issue #216), no adjacent overlap on a 30-day grid', () => {
   const days = (n: number) => Array.from({ length: n }, (_, i) => `2026-08-${String(i + 1).padStart(2, '0')}`)
   const mentions = (n: number) => days(n).map((day, i) => ({ day, count: 12 + ((i * 37) % 108) }))

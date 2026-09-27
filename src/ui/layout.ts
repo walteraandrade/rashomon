@@ -399,7 +399,8 @@ export type AttentionSeriesPoint = { day: string; value: number }
 
 export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
   let best: AttentionSeriesPoint | null = null
-  for (const point of series) if (point.value > 0 && (!best || point.value > best.value)) best = point
+  for (const point of series)
+    if (point.value > 0 && (!best || point.value > best.value || (point.value === best.value && point.day < best.day))) best = point
   return best?.day ?? null
 }
 

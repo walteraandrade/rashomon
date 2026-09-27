@@ -1376,18 +1376,40 @@ const attentionRowHead = (row: 'mentions' | 'views', headLabel: string, peak: st
   html`<div class="attention-row-head"><span>${headLabel}</span><span>${peak ? html`pico: ${fmt(peakValue)} ${unit} em ${attentionDayLabel(peak)}` : ATTENTION_ROW_NOTE[row]}</span></div>`
 
 // glow/hit share the bar's own width, never wider, so a click never lands on a neighbouring day.
-const attentionMarkMarkup = (mark: AttentionMark, baseline: number, selected: string | null, unit: string) => {
+// Only the mentions mark stays in the tab order (spec §4: one shared click target per day, not
+// two); the views mark stays clickable by pointer but drops out of both the tab order and the
+// accessibility tree, or the day count would double to 60.
+const attentionMarkMarkup = (mark: AttentionMark, baseline: number, selected: string | null, interactive: boolean, title: string) => {
   const isSelected = selected === mark.day
   const barX = -mark.barW / 2
   const barY = -mark.size
-  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" transform="translate(${mark.x},${baseline})" data-day="${mark.day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${mark.day}, ${mark.text} ${unit}"><title>${mark.day} · ${mark.text} ${unit}</title><rect class="attention-hit" x="${barX}" y="${-baseline}" width="${mark.barW}" height="${ATTENTION_ROW_HEIGHT}"/><rect class="attention-glow" x="${barX}" y="${barY - 4}" width="${mark.barW}" height="${mark.size + 8}"/><rect class="attention-bar" x="${barX}" y="${barY}" width="${mark.barW}" height="${mark.size}"/></g>`
+  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" transform="translate(${mark.x},${baseline})" data-day="${mark.day}"${
+    interactive ? html` role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${title}"` : html` tabindex="-1" aria-hidden="true"`
+  }><title>${title}</title><rect class="attention-hit" x="${barX}" y="${-baseline}" width="${mark.barW}" height="${ATTENTION_ROW_HEIGHT}"/><rect class="attention-glow" x="${barX}" y="${barY - 4}" width="${mark.barW}" height="${mark.size + 8}"/><rect class="attention-bar" x="${barX}" y="${barY}" width="${mark.barW}" height="${mark.size}"/></g>`
 }
 
-const attentionRowMarkup = (row: 'mentions' | 'views', marks: AttentionMark[], width: number, selected: string | null, headLabel: string, peak: string | null, peakValue: number, unit: string) => {
+const byDay = (marks: AttentionMark[]) => new Map(marks.map((m) => [m.day, m.text]))
+
+const attentionRowMarkup = (
+  row: 'mentions' | 'views',
+  marks: AttentionMark[],
+  companion: Map<string, string>,
+  width: number,
+  selected: string | null,
+  headLabel: string,
+  peak: string | null,
+  peakValue: number,
+  unit: string,
+) => {
   const baseline = ATTENTION_BASELINE
+  const interactive = row === 'mentions'
   return html`<div class="attention-row" data-row="${row}">${attentionRowHead(row, headLabel, peak, peakValue, unit)}${frame(
     { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}`, role: 'group', ariaLabel: headLabel },
-    html`${axis({ x0: 0, x1: width, y: baseline, ticks: marks.map((m) => m.x), cls: 'attention' })}${marks.map((m) => attentionMarkMarkup(m, baseline, selected, unit))}`,
+    html`${axis({ x0: 0, x1: width, y: baseline, ticks: marks.map((m) => m.x), cls: 'attention' })}${marks.map((m) => {
+      const other = companion.get(m.day) ?? '0'
+      const title = interactive ? `${attentionDayLabel(m.day)}, ${m.text} documentos, ${other} visualizações` : `${attentionDayLabel(m.day)}, ${other} documentos, ${m.text} visualizações`
+      return attentionMarkMarkup(m, baseline, selected, interactive, title)
+    })}`,
   )}</div>`
 }
 
@@ -1436,20 +1458,20 @@ export const paintAttention = ({
   if (!chart) return
   chart.hidden = false
   chart.classList.remove('is-loading')
-  chart.setAttribute('aria-busy', 'false')
+  chart.setAttribute('aria-busy', viewsLoading ? 'true' : 'false')
   const viewsLabel = 'Pageviews (Wikipédia)'
   const layout = attentionLayout(metrics, mentions, views, width)
   const mentionsPeak = peakDay(mentions.map((m) => ({ day: m.day, value: m.count })))
   const mentionsPeakValue = mentions.find((m) => m.day === mentionsPeak)?.count ?? 0
-  const mentionsMarkup = attentionRowMarkup('mentions', layout.mentions, layout.width, selected, 'Menções', mentionsPeak, mentionsPeakValue, 'documentos')
+  const mentionsMarkup = attentionRowMarkup('mentions', layout.mentions, byDay(layout.views), layout.width, selected, 'Menções', mentionsPeak, mentionsPeakValue, 'documentos')
   const viewsPeak = viewsLoading || viewsError ? null : peakDay(views.map((v) => ({ day: v.day, value: v.views })))
   const viewsPeakValue = views.find((v) => v.day === viewsPeak)?.views ?? 0
   const viewsMarkup = viewsError
     ? attentionRowError(layout.width, viewsLabel)
     : viewsLoading
       ? html`<div class="ghost-field" aria-hidden="true">${attentionGhostRow('views', viewsLabel, layout.width)}</div>`
-      : attentionRowMarkup('views', layout.views, layout.width, selected, viewsLabel, viewsPeak, viewsPeakValue, 'visualizações')
-  chart.innerHTML = html`${mentionsMarkup}${viewsMarkup}`
+      : attentionRowMarkup('views', layout.views, byDay(layout.mentions), layout.width, selected, viewsLabel, viewsPeak, viewsPeakValue, 'visualizações')
+  chart.innerHTML = html`${mentionsMarkup}${viewsMarkup}${viewsLoading ? html`<p class="sr-only">Lendo os pageviews.</p>` : ''}`
   for (const el of queryAll('[data-day]', chart)) {
     const pick = () => onPick(String(el.dataset.day))
     el.addEventListener('click', pick)

@@ -748,10 +748,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* ---------- the attention figure (figure 7, wikipedia pageviews against press mentions,
    issue #216): two bar-chart rows on one shared day axis, each scaled off its own maximum --
    pageviews and documents live in different orders of magnitude and are never read as one
-   number against the other. [data-row] tells the rows apart; there is no second colour pair
-   here, only --ink for mentions and --accent for views, the same live-control hue the rest of
-   the page already uses for "the thing that changed". The svg draws at its own measured width
-   (figures/attention.ts), never scaled by CSS, so a bar's physical size is never distorted. ---------- */
+   number against the other. [data-row] tells the rows apart, in the row head text; both draw
+   in --ink, since --accent is reserved for the live control elsewhere on the page. The svg
+   draws at its own measured width (figures/attention.ts), never scaled by CSS, so a bar's
+   physical size is never distorted. ---------- */
 .attention-chart { margin: 18px 0 0; padding: 6px 0 10px; }
 .attention-row { margin-bottom: var(--space-4); }
 .attention-row:last-child { margin-bottom: 0; }
@@ -760,7 +760,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .attention-axis { stroke: var(--line); stroke-width: 2; }
 .attention-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
 .attention-mark { cursor: pointer; outline: none; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.attention-row[data-row="views"] .attention-mark { --wc: var(--accent); }
 .attention-glow, .attention-hit { fill: transparent; rx: 4px; }
 .attention-glow { filter: blur(7px); transition: fill .16s ease-out; }
 .attention-hit { transition: fill .16s ease-out; }

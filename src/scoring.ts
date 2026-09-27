@@ -3,6 +3,11 @@ import { sql, type Sql } from './sql.js'
 // `count`/`about`/`col` are raw column references the caller supplies (sql.raw), never bound values.
 export const pmiRank = (count: Sql): Sql => sql`pmi * ln(1 + ${count})`
 
+// The raw PMI, before pmiRank's ln(1+count) and before rounding. graphFast keeps its own
+// casted copy: that statement's text is pinned, and its columns are already integers.
+export const pmiLog2 = (cPt: Sql, nTotal: Sql, npTotal: Sql, cT: Sql): Sql =>
+  sql`ln((${cPt} * ${nTotal}) / (${npTotal} * ${cT})) / ln(2)`
+
 export const sortKey = (sort: string, count: Sql): Sql =>
   sql`(case when ${sort} = 'pmi' then ${pmiRank(count)} else ${count} end)`
 

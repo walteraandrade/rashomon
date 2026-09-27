@@ -23,7 +23,7 @@ describe('bench scenarios', () => {
 
   it('covers graph, sources, docs, timeline, tone and testimony', () => {
     const routes = new Set(scenarios.map((s) => s.route))
-    for (const route of ['graph', 'sources', 'docs', 'timeline', 'week', 'tone', 'testimony']) assert.ok(routes.has(route), route)
+    for (const route of ['graph', 'sources', 'docs', 'timeline', 'week', 'tone', 'testimony', 'compare', 'lenses', 'agenda', 'comention', 'attention', 'rising', 'candidates']) assert.ok(routes.has(route), route)
   })
 
   it('every scenario is a request the API still answers', async () => {

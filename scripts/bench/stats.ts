@@ -9,6 +9,7 @@ export type Cell = {
   samplesMs: number[]
   rows: number
   hash: string
+  timedOut?: boolean
 }
 
 export type Report = {
@@ -55,42 +56,61 @@ const canonical = (v: unknown): unknown => {
 // Row order is part of the answer: every route statement orders its own output.
 export const resultHash = (rows: unknown[]) => createHash('sha256').update(JSON.stringify(canonical(rows))).digest('hex').slice(0, 16)
 
+// `same` is null when either side timed out, or read aggregates whose build timed out: no rows to diff.
 export type Verdict = {
   scale: string
   case: string
   window: number
   baseMs: number
   candMs: number
+  baseTimedOut: boolean
+  candTimedOut: boolean
   ratio: number
-  same: boolean
+  same: boolean | null
   fast: boolean
 }
 
 const key = (c: Pick<Cell, 'scale' | 'case' | 'window'>) => `${c.scale}|${c.case}|${c.window}`
 
-// A change is kept only when every cell returns the same rows and every targeted cell is at
-// least `gain` faster (candidate median <= (1 - gain) x base median).
+const READS_AGGREGATES = ['graphFast']
+
+// A change is kept only when every comparable cell returns the same rows and every targeted cell
+// is at least `gain` faster (candidate median <= (1 - gain) x base median). A timed-out base median
+// is its timeout, a lower bound, so the ratio against it overstates the candidate's time, never
+// understates it; a timed-out candidate is never fast.
 export const compare = (base: Report, cand: Report, targets: string[], gain = 0.2) => {
   const byKey = new Map(cand.cells.map((c) => [key(c), c]))
+  const buildTimedOut = (r: Report, scale: string, window: number) =>
+    r.cells.some((c) => c.case === 'aggregate' && c.scale === scale && c.window === window && c.timedOut)
   const verdicts: Verdict[] = base.cells.flatMap((b) => {
     const c = byKey.get(key(b))
     if (!c) return []
     const ratio = c.medianMs / b.medianMs
-    return [{ scale: b.scale, case: b.case, window: b.window, baseMs: b.medianMs, candMs: c.medianMs, ratio, same: b.hash === c.hash, fast: ratio <= 1 - gain }]
+    const blind = b.timedOut || c.timedOut || (READS_AGGREGATES.includes(b.case) && (buildTimedOut(base, b.scale, b.window) || buildTimedOut(cand, b.scale, b.window)))
+    return [{
+      scale: b.scale, case: b.case, window: b.window, baseMs: b.medianMs, candMs: c.medianMs,
+      baseTimedOut: !!b.timedOut, candTimedOut: !!c.timedOut, ratio,
+      same: blind ? null : b.hash === c.hash, fast: !c.timedOut && ratio <= 1 - gain,
+    }]
   })
   const missing = base.cells.filter((b) => !byKey.has(key(b))).map(key)
   const targeted = verdicts.filter((v) => targets.includes(v.case))
-  const diverged = verdicts.filter((v) => !v.same)
+  const diverged = verdicts.filter((v) => v.same === false)
+  const unverified = verdicts.filter((v) => v.same === null)
   const slow = targeted.filter((v) => !v.fast)
   const kept = missing.length === 0 && diverged.length === 0 && targeted.length > 0 && slow.length === 0
-  return { kept, verdicts, targeted, diverged, slow, missing }
+  return { kept, verdicts, targeted, diverged, unverified, slow, missing }
 }
 
-const ms = (x: number) => (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2))
+const ms = (x: number, timedOut: boolean) => `${timedOut ? '> ' : ''}${x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)}`
+const sameLabel = (s: boolean | null) => (s === null ? 'n/a (timeout)' : s ? 'yes' : '**NO**')
 
 export const table = (verdicts: Verdict[]) =>
   [
     '| scale | case | window | base median ms | new median ms | new / base | same rows |',
     '| --- | --- | ---: | ---: | ---: | ---: | --- |',
-    ...verdicts.map((v) => `| ${v.scale} | ${v.case} | ${v.window}d | ${ms(v.baseMs)} | ${ms(v.candMs)} | ${v.ratio.toFixed(2)} | ${v.same ? 'yes' : '**NO**'} |`),
+    ...verdicts.map(
+      (v) =>
+        `| ${v.scale} | ${v.case} | ${v.window}d | ${ms(v.baseMs, v.baseTimedOut)} | ${ms(v.candMs, v.candTimedOut)} | ${v.baseTimedOut && !v.candTimedOut ? '< ' : ''}${v.ratio.toFixed(2)} | ${sameLabel(v.same)} |`,
+    ),
   ].join('\n')

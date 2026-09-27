@@ -24,6 +24,8 @@ targeted or not) returns the same rows as the base, and every targeted cell's me
 | `--cases` | all | `aggregate` plus the names in `cases.ts` |
 | `--explain <dir>` | off | writes `EXPLAIN (ANALYZE, BUFFERS)` per cell to `<dir>/<scale>/<case>.<window>d.txt` |
 | `--fresh` | off | regenerates the seeds instead of reusing `data/bench-harness/seeds` |
+| `--budget` | `120` | seconds of samples per cell; a slower warm-up is the only sample |
+| `--timeout` | `600` | seconds one execution may run; the child is killed, the cell recorded as `> timeout` (a lower bound) and the run resumes from a fresh copy |
 | `--seeds` / `BENCH_SEEDS` | `data/bench-harness/seeds` | pristine seeds, shareable across worktrees; never opened for measurement |
 
 ## What a run does
@@ -48,5 +50,8 @@ Output is JSON: `meta` (tree, revision, CPU, a `generate_series` calibration) an
 - Windows 1 and 90 are not route values (`query.ts`'s `DAYS` is 7/30/365); the statements accept
   any `days`, and the aggregate build is run for exactly the measured windows.
 - p95 over 5 samples is the slowest sample.
+- PGlite has no `statement_timeout` (WASM, no signals), so the limit is a watchdog in the parent. A
+  timed-out cell has no rows: it is excluded from the equivalence check, as is `graphFast` for a window
+  whose build timed out on either side; `compare.ts` lists them as unverifiable.
 - The corpus is synthetic: shape (source mix, recency skew, one third of docs naming a person, a
   Zipf vocabulary growing with the corpus), not content.

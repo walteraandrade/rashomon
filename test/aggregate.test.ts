@@ -341,6 +341,18 @@ describe('term_communities (issue #214)', () => {
     assert.equal(rows[0].community, rows[1].community)
   })
 
+  it('community edges are exactly the pairs two of the person\'s own docs share, sorted', async () => {
+    const edges = async (person: string) => {
+      const q = aggregateQueries.communityEdges(30, 'all', person)
+      return (await db.query(q.text, q.values)).rows
+    }
+    assert.deepEqual(await edges('lula'), [
+      { a: 'word:lisboa', b: 'word:tarcisio', count: 2 },
+      { a: 'word:reforma', b: 'word:tributaria', count: 2 },
+    ])
+    assert.deepEqual(await edges('tarcisio'), [{ a: 'word:lisboa', b: 'word:lula', count: 2 }])
+  })
+
   it('a deleted term_communities window still answers /graph?communities=1 with community: null on every node, and the rest of the response is unaffected', async () => {
     const withCommunities = await graphFor(lula, q({ communities: '1' }))
     assert.ok(withCommunities.nodes.length > 0, 'sanity: the default window must have nodes')

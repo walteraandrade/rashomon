@@ -25,7 +25,7 @@ export type Routing = { points: Point[]; ports: Map<string, number[]>; adjacent:
 export type Layout = { placed: PlacedTerm[]; overflow: Term[]; center: CenterBox; routing?: Routing }
 export type PersonRef = { id: string; name: string }
 export type CompareSide = { count: number; pmi: number; tone: number | null }
-export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null }
+export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null; bridge?: number }
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
 export type RisingTerm = { term: string; kind: string; count_recent: number; count_baseline: number; count_recent_raw: number; count_baseline_raw: number; lift: number }
 // `present` and `about.words_*` are optional on the page side only: a payload cached before they

@@ -1,4 +1,4 @@
-// Pure Louvain partitioning: no SQL, no DB import. src/aggregate.ts is the only caller.
+// Pure graph metrics (Louvain, betweenness): no SQL, no DB import. Callers: aggregate.ts, graph.ts.
 import { UndirectedGraph as UndirectedGraphImport } from 'graphology'
 import louvainImport from 'graphology-communities-louvain'
 import betweennessCentralityImport from 'graphology-metrics/centrality/betweenness.js'

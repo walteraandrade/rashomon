@@ -788,6 +788,10 @@ const docsOf = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count 
 
 export type RulerTerm = CompareTerm & { balance: number; combined: number }
 
+export const BRIDGE_THRESHOLD = 0.5
+
+const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_THRESHOLD
+
 // Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1) and
 // combined (docs summed, measure-independent). hiddenCount feeds #compareHiddenNote.
 export const rulerTerms = (terms: CompareTerm[], measure: string): { items: RulerTerm[]; hiddenCount: number } => {
@@ -816,11 +820,11 @@ export const rulerTerms = (terms: CompareTerm[], measure: string): { items: Rule
 
 // The term written on the ruler. Transparent rect is the hit area; `--cmp` carries side colour.
 const rulerWordMarkup = (
-  d: { term: string; kind: string; text: string; balance: number; combined: number; x: number; y: number; size: number; w: number; h: number },
+  d: { term: string; kind: string; text: string; balance: number; combined: number; bridge?: number; x: number; y: number; size: number; w: number; h: number },
   half: number,
   isSelected: boolean,
 ) =>
-  html`<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${d.term}" data-kind="${d.kind}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.combined)} documentos"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central"><tspan x="0" y="0">${d.text}</tspan></text></g>`
+  html`<g class="ruler-word ${isSelected ? 'is-selected' : ''} ${isBridge(d) ? 'ruler-bridge' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${d.term}" data-kind="${d.kind}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.combined)} documentos"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central"><tspan x="0" y="0">${d.text}</tspan></text>${isBridge(d) ? html`<line class="ruler-bridge-mark" x1="${-d.w / 2}" x2="${d.w / 2}" y1="${d.h / 2}" y2="${d.h / 2}"/>` : ''}</g>`
 
 // Overflow words: count stated, each still a button with the same data-term/data-kind.
 const rulerOverflowMarkup = (
@@ -1138,7 +1142,7 @@ export const paintLensDetail = ({ term, endA, endB }: { term: CompareTerm | null
       : v
         ? html`<div><dt>${endLabel}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
         : html`<div><dt>${endLabel}</dt><dd class="empty-hint">nenhum documento</dd></div>`
-  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(endA, term.a)}${sideHtml(endB, term.b)}</dl>`
+  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(endA, term.a)}${sideHtml(endB, term.b)}</dl>${isBridge(term) ? html`<p class="detail-bridge">ponte: as duas lentes precisam dela</p>` : ''}`
 }
 
 const RULER_GHOST_WORDS: [number, number, number, number][] = [
@@ -1233,7 +1237,7 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
     v && v !== 'name'
       ? html`<div><dt>${person.name}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
       : html`<div><dt>${person.name}</dt><dd class="empty-hint">nenhum documento</dd></div>`
-  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>`
+  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>${isBridge(term) ? html`<p class="detail-bridge">ponte: liga os dois vocabulários</p>` : ''}`
 }
 
 // Figure 5 (issue #147): one word mark per day, no colour hue (--wc stays --ink in atlas.css),

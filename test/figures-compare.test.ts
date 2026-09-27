@@ -44,11 +44,11 @@ describe('figures/compare.js is importable outside a browser, touches document o
 })
 
 describe('compareParams matches calling /api/compare directly', () => {
-  it('produces the same body as calling /api/compare with kind=word,hashtag,phrase and no domain/lean', async () => {
+  it('produces the same body as calling /api/compare with kind=word,hashtag,phrase and no domain/lean, bridges=1', async () => {
     await seed()
     for (const [qp, direct] of [
-      [compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' }), '/api/compare?a=lula&b=bolsonaro&days=30&source=all&limit=40&kind=word,hashtag,phrase'],
-      [compareParams({ a: 'tarcisio', b: 'bolsonaro', days: '365', source: 'gdelt', limit: '20' }), '/api/compare?a=tarcisio&b=bolsonaro&days=365&source=gdelt&limit=20&kind=word,hashtag,phrase'],
+      [compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' }), '/api/compare?a=lula&b=bolsonaro&days=30&source=all&limit=40&kind=word,hashtag,phrase&bridges=1'],
+      [compareParams({ a: 'tarcisio', b: 'bolsonaro', days: '365', source: 'gdelt', limit: '20' }), '/api/compare?a=tarcisio&b=bolsonaro&days=365&source=gdelt&limit=20&kind=word,hashtag,phrase&bridges=1'],
     ] as const) {
       const viaHelper = await app.request('/api/compare?' + qp.toString())
       const viaDirect = await app.request(direct)

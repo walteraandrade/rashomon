@@ -66,7 +66,9 @@ export type ToneQuery = {
   min: number
 }
 
-// Cross-person like ToneQuery: no domain, no country, no kind/sort -- a count is not per-term.
+// Cross-person like ToneQuery: no domain, no kind/sort -- a count is not per-term. Always
+// scoped to country=br, like lensesQuery, since /docs?with= joins are br-only (parseScope's
+// default) and the pair count must agree with the documents behind it.
 export type ComentionQuery = { days: number; source: string; lean: string; min: number }
 
 export type TestimonyQuery = {
@@ -513,6 +515,7 @@ const comentionQuery = (q: ComentionQuery) => {
   where d.published_at >= now() - make_interval(days => ${q.days})
     and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
     and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+    and (${countryFilter('br')})
   group by a.person_id, b.person_id
   having count(*) >= ${q.min}
   order by a.person_id, b.person_id`

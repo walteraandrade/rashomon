@@ -80,8 +80,8 @@ describe('the routes answer their *For functions with the default parser (issue 
   it('/api/people/:id/graph stats are the fixture literals test/graph.test.ts pins', async () => {
     const res = await app.request('/api/people/lula/graph')
     const body = (await res.json()) as { stats: { docs: number; about: number } }
-    assert.equal(body.stats.docs, 14)
-    assert.equal(body.stats.about, 5)
+    assert.equal(body.stats.docs, 16)
+    assert.equal(body.stats.about, 7)
   })
 
   it('/api/tone matches toneFor and the fixture literal', async () => {
@@ -432,6 +432,17 @@ describe('GET /api/comention (issue #207)', () => {
     const res = await app.request('/api/comention')
     assert.ok(res.headers.get('cache-control'))
   })
+
+  it('agrees with /docs?with= for every pair: a matrix cell and its documents never disagree', async () => {
+    const res = await app.request('/api/comention?min=1')
+    const body = (await res.json()) as { pairs: { a: string; b: string; count: number }[] }
+    assert.ok(body.pairs.length > 0)
+    for (const { a, b, count } of body.pairs) {
+      const docsRes = await app.request(`/api/people/${a}/docs?with=${b}&limit=200`)
+      const docsBody = (await docsRes.json()) as { total: number }
+      assert.equal(docsBody.total, count, `${a}/${b}`)
+    }
+  })
 })
 
 describe('GET /api/people/:id/lenses (issue #206)', () => {
@@ -596,7 +607,7 @@ describe('GET /api/people/:id/docs?with= (issue #207)', () => {
     const body = await res.json()
     const direct = await docsFor(lula, parseDocsQuery({ with: 'tarcisio' }, 'lula'))
     assert.deepEqual(JSON.parse(JSON.stringify(direct)), body)
-    assert.equal((body as { total: number }).total, 1)
+    assert.equal((body as { total: number }).total, 3)
   })
 
   it('an unknown with id, or with equal to the route\'s own :id, returns byte-identical output to no with at all', async () => {

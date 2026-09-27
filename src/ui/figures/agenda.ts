@@ -51,13 +51,17 @@ export const mount = (root: FigureRoot, { initial, peopleError = null }: { peopl
     repaint()
   }
 
-  // One side only: a cell belongs to one person on one outlet, never two at once.
+  // One side only: a cell belongs to one person on one outlet, never two at once. `data.days`
+  // is the window the grid was actually built with, so a click on a stale grid still asks for
+  // the window it shows rather than whatever the days select has moved to since; `source` is
+  // not on the payload, so it still reads the control at click time.
   const showDocs = (personId: string, personName: string, domain: string) => {
+    if (!data) return
     docsCard.open({
       owner: 'agenda',
       kicker: 'Documentos de',
       title: domain,
-      sides: [{ personId, personName, query: api.docsParams({ days: days(), source: source(), domain }) }],
+      sides: [{ personId, personName, query: api.docsParams({ days: String(data.days), source: source(), domain }) }],
     })
   }
 

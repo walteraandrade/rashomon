@@ -115,3 +115,9 @@ export const lensesParams = ({ a, b, days, limit }: { a: string; b: string; days
   new URLSearchParams({ a, b, days, limit, kind: FIXED_KINDS })
 
 export const loadLenses = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/lenses?' + queryParams, signal)
+
+// Figure 7 (issue #216): /attention has no parameter but days, and the figure never exposes it
+// (fixed at 30, weekParams' fixed-days=7 precedent) -- any other field passed in is ignored.
+export const attentionParams = (_opts: Record<string, unknown> = {}) => new URLSearchParams({ days: '30' })
+
+export const loadAttention = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/attention?' + queryParams, signal)

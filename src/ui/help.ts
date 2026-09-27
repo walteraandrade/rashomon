@@ -6,7 +6,7 @@
 // Guarded: a test (or a page with no dialog) has no document to query.
 const $ = (id: string): any => (typeof document === 'undefined' ? null : document.getElementById(id))
 
-const HELP_SECTIONS = new Set(['analise', 'atlas', 'avaliacao', 'pmi', 'comparar', 'em-alta', 'semana', 'lentes'])
+const HELP_SECTIONS = new Set(['analise', 'atlas', 'avaliacao', 'pmi', 'comparar', 'em-alta', 'semana', 'lentes', 'atencao'])
 
 export const closeHelp = () => {
   const dialog = $('helpDialog')

@@ -20,6 +20,9 @@ import {
   paintLensRuler,
   paintLensRulerError,
   paintLensesLoading,
+  paintComention,
+  paintComentionLoading,
+  paintComentionError,
   paintOutletsLoading,
   paintRisingLoading,
   paintRisingRuler,
@@ -48,7 +51,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { signed, termMask, type Comention, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -1312,6 +1315,56 @@ describe('paintWeek and paintTermStrip keep their exported shape after the marks
     assert.equal(typeof paintWeekError, 'function')
     assert.equal(typeof paintTermStrip, 'function')
     assert.equal(typeof termStripLayout, 'function')
+  })
+})
+
+describe('paintComention / paintComentionLoading / paintComentionError, figure 7 (issue #207)', () => {
+  const persons = [
+    { id: 'bolsonaro', name: 'Jair Bolsonaro' },
+    { id: 'lula', name: 'Lula' },
+    { id: 'tarcisio', name: 'Tarcísio' },
+  ]
+  const comentionData = (pairs: Comention['pairs']): Comention => ({ days: 30, persons, pairs })
+
+  it('paints one clickable [data-a] cell per pair clearing min, plus the same pair in .comention-list, and no cell for a missing pair', () => {
+    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
+      paintComention({ data: comentionData([{ a: 'lula', b: 'tarcisio', count: 4 }]), width: 900, selected: null, onPick: () => {} })
+      assert.equal(els.comentionMatrix.hidden, false)
+      const html = els.comentionMatrix.innerHTML
+      const dataAOccurrences = html.match(/data-a="/g) ?? []
+      assert.equal(dataAOccurrences.length, 2, 'one clickable grid cell plus the same pair in .comention-list, and no other pair (e.g. bolsonaro/lula, bolsonaro/tarcisio)')
+      assert.match(html, /data-a="lula" data-b="tarcisio"/)
+    })
+  })
+
+  it('an empty pairs list still paints the full matrix, with #comentionAbout reading the empty-window sentence', () => {
+    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
+      paintComention({ data: comentionData([]), width: 900, selected: null, onPick: () => {} })
+      assert.equal(els.comentionMatrix.hidden, false)
+      assert.match(els.comentionMatrix.innerHTML, /comention-grid/)
+      assert.equal(els.comentionMatrix.innerHTML.match(/data-a="/g), null, 'no pair clears the floor, so no cell is clickable')
+      assert.equal(els.comentionAbout.textContent, 'Ninguém apareceu junto o suficiente nesta janela.')
+    })
+  })
+
+  it('paintComentionLoading paints a ghost matrix, not the word Carregando, and stays mute on #comentionAbout', () => {
+    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
+      els.comentionAbout.textContent = '3 pares de pessoas citadas juntas nos 30 dias.'
+      paintComentionLoading()
+      assert.match(els.comentionMatrix.innerHTML, /comention-grid is-ghost/)
+      assert.doesNotMatch(els.comentionMatrix.innerHTML, /Carregando/)
+      assert.equal(els.comentionMatrix.getAttribute('aria-busy'), 'true')
+      assert.equal(els.comentionAbout.textContent, '', 'the ghost clears the previous sentence rather than leaving it stale')
+    })
+  })
+
+  it('paintComentionError paints the "could not load" note', () => {
+    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
+      els.comentionMatrix.hidden = true
+      paintComentionError()
+      assert.equal(els.comentionMatrix.hidden, false)
+      assert.match(els.comentionMatrix.innerHTML, /Não foi possível carregar quem aparece junto/)
+    })
   })
 })
 

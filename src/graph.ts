@@ -1,3 +1,4 @@
+import { betweenness } from './communities.js'
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
@@ -98,6 +99,7 @@ export type CompareQuery = {
   country: 'br' | 'pt' | 'all'
   kind: string
   limit: number
+  bridges: boolean
 }
 
 export type WeekQuery = {
@@ -156,7 +158,7 @@ type CompareAggregates = { about_a: number; about_b: number; terms: CompareTermR
 export type LensSide = { lens: string; domain: string; lean: string; source: string }
 
 // No `min`, both selection criteria always run, no `sort`: same reasons as CompareQuery.
-export type LensesQuery = { days: number; kind: string; limit: number; a: LensSide; b: LensSide }
+export type LensesQuery = { days: number; kind: string; limit: number; a: LensSide; b: LensSide; bridges: boolean }
 type LensTermRow = {
   term: string
   kind: string
@@ -357,6 +359,62 @@ const linksQuery = (person: Person, q: Scope, ids: string[]) => {
   from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
   group by 1, 2 having count(*) >= 2
   order by 1, 2`
+}
+
+// Same co-occurrence shape as linksQuery, parameterised on the about CTE so one function
+// serves both compareEdgesQuery and lensEdgesQuery.
+const bridgeEdgesQuery = (aboutCte: Sql, ids: string[]) => {
+  const { kinds, terms } = splitIds(ids)
+  return sql`
+  with ${aboutCte},
+  hits as (
+    select t.doc_id, t.kind || ':' || t.term as id
+    from doc_terms t
+    join unnest(${kinds}::text[], ${terms}::text[]) as wanted(kind, term) on wanted.kind = t.kind and wanted.term = t.term
+    join about x on x.doc_id = t.doc_id
+  )
+  select a.id as s, b.id as t, count(*)::int as count
+  from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
+  group by 1, 2 having count(*) >= 2
+  order by 1, 2`
+}
+
+const compareEdgesQuery = (person: Person, q: CompareQuery, ids: string[]) => bridgeEdgesQuery(scopeCte(person, q), ids)
+
+const lensAboutCte = (person: Person, lens: LensSide, q: { days: number }) => {
+  const { domain } = resolveScope(lens.domain, lens.lean)
+  return sql`
+  scope as (
+    select d.id from docs d
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and (${lens.source} = 'all' or d.source = any(string_to_array(${lens.source}, ',')))
+      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
+      and (${countryFilter('br')})
+  ),
+  about as (
+    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
+  )`
+}
+
+const lensEdgesQuery = (person: Person, lens: LensSide, q: LensesQuery, ids: string[]) =>
+  bridgeEdgesQuery(lensAboutCte(person, lens, q), ids)
+
+// Sums counts when the same (s, t) pair co-occurs on both sides.
+export const mergeEdges = (edgesA: readonly LinkRow[], edgesB: readonly LinkRow[]): LinkRow[] => {
+  const merged = new Map<string, LinkRow>()
+  for (const e of [...edgesA, ...edgesB]) {
+    const key = `${e.s}\u0000${e.t}`
+    const existing = merged.get(key)
+    merged.set(key, existing ? { ...existing, count: existing.count + e.count } : { ...e })
+  }
+  return [...merged.values()]
+}
+
+// Highest-scoring id reads 1; missing/isolated ids read 0, never a division by zero.
+const normalizedBridges = (edges: readonly LinkRow[], ids: readonly string[]): Map<string, number> => {
+  const raw = betweenness(edges.map((e) => ({ a: e.s, b: e.t, count: e.count })))
+  const max = Math.max(0, ...raw.values())
+  return new Map(ids.map((id) => [id, max === 0 ? 0 : (raw.get(id) ?? 0) / max]))
 }
 
 // Per-term testimony means for the mask that colours the map: each term's mean score minus
@@ -1036,15 +1094,23 @@ export const weekFor = async (person: Person, q: WeekQuery): Promise<{ days: num
 export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   const { rows } = await run<CompareAggregates>(compareQuery(a, b, q))
   const { about_a, about_b, terms } = rows[0]
+  const ids = terms.map((t) => `${t.kind}:${t.term}`)
+  const bridges = q.bridges && ids.length
+    ? normalizedBridges(
+        mergeEdges((await run<LinkRow>(compareEdgesQuery(a, q, ids))).rows, (await run<LinkRow>(compareEdgesQuery(b, q, ids))).rows),
+        ids,
+      )
+    : null
   return {
     days: q.days,
     a: { person: a, about: about_a },
     b: { person: b, about: about_b },
-    terms: terms.map((t) => ({
+    terms: terms.map((t, i) => ({
       term: t.term,
       kind: t.kind,
       a: t.is_name_a ? ('name' as const) : t.a_count !== null ? { count: t.a_count, pmi: t.a_pmi!, tone: t.a_tone } : null,
       b: t.is_name_b ? ('name' as const) : t.b_count !== null ? { count: t.b_count, pmi: t.b_pmi!, tone: t.b_tone } : null,
+      ...(bridges ? { bridge: bridges.get(ids[i]) ?? 0 } : {}),
     })),
   }
 }
@@ -1152,15 +1218,26 @@ const lensesQuery = (person: Person, q: LensesQuery) => sql`
 export const lensesFor = async (person: Person, q: LensesQuery) => {
   const { rows } = await run<LensesAggregates>(lensesQuery(person, q))
   const { about_a, about_b, terms } = rows[0]
+  const ids = terms.map((t) => `${t.kind}:${t.term}`)
+  const bridges = q.bridges && ids.length
+    ? normalizedBridges(
+        mergeEdges(
+          (await run<LinkRow>(lensEdgesQuery(person, q.a, q, ids))).rows,
+          (await run<LinkRow>(lensEdgesQuery(person, q.b, q, ids))).rows,
+        ),
+        ids,
+      )
+    : null
   return {
     days: q.days,
     a: { lens: q.a.lens, about: about_a },
     b: { lens: q.b.lens, about: about_b },
-    terms: terms.map((t) => ({
+    terms: terms.map((t, i) => ({
       term: t.term,
       kind: t.kind,
       a: t.is_name ? ('name' as const) : t.a_count !== null ? { count: t.a_count, pmi: t.a_pmi!, tone: t.a_tone } : null,
       b: t.is_name ? ('name' as const) : t.b_count !== null ? { count: t.b_count, pmi: t.b_pmi!, tone: t.b_tone } : null,
+      ...(bridges ? { bridge: bridges.get(ids[i]) ?? 0 } : {}),
     })),
   }
 }
@@ -1182,7 +1259,9 @@ export const queries = {
   termTestimony: termTestimonyQuery,
   candidates: candidatesQuery,
   compare: compareQuery,
+  compareEdges: compareEdgesQuery,
   lenses: lensesQuery,
+  lensEdges: lensEdgesQuery,
   week: weekQuery,
   weekTestimony: weekTestimonyQuery,
   attention: attentionQuery,
@@ -1197,7 +1276,7 @@ const sampleDocs = { ...sampleScope, term: 'sample', kind: 'word', limit: 50, of
 const sampleComention: ComentionQuery = { days: 30, source: 'all', lean: 'all', min: 3 }
 const sampleGraph: GraphQuery = { ...sampleScope, limit: 40, min: 2, sort: 'count', communities: false }
 const sampleLens: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
-const sampleLenses: LensesQuery = { days: 30, kind: 'all', limit: 40, a: sampleLens, b: sampleLens }
+const sampleLenses: LensesQuery = { days: 30, kind: 'all', limit: 40, a: sampleLens, b: sampleLens, bridges: false }
 
 export const statements = {
   graph: queries.graph(samplePerson, sampleGraph).text,
@@ -1214,8 +1293,10 @@ export const statements = {
   testimonySummary: queries.testimonySummary(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
   termTestimony: queries.termTestimony(samplePerson, sampleScope, 'stub', ['word:sample']).text,
   candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,
-  compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40 }).text,
+  compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40, bridges: false }).text,
+  compareEdges: queries.compareEdges(samplePerson, { ...sampleScope, limit: 40, bridges: false }, ['word:sample']).text,
   lenses: queries.lenses(samplePerson, sampleLenses).text,
+  lensEdges: queries.lensEdges(samplePerson, sampleLens, sampleLenses, ['word:sample']).text,
   week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
   attention: queries.attention(samplePerson, { days: 30 }).text,

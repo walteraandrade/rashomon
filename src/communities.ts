@@ -1,6 +1,7 @@
 // Pure Louvain partitioning: no SQL, no DB import. src/aggregate.ts is the only caller.
 import { UndirectedGraph as UndirectedGraphImport } from 'graphology'
 import louvainImport from 'graphology-communities-louvain'
+import betweennessCentralityImport from 'graphology-metrics/centrality/betweenness.js'
 
 export type CommunityEdge = { a: string; b: string; count: number }
 
@@ -14,6 +15,8 @@ type GraphInstance = {
 const GraphCtor = UndirectedGraphImport as unknown as new () => GraphInstance
 type LouvainFn = (graph: GraphInstance, options: { getEdgeWeight: string; rng: () => number }) => Record<string, number>
 const louvain = louvainImport as unknown as LouvainFn
+type BetweennessFn = (graph: GraphInstance, options?: { getEdgeWeight?: string | null }) => Record<string, number>
+const betweennessCentrality = betweennessCentralityImport as unknown as BetweennessFn
 
 // mulberry32: deterministic PRNG so the same edges + seed always yield the same partition.
 const mulberry32 = (seed: number) => {
@@ -37,4 +40,17 @@ export const communities = (edges: readonly CommunityEdge[], seed: number): Map<
   if (g.order === 0) return new Map()
   const assignment = louvain(g, { getEdgeWeight: 'weight', rng: mulberry32(seed) })
   return new Map(Object.entries(assignment))
+}
+
+// Raw, unnormalised; graph.ts normalises against its own response's max.
+export const betweenness = (edges: readonly CommunityEdge[]): Map<string, number> => {
+  const g = new GraphCtor()
+  for (const { a, b, count } of edges) {
+    g.mergeNode(a)
+    g.mergeNode(b)
+    if (a !== b) g.mergeEdge(a, b, { weight: count })
+  }
+  if (g.order === 0) return new Map()
+  const raw = betweennessCentrality(g, { getEdgeWeight: null })
+  return new Map(Object.entries(raw))
 }

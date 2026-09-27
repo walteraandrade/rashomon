@@ -59,9 +59,9 @@ const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: '
 const toneBase: ToneQuery = { days: 30, min: 3 }
 const agendaBase: AgendaQuery = { days: 30, source: 'all', min: 5, limit: 30 }
 const testimonyBase: TestimonyQuery = { days: 30, source: 'all', method: 'stub', min: 3 }
-const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40 }
+const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, bridges: false }
 const allLens = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
-const lensesBase: LensesQuery = { days: 30, kind: 'all', limit: 40, a: allLens, b: allLens }
+const lensesBase: LensesQuery = { days: 30, kind: 'all', limit: 40, a: allLens, b: allLens, bridges: false }
 
 const node = (g: Awaited<ReturnType<typeof graphFor>>, id: string) => g.nodes.find((n) => n.id === id)
 const sumOf = (rows: { count: number }[]) => rows.reduce((a, r) => a + r.count, 0)
@@ -2060,7 +2060,7 @@ describe('compareFor (issue #93)', () => {
     // scoped to a domain used by no other fixture doc: bolsonaro's own top-count term
     // ("termdiluido", count 3, diluted pmi because lula also uses it) genuinely differs from
     // bolsonaro's own top-pmi term ("cita", count 1, exclusive)
-    const scope = { days: 3650, source: 'all', domain: 'testcorp.example', lean: 'all', country: 'all', kind: 'all', limit: 1 } as const
+    const scope = { days: 3650, source: 'all', domain: 'testcorp.example', lean: 'all', country: 'all', kind: 'all', limit: 1, bridges: false } as const
     const gCount = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'count', communities: false })
     const gPmi = await graphFor(bolsonaro, { ...scope, min: 1, sort: 'pmi', communities: false })
     assert.notEqual(gCount.nodes[0]?.term, gPmi.nodes[0]?.term, "fixture assumption: bolsonaro's own top-count and top-pmi terms differ at this scope")
@@ -2089,6 +2089,38 @@ describe('compareFor (issue #93)', () => {
     assert.deepEqual(r.terms, [])
     assert.equal(r.a.about, 0)
     assert.equal(r.b.about, 0)
+  })
+
+  const bridgeScope = { ...compareBase, days: 4325, domain: 'comparebridge.example', limit: 10 }
+
+  it('bridges omitted leaves the response identical to today', async () => {
+    const r = await compareFor(lula, tarcisio, bridgeScope)
+    for (const t of r.terms) assert.ok(!('bridge' in t))
+  })
+
+  it('bridges=1 adds a bridge field without changing existing fields', async () => {
+    const without = await compareFor(lula, tarcisio, bridgeScope)
+    const withBridges = await compareFor(lula, tarcisio, { ...bridgeScope, bridges: true })
+    assert.deepEqual(
+      withBridges.terms.map((t) => ({ ...t, bridge: undefined })),
+      without.terms.map((t) => ({ ...t, bridge: undefined })),
+    )
+    for (const t of withBridges.terms) assert.equal(typeof t.bridge, 'number')
+  })
+
+  it('the highest-betweenness term normalises to bridge 1, an isolated term gets 0, never null', async () => {
+    const r = await compareFor(lula, tarcisio, { ...bridgeScope, bridges: true })
+    const bridge = term(r, 'pontecompare')!
+    assert.equal(bridge.bridge, 1)
+    assert.ok(r.terms.every((t) => t.bridge! >= 0 && t.bridge! <= 1))
+    const lulaOnly = term(r, 'exclusivolulax')!
+    assert.equal(lulaOnly.bridge, 0)
+    assert.notEqual(lulaOnly.bridge, null)
+  })
+
+  it('is documented: bridges=1, live only, always computed (issue #219)', () => {
+    assert.match(docsText, /bridges=1/)
+    assert.match(docsText, /bridge[\s\S]{0,300}(live|never cached)/i)
   })
 })
 
@@ -2178,6 +2210,33 @@ describe('lensesFor (issue #206)', () => {
     const r = await lensesFor(lula, { ...lensesBase, a, b })
     assert.equal(r.a.lens, 'domain:folha.uol.com.br')
     assert.equal(r.b.lens, 'all')
+  })
+
+  const lensA = { lens: 'domain:lensbridgea.example', domain: 'lensbridgea.example', lean: 'all', source: 'all' }
+  const lensB = { lens: 'domain:lensbridgeb.example', domain: 'lensbridgeb.example', lean: 'all', source: 'all' }
+  const lensBridgeScope = { ...lensesBase, days: 4330, limit: 10, a: lensA, b: lensB }
+
+  it('bridges omitted leaves the lenses response identical', async () => {
+    const r = await lensesFor(lula, lensBridgeScope)
+    for (const t of r.terms) assert.ok(!('bridge' in t))
+  })
+
+  it('bridges=1 on lenses adds a bridge field without changing existing fields', async () => {
+    const without = await lensesFor(lula, lensBridgeScope)
+    const withBridges = await lensesFor(lula, { ...lensBridgeScope, bridges: true })
+    assert.deepEqual(
+      withBridges.terms.map((t) => ({ ...t, bridge: undefined })),
+      without.terms.map((t) => ({ ...t, bridge: undefined })),
+    )
+    const bridge = term(withBridges, 'pontelentes')!
+    assert.equal(bridge.bridge, 1)
+    const isolated = term(withBridges, 'somentelensa')!
+    assert.equal(isolated.bridge, 0)
+  })
+
+  it('equal lenses produce finite bridge scores', async () => {
+    const r = await lensesFor(lula, { ...lensBridgeScope, b: lensA, bridges: true })
+    for (const t of r.terms) assert.ok(Number.isFinite(t.bridge))
   })
 })
 
@@ -2278,14 +2337,24 @@ describe('statements render the same text the routes run (issue #131)', () => {
       testimonySummary: queries.testimonySummary(lula, { days: 1, source: 'rss', method: 'kikori', min: 1 }),
       termTestimony: queries.termTestimony(lula, scope, 'kikori', ['word:a']),
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),
-      compare: queries.compare(lula, tarcisio, { ...scope, limit: 5 }),
+      compare: queries.compare(lula, tarcisio, { ...scope, limit: 5, bridges: false }),
+      compareEdges: queries.compareEdges(lula, { ...scope, limit: 5, bridges: false }, ['word:a']),
       lenses: queries.lenses(lula, {
         days: scope.days,
         kind: scope.kind,
         limit: 5,
         a: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
         b: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
+        bridges: false,
       }),
+      lensEdges: queries.lensEdges(lula, { lens: 'all', domain: 'all', lean: 'all', source: 'all' }, {
+        days: scope.days,
+        kind: scope.kind,
+        limit: 5,
+        a: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
+        b: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
+        bridges: false,
+      }, ['word:a']),
       week: queries.week(lula, { ...scope, limit: 8 }),
       weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
       attention: queries.attention(lula, { days: 14 }),

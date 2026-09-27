@@ -341,6 +341,12 @@ describe('parseCompareQuery (issue #93)', () => {
     assert.equal(parseCompareQuery({ lean: 'left,bogus' }).lean, 'left')
     assert.equal(parseCompareQuery({ kind: 'word,bogus' }).kind, 'word')
   })
+
+  it('bridges=1 opts in; anything else is absent, like testimony/communities (issue #219)', () => {
+    assert.equal(parseCompareQuery({}).bridges, false)
+    assert.equal(parseCompareQuery({ bridges: '1' }).bridges, true)
+    assert.equal(parseCompareQuery({ bridges: 'yes' }).bridges, false)
+  })
 })
 
 describe('parseLens / parseLensesQuery (issue #206)', () => {
@@ -393,6 +399,11 @@ describe('parseLens / parseLensesQuery (issue #206)', () => {
     const q = parseLensesQuery({ a: 'domain:folha.uol.com.br', b: 'lean:right' })
     assert.equal(q.a.lens, 'domain:folha.uol.com.br')
     assert.equal(q.b.lens, 'lean:right')
+  })
+
+  it('bridges=1 opts in; anything else is absent, same convention as compare (issue #219)', () => {
+    assert.equal(parseLensesQuery({}).bridges, false)
+    assert.equal(parseLensesQuery({ bridges: '1' }).bridges, true)
   })
 })
 

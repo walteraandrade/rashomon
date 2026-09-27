@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
-import { communities, type CommunityEdge } from '../src/communities.js'
+import { betweenness, communities, type CommunityEdge } from '../src/communities.js'
 
 describe('communities (issue #214)', () => {
   it('imports nothing from db.ts, store.ts, aggregate.ts or an Effect/SQL module', () => {
@@ -62,5 +62,31 @@ describe('communities (issue #214)', () => {
     ]
     const assignment = communities(edges, 42)
     assert.deepEqual([...assignment.keys()].sort(), ['word:a', 'word:b', 'word:solo'])
+  })
+})
+
+describe('betweenness (issue #219)', () => {
+  it("ranks a path graph's middle node highest", () => {
+    const edges: CommunityEdge[] = [
+      { a: 'word:a', b: 'word:b', count: 1 },
+      { a: 'word:b', b: 'word:c', count: 1 },
+    ]
+    const scores = betweenness(edges)
+    assert.ok(scores.get('word:b')! > scores.get('word:a')!)
+    assert.ok(scores.get('word:b')! > scores.get('word:c')!)
+  })
+
+  it('on an edgeless graph returns 0 for every node', () => {
+    const edges: CommunityEdge[] = [
+      { a: 'word:x', b: 'word:x', count: 0 },
+      { a: 'word:y', b: 'word:y', count: 0 },
+    ]
+    const scores = betweenness(edges)
+    assert.equal(scores.get('word:x'), 0)
+    assert.equal(scores.get('word:y'), 0)
+  })
+
+  it('an empty edge list yields an empty map', () => {
+    assert.deepEqual([...betweenness([])], [])
   })
 })

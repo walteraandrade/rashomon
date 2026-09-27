@@ -252,6 +252,8 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
   ...parseScope(q, { days: 30 }),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
+  // `bridges=1` opts in, exactly like testimony's/communities' bare flag: anything else is absent.
+  bridges: q.bridges === '1',
 })
 
 const ALL_LENS: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
@@ -280,6 +282,7 @@ export const parseLensesQuery = (q: Record<string, string | undefined>): LensesQ
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
   a: parseLens(q.a),
   b: parseLens(q.b),
+  bridges: q.bridges === '1',
 })
 
 export const parseAttentionQuery = (q: Record<string, string | undefined>): AttentionQuery => ({

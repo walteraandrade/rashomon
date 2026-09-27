@@ -88,6 +88,27 @@ describe('(mount): fetches /attention and a term-less /timeline with the figure 
   })
 })
 
+// Validator B1: #attentionChart is #attention's content box, without the figure's own
+// horizontal padding; measuring the section instead draws the chart wider than its card.
+describe('the chart is measured off #attentionChart, never off the wider #attention section (B1)', () => {
+  it('the painted svg width matches attentionChart.clientWidth, not attention.clientWidth', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/attention': attentionData([{ day: '2026-08-15', views: 100 }]),
+        '/timeline': timelineData([timelineBucket('2026-08-15', 4)]),
+      })
+      els.attention.clientWidth = 900
+      els.attentionChart.clientWidth = 620
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush()
+      const width = String(els.attentionChart.innerHTML).match(/class="attention-svg"[^>]*\bwidth="(\d+)"/)?.[1]
+      assert.equal(width, '620', 'the svg must be drawn at the chart\'s own content-box width')
+    })
+  })
+})
+
 describe('a person with an empty /attention response (AC9)', () => {
   it('still renders the figure, with a "sem dado" note, no lag sentence, and the mentions row rendered from /timeline', async () => {
     await withFiguresDom(async (els, calls) => {
@@ -182,7 +203,7 @@ describe('clicking a day column opens the docs card with that day (AC8)', () => 
     })
   })
 
-  it('a background click on the chart (not a day column) releases the pick and resets aria-pressed (AC8, validator NIT)', async () => {
+  it('a background click on the chart (not a day column) releases the pick and resets aria-pressed (AC8)', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, {
@@ -206,7 +227,7 @@ describe('clicking a day column opens the docs card with that day (AC8)', () => 
     })
   })
 
-  it('pressing Escape releases the pick and closes the card (AC8, validator NIT)', async () => {
+  it('pressing Escape releases the pick and closes the card (AC8)', async () => {
     await withFiguresDom(async (els, calls, fireDocumentKeydown) => {
       clearScopes()
       routeFetch(calls, {
@@ -305,6 +326,88 @@ describe('the two independent fetches never mix recortes or misreport an outage 
       assert.match(String(els.attentionChart.innerHTML), /class="ghost"/, "the views row ghosts on its own while /attention for the new person is still in flight")
       await flush(100)
       assert.match(String(els.attentionChart.innerHTML), /999/, "bolsonaro's own views paint once /attention settles")
+    })
+  })
+
+  // Validator S1a: each fetch is tagged with the person|source key it was requested for, so a
+  // still-in-flight request that settles after the switch -- however late, even inside the
+  // reload debounce window -- is recognized as stale and never painted.
+  it('a slow /attention for the previous person settling inside the reload debounce must not paint its stale views (S1a)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        const path = new URL(url, 'http://localhost').pathname
+        if (path.includes('/attention')) {
+          const views = path.includes('/lula/') ? 12345 : 999
+          await new Promise((r) => setTimeout(r, 100))
+          return jsonResponse(attentionData([{ day: '2026-08-15', views }])) as unknown as Response
+        }
+        if (path.includes('/timeline')) {
+          const count = path.includes('/lula/') ? 4 : 7
+          return jsonResponse(timelineData([timelineBucket('2026-08-15', count)])) as unknown as Response
+        }
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      // Switch before lula's /attention (100ms) resolves; figure.reload()'s own 140ms debounce
+      // means lula's slow response lands squarely inside the window before bolsonaro's own load
+      // even starts.
+      els.attentionPerson.value = 'bolsonaro'
+      els.attentionPerson.fire('change')
+      await flush(120)
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /12\.345/, "lula's stale views must not paint however late they settle after the switch")
+      await flush(150)
+      assert.match(String(els.attentionChart.innerHTML), /999/, "bolsonaro's own views paint once its own /attention settles")
+    })
+  })
+
+  // Validator S1b: figure.ts's own repaint() (wired to the ResizeObserver on #attentionChart)
+  // never gates on in-flight state; without the key check it would redraw the last *successful*
+  // fetch, which can still be the previous person's, while the new person's own request is
+  // still pending.
+  it('a resize repaint while the new person\'s /attention is still pending must not restore the previous person\'s stale views (S1b)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const captured: { target: unknown; cb: () => void }[] = []
+      class CapturingResizeObserver {
+        cb: () => void
+        constructor(cb: () => void) {
+          this.cb = cb
+        }
+        observe(target: unknown) {
+          captured.push({ target, cb: this.cb })
+        }
+        disconnect() {}
+      }
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = CapturingResizeObserver
+      routeFetch(calls, {
+        '/attention': attentionData([{ day: '2026-08-15', views: 12345 }]),
+        '/timeline': timelineData([timelineBucket('2026-08-15', 4)]),
+      })
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush()
+      assert.match(String(els.attentionChart.innerHTML), /12\.345/, 'lula\'s own views must have painted once')
+      const chartObserver = captured.find((c) => c.target === els.attentionChart)
+      assert.ok(chartObserver, 'the attention instance must observe #attentionChart for resize')
+
+      staggeredFetch(calls, { '/timeline': timelineData([timelineBucket('2026-08-20', 7)]) }, '/attention', attentionData([{ day: '2026-08-20', views: 999 }]))
+      els.attentionPerson.value = 'bolsonaro'
+      els.attentionPerson.fire('change')
+      // Past the 140ms debounce plus bolsonaro's own fast /timeline, still short of its own
+      // slow (+80ms) /attention: bolsonaro's mentions are up, his views are still in flight.
+      await flush(180)
+      assert.match(String(els.attentionChart.innerHTML), /data-row="mentions"/, "bolsonaro's mentions must have painted while his own /attention is still in flight")
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /12\.345/, "lula's stale views must not survive the switch on their own")
+
+      els.attentionChart.clientWidth = 400
+      chartObserver!.cb()
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /12\.345/, "a resize repaint while bolsonaro's own /attention is still pending must not restore lula's stale views")
+      // Let bolsonaro's own (staggered) /attention settle before the test tears the dom down.
+      await flush(60)
     })
   })
 })

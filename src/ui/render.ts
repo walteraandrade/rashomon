@@ -1359,7 +1359,7 @@ const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
 const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => (mentionsPeak && viewsPeak ? attentionLagSentence(mentionsPeak, viewsPeak) : '')
 
 // A '2026-08-03' day string read back as a short pt-BR label, in UTC -- never weekDayLabel's BRT.
-const attentionDayLabel = (day: string) => {
+export const attentionDayLabel = (day: string) => {
   const d = new Date(`${day}T00:00:00Z`)
   const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'short' }).format(d).replace(/\.$/, '')
   const dom = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: 'numeric' }).format(d)
@@ -1380,7 +1380,7 @@ const attentionMarkMarkup = (mark: AttentionMark, baseline: number, selected: st
   const isSelected = selected === mark.day
   const barX = -mark.barW / 2
   const barY = -mark.size
-  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" style="--size:${mark.size}px" transform="translate(${mark.x},${baseline})" data-day="${mark.day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${mark.day}, ${mark.text} ${unit}"><title>${mark.day} · ${mark.text} ${unit}</title><rect class="attention-hit" x="${barX}" y="${-baseline}" width="${mark.barW}" height="${ATTENTION_ROW_HEIGHT}"/><rect class="attention-glow" x="${barX}" y="${barY - 4}" width="${mark.barW}" height="${mark.size + 8}"/><rect class="attention-bar" x="${barX}" y="${barY}" width="${mark.barW}" height="${mark.size}"/></g>`
+  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" transform="translate(${mark.x},${baseline})" data-day="${mark.day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${mark.day}, ${mark.text} ${unit}"><title>${mark.day} · ${mark.text} ${unit}</title><rect class="attention-hit" x="${barX}" y="${-baseline}" width="${mark.barW}" height="${ATTENTION_ROW_HEIGHT}"/><rect class="attention-glow" x="${barX}" y="${barY - 4}" width="${mark.barW}" height="${mark.size + 8}"/><rect class="attention-bar" x="${barX}" y="${barY}" width="${mark.barW}" height="${mark.size}"/></g>`
 }
 
 const attentionRowMarkup = (row: 'mentions' | 'views', marks: AttentionMark[], width: number, selected: string | null, headLabel: string, peak: string | null, peakValue: number, unit: string) => {
@@ -1447,7 +1447,7 @@ export const paintAttention = ({
   const viewsMarkup = viewsError
     ? attentionRowError(layout.width, viewsLabel)
     : viewsLoading
-      ? attentionGhostRow('views', viewsLabel, layout.width)
+      ? html`<div class="ghost-field" aria-hidden="true">${attentionGhostRow('views', viewsLabel, layout.width)}</div>`
       : attentionRowMarkup('views', layout.views, layout.width, selected, viewsLabel, viewsPeak, viewsPeakValue, 'visualizações')
   chart.innerHTML = html`${mentionsMarkup}${viewsMarkup}`
   for (const el of queryAll('[data-day]', chart)) {
@@ -1482,7 +1482,7 @@ export const paintAttentionError = () => {
   chart.hidden = false
   chart.classList.remove('is-loading')
   chart.setAttribute('aria-busy', 'false')
-  chart.innerHTML = html`<p class="note">Não foi possível carregar a atenção.</p>`
+  chart.innerHTML = html`<p class="note">Não foi possível carregar as menções.</p>`
   const note = $('attentionNote')
   if (note) note.textContent = ''
 }

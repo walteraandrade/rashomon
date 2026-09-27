@@ -763,7 +763,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .attention-row[data-row="views"] .attention-mark { --wc: var(--accent); }
 .attention-glow, .attention-hit { fill: transparent; rx: 4px; }
 .attention-glow { filter: blur(7px); transition: fill .16s ease-out; }
-.attention-hit { filter: blur(2px); transition: fill .16s ease-out; }
+.attention-hit { transition: fill .16s ease-out; }
 .attention-bar { fill: var(--wc); transition: height .16s ease-out, y .16s ease-out; }
 .attention-mark:hover .attention-glow, .attention-mark:focus-visible .attention-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
 .attention-mark:hover .attention-hit, .attention-mark:focus-visible .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }

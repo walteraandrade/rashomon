@@ -7,7 +7,7 @@
 import * as api from '../api.js'
 import { html, SOURCE_SEGMENTS, sourceLabels, type Attention } from '../format.js'
 import * as docsCard from '../docs-card.js'
-import { createCanvasMeasure, paintAttention, paintAttentionError, paintAttentionLoading } from '../render.js'
+import { attentionDayLabel, createCanvasMeasure, paintAttention, paintAttentionError, paintAttentionLoading } from '../render.js'
 import { runFigure } from '../figure.js'
 
 export type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
@@ -18,6 +18,9 @@ export type Seed = { person?: string; source?: string }
 export type PeopleError = unknown
 
 type TimelineBucket = { bucket_start: string; count: number }
+
+// Tags a fetch with the recorte it was requested for, so a slow, stale response is dropped.
+type Keyed<T> = { key: string; data: T }
 
 const $ = (id: string): any => document.getElementById(id)
 
@@ -45,14 +48,19 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const measured = () => (metrics ??= createCanvasMeasure())
 
   let chartWidth = 0
+  // #attentionChart's content box, never #attention's (the section adds its own padding); unhidden first, since the boot ghost's first call still finds it hidden.
   const measureWidth = () => {
-    const width = $('attention')?.clientWidth
+    const chart = $('attentionChart')
+    if (chart?.hidden) chart.hidden = false
+    const width = chart?.clientWidth
     if (width) chartWidth = width
     return chartWidth || undefined
   }
 
   const personId = () => $('attentionPerson').value
   const source = () => $('attentionSource').value
+
+  const currentKey = () => `${personId()}|${source()}`
 
   // /attention has only `days`; the mentions series is the term-less /timeline, full kind set,
   // the figure's own source, fixed at days=30 (spec §2/§4) -- never exposed as a control.
@@ -104,7 +112,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     const person = people.find((p) => p.id === id)
     docsCard.open({
       owner: OWNER,
-      kicker: `Documentos de ${day}`,
+      kicker: `Documentos de ${attentionDayLabel(day)}`,
       title: day,
       sides: [
         {
@@ -147,7 +155,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     else paintAttentionLoading(measureWidth())
   }
 
-  const paintMentions = (buckets: TimelineBucket[]) => {
+  const paintMentions = ({ key, data: buckets }: Keyed<TimelineBucket[]>) => {
+    if (key !== currentKey()) return
     mentionsBuckets = buckets
     root.classList.remove('is-loading')
     repaint()
@@ -159,7 +168,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     paintAttentionError()
   }
 
-  const paintAttentionData = (data: Attention) => {
+  const paintAttentionData = ({ key, data }: Keyed<Attention>) => {
+    if (key !== currentKey()) return
     attentionSeries = data.series
     attentionErrored = false
     root.classList.remove('is-loading')
@@ -176,10 +186,13 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   // Only the 'attention' instance owns el/markSelector/onRelease (testimony.ts's precedent):
   // the docs card this figure opens is owned by 'attention' (AC8), so figure.release()'s own
   // openedBy(name) check only matches when this instance's name is that same string.
-  const figure = runFigure<Attention>({
+  const figure = runFigure<Keyed<Attention>>({
     name: 'attention',
     params: attentionParams,
-    fetch: (queryParams, signal) => api.loadAttention(queryParams.get('person')!, withoutPerson(queryParams), signal),
+    fetch: (queryParams, signal) => {
+      const key = currentKey()
+      return api.loadAttention(queryParams.get('person')!, withoutPerson(queryParams), signal).then((data) => ({ key, data }))
+    },
     ghost,
     paint: paintAttentionData,
     paintError: paintAttentionErrorData,
@@ -189,10 +202,13 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     onRelease: releaseSelection,
   })
 
-  const mentionsFigure = runFigure<TimelineBucket[]>({
+  const mentionsFigure = runFigure<Keyed<TimelineBucket[]>>({
     name: 'mentions',
     params: mentionsParams,
-    fetch: (queryParams, signal) => api.loadTimeline(queryParams.get('person')!, withoutPerson(queryParams), signal),
+    fetch: (queryParams, signal) => {
+      const key = currentKey()
+      return api.loadTimeline(queryParams.get('person')!, withoutPerson(queryParams), signal).then((data) => ({ key, data }))
+    },
     ghost,
     paint: paintMentions,
     paintError: paintMentionsError,

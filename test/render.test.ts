@@ -1450,11 +1450,11 @@ describe('paintAttention / paintAttentionLoading / paintAttentionError, figure 7
       const mentions = mentionsSeries(2)
       paintAttention({ mentions, views: viewsSeries(3, 200), metrics, selected: null, onPick: () => {} })
       const rowA = els.attentionChart.innerHTML.match(/data-row="mentions"[\s\S]*?(?=data-row="views"|$)/)?.[0] ?? ''
-      const sizesA = [...rowA.matchAll(/--size:(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
+      const sizesA = [...rowA.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
       assert.ok(sizesA.length > 0, 'the mentions row must draw sized marks')
       paintAttention({ mentions, views: viewsSeries(3, 5_000_000), metrics, selected: null, onPick: () => {} })
       const rowB = els.attentionChart.innerHTML.match(/data-row="mentions"[\s\S]*?(?=data-row="views"|$)/)?.[0] ?? ''
-      const sizesB = [...rowB.matchAll(/--size:(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
+      const sizesB = [...rowB.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
       assert.deepEqual(sizesA, sizesB, "the mentions row's own sizes must not shift just because the views row's scale changed by orders of magnitude")
     })
   })
@@ -1464,12 +1464,12 @@ describe('paintAttention / paintAttentionLoading / paintAttentionError, figure 7
       const views = viewsSeries(2, 40000)
       paintAttention({ mentions: mentionsSeries(3, 5), views, metrics, selected: null, onPick: () => {} })
       const rowA = els.attentionChart.innerHTML.match(/data-row="views"[\s\S]*$/)?.[0] ?? ''
-      const sizesA = [...rowA.matchAll(/--size:(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
+      const sizesA = [...rowA.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
       assert.ok(sizesA.length > 0, 'the views row must draw sized marks')
       const bigMentions = Array.from({ length: 5 }, (_, i) => ({ day: day(i + 1), count: i + 1 === 3 ? 900000 : 2 }))
       paintAttention({ mentions: bigMentions, views, metrics, selected: null, onPick: () => {} })
       const rowB = els.attentionChart.innerHTML.match(/data-row="views"[\s\S]*$/)?.[0] ?? ''
-      const sizesB = [...rowB.matchAll(/--size:(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]))
+      const sizesB = [...rowB.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
       assert.deepEqual(sizesA, sizesB, "the views row's own sizes must not shift just because the mentions row's scale changed by orders of magnitude")
     })
   })
@@ -1492,7 +1492,7 @@ describe('paintAttention / paintAttentionLoading / paintAttentionError, figure 7
     })
   })
 
-  it('the loading ghost and the data paint share the same row/axis shape (AC10, validator NIT): both carry data-row="mentions", data-row="views" and the attention-axis line', () => {
+  it('the loading ghost and the data paint share the same row/axis shape (AC10): both carry data-row="mentions", data-row="views" and the attention-axis line', () => {
     withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
       paintAttentionLoading()
       const ghostHtml = String(els.attentionChart.innerHTML)

@@ -15,7 +15,7 @@ Numbers below are API latency and database work only; browser rendering is out o
 | platform | linux x64 |
 | cpu | 12th Gen Intel(R) Core(TM) i7-12700H x20 |
 | memory | 31824.9 MB |
-| data dir | /tmp/claude-1000/-home-walter-Github-assoc-graph--claude-worktrees-open-prs-review-803c00/6fa953f0-8e9c-4277-9cd1-61f148c8abbc/scratchpad/bench-pg |
+| data dir | ./data/bench |
 | docs / days / seed | 20000 / 120 / 20260908 |
 | iterations per scenario | 30 |
 | person / term | lula / reforma |

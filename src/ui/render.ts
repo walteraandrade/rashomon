@@ -1397,7 +1397,8 @@ export const paintAgenda = ({
           if (!cell) return html`<td class="agenda-cell is-empty"><span class="sr-only">sem documentos</span></td>`
           const isSelected = !!selected && selected.personId === p.id && selected.domain === row.domain
           const pct = Math.round(cell.share * 100)
-          return html`<td class="agenda-cell"><button class="agenda-pick${isSelected ? ' is-active' : ''}" data-person="${p.id}" data-domain="${row.domain}" aria-pressed="${String(isSelected)}" style="--share:${pct}%" title="${fmt(cell.docs)} ${cell.docs === 1 ? 'documento' : 'documentos'}">${pct}%</button></td>`
+          const label = cell.docs > 0 && pct === 0 ? '<1%' : `${pct}%`
+          return html`<td class="agenda-cell"><button class="agenda-pick${isSelected ? ' is-active' : ''}" data-person="${p.id}" data-domain="${row.domain}" aria-pressed="${String(isSelected)}" style="--share:${Math.max(pct, 1)}%" title="${fmt(cell.docs)} ${cell.docs === 1 ? 'documento' : 'documentos'}">${label}</button></td>`
         })}</tr>`,
     )}</tbody>
   </table></div><p class="note">A fatia é da cobertura rastreada do próprio veículo, não da pessoa. A soma de uma linha pode passar de 100%: um documento que cita duas pessoas rastreadas conta para as duas.</p>`

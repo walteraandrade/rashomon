@@ -218,4 +218,17 @@ describe('the empty state paints a note, not an empty grid; the loading state pa
       assert.match(els.agendaGrid.innerHTML, /Falha de rede ou base indisponível/)
     })
   })
+
+  it('a cell with docs but a share rounding to 0 paints "<1%", never "0%" (review fix: ink never sits on the zero stop)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/agenda': agendaData({ cells: [{ person_id: 'lula', domain: 'g1.globo.com', docs: 1, share: 0 }] }) })
+      const { mount } = await import('../src/ui/figures/agenda.js')
+      mount(els.agenda, { people, initial: {} })
+      await flush()
+      assert.match(els.agendaGrid.innerHTML, /&lt;1%/)
+      assert.doesNotMatch(els.agendaGrid.innerHTML, />0%</)
+      assert.match(els.agendaGrid.innerHTML, /--share:1%/)
+    })
+  })
 })

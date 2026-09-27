@@ -41,10 +41,11 @@ class Listenable {
   }
 }
 
-const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'data-col' | 'data-node') =>
+const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'data-col' | 'data-node' | 'data-day') =>
   [...html.matchAll(new RegExp(`${attr}="([^"]*)"`, 'g'))].map(([, value]) => {
     const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
-    stub.dataset = attr === 'data-domain' ? { domain: value } : attr === 'data-col' ? { col: value } : attr === 'data-node' ? { node: value } : { stripDomain: value }
+    stub.dataset =
+      attr === 'data-domain' ? { domain: value } : attr === 'data-col' ? { col: value } : attr === 'data-node' ? { node: value } : attr === 'data-day' ? { day: value } : { stripDomain: value }
     return stub
   })
 
@@ -86,7 +87,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-day'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -119,7 +120,7 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-day') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
     const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : dataStubs(this.html, attr)
@@ -133,6 +134,7 @@ class FakeBox extends Listenable {
     if (selector === '[data-col]') return this.stubsFor('data-col')
     if (selector === '[data-node]') return this.stubsFor('data-node')
     if (selector === '[data-person-docs]') return this.stubsFor('data-person-docs')
+    if (selector === '[data-day]') return this.stubsFor('data-day')
     return []
   }
   style: Record<string, string> = {}

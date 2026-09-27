@@ -153,12 +153,25 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(p.has('method'), false, 'the server resolves the default method; the client never guesses a label')
   })
 
-  it('the graph query asks for testimony and the sources/testimony queries do not echo it', () => {
+  it('the graph query asks for testimony and communities, and the sources/testimony queries echo neither (issue #217 AC12)', () => {
     const p = params(opts)
     assert.equal(p.get('testimony'), '1')
+    assert.equal(p.get('communities'), '1')
     assert.equal(narrowToTestimony(p).has('testimony'), false)
     assert.equal(testimonyParams(opts).has('testimony'), false)
     assert.equal(narrowToSources(p).has('testimony'), false)
+    assert.equal(narrowToTestimony(p).has('communities'), false)
+    assert.equal(narrowToSources(p).has('communities'), false)
+  })
+
+  it('params() sends communities=1 unconditionally, for every source/sort combination (issue #217 AC12)', () => {
+    for (const source of ['all', 'gnews', 'bluesky']) {
+      for (const sort of ['count', 'pmi']) {
+        const qp = params({ ...opts, source, sort })
+        assert.equal(qp.get('communities'), '1', `communities=1 must travel with source=${source} sort=${sort}`)
+        assert.equal(qp.get('testimony'), '1', 'testimony=1 must still be there too')
+      }
+    }
   })
 
   // The second figure used to write a page-wide filter: clicking an outlet down there narrowed
@@ -184,6 +197,7 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(qp.has('lean'), false)
   })
 })
+
 
 describe('weekParams / loadWeek stay fixed at days=7', () => {
   it('weekParams sends days=7, the full kind set, plus the chosen source and limit', () => {

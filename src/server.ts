@@ -4,11 +4,12 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import personsSeed from '../seed.json' with { type: 'json' }
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
-import { attentionFor, candidatesFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
+import { agendaFor, attentionFor, candidatesFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
 import {
+  parseAgendaQuery,
   parseAttentionQuery,
   parseCandidatesQuery,
   parseCompareQuery,
@@ -105,6 +106,7 @@ app.get('/api/compare', async (c) => {
 })
 
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))
+app.get('/api/agenda', async (c) => c.json(await agendaFor(parseAgendaQuery(c.req.query()))))
 app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
 
 app.get('/', serveStatic({ path: './public/atlas.html' }))

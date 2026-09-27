@@ -6,6 +6,7 @@ import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import {
+  agendaFor,
   compareFor,
   docsFor,
   docsWhereSql,
@@ -19,6 +20,7 @@ import {
   timelineFor,
   toneFor,
   weekFor,
+  type AgendaQuery,
   type CompareQuery,
   type DocsQuery,
   type GraphQuery,
@@ -52,6 +54,7 @@ const docsBase: DocsQuery = { term: '', kind: 'all', days: 30, source: 'all', do
 const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 20, min: 1 }
 const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
+const agendaBase: AgendaQuery = { days: 30, source: 'all', min: 5, limit: 30 }
 const testimonyBase: TestimonyQuery = { days: 30, source: 'all', method: 'stub', min: 3 }
 const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40 }
 const allLens = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
@@ -1442,6 +1445,288 @@ describe('toneFor (issue #5)', () => {
   })
 })
 
+describe('agendaFor (issue #208)', () => {
+  before(seed)
+
+  const cell = (r: Awaited<ReturnType<typeof agendaFor>>, personId: string, domain: string) =>
+    r.cells.find((c) => c.person_id === personId && c.domain === domain)
+
+  it('the response has exactly the keys days, persons, domains, cells', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.deepEqual(Object.keys(r).sort(), ['cells', 'days', 'domains', 'persons'])
+    assert.equal(r.days, 30)
+  })
+
+  it('lists every tracked person regardless of cells, ordered by name, shaped { id, name }', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.deepEqual(r.persons.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
+    for (const p of r.persons) assert.deepEqual(Object.keys(p).sort(), ['id', 'name'])
+    const names = r.persons.map((p) => p.name)
+    assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)))
+  })
+
+  it('shares a clean two-person domain exactly, matching docs_a / (docs_a + docs_b)', async () => {
+    // metropoles.com: 3 lula-only docs, 2 tarcisio-only docs, no doc naming both -- the
+    // domain's tracked-doc total (5) equals docs_lula + docs_tarcisio exactly
+    const r = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    assert.deepEqual(cell(r, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    assert.deepEqual(cell(r, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.4 })
+  })
+
+  it('never reads share === 1 for a person sharing a domain with someone else', async () => {
+    const r = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    assert.notEqual(cell(r, 'lula', 'metropoles.com')?.share, 1)
+    assert.notEqual(cell(r, 'tarcisio', 'metropoles.com')?.share, 1)
+  })
+
+  it('gives share 1 when a person is the only one on a domain', async () => {
+    // estadao.com.br has 4 tracked docs, all tarcisio, within the default 30-day window
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.deepEqual(cell(r, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+  })
+
+  it('counts a doc naming two tracked persons once toward the domain total and once per person', async () => {
+    // doc /37 names both tarcisio and bolsonaro on poder360.com.br, day 35; with min=1 that
+    // domain's lone doc gives both persons docs:1 -- proof the shared doc is not dropped for
+    // either person, and (since it is the domain's only doc) that the total was not doubled
+    const r = await agendaFor({ days: 90, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(cell(r, 'tarcisio', 'poder360.com.br'), { person_id: 'tarcisio', domain: 'poder360.com.br', docs: 1, share: 1 })
+    assert.deepEqual(cell(r, 'bolsonaro', 'poder360.com.br'), { person_id: 'bolsonaro', domain: 'poder360.com.br', docs: 1, share: 1 })
+  })
+
+  it('a doc naming two people can push a domain\'s shares above 1.0 without inflating the count of docs any one person actually has', async () => {
+    const r = await agendaFor({ days: 90, source: 'all', min: 1, limit: 30 })
+    const t = cell(r, 'tarcisio', 'poder360.com.br')!
+    const b = cell(r, 'bolsonaro', 'poder360.com.br')!
+    assert.equal(t.share + b.share, 2)
+  })
+
+  it('drops a domain below min from both domains and cells', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.equal(cell(r, 'tarcisio', 'estadao.com.br'), undefined)
+    assert.ok(!r.domains.includes('estadao.com.br'))
+  })
+
+  it('lowers the threshold when min is set explicitly, at the exact boundary count', async () => {
+    // estadao.com.br has exactly 4 tracked docs; min=5 excludes it, min=4 includes it
+    const excluded = await agendaFor(agendaBase)
+    assert.equal(cell(excluded, 'tarcisio', 'estadao.com.br'), undefined)
+    const included = await agendaFor({ ...agendaBase, min: 4 })
+    assert.deepEqual(cell(included, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+  })
+
+  it('includes a domain right at min, the metropoles.com boundary case', async () => {
+    // metropoles.com has exactly 5 tracked docs at the default min=5
+    const atMin = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    assert.ok(atMin.domains.includes('metropoles.com'))
+    const aboveMin = await agendaFor({ days: 4310, source: 'all', min: 6, limit: 30 })
+    assert.ok(!aboveMin.domains.includes('metropoles.com'))
+  })
+
+  it('sorts domains alphabetically with no duplicate', async () => {
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.deepEqual([...new Set(r.domains)], r.domains)
+    assert.deepEqual([...r.domains].sort(), r.domains)
+  })
+
+  it('truncates by tracked-doc total descending, ties broken by domain name ascending', async () => {
+    // agendasecundaria.example and correiostado.example both total 6 (a tie, broken
+    // alphabetically); the fixture's other source='camara' doc (camara.leg.br) totals only 1
+    // and must never outrank either even though it would fit inside a wider limit
+    const r = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 1 })
+    assert.deepEqual(r.domains, ['agendasecundaria.example'])
+    assert.deepEqual(cell(r, 'lula', 'agendasecundaria.example'), { person_id: 'lula', domain: 'agendasecundaria.example', docs: 6, share: 1 })
+    assert.equal(cell(r, 'bolsonaro', 'correiostado.example'), undefined)
+
+    const wider = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 2 })
+    assert.deepEqual(wider.domains, ['agendasecundaria.example', 'correiostado.example'])
+    assert.ok(!wider.domains.includes('camara.leg.br'), 'a domain clearing min but ranked outside limit must never surface just because a wider limit was tried')
+  })
+
+  it('never lets a domain-less doc surface, even when it is the only tracked doc that would clear min', async () => {
+    // doc /35 has no domain but names tarcisio; at min=1 it must not spuriously create a
+    // null/undefined domain entry
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.ok(!r.domains.some((d) => !d))
+    assert.ok(!r.cells.some((c) => !c.domain))
+  })
+
+  it('returns an empty matrix outside any docs window, with persons still full', async () => {
+    const r = await agendaFor({ days: 0, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(r.cells, [])
+    assert.deepEqual(r.domains, [])
+    assert.equal(r.persons.length, 3)
+  })
+
+  it('narrows a domain\'s total and every person\'s docs identically when source is filtered', async () => {
+    // metropoles.com at source=all: lula 3/5=0.6, tarcisio 2/5=0.4 (docs 63-64 gnews, 65 rss
+    // for lula; 66-67 rss for tarcisio). Filtering to source=rss drops lula's two gnews docs
+    // from both his own count and the domain's total together, never asymmetrically.
+    const wide = await agendaFor({ days: 4310, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(cell(wide, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    assert.deepEqual(cell(wide, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.4 })
+
+    const rssOnly = await agendaFor({ days: 4310, source: 'rss', min: 1, limit: 30 })
+    assert.deepEqual(cell(rssOnly, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 1, share: 0.33 })
+    assert.deepEqual(cell(rssOnly, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.67 })
+
+    const gnewsOnly = await agendaFor({ days: 4310, source: 'gnews', min: 1, limit: 30 })
+    assert.deepEqual(cell(gnewsOnly, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 2, share: 1 })
+    assert.equal(cell(gnewsOnly, 'tarcisio', 'metropoles.com'), undefined)
+  })
+
+  it('never surfaces a .pt domain, scoped to country=br like /lenses (issue #208 review)', async () => {
+    // doc /58, exemplo.pt, 2 days ago, names lula -- countryOf('exemplo.pt') resolves to 'pt',
+    // so agendaQuery must exclude it even at a wide window and min=1
+    const r = await agendaFor({ days: 7, source: 'all', min: 1, limit: 30 })
+    assert.ok(!r.domains.includes('exemplo.pt'))
+    assert.equal(cell(r, 'lula', 'exemplo.pt'), undefined)
+  })
+
+  it('docs/api.md names the route, its days/source/min parameters, the response shape, the outlet-relative share and the 6h cache class', () => {
+    const match = /## agenda\n[\s\S]*?(?=\n## |$)/.exec(docsText)
+    assert.ok(match, 'docs/api.md has an agenda section')
+    const section = match[0]
+    assert.match(section, /\/api\/agenda/)
+    assert.match(section, /days[\s\S]*?30/)
+    assert.match(section, /\bsource\b/)
+    assert.match(section, /\bmin\b/)
+    assert.match(section, /\{ days, persons, domains, cells \}/)
+    assert.match(section, /person_id[\s\S]*?domain[\s\S]*?docs[\s\S]*?share/)
+    assert.match(section, /outlet'?s? own tracked coverage|relative to the.{0,20}outlet/i)
+    assert.match(docsText, /`\/api\/agenda`[\s\S]{0,300}(rolling|6h)|(rolling|6h)[\s\S]{0,300}`\/api\/agenda`/i)
+  })
+})
+
+// Verifier pass, from the approved spec's own numbered acceptance criteria, independent of
+// the builder's own describe('agendaFor (issue #208)') tests above.
+describe('agendaFor acceptance (issue #208)', () => {
+  before(seed)
+
+  const cellOf = (r: Awaited<ReturnType<typeof agendaFor>>, personId: string, domain: string) =>
+    r.cells.find((c) => c.person_id === personId && c.domain === domain)
+
+  it('the response has exactly days, persons, domains, cells and nothing else (issue #208 AC1)', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.deepEqual(Object.keys(r).sort(), ['cells', 'days', 'domains', 'persons'])
+    assert.equal(r.days, 30)
+  })
+
+  it('persons lists every tracked person, { id, name } only, ordered by name, present with zero cells (issue #208 AC2)', async () => {
+    const r = await agendaFor({ days: 1, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(r.cells, [])
+    assert.deepEqual(r.persons.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
+    for (const p of r.persons) assert.deepEqual(Object.keys(p).sort(), ['id', 'name'])
+    const names = r.persons.map((p) => p.name)
+    assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)))
+  })
+
+  it('a two-person domain matches docs_a / (docs_a + docs_b) to 2 decimals, and neither reads share 1 (issue #208 AC3)', async () => {
+    // metropoles.com: 3 lula-only docs, 2 tarcisio-only docs, no shared doc -- the total equals
+    // docs_lula + docs_tarcisio exactly, so the arithmetic is hand-computable: 3/5=0.6, 2/5=0.4.
+    const r = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    const lula = cellOf(r, 'lula', 'metropoles.com')
+    const tarcisio = cellOf(r, 'tarcisio', 'metropoles.com')
+    assert.deepEqual(lula, { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    assert.deepEqual(tarcisio, { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.4 })
+    assert.equal(Math.round((lula!.docs / (lula!.docs + tarcisio!.docs)) * 100) / 100, lula!.share)
+    assert.equal(Math.round((tarcisio!.docs / (lula!.docs + tarcisio!.docs)) * 100) / 100, tarcisio!.share)
+    assert.notEqual(lula!.share, 1)
+    assert.notEqual(tarcisio!.share, 1)
+  })
+
+  it('a doc naming two tracked persons counts once toward the domain total and once per person, asserted on docs directly (issue #208 AC4)', async () => {
+    // poder360.com.br/37 is the domain's only tracked doc at min=1, naming both tarcisio and
+    // bolsonaro: each person's own `docs` (the numerator) must read 1, not 0 or 2, and since
+    // share = docs / total reads 1 for both, the shared doc was counted once in the total too.
+    const r = await agendaFor({ days: 90, source: 'all', min: 1, limit: 30 })
+    const t = cellOf(r, 'tarcisio', 'poder360.com.br')
+    const b = cellOf(r, 'bolsonaro', 'poder360.com.br')
+    assert.equal(t?.docs, 1)
+    assert.equal(b?.docs, 1)
+    assert.equal(t?.share, 1)
+    assert.equal(b?.share, 1)
+
+    // agendadupla.example/80-82: poder360.com.br above is a one-doc domain, so its denominator
+    // is indistinguishable from "the shared doc's own count" -- a bug that divides by the
+    // shared-doc count alone, rather than the domain's real total, would still pass it. Here
+    // the shared doc (82) sits beside two lula-only docs (80, 81) on the same domain: total 3,
+    // lula in all three (docs 3), tarcisio in the shared doc alone (docs 1).
+    const wideDupla = await agendaFor({ days: 4320, source: 'all', min: 1, limit: 30 })
+    const lulaDupla = cellOf(wideDupla, 'lula', 'agendadupla.example')
+    const tarcisioDupla = cellOf(wideDupla, 'tarcisio', 'agendadupla.example')
+    assert.deepEqual(lulaDupla, { person_id: 'lula', domain: 'agendadupla.example', docs: 3, share: 1 })
+    assert.deepEqual(tarcisioDupla, { person_id: 'tarcisio', domain: 'agendadupla.example', docs: 1, share: 0.33 })
+  })
+
+  it('a domain below min is absent from domains and cells; raising min removes it at the exact boundary (issue #208 AC5)', async () => {
+    // estadao.com.br totals exactly 4 tracked docs in the default 30-day window.
+    const belowMin = await agendaFor(agendaBase) // min: 5
+    assert.equal(cellOf(belowMin, 'tarcisio', 'estadao.com.br'), undefined)
+    assert.ok(!belowMin.domains.includes('estadao.com.br'))
+    const atBoundary = await agendaFor({ ...agendaBase, min: 4 })
+    assert.deepEqual(cellOf(atBoundary, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+    assert.ok(atBoundary.domains.includes('estadao.com.br'))
+  })
+
+  it('domains is sorted alphabetically with no duplicate (issue #208 AC6)', async () => {
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.deepEqual([...r.domains].sort((a, b) => a.localeCompare(b)), r.domains)
+    assert.deepEqual([...new Set(r.domains)], r.domains)
+  })
+
+  it('a limit lower than the qualifying-domain count truncates by tracked-doc total desc, ties by domain name asc, never a domain that failed min (issue #208 AC7)', async () => {
+    // agendasecundaria.example and correiostado.example both total 6 (a tie); camara.leg.br
+    // totals only 1 under source=camara and must never outrank either.
+    const truncated = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 1 })
+    assert.deepEqual(truncated.domains, ['agendasecundaria.example'])
+    assert.equal(cellOf(truncated, 'bolsonaro', 'correiostado.example'), undefined)
+    assert.ok(!truncated.domains.includes('camara.leg.br'))
+    const wider = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 2 })
+    assert.deepEqual(wider.domains, ['agendasecundaria.example', 'correiostado.example'])
+  })
+
+  it('a doc with no domain never appears in domains or cells, even at min=1 (issue #208 AC8)', async () => {
+    // doc /35 has no domain but names tarcisio; must never spuriously create a null domain.
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.ok(!r.domains.some((d) => !d))
+    assert.ok(!r.cells.some((c) => !c.domain))
+  })
+
+  it('an empty window returns domains: [], cells: [], persons still full (issue #208 AC9)', async () => {
+    const r = await agendaFor({ days: 0, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(r.domains, [])
+    assert.deepEqual(r.cells, [])
+    assert.equal(r.persons.length, 3)
+  })
+
+  it('source narrows a domain total and every person docs identically, symmetrically (issue #208 AC10)', async () => {
+    const wide = await agendaFor({ days: 4310, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(cellOf(wide, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    const rssOnly = await agendaFor({ days: 4310, source: 'rss', min: 1, limit: 30 })
+    // lula has one rss doc on metropoles.com (of his three); tarcisio's two are both rss.
+    assert.deepEqual(cellOf(rssOnly, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 1, share: 0.33 })
+    assert.deepEqual(cellOf(rssOnly, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.67 })
+  })
+
+  it('docs/api.md documents days/source/min, the response shape, the outlet-relative share and the 6h cache class (issue #208 AC14)', () => {
+    const match = /## agenda\n[\s\S]*?(?=\n## |$)/.exec(docsText)
+    assert.ok(match, 'the agenda route must be documented somewhere in docs/')
+    const section = match[0]
+    assert.match(section, /\bdays\b/)
+    assert.match(section, /\bsource\b/)
+    assert.match(section, /\bmin\b/)
+    assert.match(section, /persons/)
+    assert.match(section, /domains/)
+    assert.match(section, /cells/)
+    assert.match(section, /person_id/)
+    assert.match(section, /\bdocs\b/)
+    assert.match(section, /\bshare\b/)
+    assert.match(section, /outlet/i)
+    assert.match(docsText, /`\/api\/agenda`[\s\S]{0,300}(rolling|6h)|(rolling|6h)[\s\S]{0,300}`\/api\/agenda`/i)
+  })
+})
+
 describe('testimonyFor (issue #21)', () => {
   before(seed)
 
@@ -1814,6 +2099,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       timeline: queries.timeline(lula, { ...scope, term: 'x', kind: 'phrase', bucket: 'week' }),
       rising: queries.rising(lula, { ...scope, baseline: 14, min: 1, limit: 5 }),
       tone: queries.tone({ days: 1, min: 1 }),
+      agenda: queries.agenda({ days: 1, source: 'rss', min: 1, limit: 1 }),
       testimonySummary: queries.testimonySummary(lula, { days: 1, source: 'rss', method: 'kikori', min: 1 }),
       termTestimony: queries.termTestimony(lula, scope, 'kikori', ['word:a']),
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),

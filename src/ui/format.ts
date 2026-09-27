@@ -1,3 +1,7 @@
+// Bundled directly (esbuild's JSON loader), never through src/outlets.ts, so src/ui keeps its
+// own import direction and never pulls in a server-only module.
+import outletsJson from '../../outlets.json' with { type: 'json' }
+
 export type TermTestimony = { score: number; n: number }
 // `community` is a plain number: src/communities.ts's Louvain/graphology types never reach the UI.
 export type Term = { id: string; term: string; kind: string; count: number; pmi: number; testimony?: TermTestimony | null; community?: number | null }
@@ -31,6 +35,11 @@ export type Rising = { days: number; baseline: number; terms: RisingTerm[]; pres
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }
+// /api/agenda (issue #208): one row per top domain, one cell per (person, domain) pair that
+// has at least one tracked doc there. `share` is relative to the domain's own tracked
+// coverage, so a domain with docs naming two tracked people can sum above 1 across its cells.
+export type AgendaCell = { person_id: string; domain: string; docs: number; share: number }
+export type Agenda = { days: number; persons: PersonRef[]; domains: string[]; cells: AgendaCell[] }
 // The raw token /api/people/:id/lenses echoes back, normalized: domain:<host>, lean:<value>,
 // source:<name>, or the fallback 'all'. CompareTerm is reused as-is for `terms`: the API's
 // per-term { term, kind, a, b } shape is identical to /compare's.
@@ -129,7 +138,7 @@ export const score = (n: { pmi?: number; count?: number }, sort: string) =>
 
 export const scoreName = (sort: string) => (sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
 
-const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
+export const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
 
 // Turns a lens token (echoed back by /api/people/:id/lenses, always normalized) into the prose
 // the ruler's own end labels and #lensesStatus need: a domain's bare host, a lean's pt-BR name,
@@ -287,6 +296,23 @@ export const mergeOutlets = (
 export const testimonyFocus = (rows: TestimonyDomainRow[], domain: string): { score: number; n: number } | null => {
   const own = domain === 'all' ? undefined : foldTestimonyDomains(rows).find((d) => d.domain === domain)
   return own ? { score: own.score, n: own.n } : null
+}
+
+type OutletEntry = { domain: string; lean: keyof typeof LEAN_LABELS }
+const LEAN_BY_DOMAIN = new Map((outletsJson as OutletEntry[]).map((o) => [o.domain, o.lean]))
+
+export const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
+
+// Figure 8's grid shape: domains in the route's own order, cells keyed by person id so a
+// missing pair reads as a blank cell rather than a zero share.
+export const agendaRows = (data: Agenda): { domain: string; lean: string | null; cells: Map<string, AgendaCell> }[] => {
+  const byDomain = new Map<string, Map<string, AgendaCell>>()
+  for (const c of data.cells) {
+    const cells = byDomain.get(c.domain) ?? new Map<string, AgendaCell>()
+    cells.set(c.person_id, c)
+    byDomain.set(c.domain, cells)
+  }
+  return data.domains.map((domain) => ({ domain, lean: leanFor(domain), cells: byDomain.get(domain) ?? new Map() }))
 }
 
 // bsky.app URL for a bluesky doc's at:// URI; every other source falls through to safeDocUrl.

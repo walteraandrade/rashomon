@@ -46,10 +46,19 @@ describe('Cache-Control on /api reads', () => {
       '/api/people/lula/timeline',
       '/api/people/tarcisio/testimony?method=stub',
       '/api/tone',
+      '/api/agenda',
       '/api/compare?a=lula&b=bolsonaro',
       '/api/people/lula/week',
     ])
       assert.deepEqual(await header(url), { status: 200, cache: ROLLING }, url)
+  })
+
+  // Issue #208 AC13: pinned directly against cacheControl/tierOf, proving `agenda` already
+  // resolves to `rolling` (it is not in cache.ts's TREND set) with no code change needed.
+  it('resolves /api/agenda to the same rolling (6h) window as /api/tone and /api/graph (issue #208 AC13)', () => {
+    assert.equal(cacheControl({ method: 'GET', path: '/api/agenda', status: 200 }), ROLLING)
+    assert.equal(cacheControl({ method: 'GET', path: '/api/agenda', status: 200 }), cacheControl({ method: 'GET', path: '/api/tone', status: 200 }))
+    assert.equal(cacheControl({ method: 'GET', path: '/api/agenda', status: 200 }), cacheControl({ method: 'GET', path: '/api/people/lula/graph', status: 200 }))
   })
 
   it('gives the days:7 trend routes the short window', async () => {

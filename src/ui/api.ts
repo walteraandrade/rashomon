@@ -121,3 +121,11 @@ export const loadLenses = (personId: string, queryParams: URLSearchParams, signa
 export const attentionParams = (_opts: Record<string, unknown> = {}) => new URLSearchParams({ days: '30' })
 
 export const loadAttention = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/attention?' + queryParams, signal)
+
+// /api/agenda is not nested under /people/:id: one call ranks every tracked person's share of
+// the top domains at once. `min` stays at the route's own default (5); no UI control.
+export const AGENDA_MIN = 5
+
+export const agendaParams = ({ days, source }: { days: string; source: string }) => new URLSearchParams({ days, source })
+
+export const loadAgenda = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/agenda?' + queryParams, signal)

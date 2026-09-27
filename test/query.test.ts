@@ -10,6 +10,7 @@ import {
   OFFSETS,
   SMALL_LIMITS,
   SOURCES,
+  parseAgendaQuery,
   parseCandidatesQuery,
   parseCompareQuery,
   parseCountryList,
@@ -195,6 +196,53 @@ describe('parseToneQuery (issue #5)', () => {
     assert.equal(parseToneQuery({ days: '0' }).days, 7)
     assert.equal(parseToneQuery({ days: '-5' }).days, 7)
     assert.equal(parseToneQuery({ days: '9999' }).days, 365)
+  })
+})
+
+describe('parseAgendaQuery (issue #208)', () => {
+  it("min defaults to 5 and snaps to MINS, its own literal", () => {
+    assert.equal(parseAgendaQuery({}).min, 5)
+    assert.equal(parseAgendaQuery({ min: 'nope' }).min, 5)
+    assert.equal(parseAgendaQuery({ min: '0' }).min, 1)
+    assert.equal(parseAgendaQuery({ min: '-1' }).min, 1)
+    assert.equal(parseAgendaQuery({ min: '7' }).min, 5)
+  })
+
+  it('days defaults to 30 and snaps to an allowed window', () => {
+    assert.equal(parseAgendaQuery({}).days, 30)
+    assert.equal(parseAgendaQuery({ days: 'nope' }).days, 30)
+    assert.equal(parseAgendaQuery({ days: '0' }).days, 7)
+    assert.equal(parseAgendaQuery({ days: '9999' }).days, 365)
+  })
+
+  it('source falls back to "all" for undefined, empty and unknown tokens, otherwise keeps a comma list', () => {
+    assert.equal(parseAgendaQuery({}).source, 'all')
+    assert.equal(parseAgendaQuery({ source: '' }).source, 'all')
+    assert.equal(parseAgendaQuery({ source: 'bogus' }).source, 'all')
+    assert.equal(parseAgendaQuery({ source: 'rss,gnews' }).source, 'rss,gnews')
+    assert.equal(parseAgendaQuery({ source: 'rss,bogus' }).source, 'rss')
+  })
+
+  it('limit is always the fixed 30-domain cap, regardless of limit/domain/lean/kind in the query string', () => {
+    assert.equal(parseAgendaQuery({}).limit, 30)
+    assert.equal(parseAgendaQuery({ limit: '5' }).limit, 30)
+    assert.equal(parseAgendaQuery({ limit: '1000' }).limit, 30)
+    assert.equal(parseAgendaQuery({ domain: 'g1.globo.com' }).limit, 30)
+    assert.equal(parseAgendaQuery({ lean: 'left' }).limit, 30)
+    assert.equal(parseAgendaQuery({ kind: 'word' }).limit, 30)
+  })
+
+  it('has no domain, lean or kind field: those parameters are out of scope for this route', () => {
+    assert.deepEqual(Object.keys(parseAgendaQuery({})).sort(), ['days', 'limit', 'min', 'source'])
+  })
+
+  it('days snaps to DAYS, min snaps to MINS (default 5), source parses via parseSourceList, limit is always the fixed constant (issue #208 AC12)', () => {
+    assert.equal(parseAgendaQuery({ days: '45' }).days, 30)
+    assert.equal(parseAgendaQuery({ min: '7' }).min, 5)
+    assert.equal(parseAgendaQuery({ source: 'rss,bogus' }).source, 'rss')
+    assert.equal(parseAgendaQuery({ source: 'bogus' }).source, 'all')
+    for (const q of [{}, { limit: '1' }, { domain: 'g1.globo.com' }, { lean: 'left' }, { kind: 'word' }, { limit: '1', domain: 'x', lean: 'left', kind: 'word' }])
+      assert.equal(parseAgendaQuery(q).limit, 30)
   })
 })
 

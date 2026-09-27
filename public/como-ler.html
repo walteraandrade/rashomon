@@ -21,7 +21,7 @@
   </header>
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
     <p class="chapter-intro">Tudo vale só para o recorte da frase: pessoa, período e fonte.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#em-alta">Em alta</a><a href="#semana">A semana</a><a href="#lentes">Lentes</a><a href="#atencao">Atenção</a></nav>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#em-alta">Em alta</a><a href="#semana">A semana</a><a href="#lentes">Lentes</a><a href="#atencao">Atenção</a><a href="#agenda">Agenda</a></nav>
     <div class="chapter-grid">
       <div id="analise">
         <h2>Como fazer uma análise</h2>
@@ -29,7 +29,7 @@
           <li><b>Escolha uma pessoa</b>, o período e a fonte. Isso é o recorte.</li>
           <li><b>Olhe as palavras maiores.</b> Clique numa para ler os textos. O cartão fica aberto na próxima escolha e arrasta pelo topo.</li>
           <li><b>Clique no nome no centro</b> (na primeira linha da lista) para os textos da pessoa, sem palavra no meio.</li>
-          <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é.</li>
+          <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é. <b>No 6</b>, leia a mesma pessoa por dois recortes ao mesmo tempo. <b>No 7</b>, veja a fatia de cada veículo por pessoa.</li>
         </ol>
       </div>
       <div id="atlas">
@@ -118,6 +118,18 @@
         <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever, ou se os dois picos caíram no mesmo dia. Quando uma das linhas não tem pico (a pessoa não tem página de Wikipédia rastreada, ou a janela está vazia), não há frase, só uma nota.</p>
         <h3>Clique</h3>
         <p>Abre os textos de menções daquele dia, em qualquer das duas linhas. Pageviews não têm texto próprio para abrir.</p>
+      </div>
+      <div id="agenda">
+        <h2>Gráfico 8 · Agenda por veículo</h2>
+        <p>Uma tabela: uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Diferente dos outros gráficos, ele não olha uma pessoa por vez: compara todas de uma vez, veículo por veículo.</p>
+        <h3>A fatia</h3>
+        <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais escura a tinta do número.</p>
+        <h3>Por que passa de 100%</h3>
+        <p>Um documento que cita duas pessoas acompanhadas conta uma vez para cada uma. Por isso a soma de uma linha pode passar de 100%; a tabela mede quem o veículo cobre, não divide o veículo em partes.</p>
+        <h3>Veículo de fora</h3>
+        <p>Um veículo com poucos documentos rastreados na janela nem entra na tabela. Um documento sem veículo identificado nunca conta para nenhuma linha.</p>
+        <h3>Clique</h3>
+        <p>Abre os documentos daquela pessoa naquele veículo.</p>
       </div>
     </div>
     <p class="chapter-foot"><span>Tom por termo continua na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>

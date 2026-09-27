@@ -303,8 +303,9 @@ Two key forms, read in this order:
 | prefixed with the figure id | `?atlas.days=7` | seeds that figure only, and wins over the bare key |
 
 The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
-`compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`) and
-`lenses` (figure 6, `#lenses`). Figure 1 reads `person`,
+`compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`),
+`lenses` (figure 6, `#lenses`), `attention` (figure 7, `#attention`) and `agenda` (figure 8,
+`#agenda`). Figure 1 reads `person`,
 `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
 sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
 Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
@@ -316,7 +317,10 @@ values, sent explicitly by the figure and never seeded from the querystring. Fig
 Figure 6 reads `person`, `a`, `b`, `days` and `limit` — `a` and `b` are lens tokens
 (`domain:<host>`, `lean:<value>` or `source:<name>`; an unknown or absent one falls back to
 `all`), each with no bare equivalent (`['a', null]`/`['b', null]`, like figure 3's `b`/`measure`)
-so a bare `?a=` never leaks into it.
+so a bare `?a=` never leaks into it. Figure 7 reads `person` and `source`; its `days` is always
+30 and a bare `days=` never reaches it. Figure 8 reads only `days` and `source` — it spans every
+tracked person at once, so it has no `person` key, and it sends no `min`, which stays at the
+route's own default of 5.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the
@@ -373,21 +377,21 @@ Every `/api/*` GET is public, read-only and depends on data that only changes wh
 | Route | `s-maxage` | Why |
 |---|---|---|
 | `/api/people` | 24h | The only route with no `now()` in its SQL. The list of people and their aliases changes with an edit, a `pnpm reindex` and a `pnpm push`; `party`, `office` and `uf` change with an edit and a redeploy (a restart locally), no database write. |
-| `graph`, `sources`, `docs`, `timeline`, `week`, `testimony`, `/api/tone`, `/api/compare` | 6h | Default window `days=30` (7 on `week`); 6h is ~1% of a 30-day window. |
+| `graph`, `sources`, `docs`, `timeline`, `week`, `testimony`, `/api/tone`, `/api/agenda`, `/api/compare` | 6h | Default window `days=30` (7 on `week`); 6h is ~1% of a 30-day window. |
 | `rising`, `/api/candidates` | 1h | Default window `days=7` and both are read as "what changed lately"; 1% of 7 days is ~1.7h, rounded down. |
 
 The rule behind the table: an entry may be at most ~1% of the shortest default window the route reports on, capped at a day.
 
 **The cache only covers a bounded surface.** Because the CDN keys on the whole query string, any parameter with a wide range is a free cache buster: 365 values of `days` meant 365 entries per person per filter set, each miss a cold invocation and a real query against a pool of `PG_POOL_MAX` (3 by default) connections. So `days` is enumerated, not clamped — 7, 30 or 365, the windows the page itself offers, everything else snapping to the nearest ([API reference](api.md#the-window-days)), and `limit`, `min`, `baseline` and `offset` snap the same way onto their own short lists ([API reference](api.md#enumerated-integers-limit-min-baseline-offset)), so the whole reachable surface per person is a few thousand keys instead of millions. `day` on `docs` does not snap onto a short list the way `limit`/`min`/`baseline`/`offset` do: the admissible dates are at most `days + 1` of them, the BRT calendar days that fall inside the already-snapped `days` window, but the parameter itself parses free text into a calendar date or the empty string, and the CDN keys on the raw query string, not the parsed result. `?day=nope`, `?day=2020-01-01` and `?day=aaaa` all parse to the same empty filter yet are three distinct cache keys, three misses, three real `docs` queries. A hostile `day` is therefore unbounded exactly like `term`, not a bounded parameter like the others in this list. Rate limiting proper is a Vercel Firewall feature and needs a Pro plan; this project is on Hobby, so the enumeration is the whole defence.
 
-**Staleness, in plain terms.** A reader can see a page up to `s-maxage` old: up to 6 hours on the graph, sources, docs, timeline, week, testimony, tone and compare views, up to 1 hour on rising and candidates, up to a day on the list of tracked people. Within `stale-while-revalidate` (a day) the CDN may serve one entry that is older still while it refreshes in the background, so the worst case is `s-maxage + swr`. Two visible consequences: (1) documents ingested and pushed in the meantime do not appear yet; (2) on every route but `week`, the windows are `now() - interval 'N days'`, not calendar days, so at the old edge a document that has just fallen out of a window can still be counted for up to `s-maxage`. On `days=30` that edge moves 0.8% of the window, on `days=7` 0.6%. Both are far smaller than the gap between two `pnpm push` runs, which is the real age of the data. `week`'s buckets are Brazilian calendar days, not a rolling window: with `s-maxage` 6h and `stale-while-revalidate` 24h, between 00:00 and roughly 06:00 the next day in São Paulo — the full `s-maxage + swr`, 30h, not the `s-maxage` half alone — the CDN can still serve yesterday's payload, whose last bucket is yesterday and which has no bucket for today yet.
+**Staleness, in plain terms.** A reader can see a page up to `s-maxage` old: up to 6 hours on the graph, sources, docs, timeline, week, testimony, tone, agenda and compare views, up to 1 hour on rising and candidates, up to a day on the list of tracked people. Within `stale-while-revalidate` (a day) the CDN may serve one entry that is older still while it refreshes in the background, so the worst case is `s-maxage + swr`. Two visible consequences: (1) documents ingested and pushed in the meantime do not appear yet; (2) on every route but `week`, the windows are `now() - interval 'N days'`, not calendar days, so at the old edge a document that has just fallen out of a window can still be counted for up to `s-maxage`. On `days=30` that edge moves 0.8% of the window, on `days=7` 0.6%. Both are far smaller than the gap between two `pnpm push` runs, which is the real age of the data. `week`'s buckets are Brazilian calendar days, not a rolling window: with `s-maxage` 6h and `stale-while-revalidate` 24h, between 00:00 and roughly 06:00 the next day in São Paulo — the full `s-maxage + swr`, 30h, not the `s-maxage` half alone — the CDN can still serve yesterday's payload, whose last bucket is yesterday and which has no bucket for today yet.
 
 **What is never cached.** Anything that is not a 200 on a GET gets `Cache-Control: no-store`: the 404 for an unknown person, the 404 for an unknown `/api` path, and any future non-GET method. An uncaught exception is turned into a 500 by Hono's own error handler, which does not pass through this middleware and therefore carries no `Cache-Control` at all; Vercel does not cache a function response that has no `Cache-Control`. Nothing under `public/` is touched — those files are served by the CDN from `vercel.json`, not by this middleware.
 
 There is no `max-age`, on purpose: the directive targets the shared cache. A browser with no `max-age` and no `Last-Modified` has no heuristic freshness to lean on and re-asks the CDN, which answers from its own copy without waking a function.
 
 ```bash
-API_CACHE_HOURS=6         # graph, sources, docs, timeline, week, testimony, tone, compare
+API_CACHE_HOURS=6         # graph, sources, docs, timeline, week, testimony, tone, agenda, compare
 API_CACHE_TREND_HOURS=1   # rising, candidates
 API_CACHE_STATIC_HOURS=24 # people
 API_CACHE_SWR_HOURS=24    # stale-while-revalidate; 0 drops the directive

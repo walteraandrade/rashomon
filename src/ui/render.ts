@@ -1338,12 +1338,10 @@ export const paintWeekError = () => {
   if (note) note.textContent = ''
 }
 
-// Figure 7 (issue #216): Wikipedia pageviews against press mentions. Each row draws its own
-// svg with its own axis (marks.ts's shared axis(), cls="attention"), the same tick geometry in
-// both -- attentionLayout sizes each row off its own maximum only, so the two are never read as
-// one scale. The peak-to-peak lag is a note, never a causal claim, never drawn when either
-// series has no peak. Same glow/hit/text triad as the ruler's and the week's own marks.
+// Figure 7 (issue #216): Wikipedia pageviews against press mentions, a bar-chart row each on a
+// shared day axis, each sized off its own maximum. A row with no peak states "sem dado" instead.
 const ATTENTION_ROW_HEIGHT = 64
+const ATTENTION_BASELINE = ATTENTION_ROW_HEIGHT - 12
 
 const dayWord = (n: number) => (n === 1 ? 'dia' : 'dias')
 
@@ -1357,25 +1355,63 @@ const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
   return 'os dois picos caíram no mesmo dia'
 }
 
-const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => {
-  if (mentionsPeak && viewsPeak) return attentionLagSentence(mentionsPeak, viewsPeak)
-  if (mentionsPeak && !viewsPeak) return 'sem dado de pageviews para esta pessoa'
-  if (!mentionsPeak && viewsPeak) return 'sem dado de menções para esta pessoa nesta janela'
-  return 'sem dado suficiente para comparar atenção e menções nesta janela'
+// A peakless row already states its own "sem dado" in its head, so the shared note stays silent.
+const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => (mentionsPeak && viewsPeak ? attentionLagSentence(mentionsPeak, viewsPeak) : '')
+
+// A '2026-08-03' day string read back as a short pt-BR label, in UTC -- never weekDayLabel's BRT.
+const attentionDayLabel = (day: string) => {
+  const d = new Date(`${day}T00:00:00Z`)
+  const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'short' }).format(d).replace(/\.$/, '')
+  const dom = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: 'numeric' }).format(d)
+  return `${weekday} ${dom}`
 }
 
-const attentionMarkMarkup = (mark: AttentionMark, half: number, selected: string | null, unit: string) => {
+const ATTENTION_ROW_NOTE: Record<'mentions' | 'views', string> = {
+  mentions: 'sem dado de menções para esta pessoa nesta janela',
+  views: 'sem dado de pageviews para esta pessoa',
+}
+
+// States the peak, never a total, since the bar itself draws no number.
+const attentionRowHead = (row: 'mentions' | 'views', headLabel: string, peak: string | null, peakValue: number, unit: string) =>
+  html`<div class="attention-row-head"><span>${headLabel}</span><span>${peak ? html`pico: ${fmt(peakValue)} ${unit} em ${attentionDayLabel(peak)}` : ATTENTION_ROW_NOTE[row]}</span></div>`
+
+// glow/hit share the bar's own width, never wider, so a click never lands on a neighbouring day.
+const attentionMarkMarkup = (mark: AttentionMark, baseline: number, selected: string | null, unit: string) => {
   const isSelected = selected === mark.day
-  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" style="--size:${mark.size}px" transform="translate(${mark.x},${half})" data-day="${mark.day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${mark.day}, ${mark.text} ${unit}"><title>${mark.day} · ${mark.text} ${unit}</title><rect class="attention-glow" x="${-mark.w / 2 - 4}" y="${-mark.h / 2 - 3}" width="${mark.w + 8}" height="${mark.h + 6}"/><rect class="attention-hit" x="${-mark.w / 2}" y="${-mark.h / 2}" width="${mark.w}" height="${mark.h}"/><text class="attention-text" text-anchor="middle" dominant-baseline="central">${mark.text}</text></g>`
+  const barX = -mark.barW / 2
+  const barY = -mark.size
+  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" style="--size:${mark.size}px" transform="translate(${mark.x},${baseline})" data-day="${mark.day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${mark.day}, ${mark.text} ${unit}"><title>${mark.day} · ${mark.text} ${unit}</title><rect class="attention-hit" x="${barX}" y="${-baseline}" width="${mark.barW}" height="${ATTENTION_ROW_HEIGHT}"/><rect class="attention-glow" x="${barX}" y="${barY - 4}" width="${mark.barW}" height="${mark.size + 8}"/><rect class="attention-bar" x="${barX}" y="${barY}" width="${mark.barW}" height="${mark.size}"/></g>`
 }
 
-const attentionRowMarkup = (row: 'mentions' | 'views', marks: AttentionMark[], width: number, selected: string | null, headLabel: string, total: number, unit: string) => {
-  const half = ATTENTION_ROW_HEIGHT / 2
-  return html`<div class="attention-row" data-row="${row}"><div class="attention-row-head"><span>${headLabel}</span><span>${fmt(total)} ${unit}</span></div>${frame(
+const attentionRowMarkup = (row: 'mentions' | 'views', marks: AttentionMark[], width: number, selected: string | null, headLabel: string, peak: string | null, peakValue: number, unit: string) => {
+  const baseline = ATTENTION_BASELINE
+  return html`<div class="attention-row" data-row="${row}">${attentionRowHead(row, headLabel, peak, peakValue, unit)}${frame(
     { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}`, role: 'group', ariaLabel: headLabel },
-    html`${axis({ x0: 0, x1: width, y: half, ticks: marks.map((m) => m.x), cls: 'attention' })}${marks.map((m) => attentionMarkMarkup(m, half, selected, unit))}`,
+    html`${axis({ x0: 0, x1: width, y: baseline, ticks: marks.map((m) => m.x), cls: 'attention' })}${marks.map((m) => attentionMarkMarkup(m, baseline, selected, unit))}`,
   )}</div>`
 }
+
+const ATTENTION_GHOST_BARS = [10, 22, 14, 30, 18, 26]
+
+// Shared by the boot ghost and the views row alone while /attention is still in flight.
+const attentionGhostRow = (row: 'mentions' | 'views', headLabel: string, width: number) => {
+  const baseline = ATTENTION_BASELINE
+  const step = width / ATTENTION_GHOST_BARS.length
+  return html`<div class="attention-row" data-row="${row}"><div class="attention-row-head"><span>${headLabel}</span>${ghostBar('ghost-line is-short')}</div>${frame(
+    { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}` },
+    html`${axis({ x0: 0, x1: width, y: baseline, ticks: ATTENTION_GHOST_BARS.map((_, i) => Math.round(step * (i + 0.5))), cls: 'attention' })}${ATTENTION_GHOST_BARS.map(
+      (h, i) => html`<rect class="ghost" x="${Math.round(step * (i + 0.5)) - 6}" y="${baseline - h}" width="12" height="${h}" rx="3"/>`,
+    )}`,
+  )}</div>`
+}
+
+// A failed /attention fetch is distinct from an empty one: the views row states its own error,
+// never "sem dado de pageviews" (an outage is not "no wikipedia page").
+const attentionRowError = (width: number, headLabel: string) =>
+  html`<div class="attention-row" data-row="views"><div class="attention-row-head"><span>${headLabel}</span><span>Não foi possível carregar os pageviews.</span></div>${frame(
+    { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}` },
+    axis({ x0: 0, x1: width, y: ATTENTION_BASELINE, ticks: [], cls: 'attention' }),
+  )}</div>`
 
 export const paintAttention = ({
   mentions,
@@ -1383,22 +1419,37 @@ export const paintAttention = ({
   metrics,
   selected,
   onPick,
+  width = ATTENTION_ROW_WIDTH,
+  viewsLoading = false,
+  viewsError = false,
 }: {
   mentions: AttentionMentionDay[]
   views: AttentionDay[]
   metrics: Measure
   selected: string | null
   onPick: (day: string) => void
+  width?: number
+  viewsLoading?: boolean
+  viewsError?: boolean
 }) => {
   const chart = $('attentionChart')
   if (!chart) return
   chart.hidden = false
   chart.classList.remove('is-loading')
   chart.setAttribute('aria-busy', 'false')
-  const layout = attentionLayout(metrics, mentions, views, ATTENTION_ROW_WIDTH)
-  const mentionsTotal = mentions.reduce((a, m) => a + m.count, 0)
-  const viewsTotal = views.reduce((a, v) => a + v.views, 0)
-  chart.innerHTML = html`${attentionRowMarkup('mentions', layout.mentions, layout.width, selected, 'Menções', mentionsTotal, 'documentos')}${attentionRowMarkup('views', layout.views, layout.width, selected, 'Pageviews (Wikipédia)', viewsTotal, 'visualizações')}`
+  const viewsLabel = 'Pageviews (Wikipédia)'
+  const layout = attentionLayout(metrics, mentions, views, width)
+  const mentionsPeak = peakDay(mentions.map((m) => ({ day: m.day, value: m.count })))
+  const mentionsPeakValue = mentions.find((m) => m.day === mentionsPeak)?.count ?? 0
+  const mentionsMarkup = attentionRowMarkup('mentions', layout.mentions, layout.width, selected, 'Menções', mentionsPeak, mentionsPeakValue, 'documentos')
+  const viewsPeak = viewsLoading || viewsError ? null : peakDay(views.map((v) => ({ day: v.day, value: v.views })))
+  const viewsPeakValue = views.find((v) => v.day === viewsPeak)?.views ?? 0
+  const viewsMarkup = viewsError
+    ? attentionRowError(layout.width, viewsLabel)
+    : viewsLoading
+      ? attentionGhostRow('views', viewsLabel, layout.width)
+      : attentionRowMarkup('views', layout.views, layout.width, selected, viewsLabel, viewsPeak, viewsPeakValue, 'visualizações')
+  chart.innerHTML = html`${mentionsMarkup}${viewsMarkup}`
   for (const el of queryAll('[data-day]', chart)) {
     const pick = () => onPick(String(el.dataset.day))
     el.addEventListener('click', pick)
@@ -1411,27 +1462,16 @@ export const paintAttention = ({
     })
   }
   const note = $('attentionNote')
-  const mentionsPeak = peakDay(mentions.map((m) => ({ day: m.day, value: m.count })))
-  const viewsPeak = peakDay(views.map((v) => ({ day: v.day, value: v.views })))
-  if (note) note.textContent = attentionNoteText(mentionsPeak, viewsPeak)
+  if (note) note.textContent = viewsLoading || viewsError ? '' : attentionNoteText(mentionsPeak, viewsPeak)
 }
 
-const ATTENTION_GHOST_X = [60, 160, 260, 360, 460, 560]
-
-export const paintAttentionLoading = () => {
+export const paintAttentionLoading = (width = ATTENTION_ROW_WIDTH) => {
   const chart = $('attentionChart')
   if (!chart) return
   chart.hidden = false
   chart.classList.remove('is-loading')
   chart.setAttribute('aria-busy', 'true')
-  const width = ATTENTION_ROW_WIDTH
-  const half = ATTENTION_ROW_HEIGHT / 2
-  const ghostRow = (row: 'mentions' | 'views') =>
-    html`<div class="attention-row" data-row="${row}">${ghostBar('ghost-line is-short')}${frame(
-      { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}` },
-      html`${axis({ x0: 0, x1: width, y: half, ticks: ATTENTION_GHOST_X, cls: 'attention' })}${ATTENTION_GHOST_X.map((x) => html`<rect class="ghost" x="${x - 14}" y="${half - 10}" width="28" height="20" rx="5"/>`)}`,
-    )}</div>`
-  chart.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostRow('mentions')}${ghostRow('views')}</div><p class="sr-only">Lendo a atenção.</p>`
+  chart.innerHTML = html`<div class="ghost-field" aria-hidden="true">${attentionGhostRow('mentions', 'Menções', width)}${attentionGhostRow('views', 'Pageviews (Wikipédia)', width)}</div><p class="sr-only">Lendo a atenção.</p>`
   const note = $('attentionNote')
   if (note) note.textContent = ''
 }

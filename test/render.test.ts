@@ -1491,4 +1491,20 @@ describe('paintAttention / paintAttentionLoading / paintAttentionError, figure 7
       assert.doesNotMatch(els.attentionChart.innerHTML, /ghost-field/)
     })
   })
+
+  it('the loading ghost and the data paint share the same row/axis shape (AC10, validator NIT): both carry data-row="mentions", data-row="views" and the attention-axis line', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttentionLoading()
+      const ghostHtml = String(els.attentionChart.innerHTML)
+      assert.match(ghostHtml, /data-row="mentions"/)
+      assert.match(ghostHtml, /data-row="views"/)
+      assert.match(ghostHtml, /attention-axis/)
+
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(4, 9000), metrics, selected: null, onPick: () => {} })
+      const dataHtml = String(els.attentionChart.innerHTML)
+      assert.match(dataHtml, /data-row="mentions"/)
+      assert.match(dataHtml, /data-row="views"/)
+      assert.match(dataHtml, /attention-axis/)
+    })
+  })
 })

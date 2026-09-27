@@ -95,7 +95,7 @@ export const seedStatements = (docs: number, persons: Person[], nameTokens: (p: 
          from docs d where exists (select 1 from doc_persons dp where dp.doc_id = d.id)
        ),
        drawn as (
-         select n.id, n.source, floor($1::int * power(bench.r(n.id * 4096 + 64 + j), 2.5))::int as idx, bench.r(n.id * 4096 + 2048 + j) as rk
+         select n.id, n.source, floor($1::int * power(bench.r(n.id::bigint * 4096 + 64 + j), 2.5))::int as idx, bench.r(n.id::bigint * 4096 + 2048 + j) as rk
          from named n, generate_series(1, n.k) j
        )
        select distinct id,

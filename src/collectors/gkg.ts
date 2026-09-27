@@ -1,10 +1,10 @@
 import { Cause, Console, Data, Effect } from 'effect'
 import type { HttpClient, HttpClientError } from 'effect/unstable/http'
 import { Unzip, UnzipInflate } from 'fflate'
-import type { RawDoc } from '../types.js'
+import type { RawDoc, Term } from '../types.js'
 import { MAX_RESPONSE_BYTES, ResponseTooLarge, getBytes, overLimit } from '../http.js'
 import { db } from '../db.js'
-import { decodeEntities } from '../extract.js'
+import { decodeEntities, normalize } from '../extract.js'
 
 const base = 'https://data.gdeltproject.org/gdeltv2'
 const slotMs = 15 * 60 * 1000
@@ -95,7 +95,13 @@ export const unzipBounded = (zipBytes: Uint8Array, limitBytes = MAX_EXPANDED_BYT
     }
   })
 
-const col = { domain: 3, url: 4, persons: 11, tone: 15, translation: 25, extras: 26 } as const
+// V1Organizations sits at index 13 (V2Persons, unused, is 12), consistent with persons/tone below.
+const col = { domain: 3, url: 4, persons: 11, orgs: 13, tone: 15, translation: 25, extras: 26 } as const
+
+const orgTerms = (raw: string): Term[] => {
+  const names = raw.split(';').map((s) => s.trim()).filter(Boolean)
+  return [...new Set(names.map(normalize))].map((term) => ({ term, kind: 'org' as const }))
+}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const slotName = (d: Date) =>
@@ -145,7 +151,7 @@ const rowToDoc = (slot: string) => (cols: string[]): RawDoc | null => {
     publishedAt: slotDate(slot).toISOString(),
     domain: cols[col.domain]?.toLowerCase().replace(/^www\./, '') || undefined,
     tone: Number.isFinite(parseFloat(cols[col.tone] ?? '')) ? parseFloat(cols[col.tone]) : undefined,
-    extraTerms: [],
+    extraTerms: orgTerms(cols[col.orgs] ?? ''),
     extraNames: [...new Set((cols[col.persons] ?? '').split(';').map((n) => n.trim()).filter(Boolean))],
   }
 }

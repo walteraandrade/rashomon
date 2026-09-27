@@ -6,6 +6,7 @@ import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import {
+  agendaFor,
   comentionFor,
   compareFor,
   docsFor,
@@ -20,6 +21,7 @@ import {
   timelineFor,
   toneFor,
   weekFor,
+  type AgendaQuery,
   type ComentionQuery,
   type CompareQuery,
   type DocsQuery,
@@ -55,6 +57,7 @@ const comentionBase: ComentionQuery = { days: 30, source: 'all', lean: 'all', mi
 const risingBase: RisingQuery = { days: 7, baseline: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 20, min: 1 }
 const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', bucket: 'week' }
 const toneBase: ToneQuery = { days: 30, min: 3 }
+const agendaBase: AgendaQuery = { days: 30, source: 'all', min: 5, limit: 30 }
 const testimonyBase: TestimonyQuery = { days: 30, source: 'all', method: 'stub', min: 3 }
 const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40 }
 const allLens = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
@@ -70,7 +73,7 @@ describe('graphFor', () => {
     const g = await graphFor(lula, graphBase)
     // days:30 also picks up docs /30-/36 (tarcisio gdelt/rss tone fixtures for issue #5; doc /37
     // sits at day 35, just outside this window), doc /38 (gkg, about lula, issue #8's
-    // press-vs-network fixture) and docs /62-/63 (issue #207's comention fixture, about lula and
+    // press-vs-network fixture) and docs /83-/84 (issue #207's comention fixture, about lula and
     // tarcisio), widening both the person-agnostic scope (docs 13 -> 16) and about (4 -> 7)
     assert.equal(g.stats.docs, 16)
     assert.equal(g.stats.about, 7)
@@ -106,6 +109,62 @@ describe('graphFor', () => {
     assert.ok(only.nodes.every((n) => n.kind === 'hashtag'))
   })
 
+  // Issue #209: org is a fourth term kind, GDELT-only (doc 62 in the fixture), scored by the
+  // same pmi/count rules as any other kind, and it drops the person's own name like any other.
+  it('carries organizations as their own kind, scored like any other, and drops the person\'s own name from them', async () => {
+    const wide = { ...graphBase, days: 4001, limit: 400 }
+    const only = await graphFor(lula, { ...wide, kind: 'org' })
+    assert.ok(only.nodes.length > 0)
+    assert.ok(only.nodes.every((n) => n.kind === 'org'))
+    assert.deepEqual(
+      only.nodes.map((n) => n.term).sort(),
+      ['banco central', 'petrobras'],
+      "org term equal to the person's own name ('lula') must be dropped, the same way a word or phrase is",
+    )
+    const petrobras = node(only, 'org:petrobras')
+    const bancoCentral = node(only, 'org:banco central')
+    assert.equal(petrobras?.count, 1)
+    assert.equal(petrobras?.pmi, bancoCentral?.pmi, 'both terms sit in the same doc, at the same count, so the same PMI formula must yield the same figure')
+
+    const all = await graphFor(lula, wide)
+    assert.equal(node(all, 'org:petrobras')?.kind, 'org')
+    assert.ok(!all.nodes.some((n) => n.kind === 'org' && n.term === 'lula'))
+  })
+
+  // Verifier suite for issue #209, written independently against fixture doc 62 (a gkg doc
+  // about lula carrying org:petrobras, org:banco central and org:lula). petrobras and banco
+  // central each occur in exactly that one doc, globally, and nowhere else in the fixture: a
+  // count of 1 apiece is verifiable without reading src/graph.ts, and since both share the same
+  // (count, doc-set) they must share the same pmi under any correct implementation of the
+  // documented log2-lift formula, regardless of the exact universe size.
+  describe('org term kind, scored like any other (issue #209 AC5/AC6, verifier)', () => {
+    const orgWindow = { ...graphBase, days: 4001, limit: 400 }
+
+    it('kind=org returns only org nodes, scored by the same count/pmi/tone rules as any other kind (AC5)', async () => {
+      const only = await graphFor(lula, { ...orgWindow, kind: 'org' })
+      assert.ok(only.nodes.length > 0, 'sanity: at least one org node must come back')
+      assert.ok(only.nodes.every((n) => n.kind === 'org'), 'kind=org must never return a non-org node')
+
+      const petrobras = node(only, 'org:petrobras')
+      const bancoCentral = node(only, 'org:banco central')
+      assert.ok(petrobras, 'org:petrobras must be present')
+      assert.ok(bancoCentral, 'org:banco central must be present')
+      assert.equal(petrobras?.count, 1, 'petrobras occurs in exactly one doc in the whole fixture')
+      assert.equal(bancoCentral?.count, 1, 'banco central occurs in exactly one doc in the whole fixture')
+      assert.ok(Number.isFinite(petrobras?.pmi) && (petrobras?.pmi ?? 0) > 0, 'pmi must be a finite, positive number for a term unique to this person')
+      assert.equal(petrobras?.pmi, bancoCentral?.pmi, 'same count and the same single contributing doc must yield the same pmi under the documented formula, regardless of the universe size')
+      assert.equal(petrobras?.tone, 0.3, "the only contributing doc's own tone (fixture doc 62) must be the term's average tone")
+    })
+
+    it("an org term equal to the person's own alias is dropped from her graph, like any other kind (AC6)", async () => {
+      const only = await graphFor(lula, { ...orgWindow, kind: 'org' })
+      assert.ok(!only.nodes.some((n) => n.term === 'lula'), "'lula' must never appear as an org node for lula, her own alias")
+      const all = await graphFor(lula, orgWindow)
+      assert.ok(!all.nodes.some((n) => n.kind === 'org' && n.term === 'lula'), "'lula' must be dropped from the org kind under an unfiltered kind query too")
+      assert.equal(node(all, 'org:petrobras')?.kind, 'org', 'petrobras must still surface, unfiltered, as an org node')
+    })
+  })
+
   it('averages GDELT tone per term and leaves it null otherwise', async () => {
     const g = await graphFor(tarcisio, graphBase)
     assert.equal(node(g, 'word:rodovia')?.tone, -1.5)
@@ -122,7 +181,7 @@ describe('graphFor', () => {
 
   it('honours min and limit', async () => {
     const g = await graphFor(lula, { ...graphBase, min: 2 })
-    // 'lisboa' and 'tarcisio' each reach count 2 from docs /62-/63 (issue #207's comention
+    // 'lisboa' and 'tarcisio' each reach count 2 from docs /83-/84 (issue #207's comention
     // fixture); 'tarcisio' is another tracked person's name, not lula's own, so it is not
     // excluded from lula's own graph.
     assert.deepEqual(g.nodes.map((n) => n.term).sort(), ['lisboa', 'reforma', 'tarcisio', 'tributaria'])
@@ -231,8 +290,8 @@ describe('signature (issue #6)', () => {
 
   it('default 30-day scope for lula yields the reforma and tarcisio signature, at the count floor of max(3, 5% of about)', async () => {
     const g = await graphFor(lula, graphBase)
-    // docs /62-/63 (issue #207's comention fixture) widen n to 15 and np to 7, and add a second
-    // signature entry: 'tarcisio' also reaches count 3 (docs /2, /62, /63) -- another tracked
+    // docs /83-/84 (issue #207's comention fixture) widen n to 15 and np to 7, and add a second
+    // signature entry: 'tarcisio' also reaches count 3 (docs /2, /83, /84) -- another tracked
     // person's name, not lula's own, so it survives the own-name filter. Its word-total across n
     // (cT, mostly tarcisio's own coverage) is 11, giving a much lower pmi than reforma's.
     assert.deepEqual(g.signature, [
@@ -266,7 +325,7 @@ describe('signature (issue #6)', () => {
     assert.equal(new Set(terms).size, terms.length, 'no duplicate/padded rows')
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each) and, incidentally, a 3rd "defende"
     // (docs /6, /15 and /17 all use it), widening the tie set from 6 to 9 candidate terms; 30 docs
-    // sit in this window (widened by docs /62-/63, issue #207's comention fixture), of which
+    // sit in this window (widened by docs /83-/84, issue #207's comention fixture), of which
     // doc /4 names nobody tracked and is outside pmi's universe, so n is 29; np is 20
     const expectedPmi = pmi(3, 3, 29, 20)
     assert.deepEqual(g.signature, [
@@ -288,7 +347,7 @@ describe('signature (issue #6)', () => {
   it('signature orders by pmi desc, ties broken by term ascending', async () => {
     const g = await graphFor(lula, { ...graphBase, days: 1000 })
     // docs /17-/19 add "estabilidade"/"fiscal" (3 mentions each, about-lula only), tying with the others;
-    // 27 docs sit in this window (widened by docs /62-/63, issue #207's comention fixture), of
+    // 27 docs sit in this window (widened by docs /83-/84, issue #207's comention fixture), of
     // which doc /4 names nobody tracked and is outside pmi's universe, so n is 26; np is 17
     const tie = pmi(3, 3, 26, 17)
     assert.deepEqual(g.signature, [
@@ -314,8 +373,8 @@ describe('multi-source filtering (issue #8)', () => {
     const g = await graphFor(lula, { ...graphBase, source: 'gnews,rss,gkg' })
     // hand-counted from the fixture: within the default 30-day window, gnews has docs /1,/6
     // (about lula) and /3 (not about lula); rss has /4 (not about lula), /7, /36 (about
-    // tarcisio), /62, /63 (about lula and tarcisio, issue #207's comention fixture); gkg has
-    // /38 (about lula) -> 9 docs in scope, 6 about lula (/1, /6, /7, /38, /62, /63)
+    // tarcisio), /83, /84 (about lula and tarcisio, issue #207's comention fixture); gkg has
+    // /38 (about lula) -> 9 docs in scope, 6 about lula (/1, /6, /7, /38, /83, /84)
     assert.equal(g.stats.docs, 9)
     assert.equal(g.stats.about, 6)
   })
@@ -643,7 +702,7 @@ describe('docsFor', () => {
 
   it('returns every doc about the person in the window, newest first, ties broken by id desc, when no term is given', async () => {
     const { total, docs: found } = await docsFor(lula, docsBase)
-    // widened by doc /38 (gkg, day1, issue #8's press-vs-network fixture) and docs /62-/63
+    // widened by doc /38 (gkg, day1, issue #8's press-vs-network fixture) and docs /83-/84
     // (issue #207's comention fixture, day12/13)
     assert.equal(total, 7)
     assert.equal(found.length, 7)
@@ -727,7 +786,7 @@ describe('docsFor', () => {
 
   it('a comma-separated source list returns only docs whose source is in the list', async () => {
     const { total, docs: found } = await docsFor(lula, { ...docsBase, source: 'gnews,rss' })
-    // widened by docs /62-/63 (rss, issue #207's comention fixture)
+    // widened by docs /83-/84 (rss, issue #207's comention fixture)
     assert.equal(total, 5)
     assert.ok(found.every((d) => d.source === 'gnews' || d.source === 'rss'))
   })
@@ -740,8 +799,8 @@ describe('docsFor', () => {
 
   // issue #207
   it('with= restricts to docs that also name the other person', async () => {
-    // docs /2, /62 and /63 all name both lula and tarcisio inside docsBase's default 30-day,
-    // country='br' window (docs 62/63 sit on exemplo.com.br, so they are in scope, matching
+    // docs /2, /83 and /84 all name both lula and tarcisio inside docsBase's default 30-day,
+    // country='br' window (docs 83/84 sit on exemplo.com.br, so they are in scope, matching
     // comentionFor's own country='br' count for this pair -- see "comentionFor" below).
     const { total, docs: found } = await docsFor(lula, { ...docsBase, with: 'tarcisio' })
     assert.equal(total, 3)
@@ -751,9 +810,9 @@ describe('docsFor', () => {
   it('with= unchanged output when omitted: byte-identical rendered SQL to before this parameter existed', () => {
     const preExisting = {
       docs:
-        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)\n  order by d.published_at desc, d.id desc\n  limit $17 offset $18",
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)\n  order by d.published_at desc, d.id desc\n  limit $17 offset $18",
       docsCount:
-        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select count(*)::int as total\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)",
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select count(*)::int as total\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)",
     }
     assert.equal(statements.docs, preExisting.docs)
     assert.equal(statements.docsCount, preExisting.docsCount)
@@ -779,7 +838,7 @@ describe('risingFor (issue #3)', () => {
     // doc /38 (gkg, day1, issue #8's press-vs-network fixture) adds six single-mention terms
     // ("assina", "estrangeira", "expandir", "parceria", "setor", "tecnologico") to the recent
     // window, each tying by lift with the existing single-mention terms in its tier and
-    // interleaving alphabetically within that tier. Docs /62-/63 (issue #207's comention
+    // interleaving alphabetically within that tier. Docs /83-/84 (issue #207's comention
     // fixture, baseline-window) give "tarcisio" a baseline count too, dropping its lift below
     // "defende"'s and moving it to the very end.
     assert.deepEqual(
@@ -892,8 +951,8 @@ describe('risingFor (issue #3)', () => {
     assert.deepEqual(r.terms[0], full.terms[0])
   })
 
-  // /1, /2, /6, /7, /38 name lula inside the last 7 days; /17 (day31), /18 (day35), /62 (day12)
-  // and /63 (day13, both issue #207's comention fixture) are its baseline-window (8-37 days ago)
+  // /1, /2, /6, /7, /38 name lula inside the last 7 days; /17 (day31), /18 (day35), /83 (day12)
+  // and /84 (day13, both issue #207's comention fixture) are its baseline-window (8-37 days ago)
   // docs -- /19 (day50) falls outside the 30-day baseline.
   it('about.recent/about.baseline match a hand-counted distinct-doc total for lula', async () => {
     const r = await risingFor(lula, risingBase)
@@ -913,7 +972,7 @@ describe('risingFor (issue #3)', () => {
     const baselineSum = full.terms.reduce((n, t) => n + t.count_baseline_raw, 0)
     assert.ok(full.about.words_baseline >= baselineSum, 'baseline-only terms count too')
     // /17 (day31) and /18 (day35) are lula's baseline docs: "estabilidade fiscal" text, 4 rows
-    // each (8); /62 and /63 (issue #207's comention fixture) add 5 word rows each (10) -> 18.
+    // each (8); /83 and /84 (issue #207's comention fixture) add 5 word rows each (10) -> 18.
     assert.equal(full.about.words_baseline, 18)
     assert.equal(full.about.words_recent, 17)
   })
@@ -1426,6 +1485,288 @@ describe('toneFor (issue #5)', () => {
   })
 })
 
+describe('agendaFor (issue #208)', () => {
+  before(seed)
+
+  const cell = (r: Awaited<ReturnType<typeof agendaFor>>, personId: string, domain: string) =>
+    r.cells.find((c) => c.person_id === personId && c.domain === domain)
+
+  it('the response has exactly the keys days, persons, domains, cells', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.deepEqual(Object.keys(r).sort(), ['cells', 'days', 'domains', 'persons'])
+    assert.equal(r.days, 30)
+  })
+
+  it('lists every tracked person regardless of cells, ordered by name, shaped { id, name }', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.deepEqual(r.persons.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
+    for (const p of r.persons) assert.deepEqual(Object.keys(p).sort(), ['id', 'name'])
+    const names = r.persons.map((p) => p.name)
+    assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)))
+  })
+
+  it('shares a clean two-person domain exactly, matching docs_a / (docs_a + docs_b)', async () => {
+    // metropoles.com: 3 lula-only docs, 2 tarcisio-only docs, no doc naming both -- the
+    // domain's tracked-doc total (5) equals docs_lula + docs_tarcisio exactly
+    const r = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    assert.deepEqual(cell(r, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    assert.deepEqual(cell(r, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.4 })
+  })
+
+  it('never reads share === 1 for a person sharing a domain with someone else', async () => {
+    const r = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    assert.notEqual(cell(r, 'lula', 'metropoles.com')?.share, 1)
+    assert.notEqual(cell(r, 'tarcisio', 'metropoles.com')?.share, 1)
+  })
+
+  it('gives share 1 when a person is the only one on a domain', async () => {
+    // estadao.com.br has 4 tracked docs, all tarcisio, within the default 30-day window
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.deepEqual(cell(r, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+  })
+
+  it('counts a doc naming two tracked persons once toward the domain total and once per person', async () => {
+    // doc /37 names both tarcisio and bolsonaro on poder360.com.br, day 35; with min=1 that
+    // domain's lone doc gives both persons docs:1 -- proof the shared doc is not dropped for
+    // either person, and (since it is the domain's only doc) that the total was not doubled
+    const r = await agendaFor({ days: 90, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(cell(r, 'tarcisio', 'poder360.com.br'), { person_id: 'tarcisio', domain: 'poder360.com.br', docs: 1, share: 1 })
+    assert.deepEqual(cell(r, 'bolsonaro', 'poder360.com.br'), { person_id: 'bolsonaro', domain: 'poder360.com.br', docs: 1, share: 1 })
+  })
+
+  it('a doc naming two people can push a domain\'s shares above 1.0 without inflating the count of docs any one person actually has', async () => {
+    const r = await agendaFor({ days: 90, source: 'all', min: 1, limit: 30 })
+    const t = cell(r, 'tarcisio', 'poder360.com.br')!
+    const b = cell(r, 'bolsonaro', 'poder360.com.br')!
+    assert.equal(t.share + b.share, 2)
+  })
+
+  it('drops a domain below min from both domains and cells', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.equal(cell(r, 'tarcisio', 'estadao.com.br'), undefined)
+    assert.ok(!r.domains.includes('estadao.com.br'))
+  })
+
+  it('lowers the threshold when min is set explicitly, at the exact boundary count', async () => {
+    // estadao.com.br has exactly 4 tracked docs; min=5 excludes it, min=4 includes it
+    const excluded = await agendaFor(agendaBase)
+    assert.equal(cell(excluded, 'tarcisio', 'estadao.com.br'), undefined)
+    const included = await agendaFor({ ...agendaBase, min: 4 })
+    assert.deepEqual(cell(included, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+  })
+
+  it('includes a domain right at min, the metropoles.com boundary case', async () => {
+    // metropoles.com has exactly 5 tracked docs at the default min=5
+    const atMin = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    assert.ok(atMin.domains.includes('metropoles.com'))
+    const aboveMin = await agendaFor({ days: 4310, source: 'all', min: 6, limit: 30 })
+    assert.ok(!aboveMin.domains.includes('metropoles.com'))
+  })
+
+  it('sorts domains alphabetically with no duplicate', async () => {
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.deepEqual([...new Set(r.domains)], r.domains)
+    assert.deepEqual([...r.domains].sort(), r.domains)
+  })
+
+  it('truncates by tracked-doc total descending, ties broken by domain name ascending', async () => {
+    // agendasecundaria.example and correiostado.example both total 6 (a tie, broken
+    // alphabetically); the fixture's other source='camara' doc (camara.leg.br) totals only 1
+    // and must never outrank either even though it would fit inside a wider limit
+    const r = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 1 })
+    assert.deepEqual(r.domains, ['agendasecundaria.example'])
+    assert.deepEqual(cell(r, 'lula', 'agendasecundaria.example'), { person_id: 'lula', domain: 'agendasecundaria.example', docs: 6, share: 1 })
+    assert.equal(cell(r, 'bolsonaro', 'correiostado.example'), undefined)
+
+    const wider = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 2 })
+    assert.deepEqual(wider.domains, ['agendasecundaria.example', 'correiostado.example'])
+    assert.ok(!wider.domains.includes('camara.leg.br'), 'a domain clearing min but ranked outside limit must never surface just because a wider limit was tried')
+  })
+
+  it('never lets a domain-less doc surface, even when it is the only tracked doc that would clear min', async () => {
+    // doc /35 has no domain but names tarcisio; at min=1 it must not spuriously create a
+    // null/undefined domain entry
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.ok(!r.domains.some((d) => !d))
+    assert.ok(!r.cells.some((c) => !c.domain))
+  })
+
+  it('returns an empty matrix outside any docs window, with persons still full', async () => {
+    const r = await agendaFor({ days: 0, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(r.cells, [])
+    assert.deepEqual(r.domains, [])
+    assert.equal(r.persons.length, 3)
+  })
+
+  it('narrows a domain\'s total and every person\'s docs identically when source is filtered', async () => {
+    // metropoles.com at source=all: lula 3/5=0.6, tarcisio 2/5=0.4 (docs 63-64 gnews, 65 rss
+    // for lula; 66-67 rss for tarcisio). Filtering to source=rss drops lula's two gnews docs
+    // from both his own count and the domain's total together, never asymmetrically.
+    const wide = await agendaFor({ days: 4310, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(cell(wide, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    assert.deepEqual(cell(wide, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.4 })
+
+    const rssOnly = await agendaFor({ days: 4310, source: 'rss', min: 1, limit: 30 })
+    assert.deepEqual(cell(rssOnly, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 1, share: 0.33 })
+    assert.deepEqual(cell(rssOnly, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.67 })
+
+    const gnewsOnly = await agendaFor({ days: 4310, source: 'gnews', min: 1, limit: 30 })
+    assert.deepEqual(cell(gnewsOnly, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 2, share: 1 })
+    assert.equal(cell(gnewsOnly, 'tarcisio', 'metropoles.com'), undefined)
+  })
+
+  it('never surfaces a .pt domain, scoped to country=br like /lenses (issue #208 review)', async () => {
+    // doc /58, exemplo.pt, 2 days ago, names lula -- countryOf('exemplo.pt') resolves to 'pt',
+    // so agendaQuery must exclude it even at a wide window and min=1
+    const r = await agendaFor({ days: 7, source: 'all', min: 1, limit: 30 })
+    assert.ok(!r.domains.includes('exemplo.pt'))
+    assert.equal(cell(r, 'lula', 'exemplo.pt'), undefined)
+  })
+
+  it('docs/api.md names the route, its days/source/min parameters, the response shape, the outlet-relative share and the 6h cache class', () => {
+    const match = /## agenda\n[\s\S]*?(?=\n## |$)/.exec(docsText)
+    assert.ok(match, 'docs/api.md has an agenda section')
+    const section = match[0]
+    assert.match(section, /\/api\/agenda/)
+    assert.match(section, /days[\s\S]*?30/)
+    assert.match(section, /\bsource\b/)
+    assert.match(section, /\bmin\b/)
+    assert.match(section, /\{ days, persons, domains, cells \}/)
+    assert.match(section, /person_id[\s\S]*?domain[\s\S]*?docs[\s\S]*?share/)
+    assert.match(section, /outlet'?s? own tracked coverage|relative to the.{0,20}outlet/i)
+    assert.match(docsText, /`\/api\/agenda`[\s\S]{0,300}(rolling|6h)|(rolling|6h)[\s\S]{0,300}`\/api\/agenda`/i)
+  })
+})
+
+// Verifier pass, from the approved spec's own numbered acceptance criteria, independent of
+// the builder's own describe('agendaFor (issue #208)') tests above.
+describe('agendaFor acceptance (issue #208)', () => {
+  before(seed)
+
+  const cellOf = (r: Awaited<ReturnType<typeof agendaFor>>, personId: string, domain: string) =>
+    r.cells.find((c) => c.person_id === personId && c.domain === domain)
+
+  it('the response has exactly days, persons, domains, cells and nothing else (issue #208 AC1)', async () => {
+    const r = await agendaFor(agendaBase)
+    assert.deepEqual(Object.keys(r).sort(), ['cells', 'days', 'domains', 'persons'])
+    assert.equal(r.days, 30)
+  })
+
+  it('persons lists every tracked person, { id, name } only, ordered by name, present with zero cells (issue #208 AC2)', async () => {
+    const r = await agendaFor({ days: 1, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(r.cells, [])
+    assert.deepEqual(r.persons.map((p) => p.id).sort(), ['bolsonaro', 'lula', 'tarcisio'])
+    for (const p of r.persons) assert.deepEqual(Object.keys(p).sort(), ['id', 'name'])
+    const names = r.persons.map((p) => p.name)
+    assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)))
+  })
+
+  it('a two-person domain matches docs_a / (docs_a + docs_b) to 2 decimals, and neither reads share 1 (issue #208 AC3)', async () => {
+    // metropoles.com: 3 lula-only docs, 2 tarcisio-only docs, no shared doc -- the total equals
+    // docs_lula + docs_tarcisio exactly, so the arithmetic is hand-computable: 3/5=0.6, 2/5=0.4.
+    const r = await agendaFor({ days: 4310, source: 'all', min: 5, limit: 30 })
+    const lula = cellOf(r, 'lula', 'metropoles.com')
+    const tarcisio = cellOf(r, 'tarcisio', 'metropoles.com')
+    assert.deepEqual(lula, { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    assert.deepEqual(tarcisio, { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.4 })
+    assert.equal(Math.round((lula!.docs / (lula!.docs + tarcisio!.docs)) * 100) / 100, lula!.share)
+    assert.equal(Math.round((tarcisio!.docs / (lula!.docs + tarcisio!.docs)) * 100) / 100, tarcisio!.share)
+    assert.notEqual(lula!.share, 1)
+    assert.notEqual(tarcisio!.share, 1)
+  })
+
+  it('a doc naming two tracked persons counts once toward the domain total and once per person, asserted on docs directly (issue #208 AC4)', async () => {
+    // poder360.com.br/37 is the domain's only tracked doc at min=1, naming both tarcisio and
+    // bolsonaro: each person's own `docs` (the numerator) must read 1, not 0 or 2, and since
+    // share = docs / total reads 1 for both, the shared doc was counted once in the total too.
+    const r = await agendaFor({ days: 90, source: 'all', min: 1, limit: 30 })
+    const t = cellOf(r, 'tarcisio', 'poder360.com.br')
+    const b = cellOf(r, 'bolsonaro', 'poder360.com.br')
+    assert.equal(t?.docs, 1)
+    assert.equal(b?.docs, 1)
+    assert.equal(t?.share, 1)
+    assert.equal(b?.share, 1)
+
+    // agendadupla.example/80-82: poder360.com.br above is a one-doc domain, so its denominator
+    // is indistinguishable from "the shared doc's own count" -- a bug that divides by the
+    // shared-doc count alone, rather than the domain's real total, would still pass it. Here
+    // the shared doc (82) sits beside two lula-only docs (80, 81) on the same domain: total 3,
+    // lula in all three (docs 3), tarcisio in the shared doc alone (docs 1).
+    const wideDupla = await agendaFor({ days: 4320, source: 'all', min: 1, limit: 30 })
+    const lulaDupla = cellOf(wideDupla, 'lula', 'agendadupla.example')
+    const tarcisioDupla = cellOf(wideDupla, 'tarcisio', 'agendadupla.example')
+    assert.deepEqual(lulaDupla, { person_id: 'lula', domain: 'agendadupla.example', docs: 3, share: 1 })
+    assert.deepEqual(tarcisioDupla, { person_id: 'tarcisio', domain: 'agendadupla.example', docs: 1, share: 0.33 })
+  })
+
+  it('a domain below min is absent from domains and cells; raising min removes it at the exact boundary (issue #208 AC5)', async () => {
+    // estadao.com.br totals exactly 4 tracked docs in the default 30-day window.
+    const belowMin = await agendaFor(agendaBase) // min: 5
+    assert.equal(cellOf(belowMin, 'tarcisio', 'estadao.com.br'), undefined)
+    assert.ok(!belowMin.domains.includes('estadao.com.br'))
+    const atBoundary = await agendaFor({ ...agendaBase, min: 4 })
+    assert.deepEqual(cellOf(atBoundary, 'tarcisio', 'estadao.com.br'), { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+    assert.ok(atBoundary.domains.includes('estadao.com.br'))
+  })
+
+  it('domains is sorted alphabetically with no duplicate (issue #208 AC6)', async () => {
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.deepEqual([...r.domains].sort((a, b) => a.localeCompare(b)), r.domains)
+    assert.deepEqual([...new Set(r.domains)], r.domains)
+  })
+
+  it('a limit lower than the qualifying-domain count truncates by tracked-doc total desc, ties by domain name asc, never a domain that failed min (issue #208 AC7)', async () => {
+    // agendasecundaria.example and correiostado.example both total 6 (a tie); camara.leg.br
+    // totals only 1 under source=camara and must never outrank either.
+    const truncated = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 1 })
+    assert.deepEqual(truncated.domains, ['agendasecundaria.example'])
+    assert.equal(cellOf(truncated, 'bolsonaro', 'correiostado.example'), undefined)
+    assert.ok(!truncated.domains.includes('camara.leg.br'))
+    const wider = await agendaFor({ days: 4320, source: 'camara', min: 1, limit: 2 })
+    assert.deepEqual(wider.domains, ['agendasecundaria.example', 'correiostado.example'])
+  })
+
+  it('a doc with no domain never appears in domains or cells, even at min=1 (issue #208 AC8)', async () => {
+    // doc /35 has no domain but names tarcisio; must never spuriously create a null domain.
+    const r = await agendaFor({ ...agendaBase, min: 1 })
+    assert.ok(!r.domains.some((d) => !d))
+    assert.ok(!r.cells.some((c) => !c.domain))
+  })
+
+  it('an empty window returns domains: [], cells: [], persons still full (issue #208 AC9)', async () => {
+    const r = await agendaFor({ days: 0, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(r.domains, [])
+    assert.deepEqual(r.cells, [])
+    assert.equal(r.persons.length, 3)
+  })
+
+  it('source narrows a domain total and every person docs identically, symmetrically (issue #208 AC10)', async () => {
+    const wide = await agendaFor({ days: 4310, source: 'all', min: 1, limit: 30 })
+    assert.deepEqual(cellOf(wide, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 3, share: 0.6 })
+    const rssOnly = await agendaFor({ days: 4310, source: 'rss', min: 1, limit: 30 })
+    // lula has one rss doc on metropoles.com (of his three); tarcisio's two are both rss.
+    assert.deepEqual(cellOf(rssOnly, 'lula', 'metropoles.com'), { person_id: 'lula', domain: 'metropoles.com', docs: 1, share: 0.33 })
+    assert.deepEqual(cellOf(rssOnly, 'tarcisio', 'metropoles.com'), { person_id: 'tarcisio', domain: 'metropoles.com', docs: 2, share: 0.67 })
+  })
+
+  it('docs/api.md documents days/source/min, the response shape, the outlet-relative share and the 6h cache class (issue #208 AC14)', () => {
+    const match = /## agenda\n[\s\S]*?(?=\n## |$)/.exec(docsText)
+    assert.ok(match, 'the agenda route must be documented somewhere in docs/')
+    const section = match[0]
+    assert.match(section, /\bdays\b/)
+    assert.match(section, /\bsource\b/)
+    assert.match(section, /\bmin\b/)
+    assert.match(section, /persons/)
+    assert.match(section, /domains/)
+    assert.match(section, /cells/)
+    assert.match(section, /person_id/)
+    assert.match(section, /\bdocs\b/)
+    assert.match(section, /\bshare\b/)
+    assert.match(section, /outlet/i)
+    assert.match(docsText, /`\/api\/agenda`[\s\S]{0,300}(rolling|6h)|(rolling|6h)[\s\S]{0,300}`\/api\/agenda`/i)
+  })
+})
+
 describe('testimonyFor (issue #21)', () => {
   before(seed)
 
@@ -1522,7 +1863,7 @@ describe('comentionFor (issue #207)', () => {
   const pair = (r: Awaited<ReturnType<typeof comentionFor>>, a: string, b: string) => r.pairs.find((p) => p.a === a && p.b === b)
 
   it('pairs clear the min floor and order a before b', async () => {
-    // doc /2 ("Lula e Tarcísio disputam a eleição", day2) plus docs /62-/63 (issue #207's
+    // doc /2 ("Lula e Tarcísio disputam a eleição", day2) plus docs /83-/84 (issue #207's
     // fixture, day12/day13) put (lula, tarcisio) at count 3 in the default 30-day window,
     // clearing the default min:3 floor exactly, not above it.
     const r = await comentionFor(comentionBase)
@@ -1555,15 +1896,15 @@ describe('comentionFor (issue #207)', () => {
   })
 
   it('respects source and lean', async () => {
-    // doc /2 is bluesky; docs /62-/63 are rss; narrowing to a source none of them use drops
-    // the pair entirely, while narrowing to just rss keeps 62/63 (count 2, still below min:3).
+    // doc /2 is bluesky; docs /83-/84 are rss; narrowing to a source none of them use drops
+    // the pair entirely, while narrowing to just rss keeps 83/84 (count 2, still below min:3).
     const wrongSource = await comentionFor({ ...comentionBase, source: 'gkg', min: 1 })
     assert.equal(pair(wrongSource, 'lula', 'tarcisio'), undefined)
     const rssOnly = await comentionFor({ ...comentionBase, source: 'rss', min: 1 })
     assert.deepEqual(pair(rssOnly, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 2 })
     const allSources = await comentionFor({ ...comentionBase, source: 'bluesky,rss' })
     assert.deepEqual(pair(allSources, 'lula', 'tarcisio'), { a: 'lula', b: 'tarcisio', count: 3 })
-    // none of docs 2/62/63 sit on a lean-labeled domain (outlets.json has no entry for
+    // none of docs 2/83/84 sit on a lean-labeled domain (outlets.json has no entry for
     // ana.bsky.social or exemplo.com.br), so any explicit lean excludes the whole pair.
     const leaned = await comentionFor({ ...comentionBase, lean: 'left', min: 1 })
     assert.equal(pair(leaned, 'lula', 'tarcisio'), undefined)
@@ -1634,7 +1975,7 @@ describe('compareFor (issue #93)', () => {
   })
 
   it('marks a side\'s own name word as "name" while the other side may still have a real figure', async () => {
-    // doc /2 ("Lula e Tarcísio disputam a eleição") and docs /62-/63 (issue #207's comention
+    // doc /2 ("Lula e Tarcísio disputam a eleição") and docs /83-/84 (issue #207's comention
     // fixture) give lula's own docs the word "tarcisio" as ordinary vocabulary, while it is
     // tarcisio's own name word
     const r = await compareFor(tarcisio, lula, compareBase)
@@ -1822,12 +2163,12 @@ describe('the kind set query.ts and graph.ts agree on (issue #108)', () => {
 
   // tsc enforces this at compile time (pnpm typecheck); this pins the same fact in the source
   // text itself, so a regression is caught by `pnpm test` too.
-  it('src/types.ts declares Term.kind as exactly hashtag | word | phrase, never theme', () => {
+  it('src/types.ts declares Term.kind as exactly hashtag | word | phrase | org, never theme', () => {
     const types = readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8')
     const m = /export type Term = \{[^}]*kind:\s*([^}]+)\}/.exec(types)
     assert.ok(m, 'Term type must be declared in src/types.ts')
     const union = [...m![1].matchAll(/'(\w+)'/g)].map((x) => x[1])
-    assert.deepEqual(union, ['hashtag', 'word', 'phrase'])
+    assert.deepEqual(union, ['hashtag', 'word', 'phrase', 'org'])
   })
 })
 
@@ -1896,6 +2237,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       timeline: queries.timeline(lula, { ...scope, term: 'x', kind: 'phrase', bucket: 'week' }),
       rising: queries.rising(lula, { ...scope, baseline: 14, min: 1, limit: 5 }),
       tone: queries.tone({ days: 1, min: 1 }),
+      agenda: queries.agenda({ days: 1, source: 'rss', min: 1, limit: 1 }),
       testimonySummary: queries.testimonySummary(lula, { days: 1, source: 'rss', method: 'kikori', min: 1 }),
       termTestimony: queries.termTestimony(lula, scope, 'kikori', ['word:a']),
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),

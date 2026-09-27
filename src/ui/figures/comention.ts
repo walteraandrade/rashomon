@@ -1,4 +1,4 @@
-// Figure 7 (#207). Spans every tracked person at once, no `person` control. Opens the shared
+// Figure 9 (#207). Spans every tracked person at once, no `person` control. Opens the shared
 // docs card with one side: the row person's own docs, filtered to the column person via `with=`.
 
 import * as api from '../api.js'

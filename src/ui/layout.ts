@@ -1,4 +1,4 @@
-import { label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { fmt, label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
@@ -391,7 +391,55 @@ export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], wi
   return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
 }
 
-// The comention matrix (figure 7, #207): a half-matrix, upper triangle only. Genuinely new
+// Figure 7 (issue #216): the day with the maximum value in a { day, value } series, oldest day
+// winning a tie, or null on an all-zero series -- a peak of zero is no peak at all. Shared by
+// both the mentions series (its own count) and the Wikipedia pageviews series (its own views),
+// each already reduced to the one number it scores by.
+export type AttentionSeriesPoint = { day: string; value: number }
+
+export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
+  let best: AttentionSeriesPoint | null = null
+  for (const point of series)
+    if (point.value > 0 && (!best || point.value > best.value || (point.value === best.value && point.day < best.day))) best = point
+  return best?.day ?? null
+}
+
+export const ATTENTION_ROW_WIDTH = 640
+// Bar height, not font size: width is bounded by the column step, never by a label's own width.
+export const ATTENTION_BAR_MIN = 3
+export const ATTENTION_BAR_MAX = 44
+// Gap a bar always leaves before its neighbour's, so two adjacent columns can never touch.
+const ATTENTION_BAR_GAP = 3
+const ATTENTION_BAR_MIN_WIDTH = 2
+
+// One ramp per row, off its own maximum only (issue #216 AC4).
+const attentionSizes = (values: number[]): number[] => {
+  const max = Math.max(0, ...values)
+  if (max <= 0) return values.map(() => ATTENTION_BAR_MIN)
+  return values.map((v) => Math.round(ATTENTION_BAR_MIN + (ATTENTION_BAR_MAX - ATTENTION_BAR_MIN) * (Math.max(0, v) / max)))
+}
+
+// `size` is the bar's height; `barW` its width, capped to the step. `text` is a <title>/aria-label only.
+export type AttentionMark = { day: string; x: number; size: number; barW: number; text: string }
+export type AttentionRows = { width: number; mentions: AttentionMark[]; views: AttentionMark[] }
+
+// A day axis is monotonic, so a fixed column grid replaces a beeswarm. Both series arrive
+// already day-aligned and zero-padded. `measure` is unused but kept for a uniform signature.
+export const attentionLayout = (measure: Measure, mentions: { day: string; count: number }[], views: { day: string; views: number }[], width = ATTENTION_ROW_WIDTH): AttentionRows => {
+  const n = Math.max(mentions.length, views.length, 1)
+  const step = width / n
+  const x = (i: number) => Math.round(step * (i + 0.5))
+  const barW = Math.max(ATTENTION_BAR_MIN_WIDTH, Math.round(step - ATTENTION_BAR_GAP))
+  const mentionSizes = attentionSizes(mentions.map((m) => m.count))
+  const viewSizes = attentionSizes(views.map((v) => v.views))
+  return {
+    width,
+    mentions: mentions.map((m, i) => ({ day: m.day, x: x(i), size: mentionSizes[i], barW, text: fmt(m.count) })),
+    views: views.map((v, i) => ({ day: v.day, x: x(i), size: viewSizes[i], barW, text: fmt(v.views) })),
+  }
+}
+
+// The comention matrix (figure 9, #207): a half-matrix, upper triangle only. Genuinely new
 // geometry, not a reuse of swarmBy/pack/rulerLayout/weekLayout — a two-axis grid, no packing.
 export const MATRIX_CELL_MIN = 26
 export const MATRIX_CELL_MAX = 42

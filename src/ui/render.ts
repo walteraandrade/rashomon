@@ -1,12 +1,14 @@
 // DOM layer: painters only — all data and callbacks arrive as parameters.
 
 import {
+  agendaRows,
   balanceColor,
   domainSuffix,
   fmt,
   html,
   kinds,
   label,
+  LEAN_LABELS,
   matching,
   mergeOutlets,
   normalize,
@@ -20,11 +22,15 @@ import {
   signed,
   sourceLabels,
   termMask,
+  themeMask,
   testimonyClass,
   testimonyColor,
   testimonyFocus,
   testimonyPosition,
   trendOf,
+  type Agenda,
+  type AttentionDay,
+  type AttentionMentionDay,
   type Candidate,
   type Comention,
   type Compare,
@@ -35,6 +41,7 @@ import {
   type Layout,
   type Lenses,
   type Link,
+  type MaskState,
   type Measure,
   type OutletRow,
   type PersonRef,
@@ -52,7 +59,7 @@ import {
   weekDayIso,
   weekDayLabel,
 } from './format.js'
-import { FONT_MONO, matrixLayout, RULER_PAD, WEEK_COLUMN_WIDTH, rulerLayout, routesFrom, swarm, weekLayout, type RulerItem, type WeekColumnLayout } from './layout.js'
+import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, matrixLayout, peakDay, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
 import { axis, frame, overflowList } from './marks.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
@@ -70,12 +77,12 @@ export const createCanvasMeasure = (): Measure => {
   }
 }
 
-// `--mask` is set when personScore is provided; atlas.css only reads it when the mask is on.
-export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | null = null) => {
+export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | null = null, ranking: Map<number, number> = new Map()) => {
   const mask = termMask(p, personScore)
+  const theme = themeMask(p, ranking)
   const t = p.testimony
   const testimonyNote = t ? ` · avaliação ${signed(t.score)} em ${fmt(t.n)} textos` : ''
-  return html`<g class="atlas-word" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}" data-node="${p.id}" role="button" tabindex="0" aria-pressed="false" aria-label="${label(p)}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${label(p)} · ${kinds[p.kind] || p.kind || 'Tipo desconhecido'} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="atlas-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}"/><rect class="atlas-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}"/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => html`<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${line}</tspan>`)}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
+  return html`<g class="atlas-word" data-kind="${p.kind}" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}${theme ? `;--theme:${theme}` : ''}" data-node="${p.id}" role="button" tabindex="0" aria-pressed="false" aria-label="${label(p)}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${label(p)} · ${kinds[p.kind] || p.kind || 'Tipo desconhecido'} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="atlas-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}"/><rect class="atlas-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}"/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => html`<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${line}</tspan>`)}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
 }
 
 // The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
@@ -83,6 +90,12 @@ const maskLegend = (person: PersonTestimony | undefined) =>
   person && person.score !== null
     ? html`<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
     : html`<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
+
+// Names build coverage, never a document-count floor, so it reads nothing like maskLegend's MASK_MIN copy.
+const themeLegend = (ranking: Map<number, number>, builtAt?: string) =>
+  ranking.size > 0
+    ? html`<span id="themeLegend" hidden>Cor = tema: palavras que caminharam juntas nesta construção do grafo. Os números não têm nome e não são comparáveis entre construções${builtAt ? ` (construída em ${builtAt})` : ''}.</span>`
+    : html`<span id="themeLegend" hidden>Esta construção não tem temas calculados para este recorte.</span>`
 
 // Plain elements need explicit keyboard handling that <button> would have provided automatically.
 const wirePersonDocs = (el: Element, onShowPerson: () => void) => {
@@ -106,6 +119,7 @@ export const drawMap = ({
   onChoose,
   onShowPerson = () => {},
   personTestimony,
+  ranking = new Map(),
 }: {
   layout: Layout
   personName: string
@@ -115,10 +129,11 @@ export const drawMap = ({
   onChoose: (id: string) => void
   onShowPerson?: () => void
   personTestimony?: PersonTestimony
+  ranking?: Map<number, number>
 }) => {
   const { placed, overflow, center: c } = layout
   const textY = -((c.lines.length - 1) * c.lineHeight) / 2
-  const mapBody = html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text>`
+  const mapBody = html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null, ranking))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text>`
   $('viewport').innerHTML = html`<div class="map-stage">${frame({ cls: 'map-svg', viewBox: '-430 -402 860 804', ariaLabel: `Mapa de palavras associadas a ${personName}` }, mapBody)}</div>`
   $('overflow').hidden = mode !== 'map' || !overflow.length
   $('overflow').innerHTML = overflow.length
@@ -136,7 +151,7 @@ export const drawMap = ({
         }
       })
   }
-  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span><span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}`
+  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span><span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}${themeLegend(ranking)}`
 }
 
 // Repaints selection classes, search note, edge routes and the columns view.
@@ -152,8 +167,9 @@ export const paintSelection = ({
   onShowPerson,
   personName,
   about,
-  mask = false,
+  mask = 'avaliacao',
   personTestimony,
+  ranking = new Map(),
 }: {
   nodes: Term[]
   links: Link[]
@@ -166,16 +182,20 @@ export const paintSelection = ({
   onShowPerson?: () => void
   personName?: string
   about?: number
-  mask?: boolean
+  mask?: MaskState
   personTestimony?: PersonTestimony
+  ranking?: Map<number, number>
 }) => {
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
   const normalizedSearch = normalize(search)
-  // The mask is a class on the surfaces; without a person mean there is nothing to compare.
-  const masked = mask && personTestimony?.score !== null && personTestimony?.score !== undefined
+  const masked = mask === 'avaliacao' && personTestimony?.score !== null && personTestimony?.score !== undefined
+  const themed = mask === 'tema'
   $('viewport').querySelector('svg')?.classList.toggle('is-masked', masked)
+  $('viewport').querySelector('svg')?.classList.toggle('is-themed', themed)
   $('columns').classList.toggle('is-masked', masked)
-  if ($('maskLegend')) $('maskLegend').hidden = !mask
+  $('columns').classList.toggle('is-themed', themed)
+  if ($('maskLegend')) $('maskLegend').hidden = mask !== 'avaliacao'
+  if ($('themeLegend')) $('themeLegend').hidden = mask !== 'tema'
   for (const el of queryAll('[data-node]')) {
     const n = nodes.find((n) => n.id === el.dataset.node)
     if (!n) continue
@@ -207,7 +227,7 @@ export const paintSelection = ({
     }
   }
   // The list is repainted whole, so the person's own row must travel with it.
-  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson, personName, about, personTestimony })
+  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson, personName, about, personTestimony, ranking })
 }
 
 export const paintColumns = ({
@@ -222,6 +242,7 @@ export const paintColumns = ({
   personName = '',
   about,
   personTestimony,
+  ranking = new Map(),
 }: {
   nodes: Term[]
   links: Link[]
@@ -234,6 +255,7 @@ export const paintColumns = ({
   personName?: string
   about?: number
   personTestimony?: PersonTestimony
+  ranking?: Map<number, number>
 }) => {
   if (mode !== 'columns' || !nodes.length) return
   const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
@@ -242,8 +264,11 @@ export const paintColumns = ({
   $('columns').innerHTML = html`${personRow}${nodes.map((n, i) => {
     const dim = normalizedSearch ? !matching(n, search) : selected && n.id !== selected && !related.has(n.id)
     const mask = termMask(n, personTestimony?.score ?? null)
+    const theme = themeMask(n, ranking)
     const t = n.testimony
-    return html`<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${n.id}"${mask ? html` style="--mask:${mask}"` : ''}><span>${String(i + 1).padStart(2, '0')} · ${kinds[n.kind] || n.kind || 'Tipo desconhecido'} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${label(n)}</strong></button>`
+    return html`<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${n.id}"${
+      mask && theme ? html` style="--mask:${mask};--theme:${theme}"` : mask ? html` style="--mask:${mask}"` : theme ? html` style="--theme:${theme}"` : ''
+    }><span>${String(i + 1).padStart(2, '0')} · ${kinds[n.kind] || n.kind || 'Tipo desconhecido'} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${label(n)}</strong></button>`
   })}`
   queryAll('[data-col]', $('columns')).forEach((el) => el.addEventListener('click', () => onChoose(String(el.dataset.col))))
   queryAll('[data-person-docs]', $('columns')).forEach((el) => wirePersonDocs(el, onShowPerson))
@@ -293,6 +318,7 @@ export const inspect = ({
   daysLabel,
   onChoose,
   sparkline,
+  mask,
 }: {
   graph: Graph | null
   nodes: Term[]
@@ -302,13 +328,17 @@ export const inspect = ({
   daysLabel: string
   onChoose: (id: string) => void
   sparkline?: Sparkline
+  mask?: MaskState
 }) => {
   const n = nodes.find((n) => n.id === selected)
   if (!n) {
     $('inspector').innerHTML = html`<p class="eyebrow">A pessoa no centro</p><h3>${graph?.person?.name || ''}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p><p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
   } else {
     const related = relatedTo(nodes, links, n.id)
-    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}${sparklineMarkup(sparkline)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>`
+    // Only in tema mode, and only when another node on the map shares the community — never an empty heading.
+    const communityMates =
+      mask === 'tema' && n.community !== null && n.community !== undefined ? nodes.filter((o) => o.id !== n.id && o.community === n.community) : []
+    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}${sparklineMarkup(sparkline)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>${communityMates.length ? html`<p class="eyebrow">No mesmo tema</p><div class="related">${relatedButtons(communityMates.map((node) => ({ node })), sort, false)}</div>` : ''}`
   }
   queryAll('[data-related]', $('inspector')).forEach((el) =>
       el.addEventListener('click', () => {
@@ -1338,7 +1368,251 @@ export const paintWeekError = () => {
   if (note) note.textContent = ''
 }
 
-// Comention matrix (figure 7, #207): ink weight only, no --hostile/--favor/--cmp-a/--cmp-b.
+// Figure 7 (issue #216): Wikipedia pageviews against press mentions, a bar-chart row each on a
+// shared day axis, each sized off its own maximum. A row with no peak states "sem dado" instead.
+const ATTENTION_ROW_HEIGHT = 64
+const ATTENTION_BASELINE = ATTENTION_ROW_HEIGHT - 12
+
+const dayWord = (n: number) => (n === 1 ? 'dia' : 'dias')
+
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+
+// lag > 0: views peaked after mentions (press led). lag < 0: views peaked first (public led).
+const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
+  const lag = daysBetween(mentionsPeak, viewsPeak)
+  if (lag > 0) return `a imprensa veio ${lag} ${dayWord(lag)} antes`
+  if (lag < 0) return `o público buscou ${Math.abs(lag)} ${dayWord(Math.abs(lag))} antes`
+  return 'os dois picos caíram no mesmo dia'
+}
+
+// A peakless row already states its own "sem dado" in its head, so the shared note stays silent.
+const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => (mentionsPeak && viewsPeak ? attentionLagSentence(mentionsPeak, viewsPeak) : '')
+
+// A '2026-08-03' day string read back as a short pt-BR label, in UTC -- never weekDayLabel's BRT.
+export const attentionDayLabel = (day: string) => {
+  const d = new Date(`${day}T00:00:00Z`)
+  const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'short' }).format(d).replace(/\.$/, '')
+  const dom = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: 'numeric' }).format(d)
+  return `${weekday} ${dom}`
+}
+
+const ATTENTION_ROW_NOTE: Record<'mentions' | 'views', string> = {
+  mentions: 'sem dado de menções para esta pessoa nesta janela',
+  views: 'sem dado de pageviews para esta pessoa',
+}
+
+// States the peak, never a total, since the bar itself draws no number.
+const attentionRowHead = (row: 'mentions' | 'views', headLabel: string, peak: string | null, peakValue: number, unit: string) =>
+  html`<div class="attention-row-head"><span>${headLabel}</span><span>${peak ? html`pico: ${fmt(peakValue)} ${unit} em ${attentionDayLabel(peak)}` : ATTENTION_ROW_NOTE[row]}</span></div>`
+
+// glow/hit share the bar's own width, never wider, so a click never lands on a neighbouring day.
+// Only the mentions mark stays in the tab order (spec §4: one shared click target per day, not
+// two); the views mark stays clickable by pointer but drops out of both the tab order and the
+// accessibility tree, or the day count would double to 60.
+const attentionMarkMarkup = (mark: AttentionMark, baseline: number, selected: string | null, interactive: boolean, title: string) => {
+  const isSelected = selected === mark.day
+  const barX = -mark.barW / 2
+  const barY = -mark.size
+  return html`<g class="attention-mark ${isSelected ? 'is-selected' : ''}" transform="translate(${mark.x},${baseline})" data-day="${mark.day}"${
+    interactive ? html` role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${title}"` : html` tabindex="-1" aria-hidden="true"`
+  }><title>${title}</title><rect class="attention-hit" x="${barX}" y="${-baseline}" width="${mark.barW}" height="${ATTENTION_ROW_HEIGHT}"/><rect class="attention-glow" x="${barX}" y="${barY - 4}" width="${mark.barW}" height="${mark.size + 8}"/><rect class="attention-bar" x="${barX}" y="${barY}" width="${mark.barW}" height="${mark.size}"/></g>`
+}
+
+const byDay = (marks: AttentionMark[]) => new Map(marks.map((m) => [m.day, m.text]))
+
+const attentionRowMarkup = (
+  row: 'mentions' | 'views',
+  marks: AttentionMark[],
+  companion: Map<string, string>,
+  width: number,
+  selected: string | null,
+  headLabel: string,
+  peak: string | null,
+  peakValue: number,
+  unit: string,
+) => {
+  const baseline = ATTENTION_BASELINE
+  const interactive = row === 'mentions'
+  return html`<div class="attention-row" data-row="${row}">${attentionRowHead(row, headLabel, peak, peakValue, unit)}${frame(
+    { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}`, role: 'group', ariaLabel: headLabel },
+    html`${axis({ x0: 0, x1: width, y: baseline, ticks: marks.map((m) => m.x), cls: 'attention' })}${marks.map((m) => {
+      const other = companion.get(m.day) ?? '0'
+      const title = interactive ? `${attentionDayLabel(m.day)}, ${m.text} documentos, ${other} visualizações` : `${attentionDayLabel(m.day)}, ${other} documentos, ${m.text} visualizações`
+      return attentionMarkMarkup(m, baseline, selected, interactive, title)
+    })}`,
+  )}</div>`
+}
+
+const ATTENTION_GHOST_BARS = [10, 22, 14, 30, 18, 26]
+
+// Shared by the boot ghost and the views row alone while /attention is still in flight.
+const attentionGhostRow = (row: 'mentions' | 'views', headLabel: string, width: number) => {
+  const baseline = ATTENTION_BASELINE
+  const step = width / ATTENTION_GHOST_BARS.length
+  return html`<div class="attention-row" data-row="${row}"><div class="attention-row-head"><span>${headLabel}</span>${ghostBar('ghost-line is-short')}</div>${frame(
+    { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}` },
+    html`${axis({ x0: 0, x1: width, y: baseline, ticks: ATTENTION_GHOST_BARS.map((_, i) => Math.round(step * (i + 0.5))), cls: 'attention' })}${ATTENTION_GHOST_BARS.map(
+      (h, i) => html`<rect class="ghost" x="${Math.round(step * (i + 0.5)) - 6}" y="${baseline - h}" width="12" height="${h}" rx="3"/>`,
+    )}`,
+  )}</div>`
+}
+
+// A failed /attention fetch is distinct from an empty one: the views row states its own error,
+// never "sem dado de pageviews" (an outage is not "no wikipedia page").
+const attentionRowError = (width: number, headLabel: string) =>
+  html`<div class="attention-row" data-row="views"><div class="attention-row-head"><span>${headLabel}</span><span>Não foi possível carregar os pageviews.</span></div>${frame(
+    { cls: 'attention-svg', width, height: ATTENTION_ROW_HEIGHT, viewBox: `0 0 ${width} ${ATTENTION_ROW_HEIGHT}` },
+    axis({ x0: 0, x1: width, y: ATTENTION_BASELINE, ticks: [], cls: 'attention' }),
+  )}</div>`
+
+export const paintAttention = ({
+  mentions,
+  views,
+  metrics,
+  selected,
+  onPick,
+  width = ATTENTION_ROW_WIDTH,
+  viewsLoading = false,
+  viewsError = false,
+}: {
+  mentions: AttentionMentionDay[]
+  views: AttentionDay[]
+  metrics: Measure
+  selected: string | null
+  onPick: (day: string) => void
+  width?: number
+  viewsLoading?: boolean
+  viewsError?: boolean
+}) => {
+  const chart = $('attentionChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', viewsLoading ? 'true' : 'false')
+  const viewsLabel = 'Pageviews (Wikipédia)'
+  const layout = attentionLayout(metrics, mentions, views, width)
+  const mentionsPeak = peakDay(mentions.map((m) => ({ day: m.day, value: m.count })))
+  const mentionsPeakValue = mentions.find((m) => m.day === mentionsPeak)?.count ?? 0
+  const mentionsMarkup = attentionRowMarkup('mentions', layout.mentions, byDay(layout.views), layout.width, selected, 'Menções', mentionsPeak, mentionsPeakValue, 'documentos')
+  const viewsPeak = viewsLoading || viewsError ? null : peakDay(views.map((v) => ({ day: v.day, value: v.views })))
+  const viewsPeakValue = views.find((v) => v.day === viewsPeak)?.views ?? 0
+  const viewsMarkup = viewsError
+    ? attentionRowError(layout.width, viewsLabel)
+    : viewsLoading
+      ? html`<div class="ghost-field" aria-hidden="true">${attentionGhostRow('views', viewsLabel, layout.width)}</div>`
+      : attentionRowMarkup('views', layout.views, byDay(layout.mentions), layout.width, selected, viewsLabel, viewsPeak, viewsPeakValue, 'visualizações')
+  chart.innerHTML = html`${mentionsMarkup}${viewsMarkup}${viewsLoading ? html`<p class="sr-only">Lendo os pageviews.</p>` : ''}`
+  for (const el of queryAll('[data-day]', chart)) {
+    const pick = () => onPick(String(el.dataset.day))
+    el.addEventListener('click', pick)
+    el.addEventListener('keydown', (event) => {
+      const e = event as KeyboardEvent
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        pick()
+      }
+    })
+  }
+  const note = $('attentionNote')
+  if (note) note.textContent = viewsLoading || viewsError ? '' : attentionNoteText(mentionsPeak, viewsPeak)
+}
+
+export const paintAttentionLoading = (width = ATTENTION_ROW_WIDTH) => {
+  const chart = $('attentionChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'true')
+  chart.innerHTML = html`<div class="ghost-field" aria-hidden="true">${attentionGhostRow('mentions', 'Menções', width)}${attentionGhostRow('views', 'Pageviews (Wikipédia)', width)}</div><p class="sr-only">Lendo a atenção.</p>`
+  const note = $('attentionNote')
+  if (note) note.textContent = ''
+}
+
+export const paintAttentionError = () => {
+  const chart = $('attentionChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'false')
+  chart.innerHTML = html`<p class="note">Não foi possível carregar as menções.</p>`
+  const note = $('attentionNote')
+  if (note) note.textContent = ''
+}
+
+// ---------- agenda (figure 8, issue #208): domain × person coverage share ----------
+
+export const paintAgendaLoading = () => {
+  const grid = $('agendaGrid')
+  if (!grid) return
+  grid.hidden = false
+  grid.classList.remove('is-loading')
+  grid.setAttribute('aria-busy', 'true')
+  const widths = ['', 'is-mid', 'is-short']
+  grid.innerHTML = html`<div class="agenda-ghost ghost-field" aria-hidden="true">${[0, 1, 2, 3, 4, 5].map(
+    (i) => html`<div class="agenda-ghost-row">${ghostBar(`ghost-outlet-d ${widths[i % 3]}`)}${[0, 1, 2, 3].map(() => ghostBar('ghost-outlet-n'))}</div>`,
+  )}</div><p class="sr-only">Lendo a agenda.</p>`
+}
+
+export const paintAgendaError = (onRetry: () => void) => {
+  const grid = $('agendaGrid')
+  if (!grid) return
+  grid.hidden = false
+  grid.classList.remove('is-loading')
+  grid.setAttribute('aria-busy', 'false')
+  grid.innerHTML = '<p class="note">Não foi possível carregar a agenda. <button class="quiet-button" id="agendaErrorRetry">Tentar novamente</button></p>'
+  $('agendaErrorRetry')?.addEventListener('click', onRetry)
+}
+
+export type AgendaSelection = { personId: string; domain: string } | null
+
+// A domain's cells can sum above 1: a doc naming two tracked people counts once per person.
+export const paintAgenda = ({
+  data,
+  min,
+  selected,
+  onPick,
+}: {
+  data: Agenda
+  min: number
+  selected: AgendaSelection
+  onPick: (personId: string, personName: string, domain: string) => void
+}) => {
+  const grid = $('agendaGrid')
+  if (!grid) return
+  grid.hidden = false
+  grid.classList.remove('is-loading')
+  grid.setAttribute('aria-busy', 'false')
+  if (!data.domains.length) {
+    grid.innerHTML = html`<p class="note">Nenhum veículo atingiu o mínimo de ${min} documentos rastreados nesta janela.</p>`
+    return
+  }
+  const rows = agendaRows(data)
+  grid.innerHTML = html`<div class="agenda-scroll"><table class="agenda-table">
+    <caption class="sr-only">Fatia da cobertura de cada veículo, por pessoa</caption>
+    <thead><tr><th scope="col"></th>${data.persons.map((p) => html`<th scope="col">${p.name}</th>`)}</tr></thead>
+    <tbody>${rows.map(
+      (row) =>
+        html`<tr><th scope="row"><span class="d">${row.domain}</span>${row.lean ? html`<span class="lean-chip">${LEAN_LABELS[row.lean] ?? row.lean}</span>` : ''}</th>${data.persons.map((p) => {
+          const cell = row.cells.get(p.id)
+          if (!cell) return html`<td class="agenda-cell is-empty"><span class="sr-only">sem documentos</span></td>`
+          const isSelected = !!selected && selected.personId === p.id && selected.domain === row.domain
+          const pct = Math.round(cell.share * 100)
+          const label = cell.docs > 0 && pct === 0 ? '<1%' : `${pct}%`
+          return html`<td class="agenda-cell"><button class="agenda-pick${isSelected ? ' is-active' : ''}" data-person="${p.id}" data-domain="${row.domain}" aria-pressed="${String(isSelected)}" style="--share:${Math.max(pct, 1)}%" title="${fmt(cell.docs)} ${cell.docs === 1 ? 'documento' : 'documentos'}">${label}</button></td>`
+        })}</tr>`,
+    )}</tbody>
+  </table></div><p class="note">A fatia é da cobertura rastreada do próprio veículo, não da pessoa. A soma de uma linha pode passar de 100%: um documento que cita duas pessoas rastreadas conta para as duas.</p>`
+  queryAll('[data-person]', grid).forEach((el) =>
+    el.addEventListener('click', () => {
+      const personId = String(el.dataset.person)
+      const domain = String(el.dataset.domain)
+      const person = data.persons.find((p) => p.id === personId)
+      onPick(personId, person?.name ?? personId, domain)
+    }),
+  )
+}
+
+// Comention matrix (figure 9, #207): ink weight only, no --hostile/--favor/--cmp-a/--cmp-b.
 export type ComentionSelection = { a: string; b: string } | null
 
 // The grid's cells key a/b by row/column (name order, matrixLayout) while the ranked list's

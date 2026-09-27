@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { AttentionQuery, CandidatesQuery, ComentionQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
+import type { AgendaQuery, AttentionQuery, CandidatesQuery, ComentionQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -129,7 +129,7 @@ const parseList = (keep: (token: string) => boolean) => (v: string | undefined):
 
 export const parseSourceList = parseList((s) => SOURCES.includes(s))
 
-export const KINDS = ['hashtag', 'word', 'phrase']
+export const KINDS = ['hashtag', 'word', 'phrase', 'org']
 
 export const parseKindList = parseList((s) => KINDS.includes(s))
 
@@ -209,6 +209,16 @@ export const parseTimelineQuery = (q: Record<string, string | undefined>): Timel
 export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery => ({
   days: snapDays(q.days, 30),
   min: snapTo(MINS, q.min, 3),
+})
+
+// Fixed top-N cap, not a query parameter: route behavior, not a page control.
+const AGENDA_LIMIT = 30
+
+export const parseAgendaQuery = (q: Record<string, string | undefined>): AgendaQuery => ({
+  days: snapDays(q.days, 30),
+  source: parseSourceList(q.source),
+  min: snapTo(MINS, q.min, 5),
+  limit: AGENDA_LIMIT,
 })
 
 // Dedicated parser: min defaults to 3, a separate literal so changing parseToneQuery's cannot

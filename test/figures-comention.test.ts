@@ -5,7 +5,7 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Comention } from '../src/ui/format.js'
 
-// src/ui/figures/comention.ts, figure 7 (issue #207): its own mount(), the docs-card wiring a
+// src/ui/figures/comention.ts, figure 9 (issue #207): its own mount(), the docs-card wiring a
 // filled cell opens -- one side, the row person's own docs filtered to the column person via
 // `with=` -- which is this figure's own contract (AC10). paintComention/paintComentionLoading/
 // paintComentionError are exercised directly, as pure painters, in test/render.test.ts; matrixLayout

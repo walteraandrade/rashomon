@@ -66,6 +66,15 @@ export type ToneQuery = {
   min: number
 }
 
+// No domain/lean/kind: this route ranks the domains those would pre-filter, and has no term
+// dimension. `limit` is a plain field so tests can call agendaFor with a small one directly.
+export type AgendaQuery = {
+  days: number
+  source: string
+  min: number
+  limit: number
+}
+
 // Cross-person like ToneQuery: no domain, no kind/sort -- a count is not per-term. Always
 // scoped to country=br, like lensesQuery, since /docs?with= joins are br-only (parseScope's
 // default) and the pair count must agree with the documents behind it.
@@ -128,6 +137,7 @@ type RisingAggregates = { about_recent: number; about_baseline: number; words_re
 type TimelineRow = { bucket_start: Date; count: number }
 type ToneCellRow = { person_id: string; domain: string; tone: number; n: number }
 type ToneListRow = { id: string; name: string }
+type AgendaCellRow = { person_id: string; domain: string; docs: number; share: number }
 type CompareTermRow = {
   term: string
   kind: string
@@ -396,7 +406,7 @@ export const sourcesFor = async (person: Person, q: GraphQuery) => {
 const docsWhere = (term: string, kind: string) => sql`(
     ${term} = '' or exists (
       select 1 from doc_terms t where t.doc_id = d.id and t.term = ${term}
-        and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase']))
+        and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase', 'org']))
     )
   )`
 export const docsWhereSql = docsWhere('', 'all').text
@@ -500,6 +510,45 @@ export const toneFor = async (q: ToneQuery) => {
   const [cells, people] = await Promise.all([run<ToneCellRow>(toneQuery(q)), run<ToneListRow>(tonePersonsQuery)])
   const domains = [...new Set(cells.rows.map((c) => c.domain))].sort()
   return { persons: people.rows, domains, cells: cells.rows }
+}
+
+// Cross-person, like toneQuery: each outlet's own tracked-doc share by person, top q.limit
+// domains by total. min gates domain_totals before the ranking limit runs, so a domain can
+// clear min and still be cut by the limit, but never the reverse. A doc naming two tracked
+// people counts once in domain_totals but once per person in cells, so shares can sum above 1.
+// Always scoped to country='br', like lensesQuery: no country parameter on this route.
+const agendaQuery = (q: AgendaQuery) => sql`
+  with scope as (
+    select d.id, d.domain from docs d
+    where d.published_at >= now() - make_interval(days => ${q.days})
+      and d.domain is not null
+      and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+      and (${countryFilter('br')})
+  ),
+  domain_totals as (
+    select s.domain, count(distinct dp.doc_id)::int as total
+    from scope s join doc_persons dp on dp.doc_id = s.id
+    group by s.domain
+    having count(distinct dp.doc_id) >= ${q.min}
+    order by total desc, s.domain asc
+    limit ${q.limit}
+  ),
+  cells as (
+    select dp.person_id, s.domain, count(distinct dp.doc_id)::int as docs
+    from scope s
+    join doc_persons dp on dp.doc_id = s.id
+    join domain_totals dt on dt.domain = s.domain
+    group by dp.person_id, s.domain
+  )
+  select c.person_id, c.domain, c.docs,
+    round(c.docs::numeric / dt.total::numeric, 2)::float8 as share
+  from cells c join domain_totals dt on dt.domain = c.domain
+  order by c.domain asc, c.person_id asc`
+
+export const agendaFor = async (q: AgendaQuery) => {
+  const [cells, people] = await Promise.all([run<AgendaCellRow>(agendaQuery(q)), run<ToneListRow>(tonePersonsQuery)])
+  const domains = [...new Set(cells.rows.map((c) => c.domain))].sort()
+  return { days: q.days, persons: people.rows, domains, cells: cells.rows }
 }
 
 type ComentionPairRow = { a: string; b: string; count: number }
@@ -1118,6 +1167,7 @@ export const queries = {
   timeline: timelineQuery,
   rising: risingQuery,
   tone: toneQuery,
+  agenda: agendaQuery,
   testimonySummary: testimonySummaryQuery,
   termTestimony: termTestimonyQuery,
   candidates: candidatesQuery,
@@ -1150,6 +1200,7 @@ export const statements = {
   timeline: queries.timeline(samplePerson, { ...sampleDocs, days: 90, bucket: 'day' }).text,
   rising: queries.rising(samplePerson, { ...sampleScope, days: 7, baseline: 30, min: 3, limit: 20 }).text,
   tone: queries.tone({ days: 30, min: 3 }).text,
+  agenda: queries.agenda({ days: 30, source: 'all', min: 5, limit: 30 }).text,
   testimonySummary: queries.testimonySummary(samplePerson, { days: 30, source: 'all', method: 'stub', min: 3 }).text,
   termTestimony: queries.termTestimony(samplePerson, sampleScope, 'stub', ['word:sample']).text,
   candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,

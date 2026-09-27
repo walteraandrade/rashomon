@@ -10,6 +10,7 @@ import {
   OFFSETS,
   SMALL_LIMITS,
   SOURCES,
+  parseAgendaQuery,
   parseCandidatesQuery,
   parseComentionQuery,
   parseCompareQuery,
@@ -80,7 +81,7 @@ describe('parseSourceList (issue #8)', () => {
   })
 })
 
-// The kind list travels like the source list: a caller can ask for any subset of the three
+// The kind list travels like the source list: a caller can ask for any subset of the four
 // kinds, an unknown token is dropped and an all-unknown or missing list falls back to all.
 describe('parseKindList', () => {
   it('parses a comma-separated list, drops unknown tokens and falls back to all', () => {
@@ -90,6 +91,31 @@ describe('parseKindList', () => {
     assert.equal(parseKindList(undefined), 'all')
     assert.equal(parseKindList('word,word'), 'word', 'duplicates collapse, as in parseSourceList')
     assert.equal(parseQuery({ kind: 'word,phrase' }).kind, 'word,phrase')
+  })
+
+  // Issue #209: org (GDELT's V1Organizations) joins hashtag/word/phrase as a fourth accepted kind.
+  it('accepts org, alongside or on its own', () => {
+    assert.equal(parseKindList('org'), 'org')
+    assert.equal(parseKindList('word,org'), 'word,org')
+  })
+})
+
+// AC4: KINDS gains 'org', parseKindList resolves it (alone and alongside another kind) unchanged,
+// and an unrecognized token still falls back to 'all'.
+describe('KINDS includes org (issue #209 AC4)', () => {
+  it('KINDS includes org', () => {
+    assert.ok(KINDS.includes('org'), 'src/query.ts KINDS must include org')
+  })
+
+  it("parseKindList('org') and parseKindList('word,org') both resolve to strings containing org unchanged", () => {
+    assert.match(parseKindList('org'), /\borg\b/)
+    assert.match(parseKindList('word,org'), /\borg\b/)
+    assert.equal(parseKindList('org'), 'org')
+    assert.equal(parseKindList('word,org'), 'word,org')
+  })
+
+  it("parseKindList('bogus') still falls back to 'all'", () => {
+    assert.equal(parseKindList('bogus'), 'all')
   })
 })
 
@@ -171,6 +197,53 @@ describe('parseToneQuery (issue #5)', () => {
     assert.equal(parseToneQuery({ days: '0' }).days, 7)
     assert.equal(parseToneQuery({ days: '-5' }).days, 7)
     assert.equal(parseToneQuery({ days: '9999' }).days, 365)
+  })
+})
+
+describe('parseAgendaQuery (issue #208)', () => {
+  it("min defaults to 5 and snaps to MINS, its own literal", () => {
+    assert.equal(parseAgendaQuery({}).min, 5)
+    assert.equal(parseAgendaQuery({ min: 'nope' }).min, 5)
+    assert.equal(parseAgendaQuery({ min: '0' }).min, 1)
+    assert.equal(parseAgendaQuery({ min: '-1' }).min, 1)
+    assert.equal(parseAgendaQuery({ min: '7' }).min, 5)
+  })
+
+  it('days defaults to 30 and snaps to an allowed window', () => {
+    assert.equal(parseAgendaQuery({}).days, 30)
+    assert.equal(parseAgendaQuery({ days: 'nope' }).days, 30)
+    assert.equal(parseAgendaQuery({ days: '0' }).days, 7)
+    assert.equal(parseAgendaQuery({ days: '9999' }).days, 365)
+  })
+
+  it('source falls back to "all" for undefined, empty and unknown tokens, otherwise keeps a comma list', () => {
+    assert.equal(parseAgendaQuery({}).source, 'all')
+    assert.equal(parseAgendaQuery({ source: '' }).source, 'all')
+    assert.equal(parseAgendaQuery({ source: 'bogus' }).source, 'all')
+    assert.equal(parseAgendaQuery({ source: 'rss,gnews' }).source, 'rss,gnews')
+    assert.equal(parseAgendaQuery({ source: 'rss,bogus' }).source, 'rss')
+  })
+
+  it('limit is always the fixed 30-domain cap, regardless of limit/domain/lean/kind in the query string', () => {
+    assert.equal(parseAgendaQuery({}).limit, 30)
+    assert.equal(parseAgendaQuery({ limit: '5' }).limit, 30)
+    assert.equal(parseAgendaQuery({ limit: '1000' }).limit, 30)
+    assert.equal(parseAgendaQuery({ domain: 'g1.globo.com' }).limit, 30)
+    assert.equal(parseAgendaQuery({ lean: 'left' }).limit, 30)
+    assert.equal(parseAgendaQuery({ kind: 'word' }).limit, 30)
+  })
+
+  it('has no domain, lean or kind field: those parameters are out of scope for this route', () => {
+    assert.deepEqual(Object.keys(parseAgendaQuery({})).sort(), ['days', 'limit', 'min', 'source'])
+  })
+
+  it('days snaps to DAYS, min snaps to MINS (default 5), source parses via parseSourceList, limit is always the fixed constant (issue #208 AC12)', () => {
+    assert.equal(parseAgendaQuery({ days: '45' }).days, 30)
+    assert.equal(parseAgendaQuery({ min: '7' }).min, 5)
+    assert.equal(parseAgendaQuery({ source: 'rss,bogus' }).source, 'rss')
+    assert.equal(parseAgendaQuery({ source: 'bogus' }).source, 'all')
+    for (const q of [{}, { limit: '1' }, { domain: 'g1.globo.com' }, { lean: 'left' }, { kind: 'word' }, { limit: '1', domain: 'x', lean: 'left', kind: 'word' }])
+      assert.equal(parseAgendaQuery(q).limit, 30)
   })
 })
 
@@ -499,13 +572,13 @@ describe('parseCountryList', () => {
 })
 
 describe('KINDS (issue #108)', () => {
-  it('is the same set the page sends as ATLAS_KINDS (issue #195)', () => {
-    assert.deepEqual(new Set(ATLAS_KINDS.split(',')), new Set(KINDS))
+  it("matches ATLAS_KINDS's set exactly (issue #195/#209)", () => {
+    assert.deepEqual(new Set(KINDS), new Set(ATLAS_KINDS.split(',')))
   })
 
-  it('no longer accepts the token theme', () => {
+  it('no longer accepts the token theme, and now also accepts org', () => {
     assert.ok(!KINDS.includes('theme'))
-    assert.deepEqual(KINDS, ['hashtag', 'word', 'phrase'])
+    assert.deepEqual(KINDS, ['hashtag', 'word', 'phrase', 'org'])
   })
 })
 

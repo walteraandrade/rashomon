@@ -13,6 +13,7 @@ Every route is a public, read-only `GET` under `/api`. Query parameters are pars
 | `/api/people/:id/week` | top terms per calendar day in Brazil |
 | `/api/people/:id/testimony` | kikori scores, overall and per outlet |
 | `/api/tone` | GDELT tone per (person, outlet), across everybody |
+| `/api/agenda` | each outlet's own tracked coverage, split by person, across everybody |
 | `/api/candidates` | untracked names worth adding to `seed.json` |
 | `/api/compare` | exact count/PMI/tone for two people, over the union of their strongest terms |
 | `/api/people/:id/lenses` | one person, exact count/PMI/tone under two independently-scoped lenses |
@@ -44,7 +45,7 @@ Before this the ranges were `[1, 200]`, `[1, 1000]`, `[1, 365]` and `[0, 1000000
 `source`, `kind`, `domain`, `lean` and `country` each take a comma-separated list, matching a doc whose value is any of the listed ones. Unknown tokens are dropped silently, duplicates collapse, and an empty or all-invalid list falls back to `all` — **except `country`**, which falls back to `br` instead (see below). A single token behaves exactly as it always did.
 
 - `source`: `bluesky`, `gdelt`, `rss`, `gnews`, `gkg`, `camara`, `senado`, `juridico`, `oficial`, `nicho`. See [sources](sources.md).
-- `kind`: `hashtag`, `word`, `phrase`. The atlas at `/` sends `word,hashtag,phrase`, the full set.
+- `kind`: `hashtag`, `org`, `phrase`, `word`. `org` is sourced only from GDELT's `V1Organizations` column (see [terms](terms.md#organizations)), never derived from text for any other source. The atlas at `/` sends `word,hashtag,phrase,org`, the full set.
 - `domain`: one outlet host, or one Bluesky author handle.
 - `lean`: `left`, `right`, `center`, additive on `graph`, `docs`, `rising`, `timeline` and `sources`. See [editorial lean](terms.md#editorial-lean).
 - `country`: `br` or `pt`, threaded through `graph`, `sources`, `docs`, `rising`, `timeline`, `week` and `compare` (not `tone` or `testimony`, which never took `domain`/`lean` either). Unlike every other shared filter, an omitted or all-invalid `country` does **not** fall back to `all`: it falls back to `br`, which excludes every `.pt`-registered domain from `stats.docs`, `stats.about` and every node's `count`/`pmi`. `country=all` is the explicit way to fold `.pt` docs back in; `country=pt` asks for `.pt` docs only; naming both `br` and `pt` (or `all` itself) collapses to `all`. A document not yet classified by domain, or whose domain is neither `.br` nor `.pt`, is kept under the default `br` scope and under `all`, and dropped only by an explicit `country=pt`. The graph aggregate tables (see [graph aggregates](operations.md#graph-aggregates)) hold only the default `br` universe; `country=pt` and `country=all` always run the live statement, never the precomputed one.
@@ -114,6 +115,12 @@ When `?method` is omitted or fails its charset check it resolves through the sam
 ## tone
 
 `GET /api/tone?days=30&min=3` returns `{ persons, domains, cells }` across every tracked person (not nested under `/people/:id`). `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted distinct set of domains that appear in `cells` (a domain that never clears `min` never appears). `cells` holds one `{ person_id, domain, tone, n }` row per `(person, domain)` pair with at least `min` toned docs in the window; `tone` is the average, rounded to 2 decimals, `n` is the toned-doc count. [Tone is GDELT-only](terms.md#domain-and-tone), so non-GDELT docs never contribute to `tone` or `n` here.
+
+## agenda
+
+`GET /api/agenda?days=30&source=all&min=5` returns `{ days, persons, domains, cells }` across every tracked person (not nested under `/people/:id`, like `/tone`). No `domain`, `lean` or `limit` parameter: the top-30-domains cap is the route's own fixed behavior, not a page control, and `domain`/`lean` would pre-filter the very rows this route ranks. `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even with zero cells. `domains` is the sorted, deduplicated set of the top 30 domains by tracked-doc total that clear `min`; a domain below `min`, or one that clears it but ranks outside the top 30, never appears in `domains` or `cells` — ties in the ranking break by domain name ascending.
+
+`cells` holds one `{ person_id, domain, docs, share }` row per `(person, domain)` pair with at least one tracked doc on a domain that made the cut: `docs` is that person's own distinct tracked-doc count on that domain in the window/source scope, `share` is `docs` divided by the domain's own total distinct tracked-doc count (naming any tracked person, not just this one), rounded to 2 decimals — relative to the **outlet's** own tracked coverage, not to the person's total coverage elsewhere. A domain whose docs each name exactly one tracked person has its shares sum to 1.0; a doc naming two tracked people is counted once toward that domain's own total but once in each of those two people's own `docs`, so the domain's shares can sum above 1.0 — expected, not a bug. There is no `country` parameter: like `/lenses`, this route is always scoped to `country=br`. Cached at the same rolling 6h class as `/api/tone` and `/api/graph`.
 
 ## candidates
 

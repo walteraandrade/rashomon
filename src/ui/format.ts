@@ -1,5 +1,10 @@
+// Bundled directly (esbuild's JSON loader), never through src/outlets.ts, so src/ui keeps its
+// own import direction and never pulls in a server-only module.
+import outletsJson from '../../outlets.json' with { type: 'json' }
+
 export type TermTestimony = { score: number; n: number }
-export type Term = { id: string; term: string; kind: string; count: number; pmi: number; testimony?: TermTestimony | null }
+// `community` is a plain number: src/communities.ts's Louvain/graphology types never reach the UI.
+export type Term = { id: string; term: string; kind: string; count: number; pmi: number; testimony?: TermTestimony | null; community?: number | null }
 export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
@@ -30,6 +35,12 @@ export type Rising = { days: number; baseline: number; terms: RisingTerm[]; pres
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }
+// /api/agenda (issue #208): one row per top domain, one cell per (person, domain) pair that
+// has at least one tracked doc there. `share` is relative to the domain's own tracked
+// coverage, so a domain with docs naming two tracked people can sum above 1 across its cells.
+export type AgendaCell = { person_id: string; domain: string; docs: number; share: number }
+export type Agenda = { days: number; persons: PersonRef[]; domains: string[]; cells: AgendaCell[] }
+
 // /api/comention (issue #207): spans every tracked person, no single `person`. A pair below
 // `min`, or with zero shared docs, is simply absent from `pairs`, never a zero-count row.
 export type ComentionPerson = { id: string; name: string }
@@ -45,6 +56,11 @@ export type Lenses = { days: number; a: LensSide; b: LensSide; terms: CompareTer
 // counts /timeline returned, 'error' leaves the hole empty rather than inventing bars.
 export type SparklineState = 'loading' | 'ready' | 'error'
 export type Sparkline = { state: SparklineState; counts?: number[] }
+// Figure 7 (issue #216): two independently-scaled series sharing one day axis. Field names
+// never overlap (views vs count) so neither reads as sharing the other's scale.
+export type AttentionDay = { day: string; views: number }
+export type Attention = { days: number; series: AttentionDay[] }
+export type AttentionMentionDay = { day: string; count: number }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 
@@ -91,7 +107,7 @@ export const weekDayLabel = (startIso: string) => {
   return `${weekday} ${day}`
 }
 
-export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' }
+export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão', org: 'Organização' }
 
 export const sourceLabels: Record<string, string> = {
   all: 'todas as fontes',
@@ -128,7 +144,7 @@ export const score = (n: { pmi?: number; count?: number }, sort: string) =>
 
 export const scoreName = (sort: string) => (sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
 
-const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
+export const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
 
 // Turns a lens token (echoed back by /api/people/:id/lenses, always normalized) into the prose
 // the ruler's own end labels and #lensesStatus need: a domain's bare host, a lean's pt-BR name,
@@ -234,6 +250,26 @@ export const termMask = (term: { testimony?: TermTestimony | null }, personScore
   return maskColor(t.score - personScore)
 }
 
+export type MaskState = 'avaliacao' | 'tema' | 'off'
+
+// Top 6 by node count, ties broken by ascending id; a 7th+ community is simply absent from the map.
+export const communityRanking = (nodes: { community?: number | null }[]): Map<number, number> => {
+  const counts = new Map<number, number>()
+  for (const n of nodes) {
+    if (n.community === null || n.community === undefined) continue
+    counts.set(n.community, (counts.get(n.community) ?? 0) + 1)
+  }
+  return new Map([...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 6).map(([community], i) => [community, i + 1]))
+}
+
+// A discrete bucket needs no interpolation: a CSS token, not a computed rgb(...) string.
+export const themeMask = (term: { community?: number | null }, ranking: Map<number, number>): string | null => {
+  const c = term.community
+  if (c === null || c === undefined) return null
+  const rank = ranking.get(c)
+  return rank === undefined ? null : `var(--theme-${rank})`
+}
+
 export const testimonyPosition = (s: number) => ((Math.max(-10, Math.min(10, Number(s))) + 10) / 20) * 100
 
 export const signed = (value: unknown) => (Number(value) > 0 ? '+' : '') + fmt(value)
@@ -278,6 +314,23 @@ export const mergeOutlets = (
 export const testimonyFocus = (rows: TestimonyDomainRow[], domain: string): { score: number; n: number } | null => {
   const own = domain === 'all' ? undefined : foldTestimonyDomains(rows).find((d) => d.domain === domain)
   return own ? { score: own.score, n: own.n } : null
+}
+
+type OutletEntry = { domain: string; lean: keyof typeof LEAN_LABELS }
+const LEAN_BY_DOMAIN = new Map((outletsJson as OutletEntry[]).map((o) => [o.domain, o.lean]))
+
+export const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
+
+// Figure 8's grid shape: domains in the route's own order, cells keyed by person id so a
+// missing pair reads as a blank cell rather than a zero share.
+export const agendaRows = (data: Agenda): { domain: string; lean: string | null; cells: Map<string, AgendaCell> }[] => {
+  const byDomain = new Map<string, Map<string, AgendaCell>>()
+  for (const c of data.cells) {
+    const cells = byDomain.get(c.domain) ?? new Map<string, AgendaCell>()
+    cells.set(c.person_id, c)
+    byDomain.set(c.domain, cells)
+  }
+  return data.domains.map((domain) => ({ domain, lean: leanFor(domain), cells: byDomain.get(domain) ?? new Map() }))
 }
 
 // bsky.app URL for a bluesky doc's at:// URI; every other source falls through to safeDocUrl.

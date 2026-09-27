@@ -164,9 +164,9 @@ describe('help.ts: como-ler.html clicks stay on the atlas', () => {
     })
   })
 
-  // issue #207: figure 7's "Como ler" link (como-ler.html#junto) must resolve like every other
+  // issue #207: figure 9's "Como ler" link (como-ler.html#junto) must resolve like every other
   // figure's, not fall through HELP_SECTIONS and scroll nowhere.
-  it("openHelp('#junto') opens the dialog at figure 7's section", () => {
+  it("openHelp('#junto') opens the dialog at figure 9's section", () => {
     withHelpDom(({ dialog, scrolled }) => {
       mountHelp()
       openHelp('#junto')

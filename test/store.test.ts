@@ -356,6 +356,43 @@ describe('a document carrying non-BMP characters is still recognised as enriched
   })
 })
 
+// issue #209: docs.extra_terms is untouched by the upsert's on-conflict clause, so a gkg doc's
+// org terms must survive an enrichment even though the incoming rss doc carries no extraTerms
+// of its own -- derive must run on the stored row, not the incoming one, or doc_terms drifts
+// from what pnpm reindex would recompute.
+describe('insertDoc keeps a gkg doc\'s org terms through a later enrichment (issue #209)', () => {
+  before(seed)
+  const uri = 'https://example.org/org-enrich'
+  const gkg = {
+    source: 'gkg' as const,
+    uri,
+    text: 'Lula assina convenio em cerimonia oficial',
+    publishedAt: now(),
+    domain: 'example.org',
+    tone: 0.3,
+    extraTerms: [{ term: 'petrobras', kind: 'org' as const }],
+  }
+  const rss = {
+    source: 'rss' as const,
+    uri,
+    text: 'Lula assina convenio em cerimonia oficial. O presidente detalhou o acordo firmado com o setor produtivo durante a cerimonia realizada na capital.',
+    publishedAt: now(),
+    domain: 'example.org',
+  }
+
+  it('stores the org term from the gkg arrival', async () => {
+    assert.equal(await insertDocP(gkg, persons), true)
+    assert.ok((await termsOf(uri)).includes('petrobras'))
+  })
+
+  it('keeps the org term after a longer rss text enriches the same uri', async () => {
+    assert.equal(await insertDocP(rss, persons), false)
+    assert.equal(await textOf(uri), rss.text)
+    assert.ok((await termsOf(uri)).includes('petrobras'), 'doc_terms must keep the org row docs.extra_terms still holds')
+    assert.ok((await termsOf(uri)).includes('acordo'), 'the enriched text\'s own words must still be derived')
+  })
+})
+
 describe('insertDocs counts enrichment apart from new documents', () => {
   before(seed)
   const uri = 'https://example.org/syndicated-2'

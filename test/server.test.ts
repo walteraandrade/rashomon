@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
-import { comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
-import { parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
+import { agendaFor, comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
+import { parseAgendaQuery, parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
 import { insertDocP, upsertPersonsP } from '../src/store.js'
@@ -34,9 +34,9 @@ const testimony = async (qs = '') => {
 describe('the routes answer their *For functions with the default parser (issue #21 AC14)', () => {
   before(seed)
 
-  it('graph, sources, docs, timeline, rising, tone and people', async () => {
+  it('graph, sources, docs, timeline, rising, tone, agenda and people', async () => {
     const id = 'tarcisio'
-    const [graphRes, sourcesRes, docsRes, timelineRes, weekRes, risingRes, toneRes, peopleRes] = await Promise.all([
+    const [graphRes, sourcesRes, docsRes, timelineRes, weekRes, risingRes, toneRes, agendaRes, peopleRes] = await Promise.all([
       app.request(`/api/people/${id}/graph`),
       app.request(`/api/people/${id}/sources`),
       app.request(`/api/people/${id}/docs`),
@@ -44,9 +44,10 @@ describe('the routes answer their *For functions with the default parser (issue 
       app.request(`/api/people/${id}/week`),
       app.request(`/api/people/${id}/rising`),
       app.request(`/api/tone`),
+      app.request(`/api/agenda`),
       app.request(`/api/people`),
     ])
-    const [graphBody, sourcesBody, docsBody, timelineBody, weekBody, risingBody, toneBody, peopleBody] = await Promise.all([
+    const [graphBody, sourcesBody, docsBody, timelineBody, weekBody, risingBody, toneBody, agendaBody, peopleBody] = await Promise.all([
       graphRes.json(),
       sourcesRes.json(),
       docsRes.json(),
@@ -54,6 +55,7 @@ describe('the routes answer their *For functions with the default parser (issue 
       weekRes.json(),
       risingRes.json(),
       toneRes.json(),
+      agendaRes.json(),
       peopleRes.json(),
     ])
 
@@ -73,6 +75,7 @@ describe('the routes answer their *For functions with the default parser (issue 
     assert.deepEqual(JSON.parse(JSON.stringify(directWeek)), weekBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await risingFor(person, parseRisingQuery({})))), risingBody)
     assert.deepEqual(JSON.parse(JSON.stringify(await toneFor(parseToneQuery({})))), toneBody)
+    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor(parseAgendaQuery({})))), agendaBody)
     const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
     assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => withSeedFields(r)))), peopleBody)
   })
@@ -90,6 +93,21 @@ describe('the routes answer their *For functions with the default parser (issue 
     const cell = body.cells.find((c) => c.person_id === 'tarcisio' && c.domain === 'estadao.com.br')
     assert.deepEqual(cell, { person_id: 'tarcisio', domain: 'estadao.com.br', tone: -1, n: 3 })
     assert.deepEqual(JSON.parse(JSON.stringify(await toneFor({ days: 30, min: 3 }))), body)
+  })
+
+  it('/api/agenda matches agendaFor and the fixture literal', async () => {
+    // min=1 is a MINS member, so it survives parseAgendaQuery's snap unchanged
+    const res = await app.request('/api/agenda?days=30&min=1')
+    const body = (await res.json()) as { cells: { person_id: string; domain: string; docs: number; share: number }[] }
+    const cell = body.cells.find((c) => c.person_id === 'tarcisio' && c.domain === 'estadao.com.br')
+    assert.deepEqual(cell, { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
+    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor({ days: 30, source: 'all', min: 1, limit: 30 }))), body)
+  })
+
+  it('GET /api/agenda with no query string is byte-identical to agendaFor(parseAgendaQuery({})) (issue #208 AC11)', async () => {
+    const res = await app.request('/api/agenda')
+    const body = await res.json()
+    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor(parseAgendaQuery({})))), body)
   })
 
   // Issue #108: 'theme' left the recognized kind set, so kind=theme must be a plain
@@ -745,5 +763,39 @@ describe('seed.json party/office/uf, echoed by /api/people (issue #212)', () => 
       for (const key of Object.keys(p)) assert.ok(allowed.has(key), `unexpected key '${key}' on /api/people row`)
       assert.ok(!('wikidata' in p), 'wikidata must never be echoed by /api/people')
     }
+  })
+})
+
+describe('GET /api/people/:id/graph?kind=org (issue #209)', () => {
+  before(async () => {
+    await seed()
+    await insertDocP(
+      {
+        source: 'gkg',
+        uri: 'https://gdeltproject.org/209-server-org',
+        text: 'Lula se reune com a petrobras e o banco central',
+        publishedAt: new Date().toISOString(),
+        domain: 'gdeltproject.org',
+        tone: 0.1,
+        extraTerms: [
+          { term: 'petrobras', kind: 'org' },
+          { term: 'banco central', kind: 'org' },
+          // Same bare word as lula's own alias: must be dropped from her graph like any own-name term.
+          { term: 'lula', kind: 'org' },
+        ],
+      },
+      persons,
+    )
+  })
+  after(reseed)
+
+  it('returns only kind: org nodes through the Hono app', async () => {
+    // min=1: the seeded doc mentions each org term once, under GraphQuery's default min of 2.
+    const res = await app.request('/api/people/lula/graph?kind=org&days=7&min=1')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Awaited<ReturnType<typeof graphFor>>
+    assert.ok(body.nodes.length > 0, 'the org doc must surface at least one org node')
+    for (const node of body.nodes) assert.equal(node.kind, 'org')
+    assert.equal(body.nodes.some((n) => n.term === 'lula'), false, "the person's own name is dropped even as an org term")
   })
 })

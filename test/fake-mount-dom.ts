@@ -41,10 +41,21 @@ class Listenable {
   }
 }
 
-const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'data-col' | 'data-node') =>
+const dataStubs = (html: string, attr: 'data-domain' | 'data-strip-domain' | 'data-col' | 'data-node' | 'data-related' | 'data-day') =>
   [...html.matchAll(new RegExp(`${attr}="([^"]*)"`, 'g'))].map(([, value]) => {
     const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
-    stub.dataset = attr === 'data-domain' ? { domain: value } : attr === 'data-col' ? { col: value } : attr === 'data-node' ? { node: value } : { stripDomain: value }
+    stub.dataset =
+      attr === 'data-domain'
+        ? { domain: value }
+        : attr === 'data-col'
+          ? { col: value }
+          : attr === 'data-node'
+            ? { node: value }
+            : attr === 'data-related'
+              ? { related: value }
+              : attr === 'data-day'
+                ? { day: value }
+                : { stripDomain: value }
     return stub
   })
 
@@ -67,6 +78,15 @@ const dataTermStubs = (html: string) =>
 // no value, only the click and the Enter/Space a <button> would have handled on its own, so one
 // bare listenable per occurrence is the whole stub.
 const personDocsStubs = (html: string) => [...html.matchAll(/data-person-docs/g)].map(() => new Listenable())
+
+// Figure 8's grid cells (issue #208): one <button> per (person, domain) pair, carrying both
+// attributes on the same tag the way paintRuler's data-term/data-kind marks do.
+const dataPersonStubs = (html: string) =>
+  [...html.matchAll(/<button[^>]*\bdata-person="([^"]*)"[^>]*\bdata-domain="([^"]*)"[^>]*>/g)].map(([, person, domain]) => {
+    const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
+    stub.dataset = { person, domain }
+    return stub
+  })
 
 // The comention matrix's cells (issue #207): a filled cell carries both data-a and data-b (the
 // pair's own person ids), matched adjacently the way paintComention emits them, on both the
@@ -96,7 +116,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-a'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> | ReturnType<typeof dataABStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-related' | 'data-day' | 'data-person' | 'data-a'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> | ReturnType<typeof dataPersonStubs> | ReturnType<typeof dataABStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -129,10 +149,10 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-a') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-related' | 'data-day' | 'data-person' | 'data-a') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
-    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : attr === 'data-a' ? dataABStubs(this.html) : dataStubs(this.html, attr)
+    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : attr === 'data-person' ? dataPersonStubs(this.html) : attr === 'data-a' ? dataABStubs(this.html) : dataStubs(this.html, attr)
     this.domainStubs.push({ attr, html: this.html, stubs })
     return stubs
   }
@@ -142,7 +162,10 @@ class FakeBox extends Listenable {
     if (selector === '[data-term]') return this.stubsFor('data-term')
     if (selector === '[data-col]') return this.stubsFor('data-col')
     if (selector === '[data-node]') return this.stubsFor('data-node')
+    if (selector === '[data-person]') return this.stubsFor('data-person')
     if (selector === '[data-person-docs]') return this.stubsFor('data-person-docs')
+    if (selector === '[data-related]') return this.stubsFor('data-related')
+    if (selector === '[data-day]') return this.stubsFor('data-day')
     if (selector === '[data-a]') return this.stubsFor('data-a')
     return []
   }
@@ -285,6 +308,9 @@ const atlasIds = () => ({
   zoomGroup: new FakeBox('zoomGroup'),
   keyDefault: new FakeBox('keyDefault'),
   keyStrip: new FakeBox('keyStrip'),
+  keyTheme: new FakeBox('keyTheme'),
+  keyThemeText: new FakeBox('keyThemeText'),
+  keyDefaultColor: new FakeBox('keyDefaultColor'),
   mask: new FakeBox('mask'),
   zoomIn: new FakeBox('zoomIn'),
   zoomOut: new FakeBox('zoomOut'),
@@ -376,6 +402,17 @@ const weekIds = () => ({
   weekNote: new FakeBox('weekNote'),
 })
 
+// Figure 7 (issue #216): its own person/source selects, the chart host and its note (the lag
+// sentence, or an empty-state note, following week.ts's own #weekNote precedent). No days
+// control -- the figure always sends days=30, like week's own fixed days=7.
+const attentionIds = () => ({
+  attention: new FakeBox('attention'),
+  attentionPerson: new FakeSelect('attentionPerson'),
+  attentionSource: new FakeSelect('attentionSource'),
+  attentionChart: new FakeBox('attentionChart'),
+  attentionNote: new FakeBox('attentionNote'),
+})
+
 // Figure 6 (issue #206): one person select, two lens selects (flat options across every
 // optgroup the real markup groups them into — a FakeSelect has no optgroup concept, and no
 // criterion here needs one), the two optgroup stand-ins loadOutlets() fills dynamically, the
@@ -434,7 +471,16 @@ const lensesIds = () => {
   }
 }
 
-// Figure 7 (issue #207): its own source/lean/min selects (days reuses the shared DAYS_OPTIONS
+// Figure 8 (issue #208), the agenda grid: no person select -- it spans every tracked person at
+// once, only its own days/source and the grid host.
+const agendaIds = () => ({
+  agenda: new FakeBox('agenda'),
+  agendaDays: new FakeSelect('agendaDays', DAYS_OPTIONS),
+  agendaSource: new FakeSelect('agendaSource'),
+  agendaGrid: new FakeBox('agendaGrid'),
+})
+
+// Figure 9 (issue #207): its own source/lean/min selects (days reuses the shared DAYS_OPTIONS
 // convention), the matrix host and its about caption. No person control -- a shared count is
 // never one person's.
 const comentionIds = () => ({
@@ -463,6 +509,8 @@ export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof weekIds> &
   ReturnType<typeof lensesIds> &
+  ReturnType<typeof attentionIds> &
+  ReturnType<typeof agendaIds> &
   ReturnType<typeof comentionIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
@@ -475,7 +523,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...comentionIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds(), ...agendaIds(), ...comentionIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

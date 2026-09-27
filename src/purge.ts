@@ -32,9 +32,15 @@ const purgeSource = async (source: string) => {
 }
 
 // MVCC writes a new tuple on update; vacuum docs with the others or freed space stays in the file.
+// Strips only theme elements, never the whole extra_terms array, so a live org element survives.
 export const purgeThemes = async () => {
   const { rows: extra } = await db.query<{ n: number }>(
-    `with d as (update docs set extra_terms = '[]' where extra_terms <> '[]'::jsonb returning 1) select count(*)::int as n from d`,
+    `with d as (
+       update docs
+       set extra_terms = coalesce((select jsonb_agg(e) from jsonb_array_elements(extra_terms) e where e->>'kind' <> 'theme'), '[]'::jsonb)
+       where exists (select 1 from jsonb_array_elements(extra_terms) e where e->>'kind' = 'theme')
+       returning 1
+     ) select count(*)::int as n from d`,
   )
   const { rows: terms } = await db.query<{ n: number }>(
     `with d as (delete from doc_terms where kind = 'theme' returning 1) select count(*)::int as n from d`,

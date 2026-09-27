@@ -44,17 +44,41 @@ describe('figures/compare.js is importable outside a browser, touches document o
 })
 
 describe('compareParams matches calling /api/compare directly', () => {
-  it('produces the same body as calling /api/compare with kind=word,hashtag,phrase and no domain/lean, bridges=1', async () => {
+  it('produces the same body as calling /api/compare with kind=word,hashtag,phrase and no domain/lean', async () => {
     await seed()
     for (const [qp, direct] of [
-      [compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' }), '/api/compare?a=lula&b=bolsonaro&days=30&source=all&limit=40&kind=word,hashtag,phrase&bridges=1'],
-      [compareParams({ a: 'tarcisio', b: 'bolsonaro', days: '365', source: 'gdelt', limit: '20' }), '/api/compare?a=tarcisio&b=bolsonaro&days=365&source=gdelt&limit=20&kind=word,hashtag,phrase&bridges=1'],
+      [compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' }), '/api/compare?a=lula&b=bolsonaro&days=30&source=all&limit=40&kind=word,hashtag,phrase'],
+      [compareParams({ a: 'tarcisio', b: 'bolsonaro', days: '365', source: 'gdelt', limit: '20' }), '/api/compare?a=tarcisio&b=bolsonaro&days=365&source=gdelt&limit=20&kind=word,hashtag,phrase'],
     ] as const) {
       const viaHelper = await app.request('/api/compare?' + qp.toString())
       const viaDirect = await app.request(direct)
       assert.equal(viaHelper.status, 200)
       assert.deepEqual(await viaHelper.json(), await viaDirect.json())
     }
+  })
+})
+
+describe('bridges arrive after the ruler paints', () => {
+  it('paints from /compare, then asks /compare/bridges for the ruler terms and underlines the bridge', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const side = (count: number) => ({ count, pmi: 1, tone: null })
+      const terms: CompareTerm[] = [
+        { term: 'stf', kind: 'word', a: side(5), b: side(5) },
+        { term: 'pix', kind: 'word', a: side(2), b: null },
+        { term: 'lula', kind: 'word', a: 'name', b: side(3) },
+      ]
+      routeFetch(calls, { '/compare': compareData(terms), '/compare/bridges': { bridges: { 'word:stf': 1, 'word:pix': 0 } } })
+      const { mount } = await import('../src/ui/figures/compare.js')
+      mount(els.compare, { people, initial: {} })
+      await flush()
+      const ruler = calls.find((u) => new URL(u, 'http://x').pathname === '/api/compare')!
+      const bridges = calls.find((u) => new URL(u, 'http://x').pathname === '/api/compare/bridges')!
+      assert.ok(calls.indexOf(ruler) < calls.indexOf(bridges), 'the ruler request goes first')
+      assert.equal(new URL(ruler, 'http://x').searchParams.has('bridges'), false)
+      assert.equal(new URL(bridges, 'http://x').searchParams.get('ids'), 'word:pix,word:stf')
+      assert.match(els.compareRuler.innerHTML, /ruler-bridge/)
+    })
   })
 })
 

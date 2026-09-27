@@ -2,7 +2,7 @@ import { betweenness } from './communities.js'
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
-import { DAYS } from './query.js'
+import { BRIDGE_NODES, DAYS } from './query.js'
 import { countryFilter, isName, outletDomain, pmiLog2, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
@@ -401,6 +401,27 @@ const normalizedBridges = (edges: readonly LinkRow[], ids: readonly string[]): M
   const max = Math.max(0, ...raw.values())
   return new Map(ids.map((id) => [id, max === 0 ? 0 : (raw.get(id) ?? 0) / max]))
 }
+
+const scoreBridges = async (sides: [Sql, Sql], ids: string[]) => {
+  const [a, b] = await Promise.all(sides.map((s) => run<LinkRow>(s)))
+  return normalizedBridges(mergeEdges(a.rows, b.rows), ids)
+}
+
+// The BRIDGE_NODES terms with the most documents on both sides; own-name terms never bridge.
+export const bridgeNodes = (terms: readonly { id: string; docs: number; name: boolean }[]) =>
+  terms
+    .filter((t) => !t.name)
+    .sort((x, y) => y.docs - x.docs || x.id.localeCompare(y.id))
+    .slice(0, BRIDGE_NODES)
+    .map((t) => t.id)
+
+export const compareBridgesFor = async (a: Person, b: Person, q: CompareQuery, ids: string[]) => ({
+  bridges: Object.fromEntries(ids.length ? await scoreBridges([compareEdgesQuery(a, q, ids), compareEdgesQuery(b, q, ids)], ids) : []),
+})
+
+export const lensBridgesFor = async (person: Person, q: LensesQuery, ids: string[]) => ({
+  bridges: Object.fromEntries(ids.length ? await scoreBridges([lensEdgesQuery(person, q.a, q, ids), lensEdgesQuery(person, q.b, q, ids)], ids) : []),
+})
 
 // Per-term testimony means for the mask that colours the map: each term's mean score minus
 // the person's own mean over the same `about`, so the colour shows distance from the person
@@ -1080,12 +1101,8 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
   const { rows } = await run<CompareAggregates>(compareQuery(a, b, q))
   const { about_a, about_b, terms } = rows[0]
   const ids = terms.map((t) => `${t.kind}:${t.term}`)
-  const bridges = q.bridges && ids.length
-    ? normalizedBridges(
-        mergeEdges((await run<LinkRow>(compareEdgesQuery(a, q, ids))).rows, (await run<LinkRow>(compareEdgesQuery(b, q, ids))).rows),
-        ids,
-      )
-    : null
+  const nodes = bridgeNodes(terms.map((t, i) => ({ id: ids[i], docs: (t.a_count ?? 0) + (t.b_count ?? 0), name: t.is_name_a || t.is_name_b })))
+  const bridges = q.bridges ? (await compareBridgesFor(a, b, q, nodes)).bridges : null
   return {
     days: q.days,
     a: { person: a, about: about_a },
@@ -1095,7 +1112,7 @@ export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
       kind: t.kind,
       a: t.is_name_a ? ('name' as const) : t.a_count !== null ? { count: t.a_count, pmi: t.a_pmi!, tone: t.a_tone } : null,
       b: t.is_name_b ? ('name' as const) : t.b_count !== null ? { count: t.b_count, pmi: t.b_pmi!, tone: t.b_tone } : null,
-      ...(bridges ? { bridge: bridges.get(ids[i]) ?? 0 } : {}),
+      ...(bridges ? { bridge: bridges[ids[i]] ?? 0 } : {}),
     })),
   }
 }
@@ -1204,15 +1221,8 @@ export const lensesFor = async (person: Person, q: LensesQuery) => {
   const { rows } = await run<LensesAggregates>(lensesQuery(person, q))
   const { about_a, about_b, terms } = rows[0]
   const ids = terms.map((t) => `${t.kind}:${t.term}`)
-  const bridges = q.bridges && ids.length
-    ? normalizedBridges(
-        mergeEdges(
-          (await run<LinkRow>(lensEdgesQuery(person, q.a, q, ids))).rows,
-          (await run<LinkRow>(lensEdgesQuery(person, q.b, q, ids))).rows,
-        ),
-        ids,
-      )
-    : null
+  const nodes = bridgeNodes(terms.map((t, i) => ({ id: ids[i], docs: (t.a_count ?? 0) + (t.b_count ?? 0), name: t.is_name })))
+  const bridges = q.bridges ? (await lensBridgesFor(person, q, nodes)).bridges : null
   return {
     days: q.days,
     a: { lens: q.a.lens, about: about_a },
@@ -1222,7 +1232,7 @@ export const lensesFor = async (person: Person, q: LensesQuery) => {
       kind: t.kind,
       a: t.is_name ? ('name' as const) : t.a_count !== null ? { count: t.a_count, pmi: t.a_pmi!, tone: t.a_tone } : null,
       b: t.is_name ? ('name' as const) : t.b_count !== null ? { count: t.b_count, pmi: t.b_pmi!, tone: t.b_tone } : null,
-      ...(bridges ? { bridge: bridges.get(ids[i]) ?? 0 } : {}),
+      ...(bridges ? { bridge: bridges[ids[i]] ?? 0 } : {}),
     })),
   }
 }

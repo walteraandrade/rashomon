@@ -87,9 +87,18 @@ export const loadCandidates = (queryParams: URLSearchParams, signal?: AbortSigna
 
 // /api/compare is not nested under /people/:id; both person ids travel as query params.
 export const compareParams = ({ a, b, days, source, limit }: { a: string; b: string; days: string; source: string; limit: string }) =>
-  new URLSearchParams({ a, b, days, source, limit, kind: FIXED_KINDS, bridges: '1' })
+  new URLSearchParams({ a, b, days, source, limit, kind: FIXED_KINDS })
 
 export const loadCompare = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/compare?' + queryParams, signal)
+
+// The ruler's own recorte plus the terms to score, fetched after the ruler has painted.
+export const bridgeParams = (queryParams: URLSearchParams, ids: string[]) => {
+  const qp = new URLSearchParams(queryParams)
+  qp.set('ids', ids.join(','))
+  return qp
+}
+
+export const loadCompareBridges = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/compare/bridges?' + queryParams, signal)
 
 // days/baseline/limit/min stay at the route's own defaults — the figure never exposes them —
 // sent explicitly so the figure keeps working the day the server default changes again.
@@ -115,9 +124,12 @@ export const loadTimeline = (personId: string, queryParams: URLSearchParams, sig
 // `a`/`b` travel as raw tokens (domain:<host>, lean:<value>, source:<name>, or all); the server
 // parses and echoes back the normalized one, never the malformed input.
 export const lensesParams = ({ a, b, days, limit }: { a: string; b: string; days: string; limit: string }) =>
-  new URLSearchParams({ a, b, days, limit, kind: FIXED_KINDS, bridges: '1' })
+  new URLSearchParams({ a, b, days, limit, kind: FIXED_KINDS })
 
 export const loadLenses = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/lenses?' + queryParams, signal)
+
+export const loadLensBridges = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
+  json(endpoint(personId) + '/lenses/bridges?' + queryParams, signal)
 
 // Figure 7 (issue #216): /attention has no parameter but days, and the figure never exposes it
 // (fixed at 30, weekParams' fixed-days=7 precedent) -- any other field passed in is ignored.

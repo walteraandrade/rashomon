@@ -424,6 +424,21 @@ describe('GET /api/compare (issue #93)', () => {
     const plainBody = (await plain.json()) as { terms: { bridge?: number }[] }
     for (const t of plainBody.terms) assert.ok(!('bridge' in t))
   })
+
+  it('/api/compare/bridges scores only the ids it is given, dropping malformed ones', async () => {
+    const res = await app.request('/api/compare/bridges?a=lula&b=tarcisio&days=4325&domain=comparebridge.example&ids=word:pontecompare,word:exclusivolulax,bogus:x,nocolon')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { bridges: Record<string, number> }
+    assert.deepEqual(Object.keys(body.bridges).sort(), ['word:exclusivolulax', 'word:pontecompare'])
+    const unknown = await app.request('/api/compare/bridges?a=nobody&b=lula&ids=word:x')
+    assert.equal(unknown.status, 404)
+  })
+
+  it('/api/people/:id/lenses/bridges answers { bridges }, empty when no ids survive parsing', async () => {
+    const res = await app.request('/api/people/lula/lenses/bridges?ids=nope')
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { bridges: {} })
+  })
 })
 
 describe('GET /api/comention (issue #207)', () => {

@@ -133,6 +133,20 @@ export const KINDS = ['hashtag', 'word', 'phrase', 'org']
 
 export const parseKindList = parseList((s) => KINDS.includes(s))
 
+// Betweenness is scored over at most this many terms: the edge statements grow with its square.
+export const BRIDGE_NODES = 60
+
+// `ids` on the bridges routes: `kind:term` pairs, deduped, sorted and capped so the cache key
+// is canonical and the edge statements stay bounded.
+export const parseBridgeIds = (v: string | undefined): string[] =>
+  [...new Set((v ?? '').split(',').map((s) => s.trim()))]
+    .filter((id) => {
+      const at = id.indexOf(':')
+      return at > 0 && at < id.length - 1 && KINDS.includes(id.slice(0, at))
+    })
+    .sort()
+    .slice(0, BRIDGE_NODES)
+
 const DOMAIN_TOKEN = /^[a-z0-9.:-]{1,120}$/
 
 export const parseDomainList = parseList((s) => DOMAIN_TOKEN.test(s))

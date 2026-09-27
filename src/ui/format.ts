@@ -27,6 +27,29 @@ export type PersonRef = { id: string; name: string }
 export type CompareSide = { count: number; pmi: number; tone: number | null }
 export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null; bridge?: number }
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
+
+// Mirrors src/query.ts's BRIDGE_NODES and graph.ts's bridgeNodes: the most-documented terms,
+// never an own name, sorted so the bridges URL is one cache key per recorte.
+export const BRIDGE_NODES = 60
+
+const sideDocs = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count : 0)
+
+export const bridgeIds = (terms: readonly CompareTerm[]) =>
+  terms
+    .filter((t) => t.a !== 'name' && t.b !== 'name')
+    .map((t) => ({ id: `${t.kind}:${t.term}`, docs: sideDocs(t.a) + sideDocs(t.b) }))
+    .sort((x, y) => y.docs - x.docs || x.id.localeCompare(y.id))
+    .slice(0, BRIDGE_NODES)
+    .map((t) => t.id)
+    .sort()
+
+export const hasBridges = (terms: readonly CompareTerm[]) => terms.some((t) => t.bridge !== undefined)
+
+// In place on purpose: a figure tells a new dataset from a repaint by object identity, so the
+// scores join the payload already on screen (and in the scope memo) instead of replacing it.
+export const applyBridges = (terms: CompareTerm[], bridges: Record<string, number>) => {
+  for (const t of terms) t.bridge = bridges[`${t.kind}:${t.term}`] ?? 0
+}
 export type RisingTerm = { term: string; kind: string; count_recent: number; count_baseline: number; count_recent_raw: number; count_baseline_raw: number; lift: number }
 // `present` and `about.words_*` are optional on the page side only: a payload cached before they
 // existed still has to paint something rather than NaN positions.

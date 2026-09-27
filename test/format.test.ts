@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  BRIDGE_NODES,
   MASK_MIN,
   SCALE_MID,
+  applyBridges,
+  bridgeIds,
+  hasBridges,
   SOURCE_SEGMENTS,
   balanceColor,
   bskyUrl,
@@ -35,6 +39,36 @@ import {
 } from '../src/ui/format.js'
 
 // src/ui/format.ts: pure formatting, labels, colour ramps and the outlet merge. No DOM.
+
+describe('bridgeIds / applyBridges: the terms the bridges request scores', () => {
+  const side = (count: number) => ({ count, pmi: 1, tone: null })
+
+  it('takes the most-documented non-name terms, capped, sorted by id', () => {
+    const terms = [
+      { term: 'b', kind: 'word', a: side(1), b: null },
+      { term: 'a', kind: 'word', a: side(5), b: side(5) },
+      { term: 'lula', kind: 'word', a: 'name' as const, b: side(9) },
+      ...Array.from({ length: BRIDGE_NODES }, (_, i) => ({ term: `x${i}`, kind: 'word', a: side(2), b: null })),
+    ]
+    const ids = bridgeIds(terms)
+    assert.equal(ids.length, BRIDGE_NODES)
+    assert.ok(ids.includes('word:a'))
+    assert.ok(!ids.includes('word:lula'))
+    assert.ok(!ids.includes('word:b'), 'the least-documented term is the one cut')
+    assert.deepEqual(ids, [...ids].sort())
+  })
+
+  it('writes a score on every term in place, 0 for ids outside the answer', () => {
+    const terms = [
+      { term: 'stf', kind: 'word', a: side(1), b: side(1) },
+      { term: 'pix', kind: 'word', a: side(1), b: null },
+    ]
+    assert.equal(hasBridges(terms), false)
+    applyBridges(terms, { 'word:stf': 1 })
+    assert.deepEqual(terms.map((t) => (t as { bridge?: number }).bridge), [1, 0])
+    assert.equal(hasBridges(terms), true)
+  })
+})
 
 describe('html', () => {
   it('escapes the five HTML-sensitive characters in every interpolation', () => {

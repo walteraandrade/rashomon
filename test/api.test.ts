@@ -197,7 +197,7 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(qp.has('lean'), false)
   })
 
-  it('compareParams and lensesParams always send bridges=1, no toggle (issue #219 AC4/AC14)', () => {
+  it('compareParams (spec §4) and lensesParams (issue #219 AC14) always send bridges=1, no toggle', () => {
     const compareQp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' })
     assert.equal(compareQp.get('bridges'), '1')
     const lensesQp = lensesParams({ a: 'all', b: 'lean:right', days: '30', limit: '40' })

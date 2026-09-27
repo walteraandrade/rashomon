@@ -254,6 +254,15 @@ export const docs: RawDoc[] = [
   { source: 'camara', uri: 'https://agendasecundaria.example/76', text: 'Lula discute plano de infraestrutura regional', publishedAt: daysAgo(4314), domain: 'agendasecundaria.example' },
   { source: 'camara', uri: 'https://agendasecundaria.example/77', text: 'Lula recebe governadores em pauta federativa', publishedAt: daysAgo(4315), domain: 'agendasecundaria.example' },
   { source: 'camara', uri: 'https://agendasecundaria.example/78', text: 'Lula sanciona decreto sobre repasses estaduais', publishedAt: daysAgo(4316), domain: 'agendasecundaria.example' },
+  // docs 79-81: issue #208 AC4 regression, a domain whose shared doc is not its only tracked
+  // doc, unlike poder360.com.br/37 above (a one-doc domain, so its denominator could be
+  // mistaken for "the shared doc's own count" rather than the domain's real total). 2 lula-only
+  // docs plus 1 doc naming both lula and tarcisio: the domain total is 3 (the shared doc counts
+  // once), lula docs is 3 (all three), tarcisio docs is 1 (the shared doc alone) -- lula share
+  // 3/3=1, tarcisio share 1/3=0.33. Dated 4317+ days ago, past doc 78 above.
+  { source: 'gnews', uri: 'https://agendadupla.example/79', text: 'Lula debate reforma tributaria em agenda economica', publishedAt: daysAgo(4317), domain: 'agendadupla.example' },
+  { source: 'gnews', uri: 'https://agendadupla.example/80', text: 'Lula recebe ministros para revisar cronograma', publishedAt: daysAgo(4318), domain: 'agendadupla.example' },
+  { source: 'gnews', uri: 'https://agendadupla.example/81', text: 'Lula e Tarcísio discutem parceria em evento conjunto', publishedAt: daysAgo(4319), domain: 'agendadupla.example' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

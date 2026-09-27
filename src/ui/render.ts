@@ -1353,13 +1353,14 @@ export const paintAgendaLoading = () => {
   )}</div><p class="sr-only">Lendo a agenda.</p>`
 }
 
-export const paintAgendaError = () => {
+export const paintAgendaError = (onRetry: () => void) => {
   const grid = $('agendaGrid')
   if (!grid) return
   grid.hidden = false
   grid.classList.remove('is-loading')
   grid.setAttribute('aria-busy', 'false')
-  grid.innerHTML = '<p class="note">Não foi possível carregar a agenda.</p>'
+  grid.innerHTML = '<p class="note">Não foi possível carregar a agenda. <button class="quiet-button" id="agendaErrorRetry">Tentar novamente</button></p>'
+  $('agendaErrorRetry')?.addEventListener('click', onRetry)
 }
 
 export type AgendaSelection = { personId: string; domain: string } | null
@@ -1393,13 +1394,13 @@ export const paintAgenda = ({
       (row) =>
         html`<tr><th scope="row"><span class="d">${row.domain}</span>${row.lean ? html`<span class="lean-chip">${LEAN_LABELS[row.lean] ?? row.lean}</span>` : ''}</th>${data.persons.map((p) => {
           const cell = row.cells.get(p.id)
-          if (!cell) return html`<td class="agenda-cell is-empty">—</td>`
+          if (!cell) return html`<td class="agenda-cell is-empty"><span class="sr-only">sem documentos</span></td>`
           const isSelected = !!selected && selected.personId === p.id && selected.domain === row.domain
           const pct = Math.round(cell.share * 100)
           return html`<td class="agenda-cell"><button class="agenda-pick${isSelected ? ' is-active' : ''}" data-person="${p.id}" data-domain="${row.domain}" aria-pressed="${String(isSelected)}" style="--share:${pct}%" title="${fmt(cell.docs)} ${cell.docs === 1 ? 'documento' : 'documentos'}">${pct}%</button></td>`
         })}</tr>`,
     )}</tbody>
-  </table></div><p class="note">A fatia é sobre a cobertura rastreada do próprio veículo, não soma 100% por coluna: um documento que cita duas pessoas rastreadas conta para as duas.</p>`
+  </table></div><p class="note">A fatia é da cobertura rastreada do próprio veículo, não da pessoa. A soma de uma linha pode passar de 100%: um documento que cita duas pessoas rastreadas conta para as duas.</p>`
   queryAll('[data-person]', grid).forEach((el) =>
     el.addEventListener('click', () => {
       const personId = String(el.dataset.person)

@@ -1590,6 +1590,17 @@ describe('agendaFor acceptance (issue #208)', () => {
     assert.equal(b?.docs, 1)
     assert.equal(t?.share, 1)
     assert.equal(b?.share, 1)
+
+    // agendadupla.example/79-81: poder360.com.br above is a one-doc domain, so its denominator
+    // is indistinguishable from "the shared doc's own count" -- a bug that divides by the
+    // shared-doc count alone, rather than the domain's real total, would still pass it. Here
+    // the shared doc (81) sits beside two lula-only docs (79, 80) on the same domain: total 3,
+    // lula in all three (docs 3), tarcisio in the shared doc alone (docs 1).
+    const wideDupla = await agendaFor({ days: 4320, source: 'all', min: 1, limit: 30 })
+    const lulaDupla = cellOf(wideDupla, 'lula', 'agendadupla.example')
+    const tarcisioDupla = cellOf(wideDupla, 'tarcisio', 'agendadupla.example')
+    assert.deepEqual(lulaDupla, { person_id: 'lula', domain: 'agendadupla.example', docs: 3, share: 1 })
+    assert.deepEqual(tarcisioDupla, { person_id: 'tarcisio', domain: 'agendadupla.example', docs: 1, share: 0.33 })
   })
 
   it('a domain below min is absent from domains and cells; raising min removes it at the exact boundary (issue #208 AC5)', async () => {

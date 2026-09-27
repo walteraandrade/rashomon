@@ -102,7 +102,7 @@ export const mount = (root: FigureRoot, { initial, peopleError = null }: { peopl
     data = null
     dropStalePick()
     root.classList.remove('is-loading')
-    paintAgendaError()
+    paintAgendaError(() => figure.reload())
   }
 
   const figure = runFigure<Agenda>({

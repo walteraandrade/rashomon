@@ -71,6 +71,40 @@ describe('(mount): fetches /api/agenda with the figure own days/source, no perso
       assert.match(els.agendaGrid.innerHTML, /20%/)
     })
   })
+
+  it('renders no em dash for a person with no cell on a domain, an sr-only label instead (validator gap #1)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/agenda': agendaData({
+          domains: ['g1.globo.com', 'g2.example'],
+          cells: [
+            { person_id: 'lula', domain: 'g1.globo.com', docs: 8, share: 0.8 },
+            { person_id: 'tarcisio', domain: 'g1.globo.com', docs: 2, share: 0.2 },
+            // tarcisio has no cell here: g2.example is lula-only.
+            { person_id: 'lula', domain: 'g2.example', docs: 5, share: 1 },
+          ],
+        }),
+      })
+      const { mount } = await import('../src/ui/figures/agenda.js')
+      mount(els.agenda, { people, initial: {} })
+      await flush()
+      assert.doesNotMatch(els.agendaGrid.innerHTML, /—/, 'an empty cell must never render an em dash')
+      assert.match(els.agendaGrid.innerHTML, /sr-only">sem documentos</)
+    })
+  })
+
+  it('the trailing note names the row (linha) as the share axis, never the column (validator gap #2)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/agenda': agendaData() })
+      const { mount } = await import('../src/ui/figures/agenda.js')
+      mount(els.agenda, { people, initial: {} })
+      await flush()
+      assert.match(els.agendaGrid.innerHTML, /\blinha\b/)
+      assert.doesNotMatch(els.agendaGrid.innerHTML, /\bcoluna\b/)
+    })
+  })
 })
 
 describe('picking a cell opens the docs card with exactly one side, no term (issue #208 AC16)', () => {
@@ -171,6 +205,7 @@ describe('the empty state paints a note, not an empty grid; the loading state pa
       await flush()
       assert.match(els.agendaGrid.innerHTML, /Não foi possível carregar a agenda/)
       assert.doesNotMatch(els.agendaGrid.innerHTML, /agenda-ghost/, 'the loading ghost must not survive a failed request')
+      assert.match(els.agendaGrid.innerHTML, /class="quiet-button" id="agendaErrorRetry">Tentar novamente</, 'a retry button must be offered (validator gap #4)')
     })
   })
 

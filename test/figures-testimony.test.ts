@@ -161,6 +161,13 @@ describe('the page holds the figure and explains it', () => {
     assert.match(chapter, /Vale para todas as fontes, ao contrário do tom/)
   })
 
+  it('como-ler.html\'s testimony/#avaliacao section states both outlet-grouping caveats (AC14)', () => {
+    const section = read('como-ler.html').match(/<div id="avaliacao">[\s\S]*?(?=\n\s*<div id="pmi">)/)?.[0] ?? ''
+    assert.ok(section, 'the #avaliacao section must exist')
+    assert.match(section, /vocabulário parecido[\s\S]{0,120}(não é a mesma coisa que|não é) linha editorial/i, 'shared vocabulary is not editorial lean')
+    assert.match(section, /número de cada grupo não significa nada[\s\S]{0,120}(entre|comparad)/i, "a field's number carries no meaning across rebuilds")
+  })
+
   it('atlas.css styles the panel from the type ramp, never from a loose px', () => {
     const css = read('atlas.css')
     assert.match(css, /\.testimony \.verdict dd \{[^}]*var\(--tone, var\(--ink\)\)/)

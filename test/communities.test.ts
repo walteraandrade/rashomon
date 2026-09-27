@@ -65,7 +65,6 @@ describe('communities (issue #214)', () => {
   })
 })
 
-<<<<<<< HEAD
 describe('betweenness (issue #219)', () => {
   it("ranks a path graph's middle node highest", () => {
     const edges: CommunityEdge[] = [

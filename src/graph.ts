@@ -381,23 +381,8 @@ const bridgeEdgesQuery = (aboutCte: Sql, ids: string[]) => {
 
 const compareEdgesQuery = (person: Person, q: CompareQuery, ids: string[]) => bridgeEdgesQuery(scopeCte(person, q), ids)
 
-const lensAboutCte = (person: Person, lens: LensSide, q: { days: number }) => {
-  const { domain } = resolveScope(lens.domain, lens.lean)
-  return sql`
-  scope as (
-    select d.id from docs d
-    where d.published_at >= now() - make_interval(days => ${q.days})
-      and (${lens.source} = 'all' or d.source = any(string_to_array(${lens.source}, ',')))
-      and (${domain} = 'all' or d.domain = any(string_to_array(${domain}, ',')))
-      and (${countryFilter('br')})
-  ),
-  about as (
-    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
-  )`
-}
-
 const lensEdgesQuery = (person: Person, lens: LensSide, q: LensesQuery, ids: string[]) =>
-  bridgeEdgesQuery(lensAboutCte(person, lens, q), ids)
+  bridgeEdgesQuery(scopeCte(person, { days: q.days, source: lens.source, domain: lens.domain, lean: lens.lean, country: 'br' }), ids)
 
 // Sums counts when the same (s, t) pair co-occurs on both sides.
 export const mergeEdges = (edgesA: readonly LinkRow[], edgesB: readonly LinkRow[]): LinkRow[] => {

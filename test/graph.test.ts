@@ -2118,6 +2118,13 @@ describe('compareFor (issue #93)', () => {
     assert.notEqual(lulaOnly.bridge, null)
   })
 
+  it('a term with no co-occurrence edge on either side gets bridge 0', async () => {
+    const r = await compareFor(lula, tarcisio, { ...bridgeScope, bridges: true })
+    const isolated = term(r, 'evento')
+    assert.ok(isolated, 'evento appears once per side, so it is in terms but clears no edge floor')
+    assert.equal(isolated.bridge, 0)
+  })
+
   it('is documented: bridges=1, live only, always computed (issue #219)', () => {
     assert.match(docsText, /bridges=1/)
     assert.match(docsText, /bridge[\s\S]{0,300}(live|never cached)/i)
@@ -2230,13 +2237,20 @@ describe('lensesFor (issue #206)', () => {
     )
     const bridge = term(withBridges, 'pontelentes')!
     assert.equal(bridge.bridge, 1)
-    const isolated = term(withBridges, 'somentelensa')!
+    const pathEnd = term(withBridges, 'somentelensa')!
+    assert.equal(pathEnd.bridge, 0)
+    const isolated = term(withBridges, 'evento')
+    assert.ok(isolated, 'evento appears once per lens, so it is in terms but clears no edge floor')
     assert.equal(isolated.bridge, 0)
   })
 
-  it('equal lenses produce finite bridge scores', async () => {
-    const r = await lensesFor(lula, { ...lensBridgeScope, b: lensA, bridges: true })
-    for (const t of r.terms) assert.ok(Number.isFinite(t.bridge))
+  it('equal lenses score like that lens alone', async () => {
+    const empty = { lens: 'domain:vazio.example', domain: 'vazio.example', lean: 'all', source: 'all' }
+    const same = await lensesFor(lula, { ...lensBridgeScope, b: lensA, bridges: true })
+    const alone = await lensesFor(lula, { ...lensBridgeScope, b: empty, bridges: true })
+    for (const t of same.terms) assert.ok(Number.isFinite(t.bridge))
+    const scores = (r: typeof same) => Object.fromEntries(r.terms.map((t) => [`${t.kind}:${t.term}`, t.bridge]))
+    assert.deepEqual(scores(same), scores(alone))
   })
 })
 

@@ -794,7 +794,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   font-size: var(--t-micro);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  background: color-mix(in srgb, var(--ink) calc(var(--w, 0) * 60%), var(--panel));
+  background: color-mix(in srgb, var(--ink) calc(var(--w, 0) * 30%), var(--panel));
   cursor: pointer;
 }
 .comention-cell.is-empty, .comention-cell.is-blank { cursor: default; background: transparent; border-color: transparent; }

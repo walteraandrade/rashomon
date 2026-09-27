@@ -26,9 +26,13 @@
       <p class="figure-sub">Palavras nos textos que citam a pessoa. A posição só evita colisão. <a href="como-ler.html#atlas">Como ler</a>.</p>
       <dl class="figure-key" id="keyDefault">
         <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>frequência ou PMI, o que a frase escolhe</dd></div>
-        <div><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
+        <div id="keyDefaultColor"><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
         <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
         <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
+      </dl>
+      <dl class="figure-key" id="keyTheme" hidden>
+        <div><dt><span class="theme-scale" aria-hidden="true"></span>Cor</dt><dd id="keyThemeText">tema: palavras que caminharam juntas nesta construção</dd></div>
       </dl>
       <dl class="figure-key" id="keyStrip" hidden>
         <div><dt>Posição</dt><dd>média da avaliação dos textos com a palavra</dd></div>
@@ -154,9 +158,24 @@
     <p class="note" id="lensesHiddenNote" hidden></p>
   </section>
 
+  <section class="figure attention" id="attention" aria-labelledby="attentionTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="attentionTitle">Atenção e menções</h2></div>
+      <p class="figure-sub">Quanto se buscou o nome na Wikipédia contra quanto se escreveu sobre a pessoa, dia a dia. <a href="como-ler.html#atencao">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt>Posição</dt><dd>o dia, o mesmo eixo nas duas linhas</dd></div>
+        <div><dt>Tamanho</dt><dd>altura da barra, numa escala só de cada linha</dd></div>
+        <div><dt>Clique</dt><dd>documentos do dia, em qualquer das duas linhas</dd></div>
+      </dl>
+      <div class="sentence"><p class="sentence-line">Curiosidade e menções sobre <span class="pick"><select id="attentionPerson" aria-label="Pessoa (atenção)"></select></span> nos últimos 30 dias, em <span class="keep"><span class="pick"><select id="attentionSource" aria-label="Fonte (atenção)"></select></span>.</span></p></div>
+    </header>
+    <p class="note" id="attentionNote"></p>
+    <figure class="attention-chart" id="attentionChart" aria-label="Pageviews da Wikipédia e menções por dia" hidden></figure>
+  </section>
+
   <section class="figure agenda" id="agenda" aria-labelledby="agendaTitle">
     <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
+      <div class="figure-title"><span class="eyebrow">Gráfico 8</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
       <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="como-ler.html#agenda">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo</dd></div>
@@ -190,11 +209,13 @@
         <div><dt>Tamanho</dt><dd>frequência ou PMI, o que a frase escolhe</dd></div>
         <div><dt>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
         <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
         <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
       </dl>
       <p>Cinza: igual à média, ou menos de 3 textos avaliados. Linha entre duas palavras: estão nos mesmos textos. Só isso.</p>
       <p>No modo <b>Avaliação</b> a posição passa a ser a média das notas dos textos com a palavra; a cor continua a mesma máscara.</p>
       <p>Uma expressão é várias palavras como um termo só. Ela substitui as palavras que cobre; a contagem de uma palavra passa a ser os textos em que ela aparece fora de qualquer expressão.</p>
+      <p>Textos vindos do GDELT também trazem organizações citadas na matéria (ministérios, partidos, empresas): um quarto tipo de termo, com sublinhado tracejado. Vem só do GDELT e nunca é inventado para as outras fontes.</p>
       <p>Clique numa palavra abre os textos. No nome no centro, e na primeira linha da lista, abre os da pessoa. O cartão fica aberto na próxima escolha e arrasta pelo topo.</p>
     </div>
     <div id="help-pmi">
@@ -237,8 +258,13 @@
       <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". O nome da pessoa não entra na régua; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas, já que é a mesma pessoa nos dois lados.</p>
       <p>Uma lente inválida ou vazia volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
     </div>
+    <div id="help-atencao">
+      <h3>Gráfico 7 · Atenção e menções</h3>
+      <p>Uma linha traz quantas pessoas visitaram a página da Wikipédia da pessoa, dia a dia: curiosidade, não opinião. A outra traz quantos textos a citam naquele mesmo dia. As duas nunca são comparadas como um número contra o outro: vivem em ordens de grandeza diferentes, cada uma na sua própria escala.</p>
+      <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever. Sem pico em nenhuma das duas (pessoa sem página rastreada, ou janela vazia), não há frase, só uma nota. Clique em qualquer das duas linhas abre os textos de menções do dia; pageviews não têm texto próprio para abrir.</p>
+    </div>
     <div id="help-agenda">
-      <h3>Gráfico 7 · Agenda por veículo</h3>
+      <h3>Gráfico 8 · Agenda por veículo</h3>
       <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total.</p>
       <p>A soma de uma linha pode passar de 100%: um documento que cita duas pessoas acompanhadas conta para as duas, uma vez cada. Um veículo com poucos documentos rastreados nem entra na tabela. Clique numa célula abre os documentos daquela pessoa naquele veículo.</p>
     </div>

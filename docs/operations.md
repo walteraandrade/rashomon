@@ -304,7 +304,8 @@ Two key forms, read in this order:
 
 The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
 `compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`),
-`lenses` (figure 6, `#lenses`) and `agenda` (figure 7, `#agenda`). Figure 1 reads `person`,
+`lenses` (figure 6, `#lenses`), `attention` (figure 7, `#attention`) and `agenda` (figure 8,
+`#agenda`). Figure 1 reads `person`,
 `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
 sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
 Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
@@ -316,7 +317,8 @@ values, sent explicitly by the figure and never seeded from the querystring. Fig
 Figure 6 reads `person`, `a`, `b`, `days` and `limit` — `a` and `b` are lens tokens
 (`domain:<host>`, `lean:<value>` or `source:<name>`; an unknown or absent one falls back to
 `all`), each with no bare equivalent (`['a', null]`/`['b', null]`, like figure 3's `b`/`measure`)
-so a bare `?a=` never leaks into it. Figure 7 reads only `days` and `source` — it spans every
+so a bare `?a=` never leaks into it. Figure 7 reads `person` and `source`; its `days` is always
+30 and a bare `days=` never reaches it. Figure 8 reads only `days` and `source` — it spans every
 tracked person at once, so it has no `person` key, and it sends no `min`, which stays at the
 route's own default of 5.
 

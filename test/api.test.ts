@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { candidatesQuery, compareParams, docsParams, endpoint, json, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams, candidatesQuery, compareParams, docsParams, endpoint, json, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -88,8 +88,8 @@ describe('params', () => {
     assert.equal(p.get('sort'), 'pmi')
     assert.equal(p.get('limit'), '18')
     assert.equal(p.get('min'), '2')
-    // Not 'all': the atlas names the three kinds it wants (see ATLAS_KINDS in api.js).
-    assert.equal(p.get('kind'), 'word,hashtag,phrase')
+    // Not 'all': the atlas names the four kinds it wants (see ATLAS_KINDS in api.js).
+    assert.equal(p.get('kind'), 'word,hashtag,phrase,org')
     assert.equal(p.get('source'), 'all')
     // No outlet: picking one is a reading inside the second figure, so it never reaches a route.
     assert.equal(p.has('domain'), false)
@@ -153,12 +153,25 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(p.has('method'), false, 'the server resolves the default method; the client never guesses a label')
   })
 
-  it('the graph query asks for testimony and the sources/testimony queries do not echo it', () => {
+  it('the graph query asks for testimony and communities, and the sources/testimony queries echo neither (issue #217 AC12)', () => {
     const p = params(opts)
     assert.equal(p.get('testimony'), '1')
+    assert.equal(p.get('communities'), '1')
     assert.equal(narrowToTestimony(p).has('testimony'), false)
     assert.equal(testimonyParams(opts).has('testimony'), false)
     assert.equal(narrowToSources(p).has('testimony'), false)
+    assert.equal(narrowToTestimony(p).has('communities'), false)
+    assert.equal(narrowToSources(p).has('communities'), false)
+  })
+
+  it('params() sends communities=1 unconditionally, for every source/sort combination (issue #217 AC12)', () => {
+    for (const source of ['all', 'gnews', 'bluesky']) {
+      for (const sort of ['count', 'pmi']) {
+        const qp = params({ ...opts, source, sort })
+        assert.equal(qp.get('communities'), '1', `communities=1 must travel with source=${source} sort=${sort}`)
+        assert.equal(qp.get('testimony'), '1', 'testimony=1 must still be there too')
+      }
+    }
   })
 
   // The second figure used to write a page-wide filter: clicking an outlet down there narrowed
@@ -185,6 +198,7 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
   })
 })
 
+
 describe('weekParams / loadWeek stay fixed at days=7', () => {
   it('weekParams sends days=7, the full kind set, plus the chosen source and limit', () => {
     const qp = weekParams({ source: 'gdelt', limit: '5' })
@@ -195,6 +209,23 @@ describe('weekParams / loadWeek stay fixed at days=7', () => {
     const calls = stubFetch(true, {})
     await loadWeek('lula', weekParams({ source: 'all', limit: '8' }))
     assert.equal(calls[0].url, '/api/people/lula/week?' + weekParams({ source: 'all', limit: '8' }).toString())
+  })
+})
+
+// Issue #216 (figure 7, attention vs mentions): attentionParams always sends days=30, the
+// route's only window, never exposed as a control -- same fixed-window precedent as
+// weekParams' days=7 above.
+describe('attentionParams / loadAttention stay fixed at days=30 (issue #216)', () => {
+  it('attentionParams always sends days=30 regardless of any other input (AC5)', () => {
+    assert.equal(attentionParams({}).get('days'), '30')
+    // Passing an unrelated/extra field must not change the fixed window either.
+    assert.equal(attentionParams({ source: 'gdelt' } as any).get('days'), '30')
+  })
+
+  it('loadAttention calls GET /api/people/:id/attention', async () => {
+    const calls = stubFetch(true, { days: 30, series: [] })
+    await loadAttention('lula', attentionParams({}))
+    assert.equal(calls[0].url, '/api/people/lula/attention?' + attentionParams({}).toString())
   })
 })
 
@@ -224,5 +255,13 @@ describe('sparklineParams / loadTimeline, the inspector sparkline', () => {
     const calls = stubFetch(true, [])
     await loadTimeline('lula', sparklineParams('reforma', 'word'))
     assert.equal(calls[0].url, '/api/people/lula/timeline?' + sparklineParams('reforma', 'word').toString())
+  })
+})
+
+// AC12: ATLAS_KINDS becomes 'word,hashtag,phrase,org' — the atlas page's own kind= request
+// grows to the full four-kind set, additive over the pre-#209 three.
+describe('ATLAS_KINDS gains org (issue #209 AC12)', () => {
+  it("ATLAS_KINDS equals 'word,hashtag,phrase,org'", () => {
+    assert.equal(ATLAS_KINDS, 'word,hashtag,phrase,org')
   })
 })

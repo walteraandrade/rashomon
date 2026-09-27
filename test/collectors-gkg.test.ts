@@ -164,11 +164,12 @@ describe('latestSlot', () => {
   })
 })
 
-const gkgRow = (slot: string, extra: Partial<Record<'domain' | 'themes', string>> = {}) => {
+const gkgRow = (slot: string, extra: Partial<Record<'domain' | 'themes' | 'orgs', string>> = {}) => {
   const cols = new Array(27).fill('')
   cols[3] = extra.domain ?? 'example.org'
   cols[4] = `https://example.org/${slot}`
   cols[7] = extra.themes ?? ''
+  cols[13] = extra.orgs ?? ''
   cols[15] = '1.0'
   cols[25] = 'srclc:por'
   cols[26] = `<PAGE_TITLE>Doc ${slot}</PAGE_TITLE>`
@@ -220,15 +221,64 @@ describe('collect() records no slot whose payload carried no documents', () => {
   })
 })
 
-// Issue #108: GDELT's V2Themes column is no longer read into extraTerms at all, even when the
-// row carries one.
-describe('collect() drops GDELT themes: extraTerms is always [] (issue #108)', () => {
+// Issue #108: GDELT's V2Themes column is never read into extraTerms. Issue #209: V1Organizations
+// (a different column) is, as a new 'org' term kind.
+describe('collect(): V2Themes stays unread, V1Organizations becomes org terms (issue #108/#209)', () => {
   before(migrateP)
 
-  const latest = '20260911130000'
+  // Each test needs its own slot, 15 minutes (one slotMs) apart: gkg_files (checked by collect()
+  // to skip already-processed slots) is a table shared across every test in this describe, not
+  // reset between them, and slotDate/slotName both truncate to the minute, dropping seconds.
 
-  it('returns every doc with extraTerms: [] even though the row carries themes', async () => {
+  it('returns every doc with extraTerms: [] when only themes are present, no organizations (issue #108)', async () => {
+    const latest = '20260911130000'
     const fetchFn = gkgFetch(latest, (slot) => new Response(zipSync({ 'entry.csv': strToU8(gkgRow(slot, { themes: 'TAX_FNCACT_JUDGE;WB_678_ECONOMY' })) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [])
+  })
+
+  it('returns org terms from V1Organizations, normalized and deduplicated, while themes are still ignored (issue #209 AC1/AC3)', async () => {
+    const latest = '20260911131500'
+    const fetchFn = gkgFetch(
+      latest,
+      (slot) => new Response(zipSync({ 'entry.csv': strToU8(gkgRow(slot, { themes: 'TAX_FNCACT_JUDGE', orgs: 'Petrobras;Banco Central;PETROBRAS' })) }), { status: 200 }),
+    )
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')
+    for (const d of exit.value) {
+      assert.deepEqual(d.extraTerms, [
+        { term: 'petrobras', kind: 'org' },
+        { term: 'banco central', kind: 'org' },
+      ])
+    }
+  })
+
+  it('returns extraTerms: [] for an empty V1Organizations field (issue #209 AC2)', async () => {
+    const latest = '20260911133000'
+    const fetchFn = gkgFetch(latest, (slot) => new Response(zipSync({ 'entry.csv': strToU8(gkgRow(slot, { orgs: '' })) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [])
+  })
+
+  // V1Persons is column 11, V2Persons (unused) is 12, V1Organizations is 13: content placed one
+  // column early (12, not 13) must never be read as an organization, pinning the off-by-one risk.
+  it('reads organizations from column 13 only, never column 12 (issue #209 off-by-one guard)', async () => {
+    const latest = '20260911134500'
+    const fetchFn = gkgFetch(latest, (slot) => {
+      const cols = new Array(27).fill('')
+      cols[3] = 'example.org'
+      cols[4] = `https://example.org/${slot}`
+      cols[12] = 'Petrobras'
+      cols[15] = '1.0'
+      cols[25] = 'srclc:por'
+      cols[26] = `<PAGE_TITLE>Doc ${slot}</PAGE_TITLE>`
+      return new Response(zipSync({ 'entry.csv': strToU8(cols.join('\t')) }), { status: 200 })
+    })
     const exit = await runTest(collect, fetchFn)
     assert.ok(Exit.isSuccess(exit))
     assert.ok(exit.value.length > 0, 'sanity: the stub must yield at least one doc')
@@ -396,5 +446,72 @@ describe('gkg log lines are unchanged text, read through TestConsole (issue #183
     assert.deepEqual(value, [])
     assert.equal(log[0], '[gkg] 24 of last 24 slots pending')
     assert.ok(log.includes(`[gkg] ${latest}: missing (404)`))
+  })
+})
+
+// Verifier suite for issue #209: written from the approved spec's acceptance criteria alone.
+// A GKG row is built here from the spec's own column layout (V1Persons at index 11, V1Organizations
+// at index 13, V2Tone at index 15), independent of the fixture's own gkgRow() helper.
+describe('collect(): V1Organizations becomes an org term kind (issue #209, verifier)', () => {
+  before(migrateP)
+
+  const orgRow = (slot: string, orgs: string, themes = '') => {
+    const cols = new Array(27).fill('')
+    cols[3] = 'verifier.example'
+    cols[4] = `https://verifier.example/${slot}`
+    cols[7] = themes
+    cols[11] = ''
+    cols[13] = orgs
+    cols[15] = '0.5'
+    cols[25] = 'srclc:por'
+    cols[26] = `<PAGE_TITLE>Verifier ${slot}</PAGE_TITLE>`
+    return cols.join('\t')
+  }
+
+  it('a V1Organizations field with "Petrobras;Banco Central" yields org terms normalized and deduplicated (AC1)', async () => {
+    const slot = '20260916000000'
+    const fetchFn = gkgFetch(slot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, 'Petrobras;Banco Central')) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of exit.value) {
+      assert.ok(d.extraTerms?.some((t) => t.term === 'petrobras' && t.kind === 'org'))
+      assert.ok(d.extraTerms?.some((t) => t.term === 'banco central' && t.kind === 'org'))
+      assert.equal(d.extraTerms?.length, 2)
+    }
+  })
+
+  it('an empty V1Organizations field yields extraTerms: [] (AC2)', async () => {
+    const slot = '20260916001500'
+    const fetchFn = gkgFetch(slot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, '')) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [])
+  })
+
+  it('the same organization repeated with differing case and accents yields exactly one org term (AC3)', async () => {
+    const slot = '20260916003000'
+    const fetchFn = gkgFetch(slot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, 'Ministério da Saúde;MINISTERIO DA SAUDE;ministério da saúde')) }), { status: 200 }))
+    const exit = await runTest(collect, fetchFn)
+    assert.ok(Exit.isSuccess(exit))
+    assert.ok(exit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of exit.value) assert.deepEqual(d.extraTerms, [{ term: 'ministerio da saude', kind: 'org' }])
+  })
+
+  it('a themes-only row still yields extraTerms: [], while a row also carrying organizations yields org terms (AC8)', async () => {
+    const themesOnlySlot = '20260916004500'
+    const themesOnlyFetch = gkgFetch(themesOnlySlot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, '', 'TAX_FNCACT_JUDGE;WB_678_ECONOMY')) }), { status: 200 }))
+    const themesExit = await runTest(collect, themesOnlyFetch)
+    assert.ok(Exit.isSuccess(themesExit))
+    assert.ok(themesExit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of themesExit.value) assert.deepEqual(d.extraTerms, [])
+
+    const mixedSlot = '20260916010000'
+    const mixedFetch = gkgFetch(mixedSlot, (s) => new Response(zipSync({ 'entry.csv': strToU8(orgRow(s, 'Petrobras', 'TAX_FNCACT_JUDGE')) }), { status: 200 }))
+    const mixedExit = await runTest(collect, mixedFetch)
+    assert.ok(Exit.isSuccess(mixedExit))
+    assert.ok(mixedExit.value.length > 0, 'sanity: at least one doc must come back')
+    for (const d of mixedExit.value) assert.deepEqual(d.extraTerms, [{ term: 'petrobras', kind: 'org' }])
   })
 })

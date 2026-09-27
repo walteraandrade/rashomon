@@ -5,7 +5,7 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Agenda } from '../src/ui/format.js'
 
-// src/ui/figures/agenda.ts, figure 7 (issue #208): the domain x person coverage-share grid.
+// src/ui/figures/agenda.ts, figure 8 (issue #208): the domain x person coverage-share grid.
 // Spans every tracked person at once, so mount() takes no `person` seed and the request never
 // carries one. paintAgenda/paintAgendaLoading/paintAgendaError are exercised as pure painters
 // too (issue #208 AC17), but the click/release contract (AC16) is this figure's own, so it goes

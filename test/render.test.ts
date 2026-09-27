@@ -36,6 +36,10 @@ import {
   liftBalance,
   liftOfPerson,
   rareRisers,
+  attentionDayLabel,
+  paintAttention,
+  paintAttentionError,
+  paintAttentionLoading,
   paintWeek,
   paintWeekError,
   paintWeekLoading,
@@ -48,7 +52,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -151,6 +155,41 @@ describe('the inspector carries no documents button', () => {
     }
   })
 
+})
+
+describe('inspect: "no mesmo tema" (issue #217 AC7)', () => {
+  type NodeWithCommunity = { id: string; term: string; kind: string; count: number; pmi: number; community: number | null }
+  const golpe: NodeWithCommunity = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 }
+  const stf: NodeWithCommunity = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 }
+  const reforma: NodeWithCommunity = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, community: 9 }
+  const graphWith = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf, reforma], links: [] }
+
+  const paintWith = (mask: 'avaliacao' | 'tema' | 'off' | undefined, selected: string | null, nodes: NodeWithCommunity[] = [golpe, stf, reforma]) =>
+    withFakeDocument(['inspector'], (els) => {
+      inspect({ graph: graphWith, nodes, links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, mask })
+      return els.inspector.innerHTML
+    })
+
+  it('renders only when mask is tema, the focused term has a community, and another node on the map shares it', () => {
+    assert.match(paintWith('tema', golpe.id), /No mesmo tema/)
+    assert.doesNotMatch(paintWith('avaliacao', golpe.id), /No mesmo tema/, 'avaliação mode never shows the tema list')
+    assert.doesNotMatch(paintWith('off', golpe.id), /No mesmo tema/)
+    assert.doesNotMatch(paintWith(undefined, golpe.id), /No mesmo tema/, 'no mask state handed in: same as off')
+    assert.doesNotMatch(paintWith('tema', reforma.id), /No mesmo tema/, 'no other node shares community 9')
+    assert.doesNotMatch(paintWith('tema', golpe.id, [golpe, reforma]), /No mesmo tema/, 'fewer than two members sharing the community renders nothing')
+  })
+
+  it('the focused term itself having no community renders nothing, never an empty heading (issue #217 AC7)', () => {
+    const solo = { id: 'word:solo', term: 'solo', kind: 'word', count: 15, pmi: 1.1, community: null }
+    assert.doesNotMatch(paintWith('tema', solo.id, [golpe, stf, solo]), /No mesmo tema/, "the focused term's own null community: nothing")
+  })
+
+  it('lists every community mate, never the focused term itself', () => {
+    const html = paintWith('tema', golpe.id)
+    assert.match(html, /data-related="word:stf"/)
+    assert.doesNotMatch(html, /data-related="word:golpe"/, 'the focused term never lists itself')
+    assert.doesNotMatch(html, /data-related="word:reforma"/, 'reforma is a different community')
+  })
 })
 
 describe("the person's own entry points to her documents", () => {
@@ -579,6 +618,15 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
     assert.doesNotMatch(String(wordMarkup(placed({ testimony: { score: -4.9, n: 2 } }), 'count', person.score)), /--mask/, 'under the floor: title yes, colour no')
   })
 
+  // AC13: wordMarkup's <g class="atlas-word"> carries a data-kind attribute matching the node's
+  // own kind, org included, so atlas.css's dashed-underline rule can target it.
+  it('wordMarkup carries data-kind matching the node kind, for word/hashtag/phrase/org (issue #209 AC13)', () => {
+    for (const kind of ['word', 'hashtag', 'phrase', 'org']) {
+      const markup = String(wordMarkup(placed({ kind }), 'count', person.score))
+      assert.match(markup, new RegExp(`<g class="atlas-word"[^>]*\\sdata-kind="${kind}"`), `expected data-kind="${kind}" for a ${kind} node`)
+    }
+  })
+
   it('paintColumns colours cards the same way and spells the score out', () => {
     withFakeDocument(['columns'], (els) => {
       const nodes = [
@@ -603,7 +651,7 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
   })
 
   it('paintSelection masks only when the person has a mean to compare against', () => {
-    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, mask: true }
+    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, mask: 'avaliacao' as const }
     withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
       paintSelection({ ...args, personTestimony: { method: 'kikori', score: -2.1, n: 40 } })
       assert.equal(els.columns.classes['is-masked'], true)
@@ -612,6 +660,252 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
       paintSelection({ ...args, personTestimony: undefined })
       assert.equal(els.columns.classes['is-masked'], false)
     })
+  })
+
+  it('paintSelection: MaskState is three-way and mutually exclusive (issue #217 AC4)', () => {
+    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, personTestimony: { method: 'kikori', score: -2.1, n: 40 } }
+    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
+      paintSelection({ ...args, mask: 'avaliacao' })
+      assert.equal(els.columns.classes['is-masked'], true)
+      assert.equal(els.columns.classes['is-themed'], false)
+      paintSelection({ ...args, mask: 'tema' })
+      assert.equal(els.columns.classes['is-masked'], false)
+      assert.equal(els.columns.classes['is-themed'], true)
+      paintSelection({ ...args, mask: 'off' })
+      assert.equal(els.columns.classes['is-masked'], false)
+      assert.equal(els.columns.classes['is-themed'], false)
+    })
+  })
+
+  it('wordMarkup and paintColumns emit --theme only when the node is inside the ranking, in addition to --mask (issue #217 AC3/AC5)', () => {
+    const ranking = new Map([[3, 1]])
+    const themed = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: 3 }), 'count', person.score, ranking))
+    assert.match(themed, /--mask:rgb\(255,122,138\)/)
+    assert.match(themed, /--theme:var\(--theme-1\)/)
+    const untouchedCommunity = String(wordMarkup(placed({ community: 9 }), 'count', person.score, ranking))
+    assert.doesNotMatch(untouchedCommunity, /--theme/, 'a community outside the ranking paints no --theme, not a muted literal')
+    const nullCommunity = String(wordMarkup(placed({ community: null }), 'count', person.score, ranking))
+    assert.doesNotMatch(nullCommunity, /--theme/)
+
+    withFakeDocument(['columns'], (els) => {
+      const nodes = [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: 0.1, n: 20 }, community: 3 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, testimony: null, community: 9 },
+      ]
+      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, personTestimony: person, ranking })
+      assert.match(els.columns.innerHTML, /data-col="word:a" style="--mask:rgb\(116,220,134\);--theme:var\(--theme-1\)">/)
+      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/, 'community outside the ranking and no testimony: no style attribute')
+    })
+  })
+})
+
+describe('drawMap threads ranking into every placed word, and themeLegend names build coverage (issue #217 AC6/AC13)', () => {
+  const layout = {
+    placed: [
+      { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 3, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
+      { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: null, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 },
+    ],
+    overflow: [],
+    center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
+  }
+  const themeLegendSpan = (markup: string) => markup.match(/<span id="themeLegend" hidden>([^<]*)<\/span>/)?.[1] ?? ''
+
+  it('a top-6 community produces at least one --theme style in the painted SVG, and the legend names it', () => {
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      const ranking = new Map([[3, 1]])
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
+      assert.match(els.viewport.innerHTML, /--theme:var\(--theme-1\)/)
+      assert.match(themeLegendSpan(els.legend.innerHTML), /caminharam juntas/)
+    })
+  })
+
+  it('no ranking handed in: no --theme anywhere, and the key states the build has no communities for this recorte', () => {
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {} })
+      assert.doesNotMatch(els.viewport.innerHTML, /--theme/)
+      const span = themeLegendSpan(els.legend.innerHTML)
+      assert.match(span, /não tem temas calculados/)
+      assert.doesNotMatch(span, /textos avaliados/, 'the tema key must never borrow maskLegend\'s MASK_MIN document-count wording')
+    })
+  })
+})
+
+describe('theme mask acceptance: coverage beyond the builder\'s own tests (issue #217)', () => {
+  const person = { method: 'kikori:q8', score: -2.4, n: 500 }
+  const placed = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9, ...over })
+
+  it('wordMarkup emits --theme only in addition to (never instead of) an existing --mask style (issue #217 AC5)', () => {
+    const ranking = new Map([[7, 1]])
+    const both = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: 7 }), 'count', person.score, ranking))
+    assert.match(both, /--mask:rgb\(255,122,138\)/)
+    assert.match(both, /--theme:var\(--theme-1\)/)
+    const maskOnly = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: null }), 'count', person.score, ranking))
+    assert.match(maskOnly, /--mask:/)
+    assert.doesNotMatch(maskOnly, /--theme/)
+    const themeOnly = String(wordMarkup(placed({ community: 7 }), 'count', person.score, ranking))
+    assert.doesNotMatch(themeOnly, /--mask/)
+    assert.match(themeOnly, /--theme:var\(--theme-1\)/)
+    const neither = String(wordMarkup(placed({}), 'count', person.score, ranking))
+    assert.doesNotMatch(neither, /--mask/)
+    assert.doesNotMatch(neither, /--theme/)
+  })
+
+  it('paintColumns applies the same --theme rule to .column-card (issue #217 AC5)', () => {
+    withFakeDocument(['columns'], (els) => {
+      const ranking = new Map([[7, 1]])
+      const nodes = [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 7 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: null },
+      ]
+      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, ranking })
+      assert.match(els.columns.innerHTML, /data-col="word:a" style="--theme:var\(--theme-1\)">/)
+      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/)
+    })
+  })
+
+  it('drawMap threads its ranking parameter into every placed word, not just the first (issue #217 AC6)', () => {
+    const layout = {
+      placed: [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 11, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: 22, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 },
+      ],
+      overflow: [],
+      center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
+    }
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      const ranking = communityRanking(layout.placed)
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
+      const wordBlock = (id: string) => els.viewport.innerHTML.match(new RegExp(`<g class="atlas-word"[^]*?data-node="${id}"[^]*?</g>`))?.[0] ?? ''
+      assert.match(wordBlock('word:a'), /--theme:var\(--theme-1\)/)
+      assert.match(wordBlock('word:b'), /--theme:var\(--theme-2\)/)
+    })
+  })
+
+  it('a community-mate entry is reachable through onChoose by a real click, the same wiring .related buttons use (issue #217 AC8)', async () => {
+    const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 5 }
+    const stf = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 5 }
+    const graph = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf], links: [] }
+    await withFiguresDom(async (els) => {
+      const chosen: string[] = []
+      inspect({ graph, nodes: [golpe, stf], links: [], selected: golpe.id, sort: 'pmi', daysLabel: '30 dias', onChoose: (id) => chosen.push(id), mask: 'tema' })
+      const mate = els.inspector.querySelectorAll('[data-related]').find((el: any) => el.dataset.related === stf.id)
+      assert.ok(mate, 'the community mate must be a real, queryable [data-related] node')
+      mate.fire('click')
+      assert.deepEqual(chosen, [stf.id])
+    })
+  })
+
+  it("when every node's community is null or the field is absent entirely, tema state paints no --theme and the key states the build has no communities, distinct from the MASK_MIN wording (issue #217 AC13)", () => {
+    const layout = {
+      placed: [
+        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: null, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
+        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 }, // field absent entirely
+      ],
+      overflow: [],
+      center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
+    }
+    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
+      const ranking = communityRanking(layout.placed)
+      assert.equal(ranking.size, 0)
+      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
+      assert.doesNotMatch(els.viewport.innerHTML, /--theme/)
+      const span = els.legend.innerHTML.match(/<span id="themeLegend" hidden>([^<]*)<\/span>/)?.[1] ?? ''
+      assert.match(span, /não tem temas|sem temas|não têm temas/i, 'names build coverage')
+      assert.doesNotMatch(span, /\d+ textos avaliados/, 'never the MASK_MIN document-count floor wording')
+    })
+  })
+})
+
+describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)', () => {
+  const cssRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+  const cssPath = join(cssRoot, 'public', 'atlas.css')
+  const css = readFileSync(cssPath, 'utf8')
+  const hexOf = (name: string) => css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1]
+
+  const srgbToLinear = (c: number) => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  }
+  const luminance = (hex: string) => {
+    const n = hex.replace('#', '')
+    const r = parseInt(n.slice(0, 2), 16)
+    const g = parseInt(n.slice(2, 4), 16)
+    const b = parseInt(n.slice(4, 6), 16)
+    return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b)
+  }
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  const hexToHue = (hex: string) => {
+    const n = hex.replace('#', '')
+    const r = parseInt(n.slice(0, 2), 16) / 255
+    const g = parseInt(n.slice(2, 4), 16) / 255
+    const b = parseInt(n.slice(4, 6), 16) / 255
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    if (max === min) return 0
+    const d = max - min
+    const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return h * 60
+  }
+  const hueDistance = (a: number, b: number) => {
+    const d = Math.abs(a - b) % 360
+    return Math.min(d, 360 - d)
+  }
+
+  it('atlas.css declares --theme-1..--theme-6, each meeting 4.5:1 against --bg (issue #217 AC14)', () => {
+    const bg = hexOf('bg')
+    assert.ok(bg, '--bg must be declared')
+    const themeHexes = [1, 2, 3, 4, 5, 6].map((i) => hexOf(`theme-${i}`))
+    for (const [i, hex] of themeHexes.entries()) {
+      assert.ok(hex, `--theme-${i + 1} must be declared as a hex colour`)
+      assert.ok(contrast(hex as string, bg as string) >= 4.5, `--theme-${i + 1} (${hex}) must meet 4.5:1 against --bg (${bg})`)
+    }
+  })
+
+  it('the six --theme-* tokens are pairwise distinct, and distinct from --hostile/--favor/--cmp-a/--cmp-b (issue #217 AC14)', () => {
+    const named = { hostile: hexOf('hostile'), favor: hexOf('favor'), 'cmp-a': hexOf('cmp-a'), 'cmp-b': hexOf('cmp-b') }
+    for (const [k, v] of Object.entries(named)) assert.ok(v, `--${k} must be declared`)
+    const themes = [1, 2, 3, 4, 5, 6].map((i) => [`theme-${i}`, hexOf(`theme-${i}`)] as const)
+    const all = [...Object.entries(named), ...themes]
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const [nameA, hexA] = all[i]
+        const [nameB, hexB] = all[j]
+        if (nameA.startsWith('theme-') && nameB.startsWith('theme-')) {
+          assert.notEqual(hexA, hexB, `${nameA} and ${nameB} must not share a colour`)
+        } else if (nameA.startsWith('theme-') || nameB.startsWith('theme-')) {
+          assert.notEqual(hexA, hexB, `${nameA} and ${nameB} must not share a colour`)
+        }
+      }
+    }
+  })
+
+  it('every --theme-* token sits at least 30° of hue away from --accent, so none reads as the live control (code review fix #3)', () => {
+    const accent = hexOf('accent')
+    assert.ok(accent, '--accent must be declared')
+    const accentHue = hexToHue(accent as string)
+    for (const i of [1, 2, 3, 4, 5, 6]) {
+      const hex = hexOf(`theme-${i}`)
+      assert.ok(hex, `--theme-${i} must be declared`)
+      const d = hueDistance(hexToHue(hex as string), accentHue)
+      assert.ok(d >= 30, `--theme-${i} (${hex}) must sit at least 30° of hue from --accent (${accent}), got ${d.toFixed(1)}°`)
+    }
+  })
+
+  it('.map-svg.is-themed .atlas-word and .columns.is-themed .column-card both fall back to --muted, so an uncoloured node never vanishes (code review fix #4)', () => {
+    assert.match(
+      css,
+      /\.map-svg\.is-themed \.atlas-word[^{]*\{[^}]*--wc:\s*var\(--theme,\s*var\(--muted\)\)/,
+      'the atlas map must keep the --muted fallback on --wc in tema mode',
+    )
+    assert.match(
+      css,
+      /\.columns\.is-themed \.column-card\s*\{[^}]*--wc:\s*var\(--theme,\s*var\(--muted\)\)/,
+      'the columns list must keep the --muted fallback on --wc in tema mode',
+    )
   })
 })
 
@@ -1390,5 +1684,167 @@ describe('one class scheme, one rx source, one text shape for the three word mar
   it('marks.ts still exports only frame, axis and overflowList — no wordMark', async () => {
     const marks = await import('../src/ui/marks.js')
     assert.deepEqual(Object.keys(marks).sort(), ['axis', 'frame', 'overflowList'])
+  })
+})
+
+// Issue #216 (figure 7): paintAttention/paintAttentionLoading/paintAttentionError draw the two
+// independently-scaled rows (mentions vs Wikipedia pageviews) on one shared day axis, plus the
+// peak-to-peak lag sentence (or a note when either series has no peak). Both series arrive
+// already padded to the same 30 columns and day-aligned (§3 of the spec); this suite only
+// exercises the painter, never the day-alignment/padding step itself (figures/attention.ts's
+// own job, exercised in test/figures-attention.test.ts).
+describe('paintAttention / paintAttentionLoading / paintAttentionError, figure 7 (issue #216)', () => {
+  const day = (n: number) => `2026-08-${String(n).padStart(2, '0')}`
+  const mentionsSeries = (peakAt: number, days = 5) => Array.from({ length: days }, (_, i) => ({ day: day(i + 1), count: i + 1 === peakAt ? 40 : 2 }))
+  const viewsSeries = (peakAt: number, peakValue: number, days = 5) => Array.from({ length: days }, (_, i) => ({ day: day(i + 1), views: i + 1 === peakAt ? peakValue : 5 }))
+
+  it('the sentence is "a imprensa veio N dias antes" when the mentions peak precedes the views peak by N days (AC3)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(4, 9000), metrics, selected: null, onPick: () => {} })
+      assert.match(els.attentionNote.textContent, /a imprensa veio 3 dias antes/)
+    })
+  })
+
+  it('the sentence keeps the singular "dia" when the lag is exactly one day (AC3)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(2, 9000), metrics, selected: null, onPick: () => {} })
+      assert.match(els.attentionNote.textContent, /a imprensa veio 1 dia antes\b/)
+      assert.doesNotMatch(els.attentionNote.textContent, /1 dias antes/)
+    })
+  })
+
+  it('the sentence is "o público buscou N dias antes" when the views peak precedes the mentions peak (AC3)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(4), views: viewsSeries(1, 9000), metrics, selected: null, onPick: () => {} })
+      assert.match(els.attentionNote.textContent, /o público buscou 3 dias antes/)
+    })
+  })
+
+  it('the sentence is "os dois picos caíram no mesmo dia" when both peaks fall on the same day (AC3)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(3), views: viewsSeries(3, 9000), metrics, selected: null, onPick: () => {} })
+      assert.match(els.attentionNote.textContent, /os dois picos caíram no mesmo dia/)
+    })
+  })
+
+  it('no sentence, only a note, when either series has no peak, all-zero (AC3)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      const zeroViews = Array.from({ length: 5 }, (_, i) => ({ day: day(i + 1), views: 0 }))
+      paintAttention({ mentions: mentionsSeries(3), views: zeroViews, metrics, selected: null, onPick: () => {} })
+      assert.doesNotMatch(els.attentionNote.textContent, /dias antes|mesmo dia/)
+      assert.doesNotMatch(els.attentionChart.innerHTML, /dias antes|mesmo dia/)
+    })
+  })
+
+  it('the mentions row is sized off its own maximum, never distorted by the views row scale (AC4)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      const mentions = mentionsSeries(2)
+      paintAttention({ mentions, views: viewsSeries(3, 200), metrics, selected: null, onPick: () => {} })
+      const rowA = els.attentionChart.innerHTML.match(/data-row="mentions"[\s\S]*?(?=data-row="views"|$)/)?.[0] ?? ''
+      const sizesA = [...rowA.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
+      assert.ok(sizesA.length > 0, 'the mentions row must draw sized marks')
+      paintAttention({ mentions, views: viewsSeries(3, 5_000_000), metrics, selected: null, onPick: () => {} })
+      const rowB = els.attentionChart.innerHTML.match(/data-row="mentions"[\s\S]*?(?=data-row="views"|$)/)?.[0] ?? ''
+      const sizesB = [...rowB.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
+      assert.deepEqual(sizesA, sizesB, "the mentions row's own sizes must not shift just because the views row's scale changed by orders of magnitude")
+    })
+  })
+
+  it('the views row is sized off its own maximum, never distorted by the mentions row scale (AC4)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      const views = viewsSeries(2, 40000)
+      paintAttention({ mentions: mentionsSeries(3, 5), views, metrics, selected: null, onPick: () => {} })
+      const rowA = els.attentionChart.innerHTML.match(/data-row="views"[\s\S]*$/)?.[0] ?? ''
+      const sizesA = [...rowA.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
+      assert.ok(sizesA.length > 0, 'the views row must draw sized marks')
+      const bigMentions = Array.from({ length: 5 }, (_, i) => ({ day: day(i + 1), count: i + 1 === 3 ? 900000 : 2 }))
+      paintAttention({ mentions: bigMentions, views, metrics, selected: null, onPick: () => {} })
+      const rowB = els.attentionChart.innerHTML.match(/data-row="views"[\s\S]*$/)?.[0] ?? ''
+      const sizesB = [...rowB.matchAll(/class="attention-bar"[^/]*height="(\d+(?:\.\d+)?)"/g)].map((m) => Number(m[1]))
+      assert.deepEqual(sizesA, sizesB, "the views row's own sizes must not shift just because the mentions row's scale changed by orders of magnitude")
+    })
+  })
+
+  it('paintAttentionLoading paints a ghost of the two-row/axis shape, never the word Carregando (AC10)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttentionLoading()
+      assert.match(els.attentionChart.innerHTML, /ghost-field/)
+      assert.doesNotMatch(els.attentionChart.innerHTML, /Carregando/)
+      assert.equal(els.attentionChart.getAttribute('aria-busy'), 'true')
+    })
+  })
+
+  it('paintAttentionError paints the "could not load" note and clears the loading ghost (AC10)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttentionLoading()
+      paintAttentionError()
+      assert.match(els.attentionChart.innerHTML, /Não foi possível carregar/)
+      assert.doesNotMatch(els.attentionChart.innerHTML, /ghost-field/)
+    })
+  })
+
+  it('the loading ghost and the data paint share the same row/axis shape (AC10): both carry data-row="mentions", data-row="views" and the attention-axis line', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttentionLoading()
+      const ghostHtml = String(els.attentionChart.innerHTML)
+      assert.match(ghostHtml, /data-row="mentions"/)
+      assert.match(ghostHtml, /data-row="views"/)
+      assert.match(ghostHtml, /attention-axis/)
+
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(4, 9000), metrics, selected: null, onPick: () => {} })
+      const dataHtml = String(els.attentionChart.innerHTML)
+      assert.match(dataHtml, /data-row="mentions"/)
+      assert.match(dataHtml, /data-row="views"/)
+      assert.match(dataHtml, /attention-axis/)
+    })
+  })
+
+  // Spec §4: both rows of a day share one click target; only the mentions mark stays reachable
+  // by keyboard/AT, or the day count would double to 60.
+  it('exactly 30 marks stay in the tab order on a 30-day paint; the views row drops out of the tab order and the accessibility tree', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(3, 30), views: viewsSeries(7, 9000, 30), metrics, selected: null, onPick: () => {} })
+      const html = String(els.attentionChart.innerHTML)
+      assert.equal([...html.matchAll(/data-day="/g)].length, 60, 'both rows still carry one mark per day')
+      assert.equal([...html.matchAll(/tabindex="0"/g)].length, 30, 'only the mentions row stays in the tab order')
+      assert.equal([...html.matchAll(/tabindex="-1"/g)].length, 30, 'the views row drops out of the tab order')
+      assert.equal([...html.matchAll(/aria-hidden="true"/g)].length, 30, 'the views row drops out of the accessibility tree')
+    })
+  })
+
+  it("the mentions mark's accessible name is the pt-BR day label plus both series' own values, never the raw ISO date", () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(1, 9000), metrics, selected: null, onPick: () => {} })
+      const html = String(els.attentionChart.innerHTML)
+      const label = `${attentionDayLabel(day(1))}, 40 documentos, 9.000 visualizações`
+      assert.ok(html.includes(`aria-label="${label}"`), `expected aria-label ${JSON.stringify(label)} in ${html}`)
+      assert.doesNotMatch(html, /aria-label="2026-08-01/, 'the raw ISO date must not leak into the accessible name')
+    })
+  })
+
+  it('viewsLoading paints aria-busy="true" and its own sr-only note; a full paint clears both (AC10)', () => {
+    withFakeDocument(['attentionChart', 'attentionNote'], (els) => {
+      paintAttention({ mentions: mentionsSeries(1), views: [], metrics, selected: null, onPick: () => {}, viewsLoading: true })
+      assert.equal(els.attentionChart.getAttribute('aria-busy'), 'true')
+      assert.match(els.attentionChart.innerHTML, /Lendo os pageviews\./)
+
+      paintAttention({ mentions: mentionsSeries(1), views: viewsSeries(4, 9000), metrics, selected: null, onPick: () => {} })
+      assert.equal(els.attentionChart.getAttribute('aria-busy'), 'false')
+      assert.doesNotMatch(els.attentionChart.innerHTML, /Lendo os pageviews\./)
+    })
+  })
+})
+
+// --accent is reserved for the live control elsewhere on the page (CLAUDE.md); the views row
+// must never carry a colour rule of its own -- the row head already names the row.
+describe('atlas.css never gives the attention views row --accent', () => {
+  const root = dirname(dirname(fileURLToPath(import.meta.url)))
+  const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+
+  it('carries no data-row="views" .attention-mark rule, and no rule anywhere in the attention block reads var(--accent)', () => {
+    const block = css.match(/\/\* -+ the attention figure[\s\S]*?-+ \*\/[\s\S]*?(?=\n\/\* -+|$)/)?.[0] ?? ''
+    assert.ok(block, 'the attention figure CSS block must exist')
+    assert.doesNotMatch(block, /data-row="views"\s*\.attention-mark/)
+    assert.doesNotMatch(block, /var\(--accent\)/)
   })
 })

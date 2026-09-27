@@ -1,4 +1,4 @@
-// Figure 7 (issue #208). Side-effect free outside a browser. Spans every tracked person at
+// Figure 8 (issue #208). Side-effect free outside a browser. Spans every tracked person at
 // once, so — unlike every other figure — it takes no person <select> of its own: the route's
 // own `persons` list is what feeds the grid's columns.
 

@@ -1,5 +1,6 @@
 import { mountDocsCard } from './docs-card.js'
 import { mount as mountAgenda } from './figures/agenda.js'
+import { mount as mountAttention } from './figures/attention.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountLenses } from './figures/lenses.js'
@@ -10,6 +11,7 @@ import { mountHelp } from './help.js'
 import {
   paintAgendaLoading,
   paintAtlasLoading,
+  paintAttentionLoading,
   paintCompareLoading,
   paintLensesLoading,
   paintOutletsLoading,
@@ -49,6 +51,8 @@ const FIGURES: FigureEntry[] = [
   // days stays fixed at 7, never seeded: figure 5 has no period control (issue #147 §4).
   { id: 'week', sectionId: 'week', keys: ['person', 'source', 'limit'], noticeId: 'weekNote', mount: mountWeek },
   { id: 'lenses', sectionId: 'lenses', keys: ['person', ['a', null], ['b', null], 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
+  // days stays fixed at 30, never seeded: figure 7 has no period control, like week's fixed 7.
+  { id: 'attention', sectionId: 'attention', keys: ['person', 'source'], noticeId: 'attentionNote', mount: mountAttention },
   // Spans every tracked person at once, so no 'person' key: the route's own persons list feeds
   // the grid's columns.
   { id: 'agenda', sectionId: 'agenda', keys: ['days', 'source'], noticeId: 'agendaGrid', mount: mountAgenda },
@@ -79,6 +83,7 @@ const paintBootLoading = () => {
   paintRisingLoading()
   paintWeekLoading()
   paintLensesLoading()
+  paintAttentionLoading()
   paintAgendaLoading()
 }
 

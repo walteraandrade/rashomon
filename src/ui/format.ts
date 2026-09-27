@@ -3,7 +3,8 @@
 import outletsJson from '../../outlets.json' with { type: 'json' }
 
 export type TermTestimony = { score: number; n: number }
-export type Term = { id: string; term: string; kind: string; count: number; pmi: number; testimony?: TermTestimony | null }
+// `community` is a plain number: src/communities.ts's Louvain/graphology types never reach the UI.
+export type Term = { id: string; term: string; kind: string; count: number; pmi: number; testimony?: TermTestimony | null; community?: number | null }
 export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
@@ -49,6 +50,11 @@ export type Lenses = { days: number; a: LensSide; b: LensSide; terms: CompareTer
 // counts /timeline returned, 'error' leaves the hole empty rather than inventing bars.
 export type SparklineState = 'loading' | 'ready' | 'error'
 export type Sparkline = { state: SparklineState; counts?: number[] }
+// Figure 7 (issue #216): two independently-scaled series sharing one day axis. Field names
+// never overlap (views vs count) so neither reads as sharing the other's scale.
+export type AttentionDay = { day: string; views: number }
+export type Attention = { days: number; series: AttentionDay[] }
+export type AttentionMentionDay = { day: string; count: number }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 
@@ -95,7 +101,7 @@ export const weekDayLabel = (startIso: string) => {
   return `${weekday} ${day}`
 }
 
-export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão' }
+export const kinds: Record<string, string> = { word: 'Palavra', hashtag: 'Hashtag', phrase: 'Expressão', org: 'Organização' }
 
 export const sourceLabels: Record<string, string> = {
   all: 'todas as fontes',
@@ -226,6 +232,26 @@ export const termMask = (term: { testimony?: TermTestimony | null }, personScore
   return maskColor(t.score - personScore)
 }
 
+export type MaskState = 'avaliacao' | 'tema' | 'off'
+
+// Top 6 by node count, ties broken by ascending id; a 7th+ community is simply absent from the map.
+export const communityRanking = (nodes: { community?: number | null }[]): Map<number, number> => {
+  const counts = new Map<number, number>()
+  for (const n of nodes) {
+    if (n.community === null || n.community === undefined) continue
+    counts.set(n.community, (counts.get(n.community) ?? 0) + 1)
+  }
+  return new Map([...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 6).map(([community], i) => [community, i + 1]))
+}
+
+// A discrete bucket needs no interpolation: a CSS token, not a computed rgb(...) string.
+export const themeMask = (term: { community?: number | null }, ranking: Map<number, number>): string | null => {
+  const c = term.community
+  if (c === null || c === undefined) return null
+  const rank = ranking.get(c)
+  return rank === undefined ? null : `var(--theme-${rank})`
+}
+
 export const testimonyPosition = (s: number) => ((Math.max(-10, Math.min(10, Number(s))) + 10) / 20) * 100
 
 export const signed = (value: unknown) => (Number(value) > 0 ? '+' : '') + fmt(value)
@@ -277,7 +303,7 @@ const LEAN_BY_DOMAIN = new Map((outletsJson as OutletEntry[]).map((o) => [o.doma
 
 export const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
 
-// Figure 7's grid shape: domains in the route's own order, cells keyed by person id so a
+// Figure 8's grid shape: domains in the route's own order, cells keyed by person id so a
 // missing pair reads as a blank cell rather than a zero share.
 export const agendaRows = (data: Agenda): { domain: string; lean: string | null; cells: Map<string, AgendaCell> }[] => {
   const byDomain = new Map<string, Map<string, AgendaCell>>()

@@ -80,7 +80,7 @@ describe('parseSourceList (issue #8)', () => {
   })
 })
 
-// The kind list travels like the source list: a caller can ask for any subset of the three
+// The kind list travels like the source list: a caller can ask for any subset of the four
 // kinds, an unknown token is dropped and an all-unknown or missing list falls back to all.
 describe('parseKindList', () => {
   it('parses a comma-separated list, drops unknown tokens and falls back to all', () => {
@@ -90,6 +90,31 @@ describe('parseKindList', () => {
     assert.equal(parseKindList(undefined), 'all')
     assert.equal(parseKindList('word,word'), 'word', 'duplicates collapse, as in parseSourceList')
     assert.equal(parseQuery({ kind: 'word,phrase' }).kind, 'word,phrase')
+  })
+
+  // Issue #209: org (GDELT's V1Organizations) joins hashtag/word/phrase as a fourth accepted kind.
+  it('accepts org, alongside or on its own', () => {
+    assert.equal(parseKindList('org'), 'org')
+    assert.equal(parseKindList('word,org'), 'word,org')
+  })
+})
+
+// AC4: KINDS gains 'org', parseKindList resolves it (alone and alongside another kind) unchanged,
+// and an unrecognized token still falls back to 'all'.
+describe('KINDS includes org (issue #209 AC4)', () => {
+  it('KINDS includes org', () => {
+    assert.ok(KINDS.includes('org'), 'src/query.ts KINDS must include org')
+  })
+
+  it("parseKindList('org') and parseKindList('word,org') both resolve to strings containing org unchanged", () => {
+    assert.match(parseKindList('org'), /\borg\b/)
+    assert.match(parseKindList('word,org'), /\borg\b/)
+    assert.equal(parseKindList('org'), 'org')
+    assert.equal(parseKindList('word,org'), 'word,org')
+  })
+
+  it("parseKindList('bogus') still falls back to 'all'", () => {
+    assert.equal(parseKindList('bogus'), 'all')
   })
 })
 
@@ -495,13 +520,13 @@ describe('parseCountryList', () => {
 })
 
 describe('KINDS (issue #108)', () => {
-  it('is the same set the page sends as ATLAS_KINDS (issue #195)', () => {
-    assert.deepEqual(new Set(ATLAS_KINDS.split(',')), new Set(KINDS))
+  it("matches ATLAS_KINDS's set exactly (issue #195/#209)", () => {
+    assert.deepEqual(new Set(KINDS), new Set(ATLAS_KINDS.split(',')))
   })
 
-  it('no longer accepts the token theme', () => {
+  it('no longer accepts the token theme, and now also accepts org', () => {
     assert.ok(!KINDS.includes('theme'))
-    assert.deepEqual(KINDS, ['hashtag', 'word', 'phrase'])
+    assert.deepEqual(KINDS, ['hashtag', 'word', 'phrase', 'org'])
   })
 })
 

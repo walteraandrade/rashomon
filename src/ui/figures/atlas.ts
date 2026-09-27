@@ -341,6 +341,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $('zoomGroup').hidden = mode === 'strip'
     $('keyDefault').hidden = mode === 'strip'
     $('keyStrip').hidden = mode !== 'strip'
+    $('keyTheme').hidden = mode === 'strip' || getMask() !== 'tema'
     if (nodes.length) {
       if (!currentLayout || mode === 'map') drawCurrentMap()
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
@@ -495,6 +496,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     },
     toggleMask: () => {
       setMask(nextMask(getMask()))
+      $('keyTheme').hidden = mode === 'strip' || getMask() !== 'tema'
       $('mask').textContent = MASK_LABELS[getMask()]
       $('mask').setAttribute('aria-pressed', String(getMask() !== 'off'))
       if (graph && !busy) {

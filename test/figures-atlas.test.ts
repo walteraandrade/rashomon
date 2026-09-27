@@ -233,6 +233,24 @@ describe('mask cycle verifier suite (issue #217 AC9/AC10/AC11)', () => {
       assert.equal(els.mask.textContent, 'Sem cor', 'off survives the round trip through strip mode just as tema does')
     })
   })
+
+  it('#keyTheme tracks the tema state across mode switches and the cycle to off (issue #217 UI gap)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.mask.fire('click') // avaliação -> tema
+      assert.equal(els.keyTheme.hidden, false, 'tema chosen, map mode: the tema key shows')
+      els.modeStrip.fire('click')
+      assert.equal(els.keyTheme.hidden, true, 'strip mode hides the tema key even though tema is still chosen')
+      els.modeMap.fire('click')
+      assert.equal(els.keyTheme.hidden, false, 'back in map mode, the tema key shows again')
+      els.mask.fire('click') // tema -> off
+      assert.equal(els.keyTheme.hidden, true, 'cycling to off hides the tema key')
+    })
+  })
 })
 
 // Issue #217: /graph nodes may carry a community; the atlas ranks the top 6 and colours by it.

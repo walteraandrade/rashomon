@@ -320,6 +320,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .atlas-word.is-selected .underline { opacity: 1; }
 .atlas-word[data-kind="org"]:not(.is-selected) .underline { opacity: .55; stroke-dasharray: 2 2; }
 .atlas-word[data-kind="org"].is-selected .underline { stroke-dasharray: 2 2; }
+.map-svg.is-masked .atlas-word[data-kind="org"].is-neighbor .underline { stroke-dasharray: 2 2; }
 .person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
 /* The centre is the person's own entry to the documents, so it answers to the cursor the way a
    word does -- the same soft box, in the colour the name is already written in. */

@@ -52,15 +52,20 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.doesNotMatch(html.replaceAll(VERCEL_INSIGHTS_TAG, ''), /<script/i, 'the reading page runs no JavaScript of its own')
   })
 
-  // AC11: como-ler.html carries a paragraph, in pt-BR, describing the org term kind, reachable
-  // from the guide (the chapter with id="como-ler" is the same content help.ts opens inside
-  // #helpDialog — see test/help.test.ts — so any paragraph inside it is reachable that way).
-  it("como-ler.html describes the org term kind in pt-BR, inside the guide's own chapter (issue #209 AC11)", () => {
+  // AC11: como-ler.html carries a paragraph, in pt-BR, describing the org term kind. #helpDialog
+  // in atlas.html is its own copy of the guide (help.ts only opens it and scrolls to a section),
+  // so the same paragraph must also exist inside #help-atlas there, or a reader who opens the
+  // in-page dialog never sees it.
+  it("como-ler.html and atlas.html's #helpDialog both describe the org term kind in pt-BR (issue #209 AC11)", () => {
     const html = read('como-ler.html')
     const chapter = html.match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.ok(chapter, 'the chapter must exist with id="como-ler"')
     assert.match(chapter, /organiza[cç][aãoõ]/i, 'the chapter must mention organizações in pt-BR')
     assert.match(chapter, /GDELT/, 'the paragraph must name GDELT as the source')
+    const help = read('atlas.html').match(/id="help-atlas"[\s\S]*?(?=<div id="help-pmi")/)?.[0] ?? ''
+    assert.ok(help, '#help-atlas must exist in atlas.html')
+    assert.match(help, /organiza[cç][aãoõ]/i, '#help-atlas must mention organizações in pt-BR')
+    assert.match(help, /GDELT/, '#help-atlas must name GDELT as the source')
   })
 
   it('atlas.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
@@ -88,7 +93,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       )
     const figure = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const help = html.match(/id="help-atlas"[\s\S]*?(?=<div id="help-pmi")/)?.[0] ?? ''
-    assert.deepEqual(dts(figure), ['Tamanho', 'Cor', 'Posição', 'Clique'])
+    assert.deepEqual(dts(figure), ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Clique'])
     assert.deepEqual(dts(help), dts(figure))
   })
 
@@ -287,12 +292,12 @@ describe('markup for figure 1\'s third view, Avaliação', () => {
     assert.match(segment, /<button id="modeColumns"/)
     assert.match(segment, /<button id="modeStrip"[^>]*>Avaliação<\/button>/, 'the third button reads "Avaliação"')
     // #keyDefault must stay the first <dl class="figure-key"> in #workspace, with exactly the
-    // four rows Tamanho/Cor/Posição/Clique, unchanged (test/leitura-ui-acceptance.test.ts:70-80
-    // relies on this order).
+    // five rows Tamanho/Cor/Posição/Tracejado/Clique, unchanged (test/leitura-ui-acceptance.test.ts
+    // "figure 1's key on the page and in the dialog name the same encodings" relies on this order).
     const firstKey = workspace.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? ''
     assert.match(firstKey, /id="keyDefault"/)
     const rows = [...firstKey.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim())
-    assert.deepEqual(rows, ['Tamanho', 'Cor', 'Posição', 'Clique'])
+    assert.deepEqual(rows, ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Clique'])
   })
 
   it('#keyStrip is a second, initially-hidden figure-key with the four Posição/Tamanho/Cor/Clique rows', () => {

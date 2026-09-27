@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
-import { before, describe, it } from 'node:test'
+import { after, before, describe, it } from 'node:test'
 import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
 import { inTransaction, insertDocP } from '../src/store.js'
-import { persons, seed, untrackedPerson } from './fixture.js'
+import { persons, reseed, seed, untrackedPerson } from './fixture.js'
 import './close.js'
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
 
 // src/aggregate.ts builds graph_scopes / graph_terms (graph_terms_all is a session-temp table,
 // never persisted); graphFor answers
@@ -363,5 +365,68 @@ describe('term_communities (issue #214)', () => {
       { nodes: withCommunities.nodes.map(({ community, ...rest }) => rest), stats: withCommunities.stats, signature: withCommunities.signature },
     )
     await buildGraphAggregates(persons)
+  })
+})
+
+// Issue #209: the fixture's own org-kind doc (doc 62 in fixture.ts) is dated daysAgo(4000),
+// outside every DAYS window, so graph_terms never gets an 'org' row from the shared seed and
+// every recorte above comparing fast against live on kind 'org' does so over two empty results.
+// This suite adds gkg docs about lula, inside the 7-day window, that actually carry org terms.
+describe('org-kind terms inside a build window (issue #209)', () => {
+  before(async () => {
+    await seed()
+    await insertDocP(
+      {
+        source: 'gkg',
+        uri: 'https://gdeltproject.org/209-org-1',
+        text: 'Lula reune ministros para discutir petrobras e o banco central',
+        publishedAt: daysAgo(1),
+        domain: 'gdeltproject.org',
+        tone: 0.2,
+        extraTerms: [
+          { term: 'petrobras', kind: 'org' },
+          { term: 'banco central', kind: 'org' },
+          // Same bare word as lula's own alias: must be dropped from her graph like any own-name term.
+          { term: 'lula', kind: 'org' },
+        ],
+      },
+      persons,
+    )
+    await insertDocP(
+      {
+        source: 'gkg',
+        uri: 'https://gdeltproject.org/209-org-2',
+        text: 'Lula recebe diretoria da petrobras em reuniao',
+        publishedAt: daysAgo(2),
+        domain: 'gdeltproject.org',
+        tone: -0.1,
+        extraTerms: [
+          { term: 'petrobras', kind: 'org' },
+          { term: 'lula', kind: 'org' },
+        ],
+      },
+      persons,
+    )
+    await buildGraphAggregates(persons)
+  })
+  after(reseed)
+
+  it('graph_terms holds org rows once a doc inside a build window carries one', async () => {
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_terms where kind = 'org'`)
+    assert.ok(rows[0].n > 0)
+  })
+
+  for (const days of DAYS)
+    for (const kind of ['org', 'org,word', 'word,hashtag,phrase,org'])
+      for (const sort of ['count', 'pmi'])
+        it(`fast matches live for lula, kind=${kind}, sort=${sort}, days=${days}`, async () => {
+          const query = q({ days: String(days), kind, sort })
+          assert.deepEqual(await fast(lula, query), await live(lula, query))
+        })
+
+  it("drops the org term that is the person's own name, like the live query does", async () => {
+    const row = (await fast(lula, q({ kind: 'org', days: '7' }))) as { nodes: { term: string; kind: string }[] } | undefined
+    assert.ok(row, 'the fast path must answer this recorte')
+    assert.equal(row!.nodes.some((n) => n.term === 'lula'), false)
   })
 })

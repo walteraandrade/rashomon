@@ -646,3 +646,37 @@ describe('seed.json party/office/uf, echoed by /api/people (issue #212)', () => 
     }
   })
 })
+
+describe('GET /api/people/:id/graph?kind=org (issue #209)', () => {
+  before(async () => {
+    await seed()
+    await insertDocP(
+      {
+        source: 'gkg',
+        uri: 'https://gdeltproject.org/209-server-org',
+        text: 'Lula se reune com a petrobras e o banco central',
+        publishedAt: new Date().toISOString(),
+        domain: 'gdeltproject.org',
+        tone: 0.1,
+        extraTerms: [
+          { term: 'petrobras', kind: 'org' },
+          { term: 'banco central', kind: 'org' },
+          // Same bare word as lula's own alias: must be dropped from her graph like any own-name term.
+          { term: 'lula', kind: 'org' },
+        ],
+      },
+      persons,
+    )
+  })
+  after(reseed)
+
+  it('returns only kind: org nodes through the Hono app', async () => {
+    // min=1: the seeded doc mentions each org term once, under GraphQuery's default min of 2.
+    const res = await app.request('/api/people/lula/graph?kind=org&days=7&min=1')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Awaited<ReturnType<typeof graphFor>>
+    assert.ok(body.nodes.length > 0, 'the org doc must surface at least one org node')
+    for (const node of body.nodes) assert.equal(node.kind, 'org')
+    assert.equal(body.nodes.some((n) => n.term === 'lula'), false, "the person's own name is dropped even as an org term")
+  })
+})

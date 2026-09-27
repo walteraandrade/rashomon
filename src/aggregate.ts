@@ -123,10 +123,12 @@ const COMMUNITY_SEED = 42
 const scopePairsQuery = (days: number) => sql`select distinct source, person_id from graph_terms where days = ${days}`
 
 const keptTermsQuery = (days: number, source: string, personId: string) => sql`
-  select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}`
+  select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
+  order by kind, term`
 
 // linksQuery's join shape against graph_terms' own kept (term, kind) set instead of a live
 // per-request `ids` array, which is why this cannot simply import linksQuery.
+// Louvain's partition depends on edge order, so both this and keptTermsQuery sort theirs.
 // Pairs come from each doc's own kept ids, never a self-join of all hits on doc_id: the
 // planner misestimates that join and nested-loops it. Driving from `about` skips docs without the person.
 const communityEdgesQuery = (days: number, source: string, personId: string) => sql`
@@ -150,7 +152,8 @@ const communityEdgesQuery = (days: number, source: string, personId: string) => 
   select a, b, count(*)::int as count
   from doc_ids, unnest(ids) a, unnest(ids) b
   where a < b
-  group by 1, 2 having count(*) >= 2`
+  group by 1, 2 having count(*) >= 2
+  order by 1, 2`
 
 const insertCommunitiesQuery = (days: number, source: string, personId: string, terms: string[], kinds: string[], communityIds: number[]) => sql`
   insert into term_communities (days, source, person_id, term, kind, community)
@@ -231,7 +234,7 @@ export const hasGraphAggregates = async (): Promise<boolean> => {
   return rows[0].built
 }
 
-export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery, window: windowStatements }
+export const queries = { universe: universeQuery, scopes: scopesQuery, personTerms: personTermsQuery, window: windowStatements, communityEdges: communityEdgesQuery }
 
 const main = async (argv: string[]) => {
   await migrateP()

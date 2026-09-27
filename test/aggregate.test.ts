@@ -565,6 +565,14 @@ describe('outlet fields and neighbours (issue #218)', () => {
     assert.deepEqual(below!.neighbors, [])
   })
 
+  it('sourcesFor off the build universe (source, country, domain, lean) returns field: null and neighbors: []', async () => {
+    const overs: Record<string, string>[] = [{ source: 'gnews' }, { country: 'all' }, { lean: 'right' }, { domain: 'campovoz.example' }]
+    for (const over of overs) {
+      const rows = await sourcesFor(tarcisio, q(over))
+      assert.ok(rows.every((r) => r.field === null && r.neighbors.length === 0), JSON.stringify(over))
+    }
+  })
+
   it('buildGraphAggregates run twice back-to-back does not throw and leaves no duplicate rows (AC3)', async () => {
     await assert.doesNotReject(buildGraphAggregates(persons))
     const { rows: dupFields } = await db.query<{ n: number }>(

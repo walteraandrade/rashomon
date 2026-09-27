@@ -394,15 +394,14 @@ export const paintOutlets = ({
   }
   const groupMarkup = (eyebrow: string, group: (typeof merged)[number][]) =>
     html`<p class="eyebrow">${eyebrow}</p><div class="outlet-grid">${group.map(outletRow)}</div>`
+  // The field int is a build-local Louvain label, never a rank: groups order by their own docs.
+  const byDocs = (a: (typeof merged)[number], b: (typeof merged)[number]) => b.docs - a.docs || a.domain.localeCompare(b.domain)
+  const docsOf = (g: (typeof merged)[number][]) => g.reduce((n, r) => n + r.docs, 0)
   const groupSections = [
-    ...[...groups.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([, g]) =>
-        groupMarkup(
-          `grupo · ${g.slice().sort((a, b) => b.docs - a.docs || a.domain.localeCompare(b.domain)).slice(0, 3).map((r) => r.domain).join(', ')}`,
-          g,
-        ),
-      ),
+    ...[...groups.values()]
+      .map((g) => g.slice().sort(byDocs))
+      .sort((a, b) => docsOf(b) - docsOf(a) || a[0].domain.localeCompare(b[0].domain))
+      .map((g) => groupMarkup(`grupo · ${g.slice(0, 3).map((r) => r.domain).join(', ')}`, g)),
     ...(ungrouped.length ? [groupMarkup('Sem agrupamento suficiente', ungrouped)] : []),
   ]
   $('outletList').innerHTML = merged.length

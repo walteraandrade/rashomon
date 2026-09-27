@@ -111,7 +111,24 @@ describe('neighbors (issue #218)', () => {
       { domain: 'a.example', neighbor: 'b.example', similarity: 1 },
       { domain: 'b.example', neighbor: 'a.example', similarity: 1 },
     ])
-    assert.deepEqual(edges, [{ a: 'a.example', b: 'b.example', count: 1 }, { a: 'b.example', b: 'a.example', count: 1 }])
+    assert.deepEqual(edges, [{ a: 'a.example', b: 'b.example', count: 1 }])
+  })
+
+  it('topK caps pairs but never edges: a bridge neither side kept still reaches Louvain', () => {
+    const sets = new Map<string, Set<string>>([
+      ['a.example', new Set(['word:x', 'word:b'])],
+      ['a1.example', new Set(['word:x'])],
+      ['a2.example', new Set(['word:x'])],
+      ['b.example', new Set(['word:y', 'word:b'])],
+      ['b1.example', new Set(['word:y'])],
+      ['b2.example', new Set(['word:y'])],
+    ])
+    const { pairs, edges } = neighbors(sets, 2)
+    const bridge = (x: { domain?: string; neighbor?: string; a?: string; b?: string }) =>
+      [x.domain ?? x.a, x.neighbor ?? x.b].sort().join('|') === 'a.example|b.example'
+    assert.ok(!pairs.some(bridge), 'each side keeps two closer neighbours')
+    assert.equal(edges.filter(bridge).length, 1, 'the bridge is one undirected edge')
+    assert.equal(edges.length, new Set(edges.map((e) => [e.a, e.b].sort().join('|'))).size, 'no pair appears twice')
   })
 
   it('two domains sharing nothing produce no pair and no edge', () => {

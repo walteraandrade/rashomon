@@ -462,20 +462,24 @@ const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: strin
 type TermTestimonyRow = { overall: { score: number | null; n: number }; terms: { id: string; score: number; n: number }[] }
 
 // field/neighbors are keyed by (days, person, domain) alone; null/[] when this window/domain
-// has no outlet_fields/outlet_neighbors row.
-const sourcesQuery = (person: Person, q: Scope) => sql`
+// has no outlet_fields/outlet_neighbors row, or when the request is not the build's own universe
+// (source=all, country=br, no domain/lean) -- bound as a flag so the statement text never branches.
+const sourcesQuery = (person: Person, q: Scope) => {
+  const built = q.source === 'all' && q.country === 'br' && q.domain === 'all' && q.lean === 'all'
+  return sql`
   with ${scopeCte(person, q)}
   select ${outletDomain} as domain, d.source, count(*)::int as docs,
     round(avg(d.tone)::numeric, 2)::float8 as tone, count(d.tone)::int as tone_n,
     of.field as field, coalesce(onb.neighbors, '[]'::jsonb) as neighbors
   from docs d join about a on a.doc_id = d.id
-  left join outlet_fields of on of.days = ${q.days}::int and of.person_id = ${person.id} and of.domain = ${outletDomain}
+  left join outlet_fields of on ${built}::boolean and of.days = ${q.days}::int and of.person_id = ${person.id} and of.domain = ${outletDomain}
   left join (
     select domain, jsonb_agg(jsonb_build_object('domain', neighbor, 'similarity', similarity) order by similarity desc, neighbor) as neighbors
-    from outlet_neighbors where days = ${q.days}::int and person_id = ${person.id}
+    from outlet_neighbors where ${built}::boolean and days = ${q.days}::int and person_id = ${person.id}
     group by domain
   ) onb on onb.domain = ${outletDomain}
   group by 1, 2, of.field, onb.neighbors order by docs desc, domain limit 80`
+}
 
 export const sourcesFor = async (person: Person, q: GraphQuery) => {
   const { rows } = await run<SourceRow>(sourcesQuery(person, q))

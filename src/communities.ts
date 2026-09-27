@@ -59,9 +59,11 @@ export type OutletPair = { domain: string; neighbor: string; similarity: number 
 
 // Jaccard over each domain's term-id set; zero-similarity pairs are dropped, not stored as zero.
 // A domain with no surviving pair gets no entry -- the caller adds its own self-loop.
+// `edges` holds every non-zero pair once, undirected; topK caps only `pairs`, never the graph Louvain sees.
 export const neighbors = (sets: ReadonlyMap<string, ReadonlySet<string>>, topK: number): { pairs: OutletPair[]; edges: CommunityEdge[] } => {
   const domains = [...sets.keys()]
   const byDomain = new Map<string, OutletPair[]>(domains.map((d) => [d, []]))
+  const edges: CommunityEdge[] = []
   for (let i = 0; i < domains.length; i++) {
     for (let j = i + 1; j < domains.length; j++) {
       const a = domains[i]
@@ -73,6 +75,7 @@ export const neighbors = (sets: ReadonlyMap<string, ReadonlySet<string>>, topK: 
       const union = setA.size + setB.size - intersection
       const similarity = union === 0 ? 0 : intersection / union
       if (similarity <= 0) continue
+      edges.push({ a, b, count: similarity })
       byDomain.get(a)!.push({ domain: a, neighbor: b, similarity })
       byDomain.get(b)!.push({ domain: b, neighbor: a, similarity })
     }
@@ -84,6 +87,5 @@ export const neighbors = (sets: ReadonlyMap<string, ReadonlySet<string>>, topK: 
       .sort((x, y) => y.similarity - x.similarity || byName(x, y))
       .slice(0, topK),
   )
-  const edges: CommunityEdge[] = pairs.map((p) => ({ a: p.domain, b: p.neighbor, count: p.similarity }))
   return { pairs, edges }
 }

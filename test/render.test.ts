@@ -351,6 +351,18 @@ describe('paintOutlets groups by field and lists a focused outlet\'s neighbours 
     assert.ok(markup.indexOf('a.example') < markup.indexOf('Sem agrupamento suficiente'))
   })
 
+  it('field groups order by their summed docs, never by the Louvain id', () => {
+    const swapped: FieldedRow[] = [
+      { domain: 'small.example', source: 'gnews', docs: 2, tone: null, field: 0, neighbors: [] },
+      { domain: 'big.example', source: 'gnews', docs: 9, tone: null, field: 7, neighbors: [] },
+    ]
+    const markup = withFakeDocument(['domainLabel', 'outletList'], (els) => {
+      paintOutlets({ rows: swapped, testimony: null, domain: 'all', onPick: () => {} })
+      return els.outletList.innerHTML
+    })
+    assert.ok(markup.indexOf('grupo · big.example') < markup.indexOf('grupo · small.example'))
+  })
+
   it('the focused outlet\'s own row lists its neighbours as domain and similarity, or the empty-neighbours line (AC13)', () => {
     const focused = withFakeDocument(['domainLabel', 'outletList'], (els) => {
       paintOutlets({ rows, testimony: null, domain: 'a.example', onPick: () => {} })

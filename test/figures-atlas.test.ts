@@ -134,6 +134,169 @@ describe('createHandlers: local repaints never reload, control changes do (issue
   })
 })
 
+// Issue #217: a second, opt-in colouring by term community, cycling through the same control.
+describe('figure 1: the mask control cycles avaliação → tema → off → avaliação (issue #217 AC9/AC10/AC11)', () => {
+  const graphOf = (nodes: unknown[]) => ({ person: persons[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } })
+
+  it('cycles the label and aria-pressed in the fixed order and wraps', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphOf([{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.equal(els.mask.textContent, 'Colorir por avaliação')
+      assert.equal(els.mask.getAttribute('aria-pressed'), 'true')
+      els.mask.fire('click')
+      assert.equal(els.mask.textContent, 'Colorir por tema')
+      assert.equal(els.mask.getAttribute('aria-pressed'), 'true')
+      els.mask.fire('click')
+      assert.equal(els.mask.textContent, 'Sem cor')
+      assert.equal(els.mask.getAttribute('aria-pressed'), 'false')
+      els.mask.fire('click')
+      assert.equal(els.mask.textContent, 'Colorir por avaliação')
+      assert.equal(els.mask.getAttribute('aria-pressed'), 'true')
+    })
+  })
+
+  it('the chosen mask state survives a switch into and back out of strip mode', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphOf([{ id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.mask.fire('click')
+      assert.equal(els.mask.textContent, 'Colorir por tema')
+      els.modeStrip.fire('click')
+      assert.equal(els.mask.hidden, true, 'the control still hides in strip mode')
+      els.modeMap.fire('click')
+      assert.equal(els.mask.textContent, 'Colorir por tema', 'the tema state must survive the round trip through strip mode')
+      assert.equal(els.mask.getAttribute('aria-pressed'), 'true')
+    })
+  })
+
+  it('the control stays hidden in strip mode and the chosen state (off) survives the round trip, from a fresh mount (issue #217 AC11)', async () => {
+    const graphWith = (nodes: unknown[]) => ({ person: persons[1], nodes, links: [], stats: { about: 5, testimony: { method: 'kikori', score: -0.5, n: 8 } } })
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2, testimony: { score: 1.1, n: 6 } }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.equal(els.mask.hidden, false, 'map mode: the control is visible')
+      els.mask.fire('click') // avaliação -> tema
+      els.mask.fire('click') // tema -> off
+      els.modeStrip.fire('click')
+      assert.equal(els.mask.hidden, true)
+      els.modeMap.fire('click')
+      assert.equal(els.mask.hidden, false)
+      assert.equal(els.mask.textContent, 'Sem cor', 'off survives the round trip through strip mode just as tema does')
+    })
+  })
+
+  it('#keyTheme tracks the tema state across mode switches and the cycle to off (issue #217 UI gap)', async () => {
+    const graphWith = (nodes: unknown[]) => ({ person: persons[1], nodes, links: [], stats: { about: 5, testimony: { method: 'kikori', score: -0.5, n: 8 } } })
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.mask.fire('click') // avaliação -> tema
+      assert.equal(els.keyTheme.hidden, false, 'tema chosen, map mode: the tema key shows')
+      els.modeStrip.fire('click')
+      assert.equal(els.keyTheme.hidden, true, 'strip mode hides the tema key even though tema is still chosen')
+      els.modeMap.fire('click')
+      assert.equal(els.keyTheme.hidden, false, 'back in map mode, the tema key shows again')
+      els.mask.fire('click') // tema -> off
+      assert.equal(els.keyTheme.hidden, true, 'cycling to off hides the tema key')
+    })
+  })
+
+  it('#keyThemeText names the construction\'s own communities, or says there are none (code review fix #1)', async () => {
+    const graphWith = (nodes: unknown[]) => ({ person: persons[1], nodes, links: [], stats: { about: 5, testimony: { method: 'kikori', score: -0.5, n: 8 } } })
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.mask.fire('click') // avaliação -> tema
+      assert.match(els.keyThemeText.textContent, /não tem temas/, 'no node carries a community: the key must say so')
+      assert.doesNotMatch(els.keyThemeText.textContent, /caminharam juntas/, 'the positive sentence must not show when there is nothing to rank')
+    })
+  })
+
+  it('#keyThemeText praises the construction when at least one community was ranked (code review fix #1)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [
+        { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 },
+        { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 },
+      ]
+      const graph = { person: persons[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.mask.fire('click') // avaliação -> tema
+      assert.match(els.keyThemeText.textContent, /caminharam juntas/, 'a ranked community: the positive sentence shows')
+      assert.doesNotMatch(els.keyThemeText.textContent, /não tem temas/)
+    })
+  })
+
+  it('#keyDefaultColor hides in tema and returns once the mask cycles to off (code review fix #2)', async () => {
+    const graphWith = (nodes: unknown[]) => ({ person: persons[1], nodes, links: [], stats: { about: 5, testimony: { method: 'kikori', score: -0.5, n: 8 } } })
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.equal(els.keyDefaultColor.hidden, false, 'avaliação: the default colour row is visible')
+      els.mask.fire('click') // avaliação -> tema
+      assert.equal(els.keyDefaultColor.hidden, true, 'tema: the avaliação colour row makes no sense any more')
+      els.mask.fire('click') // tema -> off
+      assert.equal(els.keyDefaultColor.hidden, false, 'off: the default colour row returns')
+    })
+  })
+})
+
+// Issue #217: /graph nodes may carry a community; the atlas ranks the top 6 and colours by it.
+describe('figure 1: "no mesmo tema" (issue #217 AC7/AC8)', () => {
+  it('lists a term\'s community mates only in tema mode, and each one is reachable via a click', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [
+        { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 },
+        { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 },
+        { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, community: 9 },
+      ]
+      const graph = { person: people[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph, '/docs': { docs: [], total: 0 } })
+      mountDocsCard()
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.modeColumns.fire('click')
+      const card = [...els.columns.querySelectorAll('[data-col]')].find((el: any) => el.dataset.col === 'word:golpe')
+      assert.ok(card, 'the columns list must carry a card for golpe')
+      card.fire('click')
+      await flush()
+      assert.doesNotMatch(els.inspector.innerHTML, /No mesmo tema/, 'avaliação mode: no tema list yet')
+      els.mask.fire('click')
+      assert.match(els.inspector.innerHTML, /No mesmo tema/, 'tema mode, a shared community: the list appears')
+      const mate = [...els.inspector.querySelectorAll('[data-related]')].find((el: any) => el.dataset.related === 'word:stf')
+      assert.ok(mate, 'stf shares golpe\'s community and must be listed')
+      mate.fire('click')
+      await flush()
+      const docsRequests = calls.filter((url) => url.includes('/docs?'))
+      assert.match(docsRequests.at(-1) ?? '', /term=stf/, 'picking a community mate reuses the same onChoose path as any other pick')
+    })
+  })
+})
+
 // Selecting a term used to be one way: once a word was picked, the only path back to the clean
 // map was the clear button in the toolbar. Two gestures now let the selection go — clicking the
 // selected term again, and clicking empty space inside the map or the list.

@@ -6,6 +6,7 @@ import {
   SOURCE_SEGMENTS,
   balanceColor,
   bskyUrl,
+  communityRanking,
   domainSuffix,
   fmt,
   foldTestimonyDomains,
@@ -28,6 +29,7 @@ import {
   testimonyColor,
   testimonyFocus,
   testimonyPosition,
+  themeMask,
   toneColor,
   trendOf,
 } from '../src/ui/format.js'
@@ -270,6 +272,60 @@ describe('the mask colours: maskColor and termMask', () => {
     assert.equal(termMask({ testimony: null }, -2.4), null)
     assert.equal(termMask({ testimony: { score: 3, n: 9 } }, null), null)
     assert.equal(termMask({ testimony: { score: -2.4, n: 10 } }, -2.4), termMask({ testimony: { score: 1, n: 10 } }, 1), 'same distance, same colour, whoever the person is')
+  })
+})
+
+describe('the tema colours: communityRanking and themeMask (issue #217 AC1/AC2/AC3)', () => {
+  it('communityRanking keeps the top 6 communities by node count, ties broken by ascending community id', () => {
+    // 7 (5 nodes), 2 (4 nodes), 4 & 9 tie at 3 nodes each (4 wins the tie: lower id), 1 (2 nodes), 5 (1 node) — an 8th, 6, has 1 node and must be cut.
+    const nodes = [
+      ...Array.from({ length: 5 }, () => ({ community: 7 })),
+      ...Array.from({ length: 4 }, () => ({ community: 2 })),
+      ...Array.from({ length: 3 }, () => ({ community: 9 })),
+      ...Array.from({ length: 3 }, () => ({ community: 4 })),
+      ...Array.from({ length: 2 }, () => ({ community: 1 })),
+      { community: 5 },
+      { community: 6 },
+      { community: null },
+      {},
+    ]
+    const ranking = communityRanking(nodes)
+    assert.deepEqual([...ranking.entries()], [
+      [7, 1],
+      [2, 2],
+      [4, 3],
+      [9, 4],
+      [1, 5],
+      [5, 6],
+    ])
+    assert.equal(ranking.has(6), false, 'a 7th distinct community is simply absent from the map')
+  })
+
+  it('communityRanking on an empty node list, or one with no non-null community, returns an empty map', () => {
+    assert.equal(communityRanking([]).size, 0)
+    assert.equal(communityRanking([{ community: null }, {}, { community: undefined }]).size, 0)
+  })
+
+  it('Term accepts an optional community: number | null field, and omitting it is valid too (issue #217 AC1)', () => {
+    const withNumber: import('../src/ui/format.js').Term = { id: 'word:a', term: 'a', kind: 'word', count: 1, pmi: 1, community: 4 }
+    const withNull: import('../src/ui/format.js').Term = { id: 'word:b', term: 'b', kind: 'word', count: 1, pmi: 1, community: null }
+    const withoutField: import('../src/ui/format.js').Term = { id: 'word:c', term: 'c', kind: 'word', count: 1, pmi: 1 }
+    assert.equal(withNumber.community, 4)
+    assert.equal(withNull.community, null)
+    assert.equal(withoutField.community, undefined)
+  })
+
+  it('themeMask: null in (no community) yields null out; a top-6 community yields its CSS token; a community outside the ranking yields null, not a literal muted colour', () => {
+    const ranking = new Map([[3, 1], [7, 2]])
+    assert.equal(themeMask({ community: null }, ranking), null)
+    assert.equal(themeMask({}, ranking), null, 'undefined reads the same as null')
+    assert.equal(themeMask({ community: 3 }, ranking), 'var(--theme-1)')
+    assert.equal(themeMask({ community: 7 }, ranking), 'var(--theme-2)')
+    assert.equal(themeMask({ community: 42 }, ranking), null, 'a 7th+ community is outside the ranking: no colour, not muted')
+  })
+
+  it('themeMask on an empty ranking always returns null', () => {
+    assert.equal(themeMask({ community: 1 }, new Map()), null)
   })
 })
 

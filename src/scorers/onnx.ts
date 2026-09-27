@@ -34,11 +34,16 @@ const loaded = new Map<string, Promise<Loaded>>()
 // via src/scorers/index.ts from src/score.ts) must never touch the network, which is what
 // keeps `pnpm typecheck`/`pnpm test` safe without ever setting TESTIMONY_SCORER=onnx.
 const load = async (): Promise<Loaded> => {
-  const { AutoTokenizer, AutoModelForSequenceClassification, Tensor } = await import('@huggingface/transformers')
-  // `revision` is omitted, not spelled 'main', when unset: transformers.js has its own default
-  // and naming it here would make an unpinned run indistinguishable from a pinned one.
   const rev = modelRevision()
-  const opts = rev ? { cache_dir: cacheDir(), revision: rev } : { cache_dir: cacheDir() }
+  // load() never runs unpinned: @huggingface/transformers keys its file cache by revision only
+  // when one is given, so an unpinned load would silently reuse whatever revision (main, in
+  // practice) first downloaded under that file name.
+  if (!rev)
+    throw new Error(
+      'TESTIMONY_REVISION is unset or malformed: set it to the Hub revision of TESTIMONY_MODEL (commit sha, tag or branch, matching /^[\\w.-]{1,64}$/) so doc_testimony records which model scored each row',
+    )
+  const { AutoTokenizer, AutoModelForSequenceClassification, Tensor } = await import('@huggingface/transformers')
+  const opts = { cache_dir: cacheDir(), revision: rev }
   const tok = await AutoTokenizer.from_pretrained(modelId(), opts)
   const model = await AutoModelForSequenceClassification.from_pretrained(modelId(), { ...opts, dtype: dtype() as Dtype })
   const contract = (model.config as unknown as { kikori?: Contract }).kikori

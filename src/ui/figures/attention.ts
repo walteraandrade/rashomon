@@ -77,7 +77,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     p.then(
       (data) => ({ key, data }),
       (e) => {
-        if (e && typeof e === 'object') (e as { key?: string }).key = key
+        if (e && typeof e === 'object' && Object.isExtensible(e)) (e as { key?: string }).key = key
         throw e
       },
     )

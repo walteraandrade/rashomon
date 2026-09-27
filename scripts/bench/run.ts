@@ -34,6 +34,7 @@ const { values: args } = parseArgs({
     progress: { type: 'string' },
     skip: { type: 'string', default: '' },
     dead: { type: 'string', default: '' },
+    cpu: { type: 'string', default: process.env.BENCH_CPU ?? '' },
   },
 })
 
@@ -247,7 +248,10 @@ const finishedKeys = (lines: Line[]) =>
 // a cell is open. Every sample writes a beat, so the limit applies to one execution, not a cell.
 const watched = (extra: string[], progress: string, timeoutMs: number) =>
   new Promise<{ code: number | null; hung?: string }>((done) => {
-    const proc = spawn(process.execPath, ['--import', 'tsx', here, '--phase', 'measure', '--src', src, '--progress', progress, ...extra], { stdio: 'inherit', env: childEnv })
+    const argv = [process.execPath, '--import', 'tsx', here, '--phase', 'measure', '--src', src, '--progress', progress, ...extra]
+    // A hybrid CPU's efficiency cores run the same statement ~2x slower: pin to one named core.
+    const [cmd, ...rest] = args.cpu ? ['taskset', '-c', args.cpu, ...argv] : argv
+    const proc = spawn(cmd, rest, { stdio: 'inherit', env: childEnv })
     let from = -1
     let seen = 0
     let since = Date.now()
@@ -315,6 +319,7 @@ const main = async () => {
       src,
       rev: revOf(src),
       node: process.version,
+      cpuPin: args.cpu || null,
       cpu: `${cpus()[0]?.model ?? 'unknown'} x${cpus().length}`,
       anchor: ANCHOR,
       runs: Number(args.runs),

@@ -17,6 +17,7 @@ export type Report = {
     src: string
     rev: string
     node: string
+    cpuPin?: string | null
     cpu: string
     anchor: string
     runs: number

@@ -26,6 +26,7 @@ targeted or not) returns the same rows as the base, and every targeted cell's me
 | `--fresh` | off | regenerates the seeds instead of reusing `data/bench-harness/seeds` |
 | `--budget` | `120` | seconds of samples per cell; a slower warm-up is the only sample |
 | `--timeout` | `600` | seconds one execution may run; the child is killed, the cell recorded as `> timeout` (a lower bound) and the run resumes from a fresh copy |
+| `--cpu` / `BENCH_CPU` | unpinned | `taskset -c` list for the measuring child; pin both sides of a comparison to the same performance core |
 | `--seeds` / `BENCH_SEEDS` | `data/bench-harness/seeds` | pristine seeds, shareable across worktrees; never opened for measurement |
 
 ## What a run does

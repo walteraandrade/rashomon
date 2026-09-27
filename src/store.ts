@@ -25,31 +25,57 @@ const DELETE_ORPHAN_PERSONS_SQL = `delete from persons where not (id = any($1::t
 // A plain overwrite, not `do nothing`: a day Wikimedia corrects after the fact heals on the next run.
 const UPSERT_PERSON_ATTENTION_SQL = `insert into person_attention (person_id, day, views) select * from unnest($1::text[], $2::date[], $3::int[])
      on conflict (person_id, day) do update set views = excluded.views`
-// On conflict: domain keeps first non-null; tone is null for non-GDELT; longer text wins.
-const UPSERT_DOC_SQL = `insert into docs (source, uri, text, published_at, extra_terms, domain, country, tone, extra_names) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     on conflict (uri) do update set
-       text = case when length(excluded.text) > length(docs.text) then excluded.text else docs.text end,
-       domain = coalesce(docs.domain, excluded.domain),
-       country = coalesce(docs.country, excluded.country),
-       tone = case when docs.source = any($10::text[]) then coalesce(docs.tone, excluded.tone) else null end
-     where docs.domain is distinct from coalesce(docs.domain, excluded.domain)
-        or docs.country is distinct from coalesce(docs.country, excluded.country)
-        or docs.tone is distinct from (case when docs.source = any($10::text[]) then coalesce(docs.tone, excluded.tone) else null end)
-        or length(excluded.text) > length(docs.text)
-     returning id, source, extra_terms, extra_names, (xmax = 0) as inserted, (text = $3) as took_incoming`
-const upsertDocParams = (doc: RawDoc) => [
-  doc.source,
-  doc.uri,
-  doc.text,
-  doc.publishedAt,
-  JSON.stringify(doc.extraTerms ?? []),
-  doc.domain ?? null,
-  countryOf(doc.domain) ?? null,
-  toneFor(doc),
-  JSON.stringify(doc.extraNames ?? []),
+// One statement for a whole uriLayers layer: domain keeps first non-null, tone is null for
+// non-GDELT, longer text wins. The layer travels as one json value: sql-pg cannot bind an
+// all-null or mixed int/float array. RETURNING can't see the input row, so it's joined back by uri.
+const UPSERT_DOCS_SQL = `with input as (
+       select * from jsonb_to_recordset($1::jsonb)
+         as t(source text, uri text, text text, published_at timestamptz, extra_terms jsonb, domain text, country text, tone float8, extra_names jsonb)
+     ), up as (
+       insert into docs (source, uri, text, published_at, extra_terms, domain, country, tone, extra_names)
+       select source, uri, text, published_at, extra_terms, domain, country, tone, extra_names from input
+       on conflict (uri) do update set
+         text = case when length(excluded.text) > length(docs.text) then excluded.text else docs.text end,
+         domain = coalesce(docs.domain, excluded.domain),
+         country = coalesce(docs.country, excluded.country),
+         tone = case when docs.source = any($2::text[]) then coalesce(docs.tone, excluded.tone) else null end
+       where docs.domain is distinct from coalesce(docs.domain, excluded.domain)
+          or docs.country is distinct from coalesce(docs.country, excluded.country)
+          or docs.tone is distinct from (case when docs.source = any($2::text[]) then coalesce(docs.tone, excluded.tone) else null end)
+          or length(excluded.text) > length(docs.text)
+       returning id, uri, source, extra_terms, extra_names, (xmax = 0) as inserted, text as stored_text
+     )
+     select input.uri, up.id, up.source, up.extra_terms, up.extra_names, up.inserted, (up.stored_text = input.text) as took_incoming
+     from up join input using (uri)`
+const upsertDocsParams = (docs: readonly RawDoc[]) => [
+  JSON.stringify(
+    docs.map((d) => ({
+      source: d.source,
+      uri: d.uri,
+      text: d.text,
+      published_at: d.publishedAt,
+      extra_terms: d.extraTerms ?? [],
+      domain: d.domain ?? null,
+      country: countryOf(d.domain) ?? null,
+      tone: toneFor(d),
+      extra_names: d.extraNames ?? [],
+    })),
+  ),
   tonedSources,
 ]
-type UpsertRow = { id: number; source: Source; extra_terms: Term[]; extra_names: string[]; inserted: boolean; took_incoming: boolean }
+type UpsertRow = { uri: string; id: number; source: Source; extra_terms: Term[]; extra_names: string[]; inserted: boolean; took_incoming: boolean }
+
+// A multi-row upsert errors on a repeated uri: the nth occurrence of a uri goes to layer n,
+// so running the layers in order replays doc-by-doc outcomes.
+export const uriLayers = <T extends { uri: string }>(docs: readonly T[]): T[][] => {
+  const seen = new Map<string, number>()
+  return docs.reduce<T[][]>((layers, doc) => {
+    const n = seen.get(doc.uri) ?? 0
+    seen.set(doc.uri, n + 1)
+    ;(layers[n] ??= []).push(doc)
+    return layers
+  }, [])
+}
 
 export const writeBatchRows = () => clampEnv(process.env.WRITE_BATCH_ROWS, 500, 1, 10_000)
 export const writeBatchDocs = () => clampEnv(process.env.WRITE_BATCH_DOCS, 200, 1, 5_000)
@@ -149,7 +175,20 @@ export const writeDerived = (rows: readonly Derived[], size = writeBatchRows()):
   Effect.flatMap(SqlClient.SqlClient, (sql) => writeDerivedRows(sql, rows, size))
 export const writeDerivedP = (rows: readonly Derived[], size?: number) => runSql(writeDerived(rows, size))
 
-const upsertDoc = (sql: SqlClient.SqlClient, doc: RawDoc) => Effect.map(sql.unsafe<UpsertRow>(UPSERT_DOC_SQL, upsertDocParams(doc)), (rows) => rows[0])
+// Keyed by object identity, not uri: two layers can each hold a row for the same uri.
+const upsertDocsBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[]): Effect.Effect<Map<RawDoc, UpsertRow>, SqlError.SqlError> =>
+  Effect.gen(function* () {
+    const results = new Map<RawDoc, UpsertRow>()
+    for (const layer of uriLayers(docs)) {
+      const rows = yield* sql.unsafe<UpsertRow>(UPSERT_DOCS_SQL, upsertDocsParams(layer))
+      const byUri = new Map(rows.map((r) => [r.uri, r]))
+      for (const doc of layer) {
+        const row = byUri.get(doc.uri)
+        if (row) results.set(doc, row)
+      }
+    }
+    return results
+  })
 
 // Clear terms when text is replaced: headline terms must not sum with the article's. doc_persons is left alone: the headline already named them; the body only adds.
 const clearDerived = (sql: SqlClient.SqlClient, ids: readonly number[]) =>
@@ -163,20 +202,19 @@ const clearDerived = (sql: SqlClient.SqlClient, ids: readonly number[]) =>
 // Cap is applied before upsert and before `derive` so stored text and derived terms match.
 const writeBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Effect.Effect<{ written: number; enriched: number }, SqlError.SqlError> =>
   Effect.gen(function* () {
-    const batch = yield* Effect.reduce(docs, (): Batch => ({ derived: [], stale: [], written: 0, enriched: 0 }), (a, raw) =>
-      Effect.gen(function* () {
-        const doc = { ...raw, text: truncateText(raw.text) }
-        const row = yield* upsertDoc(sql, doc)
-        const result = outcome(row)
-        if (result === 'unchanged') return a
-        return {
-          derived: [...a.derived, derive(row.id, { ...doc, source: row.source, extraTerms: row.extra_terms, extraNames: row.extra_names }, ps, lexicon)],
-          stale: result === 'enriched' ? [...a.stale, row.id] : a.stale,
-          written: a.written + (result === 'inserted' ? 1 : 0),
-          enriched: a.enriched + (result === 'enriched' ? 1 : 0),
-        }
-      }),
-    )
+    const truncated = docs.map((raw) => ({ ...raw, text: truncateText(raw.text) }))
+    const rows = yield* upsertDocsBatch(sql, truncated)
+    const batch = truncated.reduce((a: Batch, doc): Batch => {
+      const row = rows.get(doc)
+      const result = outcome(row)
+      if (result === 'unchanged' || !row) return a
+      return {
+        derived: [...a.derived, derive(row.id, { ...doc, source: row.source, extraTerms: row.extra_terms, extraNames: row.extra_names }, ps, lexicon)],
+        stale: result === 'enriched' ? [...a.stale, row.id] : a.stale,
+        written: a.written + (result === 'inserted' ? 1 : 0),
+        enriched: a.enriched + (result === 'enriched' ? 1 : 0),
+      }
+    }, { derived: [], stale: [], written: 0, enriched: 0 })
     yield* clearDerived(sql, batch.stale)
     yield* writeDerivedRows(sql, batch.derived, writeBatchRows())
     return { written: batch.written, enriched: batch.enriched }

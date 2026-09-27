@@ -746,17 +746,17 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #weekNote { margin-top: var(--space-3); }
 
 /* ---------- the attention figure (figure 7, wikipedia pageviews against press mentions,
-   issue #216): two rows on one shared day axis, each scaled off its own maximum -- pageviews
-   and documents live in different orders of magnitude and are never read as one number against
-   the other. [data-row] tells the rows apart; there is no second colour pair here, only --ink
-   for mentions and --accent for views, the same live-control hue the rest of the page already
-   uses for "the thing that changed". Same glow/hit/text triad as the ruler and the week; the
-   axis reuses marks.ts's shared axis() with cls="attention" (.attention-axis/.attention-tick). ---------- */
+   issue #216): two bar-chart rows on one shared day axis, each scaled off its own maximum --
+   pageviews and documents live in different orders of magnitude and are never read as one
+   number against the other. [data-row] tells the rows apart; there is no second colour pair
+   here, only --ink for mentions and --accent for views, the same live-control hue the rest of
+   the page already uses for "the thing that changed". The svg draws at its own measured width
+   (figures/attention.ts), never scaled by CSS, so a bar's physical size is never distorted. ---------- */
 .attention-chart { margin: 18px 0 0; padding: 6px 0 10px; }
 .attention-row { margin-bottom: var(--space-4); }
 .attention-row:last-child { margin-bottom: 0; }
 .attention-row-head { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); padding-bottom: var(--space-1); }
-.attention-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.attention-svg { display: block; overflow: visible; }
 .attention-axis { stroke: var(--line); stroke-width: 2; }
 .attention-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
 .attention-mark { cursor: pointer; outline: none; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
@@ -764,11 +764,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .attention-glow, .attention-hit { fill: transparent; rx: 4px; }
 .attention-glow { filter: blur(7px); transition: fill .16s ease-out; }
 .attention-hit { filter: blur(2px); transition: fill .16s ease-out; }
-.attention-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
+.attention-bar { fill: var(--wc); transition: height .16s ease-out, y .16s ease-out; }
 .attention-mark:hover .attention-glow, .attention-mark:focus-visible .attention-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
 .attention-mark:hover .attention-hit, .attention-mark:focus-visible .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .attention-mark.is-selected .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.attention-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 #attentionNote { margin-bottom: var(--space-3); }
 
 /* ---------- the pet ---------- */

@@ -552,6 +552,15 @@ describe('outlet fields and neighbours (issue #218)', () => {
     assert.deepEqual(rows.map((r) => r.neighbor), expected)
   })
 
+  it('outlet_neighbors binds no array mixing integer and fractional numbers (sql-pg infers one OID per array)', () => {
+    const q = aggregateQueries.outletNeighbors(30, 'tarcisio', [
+      { domain: 'a.example', neighbor: 'b.example', similarity: 1 },
+      { domain: 'a.example', neighbor: 'c.example', similarity: 0.5 },
+    ])
+    const oid = (v: unknown) => (typeof v === 'number' ? (Number.isInteger(v) ? 'int' : 'float') : typeof v)
+    for (const v of q.values.filter(Array.isArray)) assert.equal(new Set(v.map(oid)).size, 1, JSON.stringify(v))
+  })
+
   it('GET-shaped: sourcesFor rides the same build, field/neighbors additive to every existing row', async () => {
     const rows = await sourcesFor(tarcisio, q({}))
     const campo = rows.find((r) => r.domain === 'campovoz.example')

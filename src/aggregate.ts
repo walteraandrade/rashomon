@@ -241,10 +241,11 @@ const insertOutletFieldsQuery = (days: number, personId: string, domains: string
   select ${days}::int, ${personId}, u.domain, u.field
   from unnest(${domains}::text[], ${fields}::int[]) as u(domain, field)`
 
+// Similarities travel as text: sql-pg infers int4 for 1 and float8 for 0.5 and rejects a mixed array.
 const insertOutletNeighborsQuery = (days: number, personId: string, pairs: OutletPair[]) => sql`
   insert into outlet_neighbors (days, person_id, domain, neighbor, similarity)
-  select ${days}::int, ${personId}, u.domain, u.neighbor, u.similarity
-  from unnest(${pairs.map((p) => p.domain)}::text[], ${pairs.map((p) => p.neighbor)}::text[], ${pairs.map((p) => p.similarity)}::float8[])
+  select ${days}::int, ${personId}, u.domain, u.neighbor, u.similarity::float8
+  from unnest(${pairs.map((p) => p.domain)}::text[], ${pairs.map((p) => p.neighbor)}::text[], ${pairs.map((p) => String(p.similarity))}::text[])
     as u(domain, neighbor, similarity)`
 
 // One neighbours/Louvain pass per (days, person); a self-loop gives an isolated domain its field.
@@ -322,6 +323,7 @@ export const queries = {
   window: windowStatements,
   communityEdges: communityEdgesQuery,
   outletTerms: outletTermsQuery,
+  outletNeighbors: insertOutletNeighborsQuery,
 }
 
 const main = async (argv: string[]) => {

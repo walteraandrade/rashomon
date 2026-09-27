@@ -584,7 +584,7 @@ describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words colo
   it('wordMarkup carries data-kind matching the node kind, for word/hashtag/phrase/org (issue #209 AC13)', () => {
     for (const kind of ['word', 'hashtag', 'phrase', 'org']) {
       const markup = String(wordMarkup(placed({ kind }), 'count', person.score))
-      assert.match(markup, new RegExp(`<g class="atlas-word" data-kind="${kind}"`), `expected data-kind="${kind}" for a ${kind} node`)
+      assert.match(markup, new RegExp(`<g class="atlas-word"[^>]*\\sdata-kind="${kind}"`), `expected data-kind="${kind}" for a ${kind} node`)
     }
   })
 

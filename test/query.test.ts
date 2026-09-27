@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import {
   BASELINES,
+  BRIDGE_NODES,
+  parseBridgeIds,
   DAYS,
   KINDS,
   LIMITS,
@@ -83,6 +85,18 @@ describe('parseSourceList (issue #8)', () => {
 
 // The kind list travels like the source list: a caller can ask for any subset of the four
 // kinds, an unknown token is dropped and an all-unknown or missing list falls back to all.
+describe('parseBridgeIds', () => {
+  it('keeps kind:term pairs with a known kind, deduped and sorted', () => {
+    assert.deepEqual(parseBridgeIds('word:stf, hashtag:lula,word:stf,theme:x,:x,word:,plain'), ['hashtag:lula', 'word:stf'])
+  })
+
+  it('caps the list at BRIDGE_NODES and reads a missing param as empty', () => {
+    const many = Array.from({ length: BRIDGE_NODES + 10 }, (_, i) => `word:t${String(i).padStart(3, '0')}`).join(',')
+    assert.equal(parseBridgeIds(many).length, BRIDGE_NODES)
+    assert.deepEqual(parseBridgeIds(undefined), [])
+  })
+})
+
 describe('parseKindList', () => {
   it('parses a comma-separated list, drops unknown tokens and falls back to all', () => {
     assert.equal(parseKindList('word,hashtag,phrase'), 'word,hashtag,phrase')
@@ -341,6 +355,12 @@ describe('parseCompareQuery (issue #93)', () => {
     assert.equal(parseCompareQuery({ lean: 'left,bogus' }).lean, 'left')
     assert.equal(parseCompareQuery({ kind: 'word,bogus' }).kind, 'word')
   })
+
+  it('bridges=1 opts in; anything else is absent, like testimony/communities (issue #219)', () => {
+    assert.equal(parseCompareQuery({}).bridges, false)
+    assert.equal(parseCompareQuery({ bridges: '1' }).bridges, true)
+    assert.equal(parseCompareQuery({ bridges: 'yes' }).bridges, false)
+  })
 })
 
 describe('parseLens / parseLensesQuery (issue #206)', () => {
@@ -393,6 +413,11 @@ describe('parseLens / parseLensesQuery (issue #206)', () => {
     const q = parseLensesQuery({ a: 'domain:folha.uol.com.br', b: 'lean:right' })
     assert.equal(q.a.lens, 'domain:folha.uol.com.br')
     assert.equal(q.b.lens, 'lean:right')
+  })
+
+  it('bridges=1 opts in; anything else is absent, same convention as compare (issue #219)', () => {
+    assert.equal(parseLensesQuery({}).bridges, false)
+    assert.equal(parseLensesQuery({ bridges: '1' }).bridges, true)
   })
 })
 

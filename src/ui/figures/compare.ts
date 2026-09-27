@@ -2,7 +2,7 @@
 // figures. Opens the shared docs card with BOTH people, because a ruler word is never one person's.
 
 import * as api from '../api.js'
-import { html, kinds, SOURCE_SEGMENTS, scoreName, sourceLabels, type Compare, type Measure } from '../format.js'
+import { applyBridges, bridgeIds, hasBridges, html, kinds, SOURCE_SEGMENTS, scoreName, sourceLabels, type Compare, type Measure } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintCompareDetail, paintCompareLoading, paintRuler, paintRulerError } from '../render.js'
 import { runFigure } from '../figure.js'
@@ -146,12 +146,33 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     selected = null
   }
 
+  // Paint first, underline later: the ruler never waits on the betweenness statements.
+  let bridgesAbort: AbortController | null = null
+  const loadBridges = (result: Compare) => {
+    bridgesAbort?.abort()
+    const ids = bridgeIds(result.terms)
+    if (hasBridges(result.terms) || !ids.length) return
+    const controller = new AbortController()
+    bridgesAbort = controller
+    api
+      .loadCompareBridges(api.bridgeParams(api.compareParams(controlValues()), ids), controller.signal)
+      .then((r) => {
+        if (data !== result || !r?.bridges) return
+        applyBridges(result.terms, r.bridges)
+        repaint()
+      })
+      .catch(() => {})
+  }
+
   const paint = (result: Compare) => {
     // A resize repaint calls this with the same object again; only a new dataset clears the pick,
     // and closes a card picked on the previous recorte during the reload debounce.
     const isNewData = result !== data
     data = result
-    if (isNewData) dropStalePick()
+    if (isNewData) {
+      dropStalePick()
+      loadBridges(result)
+    }
     lastWidth = $('compareRuler').clientWidth || 0
     $('compareStatus').hidden = result.a.person.id !== result.b.person.id
     root.classList.remove('is-loading')

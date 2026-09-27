@@ -26,10 +26,11 @@ const DELETE_ORPHAN_PERSONS_SQL = `delete from persons where not (id = any($1::t
 const UPSERT_PERSON_ATTENTION_SQL = `insert into person_attention (person_id, day, views) select * from unnest($1::text[], $2::date[], $3::int[])
      on conflict (person_id, day) do update set views = excluded.views`
 // One statement for a whole uriLayers layer: domain keeps first non-null, tone is null for
-// non-GDELT, longer text wins. RETURNING can't see the input row, so it's joined back by uri.
+// non-GDELT, longer text wins. The layer travels as one json value: sql-pg cannot bind an
+// all-null or mixed int/float array. RETURNING can't see the input row, so it's joined back by uri.
 const UPSERT_DOCS_SQL = `with input as (
-       select * from unnest($1::text[], $2::text[], $3::text[], $4::timestamptz[], $5::jsonb[], $6::text[], $7::text[], $8::float8[], $9::jsonb[])
-         as t(source, uri, text, published_at, extra_terms, domain, country, tone, extra_names)
+       select * from jsonb_to_recordset($1::jsonb)
+         as t(source text, uri text, text text, published_at timestamptz, extra_terms jsonb, domain text, country text, tone float8, extra_names jsonb)
      ), up as (
        insert into docs (source, uri, text, published_at, extra_terms, domain, country, tone, extra_names)
        select source, uri, text, published_at, extra_terms, domain, country, tone, extra_names from input
@@ -37,25 +38,29 @@ const UPSERT_DOCS_SQL = `with input as (
          text = case when length(excluded.text) > length(docs.text) then excluded.text else docs.text end,
          domain = coalesce(docs.domain, excluded.domain),
          country = coalesce(docs.country, excluded.country),
-         tone = case when docs.source = any($10::text[]) then coalesce(docs.tone, excluded.tone) else null end
+         tone = case when docs.source = any($2::text[]) then coalesce(docs.tone, excluded.tone) else null end
        where docs.domain is distinct from coalesce(docs.domain, excluded.domain)
           or docs.country is distinct from coalesce(docs.country, excluded.country)
-          or docs.tone is distinct from (case when docs.source = any($10::text[]) then coalesce(docs.tone, excluded.tone) else null end)
+          or docs.tone is distinct from (case when docs.source = any($2::text[]) then coalesce(docs.tone, excluded.tone) else null end)
           or length(excluded.text) > length(docs.text)
        returning id, uri, source, extra_terms, extra_names, (xmax = 0) as inserted, text as stored_text
      )
      select input.uri, up.id, up.source, up.extra_terms, up.extra_names, up.inserted, (up.stored_text = input.text) as took_incoming
      from up join input using (uri)`
 const upsertDocsParams = (docs: readonly RawDoc[]) => [
-  docs.map((d) => d.source),
-  docs.map((d) => d.uri),
-  docs.map((d) => d.text),
-  docs.map((d) => d.publishedAt),
-  docs.map((d) => JSON.stringify(d.extraTerms ?? [])),
-  docs.map((d) => d.domain ?? null),
-  docs.map((d) => countryOf(d.domain) ?? null),
-  docs.map((d) => toneFor(d)),
-  docs.map((d) => JSON.stringify(d.extraNames ?? [])),
+  JSON.stringify(
+    docs.map((d) => ({
+      source: d.source,
+      uri: d.uri,
+      text: d.text,
+      published_at: d.publishedAt,
+      extra_terms: d.extraTerms ?? [],
+      domain: d.domain ?? null,
+      country: countryOf(d.domain) ?? null,
+      tone: toneFor(d),
+      extra_names: d.extraNames ?? [],
+    })),
+  ),
   tonedSources,
 ]
 type UpsertRow = { uri: string; id: number; source: Source; extra_terms: Term[]; extra_names: string[]; inserted: boolean; took_incoming: boolean }

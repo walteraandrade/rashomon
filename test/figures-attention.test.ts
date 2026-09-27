@@ -88,9 +88,9 @@ describe('(mount): fetches /attention and a term-less /timeline with the figure 
   })
 })
 
-// Validator B1: #attentionChart is #attention's content box, without the figure's own
-// horizontal padding; measuring the section instead draws the chart wider than its card.
-describe('the chart is measured off #attentionChart, never off the wider #attention section (B1)', () => {
+// #attentionChart is #attention's content box, without the figure's own horizontal padding;
+// measuring the section instead draws the chart wider than its card.
+describe('the chart is measured off #attentionChart, never off the wider #attention section', () => {
   it('the painted svg width matches attentionChart.clientWidth, not attention.clientWidth', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -105,6 +105,31 @@ describe('the chart is measured off #attentionChart, never off the wider #attent
       await flush()
       const width = String(els.attentionChart.innerHTML).match(/class="attention-svg"[^>]*\bwidth="(\d+)"/)?.[1]
       assert.equal(width, '620', 'the svg must be drawn at the chart\'s own content-box width')
+    })
+  })
+})
+
+// /attention's own query carries only days=person, no source, so its scope memo hits across a
+// source-only change; the memoized Keyed value's key must still be recognized as current.
+describe("a source change never leaves the views row stuck loading behind /attention's own memo", () => {
+  it('a source change after a memoized /attention response still paints the views row instead of ghosting it forever', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/attention': attentionData([{ day: '2026-08-15', views: 12345 }]),
+        '/timeline': timelineData([timelineBucket('2026-08-15', 4)]),
+      })
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      await flush()
+      assert.match(String(els.attentionChart.innerHTML), /12\.345/, 'the views row must have painted once for the initial source')
+
+      els.attentionSource.value = 'gdelt'
+      els.attentionSource.fire('change')
+      await flush(180)
+      const attentionCalls = calls.filter((u) => u.includes('/attention'))
+      assert.equal(attentionCalls.length, 1, "/attention has no source of its own, so the memo must serve the second request rather than refetch")
+      assert.match(String(els.attentionChart.innerHTML), /12\.345/, "the memoized response must still paint the views row, never leave it loading forever")
     })
   })
 })
@@ -250,9 +275,9 @@ describe('clicking a day column opens the docs card with that day (AC8)', () => 
   })
 })
 
-// Validator round-2 SHOULD (a/b/c): the two independent fetches (mentions, attention) can
-// settle in either order, fail independently, or race a person/source change. Each must never
-// paint a state that mixes the wrong recorte or misreports "no data" for an outage.
+// The two independent fetches (mentions, attention) can settle in either order, fail
+// independently, or race a person/source change. Each must never paint a state that mixes the
+// wrong recorte or misreports "no data" for an outage.
 describe('the two independent fetches never mix recortes or misreport an outage as empty data', () => {
   // A routeFetch variant that lets /timeline settle well before /attention, so a test can flush
   // past the first without the second, and observe the views row still marked as loading.
@@ -329,10 +354,10 @@ describe('the two independent fetches never mix recortes or misreport an outage 
     })
   })
 
-  // Validator S1a: each fetch is tagged with the person|source key it was requested for, so a
-  // still-in-flight request that settles after the switch -- however late, even inside the
-  // reload debounce window -- is recognized as stale and never painted.
-  it('a slow /attention for the previous person settling inside the reload debounce must not paint its stale views (S1a)', async () => {
+  // Each fetch is tagged with the recorte it was requested for, so a still-in-flight request
+  // that settles after the switch -- however late, even inside the reload debounce window --
+  // is recognized as stale and never painted.
+  it('a slow /attention for the previous person settling inside the reload debounce must not paint its stale views', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       globalThis.fetch = (async (input: unknown) => {
@@ -364,11 +389,10 @@ describe('the two independent fetches never mix recortes or misreport an outage 
     })
   })
 
-  // Validator S1b: figure.ts's own repaint() (wired to the ResizeObserver on #attentionChart)
-  // never gates on in-flight state; without the key check it would redraw the last *successful*
-  // fetch, which can still be the previous person's, while the new person's own request is
-  // still pending.
-  it('a resize repaint while the new person\'s /attention is still pending must not restore the previous person\'s stale views (S1b)', async () => {
+  // figure.ts's own repaint() (wired to the ResizeObserver on #attentionChart) never gates on
+  // in-flight state; without the key check it would redraw the last *successful* fetch, which
+  // can still be the previous person's, while the new person's own request is still pending.
+  it('a resize repaint while the new person\'s /attention is still pending must not restore the previous person\'s stale views', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       const captured: { target: unknown; cb: () => void }[] = []
@@ -408,6 +432,38 @@ describe('the two independent fetches never mix recortes or misreport an outage 
       assert.doesNotMatch(String(els.attentionChart.innerHTML), /12\.345/, "a resize repaint while bolsonaro's own /attention is still pending must not restore lula's stale views")
       // Let bolsonaro's own (staggered) /attention settle before the test tears the dom down.
       await flush(60)
+    })
+  })
+
+  // paintMentionsError/paintAttentionErrorData must drop a stale rejection the same way the
+  // success paths do, or a failure from the previous recorte, settling inside the debounce
+  // window, paints an outage note over the new one instead of leaving it to load normally.
+  it('a stale /timeline failure for the previous person settling inside the reload debounce must not paint an outage note for the new one', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      globalThis.fetch = (async (input: unknown) => {
+        const url = String(input)
+        calls.push(url)
+        const path = new URL(url, 'http://localhost').pathname
+        if (path.includes('/timeline')) {
+          if (path.includes('/lula/')) {
+            await new Promise((r) => setTimeout(r, 100))
+            return { ok: false, status: 500, json: async () => ({}) } as unknown as Response
+          }
+          return jsonResponse(timelineData([timelineBucket('2026-08-20', 7)])) as unknown as Response
+        }
+        if (path.includes('/attention')) return jsonResponse(attentionData([{ day: '2026-08-20', views: 999 }])) as unknown as Response
+        return jsonResponse({}) as unknown as Response
+      }) as typeof fetch
+      const { mount } = await import('../src/ui/figures/attention.js')
+      mount(els.attention, { people, initial: { person: 'lula' } })
+      els.attentionPerson.value = 'bolsonaro'
+      els.attentionPerson.fire('change')
+      await flush(120)
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /Não foi possível carregar as menções/, "lula's stale /timeline failure must not paint an outage note over bolsonaro's own recorte")
+      await flush(150)
+      assert.match(String(els.attentionChart.innerHTML), /data-row="mentions"/, "bolsonaro's own mentions must paint normally once his /timeline settles")
+      assert.doesNotMatch(String(els.attentionChart.innerHTML), /Não foi possível carregar as menções/)
     })
   })
 })

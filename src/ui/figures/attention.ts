@@ -1,8 +1,4 @@
-// Figure 7 (issue #216). Side-effect free outside a browser. Never imports or is imported by
-// atlas.ts, testimony.ts, compare.ts, rising.ts, week.ts or lenses.ts. Two independent fetches
-// (attention/mentions) wired through figure.ts's runFigure, following testimony.ts's two-
-// instance pattern: only the 'attention' instance owns el/markSelector/onRelease, so a day pick
-// is owned by 'attention' in the docs card.
+// Figure 7 (issue #216): two independent fetches wired through figure.ts's runFigure.
 
 import * as api from '../api.js'
 import { html, SOURCE_SEGMENTS, sourceLabels, type Attention } from '../format.js'
@@ -60,8 +56,6 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const personId = () => $('attentionPerson').value
   const source = () => $('attentionSource').value
 
-  const currentKey = () => `${personId()}|${source()}`
-
   // /attention has only `days`; the mentions series is the term-less /timeline, full kind set,
   // the figure's own source, fixed at days=30 (spec §2/§4) -- never exposed as a control.
   const mentionsQuery = () => new URLSearchParams({ term: '', kind: api.ATLAS_KINDS, days: '30', bucket: 'day', source: source() })
@@ -71,6 +65,22 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     p.delete('person')
     return p
   }
+
+  // Each instance keys on what its own route actually varies with: /attention has no source, so
+  // a memo hit after a source-only change must still be recognized as current, never dropped.
+  const attentionKey = (queryParams: URLSearchParams) => queryParams.get('person') ?? ''
+  const mentionsKey = (queryParams: URLSearchParams) => `${queryParams.get('person') ?? ''}|${queryParams.get('source') ?? ''}`
+
+  // Tags a rejection with the same key a success would carry, without disturbing AbortError's
+  // own shape -- figure.ts's aborted() check still needs `e.name === 'AbortError'` to hold.
+  const tagKey = <T,>(key: string, p: Promise<T>): Promise<Keyed<T>> =>
+    p.then(
+      (data) => ({ key, data }),
+      (e) => {
+        if (e && typeof e === 'object') (e as { key?: string }).key = key
+        throw e
+      },
+    )
 
   const repaint = () => {
     if (!mentionsBuckets) return
@@ -156,43 +166,42 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const paintMentions = ({ key, data: buckets }: Keyed<TimelineBucket[]>) => {
-    if (key !== currentKey()) return
+    if (key !== `${personId()}|${source()}`) return
     mentionsBuckets = buckets
     root.classList.remove('is-loading')
     repaint()
   }
 
-  const paintMentionsError = () => {
+  const paintMentionsError = (e: unknown) => {
+    const key = (e as { key?: string } | null)?.key
+    if (key !== undefined && key !== `${personId()}|${source()}`) return
     mentionsBuckets = null
     root.classList.remove('is-loading')
     paintAttentionError()
   }
 
   const paintAttentionData = ({ key, data }: Keyed<Attention>) => {
-    if (key !== currentKey()) return
+    if (key !== personId()) return
     attentionSeries = data.series
     attentionErrored = false
     root.classList.remove('is-loading')
     repaint()
   }
 
-  const paintAttentionErrorData = () => {
+  const paintAttentionErrorData = (e: unknown) => {
+    const key = (e as { key?: string } | null)?.key
+    if (key !== undefined && key !== personId()) return
     attentionSeries = null
     attentionErrored = true
     root.classList.remove('is-loading')
     repaint()
   }
 
-  // Only the 'attention' instance owns el/markSelector/onRelease (testimony.ts's precedent):
-  // the docs card this figure opens is owned by 'attention' (AC8), so figure.release()'s own
-  // openedBy(name) check only matches when this instance's name is that same string.
+  // The docs card is owned by 'attention', so only this instance carries el/markSelector/onRelease.
   const figure = runFigure<Keyed<Attention>>({
     name: 'attention',
     params: attentionParams,
-    fetch: (queryParams, signal) => {
-      const key = currentKey()
-      return api.loadAttention(queryParams.get('person')!, withoutPerson(queryParams), signal).then((data) => ({ key, data }))
-    },
+    fetch: (queryParams, signal) => tagKey(attentionKey(queryParams), api.loadAttention(queryParams.get('person')!, withoutPerson(queryParams), signal)),
     ghost,
     paint: paintAttentionData,
     paintError: paintAttentionErrorData,
@@ -205,10 +214,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const mentionsFigure = runFigure<Keyed<TimelineBucket[]>>({
     name: 'mentions',
     params: mentionsParams,
-    fetch: (queryParams, signal) => {
-      const key = currentKey()
-      return api.loadTimeline(queryParams.get('person')!, withoutPerson(queryParams), signal).then((data) => ({ key, data }))
-    },
+    fetch: (queryParams, signal) => tagKey(mentionsKey(queryParams), api.loadTimeline(queryParams.get('person')!, withoutPerson(queryParams), signal)),
     ghost,
     paint: paintMentions,
     paintError: paintMentionsError,

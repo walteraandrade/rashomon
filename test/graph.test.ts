@@ -1519,6 +1519,14 @@ describe('agendaFor (issue #208)', () => {
     assert.equal(cell(gnewsOnly, 'tarcisio', 'metropoles.com'), undefined)
   })
 
+  it('never surfaces a .pt domain, scoped to country=br like /lenses (issue #208 review)', async () => {
+    // doc /58, exemplo.pt, 2 days ago, names lula -- countryOf('exemplo.pt') resolves to 'pt',
+    // so agendaQuery must exclude it even at a wide window and min=1
+    const r = await agendaFor({ days: 7, source: 'all', min: 1, limit: 30 })
+    assert.ok(!r.domains.includes('exemplo.pt'))
+    assert.equal(cell(r, 'lula', 'exemplo.pt'), undefined)
+  })
+
   it('docs/api.md names the route, its days/source/min parameters, the response shape, the outlet-relative share and the 6h cache class', () => {
     const match = /## agenda\n[\s\S]*?(?=\n## |$)/.exec(docsText)
     assert.ok(match, 'docs/api.md has an agenda section')

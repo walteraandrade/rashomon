@@ -506,12 +506,14 @@ export const toneFor = async (q: ToneQuery) => {
 // domains by total. min gates domain_totals before the ranking limit runs, so a domain can
 // clear min and still be cut by the limit, but never the reverse. A doc naming two tracked
 // people counts once in domain_totals but once per person in cells, so shares can sum above 1.
+// Always scoped to country='br', like lensesQuery: no country parameter on this route.
 const agendaQuery = (q: AgendaQuery) => sql`
   with scope as (
     select d.id, d.domain from docs d
     where d.published_at >= now() - make_interval(days => ${q.days})
       and d.domain is not null
       and (${q.source} = 'all' or d.source = any(string_to_array(${q.source}, ',')))
+      and (${countryFilter('br')})
   ),
   domain_totals as (
     select s.domain, count(distinct dp.doc_id)::int as total

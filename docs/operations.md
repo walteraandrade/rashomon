@@ -303,8 +303,8 @@ Two key forms, read in this order:
 | prefixed with the figure id | `?atlas.days=7` | seeds that figure only, and wins over the bare key |
 
 The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
-`compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`) and
-`lenses` (figure 6, `#lenses`). Figure 1 reads `person`,
+`compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`),
+`lenses` (figure 6, `#lenses`) and `agenda` (figure 7, `#agenda`). Figure 1 reads `person`,
 `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
 sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
 Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
@@ -316,7 +316,9 @@ values, sent explicitly by the figure and never seeded from the querystring. Fig
 Figure 6 reads `person`, `a`, `b`, `days` and `limit` — `a` and `b` are lens tokens
 (`domain:<host>`, `lean:<value>` or `source:<name>`; an unknown or absent one falls back to
 `all`), each with no bare equivalent (`['a', null]`/`['b', null]`, like figure 3's `b`/`measure`)
-so a bare `?a=` never leaks into it.
+so a bare `?a=` never leaks into it. Figure 7 reads only `days` and `source` — it spans every
+tracked person at once, so it has no `person` key, and it sends no `min`, which stays at the
+route's own default of 5.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

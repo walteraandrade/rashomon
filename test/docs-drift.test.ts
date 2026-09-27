@@ -325,6 +325,13 @@ describe('docs facts', () => {
     assert.match(around, /never|only|no other source/i, 'the docs must state org is exclusive to GDELT, not merely mentioned alongside it')
   })
 
+  // AC7: the docs must state the model cache's revision-only keying and that the onnx scorer
+  // itself, not only pnpm score, refuses to load unpinned (issue #201).
+  it('the docs state the model cache keys by revision only when given, and that the onnx scorer itself refuses to load unpinned (issue #201 AC7)', () => {
+    assert.match(docsText, /keys its file cache by revision only when/i, 'the docs must state the cache keys by revision only when one is given')
+    assert.match(docsText, /onnx.{0,20}scorer itself refuses to load/i, 'the docs must state the onnx scorer itself, not only pnpm score, refuses to load unpinned')
+  })
+
   it('CLAUDE.md no longer claims GDELT theme codes stay in the atlas or the API', () => {
     const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
     assert.doesNotMatch(claude, /theme codes[^\n]*(stay|remain) in the API/i, 'CLAUDE.md must not describe theme codes staying in the API any more')

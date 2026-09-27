@@ -22,6 +22,8 @@ The figure carries **one** outlet list, built by `mergeOutlets` in `src/ui/forma
 
 **`pnpm score` refuses to run the `onnx` scorer without it**, before it opens the database. An env var nobody is forced to set is exactly as forgettable as the manual `doc_testimony` purge this replaces, and it is the forgetting that causes the bug. `TESTIMONY_SCORER=stub` is unaffected: it is a pure function of its inputs with no model behind it.
 
+**The `onnx` scorer itself refuses to load without it too**, not only `pnpm score`: `src/scorers/onnx.ts`'s `load()` throws the same `TESTIMONY_REVISION` error as its first statement, before the dynamic `@huggingface/transformers` import, so any caller that reaches the model — a test, a script, a future route — fails the same way instead of loading unpinned. (Empty text still short-circuits to `null` before `load()` runs, revision set or not — that is unrelated to this guard.) This matters because `@huggingface/transformers` keys its file cache by revision only when one is given: an unpinned load would silently reuse whatever revision (`main`, in practice) first downloaded under that file's name, indistinguishable from a pinned one.
+
 **Rows scored before this existed carry the bare `kikori:<dtype>` label and are left alone**, readable with `?method=kikori:q8`. They are not migrated, because nothing knows which revision produced them. The first versioned run therefore writes a full second set of rows, and until it happens the route answers `{ score: null, n: 0 }` for any server that has `TESTIMONY_REVISION` set. Order of operations on a deploy: re-score locally with the revision set, `pnpm push`, then set the same `TESTIMONY_REVISION` on the serving environment.
 
 ### The kikori contract

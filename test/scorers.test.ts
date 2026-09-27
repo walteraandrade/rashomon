@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { methods, scorers } from '../src/scorers/index.js'
 import { methods as methodsFromMethod, modelRevision } from '../src/scorers/method.js'
 import { onnx, pairIds, scoreFromLogits } from '../src/scorers/onnx.js'
+import { resolveRun } from '../src/score.js'
 import seedJson from '../seed.json' with { type: 'json' }
 import type { Person } from '../src/types.js'
 import fixtures from './kikori-fixtures.json' with { type: 'json' }
@@ -230,6 +231,38 @@ describe('onnx.ts keeps its network-safety gate', () => {
   it('importing the onnx scorer module resolves without invoking any model call', async () => {
     const mod = await import('../src/scorers/onnx.js')
     assert.equal(typeof mod.onnx, 'function')
+  })
+})
+
+describe('onnx refuses an unpinned load', () => {
+  const person = seed[0]
+
+  it('rejects when TESTIMONY_REVISION is unset, before touching the model', async () => {
+    await withEnv(unversioned, () => assert.rejects(() => onnx('texto', person, seed), /TESTIMONY_REVISION/))
+  })
+
+  it('rejects when TESTIMONY_REVISION fails the charset, same as unset', async () => {
+    await withEnv({ ...unversioned, TESTIMONY_REVISION: 'a b' }, () => assert.rejects(() => onnx('texto', person, seed), /TESTIMONY_REVISION/))
+  })
+
+  it('uses the same message as src/score.ts\'s resolveRun guard', async () => {
+    let onnxMessage = ''
+    let resolveRunMessage = ''
+    await withEnv(unversioned, async () => {
+      try {
+        await onnx('texto', person, seed)
+        assert.fail('onnx() must reject when TESTIMONY_REVISION is unset')
+      } catch (err) {
+        onnxMessage = (err as Error).message
+      }
+      try {
+        resolveRun('onnx')
+        assert.fail('resolveRun("onnx") must throw when TESTIMONY_REVISION is unset')
+      } catch (err) {
+        resolveRunMessage = (err as Error).message
+      }
+    })
+    assert.equal(onnxMessage, resolveRunMessage)
   })
 })
 

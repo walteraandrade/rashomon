@@ -37,6 +37,8 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
   let controller: AbortController | null = null
   let hasData = false
   let lastData: T | undefined
+  // Set before a ghost paint, cleared only when that request settles (success or error).
+  let loading = false
 
   const load = async () => {
     const id = ++requestId
@@ -46,13 +48,17 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
     const p = params()
     if (p === null) return
     const key = p.toString()
-    if (!readScope(scope, key)) ghost()
+    if (!readScope(scope, key)) {
+      loading = true
+      ghost()
+    }
     const painted = span('figure:' + name)
     try {
       const data = await fromScope(scope, key, () => fetch(p, current.signal))
       if (id !== requestId) return
       hasData = true
       lastData = data
+      loading = false
       paint(data)
       painted({ query: key, ...(detail ? detail(data, p) : {}) })
     } catch (e) {
@@ -60,14 +66,25 @@ export const runFigure = <T>(opts: FigureOptions<T>): FigureHandle => {
       if (aborted(e)) return
       hasData = false
       lastData = undefined
+      loading = false
       paintError(e)
     }
   }
 
-  const reload = debounce(load)
+  const debouncedLoad = debounce(load)
 
-  // Never gates on in-flight state: a resize mid-reload must still repaint the on-screen data.
+  // Dims at once, before the debounce fires, so a resize or click in that gap sees no stale data.
+  const reload = () => {
+    if (hasData) {
+      loading = true
+      ghost()
+    }
+    debouncedLoad()
+  }
+
+  // A no-op while loading: painting old data over a ghost would make it clickable again.
   const repaint = () => {
+    if (loading) return
     if (hasData) paint(lastData as T)
   }
 

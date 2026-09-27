@@ -500,7 +500,7 @@ describe('figure.ts: runFigure abort/stale/scope/ghost/background/Escape/resize 
     }
   })
 
-  it('repaint() still repaints the stale data while a reload is in flight, like a resize crossing a breakpoint mid-load', async () => {
+  it('repaint() is a no-op while a reload is in flight, like a resize crossing a breakpoint mid-load (issue #231)', async () => {
     setupDom()
     try {
       const { runFigure } = await import('../src/ui/figure.js')
@@ -519,12 +519,66 @@ describe('figure.ts: runFigure abort/stale/scope/ghost/background/Escape/resize 
       assert.deepEqual(painted, ['A'])
       const loadB = handle.load()
       handle.repaint()
-      assert.deepEqual(painted, ['A', 'A'], 'a repaint while B is in flight must still repaint the on-screen A, at the new width')
+      assert.deepEqual(painted, ['A'], 'a resize while B is in flight must not repaint the stale A over the ghost')
       resolveB('B')
       await loadB
-      assert.deepEqual(painted, ['A', 'A', 'B'])
+      assert.deepEqual(painted, ['A', 'B'])
       handle.repaint()
-      assert.deepEqual(painted, ['A', 'A', 'B', 'B'], 'repaint() keeps working once the in-flight fetch has settled')
+      assert.deepEqual(painted, ['A', 'B', 'B'], 'repaint() keeps working once the in-flight fetch has settled')
+    } finally {
+      teardownDom()
+    }
+  })
+
+  it('a control change dims the figure at once, before the 140ms debounce fires (issue #231)', async () => {
+    setupDom()
+    try {
+      const { runFigure } = await import('../src/ui/figure.js')
+      let ghosts = 0
+      const handle = runFigure<string>({
+        name: 'ac-reload-dim',
+        params: () => new URLSearchParams({ c: '1' }),
+        fetch: () => Promise.resolve('A'),
+        ghost: () => ghosts++,
+        paint: () => {},
+        paintError: () => {},
+      })
+      await handle.load()
+      assert.equal(ghosts, 1, 'the initial load ghosts on its own scope miss')
+      handle.reload()
+      assert.equal(ghosts, 2, 'reload ghosts synchronously, without waiting for the debounce')
+      await flush(200)
+    } finally {
+      teardownDom()
+    }
+  })
+
+  it('a memo hit after a miss still clears the loading gate, so repaint works again (issue #231)', async () => {
+    setupDom()
+    try {
+      const { runFigure } = await import('../src/ui/figure.js')
+      let phase = 1
+      const painted: string[] = []
+      const handle = runFigure<string>({
+        name: 'ac-memo-clear',
+        params: () => new URLSearchParams({ p: String(phase) }),
+        fetch: () => Promise.resolve('miss-value'),
+        ghost: () => {},
+        paint: (d) => painted.push(d),
+        paintError: () => {},
+      })
+      await handle.load()
+      assert.deepEqual(painted, ['miss-value'])
+
+      writeScope('ac-memo-clear', new URLSearchParams({ p: '2' }).toString(), 'cached-value')
+      phase = 2
+      handle.reload()
+      handle.repaint()
+      assert.deepEqual(painted, ['miss-value'], 'repaint is gated while the debounced reload is pending')
+      await flush(200)
+      assert.deepEqual(painted, ['miss-value', 'cached-value'], 'the debounced load resolved from the memo, not a fresh fetch')
+      handle.repaint()
+      assert.deepEqual(painted, ['miss-value', 'cached-value', 'cached-value'], 'a memo hit clears the loading gate just like a real fetch settling')
     } finally {
       teardownDom()
     }

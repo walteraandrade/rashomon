@@ -285,6 +285,8 @@ const atlasIds = () => ({
   keyDefault: new FakeBox('keyDefault'),
   keyStrip: new FakeBox('keyStrip'),
   keyTheme: new FakeBox('keyTheme'),
+  keyThemeText: new FakeBox('keyThemeText'),
+  keyDefaultColor: new FakeBox('keyDefaultColor'),
   mask: new FakeBox('mask'),
   zoomIn: new FakeBox('zoomIn'),
   zoomOut: new FakeBox('zoomOut'),

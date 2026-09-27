@@ -317,6 +317,16 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     }
   }
 
+  const paintKeys = () => {
+    $('keyDefault').hidden = mode === 'strip'
+    $('keyStrip').hidden = mode !== 'strip'
+    $('keyTheme').hidden = mode === 'strip' || getMask() !== 'tema'
+    $('keyThemeText').textContent = ranking.size
+      ? 'tema: palavras que caminharam juntas nesta construção'
+      : 'esta construção não tem temas para este recorte'
+    $('keyDefaultColor').hidden = getMask() === 'tema'
+  }
+
   const render = () => {
     if (busy || !graph) return
     const current = graph
@@ -339,9 +349,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     // there is nothing to zoom: both controls are meaningless there.
     $('mask').hidden = mode === 'strip'
     $('zoomGroup').hidden = mode === 'strip'
-    $('keyDefault').hidden = mode === 'strip'
-    $('keyStrip').hidden = mode !== 'strip'
-    $('keyTheme').hidden = mode === 'strip' || getMask() !== 'tema'
+    paintKeys()
     if (nodes.length) {
       if (!currentLayout || mode === 'map') drawCurrentMap()
       $('overflow').hidden = mode !== 'map' || !currentLayout?.overflow?.length
@@ -496,7 +504,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     },
     toggleMask: () => {
       setMask(nextMask(getMask()))
-      $('keyTheme').hidden = mode === 'strip' || getMask() !== 'tema'
+      paintKeys()
       $('mask').textContent = MASK_LABELS[getMask()]
       $('mask').setAttribute('aria-pressed', String(getMask() !== 'off'))
       if (graph && !busy) {

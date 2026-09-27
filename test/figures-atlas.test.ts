@@ -213,6 +213,54 @@ describe('figure 1: the mask control cycles avaliação → tema → off → ava
       assert.equal(els.keyTheme.hidden, true, 'cycling to off hides the tema key')
     })
   })
+
+  it('#keyThemeText names the construction\'s own communities, or says there are none (code review fix #1)', async () => {
+    const graphWith = (nodes: unknown[]) => ({ person: persons[1], nodes, links: [], stats: { about: 5, testimony: { method: 'kikori', score: -0.5, n: 8 } } })
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.mask.fire('click') // avaliação -> tema
+      assert.match(els.keyThemeText.textContent, /não tem temas/, 'no node carries a community: the key must say so')
+      assert.doesNotMatch(els.keyThemeText.textContent, /caminharam juntas/, 'the positive sentence must not show when there is nothing to rank')
+    })
+  })
+
+  it('#keyThemeText praises the construction when at least one community was ranked (code review fix #1)', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      const nodes = [
+        { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 },
+        { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 },
+      ]
+      const graph = { person: persons[0], nodes, links: [], stats: { about: 10, testimony: { method: 'kikori', score: -1, n: 100 } } }
+      routeFetch(calls, { '/graph': graph })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      els.mask.fire('click') // avaliação -> tema
+      assert.match(els.keyThemeText.textContent, /caminharam juntas/, 'a ranked community: the positive sentence shows')
+      assert.doesNotMatch(els.keyThemeText.textContent, /não tem temas/)
+    })
+  })
+
+  it('#keyDefaultColor hides in tema and returns once the mask cycles to off (code review fix #2)', async () => {
+    const graphWith = (nodes: unknown[]) => ({ person: persons[1], nodes, links: [], stats: { about: 5, testimony: { method: 'kikori', score: -0.5, n: 8 } } })
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const people = persons.map(({ id, name }) => ({ id, name }))
+      routeFetch(calls, { '/graph': graphWith([{ id: 'word:reforma', term: 'reforma', kind: 'word', count: 6, pmi: 1.2 }]) })
+      mount(els.workspace, { people, initial: {} })
+      await flush()
+      assert.equal(els.keyDefaultColor.hidden, false, 'avaliação: the default colour row is visible')
+      els.mask.fire('click') // avaliação -> tema
+      assert.equal(els.keyDefaultColor.hidden, true, 'tema: the avaliação colour row makes no sense any more')
+      els.mask.fire('click') // tema -> off
+      assert.equal(els.keyDefaultColor.hidden, false, 'off: the default colour row returns')
+    })
+  })
 })
 
 // Issue #217: /graph nodes may carry a community; the atlas ranks the top 6 and colours by it.

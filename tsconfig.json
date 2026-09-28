@@ -20,6 +20,7 @@
   "include": [
     "api",
     "src",
+    "scripts",
     "test"
   ]
 }

@@ -1028,6 +1028,70 @@ const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
+// issue #247: compareQuery over graph_terms/graph_scopes. s_a/s_b mirror graphFastQuery's own
+// "about = 0 or exists" gate, one per person (compare shares one days/source scope but scores
+// two people). A missing graph_scopes row on either side leaves that CTE empty, so `from s_a,
+// s_b` yields zero rows overall and compareFor falls back live for the whole request -- never a
+// fast side mixed with a live one. pmi is graphFastQuery's own formula, not pmiLog2.
+const compareSideFastCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
+  const s = sql.raw(`s_${side}`)
+  const scored = sql.raw(`scored_${side}`)
+  const top = sql.raw(`${side}_top`)
+  return sql`
+  ${s} as (
+    select tracked, about from graph_scopes
+    where days = ${q.days} and source = ${q.source} and person_id = ${person.id}
+      and (about = 0 or exists (
+        select 1 from graph_terms g where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}))
+  ),
+  ${scored} as (
+    select g.term, g.kind, g.c_pt as count, g.tone,
+      ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
+    from graph_terms g, ${s} s
+    where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}
+      and (${q.kind} = 'all' or g.kind = any(string_to_array(${q.kind}, ',')))
+  ),
+  ${top}_count as (
+    select term, kind from ${scored} order by count desc, term, kind limit ${q.limit}
+  ),
+  ${top}_pmi as (
+    select term, kind from ${scored} order by ${pmiRank(sql.raw('count'))} desc, term, kind limit ${q.limit}
+  )`
+}
+
+const compareFastQuery = (a: Person, b: Person, q: CompareQuery) => sql`
+  with
+  ${compareSideFastCte('a', a, q)},
+  ${compareSideFastCte('b', b, q)},
+  keys as (
+    select term, kind from a_top_count
+    union select term, kind from a_top_pmi
+    union select term, kind from b_top_count
+    union select term, kind from b_top_pmi
+  ),
+  unioned as (
+    select k.term, k.kind,
+      ${isName(sql.raw('k.term'), nameTokens(a))} as is_name_a,
+      ${isName(sql.raw('k.term'), nameTokens(b))} as is_name_b,
+      sca.count as a_count, round(sca.pmi::numeric, 2)::float8 as a_pmi, round(sca.tone::numeric, 2)::float8 as a_tone,
+      scb.count as b_count, round(scb.pmi::numeric, 2)::float8 as b_pmi, round(scb.tone::numeric, 2)::float8 as b_tone
+    from keys k
+    left join scored_a sca using (term, kind)
+    left join scored_b scb using (term, kind)
+  )
+  select
+    s_a.about::int as about_a,
+    s_b.about::int as about_b,
+    coalesce((
+      select json_agg(json_build_object(
+        'term', term, 'kind', kind, 'is_name_a', is_name_a, 'is_name_b', is_name_b,
+        'a_count', a_count, 'a_pmi', a_pmi, 'a_tone', a_tone,
+        'b_count', b_count, 'b_pmi', b_pmi, 'b_tone', b_tone
+      ) order by term, kind)
+      from unioned
+    ), '[]'::json) as terms
+  from s_a, s_b`
+
 // today/dates/scoped/kept: the BRT calendar-day scan both weekQuery and weekTestimonyQuery
 // share. Lower bound so docs_published_idx applies; the CASE folds future-dated docs into
 // today, so no upper bound. Shared rather than inlined twice, the way scopeCte is shared
@@ -1145,10 +1209,18 @@ export const weekFor = async (person: Person, q: WeekQuery): Promise<{ days: num
   }
 }
 
+// Precomputed first, live when either side has no graph_scopes row for this (days, source).
+const compareAggregates = async (a: Person, b: Person, q: CompareQuery): Promise<CompareAggregates> => {
+  if (precomputable(q)) {
+    const fast = (await run<CompareAggregates>(compareFastQuery(a, b, q))).rows[0]
+    if (fast) return fast
+  }
+  return (await run<CompareAggregates>(compareQuery(a, b, q))).rows[0]
+}
+
 // Not nested under /people/:id: spans two specific people, neither of which is "the" resource.
 export const compareFor = async (a: Person, b: Person, q: CompareQuery) => {
-  const { rows } = await run<CompareAggregates>(compareQuery(a, b, q))
-  const { about_a, about_b, terms } = rows[0]
+  const { about_a, about_b, terms } = await compareAggregates(a, b, q)
   const ids = terms.map((t) => `${t.kind}:${t.term}`)
   const nodes = bridgeNodes(terms.map((t, i) => ({ id: ids[i], docs: (t.a_count ?? 0) + (t.b_count ?? 0), name: t.is_name_a || t.is_name_b })))
   const bridges = q.bridges ? (await compareBridgesFor(a, b, q, nodes)).bridges : null
@@ -1265,10 +1337,90 @@ const lensesQuery = (person: Person, q: LensesQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
-// No aggregate exists for lenses; this always runs live, at every window (deliberate).
+// issue #247: lensesQuery over graph_terms/graph_scopes, run only when both lenses are `all` or
+// a `source:` lens (lensesFastEligible below). Same "s_a/s_b empty -> whole result empty ->
+// caller falls back live" shape as compareFastQuery, per lens (one person, two source scopes).
+// graph_terms never carries a person's own name words (personTermsQuery's own exclusion), so
+// unlike lensesQuery's live names_a/names_b union, the fast path has no name keys to add: a
+// person's own name words never appear on a precomputed lenses ruler (docs/api.md).
+const lensSideFastCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQuery) => {
+  const names = nameTokens(person)
+  const s = sql.raw(`s_${side}`)
+  const scored = sql.raw(`scored_${side}`)
+  const top = sql.raw(`${side}_top`)
+  return sql`
+  ${s} as (
+    select tracked, about from graph_scopes
+    where days = ${q.days} and source = ${lens.source} and person_id = ${person.id}
+      and (about = 0 or exists (
+        select 1 from graph_terms g where g.days = ${q.days} and g.source = ${lens.source} and g.person_id = ${person.id}))
+  ),
+  ${scored} as (
+    select g.term, g.kind, g.c_pt as count, g.tone,
+      ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
+    from graph_terms g, ${s} s
+    where g.days = ${q.days} and g.source = ${lens.source} and g.person_id = ${person.id}
+      and (${q.kind} = 'all' or g.kind = any(string_to_array(${q.kind}, ',')))
+  ),
+  ${top}_count as (
+    select term, kind from ${scored} where not ${isName(sql.raw('term'), names)} order by count desc, term, kind limit ${q.limit}
+  ),
+  ${top}_pmi as (
+    select term, kind from ${scored} where not ${isName(sql.raw('term'), names)} order by ${pmiRank(sql.raw('count'))} desc, term, kind limit ${q.limit}
+  )`
+}
+
+// Both q.a and q.b must clear this for lensesFor to try the fast query -- never a fast side
+// mixed with a live one (country is already 'br' at the SQL level, matching the build).
+const lensSideFast = (lens: LensSide, days: number) => DAYS.includes(days) && lens.domain === 'all' && lens.lean === 'all'
+export const lensesFastEligible = (q: Pick<LensesQuery, 'days' | 'a' | 'b'>) => lensSideFast(q.a, q.days) && lensSideFast(q.b, q.days)
+
+const lensesFastQuery = (person: Person, q: LensesQuery) => {
+  const names = nameTokens(person)
+  return sql`
+  with
+  ${lensSideFastCte('a', person, q.a, q)},
+  ${lensSideFastCte('b', person, q.b, q)},
+  keys as (
+    select term, kind from a_top_count
+    union select term, kind from a_top_pmi
+    union select term, kind from b_top_count
+    union select term, kind from b_top_pmi
+  ),
+  unioned as (
+    select k.term, k.kind,
+      ${isName(sql.raw('k.term'), names)} as is_name,
+      sa2.count as a_count, round(sa2.pmi::numeric, 2)::float8 as a_pmi, round(sa2.tone::numeric, 2)::float8 as a_tone,
+      sb2.count as b_count, round(sb2.pmi::numeric, 2)::float8 as b_pmi, round(sb2.tone::numeric, 2)::float8 as b_tone
+    from keys k
+    left join scored_a sa2 using (term, kind)
+    left join scored_b sb2 using (term, kind)
+  )
+  select
+    s_a.about::int as about_a,
+    s_b.about::int as about_b,
+    coalesce((
+      select json_agg(json_build_object(
+        'term', term, 'kind', kind, 'is_name', is_name,
+        'a_count', a_count, 'a_pmi', a_pmi, 'a_tone', a_tone,
+        'b_count', b_count, 'b_pmi', b_pmi, 'b_tone', b_tone
+      ) order by term, kind)
+      from unioned
+    ), '[]'::json) as terms
+  from s_a, s_b`
+}
+
+// Same fallback shape as compareAggregates.
+const lensesAggregates = async (person: Person, q: LensesQuery): Promise<LensesAggregates> => {
+  if (lensesFastEligible(q)) {
+    const fast = (await run<LensesAggregates>(lensesFastQuery(person, q))).rows[0]
+    if (fast) return fast
+  }
+  return (await run<LensesAggregates>(lensesQuery(person, q))).rows[0]
+}
+
 export const lensesFor = async (person: Person, q: LensesQuery) => {
-  const { rows } = await run<LensesAggregates>(lensesQuery(person, q))
-  const { about_a, about_b, terms } = rows[0]
+  const { about_a, about_b, terms } = await lensesAggregates(person, q)
   const ids = terms.map((t) => `${t.kind}:${t.term}`)
   const nodes = bridgeNodes(terms.map((t, i) => ({ id: ids[i], docs: (t.a_count ?? 0) + (t.b_count ?? 0), name: t.is_name })))
   const bridges = q.bridges ? (await lensBridgesFor(person, q, nodes)).bridges : null
@@ -1304,8 +1456,10 @@ export const queries = {
   termTestimony: termTestimonyQuery,
   candidates: candidatesQuery,
   compare: compareQuery,
+  compareFast: compareFastQuery,
   compareEdges: compareEdgesQuery,
   lenses: lensesQuery,
+  lensesFast: lensesFastQuery,
   lensEdges: lensEdgesQuery,
   week: weekQuery,
   weekTestimony: weekTestimonyQuery,
@@ -1340,8 +1494,10 @@ export const statements = {
   termTestimony: queries.termTestimony(samplePerson, sampleScope, 'stub', ['word:sample']).text,
   candidates: queries.candidates({ days: 7, min: 5, limit: 50 }).text,
   compare: queries.compare(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40, bridges: false }).text,
+  compareFast: queries.compareFast(samplePerson, { ...samplePerson, id: 'other' }, { ...sampleScope, limit: 40, bridges: false }).text,
   compareEdges: queries.compareEdges(samplePerson, { ...sampleScope, limit: 40, bridges: false }, ['word:sample']).text,
   lenses: queries.lenses(samplePerson, sampleLenses).text,
+  lensesFast: queries.lensesFast(samplePerson, sampleLenses).text,
   lensEdges: queries.lensEdges(samplePerson, sampleLens, sampleLenses, ['word:sample']).text,
   week: queries.week(samplePerson, { ...sampleScope, days: 7, limit: 8 }).text,
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,

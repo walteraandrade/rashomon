@@ -183,7 +183,16 @@ const measurePhase = async () => {
     ['graphFast', queries.graphFast(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
     ['agenda', queries.agenda({ days: 30, source: 'all', min: 5, limit: 30 })],
     ['compare', queries.compare(person, compareWith, { ...scope, limit: 40, bridges: false })],
+    ['compareFast', queries.compareFast(person, compareWith, { ...scope, limit: 40, bridges: false })],
     ['lenses', queries.lenses(person, {
+      days: 30,
+      kind: 'all',
+      limit: 40,
+      a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
+      b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
+      bridges: false,
+    })],
+    ['lensesFast', queries.lensesFast(person, {
       days: 30,
       kind: 'all',
       limit: 40,

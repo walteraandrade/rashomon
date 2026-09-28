@@ -13,6 +13,7 @@ import {
   docsWhereSql,
   graphFor,
   lensesFor,
+  precomputable,
   queries,
   risingFor,
   sourcesFor,
@@ -2317,6 +2318,54 @@ describe('lensesFor (issue #206)', () => {
     const scores = (r: typeof same) => Object.fromEntries(r.terms.map((t) => [`${t.kind}:${t.term}`, t.bridge]))
     assert.deepEqual(scores(same), scores(alone))
   })
+
+})
+
+describe('null meaning, bridges and rising unaffected (issue #247)', () => {
+  it('docsText states a null side on /api/compare or /api/people/:id/lenses can mean below the precomputed build\'s kept threshold, not only zero documents (AC8)', () => {
+    assert.match(docPageText.get('docs/api.md') ?? '', /null[\s\S]{0,600}(precomputed|graph_terms|window's own build)[\s\S]{0,300}kept/i)
+    assert.match(docsText, /null[\s\S]{0,400}(measured, but the aggregate did not keep it|below[\s\S]{0,80}kept threshold|kept[\s\S]{0,80}threshold)/i)
+  })
+
+  // The spec (section 4) asks for this sentence in public/como-ler.html's own pt-BR voice, not
+  // in a docs/*.md page, so it is checked against that file directly rather than through
+  // docsText (test/docs.ts only concatenates README.md and docs/*.md, never public/*) -- the
+  // fact behind AC9, not the page docsText happens to cover.
+  it('como-ler.html tells the reader, in pt-BR, that a word drawn fully to one end of the compare or lenses ruler can mean the other side used it too, just below what the build kept (AC9)', () => {
+    const html = readFileSync(new URL('../public/como-ler.html', import.meta.url), 'utf8')
+    const section = (id: string) => {
+      const start = html.indexOf(`id="${id}"`)
+      assert.ok(start >= 0, `public/como-ler.html has no id="${id}" section`)
+      return html.slice(start, start + html.slice(start).indexOf('</div>'))
+    }
+    const belowKeptSentence = /(n[aã]o entrou|abaixo|n[aã]o guardou|n[aã]o couber)[\s\S]{0,200}(recorte pr[eé]-calculad|constru[cç][aã]o|pr[eé]-comput)/i
+    assert.match(section('comparar'), belowKeptSentence, "public/como-ler.html's #comparar section (spec section 4) needs a sentence on the new null meaning")
+    assert.match(section('lentes'), belowKeptSentence, "public/como-ler.html's #lentes section (spec section 4) needs a sentence on the new null meaning")
+  })
+
+  it('/compare/bridges and /lenses/bridges always run the live edge statement, regardless of whether compareFor/lensesFor itself went fast (AC10)', async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+    // compareBase/lensesBase are precomputable, so compareFor/lensesFor answer from graph_terms
+    // here; bridges must still be computed, proving the bridge path never reads the fast tables.
+    assert.equal(precomputable(compareBase), true)
+    const withBridges = await compareFor(lula, bolsonaro, { ...compareBase, bridges: true })
+    assert.ok(withBridges.terms.some((t) => typeof t.bridge === 'number'), 'bridges must still score every term on a precomputable /compare recorte')
+    const lensWithBridges = await lensesFor(lula, { ...lensesBase, a: allLens, b: allLens, bridges: true })
+    assert.ok(lensWithBridges.terms.some((t) => typeof t.bridge === 'number'), 'bridges must still score every term on a precomputable /lenses recorte')
+    // Leave the aggregate build behind reseed's cascade-cleared state, so AC11 can snapshot
+    // risingFor genuinely unbuilt before it triggers its own build.
+    await reseed()
+  })
+
+  it('risingFor is untouched by this issue -- no graph_scopes/graph_terms row makes any difference to its output (AC11)', async () => {
+    await seed()
+    const before = await risingFor(lula, risingBase)
+    await buildGraphAggregates(persons)
+    const after = await risingFor(lula, risingBase)
+    assert.deepEqual(after, before, 'risingFor must read the same live statement whether or not the aggregate build ran')
+    await reseed()
+  })
 })
 
 // docsWhereSql carries its own copy of the kind set, used only to decide whether an
@@ -2418,8 +2467,17 @@ describe('statements render the same text the routes run (issue #131)', () => {
       termTestimony: queries.termTestimony(lula, scope, 'kikori', ['word:a']),
       candidates: queries.candidates({ days: 1, min: 1, limit: 1 }),
       compare: queries.compare(lula, tarcisio, { ...scope, limit: 5, bridges: false }),
+      compareFast: queries.compareFast(lula, tarcisio, { ...scope, limit: 5, bridges: false }),
       compareEdges: queries.compareEdges(lula, { ...scope, limit: 5, bridges: false }, ['word:a']),
       lenses: queries.lenses(lula, {
+        days: scope.days,
+        kind: scope.kind,
+        limit: 5,
+        a: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
+        b: { lens: 'all', domain: 'all', lean: 'all', source: 'all' },
+        bridges: false,
+      }),
+      lensesFast: queries.lensesFast(lula, {
         days: scope.days,
         kind: scope.kind,
         limit: 5,

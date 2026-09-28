@@ -32,7 +32,7 @@ export const readCases: ReadCase[] = [
   { name: 'testimonySummary', sql: (q, c) => q.testimonySummary(c.person, { days: c.window, source: 'all', method: 'stub', min: 3 }) },
   { name: 'termTestimony', sql: (q, c) => q.termTestimony(c.person, scope(c.window), 'stub', c.ids) },
   { name: 'candidates', sql: (q, c) => q.candidates({ days: c.window, min: 5, limit: 50 }) },
-  { name: 'compare', sql: (q, c) => q.compare(c.person, c.other, { ...scope(c.window), kind: KINDS, limit: 40 }) },
+  { name: 'compare', sql: (q, c) => q.compare(c.person, c.other, { ...scope(c.window), kind: KINDS, limit: 40, bridges: false }) },
   {
     name: 'lenses',
     sql: (q, c) =>
@@ -40,6 +40,7 @@ export const readCases: ReadCase[] = [
         days: c.window,
         kind: KINDS,
         limit: 40,
+        bridges: false,
         a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
         b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
       }),

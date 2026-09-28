@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
-import { graphFor, precomputable, queries, sourcesFor } from '../src/graph.js'
-import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
+import { compareFor, graphFor, lensesFastEligible, lensesFor, precomputable, queries, sourcesFor } from '../src/graph.js'
+import type { CompareQuery, LensesQuery, LensSide } from '../src/graph.js'
+import { DAYS, LIMITS, MINS, parseQuery, SMALL_LIMITS, SOURCES } from '../src/query.js'
 import { inTransaction, insertDocP } from '../src/store.js'
 import type { Person } from '../src/types.js'
 import { ATLAS_KINDS } from '../src/ui/api.js'
@@ -18,6 +19,8 @@ const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString
 // equality: for every recorte the tables can hold, both paths render the same response.
 
 const lula = persons.find((p) => p.id === 'lula')!
+const tarcisio = persons.find((p) => p.id === 'tarcisio')!
+const bolsonaro = persons.find((p) => p.id === 'bolsonaro')!
 const q = (over: Record<string, string>) => parseQuery({ days: '30', ...over })
 const live = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graph(person, query).text, queries.graph(person, query).values)).rows[0]
 const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graphFast(person, query).text, queries.graphFast(person, query).values)).rows[0]
@@ -332,6 +335,218 @@ describe('the ceiling on graph_terms', () => {
               }
     await buildGraphAggregates(persons)
     assert.equal(await count(), full)
+  })
+})
+
+// Issue #247: compareFor/lensesFor over graph_terms/graph_scopes instead of a live scan.
+type CompareTermRow = {
+  term: string
+  kind: string
+  a_count: number | null
+  a_pmi: number | null
+  a_tone: number | null
+  b_count: number | null
+  b_pmi: number | null
+  b_tone: number | null
+}
+type CompareRow = { about_a: number; about_b: number; terms: CompareTermRow[] }
+type LensTermRow = { term: string; kind: string; is_name: boolean; a_count: number | null; a_pmi: number | null; a_tone: number | null; b_count: number | null; b_pmi: number | null; b_tone: number | null }
+type LensesRow = { about_a: number; about_b: number; terms: LensTermRow[] }
+const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, bridges: false }
+const cq = (over: Partial<CompareQuery>): CompareQuery => ({ ...compareBase, ...over })
+const liveCompareRow = async (a: Person, b: Person, query: CompareQuery) => {
+  const built = queries.compare(a, b, query)
+  return (await db.query<CompareRow>(built.text, built.values)).rows[0]
+}
+const fastCompareRow = async (a: Person, b: Person, query: CompareQuery) => {
+  const built = queries.compareFast(a, b, query)
+  return (await db.query<CompareRow>(built.text, built.values)).rows[0]
+}
+
+const allLens: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
+const rssLens: LensSide = { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' }
+const gkgLens: LensSide = { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' }
+const senadoLens: LensSide = { lens: 'source:senado', domain: 'all', lean: 'all', source: 'senado' }
+const lensesBase: LensesQuery = { days: 30, kind: 'all', limit: 40, a: allLens, b: allLens, bridges: false }
+const lensQ = (over: Partial<LensesQuery>): LensesQuery => ({ ...lensesBase, ...over })
+const liveLensesRow = async (person: Person, query: LensesQuery) => {
+  const built = queries.lenses(person, query)
+  return (await db.query<LensesRow>(built.text, built.values)).rows[0]
+}
+const fastLensesRow = async (person: Person, query: LensesQuery) => {
+  const built = queries.lensesFast(person, query)
+  return (await db.query<LensesRow>(built.text, built.values)).rows[0]
+}
+
+describe('compare fast path (issue #247)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  const compareRecortes: Partial<CompareQuery>[] = [
+    {},
+    { days: 7 },
+    { days: 365 },
+    { kind: 'word' },
+    { kind: 'phrase,hashtag' },
+    { kind: 'org' },
+    { kind: 'org,word' },
+    { source: 'rss' },
+    { source: 'gkg', days: 7 },
+    { limit: 5 },
+  ]
+
+  it('renders the same response as the live query for every recorte and every person pair', async () => {
+    for (const over of compareRecortes)
+      for (const a of persons)
+        for (const b of persons) {
+          const query = cq(over)
+          assert.equal(precomputable(query), true)
+          assert.deepEqual(await fastCompareRow(a, b, query), await liveCompareRow(a, b, query), `${a.id}/${b.id} ${JSON.stringify(over)}`)
+        }
+  })
+
+  it('falls back to live for a domain, a lean, a source list, or an explicit country', async () => {
+    const outside: Partial<CompareQuery>[] = [
+      { domain: 'example.org' },
+      { lean: 'left' },
+      { source: 'rss,gkg' },
+      { country: 'pt' },
+      { country: 'all' },
+    ]
+    for (const over of outside) {
+      const query = cq(over)
+      assert.equal(precomputable(query), false)
+      const expected = await liveCompareRow(lula, bolsonaro, query)
+      const result = await compareFor(lula, bolsonaro, query)
+      assert.equal(result.a.about, expected.about_a)
+      assert.equal(result.b.about, expected.about_b)
+      assert.equal(result.terms.length, expected.terms.length)
+    }
+  })
+
+  it('a scope with about = 0 on one or both sides still answers fast', async () => {
+    const query = cq({ source: 'senado' })
+    assert.equal(precomputable(query), true)
+    const row = await fastCompareRow(lula, bolsonaro, query)
+    assert.deepEqual(row && { about_a: row.about_a, about_b: row.about_b, terms: row.terms }, { about_a: 0, about_b: 0, terms: [] })
+  })
+
+  it("a lower ceiling produces a genuine cross-side null while each side's own top-limit selection stays exact", async () => {
+    await buildGraphAggregates(persons, DAYS, 2)
+    let sawGenuineNull = false
+    const pairs: [Person, Person][] = [[lula, bolsonaro], [tarcisio, lula], [bolsonaro, tarcisio]]
+    for (const limit of SMALL_LIMITS)
+      for (const [a, b] of pairs) {
+        const query = cq({ limit })
+        const fastRow = await fastCompareRow(a, b, query)
+        if (!fastRow) continue
+        const liveRow = await liveCompareRow(a, b, query)
+        for (const ft of fastRow.terms) {
+          const lt = liveRow.terms.find((t) => t.term === ft.term && t.kind === ft.kind)
+          if (!lt) continue
+          if (ft.a_count !== null)
+            assert.deepEqual({ count: ft.a_count, pmi: ft.a_pmi, tone: ft.a_tone }, { count: lt.a_count, pmi: lt.a_pmi, tone: lt.a_tone }, `${a.id}/${b.id} ${ft.term}:${ft.kind} a @ ${limit}`)
+          if (ft.b_count !== null)
+            assert.deepEqual({ count: ft.b_count, pmi: ft.b_pmi, tone: ft.b_tone }, { count: lt.b_count, pmi: lt.b_pmi, tone: lt.b_tone }, `${a.id}/${b.id} ${ft.term}:${ft.kind} b @ ${limit}`)
+          if ((ft.a_count === null && lt.a_count !== null) || (ft.b_count === null && lt.b_count !== null)) sawGenuineNull = true
+        }
+      }
+    assert.ok(sawGenuineNull, 'expected at least one cross-side null under the shrunk ceiling')
+    await buildGraphAggregates(persons)
+  })
+})
+
+// graph_terms never stores a person's own name words (excluded at every source by
+// personTermsQuery), so lensesFastQuery's own comment documents a known gap: a term the live
+// query's names_a/names_b union (issue #206) would surface as "name" is simply absent from the
+// fast path's terms, never present as a false null or a wrong figure. dropNames sets those rows
+// aside so the rest of the response is still checked byte-for-byte against the live query.
+const dropNames = (terms: readonly { is_name: boolean }[]) => terms.filter((t) => !t.is_name)
+
+describe('lenses fast path (issue #247)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  const lensesRecortes: Partial<LensesQuery>[] = [
+    {},
+    { days: 7 },
+    { days: 365 },
+    { kind: 'word' },
+    { kind: 'phrase,hashtag' },
+    { kind: 'org' },
+    { limit: 5 },
+  ]
+  const lensPairs: [LensSide, LensSide][] = [
+    [allLens, allLens],
+    [rssLens, gkgLens],
+    [allLens, rssLens],
+    [senadoLens, allLens],
+  ]
+
+  it('renders the same response as the live query when both sides are all or a source: lens, every recorte', async () => {
+    for (const over of lensesRecortes)
+      for (const person of persons)
+        for (const [a, b] of lensPairs) {
+          const query = lensQ({ ...over, a, b })
+          assert.equal(lensesFastEligible(query), true)
+          const fastRow = await fastLensesRow(person, query)
+          const liveRow = await liveLensesRow(person, query)
+          const label = `${person.id} ${a.lens}/${b.lens} ${JSON.stringify(over)}`
+          assert.equal(fastRow.about_a, liveRow.about_a, `${label} about_a`)
+          assert.equal(fastRow.about_b, liveRow.about_b, `${label} about_b`)
+          assert.deepEqual(dropNames(fastRow.terms), dropNames(liveRow.terms), label)
+        }
+  })
+
+  it('a lens with about = 0 on one or both sides still answers fast', async () => {
+    const bothZero = lensQ({ a: senadoLens, b: senadoLens })
+    assert.equal(lensesFastEligible(bothZero), true)
+    const row = await fastLensesRow(lula, bothZero)
+    assert.deepEqual(row && { about_a: row.about_a, about_b: row.about_b, terms: dropNames(row.terms) }, { about_a: 0, about_b: 0, terms: [] })
+
+    const oneZero = lensQ({ a: senadoLens, b: allLens })
+    const mixed = await fastLensesRow(lula, oneZero)
+    assert.equal(mixed.about_a, 0)
+    assert.ok(mixed.about_b > 0)
+  })
+
+  it("a person's own name term is present live but absent from the fast path (documented gap, issue #247)", async () => {
+    const query = lensQ({ days: 365, limit: 100 })
+    const liveRow = await liveLensesRow(lula, query)
+    const fastRow = await fastLensesRow(lula, query)
+    const liveName = liveRow.terms.find((t) => t.is_name)
+    assert.ok(liveName, "fixture assumption: lula's own name word appears in the live union")
+    assert.ok(
+      !fastRow.terms.some((t) => t.term === liveName!.term && t.kind === liveName!.kind),
+      'the fast path never carries this key, since graph_terms excludes it at build time',
+    )
+  })
+
+  it('stays live end to end when either side is a domain: or lean: lens', async () => {
+    const domainLens: LensSide = { lens: 'domain:example.org', domain: 'example.org', lean: 'all', source: 'all' }
+    const leanLens: LensSide = { lens: 'lean:left', domain: 'all', lean: 'left', source: 'all' }
+    for (const [a, b] of [[domainLens, allLens], [allLens, leanLens]] as [LensSide, LensSide][]) {
+      const query = lensQ({ a, b })
+      assert.equal(lensesFastEligible(query), false)
+      const liveRow = await liveLensesRow(lula, query)
+      const result = await lensesFor(lula, query)
+      assert.equal(result.a.about, liveRow.about_a)
+      assert.equal(result.b.about, liveRow.about_b)
+      assert.equal(result.terms.length, liveRow.terms.length)
+    }
+  })
+
+  it('stays live end to end when days is outside DAYS', async () => {
+    const query = lensQ({ days: 14 })
+    assert.equal(lensesFastEligible(query), false)
+    const liveRow = await liveLensesRow(lula, query)
+    const result = await lensesFor(lula, query)
+    assert.equal(result.a.about, liveRow.about_a)
+    assert.equal(result.b.about, liveRow.about_b)
   })
 })
 
@@ -851,5 +1066,116 @@ describe('outlet fields and neighbours (issue #218)', () => {
     assert.ok(rows.every((r) => r.similarity === 1), 'every colheita domain ties at similarity 1')
     const expected = colheitaDomains.filter((d) => d !== 'campovoz.example').sort()
     assert.deepEqual(rows.map((r) => r.neighbor), expected, 'tied similarity must fall back to domain ascending')
+  })
+})
+
+// Issue #247 acceptance criteria, written from the spec independently of the
+// 'compare fast path (issue #247)' / 'lenses fast path (issue #247)' describes above (which the
+// build itself added). Kept deliberately lighter than those: this block pins the criterion
+// itself, not the full recorte x pair matrix those already exhaustively cover.
+describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+  after(async () => {
+    await reseed()
+    await buildGraphAggregates(persons)
+  })
+
+  it('compareFast renders byte-identical output to the live compare query on a precomputable recorte, every pair (AC1)', async () => {
+    const query = cq({})
+    for (const a of persons)
+      for (const b of persons)
+        assert.deepEqual(await fastCompareRow(a, b, query), await liveCompareRow(a, b, query), `${a.id}/${b.id}`)
+  })
+
+  it('lensesFast renders byte-identical output to the live lenses query for every fixture person, source: and all lenses (AC2)', async () => {
+    // graph_terms never stores a person's own name words (excluded at build time), so a term the
+    // live union's names_a/names_b CTE marks "name" is simply absent from the fast path's own
+    // terms -- the one documented gap this file's own 'lenses fast path' describe already pins.
+    // dropNames sets those aside so the rest of the response is checked byte-for-byte.
+    for (const person of persons) {
+      const query = lensQ({ a: rssLens, b: gkgLens })
+      const fastRow = await fastLensesRow(person, query)
+      const liveRow = await liveLensesRow(person, query)
+      assert.equal(fastRow.about_a, liveRow.about_a, person.id)
+      assert.equal(fastRow.about_b, liveRow.about_b, person.id)
+      assert.deepEqual(dropNames(fastRow.terms), dropNames(liveRow.terms), person.id)
+      const queryAll = lensQ({ a: allLens, b: senadoLens })
+      const fastAll = await fastLensesRow(person, queryAll)
+      const liveAll = await liveLensesRow(person, queryAll)
+      assert.equal(fastAll.about_a, liveAll.about_a, `${person.id} all/senado`)
+      assert.equal(fastAll.about_b, liveAll.about_b, `${person.id} all/senado`)
+      assert.deepEqual(dropNames(fastAll.terms), dropNames(liveAll.terms), `${person.id} all/senado`)
+    }
+  })
+
+  it('a domain, a lean, a comma source list, or an explicit country keeps /api/compare fully live, unchanged output (AC3)', async () => {
+    const outside: Partial<CompareQuery>[] = [{ domain: 'example.org' }, { lean: 'left' }, { source: 'rss,gkg' }, { country: 'pt' }, { country: 'all' }]
+    for (const over of outside) {
+      const query = cq(over)
+      assert.equal(precomputable(query), false)
+      const expected = await liveCompareRow(lula, bolsonaro, query)
+      const result = await compareFor(lula, bolsonaro, query)
+      assert.equal(result.a.about, expected.about_a)
+      assert.equal(result.b.about, expected.about_b)
+      assert.equal(result.terms.length, expected.terms.length)
+    }
+  })
+
+  it('a domain: or lean: lens on either side, or a days outside DAYS, keeps /api/people/:id/lenses fully live, unchanged output (AC4)', async () => {
+    const domainLens: LensSide = { lens: 'domain:example.org', domain: 'example.org', lean: 'all', source: 'all' }
+    const leanLens: LensSide = { lens: 'lean:left', domain: 'all', lean: 'left', source: 'all' }
+    for (const query of [lensQ({ a: domainLens, b: allLens }), lensQ({ a: allLens, b: leanLens }), lensQ({ days: 14 })]) {
+      assert.equal(lensesFastEligible(query), false)
+      const liveRow = await liveLensesRow(lula, query)
+      const result = await lensesFor(lula, query)
+      assert.equal(result.a.about, liveRow.about_a)
+      assert.equal(result.b.about, liveRow.about_b)
+      assert.equal(result.terms.length, liveRow.terms.length)
+    }
+  })
+
+  it('a lower ceiling yields a genuine cross-side null on /api/compare while each side\'s own top-limit selection stays exact (AC5)', async () => {
+    try {
+      await buildGraphAggregates(persons, DAYS, 2)
+      let sawGenuineNull = false
+      const pairs: [Person, Person][] = [[lula, bolsonaro], [tarcisio, lula], [bolsonaro, tarcisio]]
+      for (const limit of SMALL_LIMITS)
+        for (const [a, b] of pairs) {
+          const query = cq({ limit })
+          const fastRow = await fastCompareRow(a, b, query)
+          if (!fastRow) continue
+          const liveRow = await liveCompareRow(a, b, query)
+          for (const ft of fastRow.terms) {
+            const lt = liveRow.terms.find((t) => t.term === ft.term && t.kind === ft.kind)
+            if (!lt) continue
+            if (ft.a_count !== null) assert.deepEqual({ count: ft.a_count, pmi: ft.a_pmi }, { count: lt.a_count, pmi: lt.a_pmi }, `${a.id}/${b.id} a @ ${limit} ${ft.term}`)
+            if (ft.b_count !== null) assert.deepEqual({ count: ft.b_count, pmi: ft.b_pmi }, { count: lt.b_count, pmi: lt.b_pmi }, `${a.id}/${b.id} b @ ${limit} ${ft.term}`)
+            if ((ft.a_count === null && lt.a_count !== null) || (ft.b_count === null && lt.b_count !== null)) sawGenuineNull = true
+          }
+        }
+      assert.ok(sawGenuineNull, 'expected at least one cross-side null under the shrunk ceiling')
+    } finally {
+      await buildGraphAggregates(persons)
+    }
+  })
+
+  it('a source with zero docs for both persons in scope still answers /api/compare fast: about = 0, terms = [] (AC6)', async () => {
+    const query = cq({ source: 'senado' })
+    assert.equal(precomputable(query), true)
+    const row = await fastCompareRow(lula, bolsonaro, query)
+    assert.deepEqual(row && { about_a: row.about_a, about_b: row.about_b, terms: row.terms }, { about_a: 0, about_b: 0, terms: [] })
+  })
+
+  it('tone is identical, and null wherever no GDELT doc contributed, between the fast and live compare paths (AC7)', async () => {
+    const query = cq({ days: 365 })
+    const fastRow = await fastCompareRow(tarcisio, lula, query)
+    const liveRow = await liveCompareRow(tarcisio, lula, query)
+    const tones = (row: typeof fastRow) => row.terms.map((t) => ({ term: t.term, kind: t.kind, a_tone: t.a_tone, b_tone: t.b_tone }))
+    assert.deepEqual(tones(fastRow), tones(liveRow))
+    assert.ok(fastRow.terms.some((t) => t.a_tone !== null), 'sanity: tarcisio has at least one gdelt-toned term in scope')
+    assert.ok(fastRow.terms.some((t) => t.a_tone === null), 'sanity: at least one untoned term also survives in scope')
   })
 })

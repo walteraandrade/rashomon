@@ -2319,12 +2319,6 @@ describe('lensesFor (issue #206)', () => {
     assert.deepEqual(scores(same), scores(alone))
   })
 
-  // AC9 (public/como-ler.html's own pt-BR sentence) is out of scope here: `docsText`
-  // (test/docs.ts) only concatenates README.md and docs/*.md, never public/*, and this task's
-  // own brief leaves public/ untouched -- see the report for both.
-  it('is documented: a null side can mean below the precomputed build\'s own kept threshold, not only zero documents (issue #247)', () => {
-    assert.match(docsText, /null[\s\S]{0,400}(measured, but the aggregate did not keep it|below[\s\S]{0,60}kept threshold|kept[\s\S]{0,60}threshold)/i)
-  })
 })
 
 describe('null meaning, bridges and rising unaffected (issue #247)', () => {

@@ -1340,10 +1340,9 @@ const lensesQuery = (person: Person, q: LensesQuery) => sql`
 // issue #247: lensesQuery over graph_terms/graph_scopes, run only when both lenses are `all` or
 // a `source:` lens (lensesFastEligible below). Same "s_a/s_b empty -> whole result empty ->
 // caller falls back live" shape as compareFastQuery, per lens (one person, two source scopes).
-// `scored` unions graph_terms (never a name word, personTermsQuery's own exclusion) with
-// graph_name_terms (only name words, aggregate.ts's nameTermsQuery) so a name key still ranks by
-// its real count into `top_names`, mirroring lensesQuery's live names_a/names_b union exactly --
-// top_count/top_pmi keep filtering `not isName` defensively, same as the live query's own shape.
+// graph_terms never carries a person's own name words (personTermsQuery's own exclusion), so
+// unlike lensesQuery's live names_a/names_b union, the fast path has no name keys to add: a
+// person's own name words never appear on a precomputed lenses ruler (docs/api.md).
 const lensSideFastCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQuery) => {
   const names = nameTokens(person)
   const s = sql.raw(`s_${side}`)
@@ -1362,21 +1361,12 @@ const lensSideFastCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: Len
     from graph_terms g, ${s} s
     where g.days = ${q.days} and g.source = ${lens.source} and g.person_id = ${person.id}
       and (${q.kind} = 'all' or g.kind = any(string_to_array(${q.kind}, ',')))
-    union all
-    select gn.term, gn.kind, gn.c_pt as count, gn.tone,
-      ln((gn.c_pt::float8 * s.tracked::float8) / (s.about::float8 * gn.c_t::float8)) / ln(2) as pmi
-    from graph_name_terms gn, ${s} s
-    where gn.days = ${q.days} and gn.source = ${lens.source} and gn.person_id = ${person.id}
-      and (${q.kind} = 'all' or gn.kind = any(string_to_array(${q.kind}, ',')))
   ),
   ${top}_count as (
     select term, kind from ${scored} where not ${isName(sql.raw('term'), names)} order by count desc, term, kind limit ${q.limit}
   ),
   ${top}_pmi as (
     select term, kind from ${scored} where not ${isName(sql.raw('term'), names)} order by ${pmiRank(sql.raw('count'))} desc, term, kind limit ${q.limit}
-  ),
-  ${top}_names as (
-    select term, kind from ${scored} where ${isName(sql.raw('term'), names)} order by count desc, term, kind limit ${q.limit}
   )`
 }
 
@@ -1394,10 +1384,8 @@ const lensesFastQuery = (person: Person, q: LensesQuery) => {
   keys as (
     select term, kind from a_top_count
     union select term, kind from a_top_pmi
-    union select term, kind from a_top_names
     union select term, kind from b_top_count
     union select term, kind from b_top_pmi
-    union select term, kind from b_top_names
   ),
   unioned as (
     select k.term, k.kind,

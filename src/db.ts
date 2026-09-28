@@ -241,17 +241,6 @@ export const schema = `
       similarity float8 not null,
       primary key (days, person_id, domain, neighbor)
     );
-    create table if not exists graph_name_terms (
-      days int not null,
-      source text not null,
-      person_id text not null references persons(id) on delete cascade,
-      term text not null,
-      kind text not null,
-      c_pt int not null,
-      c_t int not null,
-      tone float8,
-      primary key (days, source, person_id, term, kind)
-    );
 `
 
 // sql.unsafe parses one statement per call, unlike the exec() it replaces.
@@ -274,7 +263,6 @@ export const ANALYZED_TABLES = [
   'doc_testimony',
   'graph_scopes',
   'graph_terms',
-  'graph_name_terms',
   'term_communities',
   'term_links',
   'outlet_fields',

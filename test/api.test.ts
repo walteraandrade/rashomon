@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { ATLAS_KINDS, attentionParams, candidatesQuery, compareParams, docsParams, endpoint, json, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams, bridgeParams, candidatesQuery, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -195,6 +195,17 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
     assert.equal(qp.get('kind'), 'word,hashtag,phrase')
     assert.equal(qp.has('domain'), false)
     assert.equal(qp.has('lean'), false)
+  })
+
+  it('the ruler requests never carry bridges; bridgeParams adds the ids to the same recorte', () => {
+    const compareQp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' })
+    assert.equal(compareQp.has('bridges'), false)
+    const lensesQp = lensesParams({ a: 'all', b: 'lean:right', days: '30', limit: '40' })
+    assert.equal(lensesQp.has('bridges'), false)
+    const withIds = bridgeParams(compareQp, ['word:stf', 'word:pix'])
+    assert.equal(withIds.get('ids'), 'word:stf,word:pix')
+    assert.equal(withIds.get('a'), 'lula')
+    assert.equal(compareQp.has('ids'), false)
   })
 })
 

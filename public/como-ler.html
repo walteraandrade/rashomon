@@ -54,6 +54,7 @@
         <p>O nome da pessoa puxa a nota. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
         <p><b>A régua</b> põe cada veículo na sua nota média; o tamanho é quantos textos; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos avaliados.</p>
         <p>O modo <b>Avaliação</b> do gráfico 1 usa a mesma régua, mas com palavras: cada palavra fica na média das notas dos textos em que aparece, e a cor é a mesma máscara do mapa e da lista, a distância até a média desta pessoa. Não é uma segunda medida, é a mesma nota do kikori vista de outro ângulo.</p>
+        <p>A lista de veículos também os agrupa por vocabulário parecido. Vocabulário parecido não é a mesma coisa que linha editorial: dois veículos podem usar palavras semelhantes por motivos que nada têm a ver com posição política. E o número de cada grupo não significa nada por si só, nem pode ser comparado entre uma reconstrução e outra do site: ele só serve para juntar veículos naquela leitura.</p>
       </div>
       <div id="pmi">
         <h2>PMI</h2>
@@ -73,6 +74,8 @@
         <p>O tamanho da letra é quantos documentos ela tem com as duas pessoas, somados. “Documentos” ou “PMI ponderado” na frase mudam só a posição, nunca o tamanho.</p>
         <p>Se as duas têm a palavra, ela fica dentro da régua. PMI negativo conta como zero na posição, senão uma palavra exclusiva do outro lado seria desenhada como se fosse desta ponta.</p>
         <p>As que não couberam sem cobrir outra ficam numa lista abaixo da régua, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
+        <h3 id="ponte">Ponte</h3>
+        <p>Uma palavra sublinhada em âmbar é uma ponte: pelos documentos das duas pessoas, ela liga palavras de um vocabulário às do outro. A conta junta as palavras que aparecem juntas no mesmo texto, dos dois lados, e mede por quantos caminhos mais curtos entre duas palavras quaisquer ela passa (centralidade de intermediação). A mais atravessada vale 1; sublinhadas ficam as que passam de 0,5. A ponte não muda a posição: uma palavra pode pender para um lado e ainda assim ligar os dois.</p>
       </div>
       <div id="em-alta">
         <h2>Gráfico 4 · Em alta</h2>
@@ -106,6 +109,8 @@
         <p>O nome da pessoa não entra na régua, nas duas lentes: é a mesma pessoa dos dois lados. Quantas palavras saíram por isso aparece embaixo da régua.</p>
         <h3>Lente inválida</h3>
         <p>Uma lente vazia, malformada ou desconhecida volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
+        <h3>Ponte</h3>
+        <p>O sublinhado âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa. A conta está em <a href="#ponte">Ponte</a>, no gráfico 3.</p>
         <h3>Clique</h3>
         <p>Abre os textos das duas lentes ao mesmo tempo, cada uma com o seu recorte de veículo, viés ou fonte.</p>
       </div>

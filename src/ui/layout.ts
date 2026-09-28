@@ -247,7 +247,7 @@ const RULER_SIZE_MAX = 30
 const RULER_GAP_X = 8
 const RULER_GAP_Y = 3
 
-export type RulerItem = { term: string; kind: string; balance: number; combined: number }
+export type RulerItem = { term: string; kind: string; balance: number; combined: number; bridge?: number }
 
 export type RulerLayout<T> = {
   words: (T & { text: string; x: number; y: number; size: number; w: number; h: number })[]

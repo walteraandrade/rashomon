@@ -4,12 +4,13 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import personsSeed from '../seed.json' with { type: 'json' }
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
-import { agendaFor, attentionFor, candidatesFor, comentionFor, compareFor, docsFor, graphFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
+import { agendaFor, attentionFor, candidatesFor, comentionFor, compareBridgesFor, compareFor, docsFor, graphFor, lensBridgesFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
 import {
   parseAgendaQuery,
+  parseBridgeIds,
   parseAttentionQuery,
   parseCandidatesQuery,
   parseComentionQuery,
@@ -99,19 +100,33 @@ app.get('/api/people/:id/week', async (c) => c.json(await weekFor(c.get('person'
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
 app.get('/api/people/:id/testimony', async (c) => c.json(await testimonyFor(c.get('person'), parseTestimonyQuery(c.req.query()))))
 app.get('/api/people/:id/lenses', async (c) => c.json(await lensesFor(c.get('person'), parseLensesQuery(c.req.query()))))
+app.get('/api/people/:id/lenses/bridges', async (c) =>
+  c.json(await lensBridgesFor(c.get('person'), parseLensesQuery(c.req.query()), parseBridgeIds(c.req.query('ids')))),
+)
 app.get('/api/people/:id/attention', async (c) => c.json(await attentionFor(c.get('person'), parseAttentionQuery(c.req.query()))))
 
 // Not nested under /people/:id: spans two specific people.
-app.get('/api/compare', async (c) => {
-  const aId = (c.req.query('a') ?? '').trim()
-  const bId = (c.req.query('b') ?? '').trim()
+const comparePair = async (aRaw: string | undefined, bRaw: string | undefined) => {
+  const aId = (aRaw ?? '').trim()
+  const bId = (bRaw ?? '').trim()
   const { rows } = await db.query<Person>(`select id, name, aliases from persons where id = any($1::text[])`, [[aId, bId]])
   const byId = new Map(rows.map((p) => [p.id, p]))
   const a = byId.get(aId)
-  if (!a) return c.json({ error: 'person not found' }, 404)
   const b = byId.get(bId)
-  if (!b) return c.json({ error: 'person not found' }, 404)
-  return c.json(await compareFor(a, b, parseCompareQuery(c.req.query())))
+  return a && b ? { a, b } : null
+}
+
+app.get('/api/compare', async (c) => {
+  const pair = await comparePair(c.req.query('a'), c.req.query('b'))
+  if (!pair) return c.json({ error: 'person not found' }, 404)
+  return c.json(await compareFor(pair.a, pair.b, parseCompareQuery(c.req.query())))
+})
+
+// The ruler paints from /api/compare first; this scores its terms afterwards so the figure never waits on it.
+app.get('/api/compare/bridges', async (c) => {
+  const pair = await comparePair(c.req.query('a'), c.req.query('b'))
+  if (!pair) return c.json({ error: 'person not found' }, 404)
+  return c.json(await compareBridgesFor(pair.a, pair.b, parseCompareQuery(c.req.query()), parseBridgeIds(c.req.query('ids'))))
 })
 
 app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.query()))))

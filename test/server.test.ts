@@ -414,6 +414,31 @@ describe('GET /api/compare (issue #93)', () => {
       assert.deepEqual(await res.json(), { error: 'person not found' })
     }
   })
+
+  it('bridges=1 adds a bridge field to every term; omitted, the field is absent (issue #219)', async () => {
+    const res = await app.request('/api/compare?a=lula&b=tarcisio&bridges=1')
+    const body = (await res.json()) as { terms: { bridge?: number }[] }
+    assert.ok(body.terms.length > 0)
+    for (const t of body.terms) assert.equal(typeof t.bridge, 'number')
+    const plain = await app.request('/api/compare?a=lula&b=tarcisio')
+    const plainBody = (await plain.json()) as { terms: { bridge?: number }[] }
+    for (const t of plainBody.terms) assert.ok(!('bridge' in t))
+  })
+
+  it('/api/compare/bridges scores only the ids it is given, dropping malformed ones', async () => {
+    const res = await app.request('/api/compare/bridges?a=lula&b=tarcisio&days=4325&domain=comparebridge.example&ids=word:pontecompare,word:exclusivolulax,bogus:x,nocolon')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { bridges: Record<string, number> }
+    assert.deepEqual(Object.keys(body.bridges).sort(), ['word:exclusivolulax', 'word:pontecompare'])
+    const unknown = await app.request('/api/compare/bridges?a=nobody&b=lula&ids=word:x')
+    assert.equal(unknown.status, 404)
+  })
+
+  it('/api/people/:id/lenses/bridges answers { bridges }, empty when no ids survive parsing', async () => {
+    const res = await app.request('/api/people/lula/lenses/bridges?ids=nope')
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { bridges: {} })
+  })
 })
 
 describe('GET /api/comention (issue #207)', () => {
@@ -497,6 +522,17 @@ describe('GET /api/people/:id/lenses (issue #206)', () => {
     const res = await app.request('/api/people/lula/lenses')
     const body = (await res.json()) as Record<string, unknown>
     assert.deepEqual(Object.keys(body).sort(), ['a', 'b', 'days', 'terms'])
+  })
+
+  it('bridges=1 adds a bridge field to every term; omitted, the field is absent (issue #219)', async () => {
+    const url = '/api/people/lula/lenses?a=domain:g1.globo.com&b=domain:valor.globo.com'
+    const res = await app.request(`${url}&bridges=1`)
+    const body = (await res.json()) as { terms: { bridge?: number }[] }
+    assert.ok(body.terms.length > 0)
+    for (const t of body.terms) assert.equal(typeof t.bridge, 'number')
+    const plain = await app.request(url)
+    const plainBody = (await plain.json()) as { terms: { bridge?: number }[] }
+    for (const t of plainBody.terms) assert.ok(!('bridge' in t))
   })
 })
 

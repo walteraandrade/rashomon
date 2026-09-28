@@ -9,7 +9,17 @@ export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
 export type Doc = { source?: string; uri?: unknown; domain?: string | null; text?: string }
-export type OutletRow = { domain?: string | null; source?: string | null; label?: string | null; docs: number; tone?: number | null }
+// field/neighbors (issue #218): from the window's own aggregate build, not the live query.
+export type OutletNeighbor = { domain: string; similarity: number }
+export type OutletRow = {
+  domain?: string | null
+  source?: string | null
+  label?: string | null
+  docs: number
+  tone?: number | null
+  field?: number | null
+  neighbors?: OutletNeighbor[]
+}
 export type Sample = { id: string; source: string; text: string }
 export type Candidate = { name: string; count: number; sources: number; previous: number; samples: Sample[] }
 export type TestimonyOverall = { score: number | null; n: number }
@@ -25,8 +35,31 @@ export type Routing = { points: Point[]; ports: Map<string, number[]>; adjacent:
 export type Layout = { placed: PlacedTerm[]; overflow: Term[]; center: CenterBox; routing?: Routing }
 export type PersonRef = { id: string; name: string }
 export type CompareSide = { count: number; pmi: number; tone: number | null }
-export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null }
+export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null; bridge?: number }
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
+
+// Mirrors src/query.ts's BRIDGE_NODES and graph.ts's bridgeNodes: the most-documented terms,
+// never an own name, sorted so the bridges URL is one cache key per recorte.
+export const BRIDGE_NODES = 60
+
+const sideDocs = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count : 0)
+
+export const bridgeIds = (terms: readonly CompareTerm[]) =>
+  terms
+    .filter((t) => t.a !== 'name' && t.b !== 'name')
+    .map((t) => ({ id: `${t.kind}:${t.term}`, docs: sideDocs(t.a) + sideDocs(t.b) }))
+    .sort((x, y) => y.docs - x.docs || x.id.localeCompare(y.id))
+    .slice(0, BRIDGE_NODES)
+    .map((t) => t.id)
+    .sort()
+
+export const hasBridges = (terms: readonly CompareTerm[]) => terms.some((t) => t.bridge !== undefined)
+
+// In place on purpose: a figure tells a new dataset from a repaint by object identity, so the
+// scores join the payload already on screen (and in the scope memo) instead of replacing it.
+export const applyBridges = (terms: CompareTerm[], bridges: Record<string, number>) => {
+  for (const t of terms) t.bridge = bridges[`${t.kind}:${t.term}`] ?? 0
+}
 export type RisingTerm = { term: string; kind: string; count_recent: number; count_baseline: number; count_recent_raw: number; count_baseline_raw: number; lift: number }
 // `present` and `about.words_*` are optional on the page side only: a payload cached before they
 // existed still has to paint something rather than NaN positions.
@@ -292,13 +325,15 @@ export const foldTestimonyDomains = (rows: TestimonyDomainRow[]): { domain: stri
 export const mergeOutlets = (
   rows: OutletRow[],
   testimonyRows: TestimonyDomainRow[],
-): { domain: string; sources: string[]; docs: number; score: number | null; n: number }[] => {
+): { domain: string; sources: string[]; docs: number; score: number | null; n: number; field: number | null; neighbors: OutletNeighbor[] }[] => {
   const scored = new Map(foldTestimonyDomains(testimonyRows).map((d) => [d.domain, d]))
-  const byDomain = new Map<string, { domain: string; sources: string[]; docs: number }>()
+  const byDomain = new Map<string, { domain: string; sources: string[]; docs: number; field: number | null; neighbors: OutletNeighbor[] }>()
   for (const r of rows) {
     const domain = r.domain ?? r.source ?? ''
     if (!domain) continue
-    const entry = byDomain.get(domain) ?? { domain, sources: [], docs: 0 }
+    const entry = byDomain.get(domain) ?? { domain, sources: [], docs: 0, field: null, neighbors: [] }
+    if (entry.field === null && r.field != null) entry.field = r.field
+    if (!entry.neighbors.length && r.neighbors?.length) entry.neighbors = r.neighbors
     if (r.source && !entry.sources.includes(r.source)) entry.sources.push(r.source)
     entry.docs += r.docs
     byDomain.set(domain, entry)

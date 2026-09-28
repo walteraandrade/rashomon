@@ -133,6 +133,20 @@ export const KINDS = ['hashtag', 'word', 'phrase', 'org']
 
 export const parseKindList = parseList((s) => KINDS.includes(s))
 
+// Betweenness is scored over at most this many terms: the edge statements grow with its square.
+export const BRIDGE_NODES = 60
+
+// `ids` on the bridges routes: `kind:term` pairs, deduped, sorted and capped so the cache key
+// is canonical and the edge statements stay bounded.
+export const parseBridgeIds = (v: string | undefined): string[] =>
+  [...new Set((v ?? '').split(',').map((s) => s.trim()))]
+    .filter((id) => {
+      const at = id.indexOf(':')
+      return at > 0 && at < id.length - 1 && KINDS.includes(id.slice(0, at))
+    })
+    .sort()
+    .slice(0, BRIDGE_NODES)
+
 const DOMAIN_TOKEN = /^[a-z0-9.:-]{1,120}$/
 
 export const parseDomainList = parseList((s) => DOMAIN_TOKEN.test(s))
@@ -252,6 +266,8 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
   ...parseScope(q, { days: 30 }),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
+  // `bridges=1` opts in, exactly like testimony's/communities' bare flag: anything else is absent.
+  bridges: q.bridges === '1',
 })
 
 const ALL_LENS: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
@@ -280,6 +296,7 @@ export const parseLensesQuery = (q: Record<string, string | undefined>): LensesQ
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
   a: parseLens(q.a),
   b: parseLens(q.b),
+  bridges: q.bridges === '1',
 })
 
 export const parseAttentionQuery = (q: Record<string, string | undefined>): AttentionQuery => ({

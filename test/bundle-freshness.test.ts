@@ -53,10 +53,8 @@ describe('public/bundle.js stays in step with src/ui', () => {
     }
   })
 
-  // AC5 (issue #214): graphology/graphology-communities-louvain feed src/aggregate.ts and
-  // src/communities.ts only. Neither is imported by src/ui/* or src/server.ts, so esbuild's
-  // bundle of the front end must never pull them in.
-  it('does not bundle graphology, which only src/aggregate.ts and src/communities.ts need', () => {
+  // graphology is server-side only (aggregate.ts, graph.ts); nothing under src/ui imports it.
+  it('does not bundle graphology, which never reaches src/ui', () => {
     const bundle = readFileSync('public/bundle.js', 'utf8')
     assert.doesNotMatch(bundle, /graphology/)
   })

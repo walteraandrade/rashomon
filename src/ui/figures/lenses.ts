@@ -3,7 +3,7 @@
 // same person — because a lens word is never one side's alone, just like figure 3's ruler.
 
 import * as api from '../api.js'
-import { html, kinds, lensLabel, type Lenses, type Measure, type OutletRow } from '../format.js'
+import { applyBridges, bridgeIds, hasBridges, html, kinds, lensLabel, type Lenses, type Measure, type OutletRow } from '../format.js'
 import * as docsCard from '../docs-card.js'
 import { createCanvasMeasure, paintLensDetail, paintLensRuler, paintLensRulerError, paintLensesLoading } from '../render.js'
 import { runFigure } from '../figure.js'
@@ -170,6 +170,25 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     else paintLensesLoading()
   }
 
+  // Paint first, underline later: the ruler never waits on the betweenness statements.
+  let bridgesAbort: AbortController | null = null
+  const loadBridges = (result: Lenses) => {
+    bridgesAbort?.abort()
+    const ids = bridgeIds(result.terms)
+    if (hasBridges(result.terms) || !ids.length) return
+    const controller = new AbortController()
+    bridgesAbort = controller
+    const qp = api.lensesParams({ a: $('lensesA').value, b: $('lensesB').value, days: $('lensesDays').value, limit: $('lensesLimit').value })
+    api
+      .loadLensBridges(personId(), api.bridgeParams(qp, ids), controller.signal)
+      .then((r) => {
+        if (data !== result || !r?.bridges) return
+        applyBridges(result.terms, r.bridges)
+        repaint()
+      })
+      .catch(() => {})
+  }
+
   const paint = (result: Lenses) => {
     // A resize repaint calls this with the same object again (figure.ts's own repaint());
     // only a genuinely new dataset clears the pick. A pick made between a control change and
@@ -180,6 +199,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     if (isNewData) {
       if (docsCard.openedBy('lenses')) docsCard.close()
       selected = null
+      loadBridges(result)
     }
     lastWidth = $('lensesRuler').clientWidth || 0
     $('lensesStatus').hidden = result.a.lens !== result.b.lens

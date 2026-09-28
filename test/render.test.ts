@@ -23,6 +23,7 @@ import {
   paintComention,
   paintComentionLoading,
   paintComentionError,
+  paintOutlets,
   paintOutletsLoading,
   paintRisingLoading,
   paintRisingRuler,
@@ -55,7 +56,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { communityRanking, signed, termMask, type Comention, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type Comention, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -322,6 +323,60 @@ describe('paintTestimony', () => {
       paintTestimonyError()
       assert.match(els.testimonyList.innerHTML, /Não foi possível carregar a avaliação/)
     })
+  })
+})
+
+describe('paintOutlets groups by field and lists a focused outlet\'s neighbours (issue #218)', () => {
+  type FieldedRow = OutletRow & { field?: number | null; neighbors?: { domain: string; similarity: number }[] }
+
+  const rows: FieldedRow[] = [
+    { domain: 'a.example', source: 'gnews', docs: 5, tone: null, field: 1, neighbors: [{ domain: 'b.example', similarity: 0.5 }] },
+    { domain: 'b.example', source: 'gnews', docs: 3, tone: null, field: 1, neighbors: [{ domain: 'a.example', similarity: 0.5 }] },
+    { domain: 'c.example', source: 'gnews', docs: 2, tone: null, field: 2, neighbors: [] },
+    { domain: 'd.example', source: 'gnews', docs: 1, tone: null, field: null, neighbors: [] },
+  ]
+
+  it('groups rows by field, with field: null rows in their own trailing group, and no field number in any visible text (AC12)', () => {
+    const markup = withFakeDocument(['domainLabel', 'outletList'], (els) => {
+      paintOutlets({ rows, testimony: null, domain: 'all', onPick: () => {} })
+      return els.outletList.innerHTML
+    })
+    const grids = markup.match(/<div class="outlet-grid">/g) ?? []
+    assert.ok(grids.length >= 2, 'field 1, field 2 and the ungrouped rows must each get their own outlet-grid')
+    // The eyebrow names domains, never the raw field number.
+    assert.doesNotMatch(markup.replace(/<span class="n">\d+<\/span>/g, ''), /\bfield\b|\bgrupo\s*\d/i)
+    assert.match(markup, /a\.example,\s*b\.example/, 'eyebrow names the field\'s domains by docs desc')
+    assert.match(markup, /Sem agrupamento suficiente/, 'the field: null rows get a fixed trailing eyebrow')
+    // The ungrouped group must come after every numbered field's group.
+    assert.ok(markup.indexOf('a.example') < markup.indexOf('Sem agrupamento suficiente'))
+  })
+
+  it('field groups order by their summed docs, never by the Louvain id', () => {
+    const swapped: FieldedRow[] = [
+      { domain: 'small.example', source: 'gnews', docs: 2, tone: null, field: 0, neighbors: [] },
+      { domain: 'big.example', source: 'gnews', docs: 9, tone: null, field: 7, neighbors: [] },
+    ]
+    const markup = withFakeDocument(['domainLabel', 'outletList'], (els) => {
+      paintOutlets({ rows: swapped, testimony: null, domain: 'all', onPick: () => {} })
+      return els.outletList.innerHTML
+    })
+    assert.ok(markup.indexOf('grupo · big.example') < markup.indexOf('grupo · small.example'))
+  })
+
+  it('the focused outlet\'s own row lists its neighbours as domain and similarity, or the empty-neighbours line (AC13)', () => {
+    const focused = withFakeDocument(['domainLabel', 'outletList'], (els) => {
+      paintOutlets({ rows, testimony: null, domain: 'a.example', onPick: () => {} })
+      return els.outletList.innerHTML
+    })
+    assert.match(focused, /Vocabulário mais parecido com/)
+    assert.match(focused, /b\.example[\s\S]{0,20}0[.,]50/)
+    assert.doesNotMatch(focused, /—/)
+
+    const empty = withFakeDocument(['domainLabel', 'outletList'], (els) => {
+      paintOutlets({ rows, testimony: null, domain: 'c.example', onPick: () => {} })
+      return els.outletList.innerHTML
+    })
+    assert.match(empty, /Nenhum veículo com vocabulário parecido neste recorte/)
   })
 })
 
@@ -1043,6 +1098,37 @@ describe('regression: an opposite-signed-but-real term on both sides never pins 
   })
 })
 
+describe('rulerTerms copies bridge, and the ruler-bridge mark (issue #219 AC7)', () => {
+  it('rulerTerms attaches bridge onto its emitted item only when the source CompareTerm carries it', () => {
+    const terms = [
+      { term: 'ponte', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.9 },
+      { term: 'sembridge', kind: 'word', a: side(10, 1), b: side(10, 1) },
+    ] as (CompareTerm & { bridge?: number })[]
+    const { items } = rulerTerms(terms as CompareTerm[], 'count') as { items: (typeof terms[number] & { balance: number; combined: number })[] }
+    assert.equal(items.find((i) => i.term === 'ponte')?.bridge, 0.9)
+    assert.equal(items.find((i) => i.term === 'sembridge')?.bridge, undefined)
+  })
+
+  it('a term at or above the bridge threshold paints with class="ruler-bridge"; a term below it does not', () => {
+    const terms = [
+      { term: 'ponteforte', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.6 },
+      { term: 'pontefraca', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.1 },
+    ] as (CompareTerm & { bridge: number })[]
+    withFakeDocument(['compareRuler'], (els) => {
+      paintRuler({ data: compareData(terms as CompareTerm[]), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
+      const html = els.compareRuler.innerHTML
+      const tagFor = (term: string) => {
+        const idx = html.indexOf(`data-term="${term}"`)
+        const start = html.lastIndexOf('<g', idx)
+        const end = html.indexOf('>', idx)
+        return html.slice(start, end + 1)
+      }
+      assert.match(tagFor('ponteforte'), /ruler-bridge/, 'a term with bridge >= 0.5 must carry the ruler-bridge mark')
+      assert.doesNotMatch(tagFor('pontefraca'), /ruler-bridge/, 'a term below the bridge threshold must not carry the mark')
+    })
+  })
+})
+
 describe('rulerTerms / paintRuler: a term where either side is the string "name" is absent from the rendered set (issue #91 AC7)', () => {
   it('rulerTerms drops it and counts it as hidden, for either side', () => {
     const terms: CompareTerm[] = [
@@ -1175,6 +1261,38 @@ describe('paintLensDetail', () => {
       paintLensDetail({ term, endA: 'Folha de S.Paulo', endB: 'Direita' })
       assert.doesNotMatch(els.lensesDetail.innerHTML, /nenhum documento/)
       assert.match(els.lensesDetail.innerHTML, /nome da pessoa/)
+    })
+  })
+
+  it('names a bridge term with "ponte" when its bridge is at or above the threshold (issue #219 AC14)', () => {
+    withFakeDocument(['lensesDetail'], (els) => {
+      const bridging = { term: 'ponte', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.7 } as CompareTerm & { bridge: number }
+      paintLensDetail({ term: bridging, endA: 'Folha de S.Paulo', endB: 'Direita' })
+      assert.match(els.lensesDetail.innerHTML, /ponte/i)
+      const notBridging = { term: 'comum', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.1 } as CompareTerm & { bridge: number }
+      paintLensDetail({ term: notBridging, endA: 'Folha de S.Paulo', endB: 'Direita' })
+      assert.doesNotMatch(els.lensesDetail.innerHTML, /ponte/i)
+    })
+  })
+})
+
+describe('paintLensRuler carries the ruler-bridge mark through the shared body (issue #219 AC14)', () => {
+  it('a lens ruler term with bridge >= 0.5 paints with class="ruler-bridge"', () => {
+    const terms = [
+      { term: 'ponteforte', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.6 },
+      { term: 'pontefraca', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.1 },
+    ] as (CompareTerm & { bridge: number })[]
+    withFakeDocument(['lensesRuler'], (els) => {
+      paintLensRuler({ data: lensesData(terms as CompareTerm[]), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
+      const html = els.lensesRuler.innerHTML
+      const tagFor = (term: string) => {
+        const idx = html.indexOf(`data-term="${term}"`)
+        const start = html.lastIndexOf('<g', idx)
+        const end = html.indexOf('>', idx)
+        return html.slice(start, end + 1)
+      }
+      assert.match(tagFor('ponteforte'), /ruler-bridge/)
+      assert.doesNotMatch(tagFor('pontefraca'), /ruler-bridge/)
     })
   })
 })

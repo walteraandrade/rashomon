@@ -267,6 +267,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    (paintSelection paints both panes). A sibling dl, not a row inside #keyDefault, so #keyDefault
    stays exactly the four rows test/leitura-ui-acceptance.test.ts pins (Tamanho/Cor/Posição/
    Clique, unchanged). */
+.key-bridge { display: inline-block; width: 22px; height: 2px; margin-right: var(--space-2); vertical-align: middle; background: var(--accent); }
 .key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
@@ -456,6 +457,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .outlet .t { min-width: 40px; text-align: center; border-radius: 2px; padding: 2px 5px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--tone); }
 .outlet .t:empty { visibility: hidden; }
 .outlets .note { margin: var(--space-3) 0 0; }
+/* The focused outlet's own neighbours list rides the .stat pattern's dt/dd shape but is a list,
+   not one measurement, so it spans every column of the grid and each pair drops out of .stat
+   dd's big number size onto its own line instead of running together. */
+.outlet-grid dl.metric.stat { grid-column: 1 / -1; margin: var(--space-2) 0 0; padding-bottom: var(--space-3); }
+.outlet-grid dl.metric.stat dd { font-size: var(--t-sm); }
+.outlet-neighbor { display: block; color: var(--muted); font-variant-numeric: tabular-nums; }
+.outlet-neighbor .n { color: var(--ink); }
+.outlet-neighbor + .outlet-neighbor { margin-top: 2px; }
 .testimony-lists { min-width: 0; font-family: var(--mono); font-size: var(--t-sm); color: var(--muted); }
 
 /* Figure 2's answer: one stat pair, the number at h2 rank because it is what the whole figure is
@@ -734,6 +743,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .ruler-word.is-selected .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
 .ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
+.ruler-bridge .ruler-bridge-mark { stroke: var(--accent); stroke-width: 2; }
+.detail-bridge { margin: var(--space-1) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--accent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
 .ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }

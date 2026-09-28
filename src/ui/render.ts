@@ -365,15 +365,47 @@ export const paintOutlets = ({
   const merged = mergeOutlets(rows, testimony?.by_domain ?? [])
   $('outletList').classList.remove('is-loading')
   $('outletList').setAttribute('aria-busy', 'false')
+  const outletRow = (r: (typeof merged)[number]) => {
+    const cells = html`<span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span>`
+    // A row keyed by a source name folds that source's host-less docs (Bluesky posts, whose
+    // stored domain is an author handle): a count, never an outlet to focus on.
+    const button = r.sources.includes(r.domain)
+      ? html`<span class="outlet is-static" title="Textos sem veículo nesta fonte">${cells}</span>`
+      : html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}">${cells}</button>`
+    if (r.domain !== domain) return button
+    const neighborLines = r.neighbors.slice(0, 5)
+    return html`${button}<dl class="metric stat"><div><dt>Vocabulário mais parecido com</dt><dd>${
+      neighborLines.length
+        ? neighborLines.map((nb) => html`<span class="outlet-neighbor">${nb.domain} · <span class="n">${nb.similarity.toFixed(2)}</span></span>`)
+        : 'Nenhum veículo com vocabulário parecido neste recorte'
+    }</dd></div></dl>`
+  }
+  // Groups by field: a numbered group's eyebrow names its top-3 domains (by docs desc), never
+  // the field int itself; field: null rows form their own trailing, unnumbered group.
+  const groups = new Map<number, (typeof merged)[number][]>()
+  const ungrouped: (typeof merged)[number][] = []
+  for (const r of merged) {
+    if (r.field === null || r.field === undefined) ungrouped.push(r)
+    else {
+      const g = groups.get(r.field) ?? []
+      g.push(r)
+      groups.set(r.field, g)
+    }
+  }
+  const groupMarkup = (eyebrow: string, group: (typeof merged)[number][]) =>
+    html`<p class="eyebrow">${eyebrow}</p><div class="outlet-grid">${group.map(outletRow)}</div>`
+  // The field int is a build-local Louvain label, never a rank: groups order by their own docs.
+  const byDocs = (a: (typeof merged)[number], b: (typeof merged)[number]) => b.docs - a.docs || a.domain.localeCompare(b.domain)
+  const docsOf = (g: (typeof merged)[number][]) => g.reduce((n, r) => n + r.docs, 0)
+  const groupSections = [
+    ...[...groups.values()]
+      .map((g) => g.slice().sort(byDocs))
+      .sort((a, b) => docsOf(b) - docsOf(a) || a[0].domain.localeCompare(b[0].domain))
+      .map((g) => groupMarkup(`grupo · ${g.slice(0, 3).map((r) => r.domain).join(', ')}`, g)),
+    ...(ungrouped.length ? [groupMarkup('Sem agrupamento suficiente', ungrouped)] : []),
+  ]
   $('outletList').innerHTML = merged.length
-    ? html`<div class="outlet-grid">${merged.map((r) => {
-        const cells = html`<span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span>`
-        // A row keyed by a source name folds that source's host-less docs (Bluesky posts, whose
-        // stored domain is an author handle): a count, never an outlet to focus on.
-        return r.sources.includes(r.domain)
-          ? html`<span class="outlet is-static" title="Textos sem veículo nesta fonte">${cells}</span>`
-          : html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}">${cells}</button>`
-      })}</div><p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si.</p>`
+    ? html`${groupSections}<p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si. Grupos e vocabulário parecido vêm da construção da janela, não da consulta ao vivo, e podem ficar desatualizados entre construções.</p>`
     : '<p class="note">Nenhum veículo neste recorte.</p>'
   queryAll('[data-domain]', $('outletList')).forEach((el) =>
     el.addEventListener('click', () => {
@@ -788,6 +820,10 @@ const docsOf = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count 
 
 export type RulerTerm = CompareTerm & { balance: number; combined: number }
 
+export const BRIDGE_THRESHOLD = 0.5
+
+const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_THRESHOLD
+
 // Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1) and
 // combined (docs summed, measure-independent). hiddenCount feeds #compareHiddenNote.
 export const rulerTerms = (terms: CompareTerm[], measure: string): { items: RulerTerm[]; hiddenCount: number } => {
@@ -816,11 +852,11 @@ export const rulerTerms = (terms: CompareTerm[], measure: string): { items: Rule
 
 // The term written on the ruler. Transparent rect is the hit area; `--cmp` carries side colour.
 const rulerWordMarkup = (
-  d: { term: string; kind: string; text: string; balance: number; combined: number; x: number; y: number; size: number; w: number; h: number },
+  d: { term: string; kind: string; text: string; balance: number; combined: number; bridge?: number; x: number; y: number; size: number; w: number; h: number },
   half: number,
   isSelected: boolean,
 ) =>
-  html`<g class="ruler-word ${isSelected ? 'is-selected' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${d.term}" data-kind="${d.kind}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.combined)} documentos"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central"><tspan x="0" y="0">${d.text}</tspan></text></g>`
+  html`<g class="ruler-word ${isSelected ? 'is-selected' : ''} ${isBridge(d) ? 'ruler-bridge' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${d.term}" data-kind="${d.kind}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.combined)} documentos"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central"><tspan x="0" y="0">${d.text}</tspan></text>${isBridge(d) ? html`<line class="ruler-bridge-mark" x1="${-d.w / 2}" x2="${d.w / 2}" y1="${d.h / 2}" y2="${d.h / 2}"/>` : ''}</g>`
 
 // Overflow words: count stated, each still a button with the same data-term/data-kind.
 const rulerOverflowMarkup = (
@@ -1138,7 +1174,7 @@ export const paintLensDetail = ({ term, endA, endB }: { term: CompareTerm | null
       : v
         ? html`<div><dt>${endLabel}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
         : html`<div><dt>${endLabel}</dt><dd class="empty-hint">nenhum documento</dd></div>`
-  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(endA, term.a)}${sideHtml(endB, term.b)}</dl>`
+  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(endA, term.a)}${sideHtml(endB, term.b)}</dl>${isBridge(term) ? html`<p class="detail-bridge">ponte: as duas lentes precisam dela</p>` : ''}`
 }
 
 const RULER_GHOST_WORDS: [number, number, number, number][] = [
@@ -1233,7 +1269,7 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
     v && v !== 'name'
       ? html`<div><dt>${person.name}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
       : html`<div><dt>${person.name}</dt><dd class="empty-hint">nenhum documento</dd></div>`
-  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>`
+  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>${isBridge(term) ? html`<p class="detail-bridge">ponte: liga os dois vocabulários</p>` : ''}`
 }
 
 // Figure 5 (issue #147): one word mark per day, no colour hue (--wc stays --ink in atlas.css),

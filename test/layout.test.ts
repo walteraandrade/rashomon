@@ -276,6 +276,21 @@ describe('a word that does not fit is listed rather than dropped', () => {
   })
 })
 
+describe('RulerItem.bridge is optional and never affects layout (issue #219 AC6)', () => {
+  it('rulerLayout output is unchanged when items carry no bridge field', () => {
+    const wordGeometry = (words: { term: string; x: number; y: number; size: number; w: number; h: number }[]) =>
+      words.map(({ term, x, y, size, w, h }) => ({ term, x, y, size, w, h }))
+    const overflowGeometry = (words: { term: string; size: number }[]) => words.map(({ term, size }) => ({ term, size }))
+    const { items } = rulerTerms(corpus(), 'count')
+    const withoutBridge = rulerLayout(metrics, items, 860)
+    const withBridge = rulerLayout(metrics, items.map((it) => ({ ...it, bridge: 1 }) as typeof it), 860)
+    assert.deepEqual(wordGeometry(withBridge.words), wordGeometry(withoutBridge.words))
+    assert.deepEqual(overflowGeometry(withBridge.overflow), overflowGeometry(withoutBridge.overflow))
+    assert.equal(withBridge.height, withoutBridge.height)
+    assert.equal(withBridge.half, withoutBridge.half)
+  })
+})
+
 describe('swarm / swarmBy / rulerLayout: one beeswarm skeleton, two shapes (issue #99 AC6)', () => {
   it('swarm is swarmBy with circle clearance and still keeps every x, never overlapping', () => {
     const items = [

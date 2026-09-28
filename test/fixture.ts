@@ -290,6 +290,21 @@ export const docs: RawDoc[] = [
   // own country=br default, so a .pt doc here would make the matrix cell and its docs disagree.
   { source: 'rss', uri: 'https://exemplo.com.br/83', text: 'Lula e Tarcísio participam de cúpula lusófona em Lisboa', publishedAt: daysAgo(12), domain: 'exemplo.com.br' },
   { source: 'rss', uri: 'https://exemplo.com.br/84', text: 'Lula recebe Tarcísio para agenda bilateral em Lisboa', publishedAt: daysAgo(13), domain: 'exemplo.com.br' },
+  // docs 85-88: issue #219's bridges=1 fixture for /compare. One domain, two docs per person,
+  // each pairing that person's alias with "pontecompare" and one person-exclusive word (twice,
+  // clearing linksQuery's own count >= 2 floor); dated 4320+ days ago, past doc 84, so no
+  // existing days:<=3950 window picks them up. Lula's own edge is pontecompare-exclusivolulax2,
+  // Tarcísio's is pontecompare-exclusivotarx2; merged, pontecompare is the 3-node path's middle.
+  { source: 'rss', uri: 'https://comparebridge.example/85', text: 'Lula fala sobre pontecompare e exclusivolulax no evento', publishedAt: daysAgo(4320), domain: 'comparebridge.example' },
+  { source: 'rss', uri: 'https://comparebridge.example/86', text: 'Lula cita pontecompare e exclusivolulax outra vez', publishedAt: daysAgo(4321), domain: 'comparebridge.example' },
+  { source: 'rss', uri: 'https://comparebridge.example/87', text: 'Tarcísio fala sobre pontecompare e exclusivotarx no evento', publishedAt: daysAgo(4322), domain: 'comparebridge.example' },
+  { source: 'rss', uri: 'https://comparebridge.example/88', text: 'Tarcísio cita pontecompare e exclusivotarx outra vez', publishedAt: daysAgo(4323), domain: 'comparebridge.example' },
+  // docs 89-92: issue #219's bridges=1 fixture for /lenses. One person, two domains, each with
+  // its own co-occurring pair sharing "pontelentes"; dated past doc 88 for the same reason.
+  { source: 'rss', uri: 'https://lensbridgea.example/89', text: 'Lula fala sobre pontelentes e somentelensa no evento', publishedAt: daysAgo(4324), domain: 'lensbridgea.example' },
+  { source: 'rss', uri: 'https://lensbridgea.example/90', text: 'Lula cita pontelentes e somentelensa outra vez', publishedAt: daysAgo(4325), domain: 'lensbridgea.example' },
+  { source: 'rss', uri: 'https://lensbridgeb.example/91', text: 'Lula fala sobre pontelentes e somentelensb no evento', publishedAt: daysAgo(4326), domain: 'lensbridgeb.example' },
+  { source: 'rss', uri: 'https://lensbridgeb.example/92', text: 'Lula cita pontelentes e somentelensb outra vez', publishedAt: daysAgo(4327), domain: 'lensbridgeb.example' },
 ]
 
 // Kept out of `docs`/`seed()` on purpose: scopeCte has no upper bound on published_at, so a

@@ -2403,6 +2403,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
       graphFast: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: false }),
       graphFastCommunities: queries.graphFast(lula, { ...scope, min: 5, sort: 'pmi', limit: 10, communities: true }),
       links: queries.links(lula, scope, ['word:a', 'word:b']),
+      linksFast: queries.linksFast(lula, scope, ['word:a', 'word:b']),
       sources: queries.sources(lula, scope),
       // `with` stays '' here unlike every other field: it is the one value that changes the
       // statement's SHAPE (docsWithPerson), not just its bound values, so it must match the

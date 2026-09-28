@@ -2,7 +2,7 @@ import { betweenness } from './communities.js'
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
-import { BRIDGE_NODES, DAYS } from './query.js'
+import { BRIDGE_NODES, DAYS, KINDS } from './query.js'
 import { countryFilter, isName, outletDomain, pmiLog2, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
@@ -342,6 +342,14 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
 export const precomputable = (q: Pick<GraphQuery, 'days' | 'domain' | 'lean' | 'source' | 'country'>) =>
   DAYS.includes(q.days) && q.domain === 'all' && q.lean === 'all' && !q.source.includes(',') && q.country === 'br'
 
+// term_links (issue #251) is built for one kind set only, 'all' or every KINDS value once;
+// a narrower kind runs linksQuery live even on a built scope.
+export const isFullKindSet = (kind: string) => {
+  if (kind === 'all') return true
+  const given = kind.split(',')
+  return given.length === KINDS.length && KINDS.every((k) => given.includes(k))
+}
+
 // The term list arrives as `kind:term` ids (what the route names a node) and is matched as
 // (kind, term) pairs: an expression like `kind || ':' || term = any(...)` has no index, and the
 // planner answered it with a parallel seq scan of doc_terms plus a Parallel Hash whose barrier
@@ -369,6 +377,14 @@ const linksQuery = (person: Person, q: Scope, ids: string[]) => {
   group by 1, 2 having count(*) >= 2
   order by 1, 2`
 }
+
+// term_links' own read (issue #251): a primary-key lookup instead of linksQuery's live
+// self-join. Zero rows falls back to live, same "empty means never built" idiom as nodes.
+const linksFastQuery = (person: Person, q: Pick<Scope, 'days' | 'source'>, ids: string[]) => sql`
+  select a as s, b as t, count from term_links
+  where days = ${q.days} and source = ${q.source} and person_id = ${person.id}
+    and a = any(${ids}::text[]) and b = any(${ids}::text[])
+  order by a, b`
 
 // Same co-occurrence shape as linksQuery, parameterised on the about CTE so one function
 // serves both compareEdgesQuery and lensEdgesQuery.
@@ -874,18 +890,29 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
 // Precomputed first, live when the window was never built (local dev before `pnpm aggregate`,
 // or a scope the tables cannot hold); both render the same shape. Zero rows means never built
 // for this person, or built and since emptied: the fast query refuses a scope row whose
-// graph_terms are missing. Only this statement is precomputed; linksQuery and
-// termTestimonyQuery below still run live.
-const graphAggregates = async (person: Person, q: GraphQuery): Promise<GraphAggregates> => {
+// graph_terms are missing. Links read term_links through linksFor below (issue #251) when
+// nodes themselves answered fast; only termTestimonyQuery still always runs live.
+const graphAggregates = async (person: Person, q: GraphQuery): Promise<{ data: GraphAggregates; fastNodes: boolean }> => {
   const fast = precomputable(q) ? (await run<GraphAggregates>(graphFastQuery(person, q))).rows[0] : undefined
-  return fast ?? (await run<GraphAggregates>(graphQuery(person, q))).rows[0]
+  return fast ? { data: fast, fastNodes: true } : { data: (await run<GraphAggregates>(graphQuery(person, q))).rows[0], fastNodes: false }
+}
+
+// Fast links run only when nodes themselves answered from graph_terms and kind is the full
+// set term_links is built for (issue #251); a zero-row fast read falls back to live.
+const linksFor = async (person: Person, q: GraphQuery, ids: string[], fastNodes: boolean) => {
+  const canFast = fastNodes && precomputable(q) && isFullKindSet(q.kind)
+  if (canFast) {
+    const fast = await run<LinkRow>(linksFastQuery(person, q, ids))
+    if (fast.rows.length) return fast
+  }
+  return run<LinkRow>(linksQuery(person, q, ids))
 }
 
 export const graphFor = async (person: Person, q: GraphQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
-  const { docs, about, nodes, signature } = await graphAggregates(person, q)
+  const { data: { docs, about, nodes, signature }, fastNodes } = await graphAggregates(person, q)
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
-  const links = ids.length ? await run<LinkRow>(linksQuery(person, q, ids)) : { rows: [] }
+  const links = ids.length ? await linksFor(person, q, ids, fastNodes) : { rows: [] }
   const testimony = q.method ? (await run<TermTestimonyRow>(termTestimonyQuery(person, q, q.method, ids))).rows[0] : null
   const perTerm = new Map(testimony?.terms.map((t) => [t.id, { score: t.score, n: t.n }]) ?? [])
   return {
@@ -1265,6 +1292,7 @@ export const queries = {
   graph: graphQuery,
   graphFast: graphFastQuery,
   links: linksQuery,
+  linksFast: linksFastQuery,
   sources: sourcesQuery,
   docs: docsQuery,
   docsCount: docsCountQuery,
@@ -1300,6 +1328,7 @@ export const statements = {
   graphFast: queries.graphFast(samplePerson, sampleGraph).text,
   graphFastCommunities: queries.graphFast(samplePerson, { ...sampleGraph, communities: true }).text,
   links: queries.links(samplePerson, sampleScope, ['word:sample']).text,
+  linksFast: queries.linksFast(samplePerson, sampleScope, ['word:sample']).text,
   sources: queries.sources(samplePerson, sampleScope).text,
   docs: queries.docs(samplePerson, sampleDocs).text,
   docsCount: queries.docsCount(samplePerson, sampleDocs).text,

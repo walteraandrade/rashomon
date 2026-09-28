@@ -9,10 +9,11 @@ import { after, before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { AGGREGATE_TABLES, POST_BUILD_ANALYZED } from '../src/aggregate.js'
 import { ANALYZED_TABLES, analyzeAfterWrite, analyzeAfterWriteP, analyzeMinDocs, analyzeTables, analyzeTablesP, db, docCount, migrate, migrateP, poolConfig, runSql } from '../src/db.js'
+import { pruneRemovedP, upsertPersonsP } from '../src/store.js'
 import { docsText } from './docs.js'
 import { failingSql } from './effect.js'
 import { withEnv } from './env.js'
-import { indexDefs, lastAnalyzed, planRowEstimate, seed } from './fixture.js'
+import { indexDefs, lastAnalyzed, persons, planRowEstimate, seed } from './fixture.js'
 import './close.js'
 
 // src/db.ts: the connection (poolConfig, pure and never opening a socket), the schema migrate()
@@ -239,7 +240,7 @@ describe('graph_terms_all is a temp table, never persisted (issue #203)', () => 
   it('ANALYZED_TABLES no longer lists graph_terms_all', () => {
     assert.deepEqual(
       [...ANALYZED_TABLES],
-      ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'outlet_fields', 'outlet_neighbors'],
+      ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'],
     )
   })
 })
@@ -355,6 +356,39 @@ describe('read indexes and planner statistics (issue #44)', () => {
       )
     ).rows.map((r) => r.column_name)
     assert.deepEqual(pk, ['days', 'source', 'person_id', 'term', 'kind'])
+  })
+
+  it('term_links exists with the exact primary key (days, source, person_id, a, b) (issue #251 AC1)', async () => {
+    const cols = (
+      await db.query<{ column_name: string }>(`select column_name from information_schema.columns where table_name = 'term_links'`)
+    ).rows
+    assert.deepEqual(cols.map((c) => c.column_name).sort(), ['a', 'b', 'count', 'days', 'person_id', 'source'])
+    const pk = (
+      await db.query<{ column_name: string }>(
+        `select kcu.column_name from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+         where tc.table_name = 'term_links' and tc.constraint_type = 'PRIMARY KEY'
+         order by kcu.ordinal_position`,
+      )
+    ).rows.map((r) => r.column_name)
+    assert.deepEqual(pk, ['days', 'source', 'person_id', 'a', 'b'])
+  })
+
+  it('removing a person via pruneRemoved deletes her term_links rows through the FK cascade (issue #251 AC1)', async () => {
+    const doomed = { id: 'doomed-term-links', name: 'Doomed Links', aliases: ['Doomed Links'] }
+    await upsertPersonsP([doomed])
+    await db.query(`insert into term_links (days, source, person_id, a, b, count) values (30, 'all', $1, 'word:a', 'word:b', 5)`, [doomed.id])
+    const before = (await db.query<{ n: number }>(`select count(*)::int as n from term_links where person_id = $1`, [doomed.id])).rows[0].n
+    assert.equal(before, 1)
+    await pruneRemovedP(persons)
+    const after = (await db.query<{ n: number }>(`select count(*)::int as n from term_links where person_id = $1`, [doomed.id])).rows[0].n
+    assert.equal(after, 0)
+  })
+
+  it('term_links is in ANALYZED_TABLES and POST_BUILD_ANALYZED but absent from AGGREGATE_TABLES (issue #251 AC2)', () => {
+    assert.ok(!AGGREGATE_TABLES.includes('term_links' as (typeof AGGREGATE_TABLES)[number]))
+    assert.ok(POST_BUILD_ANALYZED.includes('term_links' as (typeof POST_BUILD_ANALYZED)[number]))
+    assert.ok(ANALYZED_TABLES.includes('term_links'))
   })
 
   it('outlet_fields exists with the exact primary key (days, person_id, domain)', async () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
-import { AGGREGATE_TABLES, buildGraphAggregates, buildLinksForWindow, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
+import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { graphFor, precomputable, queries, sourcesFor } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
@@ -237,7 +237,7 @@ describe('buildGraphAggregates', () => {
         // issue #251: the same recorte's links, through graphFor, must match the live linksQuery too.
         const result = await graphFor(person, query)
         const expectedLinks = await liveTermLinks(person, query, result.nodes.map((n) => n.id))
-        assert.deepEqual(sortLinks(termLinks(result)), sortLinks(expectedLinks))
+        assert.deepEqual(termLinks(result), expectedLinks, 'same edges in the same order')
       })
 
   it('falls back to the live query for a domain, a lean, a source list, or an explicit country', async () => {
@@ -445,12 +445,12 @@ describe('term_links (issue #251)', () => {
   })
 
   // Independent of the builder's own linkableTermsQuery: L is rebuilt here from graphFor's own
-  // node ids across every sort x min at limit 200, the full KINDS set, per the spec's own definition.
-  const linkableSet = async (person: Person, days = 30, source = 'all') => {
+  // node ids across every sort x min at the build's own top, the full KINDS set, per the spec's own definition.
+  const linkableSet = async (person: Person, limit = TOP, days = 30, source = 'all') => {
     const ids = new Set<string>()
     for (const sort of ['count', 'pmi'] as const)
       for (const min of MINS) {
-        const query = q({ days: String(days), source, sort, min: String(min), limit: '200', kind: 'all' })
+        const query = q({ days: String(days), source, sort, min: String(min), limit: String(limit), kind: 'all' })
         const result = await graphFor(person, query)
         result.nodes.forEach((n) => ids.add(n.id))
       }
@@ -473,22 +473,48 @@ describe('term_links (issue #251)', () => {
     }
   })
 
-  it('the linkable cap drops edges outside L', async () => {
-    const edgesQ = aggregateQueries.communityEdges(30, 'all', 'lula')
-    const edges = (await db.query<{ a: string; b: string; count: number }>(edgesQ.text, edgesQ.values)).rows
-    assert.ok(edges.length > 1, "sanity: lula's fixture has more than one edge to cap")
-    const smallTop = 1
-    const lQ = aggregateQueries.linkableTerms(30, 'all', 'lula', smallTop)
-    const smallL = new Set((await db.query<{ id: string }>(lQ.text, lQ.values)).rows.map((r) => r.id))
-    const expected = edges.filter((e) => smallL.has(e.a) && smallL.has(e.b)).sort((x, y) => x.a.localeCompare(y.a) || x.b.localeCompare(y.b))
-    assert.ok(expected.length < edges.length, 'the smaller cap must actually drop an edge')
-    await buildLinksForWindow(30, smallTop)
-    const stored = (
-      await db.query<{ a: string; b: string; count: number }>(
-        `select a, b, count from term_links where days = 30 and source = 'all' and person_id = 'lula' order by a, b`,
-      )
-    ).rows
-    assert.deepEqual(stored, expected)
+  // The six-doc fixture never reaches the production TOP, so the cap is only exercised by a build
+  // with a smaller linkTop over the full kept set; limits up to it are the only ones it can serve fast.
+  // Six docs only cut an edge at a cap of 1, which serves no pair; a cap of 5 serves real pairs.
+  const cutTop = 1
+  const smallTop = 5
+  const smallLimits = LIMITS.filter((l) => l <= smallTop)
+
+  it('the linkable cap drops edges outside L, and keeps exactly communityEdges within L x L', async () => {
+    await buildGraphAggregates(persons, [30], TOP, cutTop)
+    let dropped = 0
+    for (const person of persons) {
+      const L = await linkableSet(person, cutTop)
+      const edgesQ = aggregateQueries.communityEdges(30, 'all', person.id)
+      const edges = (await db.query<{ a: string; b: string; count: number }>(edgesQ.text, edgesQ.values)).rows
+      const expected = edges.filter((e) => L.has(e.a) && L.has(e.b)).sort((x, y) => x.a.localeCompare(y.a) || x.b.localeCompare(y.b))
+      dropped += edges.length - expected.length
+      const stored = (
+        await db.query<{ a: string; b: string; count: number }>(
+          `select a, b, count from term_links where days = 30 and source = 'all' and person_id = $1 order by a, b`,
+          [person.id],
+        )
+      ).rows
+      assert.deepEqual(stored, expected, person.id)
+    }
+    assert.ok(dropped > 0, 'the small cap must actually drop an edge')
+    await buildGraphAggregates(persons)
+  })
+
+  it('a capped build still renders the live links for every sort, min and limit it can serve', async () => {
+    await buildGraphAggregates(persons, [30], TOP, smallTop)
+    let compared = 0
+    for (const person of persons)
+      for (const sort of ['count', 'pmi'] as const)
+        for (const min of MINS)
+          for (const limit of smallLimits) {
+            const query = q({ sort, min: String(min), limit: String(limit), kind: 'all' })
+            const result = await graphFor(person, query)
+            const expected = await liveTermLinks(person, query, result.nodes.map((n) => n.id))
+            assert.deepEqual(termLinks(result), expected, `${person.id} ${JSON.stringify({ sort, min, limit })}`)
+            compared += expected.length
+          }
+    assert.ok(compared > 0, 'sanity: a capped build must still serve some edge')
     await buildGraphAggregates(persons)
   })
 
@@ -543,6 +569,7 @@ describe('term_links (issue #251)', () => {
   it('falls back to live links when term_links is empty for an otherwise-built scope', async () => {
     const query = q({})
     const before = await graphFor(lula, query)
+    assert.ok(termLinks(before).length > 0, 'sanity: the fast table must hold edges to fall back from')
     await db.query(`delete from term_links where days = 30 and source = 'all' and person_id = 'lula'`)
     const after = await graphFor(lula, query)
     assert.deepEqual(sortLinks(termLinks(after)), sortLinks(termLinks(before)), 'live matches what the fast table held')
@@ -550,12 +577,20 @@ describe('term_links (issue #251)', () => {
   })
 
   it('falls back to live links when the node path itself is live (an unbuilt window)', async () => {
-    await db.query(`delete from graph_terms where days = 30 and source = 'all' and person_id = 'lula'`)
     const query = q({})
+    const nodeIds = (await graphFor(lula, query)).nodes.map((n) => n.id)
+    const [a, b] = [nodeIds[0], nodeIds[1]].sort()
+    await db.query(
+      `insert into term_links (days, source, person_id, a, b, count) values (30, 'all', 'lula', $1, $2, 999)
+       on conflict (days, source, person_id, a, b) do update set count = 999`,
+      [a, b],
+    )
+    await db.query(`delete from graph_terms where days = 30 and source = 'all' and person_id = 'lula'`)
     assert.equal(precomputable(query), true)
     const result = await graphFor(lula, query)
     const expected = await liveTermLinks(lula, query, result.nodes.map((n) => n.id))
     assert.deepEqual(sortLinks(termLinks(result)), sortLinks(expected))
+    assert.ok(!termLinks(result).some((l) => l.count === 999), 'a live node set must never read term_links')
     await buildGraphAggregates(persons)
   })
 

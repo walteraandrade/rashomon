@@ -890,8 +890,8 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
 // Precomputed first, live when the window was never built (local dev before `pnpm aggregate`,
 // or a scope the tables cannot hold); both render the same shape. Zero rows means never built
 // for this person, or built and since emptied: the fast query refuses a scope row whose
-// graph_terms are missing. Only this statement is precomputed; linksQuery and
-// termTestimonyQuery below still run live.
+// graph_terms are missing. Links read term_links through linksFor below (issue #251) when
+// nodes themselves answered fast; only termTestimonyQuery still always runs live.
 const graphAggregates = async (person: Person, q: GraphQuery): Promise<{ data: GraphAggregates; fastNodes: boolean }> => {
   const fast = precomputable(q) ? (await run<GraphAggregates>(graphFastQuery(person, q))).rows[0] : undefined
   return fast ? { data: fast, fastNodes: true } : { data: (await run<GraphAggregates>(graphQuery(person, q))).rows[0], fastNodes: false }

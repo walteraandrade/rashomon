@@ -6,6 +6,7 @@ import { graphFor, precomputable, queries, sourcesFor } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SOURCES } from '../src/query.js'
 import { inTransaction, insertDocP } from '../src/store.js'
 import type { Person } from '../src/types.js'
+import { ATLAS_KINDS } from '../src/ui/api.js'
 import { persons, reseed, seed, untrackedPerson } from './fixture.js'
 import './close.js'
 
@@ -488,6 +489,27 @@ describe('term_links (issue #251)', () => {
       )
     ).rows
     assert.deepEqual(stored, expected)
+    await buildGraphAggregates(persons)
+  })
+
+  it('actually reads term_links: a sentinel count survives kind=all, the atlas kind list and a reordered one', async () => {
+    const query = q({})
+    const before = await graphFor(lula, query)
+    const nodeIds = before.nodes.map((n) => n.id)
+    assert.ok(nodeIds.length >= 2, 'sanity: needs at least two nodes to sentinel an edge')
+    const [a, b] = [nodeIds[0], nodeIds[1]].sort()
+    await db.query(
+      `insert into term_links (days, source, person_id, a, b, count) values (30, 'all', 'lula', $1, $2, 999)
+       on conflict (days, source, person_id, a, b) do update set count = 999`,
+      [a, b],
+    )
+    const kindSets = ['all', ATLAS_KINDS, 'org,phrase,word,hashtag']
+    for (const kind of kindSets) {
+      const result = await graphFor(lula, q({ kind }))
+      const edge = termLinks(result).find((l) => (l.source === a && l.target === b) || (l.source === b && l.target === a))
+      assert.ok(edge, `expected a sentinel edge for kind=${kind}`)
+      assert.equal(edge?.count, 999, `kind=${kind} must have read term_links, not the live query`)
+    }
     await buildGraphAggregates(persons)
   })
 

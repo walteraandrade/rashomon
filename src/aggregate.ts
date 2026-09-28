@@ -213,10 +213,31 @@ const splitId = (id: string): [kind: string, term: string] => {
   return [id.slice(0, at), id.slice(at + 1)]
 }
 
+// Persists communityEdgesQuery's own edges (already fetched by the caller, never re-queried)
+// restricted to L x L (issue #251); `top` threads personTermsQuery's own ceiling, so a test can
+// shrink it without a test-only branch.
+const persistLinks = async (
+  days: number,
+  source: string,
+  personId: string,
+  edgeRows: { a: string; b: string; count: number }[],
+  top: number,
+) => {
+  const { rows: linkableRows } = await run(linkableTermsQuery(days, source, personId, top))
+  const linkable = new Set((linkableRows as { id: string }[]).map((r) => r.id))
+  if (linkable.size === 0) return
+  const kept = edgeRows.filter((e) => linkable.has(e.a) && linkable.has(e.b))
+  if (kept.length === 0) return
+  await run(insertLinksQuery(days, source, personId, kept.map((e) => e.a), kept.map((e) => e.b), kept.map((e) => e.count)))
+}
+
 // One Louvain pass per (days, source, person) with graph_terms rows. A term with no surviving
 // edge still gets its own singleton row, via the self-referencing entry communities() expects.
-const buildCommunitiesForWindow = async (days: number) => {
+// term_links is persisted from the same communityEdgesQuery call (issue #251) rather than
+// re-querying it — that query is the costliest one in the per-scope build.
+const buildCommunitiesForWindow = async (days: number, top: number) => {
   await run(sql`delete from term_communities where days = ${days}`)
+  await run(sql`delete from term_links where days = ${days}`)
   const { rows: pairs } = await run(scopePairsQuery(days))
   for (const { source, person_id: personId } of pairs as { source: string; person_id: string }[]) {
     const { rows: kept } = await run(keptTermsQuery(days, source, personId))
@@ -241,22 +262,20 @@ const buildCommunitiesForWindow = async (days: number) => {
       communityIds.push(community)
     }
     if (terms.length) await run(insertCommunitiesQuery(days, source, personId, terms, kinds, communityIds))
+    await persistLinks(days, source, personId, edgeRows as { a: string; b: string; count: number }[], top)
   }
 }
 
-// Persists communityEdgesQuery's edges restricted to L x L (issue #251); `top` threads
-// personTermsQuery's own ceiling, so a test can shrink it without a test-only branch.
+// Rebuilds term_links alone (its own communityEdgesQuery pass): the test-only entry point that
+// lets a test rebuild with a shrunk `top` to see the linkable cap cut, without touching
+// term_communities. Production never calls this — buildCommunitiesForWindow persists links
+// itself, from the edges it already fetched.
 export const buildLinksForWindow = async (days: number, top = TOP) => {
   await run(sql`delete from term_links where days = ${days}`)
   const { rows: pairs } = await run(scopePairsQuery(days))
   for (const { source, person_id: personId } of pairs as { source: string; person_id: string }[]) {
-    const { rows: linkableRows } = await run(linkableTermsQuery(days, source, personId, top))
-    const linkable = new Set((linkableRows as { id: string }[]).map((r) => r.id))
-    if (linkable.size === 0) continue
     const { rows: edgeRows } = await run(communityEdgesQuery(days, source, personId))
-    const kept = (edgeRows as { a: string; b: string; count: number }[]).filter((e) => linkable.has(e.a) && linkable.has(e.b))
-    if (kept.length === 0) continue
-    await run(insertLinksQuery(days, source, personId, kept.map((e) => e.a), kept.map((e) => e.b), kept.map((e) => e.count)))
+    await persistLinks(days, source, personId, edgeRows as { a: string; b: string; count: number }[], top)
   }
 }
 
@@ -344,8 +363,7 @@ const buildOutletFieldsForWindow = async (days: number, persons: Person[]) => {
 const buildWindow = async (days: number, persons: Person[], top: number) =>
   inTransaction(async () => {
     for (const q of windowStatements(days, persons, top)) await run(q)
-    await buildCommunitiesForWindow(days)
-    await buildLinksForWindow(days, top)
+    await buildCommunitiesForWindow(days, top)
     await buildOutletFieldsForWindow(days, persons)
   })
 

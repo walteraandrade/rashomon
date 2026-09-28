@@ -2353,8 +2353,9 @@ describe('null meaning, bridges and rising unaffected (issue #247)', () => {
     assert.ok(withBridges.terms.some((t) => typeof t.bridge === 'number'), 'bridges must still score every term on a precomputable /compare recorte')
     const lensWithBridges = await lensesFor(lula, { ...lensesBase, a: allLens, b: allLens, bridges: true })
     assert.ok(lensWithBridges.terms.some((t) => typeof t.bridge === 'number'), 'bridges must still score every term on a precomputable /lenses recorte')
+    // Leave the aggregate build behind reseed's cascade-cleared state, so AC11 can snapshot
+    // risingFor genuinely unbuilt before it triggers its own build.
     await reseed()
-    await buildGraphAggregates(persons)
   })
 
   it('risingFor is untouched by this issue -- no graph_scopes/graph_terms row makes any difference to its output (AC11)', async () => {

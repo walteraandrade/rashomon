@@ -342,6 +342,8 @@ describe('the ceiling on graph_terms', () => {
 type CompareTermRow = {
   term: string
   kind: string
+  is_name_a: boolean
+  is_name_b: boolean
   a_count: number | null
   a_pmi: number | null
   a_tone: number | null
@@ -352,6 +354,25 @@ type CompareTermRow = {
 type CompareRow = { about_a: number; about_b: number; terms: CompareTermRow[] }
 type LensTermRow = { term: string; kind: string; is_name: boolean; a_count: number | null; a_pmi: number | null; a_tone: number | null; b_count: number | null; b_pmi: number | null; b_tone: number | null }
 type LensesRow = { about_a: number; about_b: number; terms: LensTermRow[] }
+
+// The {count,pmi,tone} | null | "name" mapping compareFor/lensesFor apply to a raw side, so a
+// "live == fast" assertion on the public shape can deepEqual actual term values, not just counts.
+const sideValue = (isName: boolean, count: number | null, pmi: number | null, tone: number | null) =>
+  isName ? ('name' as const) : count !== null ? { count, pmi: pmi!, tone } : null
+const expectedCompareTerms = (rows: CompareTermRow[]) =>
+  rows.map((t) => ({
+    term: t.term,
+    kind: t.kind,
+    a: sideValue(t.is_name_a, t.a_count, t.a_pmi, t.a_tone),
+    b: sideValue(t.is_name_b, t.b_count, t.b_pmi, t.b_tone),
+  }))
+const expectedLensTerms = (rows: LensTermRow[]) =>
+  rows.map((t) => ({
+    term: t.term,
+    kind: t.kind,
+    a: sideValue(t.is_name, t.a_count, t.a_pmi, t.a_tone),
+    b: sideValue(t.is_name, t.b_count, t.b_pmi, t.b_tone),
+  }))
 const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, bridges: false }
 const cq = (over: Partial<CompareQuery>): CompareQuery => ({ ...compareBase, ...over })
 const liveCompareRow = async (a: Person, b: Person, query: CompareQuery) => {
@@ -444,6 +465,7 @@ describe('compare fast path (issue #247)', () => {
       assert.equal(result.a.about, expected.about_a)
       assert.equal(result.b.about, expected.about_b)
       assert.equal(result.terms.length, expected.terms.length)
+      assert.deepEqual(result.terms.map(({ term, kind, a, b }) => ({ term, kind, a, b })), expectedCompareTerms(expected.terms))
     }
   })
 
@@ -625,6 +647,7 @@ describe('lenses fast path (issue #247)', () => {
       assert.equal(result.a.about, liveRow.about_a)
       assert.equal(result.b.about, liveRow.about_b)
       assert.equal(result.terms.length, liveRow.terms.length)
+      assert.deepEqual(result.terms.map(({ term, kind, a, b }) => ({ term, kind, a, b })), expectedLensTerms(liveRow.terms))
     }
   })
 
@@ -635,6 +658,7 @@ describe('lenses fast path (issue #247)', () => {
     const result = await lensesFor(lula, query)
     assert.equal(result.a.about, liveRow.about_a)
     assert.equal(result.b.about, liveRow.about_b)
+    assert.deepEqual(result.terms.map(({ term, kind, a, b }) => ({ term, kind, a, b })), expectedLensTerms(liveRow.terms))
   })
 
   // Routing, not just the raw SQL: lensesFor itself must pick the fast path (and keep its
@@ -1256,6 +1280,7 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
       assert.equal(result.a.about, liveRow.about_a)
       assert.equal(result.b.about, liveRow.about_b)
       assert.equal(result.terms.length, liveRow.terms.length)
+      assert.deepEqual(result.terms.map(({ term, kind, a, b }) => ({ term, kind, a, b })), expectedLensTerms(liveRow.terms))
     }
   })
 

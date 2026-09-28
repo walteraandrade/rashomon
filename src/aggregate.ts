@@ -106,13 +106,25 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
 // `create table ... as` carries no key, and every personTermsQuery joins the universe on it.
 const universeKey = sql`alter table graph_terms_all add primary key (days, source, term, kind)`
 
+// The build is one session; `set local` dies with the window's transaction, so no request sees it.
+// Never copy it into poolConfig: 128 MB per sort on a 1 GB instance is safe only for a single session.
+const workMem = sql`set local work_mem = '128MB'`
+
+// Autovacuum never analyzes a temp table, and graph_terms was just rewritten: without these the
+// planner estimates one row and nested-loops every personTermsQuery and community edge query.
+const analyzeUniverse = sql`analyze graph_terms_all`
+const analyzeTerms = sql`analyze graph_terms`
+
 const windowStatements = (days: number, persons: Person[], top = TOP) => [
+  workMem,
   sql`delete from graph_terms where days = ${days}`,
   sql`delete from graph_scopes where days = ${days}`,
   universeQuery(days),
   universeKey,
+  analyzeUniverse,
   scopesQuery(days, persons),
   ...persons.map((p) => personTermsQuery(days, p, top)),
+  analyzeTerms,
 ]
 
 const run = (q: { text: string; values: unknown[] }) => db.query(q.text, q.values)
@@ -296,7 +308,8 @@ export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'ou
 // Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
 // `top` is the per-ordering ceiling (TOP in production; tests lower it to see the cut).
-// Never analyzes: maintenance belongs to the process that owns DATA_DIR.
+// Analyzes only graph_terms_all and graph_terms, mid-window, for its own later statements; the
+// persisted tables' final statistics stay with the owner process (POST_BUILD_ANALYZED).
 export const buildGraphAggregates = async (persons: Person[], windows: readonly number[] = DAYS, top = TOP): Promise<AggregateReport> => {
   const started = performance.now()
   await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons, top))), Promise.resolve())

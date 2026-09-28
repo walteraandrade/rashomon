@@ -36,7 +36,8 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
 
   it('the universe carries its primary key inside the window and is gone after commit', async () => {
     await seed()
-    const [, , universe, key] = aggregateQueries.window(30, persons)
+    const window = aggregateQueries.window(30, persons)
+    const [universe, key] = ['create temp table', 'add primary key'].map((m) => window.find((q) => q.text.includes(m))!)
     const pk = await inTransaction(async () => {
       await db.query(universe.text, universe.values)
       await db.query(key.text, key.values)
@@ -49,6 +50,28 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
     await buildGraphAggregates(persons)
     const { rows } = await db.query<{ r: string | null }>(`select to_regclass('graph_terms_all') as r`)
     assert.equal(rows[0].r, null)
+  })
+
+  it('a window raises work_mem first and analyzes the universe and graph_terms before reading them (issue #250)', () => {
+    const texts = aggregateQueries.window(30, persons).map((s) => s.text.trim())
+    const at = (re: RegExp) => texts.findIndex((t) => re.test(t))
+    const lastAt = (re: RegExp) => texts.length - 1 - [...texts].reverse().findIndex((t) => re.test(t))
+    assert.equal(texts[0], `set local work_mem = '128MB'`)
+    const key = at(/add primary key/)
+    const analyzeUniverse = texts.indexOf('analyze graph_terms_all')
+    const analyzeTerms = texts.indexOf('analyze graph_terms')
+    assert.ok(key < analyzeUniverse && analyzeUniverse < at(/insert into graph_terms \(/))
+    assert.ok(lastAt(/insert into graph_terms \(/) < analyzeTerms)
+    assert.equal(analyzeTerms, texts.length - 1)
+  })
+
+  it('work_mem is back to its session value after a build', async () => {
+    await seed()
+    const show = async () => (await db.query<{ work_mem: string }>(`show work_mem`)).rows[0].work_mem
+    const before = await show()
+    await buildGraphAggregates(persons)
+    assert.equal(await show(), before)
+    assert.notEqual(before, '128MB')
   })
 
   it('buildGraphAggregates runs twice back-to-back with no thrown "relation already exists" error', async () => {

@@ -1,7 +1,7 @@
 import { Effect } from 'effect'
 import assert from 'node:assert/strict'
 import { after, describe, it, before } from 'node:test'
-import { db, migrateP, runSql } from '../src/db.js'
+import { db, runSql } from '../src/db.js'
 import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/graph.js'
 import {
   MAX_DOC_CHARS,
@@ -196,13 +196,6 @@ describe('insertDoc tone', () => {
     const uri = 'https://example.org/gnews-with-tone'
     await insertDocP({ source: 'gnews', uri, text: 'Lula sanciona lei', publishedAt: new Date().toISOString(), tone: 1 }, persons)
     assert.deepEqual(await stored(uri), { source: 'gnews', tone: null })
-  })
-
-  it('migrate clears tones already stored on non-GDELT docs', async () => {
-    const uri = 'https://example.org/legacy'
-    await db.query(`insert into docs (source, uri, text, published_at, tone) values ('rss', $1, 'x', now(), -1.02)`, [uri])
-    await migrateP()
-    assert.deepEqual(await stored(uri), { source: 'rss', tone: null })
   })
 })
 

@@ -501,9 +501,16 @@ describe('maintenance stays out of the request path (issue #44)', () => {
 
   it('no module outside ingest/reindex/bench runs analyze', () => {
     const offenders = sources(root)
-      .filter((f) => !owners.includes(f.slice(root.length)))
+      .filter((f) => ![...owners, 'aggregate.ts'].includes(f.slice(root.length)))
       .filter((f) => /analyzeTables|analyzeAfterWrite|`\s*analyze\b/i.test(readFileSync(f, 'utf8')))
     assert.deepEqual(offenders, [], 'maintenance must run only in the process that owns DATA_DIR')
+  })
+
+  it('aggregate.ts analyzes only the two tables its own window just wrote (issue #250)', () => {
+    const text = readFileSync(join(root, 'aggregate.ts'), 'utf8')
+    assert.doesNotMatch(text, /analyzeTables|analyzeAfterWrite/)
+    const analyzed = [...text.matchAll(/`\s*analyze\b([^`]*)`/gi)].map((m) => m[1].trim())
+    assert.deepEqual(analyzed, ['graph_terms_all', 'graph_terms'])
   })
 })
 

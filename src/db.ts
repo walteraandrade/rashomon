@@ -145,7 +145,6 @@ export const schema = `
     alter table docs add column if not exists extra_terms jsonb not null default '[]';
     alter table docs add column if not exists domain text;
     alter table docs add column if not exists tone float8;
-    update docs set tone = null where tone is not null and source not in ('gdelt', 'gkg');
     create index if not exists docs_domain_idx on docs (domain);
     alter table docs add column if not exists country text;
     create index if not exists docs_country_idx on docs (country);

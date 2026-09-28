@@ -239,7 +239,7 @@ describe('graph_terms_all is a temp table, never persisted (issue #203)', () => 
   it('ANALYZED_TABLES no longer lists graph_terms_all', () => {
     assert.deepEqual(
       [...ANALYZED_TABLES],
-      ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'outlet_fields', 'outlet_neighbors'],
+      ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'],
     )
   })
 })

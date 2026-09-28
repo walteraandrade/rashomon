@@ -134,6 +134,40 @@ const COMMUNITY_SEED = 42
 
 const scopePairsQuery = (days: number) => sql`select distinct source, person_id from graph_terms where days = ${days}`
 
+// The linkable set L: the union of graphFastQuery's own node ids across every sort/min at
+// limit 200 (issue #251), no kind filter (mirrors kind='all', term_links' only built kind set).
+const linkableTermsQuery = (days: number, source: string, personId: string, top = TOP) => {
+  const byPmi = (m: number) => sql.raw(`by_pmi_${m}`)
+  const ranks = MINS.map(
+    (m) => sql`row_number() over (partition by count >= ${m} order by ${pmiRank(sql.raw('count'))} desc, term, kind) as ${byPmi(m)}`,
+  )
+  const kept = MINS.map((m) => sql`(count >= ${m} and ${byPmi(m)} <= ${top})`)
+  return sql`
+  with s as (
+    select tracked, about from graph_scopes where days = ${days} and source = ${source} and person_id = ${personId}
+  ),
+  scored as (
+    select g.term, g.kind, g.c_pt as count,
+      ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
+    from graph_terms g, s
+    where g.days = ${days} and g.source = ${source} and g.person_id = ${personId}
+  ),
+  ranked as (
+    select term, kind, count,
+      row_number() over (order by count desc, term, kind) as by_count,
+      ${sql.join(ranks)}
+    from scored
+  )
+  select kind || ':' || term as id from ranked
+  where by_count <= ${top}
+    or ${sql.join(kept, '\n    or ')}`
+}
+
+const insertLinksQuery = (days: number, source: string, personId: string, as: string[], bs: string[], counts: number[]) => sql`
+  insert into term_links (days, source, person_id, a, b, count)
+  select ${days}::int, ${source}, ${personId}, u.a, u.b, u.count
+  from unnest(${as}::text[], ${bs}::text[], ${counts}::int[]) as u(a, b, count)`
+
 const keptTermsQuery = (days: number, source: string, personId: string) => sql`
   select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
   order by kind, term`
@@ -207,6 +241,22 @@ const buildCommunitiesForWindow = async (days: number) => {
       communityIds.push(community)
     }
     if (terms.length) await run(insertCommunitiesQuery(days, source, personId, terms, kinds, communityIds))
+  }
+}
+
+// Persists communityEdgesQuery's edges restricted to L x L (issue #251); `top` threads
+// personTermsQuery's own ceiling, so a test can shrink it without a test-only branch.
+export const buildLinksForWindow = async (days: number, top = TOP) => {
+  await run(sql`delete from term_links where days = ${days}`)
+  const { rows: pairs } = await run(scopePairsQuery(days))
+  for (const { source, person_id: personId } of pairs as { source: string; person_id: string }[]) {
+    const { rows: linkableRows } = await run(linkableTermsQuery(days, source, personId, top))
+    const linkable = new Set((linkableRows as { id: string }[]).map((r) => r.id))
+    if (linkable.size === 0) continue
+    const { rows: edgeRows } = await run(communityEdgesQuery(days, source, personId))
+    const kept = (edgeRows as { a: string; b: string; count: number }[]).filter((e) => linkable.has(e.a) && linkable.has(e.b))
+    if (kept.length === 0) continue
+    await run(insertLinksQuery(days, source, personId, kept.map((e) => e.a), kept.map((e) => e.b), kept.map((e) => e.count)))
   }
 }
 
@@ -295,6 +345,7 @@ const buildWindow = async (days: number, persons: Person[], top: number) =>
   inTransaction(async () => {
     for (const q of windowStatements(days, persons, top)) await run(q)
     await buildCommunitiesForWindow(days)
+    await buildLinksForWindow(days, top)
     await buildOutletFieldsForWindow(days, persons)
   })
 
@@ -303,7 +354,7 @@ export type AggregateReport = { windows: number[]; scopes: number; terms: number
 // The tables the build fills, for the owner process (ingest, reindex) to analyze afterwards.
 export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms'] as const
 
-export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'outlet_fields', 'outlet_neighbors'] as const
+export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'] as const
 
 // Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
@@ -335,6 +386,7 @@ export const queries = {
   personTerms: personTermsQuery,
   window: windowStatements,
   communityEdges: communityEdgesQuery,
+  linkableTerms: linkableTermsQuery,
   outletTerms: outletTermsQuery,
   outletNeighbors: insertOutletNeighborsQuery,
 }

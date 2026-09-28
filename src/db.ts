@@ -217,6 +217,15 @@ export const schema = `
       community int not null,
       primary key (days, source, person_id, term, kind)
     );
+    create table if not exists term_links (
+      days int not null,
+      source text not null,
+      person_id text not null references persons(id) on delete cascade,
+      a text not null,
+      b text not null,
+      count int not null,
+      primary key (days, source, person_id, a, b)
+    );
     create table if not exists outlet_fields (
       days int not null,
       person_id text not null references persons(id) on delete cascade,
@@ -255,6 +264,7 @@ export const ANALYZED_TABLES = [
   'graph_scopes',
   'graph_terms',
   'term_communities',
+  'term_links',
   'outlet_fields',
   'outlet_neighbors',
 ] as const

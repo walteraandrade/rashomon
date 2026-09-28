@@ -83,7 +83,7 @@ describe('pnpm size', () => {
       assert.ok(total >= 0)
     })
 
-    it('SIZE_TABLES has exactly the sixteen documented table names', () => {
+    it('SIZE_TABLES has exactly the seventeen documented table names', () => {
       assert.deepEqual(
         [...SIZE_TABLES].sort(),
         [
@@ -95,6 +95,7 @@ describe('pnpm size', () => {
           'gkg_files',
           'graph_scopes',
           'graph_terms',
+          'graph_name_terms',
           'persons',
           'person_attention',
           'phrase_stage',

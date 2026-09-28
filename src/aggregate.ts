@@ -2,7 +2,7 @@ import seedJson from '../seed.json' with { type: 'json' }
 import { communities as louvainCommunities, neighbors as outletNeighbors, type CommunityEdge, type OutletPair } from './communities.js'
 import { db, migrateP } from './db.js'
 import { nameTokens } from './extract.js'
-import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
+import { DAYS, LIMITS, MINS, SMALL_LIMITS, SOURCES } from './query.js'
 import { countryFilter, isName, outletDomain, pmiRank, signatureFloor } from './scoring.js'
 import { sql } from './sql.js'
 import { inTransaction } from './store.js'
@@ -103,6 +103,44 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
     or (c_pt >= ${signatureFloor(sql.raw('about'))} and by_signature <= 5)`
 }
 
+// issue #247: lensesFastQuery needs a person's own name words too (personTermsQuery excludes
+// them from graph_terms on purpose), or a lens comparison of the same person across two scopes
+// can never surface them as "name" the way the live lensesQuery's names_a/names_b union does.
+// Kept small and separate from graph_terms: only the name words themselves, top NAME_TERMS_TOP
+// (SMALL_LIMITS' own ceiling, so any limit either route accepts still reads an exact figure) per
+// (source, kind). Never AGGREGATE_TABLES -- an unbuilt/stale build already falls back live via
+// the same "about = 0 or exists" gate lensSideFastCte already uses on graph_terms.
+export const NAME_TERMS_TOP = Math.max(...SMALL_LIMITS)
+
+const nameTermsQuery = (days: number, person: Person, top = NAME_TERMS_TOP) => {
+  const include = nameTokens(person)
+  return sql`
+  with ${windowScope(days)},
+  about as (
+    select s.id, s.source from scope s join doc_persons dp on dp.doc_id = s.id and dp.person_id = ${person.id}
+  ),
+  p as (
+    select coalesce(a.source, 'all') as source, t.term, t.kind, count(*)::int as c_pt, avg(d.tone)::float8 as tone
+    from doc_terms t join about a on a.id = t.doc_id join docs d on d.id = t.doc_id
+    where ${isName(sql.raw('t.term'), include)}
+    group by grouping sets ((a.source, t.term, t.kind), (t.term, t.kind))
+  ),
+  scored as (
+    select p.source, p.term, p.kind, p.c_pt, ta.c_t, p.tone
+    from p
+    join graph_terms_all ta on ta.days = ${days}::int and ta.source = p.source and ta.term = p.term and ta.kind = p.kind
+  ),
+  ranked as (
+    select source, term, kind, c_pt, c_t, tone,
+      row_number() over (partition by source, kind order by c_pt desc, term, kind) as by_count
+    from scored
+  )
+  insert into graph_name_terms (days, source, person_id, term, kind, c_pt, c_t, tone)
+  select ${days}::int, source, ${person.id}, term, kind, c_pt, c_t, tone
+  from ranked
+  where by_count <= ${top}`
+}
+
 // `create table ... as` carries no key, and every personTermsQuery joins the universe on it.
 const universeKey = sql`alter table graph_terms_all add primary key (days, source, term, kind)`
 
@@ -118,12 +156,14 @@ const analyzeTerms = sql`analyze graph_terms`
 const windowStatements = (days: number, persons: Person[], top = TOP) => [
   workMem,
   sql`delete from graph_terms where days = ${days}`,
+  sql`delete from graph_name_terms where days = ${days}`,
   sql`delete from graph_scopes where days = ${days}`,
   universeQuery(days),
   universeKey,
   analyzeUniverse,
   scopesQuery(days, persons),
   ...persons.map((p) => personTermsQuery(days, p, top)),
+  ...persons.map((p) => nameTermsQuery(days, p)),
   analyzeTerms,
 ]
 
@@ -359,7 +399,7 @@ export type AggregateReport = { windows: number[]; scopes: number; terms: number
 // The tables the build fills, for the owner process (ingest, reindex) to analyze afterwards.
 export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms'] as const
 
-export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'] as const
+export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'graph_name_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'] as const
 
 // Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
@@ -390,6 +430,7 @@ export const queries = {
   universe: universeQuery,
   scopes: scopesQuery,
   personTerms: personTermsQuery,
+  nameTerms: nameTermsQuery,
   window: windowStatements,
   communityEdges: communityEdgesQuery,
   linkableTerms: linkableTermsQuery,

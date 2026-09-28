@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test'
 import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { compareFor, graphFor, lensesFastEligible, lensesFor, precomputable, queries, sourcesFor } from '../src/graph.js'
-import type { CompareQuery, LensesQuery, LensSide } from '../src/graph.js'
+import type { CompareQuery, GraphQuery, LensesQuery, LensSide } from '../src/graph.js'
 import { DAYS, LIMITS, MINS, parseQuery, SMALL_LIMITS, SOURCES } from '../src/query.js'
 import { inTransaction, insertDocP } from '../src/store.js'
 import type { Person } from '../src/types.js'
@@ -363,10 +363,29 @@ const fastCompareRow = async (a: Person, b: Person, query: CompareQuery) => {
   return (await db.query<CompareRow>(built.text, built.values)).rows[0]
 }
 
+// AC5's own-selection half: the top-`limit` keys graph_terms itself would rank for one side, by
+// count and by weighted pmi, at min=1 so nothing is floored out, together with the exact figure
+// graph_terms itself carries for each. Reusing graphFast (queries.graphFast) keeps the ranking in
+// lockstep with graphFastQuery's own selection instead of re-deriving it here -- both read the
+// same graph_terms rows with the same "order by X desc, term, kind limit" shape compareFastQuery's
+// own top_count/top_pmi CTEs use. Compared against this figure, not against liveCompareRow: a
+// per-kind top-K ceiling this small (top=2) can legitimately keep a low-count term (say a rare
+// hashtag) whose true rank across every kind combined falls outside the live query's own
+// limit-bound top selection at a small `limit`, so that term is simply absent from liveCompareRow's
+// own keys at that limit -- not a defect, since graph_terms's own values are exact regardless of
+// which rows the shrunk ceiling kept.
+const ownTopFigures = async (person: Person, query: CompareQuery, sort: 'count' | 'pmi') => {
+  const gq: GraphQuery = { days: query.days, source: query.source, domain: 'all', lean: 'all', country: 'br', kind: query.kind, limit: query.limit, min: 1, sort, communities: false }
+  const built = queries.graphFast(person, gq)
+  const row = (await db.query<{ nodes: { term: string; kind: string; count: number; pmi: number; tone: number | null }[] }>(built.text, built.values)).rows[0]
+  return new Map(row.nodes.map((n) => [`${n.kind}:${n.term}`, { count: n.count, pmi: n.pmi, tone: n.tone }]))
+}
+
 const allLens: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
 const rssLens: LensSide = { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' }
 const gkgLens: LensSide = { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' }
 const senadoLens: LensSide = { lens: 'source:senado', domain: 'all', lean: 'all', source: 'senado' }
+const blueskyLens: LensSide = { lens: 'source:bluesky', domain: 'all', lean: 'all', source: 'bluesky' }
 const lensesBase: LensesQuery = { days: 30, kind: 'all', limit: 40, a: allLens, b: allLens, bridges: false }
 const lensQ = (over: Partial<LensesQuery>): LensesQuery => ({ ...lensesBase, ...over })
 const liveLensesRow = async (person: Person, query: LensesQuery) => {
@@ -394,6 +413,8 @@ describe('compare fast path (issue #247)', () => {
     { kind: 'org,word' },
     { source: 'rss' },
     { source: 'gkg', days: 7 },
+    { source: 'bluesky' },
+    { source: 'senado' },
     { limit: 5 },
   ]
 
@@ -434,36 +455,46 @@ describe('compare fast path (issue #247)', () => {
   })
 
   it("a lower ceiling produces a genuine cross-side null while each side's own top-limit selection stays exact", async () => {
-    await buildGraphAggregates(persons, DAYS, 2)
-    let sawGenuineNull = false
-    const pairs: [Person, Person][] = [[lula, bolsonaro], [tarcisio, lula], [bolsonaro, tarcisio]]
-    for (const limit of SMALL_LIMITS)
-      for (const [a, b] of pairs) {
-        const query = cq({ limit })
-        const fastRow = await fastCompareRow(a, b, query)
-        if (!fastRow) continue
-        const liveRow = await liveCompareRow(a, b, query)
-        for (const ft of fastRow.terms) {
-          const lt = liveRow.terms.find((t) => t.term === ft.term && t.kind === ft.kind)
-          if (!lt) continue
-          if (ft.a_count !== null)
-            assert.deepEqual({ count: ft.a_count, pmi: ft.a_pmi, tone: ft.a_tone }, { count: lt.a_count, pmi: lt.a_pmi, tone: lt.a_tone }, `${a.id}/${b.id} ${ft.term}:${ft.kind} a @ ${limit}`)
-          if (ft.b_count !== null)
-            assert.deepEqual({ count: ft.b_count, pmi: ft.b_pmi, tone: ft.b_tone }, { count: lt.b_count, pmi: lt.b_pmi, tone: lt.b_tone }, `${a.id}/${b.id} ${ft.term}:${ft.kind} b @ ${limit}`)
-          if ((ft.a_count === null && lt.a_count !== null) || (ft.b_count === null && lt.b_count !== null)) sawGenuineNull = true
+    try {
+      await buildGraphAggregates(persons, DAYS, 2)
+      let sawGenuineNull = false
+      const pairs: [Person, Person][] = [[lula, bolsonaro], [tarcisio, lula], [bolsonaro, tarcisio]]
+      for (const limit of SMALL_LIMITS)
+        for (const [a, b] of pairs) {
+          const query = cq({ limit })
+          const fastRow = await fastCompareRow(a, b, query)
+          if (!fastRow) continue
+          const liveRow = await liveCompareRow(a, b, query)
+          for (const ft of fastRow.terms) {
+            const lt = liveRow.terms.find((t) => t.term === ft.term && t.kind === ft.kind)
+            if (!lt) continue
+            if (ft.a_count !== null)
+              assert.deepEqual({ count: ft.a_count, pmi: ft.a_pmi, tone: ft.a_tone }, { count: lt.a_count, pmi: lt.a_pmi, tone: lt.a_tone }, `${a.id}/${b.id} ${ft.term}:${ft.kind} a @ ${limit}`)
+            if (ft.b_count !== null)
+              assert.deepEqual({ count: ft.b_count, pmi: ft.b_pmi, tone: ft.b_tone }, { count: lt.b_count, pmi: lt.b_pmi, tone: lt.b_tone }, `${a.id}/${b.id} ${ft.term}:${ft.kind} b @ ${limit}`)
+            if ((ft.a_count === null && lt.a_count !== null) || (ft.b_count === null && lt.b_count !== null)) sawGenuineNull = true
+          }
+          const ownA = new Map([...(await ownTopFigures(a, query, 'count')), ...(await ownTopFigures(a, query, 'pmi'))])
+          const ownB = new Map([...(await ownTopFigures(b, query, 'count')), ...(await ownTopFigures(b, query, 'pmi'))])
+          for (const [id, fig] of ownA) {
+            const [kind, term] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)]
+            const ft = fastRow.terms.find((t) => t.term === term && t.kind === kind)
+            assert.ok(ft && ft.a_count !== null, `${a.id}/${b.id} a's own top selection must stay exact for ${id} @ ${limit}`)
+            assert.deepEqual({ count: ft!.a_count, pmi: ft!.a_pmi, tone: ft!.a_tone }, fig, `${a.id}/${b.id} a own-top ${id} @ ${limit}`)
+          }
+          for (const [id, fig] of ownB) {
+            const [kind, term] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)]
+            const ft = fastRow.terms.find((t) => t.term === term && t.kind === kind)
+            assert.ok(ft && ft.b_count !== null, `${a.id}/${b.id} b's own top selection must stay exact for ${id} @ ${limit}`)
+            assert.deepEqual({ count: ft!.b_count, pmi: ft!.b_pmi, tone: ft!.b_tone }, fig, `${a.id}/${b.id} b own-top ${id} @ ${limit}`)
+          }
         }
-      }
-    assert.ok(sawGenuineNull, 'expected at least one cross-side null under the shrunk ceiling')
-    await buildGraphAggregates(persons)
+      assert.ok(sawGenuineNull, 'expected at least one cross-side null under the shrunk ceiling')
+    } finally {
+      await buildGraphAggregates(persons)
+    }
   })
 })
-
-// graph_terms never stores a person's own name words (excluded at every source by
-// personTermsQuery), so lensesFastQuery's own comment documents a known gap: a term the live
-// query's names_a/names_b union (issue #206) would surface as "name" is simply absent from the
-// fast path's terms, never present as a false null or a wrong figure. dropNames sets those rows
-// aside so the rest of the response is still checked byte-for-byte against the live query.
-const dropNames = (terms: readonly { is_name: boolean }[]) => terms.filter((t) => !t.is_name)
 
 describe('lenses fast path (issue #247)', () => {
   before(async () => {
@@ -485,6 +516,7 @@ describe('lenses fast path (issue #247)', () => {
     [rssLens, gkgLens],
     [allLens, rssLens],
     [senadoLens, allLens],
+    [blueskyLens, allLens],
   ]
 
   it('renders the same response as the live query when both sides are all or a source: lens, every recorte', async () => {
@@ -498,7 +530,7 @@ describe('lenses fast path (issue #247)', () => {
           const label = `${person.id} ${a.lens}/${b.lens} ${JSON.stringify(over)}`
           assert.equal(fastRow.about_a, liveRow.about_a, `${label} about_a`)
           assert.equal(fastRow.about_b, liveRow.about_b, `${label} about_b`)
-          assert.deepEqual(dropNames(fastRow.terms), dropNames(liveRow.terms), label)
+          assert.deepEqual(fastRow.terms, liveRow.terms, label)
         }
   })
 
@@ -506,7 +538,7 @@ describe('lenses fast path (issue #247)', () => {
     const bothZero = lensQ({ a: senadoLens, b: senadoLens })
     assert.equal(lensesFastEligible(bothZero), true)
     const row = await fastLensesRow(lula, bothZero)
-    assert.deepEqual(row && { about_a: row.about_a, about_b: row.about_b, terms: dropNames(row.terms) }, { about_a: 0, about_b: 0, terms: [] })
+    assert.deepEqual(row && { about_a: row.about_a, about_b: row.about_b, terms: row.terms }, { about_a: 0, about_b: 0, terms: [] })
 
     const oneZero = lensQ({ a: senadoLens, b: allLens })
     const mixed = await fastLensesRow(lula, oneZero)
@@ -514,16 +546,15 @@ describe('lenses fast path (issue #247)', () => {
     assert.ok(mixed.about_b > 0)
   })
 
-  it("a person's own name term is present live but absent from the fast path (documented gap, issue #247)", async () => {
+  it("a person's own name term reads \"name\" on the fast path too, same as live (issue #247)", async () => {
     const query = lensQ({ days: 365, limit: 100 })
     const liveRow = await liveLensesRow(lula, query)
     const fastRow = await fastLensesRow(lula, query)
     const liveName = liveRow.terms.find((t) => t.is_name)
     assert.ok(liveName, "fixture assumption: lula's own name word appears in the live union")
-    assert.ok(
-      !fastRow.terms.some((t) => t.term === liveName!.term && t.kind === liveName!.kind),
-      'the fast path never carries this key, since graph_terms excludes it at build time',
-    )
+    const fastName = fastRow.terms.find((t) => t.term === liveName!.term && t.kind === liveName!.kind)
+    assert.ok(fastName, 'the fast path must carry this key too, via graph_name_terms')
+    assert.equal(fastName!.is_name, true)
   })
 
   it('stays live end to end when either side is a domain: or lean: lens', async () => {
@@ -1091,23 +1122,19 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
   })
 
   it('lensesFast renders byte-identical output to the live lenses query for every fixture person, source: and all lenses (AC2)', async () => {
-    // graph_terms never stores a person's own name words (excluded at build time), so a term the
-    // live union's names_a/names_b CTE marks "name" is simply absent from the fast path's own
-    // terms -- the one documented gap this file's own 'lenses fast path' describe already pins.
-    // dropNames sets those aside so the rest of the response is checked byte-for-byte.
     for (const person of persons) {
       const query = lensQ({ a: rssLens, b: gkgLens })
       const fastRow = await fastLensesRow(person, query)
       const liveRow = await liveLensesRow(person, query)
       assert.equal(fastRow.about_a, liveRow.about_a, person.id)
       assert.equal(fastRow.about_b, liveRow.about_b, person.id)
-      assert.deepEqual(dropNames(fastRow.terms), dropNames(liveRow.terms), person.id)
+      assert.deepEqual(fastRow.terms, liveRow.terms, person.id)
       const queryAll = lensQ({ a: allLens, b: senadoLens })
       const fastAll = await fastLensesRow(person, queryAll)
       const liveAll = await liveLensesRow(person, queryAll)
       assert.equal(fastAll.about_a, liveAll.about_a, `${person.id} all/senado`)
       assert.equal(fastAll.about_b, liveAll.about_b, `${person.id} all/senado`)
-      assert.deepEqual(dropNames(fastAll.terms), dropNames(liveAll.terms), `${person.id} all/senado`)
+      assert.deepEqual(fastAll.terms, liveAll.terms, `${person.id} all/senado`)
     }
   })
 
@@ -1154,6 +1181,20 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
             if (ft.a_count !== null) assert.deepEqual({ count: ft.a_count, pmi: ft.a_pmi }, { count: lt.a_count, pmi: lt.a_pmi }, `${a.id}/${b.id} a @ ${limit} ${ft.term}`)
             if (ft.b_count !== null) assert.deepEqual({ count: ft.b_count, pmi: ft.b_pmi }, { count: lt.b_count, pmi: lt.b_pmi }, `${a.id}/${b.id} b @ ${limit} ${ft.term}`)
             if ((ft.a_count === null && lt.a_count !== null) || (ft.b_count === null && lt.b_count !== null)) sawGenuineNull = true
+          }
+          const ownA = new Map([...(await ownTopFigures(a, query, 'count')), ...(await ownTopFigures(a, query, 'pmi'))])
+          const ownB = new Map([...(await ownTopFigures(b, query, 'count')), ...(await ownTopFigures(b, query, 'pmi'))])
+          for (const [id, fig] of ownA) {
+            const [kind, term] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)]
+            const ft = fastRow.terms.find((t) => t.term === term && t.kind === kind)
+            assert.ok(ft && ft.a_count !== null, `${a.id}/${b.id} a's own top selection must stay exact for ${id} @ ${limit}`)
+            assert.deepEqual({ count: ft!.a_count, pmi: ft!.a_pmi }, { count: fig.count, pmi: fig.pmi }, `${a.id}/${b.id} a own-top ${id} @ ${limit}`)
+          }
+          for (const [id, fig] of ownB) {
+            const [kind, term] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)]
+            const ft = fastRow.terms.find((t) => t.term === term && t.kind === kind)
+            assert.ok(ft && ft.b_count !== null, `${a.id}/${b.id} b's own top selection must stay exact for ${id} @ ${limit}`)
+            assert.deepEqual({ count: ft!.b_count, pmi: ft!.b_pmi }, { count: fig.count, pmi: fig.pmi }, `${a.id}/${b.id} b own-top ${id} @ ${limit}`)
           }
         }
       assert.ok(sawGenuineNull, 'expected at least one cross-side null under the shrunk ceiling')

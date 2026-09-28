@@ -15,6 +15,7 @@ export const SIZE_TABLES = [
   'phrase_stage',
   'graph_scopes',
   'graph_terms',
+  'graph_name_terms',
   'person_attention',
   'term_communities',
   'term_links',

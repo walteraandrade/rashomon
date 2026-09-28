@@ -384,22 +384,15 @@ const fastCompareRow = async (a: Person, b: Person, query: CompareQuery) => {
   return (await db.query<CompareRow>(built.text, built.values)).rows[0]
 }
 
-// AC5's own-selection half: the top-`limit` keys graph_terms itself would rank for one side, by
-// count and by weighted pmi, at min=1 so nothing is floored out, together with the exact figure
-// graph_terms itself carries for each. Reusing graphFast (queries.graphFast) keeps the ranking in
-// lockstep with graphFastQuery's own selection instead of re-deriving it here -- both read the
-// same graph_terms rows with the same "order by X desc, term, kind limit" shape compareFastQuery's
-// own top_count/top_pmi CTEs use. Compared against this figure, not against liveCompareRow: a
-// per-kind top-K ceiling this small (top=2) can legitimately keep a low-count term (say a rare
-// hashtag) whose true rank across every kind combined falls outside the live query's own
-// limit-bound top selection at a small `limit`, so that term is simply absent from liveCompareRow's
-// own keys at that limit -- not a defect, since graph_terms's own values are exact regardless of
-// which rows the shrunk ceiling kept.
-const ownTopFigures = async (person: Person, query: CompareQuery, sort: 'count' | 'pmi') => {
+// AC5's own-selection half, read off the live statement so it never checks graph_terms against
+// itself: the live /graph statement at min=1 ranks one person's terms exactly like compareQuery's
+// own top_count/top_pmi CTEs (same scope, same own-name exclusion, same "order by X desc, term,
+// kind limit"), without touching graph_terms.
+const liveOwnTop = async (person: Person, query: CompareQuery, sort: 'count' | 'pmi') => {
   const gq: GraphQuery = { days: query.days, source: query.source, domain: 'all', lean: 'all', country: 'br', kind: query.kind, limit: query.limit, min: 1, sort, communities: false }
-  const built = queries.graphFast(person, gq)
-  const row = (await db.query<{ nodes: { term: string; kind: string; count: number; pmi: number; tone: number | null }[] }>(built.text, built.values)).rows[0]
-  return new Map(row.nodes.map((n) => [`${n.kind}:${n.term}`, { count: n.count, pmi: n.pmi, tone: n.tone }]))
+  const built = queries.graph(person, gq)
+  const row = (await db.query<{ nodes: { term: string; kind: string }[] }>(built.text, built.values)).rows[0]
+  return row.nodes.map((n) => `${n.kind}:${n.term}`)
 }
 
 const allLens: LensSide = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
@@ -476,7 +469,7 @@ describe('compare fast path (issue #247)', () => {
     assert.deepEqual(row && { about_a: row.about_a, about_b: row.about_b, terms: row.terms }, { about_a: 0, about_b: 0, terms: [] })
   })
 
-  it("a lower ceiling produces a genuine cross-side null while each side's own top-limit selection stays exact (AC5)", async () => {
+  it('a lower ceiling produces a genuine cross-side null, and every figure it does return is exact (AC5)', async () => {
     try {
       await buildGraphAggregates(persons, DAYS, 2)
       let sawGenuineNull = false
@@ -496,22 +489,41 @@ describe('compare fast path (issue #247)', () => {
               assert.deepEqual({ count: ft.b_count, pmi: ft.b_pmi, tone: ft.b_tone }, { count: lt.b_count, pmi: lt.b_pmi, tone: lt.b_tone }, `${a.id}/${b.id} ${ft.term}:${ft.kind} b @ ${limit}`)
             if ((ft.a_count === null && lt.a_count !== null) || (ft.b_count === null && lt.b_count !== null)) sawGenuineNull = true
           }
-          const ownA = new Map([...(await ownTopFigures(a, query, 'count')), ...(await ownTopFigures(a, query, 'pmi'))])
-          const ownB = new Map([...(await ownTopFigures(b, query, 'count')), ...(await ownTopFigures(b, query, 'pmi'))])
-          for (const [id, fig] of ownA) {
-            const [kind, term] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)]
-            const ft = fastRow.terms.find((t) => t.term === term && t.kind === kind)
-            assert.ok(ft && ft.a_count !== null, `${a.id}/${b.id} a's own top selection must stay exact for ${id} @ ${limit}`)
-            assert.deepEqual({ count: ft!.a_count, pmi: ft!.a_pmi, tone: ft!.a_tone }, fig, `${a.id}/${b.id} a own-top ${id} @ ${limit}`)
-          }
-          for (const [id, fig] of ownB) {
-            const [kind, term] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)]
-            const ft = fastRow.terms.find((t) => t.term === term && t.kind === kind)
-            assert.ok(ft && ft.b_count !== null, `${a.id}/${b.id} b's own top selection must stay exact for ${id} @ ${limit}`)
-            assert.deepEqual({ count: ft!.b_count, pmi: ft!.b_pmi, tone: ft!.b_tone }, fig, `${a.id}/${b.id} b own-top ${id} @ ${limit}`)
-          }
         }
       assert.ok(sawGenuineNull, 'expected at least one cross-side null under the shrunk ceiling')
+    } finally {
+      await buildGraphAggregates(persons)
+    }
+  })
+
+  // A per-kind ceiling T keeps, for every kind, that kind's top T by count and by weighted pmi at
+  // min=1, so any limit <= T finds the live global top-limit inside it: at production TOP (200)
+  // that covers every limit the route accepts (SMALL_LIMITS tops out at 100).
+  it("each side's own live top-limit selection survives any ceiling at or above limit, with its live figure (AC5)", async () => {
+    try {
+      for (const top of [1, 2, 5]) {
+        await buildGraphAggregates(persons, DAYS, top)
+        const pairs: [Person, Person][] = [[lula, bolsonaro], [tarcisio, lula], [bolsonaro, tarcisio]]
+        for (const limit of SMALL_LIMITS.filter((l) => l <= top))
+          for (const kind of ['all', 'word', 'phrase,hashtag'])
+            for (const [a, b] of pairs) {
+              const query = cq({ limit, kind })
+              const fastRow = await fastCompareRow(a, b, query)
+              if (!fastRow) continue
+              const liveRow = await liveCompareRow(a, b, query)
+              for (const [side, person] of [['a', a], ['b', b]] as const) {
+                const ids = new Set([...(await liveOwnTop(person, query, 'count')), ...(await liveOwnTop(person, query, 'pmi'))])
+                for (const id of ids) {
+                  const [k, term] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)]
+                  const ft = fastRow.terms.find((t) => t.term === term && t.kind === k)
+                  const lt = liveRow.terms.find((t) => t.term === term && t.kind === k)!
+                  const figure = (t: CompareTermRow) => (side === 'a' ? { count: t.a_count, pmi: t.a_pmi, tone: t.a_tone } : { count: t.b_count, pmi: t.b_pmi, tone: t.b_tone })
+                  assert.ok(ft, `${a.id}/${b.id} ${side}'s live top ${id} missing @ top=${top} limit=${limit} kind=${kind}`)
+                  assert.deepEqual(figure(ft!), figure(lt), `${a.id}/${b.id} ${side} ${id} @ top=${top} limit=${limit} kind=${kind}`)
+                }
+              }
+            }
+      }
     } finally {
       await buildGraphAggregates(persons)
     }

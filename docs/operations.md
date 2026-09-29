@@ -22,6 +22,7 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 | `TESTIMONY_MODEL` / `TESTIMONY_REVISION` / `TESTIMONY_DTYPE` | kikori / unset / `q8` | the model, its Hub revision and its precision |
 | `MODEL_DIR` | `./data/models` | model cache |
 | `PERF` | unset | opt-in request instrumentation |
+| `OPENROUTER_API_KEY` | unset | CI secret for `.github/workflows/jev-review.yml`, the Jev shadow review; empty (a fork PR gets no secrets) makes `pnpm jev-review` skip itself and exit 0. See [Jev shadow review](factory.md#jev-shadow-review) |
 | `API_CACHE_*` | see [HTTP caching](#http-caching) | cache windows in whole hours |
 
 `.env.example` lists these names with empty values; copy it to `.env.local`. `.gitignore` ignores `.env` and `.env.*` and negates `.env.example`, so a real credential file is never trackable. The benchmark-only `BENCH_*` variables stay out of it and are documented with `pnpm bench` below.

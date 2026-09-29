@@ -39,6 +39,15 @@ In Claude Code, ask in plain words: "run the spec workflow for issue 2", then "r
 - One issue per `build` run. Two issues in parallel would race on the same database directory.
 - Visual issues (compare, split view) still pass through the pipeline, but the real gate is your eyes on the PR screenshots.
 
+## Jev shadow review
+
+`.github/workflows/jev-review.yml` runs `pnpm jev-review` (`src/jev.ts`) on every pull request (`opened`, `synchronize`) and posts one comment, updated in place through a marker, with the yes/no answers of Jev (`typesafe/jev-1.13`, OpenRouter's Decisions API) to the approved spec's acceptance criteria and to six `CLAUDE.md` conventions. It is CI infrastructure, not a factory role: it only comments and never blocks a merge (the job is `continue-on-error`, never a required check, and a missing or empty `OPENROUTER_API_KEY` secret, as on a fork PR, is a logged skip rather than a failure). The raw response of every run is the artifact `jev-review.json`, kept for a later comparison against the validator's verdict and the merge outcome.
+
+- **Input.** `state` holds exactly `diff` (`git diff origin/<base>...<head>` without `pnpm-lock.yaml` and `public/bundle.js`), `spec` (the most recent comment with Goal, API and Acceptance criteria sections on the issue the PR body closes with `Closes #N`) and `commits` (the PR's commit subjects). A PR with no spec gets only the convention questions, and the comment says so. When the estimate (characters divided by 4, plus the longest question) passes 32 000 tokens the comment reads `diff too large for Jev (N tokens)` and Jev is not called; nothing is ever truncated.
+- **Questions.** One `ac-<n>` per criterion, then the six convention checks, each a `noul` question worded so that yes means the diff conforms: `conv-comment` (an added comment states a constraint, not history), `conv-scoring-docs` (a scoring change also touches `public/como-ler.html` or `docs/terms.md`), `conv-route-docs` (a new route or parameter also touches `docs/api.md`), `conv-class` (an added `class` is a `Data.TaggedError` or a `Context.Service`), `conv-issue-test` (no test file named after an issue) and `conv-commits` (every commit subject short, imperative, in English). Each is answerable from the diff and the commit subjects alone.
+- **Output.** A table of question, answer and probability (Jev's probability of yes; 0.5 is the line), and a `Custo:` line from the response's `usage.cost`. `jev-review.json` carries `pr`, `head`, `issue`, `status` (`ok`, `too-large`, `no-key` or `api-error`), the estimated `tokens`, the questions and the raw `response`. A failed call comments `Jev indisponível (<status>)`; a comment that cannot be posted (a read-only fork token) is logged and the run still ends green.
+- **Setup.** Add the repository secret `OPENROUTER_API_KEY`. Blocking on these answers is a later, separate decision, taken after about 20 pull requests of comparison.
+
 ## When it is not worth it
 
 Small fixes and one-line changes: do them in a normal session. The factory pays off on issues with a clear spec and a testable result.

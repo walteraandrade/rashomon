@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -182,6 +182,8 @@ describe('estimateTokens / overCap', () => {
     assert.match(w.prComments[0].body, /diff too large for Jev \(\d+ tokens\)/)
     assert.ok(w.prComments[0].body.startsWith(MARKER))
     assert.equal(out.artifact().status, 'too-large')
+    assert.ok(out.artifact().tokens > TOKEN_CAP)
+    assert.ok(w.prComments[0].body.includes(`(${out.artifact().tokens} tokens)`))
   })
 })
 
@@ -445,5 +447,12 @@ describe('main shadow contract', () => {
     const out = artifactWriter()
     await main(ENV, world().fetchFn, async () => { throw new Error('bad revision') }, out.write)
     assert.equal(out.artifact().status, 'api-error')
+  })
+})
+
+describe('jev test layout', () => {
+  it('no test file is named after an issue number', () => {
+    const named = readdirSync(join(root, 'test')).filter((f) => /^\d+[-.]/.test(f))
+    assert.deepEqual(named, [])
   })
 })

@@ -77,3 +77,9 @@ describe('push: doc_terms (issue #252)', () => {
     await source.close()
   })
 })
+
+describe('term_weeks', () => {
+  it('term_weeks is not a pushed table', () => {
+    assert.ok(!tables.some((t) => t.name === 'term_weeks'))
+  })
+})

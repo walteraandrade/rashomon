@@ -21,6 +21,7 @@ export const SIZE_TABLES = [
   'term_links',
   'outlet_fields',
   'outlet_neighbors',
+  'term_weeks',
 ] as const
 
 export type SizeReport = { tables: Record<string, number>; missing: string[]; total: number }

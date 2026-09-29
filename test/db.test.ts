@@ -462,6 +462,45 @@ describe('read indexes and planner statistics (issue #44)', () => {
     assert.match(plan, /Index Only Scan using doc_persons_person_idx/)
     assert.match(plan, /Index Cond: \(person_id = /)
   })
+
+  it('docs_window_idx covers the scope predicate columns', async () => {
+    const defs = await indexDefs('docs')
+    assert.ok(
+      defs.some((d) => d.indexname === 'docs_window_idx' && /btree \(published_at\) INCLUDE \(id, source, domain, country\)/.test(d.indexdef)),
+      `expected docs_window_idx, got ${JSON.stringify(defs)}`,
+    )
+  })
+
+  it('migrate is idempotent for docs_window_idx', async () => {
+    await migrateP()
+    const defs = await indexDefs('docs')
+    assert.equal(defs.filter((d) => d.indexname === 'docs_window_idx').length, 1)
+  })
+
+  it('offers the window scan an index-only path over docs_window_idx', async () => {
+    await db.exec(`analyze docs`)
+    await db.exec(`vacuum docs`)
+    try {
+      await db.exec(`set enable_seqscan = off`)
+      await db.exec(`set enable_bitmapscan = off`)
+      const { rows } = await db.query<Record<string, string>>(
+        `explain select d.id from docs d where d.published_at >= now() - make_interval(days => 30) and d.source = any(string_to_array('all', ',')) and d.domain = any(string_to_array('all', ',')) and (d.country is distinct from 'pt')`,
+      )
+      const plan = rows.map((r) => r['QUERY PLAN']).join('\n')
+      assert.match(plan, /Index Only Scan using docs_window_idx/)
+    } finally {
+      await db.exec(`reset enable_seqscan`)
+      await db.exec(`reset enable_bitmapscan`)
+    }
+  })
+
+  it('the window index is documented', () => {
+    assert.match(docsText, /docs_window_idx/)
+    assert.match(docsText, /pg_relation_size/)
+    assert.match(docsText, /docs_window_idx[\s\S]{0,600}ingest/i)
+    assert.match(docsText, /docs_window_idx[\s\S]{0,800}(prod-explain|production plan)/i)
+    assert.match(docsText, /docs_window_idx[\s\S]{0,800}warm\.yml/i)
+  })
 })
 
 describe('analyze maintenance policy (issue #44)', () => {

@@ -239,6 +239,19 @@ The numbers, the plans and the method are in `docs/perf-baseline.md` and in the 
 them with `pnpm bench` after any schema change; a candidate index that no plan references is a candidate
 that does not ship.
 
+`docs_window_idx` is `docs (published_at) include (id, source, domain, country)`, the columns the `scope` CTE
+every live route starts with filters on and returns, so the window scan can be an index-only scan instead of
+a heap scan that reads `text` pages (issue #271). It is the one exception to the bench rule above: it ships
+on production plan evidence (the read-only production EXPLAIN under "Timing source"), not on the PGlite bench, which cannot show an
+index-only scan because PGlite has no autovacuum and so no fresh visibility map, which production has. Its
+stop conditions stand in for "does not ship": a size over about 40 MB (read it as
+`pg_relation_size('docs_window_idx')`) or the planner refusing the index in production. Every entry point
+calls `migrate()`, so the next `pnpm migrate`, `pnpm ingest`, `pnpm aggregate` (including `warm.yml`'s
+post-deploy run) or `pnpm reindex` builds it, as a plain (non-concurrent) `create index` that holds a write
+lock on `docs` while it builds. Production therefore checks disk headroom, disables both `ingest.yml` and
+`warm.yml` before merging, runs `pnpm migrate` itself against `POSTGRES_URL_NON_POOLING` after the deploy,
+re-enables both, then runs `gh workflow run warm.yml`.
+
 **Statistics.** Postgres estimates row counts from statistics that a bulk write leaves stale, and PGlite
 has no autovacuum daemon to refresh them, so `analyze` is explicit here — targeted at the five tables the
 queries touch, never database-wide, and never from a request:

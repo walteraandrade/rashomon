@@ -159,6 +159,7 @@ export const schema = `
       processed_at timestamptz not null default now()
     );
     create index if not exists docs_published_idx on docs (published_at);
+    create index if not exists docs_window_idx on docs (published_at) include (id, source, domain, country);
     create index if not exists doc_terms_term_id_idx on doc_terms (term_id, doc_id);
     create table if not exists doc_testimony (
       doc_id int references docs(id) on delete cascade,

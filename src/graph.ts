@@ -208,8 +208,9 @@ const scopeCte = (person: Person, q: Scope) => {
 const termCounts = (about: Sql, exclude?: string[], withReach = false) => sql`
     select v.id as term_id, v.term, v.kind, c.c_pt, c.tone${withReach ? sql`, c.reach` : sql``}
     from (
-      select t.term_id, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone${withReach ? sql`, sum(d.reach_reposts)::int as reach` : sql``}
-      from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+      select t.term_id, count(*)::float8 as c_pt, avg(x.tone)::float8 as tone${withReach ? sql`, sum(x.reach_reposts)::int as reach` : sql``}
+      from doc_terms t
+      join (select a.doc_id, dt.tone${withReach ? sql`, d.reach_reposts` : sql``} from ${about} a left join doc_tone dt on dt.doc_id = a.doc_id${withReach ? sql` join docs d on d.id = a.doc_id` : sql``}) x on x.doc_id = t.doc_id
       group by t.term_id
     ) c
     join terms v on v.id = c.term_id${exclude ? sql`
@@ -765,8 +766,8 @@ const risingQuery = (person: Person, q: RisingQuery) => {
   const termsOf = (about: Sql, count: Sql, withReach = false) => sql`
     select v.id as term_id, v.term, v.kind, c.${count}${withReach ? sql`, c.reach` : sql``}
     from (
-      select t.term_id, count(*)::float8 as ${count}${withReach ? sql`, sum(d.reach_reposts)::int as reach` : sql``}
-      from doc_terms t join ${about} a on a.doc_id = t.doc_id${withReach ? sql` join docs d on d.id = t.doc_id` : sql``}
+      select t.term_id, count(*)::float8 as ${count}${withReach ? sql`, sum(a.reach_reposts)::int as reach` : sql``}
+      from doc_terms t join ${withReach ? sql`(select b.doc_id, d.reach_reposts from ${about} b join docs d on d.id = b.doc_id)` : about} a on a.doc_id = t.doc_id
       group by t.term_id
     ) c
     join terms v on v.id = c.term_id

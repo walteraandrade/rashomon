@@ -48,7 +48,7 @@ describe('compareParams matches calling /api/compare directly', () => {
     await seed()
     for (const [qp, direct] of [
       [compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' }), '/api/compare?a=lula&b=bolsonaro&days=30&source=all&limit=40&kind=word,hashtag,phrase'],
-      [compareParams({ a: 'tarcisio', b: 'bolsonaro', days: '365', source: 'gdelt', limit: '20' }), '/api/compare?a=tarcisio&b=bolsonaro&days=365&source=gdelt&limit=20&kind=word,hashtag,phrase'],
+      [compareParams({ a: 'tarcisio', b: 'bolsonaro', days: '60', source: 'gdelt', limit: '20' }), '/api/compare?a=tarcisio&b=bolsonaro&days=60&source=gdelt&limit=20&kind=word,hashtag,phrase'],
     ] as const) {
       const viaHelper = await app.request('/api/compare?' + qp.toString())
       const viaDirect = await app.request(direct)
@@ -423,7 +423,7 @@ describe('changing a compare control refetches only compare, and vice versa', ()
   const controlCases: [string, string][] = [
     ['compareA', 'bolsonaro'],
     ['compareB', 'lula'],
-    ['compareDays', '365'],
+    ['compareDays', '60'],
     ['compareSource', 'bluesky'],
     ['compareLimit', '100'],
   ]
@@ -503,7 +503,7 @@ describe('changing a compare control refetches only compare, and vice versa', ()
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.days.value = '365'
+      els.days.value = '60'
       els.days.fire('change')
       await flush(220)
       const added = calls.slice(before)
@@ -519,7 +519,7 @@ describe('changing a compare control refetches only compare, and vice versa', ()
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.testimonyDays.value = '365'
+      els.testimonyDays.value = '60'
       els.testimonyDays.fire('change')
       await flush(220)
       const added = calls.slice(before)

@@ -132,7 +132,7 @@ const WEEK_TZ = 'America/Sao_Paulo'
 export const weekDayIso = (startIso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(startIso))
 
 // "seg 8": weekday abbreviation, no trailing period, plus the day of month. Never a year or
-// month, since every bucket is inside the last 7 (or 30/365) days.
+// month, since every bucket is inside the last 7 (or 30/60) days.
 export const weekDayLabel = (startIso: string) => {
   const d = new Date(startIso)
   const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: WEEK_TZ, weekday: 'short' }).format(d).replace(/\.$/, '')

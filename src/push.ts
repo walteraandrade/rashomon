@@ -28,6 +28,7 @@ const tables: Table[] = [
     columns: ['id', 'source', 'uri', 'text', 'published_at', 'collected_at', 'extra_terms', 'domain', 'tone', 'reach_likes', 'reach_reposts', 'reach_replies', 'reach_quotes', 'extra_names'],
     json: ['extra_terms', 'extra_names'],
   },
+  { name: 'doc_tone', columns: ['doc_id', 'tone'], select: ['id as doc_id', 'tone'], from: 'docs where tone is not null' },
   { name: 'doc_persons', columns: ['doc_id', 'person_id'] },
   {
     name: 'doc_terms',

@@ -745,7 +745,7 @@ describe('figure 1 fetches the inspector sparkline on its own fixed recorte', ()
     await flush()
   }
 
-  it('picking a word requests /timeline with days=7&bucket=day for that term/kind, even when the atlas itself is set to days=365', async () => {
+  it('picking a word requests /timeline with days=7&bucket=day for that term/kind, even when the atlas itself is set to days=60', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/graph': graph(), '/docs': { docs: [], total: 0 }, '/timeline': [] })
@@ -753,7 +753,7 @@ describe('figure 1 fetches the inspector sparkline on its own fixed recorte', ()
       mountDocsCard()
       mount(els.workspace, { people, initial: {} })
       await flush()
-      els.days.value = '365'
+      els.days.value = '60'
       els.days.fire('change')
       await flush()
       calls.length = 0

@@ -126,7 +126,7 @@ describe('the routes answer their *For functions with the default parser (issue 
   })
 
   it('GET /graph?source=senado for a person with zero senado docs returns the empty, stats.docs===0 shape', async () => {
-    const res = await app.request('/api/people/lula/graph?source=senado&days=365')
+    const res = await app.request('/api/people/lula/graph?source=senado&days=60')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Awaited<ReturnType<typeof graphFor>>
     assert.deepEqual(body.nodes, [])
@@ -140,7 +140,7 @@ describe('/rising default limit is 40, not 20', () => {
   before(seed)
 
   it('a wide window with more than 20 matching terms and no limit param returns more than 20', async () => {
-    const res = await app.request('/api/people/lula/rising?days=365&min=1')
+    const res = await app.request('/api/people/lula/rising?days=60&min=1')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Awaited<ReturnType<typeof risingFor>>
     assert.ok(body.terms.length > 20, `expected more than 20 terms, got ${body.terms.length}`)
@@ -589,7 +589,7 @@ describe('GET /api/candidates (issue #32)', () => {
   })
 
   it('never lists a tracked alias', async () => {
-    const { candidates } = await get('?days=365&min=1&limit=200')
+    const { candidates } = await get('?days=60&min=1&limit=200')
     assert.ok(!candidates.some((c) => ['lula', 'luiz inacio', 'tarcisio', 'bolsonaro', 'jair bolsonaro'].includes(c.name)))
   })
 
@@ -833,5 +833,35 @@ describe('GET /api/people/:id/graph?kind=org (issue #209)', () => {
     assert.ok(body.nodes.length > 0, 'the org doc must surface at least one org node')
     for (const node of body.nodes) assert.equal(node.kind, 'org')
     assert.equal(body.nodes.some((n) => n.term === 'lula'), false, "the person's own name is dropped even as an org term")
+  })
+})
+
+describe('days beyond the widest window (issue #270)', () => {
+  before(seed)
+
+  it('days=365 answers exactly as days=60 on every windowed route', async () => {
+    const paths = (days: string) => [
+      `/api/people/lula/graph?days=${days}`,
+      `/api/people/lula/sources?days=${days}`,
+      `/api/people/lula/testimony?days=${days}`,
+      `/api/people/lula/lenses?days=${days}`,
+      `/api/compare?a=lula&b=tarcisio&days=${days}`,
+    ]
+    const [wide, edge] = [paths('365'), paths('60')]
+    for (const [i, path] of wide.entries()) {
+      const [a, b] = [await app.request(path), await app.request(edge[i])]
+      assert.equal(a.status, 200, path)
+      assert.equal(await a.text(), await b.text(), path)
+    }
+  })
+
+  it('/rising at days=60 answers 200 with an empty baseline, since [60, 90) lies beyond retention', async () => {
+    const res = await app.request('/api/people/lula/rising?days=60&min=1')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Awaited<ReturnType<typeof risingFor>>
+    assert.equal(body.days, 60)
+    assert.equal(body.about.baseline, 0)
+    assert.equal(body.about.words_baseline, 0)
+    assert.ok(body.terms.every((t) => t.count_baseline_raw === 0))
   })
 })

@@ -53,7 +53,7 @@ Output is JSON: `meta` (tree, revision, CPU, a `generate_series` calibration) an
 - `now()` is frozen at `seed.ts`'s `ANCHOR` by a `bench.now()` earlier in the search path, so two
   processes, or two trees, read identical windows. `current_date` (only `/attention`) cannot be
   frozen; that route is not measured.
-- Windows 1 and 90 are not route values (`query.ts`'s `DAYS` is 7/30/365); the statements accept
+- Windows 1 and 90 are not route values (`query.ts`'s `DAYS` is 7/30/60); the statements accept
   any `days`, and the aggregate build is run for exactly the measured windows.
 - p95 over 5 samples is the slowest sample.
 - PGlite has no `statement_timeout` (WASM, no signals), so the limit is a watchdog in the parent. A

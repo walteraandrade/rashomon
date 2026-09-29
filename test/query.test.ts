@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
+import { parse } from 'parse5'
 import {
   BASELINES,
   BRIDGE_NODES,
@@ -210,7 +211,7 @@ describe('parseToneQuery (issue #5)', () => {
     assert.equal(parseToneQuery({ days: 'nope' }).days, 30)
     assert.equal(parseToneQuery({ days: '0' }).days, 7)
     assert.equal(parseToneQuery({ days: '-5' }).days, 7)
-    assert.equal(parseToneQuery({ days: '9999' }).days, 365)
+    assert.equal(parseToneQuery({ days: '9999' }).days, 60)
   })
 })
 
@@ -227,7 +228,7 @@ describe('parseAgendaQuery (issue #208)', () => {
     assert.equal(parseAgendaQuery({}).days, 30)
     assert.equal(parseAgendaQuery({ days: 'nope' }).days, 30)
     assert.equal(parseAgendaQuery({ days: '0' }).days, 7)
-    assert.equal(parseAgendaQuery({ days: '9999' }).days, 365)
+    assert.equal(parseAgendaQuery({ days: '9999' }).days, 60)
   })
 
   it('source falls back to "all" for undefined, empty and unknown tokens, otherwise keeps a comma list', () => {
@@ -266,8 +267,8 @@ describe('parseTestimonyQuery (issue #21)', () => {
     assert.equal(parseTestimonyQuery({}).days, 30)
     assert.equal(parseTestimonyQuery({ days: 'nope' }).days, 30)
     assert.equal(parseTestimonyQuery({ days: '0' }).days, 7)
-    assert.equal(parseTestimonyQuery({ days: '366' }).days, 365)
-    assert.equal(parseTestimonyQuery({ days: '9999' }).days, 365)
+    assert.equal(parseTestimonyQuery({ days: '366' }).days, 60)
+    assert.equal(parseTestimonyQuery({ days: '9999' }).days, 60)
   })
 
   it('min defaults to 3 and snaps to MINS, as its own literal', () => {
@@ -309,7 +310,7 @@ describe('parseComentionQuery (issue #207)', () => {
   it('snaps days/min the same as its neighbours, defaulting to 30/3', () => {
     assert.equal(parseComentionQuery({}).days, 30)
     assert.equal(parseComentionQuery({ days: 'nope' }).days, 30)
-    assert.equal(parseComentionQuery({ days: '9999' }).days, 365)
+    assert.equal(parseComentionQuery({ days: '9999' }).days, 60)
     assert.equal(parseComentionQuery({}).min, 3)
     assert.equal(parseComentionQuery({ min: 'nope' }).min, 3)
     assert.equal(parseComentionQuery({ min: '4' }).min, 3)
@@ -335,7 +336,7 @@ describe('parseCompareQuery (issue #93)', () => {
     assert.equal(parseCompareQuery({}).days, 30)
     assert.equal(parseCompareQuery({ days: 'nope' }).days, 30)
     assert.equal(parseCompareQuery({ days: '0' }).days, 7)
-    assert.equal(parseCompareQuery({ days: '9999' }).days, 365)
+    assert.equal(parseCompareQuery({ days: '9999' }).days, 60)
   })
 
   it("limit defaults to 40 and snaps to SMALL_LIMITS, ceiling 100 where /graph's is 200", () => {
@@ -392,7 +393,7 @@ describe('parseLens / parseLensesQuery (issue #206)', () => {
 
   it('days snaps to the nearest allowed window, defaulting to 30', () => {
     assert.equal(parseLensesQuery({}).days, 30)
-    assert.equal(parseLensesQuery({ days: '9999' }).days, 365)
+    assert.equal(parseLensesQuery({ days: '9999' }).days, 60)
   })
 
   it('kind defaults to all and delegates to the shared list parser', () => {
@@ -528,7 +529,7 @@ describe('parseCandidatesQuery (issue #32)', () => {
   })
 
   it('snaps out-of-range values to the nearest allowed one and falls back on garbage', () => {
-    assert.deepEqual(parseCandidatesQuery({ days: '9999', min: '0', limit: '-3' }), { days: 365, min: 1, limit: 1 })
+    assert.deepEqual(parseCandidatesQuery({ days: '9999', min: '0', limit: '-3' }), { days: 60, min: 1, limit: 1 })
     assert.deepEqual(parseCandidatesQuery({ days: '0', min: '0', limit: '-3' }), { days: 7, min: 1, limit: 1 })
     assert.deepEqual(parseCandidatesQuery({ days: 'abc', min: '2000', limit: '999' }), { days: 7, min: 5, limit: 200 })
   })
@@ -544,7 +545,7 @@ describe('parseScope (issue #195)', () => {
   })
 
   it('is the recorte every route with those fields reads', () => {
-    const q = { days: '365', source: 'gkg,rss', domain: 'g1.globo.com', lean: 'right', kind: 'phrase', country: 'all' }
+    const q = { days: '60', source: 'gkg,rss', domain: 'g1.globo.com', lean: 'right', kind: 'phrase', country: 'all' }
     const scope = parseScope(q, { days: 30 })
     for (const parse of [parseQuery, parseDocsQuery, parseRisingQuery, parseTimelineQuery, parseCompareQuery, parseWeekQuery]) {
       const { days, source, domain, lean, kind, country } = parse(q)
@@ -626,14 +627,31 @@ const dayParsers: [string, (q: Record<string, string | undefined>) => { days: nu
 ]
 
 describe('days enumeration acceptance criteria (issue #111)', () => {
-  it('the allowed windows are exactly the ones every <select> in atlas.html offers', () => {
-    const page = readFileSync(new URL('../public/atlas.html', import.meta.url), 'utf8')
-    const selects = [...page.matchAll(/<select id="(days|testimonyDays|compareDays)"[\s\S]*?<\/select>/g)]
-    assert.equal(selects.length, 3, 'atlas.html should carry one days select per figure')
-    for (const [markup] of selects) {
-      const offered = [...markup.matchAll(/value="(\d+)"/g)].map((m) => Number(m[1]))
-      assert.deepEqual(offered, DAYS)
+  it('the allowed windows are exactly the ones every period <select> in atlas.html offers, 30 selected, none offering 365', () => {
+    type Node = { tagName?: string; attrs?: { name: string; value: string }[]; childNodes?: Node[]; value?: string; content?: Node }
+    const walk = (n: Node): Node[] => [n, ...[...(n.childNodes ?? []), ...(n.content ? [n.content] : [])].flatMap(walk)]
+    const attr = (n: Node, name: string) => n.attrs?.find((a) => a.name === name)?.value
+    const text = (n: Node): string => (n.childNodes ?? []).map((c) => (c.tagName ? text(c) : c.value ?? '')).join('')
+    const page = walk(parse(readFileSync(new URL('../public/atlas.html', import.meta.url), 'utf8')) as Node)
+    const ids = ['days', 'testimonyDays', 'compareDays', 'lensesDays', 'agendaDays', 'comentionDays']
+    for (const id of ids) {
+      const select = page.find((n) => n.tagName === 'select' && attr(n, 'id') === id)
+      assert.ok(select, `atlas.html has no #${id}`)
+      const options = walk(select).filter((n) => n.tagName === 'option')
+      assert.deepEqual(options.map((o) => Number(attr(o, 'value'))), DAYS, id)
+      assert.deepEqual(options.filter((o) => attr(o, 'selected') !== undefined).map((o) => attr(o, 'value')), ['30'], id)
+      assert.equal(text(options[2]), id === 'lensesDays' ? '60 dias' : 'últimos 60 dias', id)
     }
+  })
+
+  it('DAYS is 7, 30 and 60, and anything wider snaps to 60 (issue #270)', () => {
+    assert.deepEqual(DAYS, [7, 30, 60])
+    assert.equal(snapDays('365', 30), 60)
+    assert.equal(snapDays('9999', 30), 60)
+    assert.equal(snapDays('45', 30), 30)
+    assert.equal(snapDays('46', 30), 60)
+    assert.equal(snapDays('18', 30), 7)
+    assert.equal(snapDays('19', 30), 30)
   })
 
   it('every parser that reads days keeps its own default when days is absent or non-numeric', () => {
@@ -652,7 +670,7 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
   })
 
   it('any other value snaps to the nearest allowed window, ties to the shorter one', () => {
-    // 18.5 is the midpoint of 7 and 30; 197.5 the midpoint of 30 and 365.
+    // 18.5 is the midpoint of 7 and 30; 45 the midpoint of 30 and 60.
     const cases: [string, number][] = [
       ['1', 7],
       ['0', 7],
@@ -660,10 +678,10 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
       ['18', 7],
       ['19', 30],
       ['45', 30],
-      ['197', 30],
-      ['198', 365],
-      ['364', 365],
-      ['9999', 365],
+      ['46', 60],
+      ['197', 60],
+      ['365', 60],
+      ['9999', 60],
     ]
     for (const [name, parse] of dayParsers) {
       for (const [given, expected] of cases) assert.equal(parse({ days: given }).days, expected, `${name} days=${given}`)
@@ -817,7 +835,7 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
   })
 
   it('snapDays is snapTo over DAYS, so the two enumerations cannot drift apart', () => {
-    for (const v of ['-5', '0', '18', '19', '197', '198', '9999', 'abc', undefined]) assert.equal(snapDays(v, 30), snapTo(DAYS, v, 30))
+    for (const v of ['-5', '0', '18', '19', '45', '46', '197', '198', '365', '9999', 'abc', undefined]) assert.equal(snapDays(v, 30), snapTo(DAYS, v, 30))
   })
 
   it('docs/api.md names every value of every set', () => {

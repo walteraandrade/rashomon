@@ -64,6 +64,7 @@ import {
   weekDayIso,
   weekDayLabel,
   weekHeadLabel,
+  weekSpanLabel,
 } from './format.js'
 import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, matrixLayout, peakDay, persistenceLayout, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
 import { axis, frame, overflowList } from './marks.js'
@@ -1782,7 +1783,7 @@ const persistenceCellMarkup = (
   if (cell.week < oldestPickable)
     return html`<span class="persistence-cell is-expired" data-lv="${cell.level}" data-expired="1" title="${PERSISTENCE_EXPIRED_LABEL}" role="img" aria-label="${PERSISTENCE_EXPIRED_LABEL}">${fmt(cell.count)}</span>`
   const isSelected = !!selected && selected.week === cell.week && selected.term === row.term && selected.kind === row.kind
-  return html`<button type="button" class="persistence-cell${isSelected ? ' is-selected' : ''}" data-lv="${cell.level}" data-week="${cell.week}" data-term="${row.term}" data-kind="${row.kind}" aria-pressed="${isSelected}" aria-label="${row.term}, semana de ${cell.week}: ${fmt(cell.count)} ${cell.count === 1 ? 'documento' : 'documentos'}">${fmt(cell.count)}</button>`
+  return html`<button type="button" class="persistence-cell${isSelected ? ' is-selected' : ''}" data-lv="${cell.level}" data-week="${cell.week}" data-term="${row.term}" data-kind="${row.kind}" aria-pressed="${isSelected}" aria-label="${row.term}, semana ${weekSpanLabel(cell.week)}: ${fmt(cell.count)} ${cell.count === 1 ? 'documento' : 'documentos'}">${fmt(cell.count)}</button>`
 }
 
 // Draws #persistenceChart and the series note in #persistenceNote. Never a blank figure: with

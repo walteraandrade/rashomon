@@ -156,7 +156,11 @@ part of the manual round that gates the Effect db PR (issue #184), not of the te
 `ANALYZED_TABLES` — it adds `persons`, `gkg_files`, `phrases`, `phrase_stage` and `person_attention`,
 all of which have caused real disk incidents or are simply never analyzed/vacuumed by that other
 list) by `pg_total_relation_size`, plus `pg_database_size` for the database
-total, largest first, followed by one JSON line with the same numbers. It is read-only: no
+total, largest first, followed by one JSON line with the same numbers. A table a pending migration
+has not created yet (`to_regclass` is null, e.g. `terms` before #252's `pnpm migrate`) is left out
+of `tables` and named in the JSON's `missing` list (printed as `missing` after the sized rows), never
+reported as 0 B, so the rest of the report still arrives during a disk incident; only a database
+where every listed table is missing (unmigrated) exits 1. It is read-only: no
 `analyze`, `vacuum` or write, and no history is kept. `.github/workflows/ingest.yml` runs it after
 every `pnpm ingest` and appends the output to the run summary, so a shrinking-disk trend is visible
 across runs without opening a database client.

@@ -6,6 +6,7 @@ import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/gra
 import {
   MAX_DOC_CHARS,
   batches,
+  derive,
   insertDoc,
   insertDocP,
   insertDocsP,
@@ -21,7 +22,7 @@ import {
   writeDerivedP,
   type Derived,
 } from '../src/store.js'
-import { collidingUri, derivedCounts, enrichmentDocs, orphanTermCount, persons, reseed, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
+import { collidingUri, derivedCounts, derivedRows, docs, enrichmentDocs, orphanTermCount, persons, reseed, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
 import './close.js'
 
 // The write path in src/store.ts. Every suite here layers its own docs on the shared fixture;
@@ -751,6 +752,24 @@ describe('store.ts exposes one Effect implementation per writer, plus its runSql
   })
 })
 
+describe('the fixture through the term dictionary (issue #252)', () => {
+  before(seed)
+  after(reseed)
+
+  it('seeding the fixture yields the (doc_id, kind, term) set the extractor derives (AC5)', async () => {
+    const { rows } = await db.query<{ id: number; uri: string }>(`select id, uri from docs`)
+    const fixtureIds = new Set(docs.map((d) => rows.find((r) => r.uri === d.uri)!.id))
+    const expected = docs.flatMap((d) => {
+      const id = rows.find((r) => r.uri === d.uri)!.id
+      return derive(id, d, persons).terms.map((t) => `${id}:${t.kind}:${t.term}`)
+    })
+    assert.ok(expected.length > 20)
+    const actual = (await derivedRows()).terms.filter((k) => fixtureIds.has(Number(k.split(':')[0])))
+    assert.deepEqual(new Set(actual), new Set(expected))
+    assert.equal(actual.length, new Set(expected).size)
+  })
+})
+
 // issue #252: the vocabulary is written by the same statement as the rows, so it has no round-trip of its own.
 describe('the terms vocabulary (issue #252)', () => {
   before(seed)
@@ -763,7 +782,7 @@ describe('the terms vocabulary (issue #252)', () => {
       [term, kind],
     )).rows
 
-  it('shares one terms row between docs carrying the same pair (issue #252)', async () => {
+  it('shares one terms row between docs carrying the same pair (issue #252) (AC7)', async () => {
     await insertDocsP([doc(1, 'Lula visita o unicornioazul'), doc(2, 'Lula elogia o unicornioazul')], persons)
     const first = await vocabulary('unicornioazul', 'word')
     assert.equal(first.length, 1)
@@ -774,7 +793,7 @@ describe('the terms vocabulary (issue #252)', () => {
     assert.equal(later[0].docs, 3)
   })
 
-  it('keeps one text under two kinds as two terms rows (issue #252)', async () => {
+  it('edge 3.6: keeps one text under two kinds as two terms rows (issue #252)', async () => {
     await insertDocP(doc(4, 'Lula fala de #zebraroxa e de zebraroxa'), persons)
     const word = await vocabulary('zebraroxa', 'word')
     const tag = await vocabulary('zebraroxa', 'hashtag')

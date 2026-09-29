@@ -3764,7 +3764,7 @@ describe('term ids are internal (issue #252)', () => {
     }
   }
 
-  it('route output does not depend on term_id order (issue #252)', async () => {
+  it('route output does not depend on term_id order (issue #252) (AC9)', async () => {
     const normal = await outputs()
     assert.ok(normal.graph.nodes.length > 10 && normal.graph.links.length > normal.graph.nodes.length, 'sanity: nodes and term-term links')
     assert.ok(normal.testimony.nodes.some((n) => n.testimony), 'sanity: term testimony')
@@ -3787,11 +3787,11 @@ describe('term ids are internal (issue #252)', () => {
     for (const key of Object.keys(normal) as (keyof typeof normal)[]) assert.deepEqual(reversed[key], normal[key], key)
   })
 
-  it('statements that never read doc_terms are byte-identical (issue #252)', () => {
+  it('statements that never read doc_terms are byte-identical (issue #252) (AC10)', () => {
     for (const [name, text] of Object.entries(masterStatements)) assert.equal(statements[name as keyof typeof statements], text, name)
   })
 
-  it('no statement orders by term_id (issue #252)', () => {
+  it('no statement orders by term_id (issue #252) (AC11)', () => {
     const texts = [
       ...Object.values(statements),
       ...aggregateQueries.window(30, persons).map((q) => q.text),
@@ -3800,6 +3800,6 @@ describe('term ids are internal (issue #252)', () => {
       aggregateQueries.personTerms(30, persons[0]).text,
     ]
     assert.ok(texts.some((t) => /order by/.test(t)))
-    for (const text of texts) for (const [, clause] of text.matchAll(/order by ([^\n]*)/g)) assert.doesNotMatch(clause, /\bterm_id\b|\bv\.id\b/, clause)
+    for (const text of texts) for (const [, clause] of text.matchAll(/order by\s*((?:[^\n]*,[ \t]*\n)*[^\n]*)/g)) assert.doesNotMatch(clause, /\bterm_id\b|\bv\.id\b/, clause)
   })
 })

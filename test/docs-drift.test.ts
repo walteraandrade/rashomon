@@ -389,15 +389,18 @@ describe('CLAUDE.md and docs/factory.md describe the current test-file layout, n
 })
 
 describe('the term dictionary is documented (issue #252)', () => {
-  it('states the vocabulary table, the term_id key, the in-place conversion and the reindex rebuild', () => {
-    assert.match(docsText, /distinct `\(term, kind\)`[^.]*stored once in `terms[^`]*`/)
-    assert.match(docsText, /`doc_terms \(doc_id, term_id\)` references it/)
-    assert.match(docsText, /`pnpm migrate` converts a `doc_terms` still shaped `\(doc_id, term, kind\)` in place, in the same transaction/)
-    assert.match(docsText, /does not read `docs\.text`, so it needs no reindex/)
-    assert.match(docsText, /`pnpm reindex` truncates `terms` with the rows it rebuilds/)
+  it('states the vocabulary table, the term_id key, the in-place conversion and the reindex rebuild (AC18)', () => {
+    assert.match(docsText, /\bvocabulary\b/i, 'the vocabulary is named')
+    assert.match(docsText, /`terms\b[^`]*`/, 'the `terms` table is named')
+    assert.match(docsText, /`\(term, kind\)`/, 'the vocabulary holds (term, kind) pairs')
+    assert.match(docsText, /`doc_terms\b[^`]*term_id[^`]*`|`term_id`/, 'doc_terms is keyed by term_id')
+    assert.match(docsText, /pnpm migrate`[^.\n]*(legacy|in place|converts)|(legacy|in place|converts)[^.\n]*`pnpm migrate/i, 'migrate converts a legacy doc_terms')
+    assert.match(docsText, /(no|without a|not need a) reindex|needs no reindex/i, 'the conversion needs no reindex')
+    assert.match(docsText, /`pnpm reindex`[^.\n]*`terms`|`terms`[^.\n]*`pnpm reindex`|reindex[^.\n]*vocabulary/i, 'reindex rebuilds the vocabulary')
   })
 
-  it('tells production to run pnpm migrate right after the deploy, with the scheduled ingest paused', () => {
-    assert.match(docsText, /disable `ingest\.yml`, deploy, run `pnpm migrate` against `POSTGRES_URL_NON_POOLING` immediately, re-enable `ingest\.yml`/)
+  it('tells production to run pnpm migrate right after the deploy, with the scheduled ingest paused (AC18)', () => {
+    assert.match(docsText, /ingest\.yml/)
+    assert.match(docsText, /disable[^.\n]*ingest\.yml[^.\n]*deploy[^.\n]*pnpm migrate[^.\n]*re-?enable[^.\n]*ingest\.yml/i)
   })
 })

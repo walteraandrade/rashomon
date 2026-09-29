@@ -479,6 +479,12 @@ describe('analyze maintenance policy (issue #44)', () => {
     }
   })
 
+  it('terms is analyzed and has a row estimate (AC13)', async () => {
+    assert.ok(ANALYZED_TABLES.includes('terms'))
+    await analyzeTablesP(['terms'])
+    assert.ok((await planRowEstimate('terms')) >= 0)
+  })
+
   it('analyzes only the tables asked for', async () => {
     const analyzed = await analyzeTablesP(['doc_persons'])
     assert.deepEqual([...analyzed], ['doc_persons'])
@@ -653,7 +659,7 @@ describe('term dictionary schema (issue #252)', () => {
   before(seed)
   after(reseed)
 
-  it('terms table and doc_terms keyed by term_id (issue #252)', async () => {
+  it('terms table and doc_terms keyed by term_id (issue #252) (AC1)', async () => {
     assert.deepEqual(await columnsOf('terms'), ['id', 'term', 'kind'])
     const { rows: unique } = await db.query<{ cols: string[] }>(
       `select array_agg(a.attname::text order by k.ord) as cols
@@ -673,7 +679,7 @@ describe('term dictionary schema (issue #252)', () => {
     assert.ok(!defs.some((d) => d.indexname === 'doc_terms_term_idx'))
   })
 
-  it('migrate converts a legacy doc_terms in place (issue #252)', async () => {
+  it('migrate converts a legacy doc_terms in place, and a second run changes nothing (issue #252) (AC2, AC3)', async () => {
     const before = await derivedRows()
     const rows = await fixtureTermRows()
     const kindsOf = (term: string) => rows.filter((r) => r.term === term).map((r) => r.kind)
@@ -704,7 +710,7 @@ describe('term dictionary schema (issue #252)', () => {
     assert.deepEqual(await snapshot(), converted, 'a second migrate on a converted database changes nothing')
   })
 
-  it('a failed conversion leaves the legacy doc_terms intact (issue #252)', async () => {
+  it('a failed conversion leaves the legacy doc_terms intact (issue #252) (AC4)', async () => {
     await seed()
     const rows = await fixtureTermRows()
     await legacyDocTerms(rows)

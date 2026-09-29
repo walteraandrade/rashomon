@@ -40,7 +40,7 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
     assert.equal(await orphanTermCount(), 0)
   })
 
-  it('leaves no unreferenced terms row after reindex (issue #252)', async () => {
+  it('leaves no unreferenced terms row after reindex (issue #252) (AC8)', async () => {
     await reindexAll(persons)
     const before = await derivedRows()
     await db.query(`insert into terms (term, kind) values ('vocabulario-morto', 'word'), ('hashtag-morta', 'hashtag')`)

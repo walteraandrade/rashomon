@@ -137,7 +137,7 @@ describe('purge themes removes theme vocabulary (issue #252)', () => {
   before(seed)
   after(reseed)
 
-  it('purge themes removes theme vocabulary (issue #252)', async () => {
+  it('purge themes removes theme vocabulary (issue #252) (AC14)', async () => {
     await seedLegacyThemeState()
     await db.query(`insert into terms (term, kind) values ('wb_unreferenced', 'theme')`)
     const { rows: docRow } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[3].uri])

@@ -51,7 +51,7 @@ describe('push: person_attention day', () => {
 })
 
 describe('push: doc_terms (issue #252)', () => {
-  it('doc_terms is pushed as text pairs, never ids (issue #252)', async () => {
+  it('doc_terms is pushed as text pairs, never ids (issue #252) (AC15)', async () => {
     const source = new PGlite('memory://')
     await source.exec(schema)
     await source.query(`insert into persons (id, name, aliases) values ('lula', 'Lula', array['Lula'])`)

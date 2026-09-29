@@ -303,6 +303,19 @@ PERF=0 pnpm bench                           # same scenarios with the instrument
 
 `pnpm test` never runs the benchmark: it asserts that every scenario is still a request the API answers and that the corpus is deterministic, against the shared in-memory fixture, and never asserts a timing.
 
+**Timing source.** Production `EXPLAIN (ANALYZE, BUFFERS)` and `pg_stat_statements` are the only timing source of truth. Neither `pnpm bench` nor the SQL harness under `scripts/bench` (`run.ts` and `compare.ts`, see `scripts/bench/README.md`) is one: they prove identical rows and plan shape, and `compare.ts` keeps a candidate on row equivalence alone, never on speed. Two reasons, both measured in production and invisible on PGlite. PGlite keeps temp files in RAM, so a hash or sort that spills to disk past `work_mem` in production costs nothing extra there (`Batches: 16`, `Sort Method: external merge`, `temp read`/`temp written` in the plan). And PGlite's whole database fits in memory, while production's does not fit `shared_buffers`, so a statement that never reads from disk locally does in production (`shared read`).
+
+`scripts/prod-explain.ts` reads production's own answer:
+
+```bash
+POSTGRES_URL_NON_POOLING=... PG_SSL_CA="$(cat ca.pem)" \
+  node --import tsx scripts/prod-explain.ts --person lula --days 30 --out prod-explain.md
+```
+
+`--person` (required, a tracked id), `--other` (second person for `compare`/`compareFast`, default the first other id by name), `--days` (snapped onto 7/30/365, default 30), `--cases` (comma list of `scripts/bench/cases.ts`'s names plus `linksFast`, `compareFast`, `lensesFast`; an unknown name exits 1 listing the valid ones), `--top` (rows of `pg_stat_statements`, 1..100, default 25), `--out` (a file instead of stdout), `--force`. The connection is `POSTGRES_URL_NON_POOLING`, then `DATABASE_URL`, then `POSTGRES_URL`, and `PG_SSL_CA` is required exactly as for `pnpm push`. The report has one section per case, run twice in a row, `cold` then `warm`, each with execution and planning ms, shared hit/read and temp read/written buffers, the plan lines that mark a spill (`Batches:` above 1, an external sort, `Disk:`, `Rows Removed by Join Filter:`) and the full plan; then the `pg_stat_statements` top by total time, or "pg_stat_statements indisponível" when the extension is absent (that alone never fails the run). `cold` means the first execution of this run, not a flushed cache: a read-only session cannot flush shared buffers or the OS cache.
+
+It is read-only: each explain runs inside `begin transaction read only` ... `rollback`, and the client only ever sends that pair, `explain (analyze, buffers, format text)` and `select`; never a `set`, DDL, DML, `analyze` or `pg_stat_statements_reset()`. It exits 1 when a case fails (the section prints the error and the next case still runs). It refuses to run inside the build window, from minute 17 of UTC hours 0/6/12/18 until minute 2 of the next hour (the `17 */6` cron plus about 45 minutes), since a running build competes for the same memory and would skew every plan; `--force` overrides it. Never run it from CI, a schedule, `pnpm test` or `pnpm ingest`.
+
 ## Front-end bootstrapping
 
 The page at `/` is a sequence of independent figures (`src/ui/figures/*.ts`), each with its

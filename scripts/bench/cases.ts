@@ -9,12 +9,21 @@ export type Ctx = { person: Person; other: Person; ids: string[]; term: string; 
 export type ReadCase = { name: string; sql: (q: Queries, c: Ctx) => Sql }
 
 // The atlas sends the full kind set; rising keeps its own fixed three.
-const KINDS = 'word,hashtag,phrase,org'
+export const KINDS = 'word,hashtag,phrase,org'
 
-const scope = (w: number) => ({ days: w, source: 'all', domain: 'all', lean: 'all', country: 'br' as const })
+export const scope = (w: number) => ({ days: w, source: 'all', domain: 'all', lean: 'all', country: 'br' as const })
 const graphQ = (w: number, communities: boolean) => ({ ...scope(w), kind: KINDS, limit: 40, min: 2, sort: 'pmi' as const, communities })
 const docsQ = (w: number, term: string) => ({ ...scope(w), term, kind: term ? 'word' : KINDS, limit: 50, offset: 0, day: '', with: '' })
 const weekQ = (w: number) => ({ ...scope(w), kind: KINDS, limit: 8 })
+export const compareQ = (w: number) => ({ ...scope(w), kind: KINDS, limit: 40, bridges: false })
+export const lensesQ = (w: number) => ({
+  days: w,
+  kind: KINDS,
+  limit: 40,
+  bridges: false,
+  a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
+  b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
+})
 
 // One entry per statement a route sends, with the parameters the page sends, the window swapped in.
 export const readCases: ReadCase[] = [
@@ -32,19 +41,8 @@ export const readCases: ReadCase[] = [
   { name: 'testimonySummary', sql: (q, c) => q.testimonySummary(c.person, { days: c.window, source: 'all', method: 'stub', min: 3 }) },
   { name: 'termTestimony', sql: (q, c) => q.termTestimony(c.person, scope(c.window), 'stub', c.ids) },
   { name: 'candidates', sql: (q, c) => q.candidates({ days: c.window, min: 5, limit: 50 }) },
-  { name: 'compare', sql: (q, c) => q.compare(c.person, c.other, { ...scope(c.window), kind: KINDS, limit: 40, bridges: false }) },
-  {
-    name: 'lenses',
-    sql: (q, c) =>
-      q.lenses(c.person, {
-        days: c.window,
-        kind: KINDS,
-        limit: 40,
-        bridges: false,
-        a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
-        b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
-      }),
-  },
+  { name: 'compare', sql: (q, c) => q.compare(c.person, c.other, compareQ(c.window)) },
+  { name: 'lenses', sql: (q, c) => q.lenses(c.person, lensesQ(c.window)) },
   { name: 'week', sql: (q, c) => q.week(c.person, weekQ(c.window)) },
   { name: 'weekTestimony', sql: (q, c) => q.weekTestimony(c.person, weekQ(c.window), 'stub') },
   { name: 'comention', sql: (q, c) => q.comention({ days: c.window, source: 'all', lean: 'all', min: 3 }) },

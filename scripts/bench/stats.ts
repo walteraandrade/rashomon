@@ -68,20 +68,18 @@ export type Verdict = {
   candTimedOut: boolean
   ratio: number
   same: boolean | null
-  fast: boolean
 }
 
 const key = (c: Pick<Cell, 'scale' | 'case' | 'window'>) => `${c.scale}|${c.case}|${c.window}`
 
 const READS_AGGREGATES = ['graphFast']
 
-// A change is kept only when every comparable cell returns the same rows and every targeted cell
-// is at least `gain` faster (candidate median <= (1 - gain) x base median). A timed-out base median
-// is its timeout, a lower bound, so the ratio against it overstates the candidate's time, never
-// understates it; a timed-out candidate is never fast.
+// A change is kept only when every comparable cell returns the same rows and at least one targeted
+// cell exists. Speed is not judged here: PGlite keeps temp files in RAM and holds the whole database
+// in memory, so its timings do not carry to production; `ratio` is informational only.
 // `strict` also requires every base cell in the candidate (the full equivalence run); otherwise only
 // the targeted ones, so an iteration can measure just its own cases.
-export const compare = (base: Report, cand: Report, targets: string[], gain = 0.2, strict = false) => {
+export const compare = (base: Report, cand: Report, targets: string[], strict = false) => {
   const byKey = new Map(cand.cells.map((c) => [key(c), c]))
   const buildTimedOut = (r: Report, scale: string, window: number) =>
     r.cells.some((c) => c.case === 'aggregate' && c.scale === scale && c.window === window && c.timedOut)
@@ -93,16 +91,15 @@ export const compare = (base: Report, cand: Report, targets: string[], gain = 0.
     return [{
       scale: b.scale, case: b.case, window: b.window, baseMs: b.medianMs, candMs: c.medianMs,
       baseTimedOut: !!b.timedOut, candTimedOut: !!c.timedOut, ratio,
-      same: blind ? null : b.hash === c.hash, fast: !c.timedOut && ratio <= 1 - gain,
+      same: blind ? null : b.hash === c.hash,
     }]
   })
   const missing = base.cells.filter((b) => (strict || targets.includes(b.case)) && !byKey.has(key(b))).map(key)
   const targeted = verdicts.filter((v) => targets.includes(v.case))
   const diverged = verdicts.filter((v) => v.same === false)
   const unverified = verdicts.filter((v) => v.same === null)
-  const slow = targeted.filter((v) => !v.fast)
-  const kept = missing.length === 0 && diverged.length === 0 && targeted.length > 0 && slow.length === 0
-  return { kept, verdicts, targeted, diverged, unverified, slow, missing }
+  const kept = missing.length === 0 && diverged.length === 0 && targeted.length > 0
+  return { kept, verdicts, targeted, diverged, unverified, missing }
 }
 
 const ms = (x: number, timedOut: boolean) => `${timedOut ? '> ' : ''}${x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)}`

@@ -22,6 +22,11 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PG_SSL_CA: ${{ secrets.PG_SSL_CA }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      WARM_STORE_URL: ${{ vars.WARM_STORE_URL }}
+      # Must equal the Vercel project's value: it is part of the testimony `method`, which is part
+      # of every stored key. TESTIMONY_DTYPE stays unset on both sides (the default, q8).
+      TESTIMONY_REVISION: ${{ vars.TESTIMONY_REVISION }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -33,6 +38,11 @@ jobs:
       - run: test -n "$DATABASE_URL" || { echo 'DATABASE_URL secret is missing'; exit 1; }
       - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
       - run: pnpm aggregate --if-missing
+      # Fills the warm store when it is empty or older than the last build (the first deploy after
+      # it shipped, a wiped store); a deploy alone never invalidates it. Same guards as in ingest.yml.
+      - run: pnpm materialize --if-stale
+        continue-on-error: true
+        timeout-minutes: 15
       # Drops every stored /api object (the `api` tag, src/cache.ts) so the warm below refills
       # them from the origin: no request header bypasses Vercel's CDN, and a plain GET after an
       # ingest would only confirm the pre-ingest copy.

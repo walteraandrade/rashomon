@@ -29,6 +29,11 @@ jobs:
       BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
       GKG_SLOTS: 28
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      WARM_STORE_URL: ${{ vars.WARM_STORE_URL }}
+      # Must equal the Vercel project's value: it is part of the testimony `method`, which is part
+      # of every stored key. TESTIMONY_DTYPE stays unset on both sides (the default, q8).
+      TESTIMONY_REVISION: ${{ vars.TESTIMONY_REVISION }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -40,6 +45,12 @@ jobs:
       - run: test -n "$DATABASE_URL" || { echo 'DATABASE_URL secret is missing'; exit 1; }
       - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
       - run: pnpm ingest ${{ inputs.sources }}
+      # Writes the warm recortes' response bodies to the store outside Postgres (skips with exit 0
+      # when no token is set). continue-on-error and its own timeout: a failed or slow store step
+      # must not skip the cache purge and warm below.
+      - run: pnpm materialize
+        continue-on-error: true
+        timeout-minutes: 20
       # Read-only: table sizes and the database total, so a shrinking-disk trend shows up in
       # the run summary without opening a database client. continue-on-error: a transient
       # failure here must not skip the cache purge/warm below and leave production serving

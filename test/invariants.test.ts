@@ -539,3 +539,33 @@ describe('CLAUDE.md documents the persistence figure', () => {
     assert.doesNotMatch(md(), /sequence of nine `\.figure` cards/)
   })
 })
+
+describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
+  const relativeImports = (file: string) =>
+    importsOf(srcSource(file))
+      .filter((spec) => spec.startsWith('.'))
+      .map((spec) => join(dirname(file), spec.replace(/\.js$/, '.ts')).replace(/\\/g, '/'))
+
+  const closure = (entry: string) => {
+    const seen = new Set<string>()
+    const visit = (file: string) => {
+      if (seen.has(file)) return
+      seen.add(file)
+      for (const next of relativeImports(file)) visit(next)
+    }
+    visit(entry)
+    return [...seen]
+  }
+
+  it('only src/warmstore-blob.ts imports @vercel/blob', () => {
+    const importers = srcFiles().filter((file) => /from\s+['"]@vercel\/blob['"]/.test(srcSource(file)))
+    assert.deepEqual(importers, ['warmstore-blob.ts'])
+  })
+
+  it('nothing src/server.ts imports, transitively, is src/warmstore-blob.ts or imports @vercel/blob', () => {
+    const reached = closure('server.ts')
+    assert.ok(reached.includes('warmstore.ts'), 'the walk really reaches the store reader')
+    assert.ok(!reached.includes('warmstore-blob.ts'))
+    for (const file of reached) assert.doesNotMatch(srcSource(file), /@vercel\/blob/, `${file} must not reach @vercel/blob`)
+  })
+})

@@ -204,10 +204,10 @@ const explainBuild = async (mod: DbModule, aggregate: typeof import('../../src/a
   }
   try {
     await mod.runInTransaction(async () => {
-      const [delTerms, delScopes, universe, key, scopes] = aggregate.queries.window(w, persons)
-      for (const s of [delTerms, delScopes]) await mod.db.query(s.text, s.values)
+      const [workMem, delTerms, delScopes, universe, key, analyzeUniverse, scopes] = aggregate.queries.window(w, persons)
+      for (const s of [workMem, delTerms, delScopes]) await mod.db.query(s.text, s.values)
       await explain('universe', universe)
-      await mod.db.query(key.text, key.values)
+      for (const s of [key, analyzeUniverse]) await mod.db.query(s.text, s.values)
       await explain('scopes', scopes)
       for (const p of who) {
         await explain(`personTerms ${p.id}`, aggregate.queries.personTerms(w, p))

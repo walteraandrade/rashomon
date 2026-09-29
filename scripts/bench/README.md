@@ -1,7 +1,9 @@
 # SQL perf-verification harness
 
 Measures every statement a route sends, plus the aggregate build, on seeded databases, and
-decides whether a SQL change is kept.
+decides whether a SQL change is kept. It proves identical rows and plan shape; it is not a timing
+source. Production `EXPLAIN (ANALYZE, BUFFERS)` and `pg_stat_statements`, read with
+`scripts/prod-explain.ts` (see `docs/operations.md`, "Timing source"), are.
 
 ## Run
 
@@ -12,8 +14,9 @@ node --import tsx scripts/bench/compare.ts base.json cand.json --cases graph,com
 ```
 
 `compare.ts` exits 1 unless the candidate is **kept**: every cell (every case, scale and window,
-targeted or not) returns the same rows as the base, and every targeted cell's median is at least
-20% lower (`--gain`).
+targeted or not) returns the same rows as the base and at least one targeted cell exists. Speed is
+never a condition; the `new / base` ratio is printed for information only. `--strict` also requires
+every base cell in the candidate; `--all` lists every cell.
 
 | flag | default | meaning |
 | --- | --- | --- |
@@ -43,8 +46,10 @@ Output is JSON: `meta` (tree, revision, CPU, a `generate_series` calibration) an
 
 ## Caveats
 
-- PGlite (single-threaded WASM Postgres), not the production Supabase instance. Ratios carry over
-  better than absolute milliseconds; compare runs from the same machine only.
+- PGlite (single-threaded WASM Postgres), not the production Supabase instance. It keeps temp files
+  in RAM where production spills past `work_mem`, and its whole database fits in memory where
+  production's does not fit `shared_buffers`, so its milliseconds and ratios say nothing about
+  production. Read timing from `scripts/prod-explain.ts`.
 - `now()` is frozen at `seed.ts`'s `ANCHOR` by a `bench.now()` earlier in the search path, so two
   processes, or two trees, read identical windows. `current_date` (only `/attention`) cannot be
   frozen; that route is not measured.

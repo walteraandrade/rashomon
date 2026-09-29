@@ -37,6 +37,11 @@ const GATE = {
     hasApi: { type: 'boolean', description: 'true if the spec has API/SQL work' },
   },
 }
+const HEAD = {
+  type: 'object',
+  required: ['sha'],
+  properties: { sha: { type: 'string', pattern: '^[0-9a-f]{40}$', description: 'full 40-character output of git rev-parse HEAD in the worktree' } },
+}
 const TESTS = {
   type: 'object',
   required: ['failures', 'table'],
@@ -57,6 +62,7 @@ const VERDICT = {
         required: ['severity', 'area', 'location', 'fix'],
         properties: {
           severity: { type: 'string', enum: ['blocker', 'should', 'nit'] },
+          criterion: { type: 'integer', description: 'number of the acceptance criterion this gap is about; omit when it spans none' },
           area: { type: 'string', enum: ['api', 'ui', 'tests'] },
           location: { type: 'string' },
           fix: { type: 'string' },
@@ -87,11 +93,22 @@ const uiReport = gate.hasUi === false
 
 let tests = null
 let verdict = null
+const verifyRounds = []
 for (let round = 1; round <= 2; round++) {
   tests = await role('test-verifier', `${where}\n\n${specText}\n\nWrite acceptance tests from the spec's criteria, run pnpm test, commit them, and report.`,
     { label: `tests #${issue} r${round}`, phase: 'Verify', schema: TESTS })
-  verdict = await role('validator', `${where}\n\n${specText}\n\nBuilder reports:\n${apiReport}\n\n${uiReport}\n\nTest verifier report (${tests?.failures ?? '?'} failing):\n${tests?.table ?? 'none'}\n\nJudge the branch against the spec and CLAUDE.md.`,
+  const head = await role('researcher', `${where}\n\nRun \`git rev-parse HEAD\` inside the worktree and return the full 40-character sha, never an abbreviation.`,
+    { label: `head #${issue} r${round}`, phase: 'Verify', schema: HEAD, effort: 'low' })
+  const started = Date.now()
+  verdict = await role('validator', `${where}\n\n${specText}\n\nBuilder reports:\n${apiReport}\n\n${uiReport}\n\nTest verifier report (${tests?.failures ?? '?'} failing):\n${tests?.table ?? 'none'}\n\nJudge the branch against the spec and CLAUDE.md. On each gap set criterion to the number of the acceptance criterion it is about, and omit it when the gap spans none.`,
     { label: `validate #${issue} r${round}`, phase: 'Verify', schema: VERDICT })
+  verifyRounds.push({
+    round,
+    headSha: head?.sha ?? null,
+    verdict: verdict?.verdict ?? null,
+    ms: Date.now() - started,
+    gaps: (verdict?.gaps ?? []).map((g) => ({ criterion: g.criterion ?? null, severity: g.severity, area: g.area })),
+  })
   const blocking = (verdict?.gaps ?? []).filter((g) => g.severity !== 'nit')
   if (verdict?.verdict === 'approve' && (tests?.failures ?? 1) === 0) break
   if (round === 2) break
@@ -115,6 +132,6 @@ phase('Release')
 const MERGE_SUITES = `Merge the acceptance suite you wrote into the builder's suite covering the same criteria: keep every distinct assertion from both, delete the redundant file, run pnpm test and commit. Leave src/ and public/ untouched.`
 await role('test-verifier', `${where}\n\n${MERGE_SUITES}`, { label: `merge tests #${issue}`, phase: 'Release' })
 
-const pr = await role('release', `${where}\n\nPush ${branch} and open a pull request against ${base} that closes #${issue}. Title: ${gate.title}. Include in the body: what changed, the test verifier table, the validator verdict, screenshot paths from the UI report.\n\nTest table:\n${tests.table}\n\nValidator: approve with ${verdict.gaps.length} nits.\n\nUI report:\n${uiReport}`,
+const pr = await role('release', `${where}\n\nPush ${branch} and open a pull request against ${base} that closes #${issue}. Title: ${gate.title}. Include in the body: what changed, the test verifier table, the validator verdict, screenshot paths from the UI report.\n\nTest table:\n${tests.table}\n\nValidator: approve with ${verdict.gaps.length} nits.\n\nEnd the body with the validator rounds as one fenced block tagged factory-verify, this JSON and nothing else inside it:\n\n\`\`\`json factory-verify\n${JSON.stringify(verifyRounds, null, 2)}\n\`\`\`\n\nUI report:\n${uiReport}`,
   { label: `pr #${issue}`, effort: 'low' })
 return { issue, branch, worktree, status: 'pr-opened', pr }

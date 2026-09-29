@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import personsSeed from '../seed.json' with { type: 'json' }
@@ -8,6 +8,7 @@ import { agendaFor, attentionFor, candidatesFor, comentionFor, compareBridgesFor
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
+import { eligibleKey, lookup, warmStoreFromEnv, type WarmReader, type WarmRoute } from './warmstore.js'
 import {
   parseAgendaQuery,
   parseBridgeIds,
@@ -84,8 +85,26 @@ app.use('/api/people/:id/*', async (c, next) => {
   await next()
 })
 
-app.get('/api/people/:id/graph', async (c) => c.json(await graphFor(c.get('person'), parseQuery(c.req.query()))))
-app.get('/api/people/:id/sources', async (c) => c.json(await sourcesFor(c.get('person'), parseQuery(c.req.query()))))
+// Warm recortes are answered from a store outside Postgres (src/materialize.ts writes it) when its
+// entry was built against the scope's current built_at; any miss runs the live statement, unless
+// the caller asked for the store alone (`pnpm warm`), which turns it into a 503.
+let warmStore: WarmReader | null = warmStoreFromEnv(process.env)
+export const setWarmStore = (store: WarmReader | null) => {
+  warmStore = store
+}
+
+const warmed = async <Q extends { days: number }>(c: Context<{ Variables: { person: Person } }>, route: WarmRoute, q: Q, live: (person: Person, q: Q) => Promise<unknown>) => {
+  const key = warmStore ? eligibleKey(route, q) : null
+  if (!warmStore || !key) return c.json(await live(c.get('person'), q))
+  const found = await lookup(warmStore, { personId: c.get('person').id, route, key, days: q.days })
+  c.header('x-warm-store', found.state)
+  if (found.body !== null) return c.body(found.body, 200, { 'content-type': 'application/json' })
+  if (c.req.header('x-warm-store-only') === '1') return c.json({ error: 'warm store miss' }, 503)
+  return c.json(await live(c.get('person'), q))
+}
+
+app.get('/api/people/:id/graph', (c) => warmed(c, 'graph', parseQuery(c.req.query()), (p, q) => graphFor(p, q)))
+app.get('/api/people/:id/sources', (c) => warmed(c, 'sources', parseQuery(c.req.query()), sourcesFor))
 app.get('/api/people/:id/docs', async (c) => {
   const q = parseDocsQuery(c.req.query(), c.req.param('id'))
   // Existence against the live persons table, the /api/compare pattern below, not seed.json.
@@ -98,7 +117,7 @@ app.get('/api/people/:id/docs', async (c) => {
 app.get('/api/people/:id/timeline', async (c) => c.json(await timelineFor(c.get('person'), parseTimelineQuery(c.req.query()))))
 app.get('/api/people/:id/week', async (c) => c.json(await weekFor(c.get('person'), parseWeekQuery(c.req.query()))))
 app.get('/api/people/:id/rising', async (c) => c.json(await risingFor(c.get('person'), parseRisingQuery(c.req.query()))))
-app.get('/api/people/:id/testimony', async (c) => c.json(await testimonyFor(c.get('person'), parseTestimonyQuery(c.req.query()))))
+app.get('/api/people/:id/testimony', (c) => warmed(c, 'testimony', parseTestimonyQuery(c.req.query()), testimonyFor))
 app.get('/api/people/:id/lenses', async (c) => c.json(await lensesFor(c.get('person'), parseLensesQuery(c.req.query()))))
 app.get('/api/people/:id/lenses/bridges', async (c) =>
   c.json(await lensBridgesFor(c.get('person'), parseLensesQuery(c.req.query()), parseBridgeIds(c.req.query('ids')))),

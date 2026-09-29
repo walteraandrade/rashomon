@@ -131,7 +131,7 @@ type SourceRow = {
   field: number | null
   neighbors: { domain: string; similarity: number }[]
 }
-type LinkRow = { s: string; t: string; count: number }
+export type LinkRow = { s: string; t: string; count: number }
 type Stats = { docs: number; about: number }
 type GraphAggregates = Stats & { nodes: TermRow[]; signature: SignatureRow[] }
 type DocRow = { id: number; source: string; domain: string | null; published_at: Date; text: string; uri: string; tone: number | null }
@@ -926,11 +926,13 @@ const linksFor = async (person: Person, q: GraphQuery, ids: string[], fastNodes:
   return run<LinkRow>(linksQuery(person, q, ids))
 }
 
-export const graphFor = async (person: Person, q: GraphQuery) => {
+// `linksOf` replaces the links statements with edges the caller already holds (the warm-store
+// materialiser slices the build's own co-occurrence edges); absent, the links run as before.
+export const graphFor = async (person: Person, q: GraphQuery, linksOf?: (ids: string[]) => LinkRow[] | Promise<LinkRow[]>) => {
   const { outlets } = resolveScope(q.domain, q.lean)
   const { data: { docs, about, nodes, signature }, fastNodes } = await graphAggregates(person, q)
   const ids = nodes.map((t) => `${t.kind}:${t.term}`)
-  const links = ids.length ? await linksFor(person, q, ids, fastNodes) : { rows: [] }
+  const links = ids.length ? (linksOf ? { rows: await linksOf(ids) } : await linksFor(person, q, ids, fastNodes)) : { rows: [] }
   const testimony = q.method ? (await run<TermTestimonyRow>(termTestimonyQuery(person, q, q.method, ids))).rows[0] : null
   const perTerm = new Map(testimony?.terms.map((t) => [t.id, { score: t.score, n: t.n }]) ?? [])
   return {

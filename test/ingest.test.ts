@@ -464,3 +464,61 @@ describe('ingest acceptance, checked against the rows written and the calls made
     assert.match(docsText, /entrypoint/i, 'no page documents that HttpClient/SqlClient layers are provided at the entrypoint rather than module-level')
   })
 })
+
+describe('defaultSources runs gkg before RSS collectors (issue #234)', () => {
+  after(reseed)
+
+  const uri = 'https://ingest-test.example/shared-234'
+  const gkgDoc: RawDoc = {
+    source: 'gkg',
+    uri,
+    text: 'Lula assina convenio em cerimonia oficial',
+    publishedAt: new Date().toISOString(),
+    domain: 'ingest-test.example',
+    tone: 0.3,
+    extraTerms: [{ term: 'petrobras', kind: 'org' }],
+  }
+  const rssDoc: RawDoc = {
+    ...doc(uri, 'Lula assina convenio em cerimonia oficial. O presidente detalhou o acordo firmado com o setor produtivo durante a cerimonia realizada na capital.'),
+    domain: 'ingest-test.example',
+  }
+  const stubs = { gkg: () => Effect.succeed([gkgDoc]), rss: () => Effect.succeed([rssDoc]) }
+  const clear = () => db.exec(`delete from docs where uri = '${uri}'`)
+  const stored = async () => {
+    const row = (await db.query<{ id: number; source: string; text: string; tone: number | null }>(`select id, source, text, tone from docs where uri = $1`, [uri])).rows[0]
+    const terms = (await db.query<{ term: string; kind: string }>(`select term, kind from doc_terms where doc_id = $1`, [row.id])).rows
+    return { row, terms }
+  }
+
+  it('orders gkg ahead of rss, juridico, oficial and nicho and keeps bluesky last', () => {
+    const at = (s: Source) => defaultSources.indexOf(s)
+    assert.ok(at('gkg') >= 0)
+    for (const s of ['rss', 'juridico', 'oficial', 'nicho'] as const) assert.ok(at('gkg') < at(s), `gkg must run before ${s}`)
+    assert.equal(defaultSources[defaultSources.length - 1], 'bluesky')
+  })
+
+  it('a default-order ingest stores a shared article as gkg with its org terms and the rss body', async () => {
+    await clear()
+    const names = defaultSources.filter((s) => s === 'gkg' || s === 'rss')
+    const layer = await testLayer()
+    const { exit } = await Effect.runPromise(run(ingest(persons, names, { collectors: stubs }), layer))
+    assert.ok(Exit.isSuccess(exit))
+    const { row, terms } = await stored()
+    assert.equal(row.source, 'gkg')
+    assert.equal(row.text, rssDoc.text)
+    assert.equal(row.tone, 0.3)
+    assert.ok(terms.some((t) => t.term === 'petrobras' && t.kind === 'org'))
+    assert.ok(terms.some((t) => t.term === 'acordo'), 'a word found only in the rss text must be derived')
+  })
+
+  it('an explicit rss-then-gkg ingest leaves the row rss with no org terms and null tone', async () => {
+    await clear()
+    const layer = await testLayer()
+    const { exit } = await Effect.runPromise(run(ingest(persons, ['rss', 'gkg'], { collectors: stubs }), layer))
+    assert.ok(Exit.isSuccess(exit))
+    const { row, terms } = await stored()
+    assert.equal(row.source, 'rss')
+    assert.equal(row.tone, null)
+    assert.ok(!terms.some((t) => t.kind === 'org'))
+  })
+})

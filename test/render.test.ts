@@ -2111,6 +2111,9 @@ describe('paintPersistence / paintPersistenceLoading / paintPersistenceError, fi
       for (const b of buttons) {
         assert.match(b.attrs, /\bdata-term="anistia"/)
         assert.match(b.attrs, /\bdata-kind="word"/)
+        const label = /\baria-label="([^"]*)"/.exec(b.attrs)![1]
+        assert.match(label, /semana de \d+ (de \S+ )?a \d+ de \S+: \d+ documentos?/)
+        assert.doesNotMatch(label, /\d{4}-\d{2}-\d{2}/)
       }
       assert.deepEqual(
         buttons.map((b) => /\bdata-week="([^"]*)"/.exec(b.attrs)![1]),

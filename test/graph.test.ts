@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { before, after, describe, it } from 'node:test'
+import { before, after, beforeEach, describe, it } from 'node:test'
 import { buildGraphAggregates, queries as aggregateQueries } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
@@ -13,6 +13,8 @@ import {
   docsWhereSql,
   graphFor,
   lensesFor,
+  persistenceFor,
+  persistenceStats,
   precomputable,
   queries,
   risingFor,
@@ -35,7 +37,7 @@ import {
   type WeekQuery,
 } from '../src/graph.js'
 import { resolveScope } from '../src/outlets.js'
-import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query.js'
+import { KINDS, brtDate, brtMidnightUtc, DAYS, parseDocsQuery, parsePersistenceQuery, parseQuery, parseSourceList, PERSISTENCE_SINCE } from '../src/query.js'
 import { inTransaction, insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
 import { docPageText, docsText } from './docs.js'
@@ -2498,6 +2500,8 @@ describe('statements render the same text the routes run (issue #131)', () => {
       weekTestimony: queries.weekTestimony(lula, { ...scope, limit: 8 }, 'kikori'),
       attention: queries.attention(lula, { days: 14 }),
       comention: queries.comention({ days: scope.days, source: scope.source, lean: scope.lean, min: 1 }),
+      persistence: queries.persistence(lula, '2026-01-05'),
+      persistenceFirstWeek: queries.persistenceFirstWeek(lula),
     }
     for (const name of Object.keys(statements) as (keyof typeof statements)[]) {
       assert.equal(built[name].text, statements[name], name)
@@ -3800,5 +3804,237 @@ describe('term ids are internal (issue #252)', () => {
     ]
     assert.ok(texts.some((t) => /order by/.test(t)))
     for (const text of texts) for (const [, clause] of text.matchAll(/order by\s*((?:[^\n]*,[ \t]*\n)*[^\n]*)/g)) assert.doesNotMatch(clause, /\bterm_id\b|\bv\.id\b/, clause)
+  })
+})
+
+describe('persistenceStats streak cases (issue #215)', () => {
+  it('an empty current week does not end a streak', () => {
+    assert.equal(persistenceStats([3, 4, null]).streak, 2)
+  })
+  it('an all-null series has no streak', () => {
+    assert.equal(persistenceStats([null, null, null]).streak, 0)
+  })
+  it('a gap ends the streak', () => {
+    assert.equal(persistenceStats([1, null, 2, 3, 4]).streak, 3)
+  })
+  it('a fully non-null series of length n gives n', () => {
+    for (const n of [1, 2, 5, 12]) assert.equal(persistenceStats(Array.from({ length: n }, () => 2)).streak, n)
+  })
+  it('the streak counts back from the week before when the current one is null', () => {
+    assert.equal(persistenceStats([2, 2, null, 3, null]).streak, 1)
+    assert.equal(persistenceStats([2, null, null]).streak, 0)
+  })
+})
+
+describe('persistenceStats half_life cases (issue #215)', () => {
+  it('measures from the peak to the first later week at or under half of it', () => {
+    assert.equal(persistenceStats([2, 8, 3, 1]).half_life, 1)
+    assert.equal(persistenceStats([2, 8, 6, 5, 4, 1]).half_life, 3)
+  })
+  it('a null week counts as a fall', () => {
+    assert.equal(persistenceStats([8, null, 5, 1]).half_life, 1)
+  })
+  it('the most recent of tied peaks is the peak', () => {
+    assert.equal(persistenceStats([2, 8, 8, 3, 1]).half_life, 1)
+  })
+  it('is null while the peak has not halved, or is the last complete week', () => {
+    assert.equal(persistenceStats([2, 4, 6, 7]).half_life, null)
+    assert.equal(persistenceStats([8, 7, 6, 5]).half_life, null)
+  })
+  it('is null with fewer than two complete weeks, or with none non-null', () => {
+    assert.equal(persistenceStats([5, 1]).half_life, null)
+    assert.equal(persistenceStats([5]).half_life, null)
+    assert.equal(persistenceStats([]).half_life, null)
+    assert.equal(persistenceStats([null, null, 3]).half_life, null)
+  })
+  it('the last, in-progress entry never counts as a fall', () => {
+    assert.equal(persistenceStats([2, 8, 6, 1]).half_life, null)
+    assert.equal(persistenceStats([2, 8, 6, null]).half_life, null)
+  })
+})
+
+describe('persistenceFor (issue #215)', () => {
+  const now = new Date('2026-10-14T15:00:00Z')
+  const cur = '2026-10-12'
+  const week = (n: number) => {
+    const d = new Date(`${cur}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() - 7 * n)
+    return d.toISOString().slice(0, 10)
+  }
+  const put = (personId: string, term: string, kind: string, wk: string, count: number) =>
+    db.query(`insert into term_weeks (person_id, term, kind, week, count, c_t) values ($1, $2, $3, $4, $5, $6)`, [personId, term, kind, wk, count, count + 5])
+
+  before(seed)
+  beforeEach(() => db.exec(`delete from term_weeks`))
+  after(async () => {
+    await db.exec(`delete from term_weeks`)
+    await reseed()
+  })
+
+  it('materialises exactly `weeks` Mondays, oldest first, ending at the current BRT Monday; a missing week is null, never 0', async () => {
+    await put('lula', 'anistia', 'word', week(1), 4)
+    await put('lula', 'anistia', 'word', week(0), 6)
+    for (const weeks of [4, 12, 26]) {
+      const out = await persistenceFor(lula, parsePersistenceQuery({ weeks: String(weeks) }), now)
+      assert.equal(out.weeks, weeks)
+      const [t] = out.terms
+      assert.equal(t.series.length, weeks)
+      assert.equal(t.series.at(-1)!.week, cur)
+      assert.deepEqual(t.series.map((x) => x.week), Array.from({ length: weeks }, (_, i) => week(weeks - 1 - i)))
+      assert.deepEqual(t.series.slice(-2).map((x) => x.count), [4, 6])
+      assert.ok(t.series.slice(0, -2).every((x) => x.count === null))
+    }
+  })
+
+  it('answers since, horizon and the person\'s earliest stored week, even one older than the window', async () => {
+    await put('lula', 'anistia', 'word', week(0), 6)
+    await put('lula', 'antigo', 'word', week(40), 3)
+    const out = await persistenceFor(lula, parsePersistenceQuery({ weeks: '4' }), now)
+    assert.equal(out.since, PERSISTENCE_SINCE)
+    assert.equal(out.since, '2026-09-09')
+    assert.equal(out.horizon, Math.max(...DAYS))
+    assert.equal(out.first_week, week(40))
+    assert.deepEqual(out.terms.map((t) => t.term), ['anistia'], 'a term with no week inside the window is left out')
+  })
+
+  it('a person with no rows answers empty terms and a null first_week', async () => {
+    await put('lula', 'anistia', 'word', week(0), 6)
+    const out = await persistenceFor(tarcisio, parsePersistenceQuery({}), now)
+    assert.deepEqual(out.terms, [])
+    assert.equal(out.first_week, null)
+    assert.equal(out.weeks, 12)
+  })
+
+  it('computes streak and half_life per term', async () => {
+    for (const [i, c] of [[4, 2], [3, 8], [2, 3], [1, 1]] as const) await put('lula', 'pico', 'word', week(i), c)
+    await put('lula', 'pico', 'word', week(0), 1)
+    const out = await persistenceFor(lula, parsePersistenceQuery({ weeks: '12' }), now)
+    assert.equal(out.terms[0].streak, 5)
+    assert.equal(out.terms[0].half_life, 1)
+  })
+
+  it('orders by streak, non-null weeks, total count, then term and kind, and cuts at limit', async () => {
+    // streak 2, 2 weeks, total 9
+    await put('lula', 'delta', 'word', week(1), 4)
+    await put('lula', 'delta', 'word', week(0), 5)
+    // streak 2, 2 weeks, total 4: after delta
+    await put('lula', 'charlie', 'word', week(1), 2)
+    await put('lula', 'charlie', 'word', week(0), 2)
+    // streak 2, same total as charlie: tie broken by term
+    await put('lula', 'bravo', 'word', week(1), 2)
+    await put('lula', 'bravo', 'word', week(0), 2)
+    await put('lula', 'bravo', 'hashtag', week(1), 2)
+    await put('lula', 'bravo', 'hashtag', week(0), 2)
+    // streak 1 but more weeks present: after every streak-2 term
+    await put('lula', 'alpha', 'word', week(5), 9)
+    await put('lula', 'alpha', 'word', week(3), 9)
+    await put('lula', 'alpha', 'word', week(0), 9)
+    const all = await persistenceFor(lula, parsePersistenceQuery({ limit: '40' }), now)
+    assert.deepEqual(all.terms.map((t) => `${t.kind}:${t.term}`), ['word:delta', 'hashtag:bravo', 'word:bravo', 'word:charlie', 'word:alpha'])
+    const cut = await persistenceFor(lula, parsePersistenceQuery({ limit: '1' }), now)
+    assert.equal(cut.terms.length, 1)
+    assert.equal(cut.terms[0].term, 'delta')
+  })
+
+  it('a person with fewer terms than limit gets fewer rows, never padded', async () => {
+    await put('lula', 'anistia', 'word', week(0), 6)
+    const out = await persistenceFor(lula, parsePersistenceQuery({ limit: '60' }), now)
+    assert.equal(out.terms.length, 1)
+  })
+})
+
+describe('docsFor with week (issue #215)', () => {
+  const HOUR = 3_600_000
+  const word = 'semanafronteira'
+  const shift = (date: string, n: number) => {
+    const d = new Date(`${date}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+  const mondayOf = (date: string) => shift(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7))
+  const today = brtDate(new Date())
+  const cur = mondayOf(today)
+  const prev = shift(cur, -7)
+  let seq = 0
+  const put = (at: Date) =>
+    insertDocP({ source: 'rss', uri: `https://week.test/${seq++}`, text: `Lula ${word}`, publishedAt: at.toISOString(), domain: 'week.test' }, persons)
+  const request = (extra: Partial<DocsQuery>) => ({ ...docsBase, term: word, ...extra })
+
+  before(async () => {
+    await seed()
+    await put(new Date(brtMidnightUtc(prev).getTime() - HOUR))
+    await put(new Date(brtMidnightUtc(prev).getTime() + HOUR))
+    await put(new Date(brtMidnightUtc(cur).getTime() - HOUR))
+    await put(new Date(brtMidnightUtc(cur).getTime() + HOUR))
+    await put(new Date(brtMidnightUtc(shift(today, 1)).getTime() + HOUR))
+  })
+  after(async () => {
+    await db.exec(`delete from docs where uri like 'https://week.test/%'`)
+    await reseed()
+  })
+
+  const expectedIn = async (from: string, toExclusive: string) =>
+    (await db.query<{ uri: string }>(
+      `select d.uri from docs d join doc_persons dp on dp.doc_id = d.id
+       where dp.person_id = 'lula' and d.uri like 'https://week.test/%'
+         and least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) >= $1::date
+         and least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) < $2::date
+       order by d.uri`,
+      [from, toExclusive],
+    )).rows.map((r) => r.uri)
+  const uris = (docs: { uri: string }[]) => docs.map((d) => d.uri).sort()
+
+  it('week=<Wednesday> returns exactly the docs of that Monday-to-Sunday BRT week, one hour inside and outside each end', async () => {
+    const wed = shift(prev, 2)
+    const q = parseDocsQuery({ term: word, week: wed, days: '30' }, 'lula')
+    assert.equal(q.week, prev)
+    const { total, docs } = await docsFor(lula, q)
+    const expected = await expectedIn(prev, cur)
+    assert.equal(expected.length, 2)
+    assert.deepEqual(uris(docs), expected)
+    assert.equal(total, expected.length)
+  })
+
+  it('a doc dated after the end of today counts in the current week and not in the previous one', async () => {
+    const inCur = await docsFor(lula, request({ week: cur }))
+    const inPrev = await docsFor(lula, request({ week: prev }))
+    const future = `https://week.test/4`
+    assert.ok(inCur.docs.some((d) => d.uri === future))
+    assert.ok(!inPrev.docs.some((d) => d.uri === future))
+    assert.equal(inCur.total, (await expectedIn(cur, shift(cur, 7))).length)
+    assert.equal(inCur.total, 2)
+  })
+
+  it('week omitted, undefined or empty adds no predicate and no placeholder', () => {
+    const base = queries.docs(lula, docsBase)
+    for (const week of [undefined, '']) {
+      assert.equal(queries.docs(lula, { ...docsBase, week }).text, base.text)
+      assert.equal(queries.docsCount(lula, { ...docsBase, week }).text, queries.docsCount(lula, docsBase).text)
+      assert.deepEqual(queries.docs(lula, { ...docsBase, week }).values, base.values)
+    }
+    assert.doesNotMatch(statements.docs, /\+ 7/)
+    assert.doesNotMatch(statements.docsCount, /\+ 7/)
+    assert.match(queries.docs(lula, { ...docsBase, week: cur }).text, /\+ 7/)
+  })
+
+  it('week narrows inside days: a week only partly inside the window returns its inside part', async () => {
+    const q = request({ week: cur, days: 7 })
+    const { total } = await docsFor(lula, q)
+    assert.ok(total >= 1)
+  })
+})
+
+describe('persistence and week= are documented (issue #215)', () => {
+  it('states the route, its params and fields, the gap rule, streak, half_life and the week= precedence', () => {
+    assert.match(docsText, /\/api\/people\/:id\/persistence/)
+    assert.match(docsText, /`weeks`[^\n]*(4, 12|4\/12)[^\n]*26|weeks=[^\n]*26/)
+    assert.match(docsText, /first_week/)
+    assert.match(docsText, /horizon/)
+    assert.match(docsText, /since/)
+    assert.match(docsText, /`?null`?[^\n]*(never|not)[^\n]*`?0`?|never `?0`?/i)
+    assert.match(docsText, /streak/)
+    assert.match(docsText, /half_life/)
+    assert.match(docsText, /week=<YYYY-MM-DD>|`week=`|week=/)
+    assert.match(docsText, /`day` (wins|takes precedence)|day[^\n]*(wins|precedence)/i)
   })
 })

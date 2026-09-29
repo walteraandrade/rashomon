@@ -2,7 +2,7 @@ import { betweenness } from './communities.js'
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
-import { BRIDGE_NODES, DAYS, KINDS } from './query.js'
+import { addDays, BRIDGE_NODES, brtDate, DAYS, KINDS, mondayOf, PERSISTENCE_SINCE } from './query.js'
 import { countryFilter, isName, outletDomain, pmiLog2, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
@@ -37,6 +37,7 @@ export type DocsQuery = {
   offset: number
   day: string
   with: string // other tracked person's id, or '' for no filter; see docsWithPerson
+  week?: string // a BRT Monday, or ''/absent for no filter; see docsWeek
 }
 
 export type RisingQuery = {
@@ -113,6 +114,9 @@ export type WeekQuery = {
   // `testimony=1` adds a per-bucket kikori mean; absent by default, mirroring GraphQuery.method.
   method?: string | null
 }
+
+// One fixed scope (all sources, word/hashtag/phrase, country=br): term_weeks stores nothing else.
+export type PersistenceQuery = { weeks: number; limit: number }
 
 // No scope: pageviews is a curiosity signal, outside the text pipeline's filters.
 export type AttentionQuery = { days: number }
@@ -541,12 +545,21 @@ const docsDay = (day: string) =>
 const docsWithPerson = (withId: string) =>
   withId === '' ? sql`` : sql` and exists (select 1 from doc_persons dp2 where dp2.doc_id = d.id and dp2.person_id = ${withId})`
 
+// The week's seven BRT calendar days, folded the way docsDay folds them. Renders nothing for
+// ''/undefined so every caller that predates it keeps its text and its $n numbering; the value is
+// bound twice, hence the casts.
+const docsWeek = (week?: string) =>
+  !week
+    ? sql``
+    : sql` and least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) >= ${week}::date
+    and least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) < ${week}::date + 7`
+
 const docsQuery = (person: Person, q: DocsQuery) => sql`
   with ${scopeCte(person, q)}
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
   where ${docsWhere(q.term, q.kind)}
-    and ${docsDay(q.day)}${docsWithPerson(q.with)}
+    and ${docsDay(q.day)}${docsWithPerson(q.with)}${docsWeek(q.week)}
   order by d.published_at desc, d.id desc
   limit ${q.limit} offset ${q.offset}`
 
@@ -555,7 +568,7 @@ const docsCountQuery = (person: Person, q: DocsQuery) => sql`
   select count(*)::int as total
   from docs d join about a on a.doc_id = d.id
   where ${docsWhere(q.term, q.kind)}
-    and ${docsDay(q.day)}${docsWithPerson(q.with)}`
+    and ${docsDay(q.day)}${docsWithPerson(q.with)}${docsWeek(q.week)}`
 
 export const docsFor = async (person: Person, q: DocsQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
@@ -887,6 +900,63 @@ const attentionQuery = (person: Person, q: AttentionQuery) => sql`
 export const attentionFor = async (person: Person, q: AttentionQuery): Promise<{ days: number; series: AttentionRow[] }> => {
   const { rows } = await run<AttentionRow>(attentionQuery(person, q))
   return { days: q.days, series: rows.map((r) => ({ day: r.day, views: r.views })) }
+}
+
+const persistenceQuery = (person: Person, oldestWeek: string) => sql`
+  select term, kind, week::text as week, count from term_weeks
+  where person_id = ${person.id} and week >= ${oldestWeek}::date
+  order by term, kind, week`
+
+const persistenceFirstWeek = (person: Person) => sql`select min(week)::text as first_week from term_weeks where person_id = ${person.id}`
+
+// Consecutive non-null weeks back from the newest, or from the week before it when the newest
+// (in progress) is empty. Half-life reads complete weeks only: the weeks from the peak (highest
+// count, latest on a tie) to the first later week at or under half of it, a null counting as a fall.
+export const persistenceStats = (counts: (number | null)[]): { streak: number; half_life: number | null } => {
+  const start = counts.length && counts[counts.length - 1] !== null ? counts.length - 1 : counts.length - 2
+  let streak = 0
+  for (let i = start; i >= 0 && counts[i] !== null; i--) streak++
+  const complete = counts.slice(0, -1)
+  const peak = complete.reduce<number>((best, c, i) => (c !== null && c >= (complete[best] ?? 0) ? i : best), -1)
+  if (complete.length < 2 || peak < 0) return { streak, half_life: null }
+  const half = (complete[peak] ?? 0) / 2
+  const fall = complete.findIndex((c, i) => i > peak && (c ?? 0) <= half)
+  return { streak, half_life: fall < 0 ? null : fall - peak }
+}
+
+type PersistenceRow = { term: string; kind: string; week: string; count: number }
+
+export const persistenceFor = async (person: Person, q: PersistenceQuery, now = new Date()) => {
+  const cur = mondayOf(brtDate(now))
+  const slots = Array.from({ length: q.weeks }, (_, i) => addDays(cur, -7 * (q.weeks - 1 - i)))
+  const [rows, first] = await Promise.all([
+    run<PersistenceRow>(persistenceQuery(person, slots[0])),
+    run<{ first_week: string | null }>(persistenceFirstWeek(person)),
+  ])
+  const byTerm = new Map<string, { term: string; kind: string; counts: Map<string, number> }>()
+  for (const r of rows.rows) {
+    const key = `${r.kind}:${r.term}`
+    if (!byTerm.has(key)) byTerm.set(key, { term: r.term, kind: r.kind, counts: new Map() })
+    byTerm.get(key)!.counts.set(r.week, r.count)
+  }
+  const terms = [...byTerm.values()]
+    .map(({ term, kind, counts }) => {
+      const series = slots.map((week) => ({ week, count: counts.get(week) ?? null }))
+      const values = series.map((x) => x.count)
+      return {
+        term,
+        kind,
+        series,
+        ...persistenceStats(values),
+        weeks_present: values.filter((c) => c !== null).length,
+        total: values.reduce<number>((sum, c) => sum + (c ?? 0), 0),
+      }
+    })
+    .filter((t) => t.weeks_present > 0)
+    .sort((a, b) => b.streak - a.streak || b.weeks_present - a.weeks_present || b.total - a.total || (a.term < b.term ? -1 : a.term > b.term ? 1 : 0) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0))
+    .slice(0, q.limit)
+    .map(({ term, kind, series, streak, half_life }) => ({ term, kind, series, streak, half_life }))
+  return { weeks: q.weeks, since: PERSISTENCE_SINCE, first_week: first.rows[0]?.first_week ?? null, horizon: Math.max(...DAYS), terms }
 }
 
 export const risingFor = async (person: Person, q: RisingQuery) => {
@@ -1476,6 +1546,8 @@ export const queries = {
   weekTestimony: weekTestimonyQuery,
   attention: attentionQuery,
   comention: comentionQuery,
+  persistence: persistenceQuery,
+  persistenceFirstWeek,
 } as const
 
 // The text each builder emits. Numbering follows statement shape, not values, so what a
@@ -1514,4 +1586,6 @@ export const statements = {
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
   attention: queries.attention(samplePerson, { days: 30 }).text,
   comention: queries.comention(sampleComention).text,
+  persistence: queries.persistence(samplePerson, '2026-09-07').text,
+  persistenceFirstWeek: queries.persistenceFirstWeek(samplePerson).text,
 } as const

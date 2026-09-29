@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { after, before, describe, it } from 'node:test'
+import { after, before, beforeEach, describe, it } from 'node:test'
 import { db } from '../src/db.js'
 import { agendaFor, comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
-import { parseAgendaQuery, parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
+import { addDays, brtDate, brtMidnightUtc, DAYS, mondayOf, parseAgendaQuery, parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
 import { insertDocP, upsertPersonsP } from '../src/store.js'
@@ -833,5 +833,122 @@ describe('GET /api/people/:id/graph?kind=org (issue #209)', () => {
     assert.ok(body.nodes.length > 0, 'the org doc must surface at least one org node')
     for (const node of body.nodes) assert.equal(node.kind, 'org')
     assert.equal(body.nodes.some((n) => n.term === 'lula'), false, "the person's own name is dropped even as an org term")
+  })
+})
+
+describe('GET /api/people/:id/persistence (issue #215)', () => {
+  const cur = mondayOf(brtDate())
+  type Body = { weeks: number; since: string; first_week: string | null; horizon: number; terms: { term: string; kind: string; series: { week: string; count: number | null }[]; streak: number; half_life: number | null }[] }
+  const get = async (qs = '', id = 'lula') => app.request(`/api/people/${id}/persistence${qs}`)
+
+  before(seed)
+  beforeEach(() => db.exec(`delete from term_weeks`))
+  after(async () => {
+    await db.exec(`delete from term_weeks`)
+    await reseed()
+  })
+
+  it('defaults to twelve weeks ending at the current BRT Monday, with since and horizon', async () => {
+    await db.query(`insert into term_weeks (person_id, term, kind, week, count, c_t) values ('lula', 'anistia', 'word', $1, 4, 9), ('lula', 'anistia', 'word', $2, 6, 9)`, [addDays(cur, -7), cur])
+    const res = await get()
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Body
+    assert.equal(body.weeks, 12)
+    assert.equal(body.since, '2026-09-09')
+    assert.equal(body.horizon, Math.max(...DAYS))
+    assert.equal(body.first_week, addDays(cur, -7))
+    assert.equal(body.terms.length, 1)
+    const [t] = body.terms
+    assert.equal(t.series.length, 12)
+    assert.equal(t.series.at(-1)!.week, cur)
+    assert.deepEqual(t.series.slice(-3).map((x) => x.count), [null, 4, 6])
+    assert.equal(t.streak, 2)
+    assert.equal(t.half_life, null)
+  })
+
+  it('snaps weeks onto 4, 12, 26 and limit onto LIMITS, and ignores unknown keys', async () => {
+    await db.query(`insert into term_weeks (person_id, term, kind, week, count, c_t) values ('lula', 'anistia', 'word', $1, 4, 9)`, [cur])
+    for (const [qs, weeks] of [['?weeks=8', 4], ['?weeks=19', 12], ['?weeks=abc', 12], ['?weeks=26&days=7&source=rss', 26]] as const) {
+      const body = (await (await get(qs)).json()) as Body
+      assert.equal(body.weeks, weeks, qs)
+      assert.equal(body.terms[0].series.length, weeks, qs)
+    }
+  })
+
+  it('a known person with no rows answers 200 with empty terms and a null first_week; an unknown person 404s', async () => {
+    const res = await get('', 'tarcisio')
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as Body
+    assert.deepEqual(body.terms, [])
+    assert.equal(body.first_week, null)
+    const missing = await get('', 'nobody')
+    assert.equal(missing.status, 404)
+    assert.deepEqual(await missing.json(), { error: 'person not found' })
+  })
+})
+
+describe('GET /api/people/:id/docs?week= (issue #215)', () => {
+  const HOUR = 3_600_000
+  const word = 'semanaservidor'
+  const today = brtDate()
+  const cur = mondayOf(today)
+  const prev = addDays(cur, -7)
+  const wed = addDays(prev, 2)
+  let seq = 0
+  const put = (at: Date) =>
+    insertDocP({ source: 'rss', uri: `https://weekroute.test/${seq++}`, text: `Lula ${word}`, publishedAt: at.toISOString(), domain: 'weekroute.test' }, persons)
+  type Body = { total: number; docs: { uri: string; published_at: string }[] }
+  const get = async (qs: string) => {
+    const res = await app.request(`/api/people/lula/docs?term=${word}&${qs}`)
+    assert.equal(res.status, 200)
+    return (await res.json()) as Body
+  }
+  const inWeek = (body: Body, monday: string) => body.docs.every((d) => {
+    const day = brtYmd(d.published_at)
+    return day >= monday && day < addDays(monday, 7)
+  })
+
+  before(async () => {
+    await seed()
+    await put(new Date(brtMidnightUtc(prev).getTime() - HOUR))
+    await put(new Date(brtMidnightUtc(prev).getTime() + HOUR))
+    await put(new Date(brtMidnightUtc(cur).getTime() - HOUR))
+    await put(new Date(brtMidnightUtc(cur).getTime() + HOUR))
+    await put(new Date(brtMidnightUtc(addDays(today, 1)).getTime() + HOUR))
+  })
+  after(async () => {
+    await db.exec(`delete from docs where uri like 'https://weekroute.test/%'`)
+    await reseed()
+  })
+
+  it('week=<Wednesday> returns exactly the docs of that BRT week, total matching', async () => {
+    const body = await get(`week=${wed}`)
+    assert.equal(body.total, 2)
+    assert.equal(body.docs.length, 2)
+    assert.ok(inWeek(body, prev))
+  })
+
+  it('a doc dated after the end of today is in the current week and not in the previous one', async () => {
+    const current = await get(`week=${cur}`)
+    const previous = await get(`week=${prev}`)
+    assert.ok(current.docs.some((d) => d.uri.endsWith('/4')))
+    assert.ok(!previous.docs.some((d) => d.uri.endsWith('/4')))
+    assert.equal(current.total, 2)
+  })
+
+  it('a valid day wins: day=X&week=Y returns what day=X returns', async () => {
+    const dayOnly = await get(`day=${today}`)
+    assert.ok(dayOnly.total >= 1)
+    assert.deepEqual(await get(`day=${today}&week=${wed}`), dayOnly)
+  })
+
+  it('a malformed, future or out-of-window week returns what the request without week returns', async () => {
+    const open = await get('days=30')
+    for (const week of ['nope', '2026-02-31', addDays(cur, 14), '2020-01-06']) assert.deepEqual(await get(`week=${week}`), open, week)
+  })
+
+  it('a malformed, future or out-of-window day with a valid week returns what that week alone returns', async () => {
+    const weekOnly = await get(`week=${wed}`)
+    for (const day of ['nope', '2099-01-01', '2020-01-01']) assert.deepEqual(await get(`day=${day}&week=${wed}`), weekOnly, day)
   })
 })

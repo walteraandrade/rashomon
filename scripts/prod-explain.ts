@@ -251,7 +251,8 @@ export const run = async (client: Client, opts: Opts): Promise<Result> => {
 
   const person = personRow(personR)
   const other = personRow(otherR)
-  const ids = (await client.query(idsSql.trim(), [person.id, days])).rows.map((r) => String(r.id))
+  const converted = (await client.query(`select to_regclass('public.terms') is not null as converted`)).rows[0]?.converted === true
+  const ids = (await client.query(idsSql(converted).trim(), [person.id, days])).rows.map((r) => String(r.id))
   const term = ids.find((id) => id.startsWith('word:'))?.slice('word:'.length) ?? ''
   const rendered = renderCases(queries, { person, other, ids, term, window: days }, names)
 

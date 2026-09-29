@@ -486,7 +486,7 @@ describe('defaultSources runs gkg before RSS collectors (issue #234)', () => {
   const clear = () => db.exec(`delete from docs where uri = '${uri}'`)
   const stored = async () => {
     const row = (await db.query<{ id: number; source: string; text: string; tone: number | null }>(`select id, source, text, tone from docs where uri = $1`, [uri])).rows[0]
-    const terms = (await db.query<{ term: string; kind: string }>(`select term, kind from doc_terms where doc_id = $1`, [row.id])).rows
+    const terms = (await db.query<{ term: string; kind: string }>(`select v.term, v.kind from doc_terms t join terms v on v.id = t.term_id where t.doc_id = $1`, [row.id])).rows
     return { row, terms }
   }
 

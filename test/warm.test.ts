@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { params, sourcesParams, testimonyParams } from '../src/ui/api.js'
-import { summary, warm, WARM_HEADERS, warmPaths, WARM_DAYS } from '../src/warm.js'
+import { summary, warm, warmFailed, WARM_HEADERS, warmPaths, WARM_DAYS, type WarmResult } from '../src/warm.js'
 
 // src/warm.ts: the paths the page asks for by itself, requested once so the CDN holds them.
 // Never hits the network: fetch is injected.
@@ -52,10 +52,60 @@ describe('warm', () => {
 describe('summary', () => {
   it('counts statuses and cache states and reports p50/p95 of the wall time', () => {
     const s = summary([
-      { path: '/a', status: 200, cache: 'HIT', server: null, ms: 10 },
-      { path: '/b', status: 200, cache: 'MISS', server: null, ms: 3000 },
-      { path: '/c', status: 500, cache: null, server: null, ms: 20 },
+      { path: '/a', status: 200, cache: 'HIT', server: null, store: 'hit', ms: 10 },
+      { path: '/b', status: 200, cache: 'MISS', server: null, store: 'none', ms: 3000 },
+      { path: '/c', status: 500, cache: null, server: null, store: 'miss', ms: 20 },
     ])
-    assert.deepEqual(s, { requests: 3, status: { '200': 2, '500': 1 }, cache: { HIT: 1, MISS: 1, none: 1 }, p50: 20, p95: 3000 })
+    assert.deepEqual(s, { requests: 3, status: { '200': 2, '500': 1 }, cache: { HIT: 1, MISS: 1, none: 1 }, store: { hit: 1, none: 1, miss: 1 }, p50: 20, p95: 3000 })
+  })
+})
+
+describe('warm and the store', () => {
+  const answer = (store: string | null, cache = 'MISS', status = 200) =>
+    (async () => ({
+      status,
+      headers: new Headers({ 'x-vercel-cache': cache, ...(store ? { 'x-warm-store': store } : {}) }),
+      arrayBuffer: async () => new ArrayBuffer(0),
+    })) as unknown as typeof fetch
+
+  const paths = warmPaths([{ id: 'lula' }])
+
+  it('asks for the store alone, so a miss is a 503 rather than a live statement', () => {
+    assert.equal(WARM_HEADERS['x-warm-store-only'], '1')
+  })
+
+  it('reads x-warm-store into each result and counts it in the summary', async () => {
+    const results = await warm('https://example.test', paths, 2, answer('hit'))
+    assert.ok(results.every((r) => r.store === 'hit'))
+    assert.deepEqual(summary(results).store, { hit: paths.length })
+  })
+
+  it('is not a failure when every path is a hit', async () => {
+    assert.equal(warmFailed(await warm('https://example.test', paths, 2, answer('hit'))), false)
+  })
+
+  it('is not a failure when no deployment header is present: every result counts as none', async () => {
+    const results = await warm('https://example.test', paths, 2, answer(null))
+    assert.equal(warmFailed(results), false)
+    assert.equal(summary(results).store.none, paths.length)
+  })
+
+  const mixed = (cache: string): WarmResult[] => [
+    { path: '/a', status: 200, cache: 'MISS', server: null, store: 'hit', ms: 1 },
+    { path: '/b', status: 200, cache, server: null, store: 'miss', ms: 1 },
+  ]
+
+  it('is a failure when one path missed the store at the origin', () => {
+    assert.equal(warmFailed(mixed('MISS')), true)
+    assert.equal(warmFailed(mixed('MISS').map((r) => ({ ...r, store: 'stale' }))), true)
+  })
+
+  it('is not a failure when the same miss came with a CDN HIT: the CDN is warm', () => {
+    assert.equal(warmFailed(mixed('HIT')), false)
+  })
+
+  it('is a failure on a null status or a 5xx, whatever the store said', () => {
+    assert.equal(warmFailed([{ path: '/a', status: null, cache: null, server: null, store: 'none', ms: 1 }]), true)
+    assert.equal(warmFailed([{ path: '/a', status: 503, cache: 'HIT', server: null, store: 'hit', ms: 1 }]), true)
   })
 })

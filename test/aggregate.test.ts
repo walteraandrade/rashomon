@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test'
 import { AGGREGATE_TABLES, buildGraphAggregates, buildTermWeeks, hasGraphAggregates, queries as aggregateQueries, TERM_WEEKS_TOP, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
-import { compareFor, graphFor, lensesFastEligible, lensesFor, precomputable, queries, sourcesFor } from '../src/graph.js'
+import { compareFor, graphFor, lensesFastEligible, lensesFor, persistenceFor, precomputable, queries, sourcesFor } from '../src/graph.js'
 import type { CompareQuery, GraphQuery, LensesQuery, LensSide } from '../src/graph.js'
 import { brtDate, DAYS, LIMITS, MINS, parseQuery, SMALL_LIMITS, SOURCES } from '../src/query.js'
 import { inTransaction, insertDocP } from '../src/store.js'
@@ -1300,6 +1300,8 @@ describe('buildTermWeeks', () => {
       await putMany(shift(prev, -7), 'Lula pardal', 2)
       await buildTermWeeks(persons, now)
       assert.deepEqual(await weeksWritten(), [prev, cur], iso)
+      const route = await persistenceFor(lula, { weeks: 4, limit: 40 }, now)
+      assert.equal(route.terms.find((t) => t.term === 'pardal')?.series.at(-1)?.week, cur, iso)
       await db.exec(`delete from docs where uri like 'https://persist.test/%'`)
     }
   })

@@ -141,7 +141,7 @@ When `?method` is omitted or fails its charset check it resolves through the sam
 
 - `since` is the constant `2026-09-09`, the earliest week the first build could have written.
 - `first_week` is the earliest week the person has in `term_weeks`, all time and not limited to the window, `null` when she has no row. It tells "no series yet" apart from "outside the top 50".
-- `horizon` is the widest `days` a `/docs` request can reach (365); a week older than that has no stored documents behind it.
+- `horizon` is `Math.max(...DAYS)` (`query.ts`), the widest `days` a `/docs` request can reach; a week older than that has no stored documents behind it.
 - Each term is `{ term, kind, series, streak, half_life }`. `series` has exactly `weeks` entries, oldest first, one per Monday, ending at the current BRT Monday, each `{ week, count }`. `count: null` means no row that week (the term was outside that week's top 50, or the week is before `first_week`): it is never `0`, and a stored row always has `count >= 2`.
 - `streak` is the number of consecutive weeks with a non-null count, counted back from the current week when it is non-null and from the week before otherwise, because the current week is still in progress and its absence alone does not end a streak. It is 0 when the starting week is also null.
 - `half_life` reads complete weeks only (the series without its last, in-progress entry). It is the number of weeks from the peak (highest count, the most recent on a tie) to the first later week whose count is at most half the peak, a null counting as a fall. It is `null` while no such week exists, when the peak is the last complete week, when every complete week is null, or with fewer than two complete weeks; otherwise an integer of at least 1.

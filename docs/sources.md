@@ -17,6 +17,8 @@ One collector per source in `src/collectors/*`, all sharing the same `Collector`
 
 Only `gkg` and `gdelt` carry tone. Every other source stores `tone = null`; see [domain and tone](terms.md#domain-and-tone).
 
+The default run order is `defaultSources` in `src/collectors/index.ts`: `gkg` first, `bluesky` last. A publisher URL that `gkg` shares with `rss`, `juridico`, `oficial` or `nicho` belongs to whichever stores it first, so `gkg` goes ahead of them and keeps the article's organizations, V1Persons names and tone while the feed body enriches its text (`gnews` stores Google redirect links, which never collide with a publisher URL). Shared articles therefore count under `gkg` in `/sources` and `source=` filters from the next ingest on. An explicit `pnpm ingest rss` before `gkg` stores the row as `rss`, without organizations or tone; see [organizations](terms.md#organizations).
+
 ## Per collector
 
 Bluesky without login returns one page (100 posts) per person. To paginate, set `BSKY_HANDLE` and `BSKY_APP_PASSWORD` (app password, not the account password).

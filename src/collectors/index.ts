@@ -25,6 +25,9 @@ export const collectors: Record<Source, Collector> = {
   oficial: () => oficial,
   nicho: () => nicho,
 }
-// Bluesky last: its authenticated search answers in ~7 s a page and takes ~20 min for
-// every person, so a slow day must not keep the fast sources from being written first.
-export const defaultSources: Source[] = ['rss', 'gnews', 'gkg', 'senado', 'camara', 'juridico', 'oficial', 'nicho', 'bluesky']
+// gkg first: a publisher URL it shares with rss/juridico/oficial/nicho is claimed by whoever
+// stores it first, and only a gkg row keeps its orgs, V1Persons names and tone (a later feed
+// body still enriches its text). Bluesky last: its authenticated search answers in ~7 s a page
+// and takes ~20 min for every person, so a slow day must not keep the fast sources from being
+// written first.
+export const defaultSources: Source[] = ['gkg', 'rss', 'gnews', 'senado', 'camara', 'juridico', 'oficial', 'nicho', 'bluesky']

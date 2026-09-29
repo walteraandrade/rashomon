@@ -6,6 +6,7 @@ import { docsFor, sourcesFor, type DocsQuery, type GraphQuery } from '../src/gra
 import {
   MAX_DOC_CHARS,
   batches,
+  derive,
   insertDoc,
   insertDocP,
   insertDocsP,
@@ -21,7 +22,7 @@ import {
   writeDerivedP,
   type Derived,
 } from '../src/store.js'
-import { collidingUri, derivedCounts, enrichmentDocs, orphanTermCount, persons, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
+import { collidingUri, derivedCounts, derivedRows, docs, enrichmentDocs, orphanTermCount, persons, reseed, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
 import './close.js'
 
 // The write path in src/store.ts. Every suite here layers its own docs on the shared fixture;
@@ -695,7 +696,7 @@ describe('the write-path behaviours store.ts pins for its single implementation'
     await writeDerivedP([derived])
     const rowsFor = async () => ({
       persons: (await db.query<{ person_id: string }>(`select person_id from doc_persons where doc_id = $1 order by 1`, [docId])).rows.map((r) => r.person_id),
-      terms: (await db.query<{ term: string; kind: string }>(`select term, kind from doc_terms where doc_id = $1 order by 1, 2`, [docId])).rows,
+      terms: (await db.query<{ term: string; kind: string }>(`select v.term, v.kind from doc_terms t join terms v on v.id = t.term_id where t.doc_id = $1 order by 1, 2`, [docId])).rows,
       names: (await db.query<{ name: string }>(`select name from doc_candidates where doc_id = $1 order by 1`, [docId])).rows.map((r) => r.name),
     })
     assert.deepEqual(await rowsFor(), { persons: [persons[0].id], terms: [{ term: 'exemplo', kind: 'word' }], names: ['Fulano De Tal'] })
@@ -748,5 +749,63 @@ describe('store.ts exposes one Effect implementation per writer, plus its runSql
     for (const name of ['pruneRemovedEffect', 'upsertPersonsEffect', 'writeDerivedEffect', 'insertDocEffect', 'insertDocsEffect']) {
       assert.ok(!(name in storeModule), `${name} must not be exported`)
     }
+  })
+})
+
+describe('the fixture through the term dictionary (issue #252)', () => {
+  before(seed)
+  after(reseed)
+
+  it('seeding the fixture yields the (doc_id, kind, term) set the extractor derives (AC5)', async () => {
+    const { rows } = await db.query<{ id: number; uri: string }>(`select id, uri from docs`)
+    const fixtureIds = new Set(docs.map((d) => rows.find((r) => r.uri === d.uri)!.id))
+    const expected = docs.flatMap((d) => {
+      const id = rows.find((r) => r.uri === d.uri)!.id
+      return derive(id, d, persons).terms.map((t) => `${id}:${t.kind}:${t.term}`)
+    })
+    assert.ok(expected.length > 20)
+    const actual = (await derivedRows()).terms.filter((k) => fixtureIds.has(Number(k.split(':')[0])))
+    assert.deepEqual(new Set(actual), new Set(expected))
+    assert.equal(actual.length, new Set(expected).size)
+  })
+})
+
+// issue #252: the vocabulary is written by the same statement as the rows, so it has no round-trip of its own.
+describe('the terms vocabulary (issue #252)', () => {
+  before(seed)
+  after(reseed)
+
+  const doc = (n: number, text: string) => ({ source: 'rss' as const, uri: `https://example.org/vocab-${n}`, text, publishedAt: new Date().toISOString(), domain: 'example.org' })
+  const vocabulary = async (term: string, kind: string) =>
+    (await db.query<{ id: number; docs: number }>(
+      `select v.id, (select count(*) from doc_terms t where t.term_id = v.id)::int as docs from terms v where v.term = $1 and v.kind = $2`,
+      [term, kind],
+    )).rows
+
+  it('shares one terms row between docs carrying the same pair (issue #252) (AC7)', async () => {
+    await insertDocsP([doc(1, 'Lula visita o unicornioazul'), doc(2, 'Lula elogia o unicornioazul')], persons)
+    const first = await vocabulary('unicornioazul', 'word')
+    assert.equal(first.length, 1)
+    assert.equal(first[0].docs, 2)
+    await insertDocP(doc(3, 'Lula cita o unicornioazul de novo'), persons)
+    const later = await vocabulary('unicornioazul', 'word')
+    assert.deepEqual(later.map((r) => r.id), first.map((r) => r.id), 'a later write reuses the id')
+    assert.equal(later[0].docs, 3)
+  })
+
+  it('edge 3.6: keeps one text under two kinds as two terms rows (issue #252)', async () => {
+    await insertDocP(doc(4, 'Lula fala de #zebraroxa e de zebraroxa'), persons)
+    const word = await vocabulary('zebraroxa', 'word')
+    const tag = await vocabulary('zebraroxa', 'hashtag')
+    assert.equal(word.length, 1)
+    assert.equal(tag.length, 1)
+    assert.notEqual(word[0].id, tag[0].id)
+  })
+
+  it('writes nothing to terms for a doc that names nobody tracked', async () => {
+    const before = (await db.query<{ n: number }>(`select count(*)::int as n from terms`)).rows[0].n
+    await insertDocP(doc(5, 'Ninguem citado aqui, apenas pinguimlaranja'), persons)
+    assert.equal((await db.query<{ n: number }>(`select count(*)::int as n from terms`)).rows[0].n, before)
+    assert.deepEqual(await vocabulary('pinguimlaranja', 'word'), [])
   })
 })

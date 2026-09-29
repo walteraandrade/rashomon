@@ -83,7 +83,7 @@ describe('pnpm size', () => {
       assert.ok(total >= 0)
     })
 
-    it('SIZE_TABLES has exactly the sixteen documented table names', () => {
+    it('SIZE_TABLES has exactly the seventeen documented table names (AC13)', () => {
       assert.deepEqual(
         [...SIZE_TABLES].sort(),
         [
@@ -99,6 +99,7 @@ describe('pnpm size', () => {
           'person_attention',
           'phrase_stage',
           'phrases',
+          'terms',
           'term_communities',
           'term_links',
           'outlet_fields',

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { before, describe, it } from 'node:test'
 import seedJson from '../seed.json' with { type: 'json' }
-import { idsSql, readCases } from '../scripts/bench/cases.js'
+import { idsFor, readCases } from '../scripts/bench/cases.js'
 import { ANCHOR, runSeed } from '../scripts/bench/seed.js'
 import { compare, median, p95, resultHash, table, type Report, type Verdict } from '../scripts/bench/stats.js'
 import { db, migrateP } from '../src/db.js'
@@ -100,6 +100,7 @@ describe('bench harness seed and cases', () => {
   before(async () => {
     await migrateP()
     await runSeed((t, p) => db.query(t, p), 400, seedJson as Person[], nameTokens, () => {})
+    await migrateP()
   })
 
   it('freezes the clock at the anchor', async () => {
@@ -116,7 +117,7 @@ describe('bench harness seed and cases', () => {
 
   it('every read case runs against the tree and the window has documents', async () => {
     const [person, other] = [(seedJson as Person[])[0], (seedJson as Person[])[20]]
-    const ids = (await db.query<{ id: string }>(idsSql, [person.id, 90])).rows.map((r) => r.id)
+    const ids = await idsFor((t, p) => db.query(t, p), person.id, 90)
     assert.ok(ids.length > 0)
     for (const c of readCases) {
       const { text, values } = c.sql(queries, { person, other, ids, term: 'w1', window: 90 })

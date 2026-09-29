@@ -34,7 +34,7 @@ every base cell in the candidate; `--all` lists every cell.
 
 ## What a run does
 
-1. Seeds each scale once (`seed.ts`, SQL-only, every value a hash of the row id) and runs `vacuum analyze`.
+1. Seeds each scale once (`seed.ts`, SQL-only, every value a hash of the row id) and runs `vacuum analyze`. `doc_terms` is always seeded in the legacy `(doc_id, term, kind)` shape (issue #252): a base tree reads it as is and a candidate's own `migrate` converts it in step 3, so one seed serves both.
 2. Copies the pristine seed to a scratch directory, so a candidate's migration never touches it.
 3. In a fresh process per scale: sets the frozen clock, runs the tree's own `migrate`, `analyze`.
 4. `aggregate`: one warm-up build plus `--runs` timed builds per window; hashes that window's rows

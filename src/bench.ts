@@ -66,7 +66,7 @@ const generate = async () => {
   console.log(`dataset: generating ${DOCS} docs into ${DATA_DIR}`)
   const started = performance.now()
   // One statement per db.exec call: the extended query protocol parses one at a time.
-  for (const table of ['doc_testimony', 'doc_candidates', 'doc_terms', 'doc_persons', 'docs', 'persons']) await db.exec(`delete from ${table}`)
+  for (const table of ['doc_testimony', 'doc_candidates', 'doc_terms', 'terms', 'doc_persons', 'docs', 'persons']) await db.exec(`delete from ${table}`)
   await upsertPersonsP(persons)
   const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: Date.now() })
   for (const doc of docs) await insertDocP(doc, persons)
@@ -146,7 +146,7 @@ const measurePhase = async () => {
   const stats = (
     await db.query<{ name: string; rows: number; bytes: number }>(`
       select 'docs' as name, count(*)::int as rows, pg_total_relation_size('docs')::int as bytes from docs
-      union all select 'doc_terms', count(*)::int, pg_total_relation_size('doc_terms')::int from doc_terms
+      union all select 'doc_terms', count(*)::int, (pg_total_relation_size('doc_terms') + pg_total_relation_size('terms'))::int from doc_terms
       union all select 'doc_persons', count(*)::int, pg_total_relation_size('doc_persons')::int from doc_persons
       union all select 'doc_candidates', count(*)::int, pg_total_relation_size('doc_candidates')::int from doc_candidates
       union all select 'doc_testimony', count(*)::int, pg_total_relation_size('doc_testimony')::int from doc_testimony
@@ -160,8 +160,8 @@ const measurePhase = async () => {
   if (!compareWith) throw new Error(`bench compare needs a person other than ${PERSON}`)
   const ids = (
     await db.query<{ id: string }>(
-      `select kind || ':' || term as id from doc_terms t join doc_persons p on p.doc_id = t.doc_id
-       where p.person_id = $1 group by 1 order by count(*) desc limit 40`,
+      `select v.kind || ':' || v.term as id from doc_terms t join terms v on v.id = t.term_id join doc_persons p on p.doc_id = t.doc_id
+       where p.person_id = $1 group by v.id order by count(*) desc limit 40`,
       [PERSON],
     )
   ).rows.map((r) => r.id)

@@ -395,3 +395,20 @@ describe('CLAUDE.md and docs/factory.md describe the current test-file layout, n
       assert.ok(docsText.includes(id), `the docs must list the ${id} check`)
   })
 })
+
+describe('the term dictionary is documented (issue #252)', () => {
+  it('states the vocabulary table, the term_id key, the in-place conversion and the reindex rebuild (AC18)', () => {
+    assert.match(docsText, /\bvocabulary\b/i, 'the vocabulary is named')
+    assert.match(docsText, /`terms\b[^`]*`/, 'the `terms` table is named')
+    assert.match(docsText, /`\(term, kind\)`/, 'the vocabulary holds (term, kind) pairs')
+    assert.match(docsText, /`doc_terms\b[^`]*term_id[^`]*`|`term_id`/, 'doc_terms is keyed by term_id')
+    assert.match(docsText, /pnpm migrate`[^.\n]*(legacy|in place|converts)|(legacy|in place|converts)[^.\n]*`pnpm migrate/i, 'migrate converts a legacy doc_terms')
+    assert.match(docsText, /(no|without a|not need a) reindex|needs no reindex/i, 'the conversion needs no reindex')
+    assert.match(docsText, /`pnpm reindex`[^.\n]*`terms`|`terms`[^.\n]*`pnpm reindex`|reindex[^.\n]*vocabulary/i, 'reindex rebuilds the vocabulary')
+  })
+
+  it('tells production to run pnpm migrate right after the deploy, with the scheduled ingest paused (AC18)', () => {
+    assert.match(docsText, /ingest\.yml/)
+    assert.match(docsText, /disable[^.\n]*ingest\.yml[^.\n]*deploy[^.\n]*pnpm migrate[^.\n]*re-?enable[^.\n]*ingest\.yml/i)
+  })
+})

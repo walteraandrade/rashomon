@@ -200,6 +200,25 @@ const scopeCte = (person: Person, q: Scope) => {
   )`
 }
 
+// Every doc_terms aggregate groups on the integer term_id and reaches `terms` only afterwards, so the hash
+// aggregate hashes integers and the text is read once per distinct term, not once per row. No order by
+// or tie-break ever uses term_id: ids follow insertion order, the text is what makes a result stable.
+// `about` is a CTE name; `exclude` (a person's own name tokens) drops a name word or a phrase carrying one.
+const termCounts = (about: Sql, exclude?: string[]) => sql`
+    select v.id as term_id, v.term, v.kind, c.c_pt, c.tone
+    from (
+      select t.term_id, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
+      from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+      group by t.term_id
+    ) c
+    join terms v on v.id = c.term_id${exclude ? sql`
+    where not ${isName(sql.raw('v.term'), exclude)}` : sql``}`
+
+const termTotals = (tracked: Sql) => sql`
+    select t.term_id, count(*)::float8 as c_t
+    from doc_terms t join ${tracked} s on s.id = t.doc_id
+    group by t.term_id`
+
 // PMI's universe: doc_terms only exists for docs naming at least one tracked person, so the
 // numerator's universe is that set; n.total and term_all must be restricted to it too.
 const trackedCte = sql`
@@ -224,20 +243,14 @@ const graphQuery = (person: Person, q: GraphQuery) => {
   with ${scopeCte(person, q)}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
-  term_p as materialized (
-    select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not ${isName(sql.raw('t.term'), exclude)}
-    group by 1, 2
+  term_p as materialized (${termCounts(sql.raw('about'), exclude)}
   ),
-  term_all as materialized (
-    select t.term, t.kind, count(*)::float8 as c_t
-    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
+  term_all as materialized (${termTotals(sql.raw('tracked'))}
   ),
   nodes_scored as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql.raw('np.total'), sql.raw('a.c_t'))} as pmi
-    from term_p p join term_all a using (term, kind), n, np
+    from term_p p join term_all a using (term_id), n, np
     where p.c_pt >= ${q.min} and (${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ',')))
   ),
   nodes_top as (
@@ -252,7 +265,7 @@ const graphQuery = (person: Person, q: GraphQuery) => {
   signature_scored as (
     select p.term, p.kind, p.c_pt::int as count,
       ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql.raw('np.total'), sql.raw('a.c_t'))} as pmi
-    from term_p p join term_all a using (term, kind), n, np
+    from term_p p join term_all a using (term_id), n, np
     where p.c_pt >= ${signatureFloor(sql.raw('np.total'))}
   ),
   signature_top as (
@@ -353,30 +366,45 @@ export const isFullKindSet = (kind: string) => {
 // The term list arrives as `kind:term` ids (what the route names a node) and is matched as
 // (kind, term) pairs: an expression like `kind || ':' || term = any(...)` has no index, and the
 // planner answered it with a parallel seq scan of doc_terms plus a Parallel Hash whose barrier
-// waited seconds on a CPU-starved instance (issue #163). Matching the pair lets doc_terms_term_idx
-// find each term's rows directly. count(*): doc_terms' PK + about's PK (doc_persons with
-// person_id fixed) make doc_id unique inside each (s, t) group. Order by is spelled out rather
-// than relying on plan emission order.
+// waited seconds on a CPU-starved instance (issue #163). `wantedTerms` resolves the pairs to
+// term_ids through terms' unique (kind, term) index, and doc_terms_term_id_idx then finds each
+// term's rows directly. count(*): doc_terms' PK + about's PK (doc_persons with person_id fixed)
+// make doc_id unique inside each (s, t) group. The pair is deduplicated on the ids (a < b) and
+// then oriented by text, so which of two terms leads never depends on id order. Order by is
+// spelled out rather than relying on plan emission order.
 const splitIds = (ids: string[]) => {
   const at = ids.map((id) => id.indexOf(':'))
   return { kinds: ids.map((id, i) => id.slice(0, at[i])), terms: ids.map((id, i) => id.slice(at[i] + 1)) }
 }
 
-const linksQuery = (person: Person, q: Scope, ids: string[]) => {
+const wantedTerms = (ids: string[]) => {
   const { kinds, terms } = splitIds(ids)
   return sql`
-  with ${scopeCte(person, q)},
-  hits as (
-    select t.doc_id, t.kind || ':' || t.term as id
-    from doc_terms t
-    join unnest(${kinds}::text[], ${terms}::text[]) as wanted(kind, term) on wanted.kind = t.kind and wanted.term = t.term
-    join about x on x.doc_id = t.doc_id
-  )
-  select a.id as s, b.id as t, count(*)::int as count
-  from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
-  group by 1, 2 having count(*) >= 2
-  order by 1, 2`
+  wanted as (
+    select v.id, v.kind || ':' || v.term as name
+    from unnest(${kinds}::text[], ${terms}::text[]) as w(kind, term)
+    join terms v on v.kind = w.kind and v.term = w.term
+  )`
 }
+
+const coOccurrence = sql`
+  hits as (
+    select t.doc_id, t.term_id as id
+    from doc_terms t
+    join wanted w on w.id = t.term_id
+    join about x on x.doc_id = t.doc_id
+  ),
+  pairs as (
+    select a.id as a_id, b.id as b_id, count(*)::int as count
+    from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
+    group by 1, 2 having count(*) >= 2
+  )
+  select least(wa.name, wb.name) as s, greatest(wa.name, wb.name) as t, p.count
+  from pairs p join wanted wa on wa.id = p.a_id join wanted wb on wb.id = p.b_id
+  order by 1, 2`
+
+const linksQuery = (person: Person, q: Scope, ids: string[]) => sql`
+  with ${scopeCte(person, q)},${wantedTerms(ids)},${coOccurrence}`
 
 // term_links' own read (issue #251): a primary-key lookup instead of linksQuery's live
 // self-join. Zero rows falls back to live, same "empty means never built" idiom as nodes.
@@ -388,21 +416,8 @@ const linksFastQuery = (person: Person, q: Pick<Scope, 'days' | 'source'>, ids: 
 
 // Same co-occurrence shape as linksQuery, parameterised on the about CTE so one function
 // serves both compareEdgesQuery and lensEdgesQuery.
-const bridgeEdgesQuery = (aboutCte: Sql, ids: string[]) => {
-  const { kinds, terms } = splitIds(ids)
-  return sql`
-  with ${aboutCte},
-  hits as (
-    select t.doc_id, t.kind || ':' || t.term as id
-    from doc_terms t
-    join unnest(${kinds}::text[], ${terms}::text[]) as wanted(kind, term) on wanted.kind = t.kind and wanted.term = t.term
-    join about x on x.doc_id = t.doc_id
-  )
-  select a.id as s, b.id as t, count(*)::int as count
-  from hits a join hits b on a.doc_id = b.doc_id and a.id < b.id
-  group by 1, 2 having count(*) >= 2
-  order by 1, 2`
-}
+const bridgeEdgesQuery = (aboutCte: Sql, ids: string[]) => sql`
+  with ${aboutCte},${wantedTerms(ids)},${coOccurrence}`
 
 const compareEdgesQuery = (person: Person, q: CompareQuery, ids: string[]) => bridgeEdgesQuery(scopeCte(person, q), ids)
 
@@ -454,9 +469,8 @@ export const lensBridgesFor = async (person: Person, q: LensesQuery, ids: string
 // per doc per term by doc_terms' PK. The ids are matched as (kind, term) pairs for the same
 // reason as `linksQuery`: the concatenated expression has no index.
 const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: string[]) => {
-  const { kinds, terms } = splitIds(ids)
   return sql`
-  with ${scopeCte(person, q)},
+  with ${scopeCte(person, q)},${wantedTerms(ids)},
   scored as (
     select a.doc_id, dt.score
     from about a join doc_testimony dt on dt.doc_id = a.doc_id and dt.person_id = ${person.id} and dt.method = ${method}
@@ -466,11 +480,11 @@ const termTestimonyQuery = (person: Person, q: Scope, method: string, ids: strin
     (select json_build_object('score', round(avg(score)::numeric, 2)::float8, 'n', count(*)::int) from scored) as overall,
     coalesce((
       select json_agg(json_build_object('id', id, 'score', score, 'n', n) order by id) from (
-        select t.kind || ':' || t.term as id, round(avg(s.score)::numeric, 2)::float8 as score, count(*)::int as n
+        select w.name as id, round(avg(s.score)::numeric, 2)::float8 as score, count(*)::int as n
         from doc_terms t
-        join unnest(${kinds}::text[], ${terms}::text[]) as wanted(kind, term) on wanted.kind = t.kind and wanted.term = t.term
+        join wanted w on w.id = t.term_id
         join scored s on s.doc_id = t.doc_id
-        group by 1
+        group by w.id, w.name
       ) x
     ), '[]'::json) as terms`
 }
@@ -502,13 +516,13 @@ export const sourcesFor = async (person: Person, q: GraphQuery) => {
   return rows.map((r) => ({ ...r, ...labelFor(r.domain) }))
 }
 
-// term/kind reuse the doc_terms (kind, term) index via exists, so a doc carrying the term
+// term/kind are checked through terms via exists, so a doc carrying the term
 // under two kinds is still counted/returned once. An unrecognized kind falls back to 'all'.
 // Exported so tests can compare the kind array against query.ts's KINDS without a third copy.
 const docsWhere = (term: string, kind: string) => sql`(
     ${term} = '' or exists (
-      select 1 from doc_terms t where t.doc_id = d.id and t.term = ${term}
-        and (${kind} = 'all' or t.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase', 'org']))
+      select 1 from doc_terms t join terms v on v.id = t.term_id where t.doc_id = d.id and v.term = ${term}
+        and (${kind} = 'all' or v.kind = any(string_to_array(${kind}, ',')) or not (string_to_array(${kind}, ',') <@ array['hashtag', 'word', 'phrase', 'org']))
     )
   )`
 export const docsWhereSql = docsWhere('', 'all').text
@@ -748,10 +762,14 @@ const risingQuery = (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)
   const termsOf = (about: Sql, count: Sql) => sql`
-    select t.term, t.kind, count(*)::float8 as ${count}
-    from doc_terms t join ${about} a on a.doc_id = t.doc_id
-    where (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ','))) and not ${isName(sql.raw('t.term'), exclude)}
-    group by 1, 2`
+    select v.id as term_id, v.term, v.kind, c.${count}
+    from (
+      select t.term_id, count(*)::float8 as ${count}
+      from doc_terms t join ${about} a on a.doc_id = t.doc_id
+      group by t.term_id
+    ) c
+    join terms v on v.id = c.term_id
+    where (${q.kind} = 'all' or v.kind = any(string_to_array(${q.kind}, ','))) and not ${isName(sql.raw('v.term'), exclude)}`
   return sql`
   with
   recent_scope as (
@@ -786,7 +804,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
       r.c_recent::int as count_recent_raw,
       coalesce(b.c_baseline, 0)::int as count_baseline_raw,
       round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
-    from recent_terms r left join baseline_terms b using (term, kind)
+    from recent_terms r left join baseline_terms b using (term_id)
     where r.c_recent >= ${q.min}
   ),
   lifted as (
@@ -967,16 +985,12 @@ const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
     select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
   ${np} as materialized (select count(*)::float8 as total from ${about}),
-  ${termP} as materialized (
-    select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    where not ${isName(sql.raw('t.term'), names)}
-    group by 1, 2
+  ${termP} as materialized (${termCounts(about, names)}
   ),
   ${scored} as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql`${np}.total`, sql.raw('a.c_t'))} as pmi
-    from ${termP} p join term_all a using (term, kind), n, ${np}
+    from ${termP} p join term_all a using (term_id), n, ${np}
     where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
   ),
   ${top}_count as (
@@ -994,9 +1008,7 @@ const compareSideCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
 const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
   with ${compareScopeCte(q)},
   n as materialized (select count(*)::float8 as total from tracked),
-  term_all as materialized (
-    select t.term, t.kind, count(*)::float8 as c_t
-    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
+  term_all as materialized (${termTotals(sql.raw('tracked'))}
   ),
   ${compareSideCte('a', a, q)},
   ${compareSideCte('b', b, q)},
@@ -1144,12 +1156,16 @@ const weekQuery = (person: Person, q: WeekQuery) => {
     select day, term, kind, count,
       row_number() over (partition by day order by count desc, term, kind) as rn
     from (
-      select pk.day, t.term, t.kind, count(*)::int as count
-      from person_kept pk
-      join doc_terms t on t.doc_id = pk.id and t.doc_id = any(array(select id from person_kept))
-      where not ${isName(sql.raw('t.term'), exclude)}
-        and (${q.kind} = 'all' or t.kind = any(string_to_array(${q.kind}, ',')))
-      group by pk.day, t.term, t.kind
+      select g.day, v.term, v.kind, g.count
+      from (
+        select pk.day, t.term_id, count(*)::int as count
+        from person_kept pk
+        join doc_terms t on t.doc_id = pk.id and t.doc_id = any(array(select id from person_kept))
+        group by pk.day, t.term_id
+      ) g
+      join terms v on v.id = g.term_id
+      where not ${isName(sql.raw('v.term'), exclude)}
+        and (${q.kind} = 'all' or v.kind = any(string_to_array(${q.kind}, ',')))
     ) g
   ),
   by_day as (
@@ -1269,19 +1285,14 @@ const lensSideCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQ
   ),
   ${n} as materialized (select count(*)::float8 as total from ${tracked}),
   ${np} as materialized (select count(*)::float8 as total from ${about}),
-  ${termAll} as materialized (
-    select t.term, t.kind, count(*)::float8 as c_t
-    from doc_terms t join ${tracked} s on s.id = t.doc_id group by 1, 2
+  ${termAll} as materialized (${termTotals(tracked)}
   ),
-  ${termP} as materialized (
-    select t.term, t.kind, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
-    group by 1, 2
+  ${termP} as materialized (${termCounts(about)}
   ),
   ${scored} as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
       ${pmiLog2(sql.raw('p.c_pt'), sql`${n}.total`, sql`${np}.total`, sql.raw('a.c_t'))} as pmi
-    from ${termP} p join ${termAll} a using (term, kind), ${n}, ${np}
+    from ${termP} p join ${termAll} a using (term_id), ${n}, ${np}
     where ${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ','))
   ),
   ${top}_count as (

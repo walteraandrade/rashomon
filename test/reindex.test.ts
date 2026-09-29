@@ -5,7 +5,7 @@ import { nameTokens } from '../src/extract.js'
 import { graphFor, type GraphQuery } from '../src/graph.js'
 import { reindexAll } from '../src/reindex.js'
 import { MAX_DOC_CHARS, insertDocP, truncateText } from '../src/store.js'
-import { derivedRows, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, reseed, seed } from './fixture.js'
+import { derivedRows, insertDocTerm, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
@@ -40,10 +40,20 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
     assert.equal(await orphanTermCount(), 0)
   })
 
+  it('leaves no unreferenced terms row after reindex (issue #252) (AC8)', async () => {
+    await reindexAll(persons)
+    const before = await derivedRows()
+    await db.query(`insert into terms (term, kind) values ('vocabulario-morto', 'word'), ('hashtag-morta', 'hashtag')`)
+    await reindexAll(persons)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from terms v where not exists (select 1 from doc_terms t where t.term_id = v.id)`)
+    assert.equal(rows[0].n, 0)
+    assert.deepEqual(await derivedRows(), before)
+  })
+
   it('purge orphan-terms deletes exactly the rows reindex would not write', async () => {
     await reindexAll(persons)
     const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, ['https://example.org/4'])
-    await db.query(`insert into doc_terms values ($1, 'congresso', 'word')`, [rows[0].id])
+    await insertDocTerm(rows[0].id, 'congresso', 'word')
     assert.equal(await orphanTermCount(), 1)
     await db.query(`delete from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id)`)
     assert.equal(await orphanTermCount(), 0)
@@ -174,7 +184,7 @@ describe('reindex builds the lexicon and tags the corpus with it', () => {
   })
 
   it('reports how many phrases it kept and writes doc_terms rows of kind phrase', async () => {
-    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase'`)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t join terms v on v.id = t.term_id where v.kind = 'phrase'`)
     assert.ok(rows[0].n > 0, 'the fixture must yield at least one phrase row')
   })
 
@@ -203,7 +213,7 @@ describe('reindex builds the lexicon and tags the corpus with it', () => {
     // Capitalized runs still produce them: seed.json cannot stop anyone from writing the name
     // mid-sentence, so the query-time filter is the one that has to hold.
     await insertDocP({ source: 'rss', uri: 'https://example.org/phrase-name', text: 'O deputado Jair Bolsonaro discursou', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
-    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'phrase' and term = 'jair bolsonaro'`)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t join terms v on v.id = t.term_id where v.kind = 'phrase' and v.term = 'jair bolsonaro'`)
     assert.equal(rows[0].n, 1, 'sanity: the run this filter has to hide must exist')
     const graph = await graphFor(persons[2], wide)
     for (const term of termsOfKind(graph.nodes, 'phrase')) assert.ok(!term.split(' ').includes('bolsonaro'), `${term} names the person, it is not said about them`)

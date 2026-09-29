@@ -136,11 +136,16 @@ export const schema = `
       person_id text references persons(id),
       primary key (doc_id, person_id)
     );
-    create table if not exists doc_terms (
-      doc_id int references docs(id) on delete cascade,
+    create table if not exists terms (
+      id serial primary key,
       term text not null,
       kind text not null,
-      primary key (doc_id, term, kind)
+      unique (kind, term)
+    );
+    create table if not exists doc_terms (
+      doc_id int references docs(id) on delete cascade,
+      term_id int not null references terms(id),
+      primary key (doc_id, term_id)
     );
     alter table docs add column if not exists extra_terms jsonb not null default '[]';
     alter table docs add column if not exists domain text;
@@ -154,7 +159,7 @@ export const schema = `
       processed_at timestamptz not null default now()
     );
     create index if not exists docs_published_idx on docs (published_at);
-    create index if not exists doc_terms_term_idx on doc_terms (kind, term);
+    create index if not exists doc_terms_term_id_idx on doc_terms (term_id, doc_id);
     create table if not exists doc_testimony (
       doc_id int references docs(id) on delete cascade,
       person_id text references persons(id),
@@ -249,9 +254,36 @@ const schemaStatements = schema
   .map((s) => s.trim())
   .filter(Boolean)
 
-// One transaction for the whole script: a failure partway through leaves the schema untouched.
+// The schema string cannot hold a `do $$` block (it is split on ';'), so the legacy check lives here.
+const LEGACY_DOC_TERMS_SQL = `select 1 as legacy from information_schema.columns where table_schema = current_schema() and table_name = 'doc_terms' and column_name = 'term'`
+
+// The legacy doc_terms carries its own term/kind text; move it aside so the canonical names are free for the new table.
+const legacyAside = [
+  `alter table doc_terms rename to doc_terms_legacy`,
+  `alter index doc_terms_pkey rename to doc_terms_legacy_pkey`,
+  `drop index if exists doc_terms_term_idx`,
+]
+
+// Rebuilds from the rows themselves, never from docs.text, so a conversion needs no reindex.
+const legacyConvert = [
+  `insert into terms (term, kind) select distinct term, kind from doc_terms_legacy order by kind, term`,
+  `insert into doc_terms (doc_id, term_id) select l.doc_id, v.id from doc_terms_legacy l join terms v on v.kind = l.kind and v.term = l.term`,
+  `drop table doc_terms_legacy`,
+]
+
+// One transaction for the whole script, legacy conversion included: a failure partway through leaves the schema and the legacy table untouched.
 export const migrate = (): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) => sql.withTransaction(Effect.forEach(schemaStatements, (statement) => sql.unsafe(statement), { discard: true })))
+  Effect.flatMap(SqlClient.SqlClient, (sql) => {
+    const run = (statements: readonly string[]) => Effect.forEach(statements, (statement) => sql.unsafe(statement), { discard: true })
+    return sql.withTransaction(
+      Effect.gen(function* () {
+        const legacy = (yield* sql.unsafe(LEGACY_DOC_TERMS_SQL)).length > 0
+        if (legacy) yield* run(legacyAside)
+        yield* run(schemaStatements)
+        if (legacy) yield* run(legacyConvert)
+      }),
+    )
+  })
 export const migrateP = () => runSql(migrate())
 
 // Table names cannot be bound as statement parameters; this fixed list is the entire maintenance surface.
@@ -259,6 +291,7 @@ export const ANALYZED_TABLES = [
   'docs',
   'doc_persons',
   'doc_terms',
+  'terms',
   'doc_candidates',
   'doc_testimony',
   'graph_scopes',

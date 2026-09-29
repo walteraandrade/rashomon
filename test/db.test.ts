@@ -13,7 +13,7 @@ import { pruneRemovedP, upsertPersonsP } from '../src/store.js'
 import { docsText } from './docs.js'
 import { failingSql } from './effect.js'
 import { withEnv } from './env.js'
-import { indexDefs, lastAnalyzed, persons, planRowEstimate, seed } from './fixture.js'
+import { derivedRows, indexDefs, lastAnalyzed, legacyDocTerms, persons, planRowEstimate, reseed, seed } from './fixture.js'
 import './close.js'
 
 // src/db.ts: the connection (poolConfig, pure and never opening a socket), the schema migrate()
@@ -240,7 +240,7 @@ describe('graph_terms_all is a temp table, never persisted (issue #203)', () => 
   it('ANALYZED_TABLES no longer lists graph_terms_all', () => {
     assert.deepEqual(
       [...ANALYZED_TABLES],
-      ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'],
+      ['docs', 'doc_persons', 'doc_terms', 'terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'],
     )
   })
 })
@@ -479,6 +479,12 @@ describe('analyze maintenance policy (issue #44)', () => {
     }
   })
 
+  it('terms is analyzed and has a row estimate (AC13)', async () => {
+    assert.ok(ANALYZED_TABLES.includes('terms'))
+    await analyzeTablesP(['terms'])
+    assert.ok((await planRowEstimate('terms')) >= 0)
+  })
+
   it('analyzes only the tables asked for', async () => {
     const analyzed = await analyzeTablesP(['doc_persons'])
     assert.deepEqual([...analyzed], ['doc_persons'])
@@ -632,5 +638,89 @@ describe('db.ts collapses migrate/analyzeTables/analyzeAfterWrite to one Effect 
     assert.ok(Effect.isEffect(docCount()))
     for (const fn of [migrateP, analyzeTablesP, analyzeAfterWriteP]) assert.equal(typeof fn, 'function')
     assert.equal(typeof (await docCount().pipe(runSql)), 'number')
+  })
+})
+
+const columnsOf = async (table: string) =>
+  (await db.query<{ column_name: string }>(`select column_name from information_schema.columns where table_schema = 'public' and table_name = $1 order by ordinal_position`, [table])).rows.map(
+    (r) => r.column_name,
+  )
+
+const regclass = async (name: string) => (await db.query<{ r: string | null }>(`select to_regclass($1)::text as r`, [`public.${name}`])).rows[0].r
+
+const fixtureTermRows = async () =>
+  (await db.query<{ doc_id: number; term: string; kind: string }>(`select t.doc_id, v.term, v.kind from doc_terms t join terms v on v.id = t.term_id order by 1, 3, 2`)).rows.map((r) => ({
+    docId: r.doc_id,
+    term: r.term,
+    kind: r.kind,
+  }))
+
+describe('term dictionary schema (issue #252)', () => {
+  before(seed)
+  after(reseed)
+
+  it('terms table and doc_terms keyed by term_id (issue #252) (AC1)', async () => {
+    assert.deepEqual(await columnsOf('terms'), ['id', 'term', 'kind'])
+    const { rows: unique } = await db.query<{ cols: string[] }>(
+      `select array_agg(a.attname::text order by k.ord) as cols
+       from pg_constraint c
+       join lateral unnest(c.conkey) with ordinality as k(attnum, ord) on true
+       join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+       where c.conrelid = 'public.terms'::regclass and c.contype = 'u'
+       group by c.oid`,
+    )
+    assert.deepEqual(unique.map((r) => r.cols), [['kind', 'term']])
+    assert.deepEqual(await columnsOf('doc_terms'), ['doc_id', 'term_id'])
+    const defs = await indexDefs('doc_terms')
+    const pkey = defs.find((d) => d.indexname === 'doc_terms_pkey')
+    assert.match(pkey?.indexdef ?? '', /\(doc_id, term_id\)/)
+    assert.ok(defs.some((d) => /\(term_id, doc_id\)/.test(d.indexdef)))
+    assert.ok(!defs.some((d) => /\b(term|kind)\b(?!_)/.test(d.indexdef.replace(/^.*?\(/, '('))), 'no index on doc_terms names a text column')
+    assert.ok(!defs.some((d) => d.indexname === 'doc_terms_term_idx'))
+  })
+
+  it('migrate converts a legacy doc_terms in place, and a second run changes nothing (issue #252) (AC2, AC3)', async () => {
+    const before = await derivedRows()
+    const rows = await fixtureTermRows()
+    const kindsOf = (term: string) => rows.filter((r) => r.term === term).map((r) => r.kind)
+    assert.ok(rows.some((r) => new Set(kindsOf(r.term)).size > 1), 'sanity: the fixture holds one text under two kinds')
+
+    await legacyDocTerms(rows)
+    assert.deepEqual(await columnsOf('doc_terms'), ['doc_id', 'term', 'kind'])
+    assert.equal(await regclass('terms'), null)
+
+    await migrateP()
+
+    assert.deepEqual(await columnsOf('doc_terms'), ['doc_id', 'term_id'])
+    assert.deepEqual((await derivedRows()).terms, before.terms)
+    const { rows: counts } = await db.query<{ vocabulary: number; pairs: number }>(
+      `select (select count(*) from terms)::int as vocabulary, (select count(*) from (select distinct v.term, v.kind from doc_terms t join terms v on v.id = t.term_id) x)::int as pairs`,
+    )
+    assert.equal(counts[0].vocabulary, new Set(rows.map((r) => `${r.kind}:${r.term}`)).size)
+    assert.equal(counts[0].vocabulary, counts[0].pairs)
+    assert.equal(await regclass('doc_terms_legacy'), null)
+    assert.equal(await regclass('doc_terms_term_idx'), null)
+
+    const snapshot = async () => ({
+      terms: (await db.query(`select id, kind, term from terms order by id`)).rows,
+      rows: (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms`)).rows[0].n,
+    })
+    const converted = await snapshot()
+    await migrateP()
+    assert.deepEqual(await snapshot(), converted, 'a second migrate on a converted database changes nothing')
+  })
+
+  it('a failed conversion leaves the legacy doc_terms intact (issue #252) (AC4)', async () => {
+    await seed()
+    const rows = await fixtureTermRows()
+    await legacyDocTerms(rows)
+    const real = await runSql(SqlClient.SqlClient)
+    const exit = await Effect.runPromiseExit(migrate().pipe(Effect.provideService(SqlClient.SqlClient, failingSql(real, /^insert into doc_terms \(doc_id, term_id\)/))))
+    assert.equal(exit._tag, 'Failure')
+    assert.match(String(exit._tag === 'Failure' ? exit.cause : ''), /SqlError/)
+    assert.deepEqual(await columnsOf('doc_terms'), ['doc_id', 'term', 'kind'])
+    assert.equal((await db.query<{ n: number }>(`select count(*)::int as n from doc_terms`)).rows[0].n, rows.length)
+    assert.equal(await regclass('terms'), null)
+    assert.equal(await regclass('doc_terms_legacy'), null)
   })
 })

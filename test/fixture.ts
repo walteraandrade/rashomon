@@ -1,5 +1,5 @@
 import { db, migrateP } from '../src/db.js'
-import { insertDocP, upsertPersonsP } from '../src/store.js'
+import { INSERT_DOC_TERMS_SQL, insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, RawDoc } from '../src/types.js'
 
 export const persons: Person[] = [
@@ -425,7 +425,7 @@ export const derivedCounts = async (uri: string) =>
     await db.query<{ persons: number; terms: number; candidates: number }>(
       `select
          (select count(*) from doc_persons p where p.doc_id = d.id)::int as persons,
-         (select count(*) from doc_terms t where t.doc_id = d.id)::int as terms,
+         (select count(*) from doc_terms t join terms v on v.id = t.term_id where t.doc_id = d.id)::int as terms,
          (select count(*) from doc_candidates c where c.doc_id = d.id)::int as candidates
        from docs d where d.uri = $1`,
       [uri],
@@ -434,32 +434,64 @@ export const derivedCounts = async (uri: string) =>
 
 export const derivedRows = async () => ({
   persons: (await db.query<{ k: string }>(`select doc_id || ':' || person_id as k from doc_persons order by 1`)).rows.map((r) => r.k),
-  terms: (await db.query<{ k: string }>(`select doc_id || ':' || kind || ':' || term as k from doc_terms order by 1`)).rows.map((r) => r.k),
+  terms: (await db.query<{ k: string }>(`select t.doc_id || ':' || v.kind || ':' || v.term as k from doc_terms t join terms v on v.id = t.term_id order by 1`)).rows.map((r) => r.k),
   candidates: (await db.query<{ k: string }>(`select doc_id || ':' || name as k from doc_candidates order by 1`)).rows.map((r) => r.k),
 })
 
 // doc_terms exists only for docs naming at least one tracked person (issue #52); these two
 // are shared by the store and reindex suites, which assert that invariant from both sides.
 export const orphanTermCount = async () =>
-  (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id)`)).rows[0].n
+  (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t join terms v on v.id = t.term_id where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id)`)).rows[0].n
 
 export const termsOf = async (uri: string) =>
-  (await db.query<{ term: string }>(`select t.term from doc_terms t join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
+  (await db.query<{ term: string }>(`select v.term from doc_terms t join terms v on v.id = t.term_id join docs d on d.id = t.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.term)
+
+// The one writer's own statement, so a test row and a production row resolve the vocabulary the same way.
+export const insertDocTerm = (docId: number, term: string, kind: string) => db.query(INSERT_DOC_TERMS_SQL, [[docId], [term], [kind]])
 
 let ready: Promise<void> | null = null
+
+// One statement per db.exec call: @effect/sql-pg/@effect/sql-pglite's `unsafe` uses the
+// extended query protocol, which parses one statement at a time (src/db.ts's migrate() splits
+// the schema the same way). `terms` follows `doc_terms` because of the foreign key.
+const clearFixtureTables = async () => {
+  for (const table of ['doc_terms', 'terms', 'doc_persons', 'docs', 'persons', 'phrases', 'phrase_stage']) await db.exec(`delete from ${table}`)
+}
+
+const writeFixture = async () => {
+  await upsertPersonsP(persons)
+  for (const d of docs) await insertDocP(d, persons)
+  await seedTestimony()
+}
 
 export const seed = () =>
   (ready ??= (async () => {
     if (process.env.DATA_DIR !== 'memory://') throw new Error('tests must run with DATA_DIR=memory://')
     await migrateP()
-    // One statement per db.exec call: @effect/sql-pg/@effect/sql-pglite's `unsafe` uses the
-    // extended query protocol, which parses one statement at a time (src/db.ts's migrate() splits
-    // the schema the same way).
-    for (const table of ['doc_terms', 'doc_persons', 'docs', 'persons', 'phrases', 'phrase_stage']) await db.exec(`delete from ${table}`)
-    await upsertPersonsP(persons)
-    for (const d of docs) await insertDocP(d, persons)
-    await seedTestimony()
+    await clearFixtureTables()
+    await writeFixture()
   })())
+
+// Recreates doc_terms (and drops the vocabulary) in the pre-#252 (doc_id, term, kind) shape with the given rows, for the legacy conversion tests. The caller reseeds afterwards.
+export const legacyDocTerms = async (rows: { docId: number; term: string; kind: string }[]) => {
+  await db.exec(`drop table if exists doc_terms`)
+  await db.exec(`drop table if exists terms`)
+  await db.exec(`create table doc_terms (doc_id int references docs(id) on delete cascade, term text not null, kind text not null, primary key (doc_id, term, kind))`)
+  await db.exec(`create index doc_terms_term_idx on doc_terms (kind, term)`)
+  if (rows.length)
+    await db.query(`insert into doc_terms (doc_id, term, kind) select * from unnest($1::int[], $2::text[], $3::text[])`, [rows.map((r) => r.docId), rows.map((r) => r.term), rows.map((r) => r.kind)])
+}
+
+// Same fixture, different ids: every pair the fixture produces is registered first in reverse alphabetical order, after junk pairs nothing references, so term ids run against the text order.
+export const seedWithReversedVocabulary = async (junk: { term: string; kind: string }[]) => {
+  await seed()
+  const pairs = (await db.query<{ term: string; kind: string }>(`select term, kind from terms order by kind desc, term desc`)).rows
+  await clearFixtureTables()
+  const all = [...junk, ...pairs]
+  await db.query(`insert into terms (term, kind) select * from unnest($1::text[], $2::text[])`, [all.map((p) => p.term), all.map((p) => p.kind)])
+  await writeFixture()
+  ready = Promise.resolve()
+}
 
 // A suite that writes past the fixture (another person, a future-dated doc, a lexicon) shares
 // its process with suites that pin counts against the fixture alone, now that tests live one

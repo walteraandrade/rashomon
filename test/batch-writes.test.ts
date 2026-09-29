@@ -67,6 +67,15 @@ describe('bounded write batches (issue #50)', () => {
     assert.equal(unbatched, 13)
   })
 
+  it('a batch of terms is one doc_terms statement and no vocabulary statement of its own (issue #252) (AC6)', async () => {
+    const { rows } = await db.query<{ id: number }>(
+      `insert into docs (source, uri, text, published_at) select 'rss', 'https://example.org/vocab/' || i, 'x', now() from generate_series(1, 6) as i returning id`,
+    )
+    const derived = rows.map((r, i) => ({ docId: r.id, persons: [], terms: [{ term: 'vocab-a', kind: 'word' as const }, { term: `vocab-${i}`, kind: 'word' as const }], names: [] }))
+    assert.equal(await statements(() => writeDerivedP(derived, 500)), 1)
+    assert.equal(await statements(() => writeDerivedP(derived, 6)), 2, 'twelve term rows in batches of six: two statements')
+  })
+
   it('a failing group rolls back its own transaction only: an untouched group before and after it still lands whole', async () => {
     const phantom = { id: 'ainda-nao-cadastrado-batch', name: 'Ciro Gomes', aliases: ['Ciro Gomes'] }
     const groupOf = (prefix: string, bad: boolean) => [

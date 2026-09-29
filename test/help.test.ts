@@ -175,6 +175,17 @@ describe('help.ts: como-ler.html clicks stay on the atlas', () => {
     })
   })
 
+  // issue #215: figure 10's "Como ler" link (como-ler.html#persistencia) must resolve like every
+  // other figure's, not fall through HELP_SECTIONS and scroll nowhere.
+  it("openHelp('#persistencia') opens the dialog at figure 10's section", () => {
+    withHelpDom(({ dialog, scrolled }) => {
+      mountHelp()
+      openHelp('#persistencia')
+      assert.equal(dialog.open, true)
+      assert.deepEqual(scrolled, ['help-persistencia'])
+    })
+  })
+
   it('every como-ler.html#<x> link in public/atlas.html resolves through openHelp and has a matching id="help-<x>"', () => {
     const html = atlasPage()
     const hashes = [...html.matchAll(/como-ler\.html#([\w-]+)/g)].map((m) => m[1])

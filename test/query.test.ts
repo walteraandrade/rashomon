@@ -24,6 +24,7 @@ import {
   parseLeanList,
   parseLens,
   parseLensesQuery,
+  parsePersistenceQuery,
   parseQuery,
   parseRisingQuery,
   parseScope,
@@ -34,8 +35,10 @@ import {
   parseWeekQuery,
   snapDays,
   snapTo,
+  addDays,
   brtDate,
   brtMidnightUtc,
+  mondayOf,
   calendarDay,
 } from '../src/query.js'
 import { ATLAS_KINDS, candidatesQuery, compareParams, docsParams, params } from '../src/ui/api.js'
@@ -859,5 +862,79 @@ describe('sort=reach (issue #210)', () => {
   it('sort=reach resolves to count', () => {
     assert.equal(parseQuery({ sort: 'reach' }).sort, 'count')
     assert.equal(parseQuery({ sort: 'pmi' }).sort, 'pmi')
+  })
+})
+
+describe('parsePersistenceQuery (issue #215)', () => {
+  it('snaps weeks onto 4, 12, 26 with a tie to the smaller value, and limit onto LIMITS', () => {
+    assert.equal(parsePersistenceQuery({}).weeks, 12)
+    assert.equal(parsePersistenceQuery({ weeks: '8' }).weeks, 4)
+    assert.equal(parsePersistenceQuery({ weeks: '19' }).weeks, 12)
+    assert.equal(parsePersistenceQuery({ weeks: '26' }).weeks, 26)
+    assert.equal(parsePersistenceQuery({ weeks: '1000' }).weeks, 26)
+    assert.equal(parsePersistenceQuery({ weeks: 'abc' }).weeks, 12)
+    assert.equal(parsePersistenceQuery({}).limit, 40)
+    assert.equal(parsePersistenceQuery({ limit: '41' }).limit, 40)
+    assert.equal(parsePersistenceQuery({ limit: '7' }).limit, 8)
+    assert.ok(LIMITS.includes(parsePersistenceQuery({ limit: '999' }).limit))
+  })
+
+  it('ignores an unknown key and answers nothing but weeks and limit', () => {
+    assert.deepEqual(parsePersistenceQuery({ source: 'rss', days: '7', kind: 'word' }), { weeks: 12, limit: 40 })
+  })
+})
+
+describe('mondayOf and addDays', () => {
+  it('snap any calendar date to its Monday by pure date arithmetic', () => {
+    assert.equal(mondayOf('2026-10-12'), '2026-10-12')
+    assert.equal(mondayOf('2026-10-14'), '2026-10-12')
+    assert.equal(mondayOf('2026-10-18'), '2026-10-12')
+    assert.equal(mondayOf('2026-10-19'), '2026-10-19')
+    assert.equal(mondayOf('2026-01-01'), '2025-12-29')
+    assert.equal(addDays('2026-10-12', -7), '2026-10-05')
+    assert.equal(addDays('2026-12-28', 7), '2027-01-04')
+  })
+})
+
+describe('parseDocsQuery.week (issue #215)', () => {
+  const now = new Date('2026-10-14T15:00:00Z')
+  const parse = (q: Record<string, string>) => parseDocsQuery(q, 'lula', now)
+
+  it('snaps to the Monday of the date given, a Wednesday or a Sunday alike', () => {
+    for (const date of ['2026-10-12', '2026-10-14', '2026-10-05', '2026-10-11']) assert.equal(parse({ week: date }).week, mondayOf(date), date)
+    assert.equal(parse({ week: '2026-10-18' }).week, '2026-10-12', 'a future date inside the current week still snaps to its Monday')
+  })
+
+  it('is empty when omitted, malformed, future, or outside the days window', () => {
+    assert.equal(parse({}).week, '')
+    assert.equal(parse({ week: 'nope' }).week, '')
+    assert.equal(parse({ week: '2026-02-31' }).week, '')
+    assert.equal(parse({ week: '2026-10-19' }).week, '')
+    assert.equal(parse({ week: '2026-08-03' }).week, '')
+    assert.equal(parse({ week: '2026-09-28', days: '7' }).week, '')
+    assert.equal(parse({ week: '2026-10-05', days: '7' }).week, '2026-10-05')
+  })
+
+  it('a week only touching the window by its last day is kept, one just past the edge is not', () => {
+    const edge = (iso: string) => parseDocsQuery({ week: '2026-10-05', days: '7' }, 'lula', new Date(iso)).week
+    assert.equal(edge('2026-10-19T02:00:00Z'), '2026-10-05')
+    assert.equal(edge('2026-10-19T04:00:00Z'), '')
+  })
+
+  it('a resolved day wins over the week', () => {
+    assert.equal(parse({ day: '2026-10-14', week: '2026-10-05' }).week, '')
+    assert.equal(parse({ day: '2026-10-14', week: '2026-10-05' }).day, '2026-10-14')
+    assert.equal(parse({ day: '2026-10-14', week: 'nope' }).week, '')
+  })
+
+  it('malformed day plus valid week keeps the week; so do a future and an out-of-window day', () => {
+    assert.equal(parse({ day: 'nope', week: '2026-10-12' }).week, '2026-10-12')
+    assert.equal(parse({ day: '2099-01-01', week: '2026-10-12' }).week, '2026-10-12')
+    assert.equal(parse({ day: '2020-01-01', week: '2026-10-12' }).week, '2026-10-12')
+    assert.equal(parse({ day: 'nope', week: '2026-10-12' }).day, '')
+  })
+
+  it('every parse carries week as a string, never undefined', () => {
+    assert.equal(typeof parseDocsQuery({}).week, 'string')
   })
 })

@@ -240,7 +240,7 @@ describe('graph_terms_all is a temp table, never persisted (issue #203)', () => 
   it('ANALYZED_TABLES no longer lists graph_terms_all', () => {
     assert.deepEqual(
       [...ANALYZED_TABLES],
-      ['docs', 'doc_persons', 'doc_terms', 'terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors', 'doc_tone'],
+      ['docs', 'doc_persons', 'doc_terms', 'terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors', 'doc_tone', 'term_weeks'],
     )
   })
 })
@@ -590,11 +590,11 @@ describe('maintenance stays out of the request path (issue #44)', () => {
     assert.deepEqual(offenders, [], 'maintenance must run only in the process that owns DATA_DIR')
   })
 
-  it('aggregate.ts analyzes only the two tables its own window just wrote (issue #250)', () => {
+  it('aggregate.ts analyzes only tables its own build just wrote, never a persisted one it leaves to the owner (issues #250, #215)', () => {
     const text = readFileSync(join(root, 'aggregate.ts'), 'utf8')
     assert.doesNotMatch(text, /analyzeTables|analyzeAfterWrite/)
     const analyzed = [...text.matchAll(/`\s*analyze\b([^`]*)`/gi)].map((m) => m[1].trim())
-    assert.deepEqual(analyzed, ['graph_terms_all', 'graph_terms'])
+    assert.deepEqual(analyzed, ['graph_terms_all', 'graph_terms', 'term_weeks_universe'])
   })
 })
 
@@ -900,5 +900,13 @@ describe('migrate adds the reach columns (issue #210)', () => {
     assert.deepEqual(await reachColumns(), expected)
     await migrateP()
     assert.deepEqual(await reachColumns(), expected, 'a second migrate is a no-op')
+  })
+})
+
+describe('term_weeks table membership', () => {
+  it('term_weeks is in ANALYZED_TABLES and POST_BUILD_ANALYZED, not in AGGREGATE_TABLES', () => {
+    assert.ok(ANALYZED_TABLES.includes('term_weeks'))
+    assert.ok(POST_BUILD_ANALYZED.includes('term_weeks' as (typeof POST_BUILD_ANALYZED)[number]))
+    assert.ok(!AGGREGATE_TABLES.includes('term_weeks' as (typeof AGGREGATE_TABLES)[number]))
   })
 })

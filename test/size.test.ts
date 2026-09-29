@@ -123,6 +123,7 @@ describe('pnpm size', () => {
           'outlet_fields',
           'outlet_neighbors',
           'doc_tone',
+          'term_weeks',
         ].sort(),
       )
     })

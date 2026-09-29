@@ -256,6 +256,15 @@ export const schema = `
       similarity float8 not null,
       primary key (days, person_id, domain, neighbor)
     );
+    create table if not exists term_weeks (
+      person_id text not null references persons(id) on delete cascade,
+      term text not null,
+      kind text not null,
+      week date not null,
+      count int not null,
+      c_t int not null,
+      primary key (person_id, term, kind, week)
+    );
 `
 
 // sql.unsafe parses one statement per call, unlike the exec() it replaces.
@@ -322,6 +331,7 @@ export const ANALYZED_TABLES = [
   'outlet_fields',
   'outlet_neighbors',
   'doc_tone',
+  'term_weeks',
 ] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 

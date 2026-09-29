@@ -366,6 +366,8 @@ POSTGRES_URL_NON_POOLING=... PG_SSL_CA="$(cat ca.pem)" \
 
 It is read-only: each explain runs inside `begin transaction read only` ... `rollback`, and the client only ever sends that pair, `explain (analyze, buffers, format text)` and `select`; never a `set`, DDL, DML, `analyze` or `pg_stat_statements_reset()`. It exits 1 when a case fails (the section prints the error and the next case still runs). It refuses to run inside the build window, from minute 17 of UTC hours 0/6/12/18 until minute 2 of the next hour (the `17 */6` cron plus about 45 minutes), since a running build competes for the same memory and would skew every plan; `--force` overrides it. Never run it from CI, a schedule, `pnpm test` or `pnpm ingest`.
 
+`term_weeks` (`person_id, term, kind, week` primary key, `count`, `c_t`; issue #215) is the one persisted table that is a history rather than a cache: `buildTermWeeks` (`src/aggregate.ts`), the last step of `buildGraphAggregates` and so of every `pnpm ingest` and `pnpm reindex`, writes for each tracked person the top 50 terms (`TERM_WEEKS_TOP`) of the current and the previous week in `America/Sao_Paulo`, Monday to Sunday, ranked by `pmi * ln(1 + count)` with the person's own name words dropped. `week` is the Monday. `count` is the person's documents that week containing the term and must be at least 2 (the count floor, `TERM_WEEKS_MIN`, the `/graph` default `min`: without that floor every week's top 50 is single-document rare words that can never persist); `c_t` is the tracked documents containing it over the widest window (`Math.max(...DAYS)` days, `query.ts`), in the temp table `term_weeks_universe`, built once per build and gone at commit, the second full scan of that window and the costliest statement of the build. The instant is injected: one `now` is bound once and every statement derives its weeks and its window from it, none reads SQL `now()`, so one build is idempotent for one `now`. Each build deletes and rewrites only the current and the previous week for the persons it is given (delete-then-insert, not upsert, so a term that fell out of the top 50 leaves no row) and never touches an older week; a missed build leaves a gap that the series shows as a gap. Size bound: at most 50 rows per person and week, about 70k rows a year for 27 people, a few MB; lifting that bound needs its own spec (the `term_links` incident, #267). The person foreign key cascades, so removing a person from `seed.json` removes her rows. It is in `ANALYZED_TABLES`, `POST_BUILD_ANALYZED` and `SIZE_TABLES`, never in `AGGREGATE_TABLES` (`pnpm aggregate --if-missing` ignores it). `term_weeks` is never copied by `pnpm push`, which does not list it: the history accrues where the ingest runs, and a push must not truncate or overwrite it. `pnpm reindex` renumbers `terms` ids and may change stopwords or phrases; `term_weeks` is text-keyed, so older weeks stay a record of the vocabulary of their day. Run `pnpm migrate` against production before the deploy that ships it. Read by `GET /api/people/:id/persistence` ([api](api.md#persistence)).
+
 ## Front-end bootstrapping
 
 The page at `/` is a sequence of independent figures (`src/ui/figures/*.ts`), each with its
@@ -383,7 +385,7 @@ Two key forms, read in this order:
 The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
 `compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`),
 `lenses` (figure 6, `#lenses`), `attention` (figure 7, `#attention`), `agenda` (figure 8,
-`#agenda`) and `comention` (figure 9, `#comention`). Figure 1 reads `person`,
+`#agenda`), `comention` (figure 9, `#comention`) and `persistence` (figure 10, `#persistence`). Figure 1 reads `person`,
 `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
 sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
 Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
@@ -401,6 +403,10 @@ tracked person at once, so it has no `person` key, and it sends no `min`, which 
 route's own default of 5. Figure 9 reads `days` and `source` (bare or prefixed) plus `lean` and
 `min`, prefixed only (`comention.lean`, `comention.min`, no bare fallback, like figure 6's
 `a`/`b`) — it has no `person` key at all, since a shared count is never one person's.
+The figure id `persistence` (figure 10, `#persistence`) reads `person` and `limit`, bare or
+prefixed (`persistence.person`, `persistence.limit`), and `weeks`, prefixed only
+(`persistence.weeks`, no bare fallback, like figure 6's `a`/`b`): no other figure has a
+`weeks` control, so a bare `?weeks=` never reaches it.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

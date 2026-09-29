@@ -195,6 +195,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'figures/agenda.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       // Figure 9 (#207), the comention matrix: same shape again, imported by nothing but app.ts.
       'figures/comention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
+      'figures/persistence.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
         './docs-card.js',
@@ -204,6 +205,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './figures/comention.js',
         './figures/compare.js',
         './figures/lenses.js',
+        './figures/persistence.js',
         './figures/rising.js',
         './figures/testimony.js',
         './figures/week.js',
@@ -520,5 +522,20 @@ describe('CLAUDE.md documents the comention figure (issue #207)', () => {
     const md = claudeMd()
     assert.match(md, /`#comention`[\s\S]{0,1000}one side[\s\S]{0,150}with=/)
     assert.match(md, /`#comention`[\s\S]{0,1000}never two columns/)
+  })
+})
+
+describe('CLAUDE.md documents the persistence figure', () => {
+  const md = () => srcSource('../CLAUDE.md')
+
+  it('names the term_weeks table, its build, the route builders, the figure module and its layout function (AC23)', () => {
+    for (const name of ['term_weeks', 'buildTermWeeks', 'persistenceFirstWeek', 'persistenceFor', 'persistenceStats', 'figures/persistence.ts', 'persistenceLayout', '`#persistence`']) {
+      assert.ok(md().includes(name), `CLAUDE.md must name ${name}`)
+    }
+  })
+
+  it('counts ten figures on the page, the tenth being the persistence card (AC23)', () => {
+    assert.match(md(), /sequence of ten `\.figure` cards/)
+    assert.doesNotMatch(md(), /sequence of nine `\.figure` cards/)
   })
 })

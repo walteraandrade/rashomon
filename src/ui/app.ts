@@ -5,6 +5,7 @@ import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountComention } from './figures/comention.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountLenses } from './figures/lenses.js'
+import { mount as mountPersistence } from './figures/persistence.js'
 import { mount as mountRising } from './figures/rising.js'
 import { mount as mountTestimony } from './figures/testimony.js'
 import { mount as mountWeek } from './figures/week.js'
@@ -17,6 +18,7 @@ import {
   paintCompareLoading,
   paintLensesLoading,
   paintOutletsLoading,
+  paintPersistenceLoading,
   paintRisingLoading,
   paintTestimonyLoading,
   paintWeekLoading,
@@ -60,6 +62,8 @@ const FIGURES: FigureEntry[] = [
   { id: 'agenda', sectionId: 'agenda', keys: ['days', 'source'], noticeId: 'agendaGrid', mount: mountAgenda },
   // Spans every tracked person, so there is no `person` key here.
   { id: 'comention', sectionId: 'comention', keys: ['days', 'source', ['lean', null], ['min', null]], noticeId: 'comentionAbout', mount: mountComention },
+  // `weeks` is prefixed only: no other figure has a weeks control, so a bare weeks= means nothing here.
+  { id: 'persistence', sectionId: 'persistence', keys: ['person', ['weeks', null], 'limit'], noticeId: 'persistenceNote', mount: mountPersistence },
 ]
 
 // A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.
@@ -90,6 +94,7 @@ const paintBootLoading = () => {
   paintAttentionLoading()
   paintAgendaLoading()
   paintComentionLoading()
+  paintPersistenceLoading()
 }
 
 export const boot = async () => {

@@ -204,6 +204,24 @@
     <figure class="comention-body" id="comentionMatrix" aria-label="Matriz de pares de pessoas citadas juntas" hidden></figure>
     <p class="note" id="comentionAbout"></p>
   </section>
+  <section class="figure persistence" id="persistence" aria-labelledby="persistenceTitle">
+    <header class="figure-head">
+      <div class="figure-title"><span class="eyebrow">Gráfico 10</span><h2 id="persistenceTitle">Persistência</h2></div>
+      <p class="figure-sub">Quais palavras grudaram na pessoa semana após semana, e quais sumiram. <a href="como-ler.html#persistencia">Como ler</a>.</p>
+      <dl class="figure-key">
+        <div><dt>Palavra</dt><dd>uma linha por palavra, das que ficaram mais tempo às que ficaram menos</dd></div>
+        <div><dt><span class="ink-scale" aria-hidden="true"></span>Célula</dt><dd>uma semana; a tinta é o número de documentos</dd></div>
+        <div><dt><span class="persistence-gap-swatch" aria-hidden="true"></span>Vazia</dt><dd>fora das 50 palavras mais fortes da semana; não é zero</dd></div>
+        <div><dt>Sequência</dt><dd>semanas seguidas com a palavra, até agora</dd></div>
+        <div><dt>Meia-vida</dt><dd>semanas do pico até cair à metade; &ldquo;sem queda&rdquo; se ainda não caiu</dd></div>
+        <div><dt>Clique</dt><dd>os textos daquela semana</dd></div>
+        <div><dt>Início</dt><dd id="persistenceSince">a série começa em 9 de set. de 2026</dd></div>
+      </dl>
+      <div class="sentence"><p class="sentence-line">As palavras que ficaram com <span class="keep"><span class="pick"><select id="persistencePerson" aria-label="Pessoa (persistência)"></select></span>,</span> nas últimas <span class="keep"><span class="pick"><select id="persistenceWeeks" aria-label="Semanas (persistência)"><option value="4">4 semanas</option><option value="12" selected>12 semanas</option><option value="26">26 semanas</option></select></span>.</span> Mostrar <span class="pick"><select id="persistenceLimit" aria-label="Quantidade de palavras (persistência)"><option value="20">20</option><option value="40" selected>40</option><option value="60">60</option></select></span> palavras.</p></div>
+    </header>
+    <figure class="persistence-chart" id="persistenceChart" aria-label="Palavras por semana, com sequência e meia-vida" hidden></figure>
+    <p class="note" id="persistenceNote"></p>
+  </section>
 </main>
 <dialog class="docs-dialog" id="docsDialog" aria-labelledby="docsTitle">
   <div class="docs-dialog-head" id="docsGrip"><div><span class="eyebrow" id="docsKicker">Documentos</span><h2 id="docsTitle"></h2></div><button id="docsClose" class="quiet-button" aria-label="Fechar documentos">Fechar</button></div>
@@ -293,6 +311,13 @@
       <h3>Gráfico 9 · Quem aparece junto</h3>
       <p>Cada célula conta os textos que citam as duas pessoas ao mesmo tempo, na mesma janela. Aparecer junto não é concordar: a célula não diz se as duas foram citadas a favor, contra ou uma da outra, só que o mesmo texto falou das duas.</p>
       <p>O mínimo escolhido na frase esconde os pares com poucos textos em comum: um par abaixo dele fica em branco na matriz, não desaparece dela. Clicar numa célula preenchida abre os textos daquele par; clique de novo, ou fora da matriz, fecha.</p>
+    </div>
+    <div id="help-persistencia">
+      <h3>Gráfico 10 · Persistência</h3>
+      <p>Cada linha é uma palavra; cada célula, uma semana de segunda a domingo, no calendário de Brasília, da mais antiga à esquerda à atual à direita. A célula mostra quantos documentos sobre a pessoa trazem a palavra naquela semana. A palavra só entra na semana se estiver entre as 50 mais fortes dela, com pelo menos 2 documentos.</p>
+      <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
+      <p>A sequência conta as semanas seguidas com a palavra, até agora. A semana em curso ainda está incompleta e não interrompe a conta se estiver vazia. A meia-vida é o número de semanas do pico até a primeira semana completa em que a palavra caiu à metade ou menos; &ldquo;sem queda&rdquo; quer dizer que isso ainda não aconteceu.</p>
+      <p>Clicar numa célula abre os textos daquela semana com a palavra. Semanas mais antigas que o período de documentos guardado mostram o número, mas não abrem textos.</p>
     </div>
     <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
     <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>

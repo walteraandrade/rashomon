@@ -1,4 +1,4 @@
-import { fmt, label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { fmt, label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
@@ -465,4 +465,18 @@ export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[],
     }
   }
   return { cellSize, cells }
+}
+
+// Figure 10 (issue #215): a fixed table grid, not a beeswarm. Level 1..PERSISTENCE_LEVELS on one
+// ramp for the whole figure, keyed to the largest count shown; 0 is only a null count, so a
+// positive count is never painted as the empty cell.
+export const PERSISTENCE_LEVELS = 5
+
+export type PersistenceCell = { week: string; count: number | null; level: number }
+export type PersistenceRow = { term: string; kind: string; cells: PersistenceCell[] }
+
+export const persistenceLayout = (data: Persistence): { rows: PersistenceRow[] } => {
+  const top = Math.max(1, ...data.terms.flatMap((t) => t.series.map((s) => s.count ?? 0)))
+  const level = (count: number | null) => (count === null ? 0 : Math.min(PERSISTENCE_LEVELS, Math.max(1, Math.ceil((count / top) * PERSISTENCE_LEVELS))))
+  return { rows: data.terms.map((t) => ({ term: t.term, kind: t.kind, cells: t.series.map((s) => ({ week: s.week, count: s.count, level: level(s.count) })) })) }
 }

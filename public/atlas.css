@@ -284,11 +284,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
 .compare .ruler, .compare .detail, .rising .ruler, .rising .note,
-.lenses .ruler, .lenses .detail, .attention .attention-chart, .attention .note, .agenda .agenda-grid { transition: opacity .16s ease-out; }
+.lenses .ruler, .lenses .detail, .attention .attention-chart, .attention .note, .agenda .agenda-grid, .persistence .persistence-chart { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
-.figure.is-loading .attention-chart, .figure.is-loading .agenda-grid,
+.figure.is-loading .attention-chart, .figure.is-loading .agenda-grid, .figure.is-loading .persistence-chart,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
 .map-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); }
@@ -925,6 +925,56 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .comention-listitem b { font-family: var(--mono); font-weight: 600; color: var(--ink); margin-right: var(--space-2); font-variant-numeric: tabular-nums; }
 .comention-listitem.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 .comention-listitem.ghost { background: var(--soft); min-height: 2.3em; }
+
+/* ---------- persistence (figure 10, issue #215): one row per word, one cell per week, --ink only.
+   A filled cell's ink is its data-lv (1..5) on one ramp for the whole figure, so any positive count is
+   visibly filled; an outline cell is a week the word was outside that week's top 50 (or before
+   the series began), never a zero. No --hostile/--favor/--cmp-a/--cmp-b. ---------- */
+.persistence-chart { margin: 18px 0 0; }
+.persistence-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.persistence-table { border-collapse: separate; border-spacing: 0; width: 100%; font-family: var(--mono); font-size: var(--t-xs); }
+.persistence-table th, .persistence-table td { padding: 0; font-weight: 400; text-align: left; }
+.persistence-table thead th { height: 1.6em; vertical-align: bottom; }
+.persistence-week { position: relative; min-width: 24px; }
+.persistence-week span { position: absolute; bottom: 4px; left: 0; white-space: nowrap; font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); color: var(--muted); }
+.persistence-table .persistence-term { padding: 0 var(--space-4) 0 0; max-width: 24ch; min-width: 12ch; color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.persistence-table .persistence-c { padding: 1px; }
+.persistence-cell {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-width: 24px; height: 26px; padding: 0;
+  border: 1px solid var(--line); border-radius: 2px;
+  font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; font-variant-numeric: tabular-nums;
+  color: var(--ink); overflow: hidden;
+}
+.persistence-cell[data-lv="1"] { --lv: 1; }
+.persistence-cell[data-lv="2"] { --lv: 2; }
+.persistence-cell[data-lv="3"] { --lv: 3; }
+.persistence-cell[data-lv="4"] { --lv: 4; }
+.persistence-cell[data-lv="5"] { --lv: 5; }
+button.persistence-cell, .persistence-cell.is-expired {
+  background: color-mix(in srgb, var(--ink) calc(var(--lv, 1) * 17%), var(--panel));
+  border-color: transparent;
+}
+/* From 51% ink up the number would be light on light. */
+.persistence-cell[data-lv="3"], .persistence-cell[data-lv="4"], .persistence-cell[data-lv="5"] { color: var(--accent-ink); }
+button.persistence-cell { cursor: pointer; }
+button.persistence-cell:hover, button.persistence-cell:focus-visible { border-color: var(--accent); outline: none; }
+button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.persistence-cell.is-expired { cursor: default; }
+.persistence-cell.is-gap { background: transparent; }
+.persistence-cell.is-nodata { background: transparent; border-style: dashed; border-color: color-mix(in srgb, var(--line) 60%, transparent); }
+.persistence-cell.ghost { background: var(--soft); border-color: var(--line); }
+.persistence-gap-swatch { display: inline-block; width: 14px; height: 10px; margin-right: var(--space-2); border: 1px solid var(--line); border-radius: 2px; }
+.persistence-table .persistence-stats { padding-left: var(--space-4); white-space: nowrap; }
+.persistence-stats .stat { display: flex; gap: var(--space-5); margin: 0; }
+.persistence-stats .stat > div { flex-direction: row-reverse; align-items: baseline; justify-content: flex-end; gap: var(--space-2); }
+.persistence-stats .stat dd { font-size: var(--t-sm); }
+.persistence-stats .stat dt { font-size: var(--t-2xs); color: var(--muted); }
+.persistence-ghost { display: flex; flex-direction: column; gap: 2px; }
+.persistence-ghost-row { display: flex; align-items: center; gap: 2px; }
+.persistence-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
+.persistence-ghost-row .persistence-cell { flex: 1 1 0; }
+#persistenceNote { margin-top: var(--space-3); }
 
 /* ---------- the pet ---------- */
 /* The one raster on a site that otherwise draws every limit with type. It is allowed exactly

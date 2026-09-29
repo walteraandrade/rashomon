@@ -1,0 +1,207 @@
+{
+  "pr": 188,
+  "issue": 185,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "bb2d0417f7a9fa8f1077393daf89d6c3fbcdab5d",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`pnpm typecheck` passes with `Collector = (persons: Person[]) => Effect.Effect<RawDoc[], CollectorError, HttpClient.HttpClient | SqlClient.SqlClient>` in `src/types.ts`, and no module under `src/collectors/*` exports a Promise-returning wrapper around its `collect` Effect (`collectors/index.ts` registers each module's `collect` directly)."
+    },
+    {
+      "n": 2,
+      "text": "Calling `ingest(persons, names, { collectors: { <stubbed source>: <effect that fails with a typed error> } })` against the fixture: the failing source's `SourceResult.error` is set, its `written`/`enriched`/`failed` are all 0, and every other named source in the same call still reaches `insertDocs` and its `SourceResult.written` matches what `insertDocs` returns for its fixture docs."
+    },
+    {
+      "n": 3,
+      "text": "`Console.error` (captured via `TestConsole`) shows exactly one `[name] message` line for the failing source above, and `Console.log` shows a `fetched X, new Y` line for every named source including the failing one (`fetched 0, new 0` for it)."
+    },
+    {
+      "n": 4,
+      "text": "Calling `ingest` with a stub `upsertPersons` that rejects fails the returned Effect with `IngestFailure({ stage: 'upsertPersons' })`, and no source in `names` is ever attempted (no `SourceResult` for any of them, no insert made against the fixture)."
+    },
+    {
+      "n": 5,
+      "text": "Calling `ingest` with `names` naming zero-doc-yielding stub sources still returns an `IngestReport` whose `aggregates` field is populated (`buildGraphAggregates` ran) even though `totalDocs` growth is zero — matching today's \"the window moves even when nothing new was written\" comment."
+    },
+    {
+      "n": 6,
+      "text": "`ingest`'s `Effect.forEach` over `names` runs one source at a time: a stub source B's Effect only starts after stub source A's has resolved (assertable by recording an entry/exit order list from two stub collectors' Effects, or by `TestClock`-timed stubs whose completion order must match `names`' order, never overlap)."
+    },
+    {
+      "n": 7,
+      "text": "`report.sources` preserves the order of `names` as given, including when `names` differs from `defaultSources`' order (e.g., `['bluesky', 'rss']` yields `sources[0].name === 'bluesky'`)."
+    },
+    {
+      "n": 8,
+      "text": "An unknown source name in `names` (not a key of `collectors` or `options.collectors`) produces a `SourceResult` with `error` set and no thrown exception, rather than failing the whole `ingest` call."
+    },
+    {
+      "n": 9,
+      "text": "The docs (README.md and/or docs/*.md, checked via `test/docs.ts`'s `docsText`, never one page's wording) state that an ingest run whose person-table write fails sets the process exit code to 1 rather than continuing, and that `ingest.ts`'s network and database access run through layers provided at its own entrypoint (not module-level connections). `test/docs-drift.test.ts`'s collector-registry/`sources.md` coverage is unaffected by this issue and needs no new criterion here."
+    },
+    {
+      "n": 10,
+      "text": "`pnpm ingest` from the shell (manual check, not automated: run once against a scratch `DATA_DIR` with a source that is expected to succeed) prints the same `fetched / new / enriched / failed`, `removed persons: …` (when applicable), `total docs: …`, `analyzed …`/`skipped analyze …` and `graph aggregates: …` line shapes as before this change, and exits 0."
+    },
+    {
+      "n": 11,
+      "text": "`test/bundle-freshness.test.ts` and every existing suite under `test/collectors-*.test.ts` still pass unchanged (their own `collect` Effects are untouched by this issue; only the registry and `Collector` type around them move)."
+    }
+  ],
+  "diffTokens": 16032,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.8
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.64
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.34
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.19
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.29
+      }
+    ],
+    "costUsd": 0.00107436,
+    "ms": 559,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.088611,
+    "ms": 6667,
+    "error": null
+  }
+}

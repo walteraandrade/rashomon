@@ -1,0 +1,267 @@
+{
+  "pr": 197,
+  "issue": 193,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "6b5361d2f6e4973a64ba504e48af3e27bad58c38",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/ui/figure.ts` exists, exports `runFigure`, and is DOM-touching (not added to the DOM-free list `test/invariants.test.ts` checks for `layout.ts`/`format.ts`/`state.ts`/`perf.ts`/`api.ts`/`marks.ts`)."
+    },
+    {
+      "n": 2,
+      "text": "`test/invariants.test.ts`'s import-graph `expected` map contains the entries listed in section 2 above (checkable by running the updated test, which fails on any drift by construction)."
+    },
+    {
+      "n": 3,
+      "text": "A second `load()`/`reload()` call on the same `runFigure` handle before the first resolves aborts the first in-flight fetch and only the second call's result is painted (`test/figure.test.ts`)."
+    },
+    {
+      "n": 4,
+      "text": "A resolved fetch whose `requestId` no longer matches the handle's current one (superseded by a later `load()`) is dropped: neither `paint` nor `paintError` is called."
+    },
+    {
+      "n": 5,
+      "text": "`readScope` returning a hit skips `ghost()`; a miss calls `ghost()` before the fetch resolves."
+    },
+    {
+      "n": 6,
+      "text": "A click on an element inside `el` whose target does not match `markSelector` calls `onRelease` and, if this figure's `name` opened the docs card (`docsCard.openedBy(name)`), closes it; a click on the `markSelector` match does neither."
+    },
+    {
+      "n": 7,
+      "text": "A click on an element inside `el` whose target does not match `markSelector`, when a *different* name currently owns the open docs card, calls `onRelease` but does not close the card."
+    },
+    {
+      "n": 8,
+      "text": "`Escape` (via the `document` keydown listener `runFigure` wires when `el` is given) triggers the same `release()` behaviour as a background click."
+    },
+    {
+      "n": 9,
+      "text": "A width change on the observed `el` (or `el[0]`) calls `repaint()` and does not call `fetch` again."
+    },
+    {
+      "n": 10,
+      "text": "`figures/compare.ts` and `figures/rising.ts` each release their ruler selection on `Escape` (new behaviour; `test/figures-compare.test.ts`, `test/figures-rising.test.ts` gain one case each)."
+    },
+    {
+      "n": 11,
+      "text": "Every existing criterion in `test/figures-compare.test.ts`, `test/figures-rising.test.ts`, `test/figures-week.test.ts`, `test/figures-testimony.test.ts` and `test/figures-atlas.test.ts` still passes; abort/stale/ghost cases that were duplicated per figure may be rewritten as \"this figure wires `runFigure` with its own `name`/`params`/`paint`\" but must keep asserting the same observable painted output."
+    },
+    {
+      "n": 12,
+      "text": "`test/app.test.ts`'s figure-independence criteria (issue #92: no figure reaches another figure's DOM) still pass with `figure.ts` in the import graph."
+    },
+    {
+      "n": 13,
+      "text": "`figures/atlas.ts` does not import `./figure.js` and its exported surface (`createHandlers`, `docsQuery`, `layoutKey`, `mount`, `scopeKeys`) is unchanged (`test/invariants.test.ts`'s existing export-surface assertion)."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` and `pnpm test` pass."
+    },
+    {
+      "n": 15,
+      "text": "`public/bundle.js` is rebuilt and committed (`test/bundle-freshness.test.ts` passes)."
+    },
+    {
+      "n": 16,
+      "text": "`CLAUDE.md`'s \"Layout\" section documents `figure.ts` (name, position in the import order, what it owns) and no longer repeats, inside `compare.ts`'s/`rising.ts`'s/`week.ts`'s/`testimony.ts`'s own paragraphs, the abort/stale/ghost/background/Escape/resize prose that `figure.ts`'s own paragraph now states once — checked by reading `CLAUDE.md`, not by a repo test (this file is not covered by `test/docs.ts`'s `docsText`, which only reads `README.md` and `docs/*.md`).\n\nThis issue touches no collector, no `docs/sources.md` row and no `defaultSources` entry, so `test/docs-drift.test.ts` is unaffected and no new documentation-fact criterion is needed."
+    }
+  ],
+  "diffTokens": 21466,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.69
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.53
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.87
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.63
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.15
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.14
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.09
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.28
+      }
+    ],
+    "costUsd": 0.001386462,
+    "ms": 640,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.114981,
+    "ms": 7171,
+    "error": null
+  }
+}

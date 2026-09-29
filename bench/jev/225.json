@@ -1,0 +1,243 @@
+{
+  "pr": 225,
+  "issue": 211,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "ec61f6eb68a7b03d49adf66a054d6fa6dc3d7a24",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`test/fixture.ts` gains a `wikipedia` field on at least one fixture person and a helper to seed `person_attention` rows (or an inline insert in the new test file); `GET /api/people/:id/attention?days=30` against that fixture returns the seeded `{ day, views }` rows ordered ascending by day."
+    },
+    {
+      "n": 2,
+      "text": "A person outside the requested `days` window is excluded: a row seeded 40 days ago is absent from a `?days=30` response and present at `?days=365`."
+    },
+    {
+      "n": 3,
+      "text": "A tracked person with no `wikipedia` field and no `person_attention` rows returns `{ days: 30, series: [] }` with HTTP 200, not 404 and not an error."
+    },
+    {
+      "n": 4,
+      "text": "`GET /api/people/does-not-exist/attention` returns 404 with `{ error: 'person not found' }`, the same shape `test/graph.test.ts` (or its sibling) already pins for other `:id` routes."
+    },
+    {
+      "n": 5,
+      "text": "`?days=45` snaps to 30 (nearest of `[7, 30, 365]`, tie rule per existing `snapDays` behaviour) — asserted directly against `parseAttentionQuery`/`snapDays`, not by re-deriving the tie table."
+    },
+    {
+      "n": 6,
+      "text": "Writing a `person_attention` row for `(person_id, day)` that already exists with a different `views` value updates it in place (`on conflict ... do update`), never producing a second row and never leaving the old value — a test inserts, re-inserts the same day with a different count, and asserts one row with the new count."
+    },
+    {
+      "n": 7,
+      "text": "Removing a person from the seed list (the existing `pruneRemoved` path) deletes that person's `person_attention` rows via the FK's `on delete cascade`, verified the same way `test/store.test.ts` (or wherever `pruneRemoved` is already tested) checks `doc_persons`/`doc_testimony` cleanup — no new orphan-row code needed."
+    },
+    {
+      "n": 8,
+      "text": "The pageviews collector test drives its HTTP call entirely through `test/effect.ts`'s stub `fetch`/`FetchHttpClient.Fetch`/`TestClock` harness (per `test/collectors-camara.test.ts`'s pattern) — no real network call, and a 429/5xx response exercises the retry-and-backoff path under `TestClock`, never a real `sleep`."
+    },
+    {
+      "n": 9,
+      "text": "A person whose stub-fetch call resolves 404 (or any non-2xx) is skipped: that person contributes zero rows, and a sibling person in the same run still gets theirs written — the per-person isolation from the SQL/logic section, exercised at the collector level."
+    },
+    {
+      "n": 10,
+      "text": "A failure at the ingest stage's own SQL write (not a fetch failure) surfaces as `IngestFailure({ stage: 'pageviews' })` — driven by `test/ingest.test.ts`'s `failingSql` pattern matched to the new stage's own statement, mirroring how the existing stages are each pinned there."
+    },
+    {
+      "n": 11,
+      "text": "`src/graph.ts`'s new `attentionQuery` builder has its rendered SQL text pinned via the `statements`-export pattern the module doc describes for every other builder — a test asserts the text, not just a live execution."
+    },
+    {
+      "n": 12,
+      "text": "`docs/api.md` names `/api/people/:id/attention`, its `days` parameter and default, and the `{ days, series }` shape with `{ day, views }` rows — checked against `docsText` (every page at once) per `test/docs.ts`, not against one file's heading or wording."
+    },
+    {
+      "n": 13,
+      "text": "`docs/sources.md`/the source table gains no new collector row for `pageviews` and `test/docs-drift.test.ts` continues to pass unchanged — pageviews is not a `Collector`, produces no `RawDoc`, and must not appear in `defaultSources` or the `source`/`kind` filter documentation. State this as a non-criterion already covered: no new test is written for it."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` passes with `Person.wikipedia?: string` added and `Source`/`RawDoc`/`Collector`/`CollectorError` in `src/types.ts` left untouched — a diff review criterion, not a runtime one."
+    }
+  ],
+  "diffTokens": 15522,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.7
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.89
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.24
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.89
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.89
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.27
+      }
+    ],
+    "costUsd": 0.001051008,
+    "ms": 514,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.95
+      }
+    ],
+    "costUsd": 0.088332,
+    "ms": 7288,
+    "error": null
+  }
+}

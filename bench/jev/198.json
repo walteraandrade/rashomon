@@ -1,0 +1,75 @@
+{
+  "pr": 198,
+  "issue": 191,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "60b29c3470c47eabb9799ce7374bdd432ae4562e",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/store.ts` exports exactly one implementation per writer under its bare name (`pruneRemoved`, `upsertPersons`, `writeDerived`, `insertDoc`, `insertDocs`), each `Effect.Effect<_, SqlError.SqlError, SqlClient.SqlClient>`; no export named `pruneRemovedEffect`, `upsertPersonsEffect`, `writeDerivedEffect`, `insertDocEffect` or `insertDocsEffect` remains anywhere in `src/`."
+    },
+    {
+      "n": 2,
+      "text": "`src/store.ts` exports `pruneRemovedP`, `upsertPersonsP`, `writeDerivedP`, `insertDocP`, `insertDocsP`; each is a one-line `runSql(<name>(...))` wrapper and contains no batching or SQL logic of its own."
+    },
+    {
+      "n": 3,
+      "text": "`src/db.ts` exports `migrate`, `analyzeTables`, `analyzeAfterWrite` and `docCount` as Effects requiring `SqlClient.SqlClient`, plus `migrateP`, `analyzeTablesP`, `analyzeAfterWriteP` adapters; `src/phrases.ts` exports `loadPhrases` as an Effect and `loadPhrasesP` as its adapter."
+    },
+    {
+      "n": 4,
+      "text": "`src/ingest.ts`'s `ingest` function body contains no `Effect.tryPromise` or `Effect.promise` call except the one wrapping `buildGraphAggregates`."
+    },
+    {
+      "n": 5,
+      "text": "`IngestOptions` is exactly `{ collectors?: Partial<Record<Source, Collector>> }`; `upsertPersons` and `pruneRemoved` are no longer accepted, and no other per-stage override exists. `ingest` reaches every stage through the ambient `SqlClient.SqlClient` only."
+    },
+    {
+      "n": 6,
+      "text": "Every existing caller of the writer/maintenance functions outside `store.ts`/`db.ts`/`phrases.ts`/`ingest.ts` — `src/reindex.ts`, `src/score.ts`, `src/server.ts`, `src/purge.ts`, `src/export-docs.ts`, `src/migrate.ts`, `src/aggregate.ts`, `src/bench.ts`, `src/bench-writes.ts`, and `test/fixture.ts`, `test/batch-writes.test.ts`, `test/graph.test.ts`, `test/server.test.ts`, `test/db.test.ts`, `test/reindex.test.ts`, `test/score.test.ts`, `test/aggregate.test.ts`, `test/phrases.test.ts` — imports the `P`-suffixed adapter, not the bare Effect name; `pnpm typecheck` passes with no `allowJs` escape and no caller left `await`-ing a bare Effect export."
+    },
+    {
+      "n": 7,
+      "text": "`test/store.test.ts`'s parity `describe` block (\"Effect-native writers write the same rows as their Promise counterparts\") no longer exists; each behaviour it pinned — enrichment on a longer text, gkg tone kept and every other source's tone nulled, one failing doc in a group still lands the rest, `pruneRemoved`/`upsertPersons` writing/removing the right rows — is asserted exactly once, against the single implementation via its `P` adapter."
+    },
+    {
+      "n": 8,
+      "text": "`test/store.test.ts`'s `Effect.catchTag('SqlError', ...)` test still passes, now calling the bare `insertDoc` (Effect) directly, and still shows the failed transaction leaves no `docs` row behind."
+    },
+    {
+      "n": 9,
+      "text": "`test/effect.ts` exports `failingSql(client, match)`; `test/ingest.test.ts` has one passing test per stage (`migrate`, `pruneRemoved`, `upsertPersons`, `loadPhrases`, `docCount`, `analyzeAfterWrite`, `analyzeTables`), each providing `failingSql(real, <that stage's match>)` as the run's `SqlClient` and asserting `Exit.isFailure(exit)` and `failureOf(exit)` is an `IngestFailure` whose `stage` names that stage and whose `cause` is a `SqlError`; the `migrate`/`pruneRemoved`/`upsertPersons`/`loadPhrases` cases additionally assert no collector ran (the existing `rssCalled` check), and the `docCount`/`analyzeAfterWrite`/`analyzeTables` cases assert every named source already reached `insertDocs` before the failure (their docs are in the table). A stage that fails must not be reachable by any `IngestOptions` field."
+    },
+    {
+      "n": 10,
+      "text": "`test/ingest.test.ts`'s existing `upsertPersons`/`pruneRemoved` failure tests no longer pass an option; they are the two `failingSql` cases of criterion 9 and still resolve to `IngestFailure({ stage: 'upsertPersons' | 'pruneRemoved' })` with no doc written."
+    },
+    {
+      "n": 11,
+      "text": "`pnpm typecheck` and `pnpm test` both pass."
+    },
+    {
+      "n": 12,
+      "text": "CLAUDE.md's `src/store.ts` bullet states each writer has one Effect implementation under its bare name and names the `P`-suffixed adapter as the only Promise-facing form, and drops the sentence that the Effect twin is \"built independently rather than wrapping the Promise version\" (the reason for that sentence — a caller can `Effect.catchTag` a typed `SqlError`, never available through a flattened Promise rejection — is kept, attached to the new shape)."
+    },
+    {
+      "n": 13,
+      "text": "CLAUDE.md's `src/ingest.ts` bullet states every stage but `buildGraphAggregates` runs as a native Effect `yield*`, mapped to `IngestFailure({ stage })`, that `IngestOptions` holds only `collectors`, and that a test makes a stage fail through the `SqlClient` it provides (`test/effect.ts`'s `failingSql`), never through an option."
+    },
+    {
+      "n": 14,
+      "text": "`docs/operations.md`'s \"Orchestration\" paragraph (under \"Writes, batches and recovery\") states the same fact: every stage but `buildGraphAggregates` is a native Effect, not `Effect.tryPromise`."
+    },
+    {
+      "n": 15,
+      "text": "`test/docs-drift.test.ts` needs no new criterion: it checks the collector registry against `docs/sources.md`, unrelated to this issue."
+    }
+  ],
+  "diffTokens": 33630,
+  "skipped": "diff too large (33630 tokens)",
+  "jev": null,
+  "sonnet": null
+}

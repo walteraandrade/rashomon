@@ -1,0 +1,103 @@
+{
+  "pr": 165,
+  "issue": 147,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "e20e00fdb071ff0e8484a02f80bb9a10d3764002",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/people/nobody/week` returns 404 `{ \"error\": \"person not found\" }`."
+    },
+    {
+      "n": 2,
+      "text": "Default query returns `{ days: 7, tz: \"America/Sao_Paulo\", buckets }` with `buckets.length === 7`, oldest first, each `start` the BRT midnight of a consecutive calendar day, last bucket = today BRT."
+    },
+    {
+      "n": 3,
+      "text": "`days` snaps to 7 / 30 / 365; missing/non-numeric → 7. `days=7` → 7 buckets; `days=30` → 30; `days=365` → 365."
+    },
+    {
+      "n": 4,
+      "text": "`limit` defaults to 8, is a member of `LIMITS` after 8 is inserted, and clamps each day's `terms` (not `about`). `limit=1` on a day with several terms returns one row for that day."
+    },
+    {
+      "n": 5,
+      "text": "`source` / `kind` / `domain` / `lean` parse as on `/graph` (lists; unknown tokens dropped; empty → `all`) and apply as specified (`kind` on terms only)."
+    },
+    {
+      "n": 6,
+      "text": "Own-name words and phrases that carry one never appear in any `terms` row."
+    },
+    {
+      "n": 7,
+      "text": "A BRT day with no about-docs is present with `about: 0` and `terms: []`."
+    },
+    {
+      "n": 8,
+      "text": "A person with no docs in the week (fixture Bolsonaro, `days=7`) returns seven zero buckets, not an error."
+    },
+    {
+      "n": 9,
+      "text": "A future-dated about-doc counts in today's bucket."
+    },
+    {
+      "n": 10,
+      "text": "`about` on a day equals the number of about-docs whose BRT date is that day (or clamped to today). It is not filtered by `kind`."
+    },
+    {
+      "n": 11,
+      "text": "Terms on a day are ordered count desc, term asc, kind asc. Two kinds of the same text are two rows."
+    },
+    {
+      "n": 12,
+      "text": "`/timeline`'s JSON remains a bare array of `{ bucket_start, count }` with rolling buckets. Byte-stable for the same query shape."
+    },
+    {
+      "n": 13,
+      "text": "`GET /week` 200 is cached with the rolling 6h class, not the 1h trend class."
+    },
+    {
+      "n": 14,
+      "text": "`parseDocsQuery({ day: '2026-09-08' })` (when that date overlaps the snapped window) keeps `day`; malformed, out-of-window, and future calendar dates become `''`."
+    },
+    {
+      "n": 15,
+      "text": "`docsFor` with a kept `day` returns only docs on that BRT date; with `day: ''` the body matches today's `/docs` for the same remaining params (same `total` on the fixture)."
+    },
+    {
+      "n": 16,
+      "text": "Adding `day` does not add or remove fields on the `/docs` response."
+    },
+    {
+      "n": 17,
+      "text": "Manual: figure 4 on `/` has seven columns of words, its own sentence (person / source / limit, no period chip), its own key, no evaluation or compare hues on the marks."
+    },
+    {
+      "n": 18,
+      "text": "Manual: clicking a word in a day opens the docs card for that person + term + that calendar day; releasing the pick closes it."
+    },
+    {
+      "n": 19,
+      "text": "Manual: a person with no words that week shows the seven `about` numbers and empty copy, no fake words."
+    },
+    {
+      "n": 20,
+      "text": "Manual: focusing a word on the atlas shows a 7-bar sparkline; focusing the person does not."
+    },
+    {
+      "n": 21,
+      "text": "The docs describe the week route (calendar days, BRT, `about` + per-day terms, not equal to `/timeline`) and the optional `/docs` `day` filter. `test/docs.ts`'s `docsText` is the assertion surface."
+    },
+    {
+      "n": 22,
+      "text": "The cache description lists `week` with the rolling (6h) class, not the trend class.\n\n`test/docs-drift.test.ts` already binds collectors to `docs/sources.md`. No new collector criterion."
+    }
+  ],
+  "diffTokens": 33796,
+  "skipped": "diff too large (33796 tokens)",
+  "jev": null,
+  "sonnet": null
+}

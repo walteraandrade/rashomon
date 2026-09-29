@@ -1,0 +1,231 @@
+{
+  "pr": 190,
+  "issue": 189,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "de8286480e962cf6651a0f517a7bfb9582199fe9",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "A `PG_SSL_CA` value containing literal `\\n` (two-char) escape sequences, e.g. `\"-----BEGIN CERTIFICATE-----\\\\nMII...\\\\n-----END CERTIFICATE-----\\\\n\"` (as a JS string, i.e. the actual bytes are backslash-n, not newline), normalizes to real newlines in the string `poolConfig(...).ssl.ca` includes — checked by splitting on real `\\n` and asserting more than one line, or by asserting the normalized string equals the same PEM built with real `\\n` characters."
+    },
+    {
+      "n": 2,
+      "text": "The same holds for literal `\\r\\n` (four-char) sequences: normalizes to a real `\\r\\n` at each occurrence, not a real `\\r` followed by a literal `\\n`."
+    },
+    {
+      "n": 3,
+      "text": "A `PG_SSL_CA` value that already contains real embedded newlines and no literal backslash-escape sequences is passed through byte-identical (existing test at `test/db.test.ts` ~line 62–71 keeps passing unmodified)."
+    },
+    {
+      "n": 4,
+      "text": "A `PG_SSL_CA` value that, after normalization, does not contain `-----BEGIN CERTIFICATE-----` throws synchronously with a message matching `/PG_SSL_CA/`, for a non-local host only."
+    },
+    {
+      "n": 5,
+      "text": "For a local host (`localhost` or `127.0.0.1`), `poolConfig(...).ssl` is `undefined` regardless of `PG_SSL_CA`'s content or presence, including a non-PEM value that would throw on a non-local host — normalization and the PEM check never run."
+    },
+    {
+      "n": 6,
+      "text": "`poolConfig(...).ssl.ca` remains a single array with exactly `tls.rootCertificates.length + 1` entries after normalization (normalization must not split one certificate into multiple array entries)."
+    },
+    {
+      "n": 7,
+      "text": "`src/push.ts` requires no code change: it still builds its pool with `poolConfig(url)` alone (existing regex test in `test/db.test.ts` keeps passing), so it inherits normalization automatically."
+    },
+    {
+      "n": 8,
+      "text": "The comment directly above `poolConfig` still matches `test/db.test.ts`'s existing regex check (mentions `PG_SSL_CA`, mentions `verif`, never says \"without chain verification\")."
+    },
+    {
+      "n": 9,
+      "text": "`docsText` (the concatenation `test/docs.ts` exposes) states that either a literal-escaped or a real-newline `PG_SSL_CA` value is now accepted — a new criterion, not covered by any existing test: assert `docsText` matches a pattern naming both forms, e.g. `/PG_SSL_CA[\\s\\S]{0,400}(literal|escaped)[\\s\\S]{0,400}newline/i` or equivalent, phrased against the fact (both forms accepted), not against exact wording."
+    },
+    {
+      "n": 10,
+      "text": "`docsText` no longer instructs the reader to run `printf '%b'` on `PG_SSL_CA` as a required step (the old workaround is gone because it's no longer necessary) — assert `docsText` does not match `/printf '%b'/`."
+    },
+    {
+      "n": 11,
+      "text": "The two existing `docsText` assertions (`PG_SSL_CA`/`CA certificate`/`PEM`/fail-closed language; `PG_SSL_CA` co-occurring with `Vercel` and with `DATABASE_URL`/`POSTGRES_URL`) keep passing unmodified."
+    },
+    {
+      "n": 12,
+      "text": "`test/docs-drift.test.ts`'s existing checks are unrelated to this change (no collector, no source) and need no new criterion here — confirmed, not extended."
+    },
+    {
+      "n": 13,
+      "text": "`pnpm typecheck` and `pnpm test` pass."
+    }
+  ],
+  "diffTokens": 2092,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.84
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.84
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.81
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.36
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.73
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.53
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.35
+      }
+    ],
+    "costUsd": 0.000307902,
+    "ms": 502,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.030888,
+    "ms": 6892,
+    "error": null
+  }
+}

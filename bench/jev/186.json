@@ -1,0 +1,87 @@
+{
+  "pr": 186,
+  "issue": 183,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "a4383dfe42cd4b6bfa0373f2e1bc5288e51a3d5f",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/http.ts` no longer exports `sleep`, `sequential`, `readCapped`, `SlowResponse` or `CappedRead`; `getBytes`, `fetchClient`, `runWithFetch`, `overLimit`, `headerLength`, `ResponseTooLarge`, `MAX_RESPONSE_BYTES`, `REQUEST_TIMEOUT_MS` and `headers` are still exported. Checkable by a test importing the module and asserting its export keys, and by `pnpm typecheck` failing if any collector still imports a removed name."
+    },
+    {
+      "n": 2,
+      "text": "`getBytes` accepts a third `timeoutMs` argument; a stub that never resolves is cut at exactly that value on `TestClock` and the underlying fetch call's `AbortSignal` fires. Checkable by extending `test/http.test.ts`'s existing timeout case with a non-default `timeoutMs`."
+    },
+    {
+      "n": 3,
+      "text": "No file under `src/` imports `node:https`. Checkable by a repo-wide grep-style test (an addition to `test/invariants.test.ts` or equivalent), since the constraint is repo-wide, not one module's text."
+    },
+    {
+      "n": 4,
+      "text": "`rss`, `juridico`, `oficial`, `nicho` and `gnews` each still stamp `source` correctly, never set `tone`, and (for `juridico`/`oficial`/`nicho`) fetch their own hardcoded feed list — checkable by running each collector's `collect` Effect against a stub `HttpClient.Fetch` returning a small feed body, not by reading source text. `test/collectors-press.test.ts`'s two source-scanning `describe` blocks (the `fetchFeed`-import check and the `assert.doesNotMatch(src, /\\bfetch\\(/...)` check) are gone; the same guarantee is covered by behavioural cases in `test/collectors-rss.test.ts`."
+    },
+    {
+      "n": 5,
+      "text": "A feed response with a declared `content-length` over `MAX_RESPONSE_BYTES` fails before any byte of the body is read; one that grows past the cap while streaming fails and cancels the underlying stream. Checkable by two cases in `test/collectors-rss.test.ts`, mirroring `test/http.test.ts`'s existing declared/streaming pair."
+    },
+    {
+      "n": 6,
+      "text": "One failing feed among several fails that collector's whole run (short-circuit), and the in-flight sibling requests are interrupted rather than left to complete. Checkable by a `collectors-rss` case asserting a second stub feed's request either never fires or its `AbortSignal` is set once the first feed's failure resolves."
+    },
+    {
+      "n": 7,
+      "text": "`camara`: a 429 then a 500 then a 200 for the same person makes exactly three requests, and `TestClock` advances by exactly 4 000 ms then 8 000 ms between them; a fourth consecutive 429 fails that person with a message matching `camara 429:`, is logged as `[camara] <id>: ...`, and the next person in the batch still makes its own request. A person without `camaraId` makes zero requests."
+    },
+    {
+      "n": 8,
+      "text": "`gdelt`: the same shape as camara's retry test, with waits of exactly 22 000 ms then 44 000 ms; a non-JSON body fails with a message matching `gdelt <status>:` followed by the first 80 characters of the body."
+    },
+    {
+      "n": 9,
+      "text": "`senado`: exactly one request per person carrying a `senadoId`, zero for a person without one; a failure for one person is logged and the next person's request still runs."
+    },
+    {
+      "n": 10,
+      "text": "`gkg.ts`'s `download(slot)` no longer takes a `fetchImpl` parameter; `test/collectors-gkg.test.ts` drives it by providing a stub `FetchHttpClient.Fetch` instead, and every existing case (404 → `missing`, declared oversize, streaming oversize with the correct running total, a valid zip → `ok`) still passes under the new call shape."
+    },
+    {
+      "n": 11,
+      "text": "`download`'s timeout is `GKG_DOWNLOAD_TIMEOUT_MS` (300 000 ms), distinct from `REQUEST_TIMEOUT_MS`; a `latestSlot` request that never resolves is cut at `REQUEST_TIMEOUT_MS`, a `download` request that never resolves is cut at `GKG_DOWNLOAD_TIMEOUT_MS`. Checkable by two `TestClock`-driven cases."
+    },
+    {
+      "n": 12,
+      "text": "`latestSlot` still fails with a message matching `gkg: cannot read lastupdate-translation.txt` when the response body carries no matching slot pattern."
+    },
+    {
+      "n": 13,
+      "text": "Every collector's per-item and per-run log lines (`[bluesky]`, `[rss]` where present today, `[camara]`, `[gdelt]`, `[senado]`, `[gkg]` prefixes and their wording) are unchanged from today's `console.log`/`console.error` text, now read through `TestConsole` instead of a spy on `console`. Checkable by asserting exact log strings in each rewritten test file."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` and `pnpm test` both pass with every collector converted; no `test/collectors-*.test.ts` file scans another module's source text for control flow it could instead exercise by running the collector (`test/collectors-press.test.ts`'s remaining behavioural facts, if any survive, move into `test/collectors-rss.test.ts` rather than staying as regex-on-source checks)."
+    },
+    {
+      "n": 15,
+      "text": "`docs/sources.md` names, for `gkg`, a download timeout distinct from the other collectors' request timeout, and that the value is separate from `MAX_RESPONSE_BYTES`/`MAX_EXPANDED_BYTES`. Checkable against `docsText` (`test/docs.ts`), not against one page's wording. `test/docs-drift.test.ts`'s existing collector/source-table checks already cover the registry-vs-table agreement and need no new criterion here."
+    },
+    {
+      "n": 16,
+      "text": "`docsText` states that a request without a declared or growing-past-cap body is now bounded by a wall-clock timeout for every collector, not only for `gdelt`/`camara`/`senado`/`bluesky` (today's `rss`/`gkg` gap). Checkable against `docsText`, phrased as a fact (\"every collector's network read is timeout-bounded\"), never against `docs/operations.md`'s specific paragraph or heading."
+    },
+    {
+      "n": 17,
+      "text": "`CLAUDE.md`'s Style section states that a class is permitted in exactly two shapes, a `Data.TaggedError` and a `Context.Service`, and nowhere else; this is a fact about the file, checkable by a human reading the merged diff (`CLAUDE.md` is project instruction, not part of `docsText`'s reference set, so no automated criterion applies)."
+    },
+    {
+      "n": 18,
+      "text": "`CLAUDE.md`'s `src/http.ts` bullet no longer calls the layer a pilot and no longer says the other nine collectors keep the Promise helpers, since they no longer exist; checkable the same way, by reading the diff."
+    }
+  ],
+  "diffTokens": 36216,
+  "skipped": "diff too large (36216 tokens)",
+  "jev": null,
+  "sonnet": null
+}

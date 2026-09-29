@@ -1,0 +1,267 @@
+{
+  "pr": 263,
+  "issue": 257,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "199ad9aff68f136dcd3edc620d2fcd5b1481a098",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`.github/workflows/jev-review.yml` triggers on `pull_request` with types `opened` and `synchronize` only. It requests `pull-requests: write`. Its job has `continue-on-error: true`. It reads `OPENROUTER_API_KEY` from `secrets`. It uploads `jev-review.json` with `if: always()`. (A test parses the YAML text for these keys.)"
+    },
+    {
+      "n": 2,
+      "text": "`estimateTokens('abcde')` is `2`. `overCap` returns a number for a 128 001-character diff with an empty spec, and `null` for a 1 000-character diff."
+    },
+    {
+      "n": 3,
+      "text": "When `overCap` fires, `main` makes zero requests to the Decisions URL and upserts a comment containing `diff too large for Jev (` and the token count. The artifact then has `status: \"too-large\"`."
+    },
+    {
+      "n": 4,
+      "text": "`findSpec` returns the most recent of two spec comments. It returns `null` when no comment has all three headings, including a comment that has Goal and API but no Acceptance criteria. It accepts both `## 5. Acceptance criteria` and `**Acceptance criteria**`."
+    },
+    {
+      "n": 5,
+      "text": "`parseCriteria` on a spec with three numbered criteria, one of which has an indented sub-bullet, returns three items. The sub-bullet's text is inside its parent item, and numbered lines under `## 7. Test plan` are not included."
+    },
+    {
+      "n": 6,
+      "text": "`closedIssue('Closes #257')` is `257`, `closedIssue('fixes #12 and #13')` is `12`, and `closedIssue('see #9')` is `null`."
+    },
+    {
+      "n": 7,
+      "text": "With a spec of N criteria, the request has N `ac-*` questions followed by the six convention ids in the fixed order. Without a spec it has exactly the six. Every question has `type: \"noul\"` and both `criteria.true` and `criteria.false`."
+    },
+    {
+      "n": 8,
+      "text": "The request body's `model` is `typesafe/jev-1.13`. The keys of `state` are exactly `diff`, `spec` and `commits`. The serialized request contains no environment variable value (the test sets `OPENROUTER_API_KEY=sk-test` and asserts `sk-test` appears only in the `Authorization` header)."
+    },
+    {
+      "n": 9,
+      "text": "`renderComment` starts with `<!-- jev-review -->`, has one table row per question in question order, and ends with a `Custo:` line carrying `usage.cost`. A missing probability renders as `—`."
+    },
+    {
+      "n": 10,
+      "text": "`upsertComment` PATCHes when a `github-actions[bot]` comment starts with the marker. It POSTs when none does, and also when the only marked comment belongs to another user. Two consecutive `main` runs against the same stub leave exactly one marked comment."
+    },
+    {
+      "n": 11,
+      "text": "With an empty `OPENROUTER_API_KEY`, `main` resolves (does not reject), makes no network request, and writes `jev-review.json` with `status: \"no-key\"`."
+    },
+    {
+      "n": 12,
+      "text": "When the Decisions stub answers 500, or with a non-JSON body, `main` resolves. It upserts a comment containing `Jev indisponível` and writes `status: \"api-error\"`."
+    },
+    {
+      "n": 13,
+      "text": "When the comment upsert stub answers 403, `main` still resolves and still writes the artifact."
+    },
+    {
+      "n": 14,
+      "text": "The docs (`test/docs.ts`'s `docsText`) name the `jev-review` workflow and the `OPENROUTER_API_KEY` secret. They state that it only comments and never blocks a merge, and they list the six convention checks. `test/docs-drift.test.ts` does not cover this, because it is about collectors only."
+    },
+    {
+      "n": 15,
+      "text": "No test file whose name starts with an issue number is added. The new tests live in `test/jev.test.ts`. `pnpm typecheck` and `pnpm test` pass, and no test reaches the network: every `fetch` and `git` call is stubbed."
+    },
+    {
+      "n": 16,
+      "text": "Manual: on the PR that ships this workflow, after the secret is set, the Actions run posts one comment. A second push edits that comment in place (still one marked comment), and the run page lists the `jev-review` artifact."
+    }
+  ],
+  "diffTokens": 12022,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.31
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.62
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.57
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.56
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.78
+      }
+    ],
+    "costUsd": 0.00092547,
+    "ms": 1301,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.05
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.88
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.15
+      }
+    ],
+    "costUsd": 0.078105,
+    "ms": 6862,
+    "error": null
+  }
+}

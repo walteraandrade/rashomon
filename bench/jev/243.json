@@ -1,0 +1,171 @@
+{
+  "pr": 243,
+  "issue": 201,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "4cb237b341a89a153ce544e9bf41abdf072aed43",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "Calling the exported `onnx` scorer (e.g. `await onnx(text, person, persons)`) under an environment with `TESTIMONY_REVISION` unset rejects with an error whose message matches `/TESTIMONY_REVISION/`, and does so without ever reaching `@huggingface/transformers`'s `from_pretrained` — checkable by a test that stubs or spies nothing beyond `withEnv`, running under plain `pnpm test` with no network and no `KIKORI_CHECK`."
+    },
+    {
+      "n": 2,
+      "text": "The same call under a `TESTIMONY_REVISION` value that fails `REVISION_TOKEN` (e.g. `'a b'`, `'a/b'`, `''` after defaulting) rejects with the same message pattern."
+    },
+    {
+      "n": 3,
+      "text": "The rejection message text is identical, character for character, between `src/scorers/onnx.ts`'s guard and `src/score.ts`'s `resolveRun` guard — checkable by a test that imports both and compares the two literal strings (or asserts both against one shared regex/constant)."
+    },
+    {
+      "n": 4,
+      "text": "`resolveRun('onnx')` still throws synchronously before `migrateP()` is ever called when `TESTIMONY_REVISION` is unset or malformed — `test/score.test.ts:89-92`'s existing assertions keep passing unmodified; no new test is needed for this fact, only confirmation it still holds."
+    },
+    {
+      "n": 5,
+      "text": "`pnpm typecheck` and plain `pnpm test` (no `KIKORI_CHECK`) pass with no network access attempted from `src/scorers/onnx.ts` at module scope or inside the new guard — the existing test at `test/scorers.test.ts` asserting `await import('../src/scorers/onnx.js')` resolves without invoking any model call keeps passing unmodified."
+    },
+    {
+      "n": 6,
+      "text": "`KIKORI_CHECK=q8 TESTIMONY_REVISION=<valid> pnpm test` still passes (skipped by default; run manually or in CI's opt-in job) — confirms a correctly pinned load is unaffected by the new guard."
+    },
+    {
+      "n": 7,
+      "text": "The docs state, somewhere across `README.md`/`docs/*.md` (via `docsText`, not tied to one page or heading): that the model cache keys files by revision only when one is given, so an unpinned load silently reuses whatever revision was first downloaded under that file name; and that the scorer itself, not only `pnpm score`, refuses to load without a pinned `TESTIMONY_REVISION`. Checkable by asserting both facts appear (by regex on content, not on a file path or heading) in `docsText`."
+    },
+    {
+      "n": 8,
+      "text": "No criterion duplicates `test/docs-drift.test.ts`'s existing coverage — this issue touches no collector or source table, so no new criterion is written against `sourceTable`."
+    }
+  ],
+  "diffTokens": 1797,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.76
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.87
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.48
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.89
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.31
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.89
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.37
+      }
+    ],
+    "costUsd": 0.000251538,
+    "ms": 428,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 1
+      }
+    ],
+    "costUsd": 0.024249,
+    "ms": 5263,
+    "error": null
+  }
+}

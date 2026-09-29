@@ -1,0 +1,303 @@
+{
+  "pr": 262,
+  "issue": 253,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "e6bbf03dc0dc7a4328dacd777bd469c20c09cfac",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`compare(base, cand, ['graph'])` returns `kept: true` for a candidate whose targeted cells return the same hashes but are slower than the base (e.g. 100 ms -> 300 ms), and the returned object has no `slow` key; `Verdict` has no `fast` field."
+    },
+    {
+      "n": 2,
+      "text": "`compare` still returns `kept: false` when any comparable cell's hash differs, when a targeted cell is missing, when no targeted cell exists, and (with `strict = true`) when any base cell is missing from the candidate."
+    },
+    {
+      "n": 3,
+      "text": "`table()` still prints the `new / base` ratio column."
+    },
+    {
+      "n": 4,
+      "text": "`compare.ts` rejects no candidate on speed: running it on two reports with identical hashes and a 3x slower candidate exits 0 and its verdict line contains no percentage."
+    },
+    {
+      "n": 5,
+      "text": "`renderCases(queries, ctx, allNames)` against the fixture's persons returns one entry per name in `readCases` plus `linksFast`, `compareFast`, `lensesFast`, and each entry's text equals the text the same `queries.*` builder renders for that ctx (no drift from what routes send)."
+    },
+    {
+      "n": 6,
+      "text": "Every rendered case, wrapped by `explainOf`, executes against the in-memory fixture database (after `buildGraphAggregates`) and its output contains `Execution Time:`; `summarize` on that output returns a finite `executionMs`."
+    },
+    {
+      "n": 7,
+      "text": "`summarize` on a canned plan containing `Batches: 16`, `Sort Method: external merge  Disk: 51232kB` and `Rows Removed by Join Filter: 1843220` returns all three lines in `flagged`, and does not flag `Batches: 1` or `Sort Method: quicksort`."
+    },
+    {
+      "n": 8,
+      "text": "`summarize` on a canned plan with `Buffers: shared hit=120 read=88, temp read=40 written=41` on the top node and other `Buffers:` lines on children returns exactly `sharedHit 120, sharedRead 88, tempRead 40, tempWritten 41`; a plan with no `Buffers:` line returns zeros."
+    },
+    {
+      "n": 9,
+      "text": "`run` against a recording fake client sends only statements matching `^(begin transaction read only|rollback|explain \\(analyze, buffers, format text\\) |select )`; no statement matches `\\b(set|reset|insert|update|delete|create|drop|alter|analyze|vacuum|truncate)\\b` at its start, and no `pg_stat_statements_reset`."
+    },
+    {
+      "n": 10,
+      "text": "`run` sends each case's explain exactly twice, each inside its own `begin transaction read only` ... `rollback` pair, and labels them `cold` then `warm` in the report."
+    },
+    {
+      "n": 11,
+      "text": "When the fake client rejects the `pg_stat_statements` select, `run` still produces every case's section, the report contains \"pg_stat_statements indisponível\", and the result's failure flag is false."
+    },
+    {
+      "n": 12,
+      "text": "When the fake client rejects one case's explain, the report shows that case's error, the following cases still run, `rollback` is sent for the failed case, and the result's failure flag is true."
+    },
+    {
+      "n": 13,
+      "text": "`run` with an unknown `--cases` name, or an unknown `--person`, sends no explain and reports the valid names/ids."
+    },
+    {
+      "n": 14,
+      "text": "`inBuildWindow` is true at 06:17, 06:59 and 07:01 UTC, false at 06:16, 07:02 and 09:30 UTC; `run` with a date inside the window and `force: false` sends no statement."
+    },
+    {
+      "n": 15,
+      "text": "A person with no docs in the window (fixture person, `days` before every doc) renders every case with `ids = []` without throwing."
+    },
+    {
+      "n": 16,
+      "text": "`test/` never opens a network connection for this script: the tests use the fixture's PGlite or a fake client only (no `POSTGRES_URL*`/`DATABASE_URL` read in the test process)."
+    },
+    {
+      "n": 17,
+      "text": "The docs state, as facts: the PGlite harness proves identical rows and plan shape and is not a timing source; production `EXPLAIN (ANALYZE, BUFFERS)` and `pg_stat_statements` are the only timing source of truth; the two reasons (PGlite keeps temp files in RAM where production spills past `work_mem`, and PGlite's whole database fits in memory where production's does not fit `shared_buffers`); how to run `prod-explain.ts`, that it is read-only, needs `PG_SSL_CA`, and must run outside the build window. Checked against `test/docs.ts`'s `docsText` (e.g. `prod-explain` and `pg_stat_statements` both appear, and the text near them mentions `work_mem` and `shared_buffers`). `test/docs-drift.test.ts` covers collectors only and does not cover this."
+    },
+    {
+      "n": 18,
+      "text": "`scripts/bench/README.md` no longer describes a speed gain as a condition for keeping a candidate (no `--gain` flag in its flag table). (This page is outside `docsText`; checked by reading the file's flag table in a test or manually.)"
+    },
+    {
+      "n": 19,
+      "text": "`pnpm typecheck` and `pnpm test` pass."
+    }
+  ],
+  "diffTokens": 14825,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.82
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.75
+      },
+      {
+        "id": "criterion:17",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:18",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:19",
+        "pTrue": 0.63
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.45
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.28
+      }
+    ],
+    "costUsd": 0.001078434,
+    "ms": 517,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:17",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:18",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:19",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.09318,
+    "ms": 7759,
+    "error": null
+  }
+}

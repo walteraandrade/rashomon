@@ -1,0 +1,170 @@
+{
+  "pr": 246,
+  "issue": 219,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "1aac042d176f580cc2ea47fc6a70398eb3b25308",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/compare` without `bridges` returns byte-identical JSON to the pre-existing shape (no `bridge` key anywhere): the existing fixture assertion in `test/graph.test.ts`'s `describe('compareFor (issue #93)', …)` (`:1991` onward) passes unmodified."
+    },
+    {
+      "n": 2,
+      "text": "`GET /api/compare?bridges=1` adds a `bridge: number` (never `undefined`, never missing) to every entry in `terms`, for a fixture recorte with at least one edge surviving `having count(*) >= 2` shared across both tracked people's scopes."
+    },
+    {
+      "n": 3,
+      "text": "In that recorte, the highest-betweenness term has `bridge === 1`; every other scored term has `0 <= bridge <= 1`."
+    },
+    {
+      "n": 4,
+      "text": "A term in `terms` with no co-occurrence edge at all has `bridge === 0`, never `null` and never absent."
+    },
+    {
+      "n": 5,
+      "text": "`src/communities.ts` exports `betweenness`, keyed by the same `kind:term` id shape `linksQuery` produces, unit-tested against a hand-built path graph where the middle node's centrality exceeds the ends'."
+    },
+    {
+      "n": 6,
+      "text": "`RulerItem`'s `bridge?: number` addition does not change any existing `test/layout.test.ts` assertion: a `rulerLayout` call with items carrying no `bridge` produces identical `words`/`overflow`/`x`/`half`/`height`/`width` output to before this change."
+    },
+    {
+      "n": 7,
+      "text": "`rulerTerms` attaches `bridge` onto its emitted item only when the source `CompareTerm` carries it, and painting a term with `bridge >= 0.5` produces markup containing `class=\"ruler-bridge\"`; a term below the threshold does not."
+    },
+    {
+      "n": 8,
+      "text": "`test/invariants.test.ts`'s import-direction check still passes with `betweenness` added to `communities.ts` — `src/graph.ts` may import it, `communities.ts` imports nothing from `graph.ts` or `server.ts`."
+    },
+    {
+      "n": 9,
+      "text": "`pnpm typecheck` and `pnpm test` pass with `graphology-metrics` added to `package.json`, pinned exact; `test/bundle-freshness.test.ts`'s existing `/graphology/` regex (`:59-61`) still matches and still asserts the front-end bundle excludes it — no second assertion needed, verified rather than added."
+    },
+    {
+      "n": 10,
+      "text": "`docs/api.md` states, and `test/docs.ts`'s `docsText` confirms, that `/compare` accepts a `bridges` parameter and that it is always computed live, never cached beyond the route's existing cache class — checked against page content as a whole, never a specific heading or file split."
+    },
+    {
+      "n": 11,
+      "text": "`GET /api/people/:id/lenses` without `bridges` returns byte-identical JSON to today: the existing `lensesFor` assertions in `test/graph.test.ts` pass unmodified."
+    },
+    {
+      "n": 12,
+      "text": "`GET /api/people/:id/lenses?bridges=1` adds `bridge: number` to every `terms` entry, the top term at `1`, every other in `[0, 1]`, an isolated term at `0`, on a fixture recorte where two lenses (for instance two `domain:` lenses) of one person share at least one surviving edge."
+    },
+    {
+      "n": 13,
+      "text": "With `a === b`, `bridges=1` returns the same `bridge` values as the corresponding single-lens graph would: equal lenses produce finite scores, never `NaN`."
+    },
+    {
+      "n": 14,
+      "text": "`lensesParams` includes `bridges=1`, and `paintLensRuler` painting a term with `bridge >= 0.5` produces markup containing `class=\"ruler-bridge\"`; `paintLensDetail` for such a term contains \"ponte\", and for a term below the threshold does not."
+    },
+    {
+      "n": 15,
+      "text": "The per-side edge statement is one builder used by both routes: `statements` exposes the compare and lenses edge texts, and both are pinned in `test/graph.test.ts`."
+    }
+  ],
+  "diffTokens": 23529,
+  "skipped": null,
+  "jev": {
+    "answers": [],
+    "costUsd": null,
+    "ms": 639,
+    "error": "HTTP 400"
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 1
+      }
+    ],
+    "costUsd": 0.124053,
+    "ms": 6741,
+    "error": null
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "pr": 12,
+  "issue": 11,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "839a8cb8aa639a5ab327fc1822572f613785432f",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "Given a Bluesky doc row with `uri = \"at://did:plc:x/app.bsky.feed.post/abc123\"` and `domain = \"ana.bsky.social\"`, `renderDocBody` produces an `<a class=\"doc-link\" href=\"https://bsky.app/profile/ana.bsky.social/post/abc123\">` — verified manually in the browser per AC3 (no test harness covers `public/*.html`; see Test plan)."
+    },
+    {
+      "n": 2,
+      "text": "Given a Bluesky doc row with a uri that does not start with `at://`, or with `domain` null/empty/undefined, `renderDocBody` renders the row with no `<a class=\"doc-link\">` element (same as today)."
+    },
+    {
+      "n": 3,
+      "text": "Manual check in the browser (`pnpm dev`, open a person with a Bluesky doc, e.g. `lula`): clicking `abrir ↗` on a Bluesky row opens the mapped `bsky.app` URL in a new tab (`target=\"_blank\" rel=\"noopener noreferrer\"`, already present)."
+    },
+    {
+      "n": 4,
+      "text": "No other source's row (`gnews`, `rss`, `gdelt`, `gkg`) changes behavior: rows that had a link before this change still have the same link; rows that had no link still have none."
+    },
+    {
+      "n": 5,
+      "text": "`pnpm typecheck` and `pnpm test` pass unchanged (no `.ts` file is touched by this issue)."
+    }
+  ],
+  "diffTokens": 1337,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.79
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.12
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.64
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.36
+      }
+    ],
+    "costUsd": 0.000217014,
+    "ms": 351,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 1
+      }
+    ],
+    "costUsd": 0.021153,
+    "ms": 4524,
+    "error": null
+  }
+}

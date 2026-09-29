@@ -1,0 +1,243 @@
+{
+  "pr": 22,
+  "issue": 21,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "dccc3f8b2b07039af3b583da5e2872e917360834",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`pnpm test` passes after `migrate()` runs against a fresh in-memory database twice in a row (idempotency): `doc_testimony` exists with columns `doc_id, person_id, method, score` and primary key `(doc_id, person_id, method)`."
+    },
+    {
+      "n": 2,
+      "text": "`GET /api/people/:id/testimony` for an unknown `:id` returns HTTP 404 with `{ error: 'person not found' }`, same as `/graph`, `/sources`, `/docs`, `/timeline`, `/rising`."
+    },
+    {
+      "n": 3,
+      "text": "For a person with no docs at all, or no docs scored under the requested `method`, the route returns `{ method, overall: { score: null, n: 0 }, by_source: [], by_domain: [] }` — checkable by requesting `method=<a string never inserted into the fixture's doc_testimony rows>`."
+    },
+    {
+      "n": 4,
+      "text": "A `(domain, source)` pair with `count(score) >= min` toned docs appears exactly once in `by_domain` with `score` = the hand-computed rounded average and `n` = the exact non-null count; a pair below `min` is absent from `by_domain` entirely (not present with `n < min`), and lowering `min` in a second request surfaces it with the correct `score`/`n`."
+    },
+    {
+      "n": 5,
+      "text": "A doc with `domain is null` never appears in `by_domain`, at any `min` including `1`, but does contribute to `overall` and to its `source`'s `by_source` row."
+    },
+    {
+      "n": 6,
+      "text": "A doc scored `null` for a given `(doc, person, method)` is excluded from `n` and from the `score` average at every level (`overall`, `by_source`, `by_domain`) — not treated as `0`."
+    },
+    {
+      "n": 7,
+      "text": "A doc naming two tracked persons has independent `doc_testimony` rows per person; requesting `/testimony` for person A never includes person B's score for that doc in any of A's `overall`/`by_source`/`by_domain`, and vice versa."
+    },
+    {
+      "n": 8,
+      "text": "A doc outside the `days` window (or excluded by the `source` filter) contributes to none of `overall`/`by_source`/`by_domain`; the same doc appears once `days` (or `source`) is widened to include it."
+    },
+    {
+      "n": 9,
+      "text": "`source=<comma list>` restricts every part of the response (`overall`, `by_source`, `by_domain`) to docs whose `source` is in that list, using the exact same `parseSourceList` grammar as `/graph` (unknown tokens dropped, empty/all-invalid falls back to `all`)."
+    },
+    {
+      "n": 10,
+      "text": "`parseTestimonyQuery` clamps `days` to `[1, 365]` (default `30`) and `min` to `[1, 1000]` (default `3`), independently of `parseQuery`'s and `parseToneQuery`'s own `min` defaults — a test asserts `parseTestimonyQuery({}).min === 3` and that changing `GraphQuery.min`'s or `ToneQuery.min`'s default would not be caught by copy-paste (i.e. the assertion pins `3` as a literal, not by reference to another parser's default)."
+    },
+    {
+      "n": 11,
+      "text": "`pnpm score` (via the exported `scoreAll('stub', scorers.stub)`) inserts exactly one `doc_testimony` row per `(doc, person)` pair in `doc_persons` that lacks a `stub` row yet, and running it a second time with no new docs/persons inserts zero additional rows (the \"skip already scored\" guarantee), checkable by asserting the row count before/after each call."
+    },
+    {
+      "n": 12,
+      "text": "`pnpm export-docs` emits one JSON line per row of `docs`, each parseable and shaped `{ id, source, domain, published_at, text, uri, tone, persons }` with `persons` an array of `person_id` strings (`[]` for a doc with no `doc_persons` rows) — checkable by piping a small fixture-backed run through `JSON.parse` per line."
+    },
+    {
+      "n": 13,
+      "text": "`pnpm typecheck` and `pnpm test` both pass without ever setting `TESTIMONY_SCORER=onnx` and without triggering any network call — checkable by running the full test suite with network access disabled (or by grepping that no test file references `onnx` beyond importing the module shape, if at all)."
+    },
+    {
+      "n": 14,
+      "text": "No existing route's response shape changes: a snapshot of `/api/people/:id/graph`, `/sources`, `/docs`, `/timeline`, `/rising`, `/tone`, `/people` responses taken before this change is byte-identical after it, for the same fixture and query params."
+    }
+  ],
+  "diffTokens": 14658,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.84
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.86
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.22
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.35
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.14
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.79
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.27
+      }
+    ],
+    "costUsd": 0.001142778,
+    "ms": 553,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.097431,
+    "ms": 7056,
+    "error": null
+  }
+}

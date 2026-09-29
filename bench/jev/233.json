@@ -1,0 +1,267 @@
+{
+  "pr": 233,
+  "issue": 217,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "3e709a24ed7555ef6b6ea6d88fe4d91257724461",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`Term` (`src/ui/format.ts`) has an optional `community?: number | null` field typed as a plain `number`, never a type imported from `src/communities.ts`; `pnpm typecheck` passes with a `Term` built with and without that field."
+    },
+    {
+      "n": 2,
+      "text": "`communityRanking` returns the top 6 distinct non-null communities by node count descending, ties broken by ascending community id — pinned with a hand-built `Term[]` fixture carrying more than 6 distinct communities of varying sizes, including a tie."
+    },
+    {
+      "n": 3,
+      "text": "`themeMask` returns `null` for a term whose `community` is `null` or `undefined`; `` `var(--theme-${rank})` `` for a term in the top 6 of a given ranking; and `null` (not a literal muted string) for a non-null community outside the top 6 — each case pinned by a direct call, no DOM."
+    },
+    {
+      "n": 4,
+      "text": "`paintSelection` accepts `MaskState`; `'avaliacao'` sets `is-masked` and not `is-themed` (unchanged: still requires a person mean, exactly as today's boolean path does); `'tema'` sets `is-themed` and not `is-masked`; `'off'` sets neither — asserted via `test/fake-dom.ts` classList state."
+    },
+    {
+      "n": 5,
+      "text": "`wordMarkup` and `paintColumns` emit a `--theme` inline style only when `themeMask` is non-null for that node, in addition to (never instead of) any `--mask` style already present, exercised the same way the current `--mask` assertions in `test/render.test.ts` are."
+    },
+    {
+      "n": 6,
+      "text": "`drawMap`'s `ranking` parameter reaches `wordMarkup` for every placed node — a graph with a top-6 community produces at least one `--theme` style in the painted SVG."
+    },
+    {
+      "n": 7,
+      "text": "`inspect()` renders a \"no mesmo tema\" list only when all three hold: mask state is `'tema'`, the focused term's `community` is non-null, and at least one other node on the map shares it; absent in every other combination, including a focused term whose `community` is `null`."
+    },
+    {
+      "n": 8,
+      "text": "Each community-mate entry in that list is reachable and actionable via `onChoose`, exercised through the same click/keyboard contract `test/render.test.ts` already uses for `.related`/`relatedButtons` entries, not a raw DOM query."
+    },
+    {
+      "n": 9,
+      "text": "`handlers.mask` (the renamed `toggleMask` path in `src/ui/figures/atlas.ts`) cycles `'avaliacao' → 'tema' → 'off' → 'avaliacao'` in that fixed order and wraps — exercised through `createHandlers`, not a click on static HTML."
+    },
+    {
+      "n": 10,
+      "text": "`#mask`'s label text and `aria-pressed` update on every cycle step (`\"Colorir por avaliação\"`/`true`, `\"Colorir por tema\"`/`true`, `\"Sem cor\"`/`false`)."
+    },
+    {
+      "n": 11,
+      "text": "The control stays `hidden` whenever `mode === 'strip'`, and the previously chosen mask state (avaliação/tema/off) is preserved across a switch into and back out of `'strip'` mode — extending the existing strip-mode test in `test/figures-atlas.test.ts`."
+    },
+    {
+      "n": 12,
+      "text": "`src/ui/api.ts`'s `params()` includes `communities: '1'` in every call, alongside the existing `testimony: '1'` — pinned in `test/api.test.ts` beside the existing `assert.equal(p.get('testimony'), '1')` assertion."
+    },
+    {
+      "n": 13,
+      "text": "When every node in the current graph has `community` either `null` or the field absent from the payload entirely, `'tema'` state paints every word with `--muted` (no `--theme` style emitted) and the tema key states the build has no communities for this recorte — wording that names build coverage, not a document-count floor, distinguishing it from the evaluation mask's `MASK_MIN` copy in the assertion itself (not merely by eyeballing the two strings)."
+    },
+    {
+      "n": 14,
+      "text": "`atlas.css` defines `--theme-1` through `--theme-6` as six values on `:root`, no two equal to each other or to `--hostile`/`--favor`/`--cmp-a`/`--cmp-b`, each meeting a 4.5:1 contrast ratio against `--bg` — checked by a relative-luminance/contrast-ratio computation over the literal hex values, not by eyeballing."
+    },
+    {
+      "n": 15,
+      "text": "No existing evaluation-mask behaviour changes outcome: every pre-existing assertion in `test/render.test.ts` and `test/figures-atlas.test.ts` about `is-masked`, `#maskLegend`, `termMask`, or `MASK_MIN` still passes once updated only for the boolean→`MaskState` signature change (a mechanical rename of `mask: true` to `mask: 'avaliacao'` at call sites, never a change to what is asserted)."
+    },
+    {
+      "n": 16,
+      "text": "`test/invariants.test.ts` continues to pass unmodified: every new markup path (`themeLegend`, the inspector's community-mates list, the new `--theme` style attributes) goes through `format.ts`'s `html` tag, nothing feeds `innerHTML` a bare template literal."
+    }
+  ],
+  "diffTokens": 21029,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.71
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.82
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.21
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.17
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.61
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.21
+      }
+    ],
+    "costUsd": 0.00145677,
+    "ms": 743,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.121251,
+    "ms": 7778,
+    "error": null
+  }
+}

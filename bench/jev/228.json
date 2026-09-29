@@ -1,0 +1,159 @@
+{
+  "pr": 228,
+  "issue": 213,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "e545bb96cdd7dd1f143433da50221c370442fb02",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`fetchFeed`'s item extraction, given an `rdf:RDF` fixture whose items are siblings of `channel` (not nested inside it), produces one `RawDoc` per item — checked with a new RDF fixture literal, distinct from the existing `rssBody()`, shaped like Planalto's real feed (`<rdf:RDF>` root with an `xmlns:dc` declaration, a `<channel>` containing no items, and one or more `<item rdf:about=\"...\">` elements as top-level siblings carrying `<title>`, `<link>`, `<description>`, `<content:encoded>` and `<dc:date>`)."
+    },
+    {
+      "n": 2,
+      "text": "A `toDoc` call on an RDF item whose `dc:date` is set (e.g. `2026-09-02T18:34:00Z`) and whose `pubDate` is absent produces a `publishedAt` matching that date, not the current time — asserted by comparing the parsed date (year/month/day, or an exact ISO match) against the fixture's `dc:date` value, not merely that `publishedAt` is a truthy string."
+    },
+    {
+      "n": 3,
+      "text": "An RDF item with neither `pubDate` nor `dc:date` still produces a `RawDoc` (not `null`, no thrown error), `publishedAt` falling back to the current time — the same code path RSS 2.0 already exercises for a missing `pubDate`."
+    },
+    {
+      "n": 4,
+      "text": "`src/collectors/oficial.ts`'s `feeds` array includes the Planalto URL (`https://www.gov.br/planalto/pt-br/acompanhe-o-planalto/noticias/RSS`) as its 5th entry, and the parametrized `oficial` case in `test/collectors-rss.test.ts` (the `cases` array's `feedCount`) is updated from `4` to `5`."
+    },
+    {
+      "n": 5,
+      "text": "Every `oficial` doc, Planalto's included, still carries `source: 'oficial'` and no `tone` field — covered by the existing per-family assertion loop (`describe('rss/juridico/oficial/nicho — ...')`), which needs no new assertion beyond the count bump in AC4."
+    },
+    {
+      "n": 6,
+      "text": "The docs state, in `docsText` terms (any page, not tied to a heading or file): Planalto's feed is part of the `oficial` family, and `oficial` (or `rss.ts`) reads at least one RDF (RSS 1.0) feed. `test/docs-drift.test.ts` already has a per-collector row check and a default-source-agreement check (`'every collector has a row in the source table'`, `'the source table agrees with defaultSources'`) — those are unaffected by this issue (the `oficial` row and its `defaultSources` membership do not change) and need no new criterion. This criterion is new because the fact that `oficial` now includes an RDF feed, and that Planalto specifically is no longer excluded, is not yet written down anywhere."
+    },
+    {
+      "n": 7,
+      "text": "`docsText` no longer states that Planalto's feed is unsupported, excluded, or that `rss.ts`'s parser assumes RSS 2.0 for every feed — checked as the absence of that claim, not the absence of one particular sentence or file location. Note for the builder: `test/docs-drift.test.ts` already has a test titled `'press families (issue #22): ... and the RDF/Planalto exclusion'` that only asserts the words \"RDF\" and \"Planalto\" appear somewhere in `docsText` — it does not assert exclusion, so it keeps passing once the prose is rewritten to describe inclusion instead. The title is now stale prose describing a fact that no longer holds; rename it in the same PR (e.g. drop \"exclusion\" from the title) so a future reader isn't misled — this is a docs-hygiene fix bundled into this PR, not a separate acceptance criterion, since a test title never itself gates a test."
+    }
+  ],
+  "diffTokens": 5534,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.83
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.19
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.29
+      }
+    ],
+    "costUsd": 0.000486402,
+    "ms": 416,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.042939,
+    "ms": 5593,
+    "error": null
+  }
+}

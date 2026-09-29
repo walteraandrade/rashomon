@@ -1,0 +1,171 @@
+{
+  "pr": 229,
+  "issue": 212,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "e545bb96cdd7dd1f143433da50221c370442fb02",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/types.ts`'s `Person` type gains four optional string fields: `party`, `office`, `uf`, `wikidata`. `pnpm typecheck` passes with `seed.json` carrying all four on at least one entry."
+    },
+    {
+      "n": 2,
+      "text": "All 27 entries in `seed.json` gain a `wikidata` QID. `party`, `office` and `uf` are filled by hand where they apply (a person with no current office may omit `office`; a national office may omit `uf`). No test asserts the specific values chosen for any real person — only that the mechanism echoing them works (AC4/AC5)."
+    },
+    {
+      "n": 3,
+      "text": "`src/server.ts` exports a pure `withSeedFields(row, seedMap?)`, defaulting to a `Map` built once at module load from the real `seed.json`; `GET /api/people`'s handler maps every DB row through it before responding."
+    },
+    {
+      "n": 4,
+      "text": "A unit test on `withSeedFields`, called with a synthetic `seedMap` the test constructs (not real `seed.json`), proves: a field present on the seed entry is echoed; a field absent from the seed entry is omitted from the result, never present as `null`; `wikidata` is never echoed even when the synthetic entry carries one; a row whose `id` has no entry in the map is returned unchanged."
+    },
+    {
+      "n": 5,
+      "text": "An integration test on `GET /api/people` (existing `app`, fixture-seeded DB) proves every row's keys are a subset of `['aliases', 'id', 'name', 'office', 'party', 'uf']` and never include `wikidata` — a structural check that holds regardless of which fields the real `seed.json` currently fills for `lula`/`tarcisio`/`bolsonaro`."
+    },
+    {
+      "n": 6,
+      "text": "`docs/sources.md`'s \"Tracked people\" section states the `party`, `office`, `uf` and `wikidata` fields, and that the first three are echoed by `/api/people` while `wikidata` is not."
+    },
+    {
+      "n": 7,
+      "text": "`docs/api.md`'s `/api/people` row or its surrounding prose names `party`/`office`/`uf` as optional, additive fields, consistent with the existing \"the contract is stable\" sentence."
+    },
+    {
+      "n": 8,
+      "text": "`test/docs-drift.test.ts` needs no new criterion: it already asserts the tracked-seed-field list (`camaraId`, `senadoId`, `exclude`) is documented, and none of `party`/`office`/`uf`/`wikidata` are fields a collector reads, so that specific test is unaffected. AC6/AC7 above are the new, issue-specific documentation criteria."
+    }
+  ],
+  "diffTokens": 5935,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.82
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.27
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.28
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.27
+      }
+    ],
+    "costUsd": 0.000519372,
+    "ms": 866,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.045621,
+    "ms": 6532,
+    "error": null
+  }
+}

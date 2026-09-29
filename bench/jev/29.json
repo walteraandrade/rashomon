@@ -1,0 +1,207 @@
+{
+  "pr": 29,
+  "issue": 25,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "ff8116783b732ebcb0f0b664531333ffca82e6e1",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`pnpm typecheck` passes with `'senado'` added to the `Source` union in `src/types.ts` and `senadoId?: string` added to `Person`."
+    },
+    {
+      "n": 2,
+      "text": "`src/collectors/senado.ts` exports a `Collector` (same signature `Person[] -> Promise<RawDoc[]>`) that returns `[]` when called with persons that all lack `senadoId` — no network call is made (assert via a spy/mock or by construction, not a live request, per the no-external-calls-in-tests constraint)."
+    },
+    {
+      "n": 3,
+      "text": "Every `RawDoc` produced by the collector has `source: 'senado'` and `tone === undefined`."
+    },
+    {
+      "n": 4,
+      "text": "`src/collectors/index.ts` registers `senado` in `collectors` and includes it in `defaultSources`, so `pnpm ingest` with no arguments now also collects `senado` (default, not opt-in — justified in section 3: no observed rate limiting, unlike `gdelt`)."
+    },
+    {
+      "n": 5,
+      "text": "`src/query.ts`'s `SOURCES` array, the `rising` source check, and the `timeline` source check (lines 13, 46, 57) all include `'senado'`; a `GET .../rising?source=senado` or `.../timeline?source=senado` request is honored (not silently downgraded to `all`) — covered by `parseRisingQuery`/`parseTimelineQuery` assertions added to `test/server.test.ts`."
+    },
+    {
+      "n": 6,
+      "text": "`test/fixture.ts` gains one `senado` doc, dated outside every window ( > 3100 days ago) any existing test opens, with vocabulary that does not appear in any other fixture doc; every existing test in the suite (`pnpm test`) still passes unmodified with no literal recomputed."
+    },
+    {
+      "n": 7,
+      "text": "A test in `test/extract.test.ts` (or `test/store.test.ts`) asserts the new senado doc's person mention is picked up by `personsMentioned`/`insertDoc` with no `source === 'senado'` branch anywhere in `src/extract.ts` (i.e. the test would pass identically if the doc's `source` were swapped for `'rss'`)."
+    },
+    {
+      "n": 8,
+      "text": "`GET /api/people/:id/graph?source=senado` for a person with no senado docs in the fixture returns `{ nodes: [], links: [], signature: [] }`-shaped response with `stats.docs === 0`, not an error — covered by a `graph.test.ts` case."
+    },
+    {
+      "n": 9,
+      "text": "`seed.json` has `senadoId: \"5894\"` on `flavio-bolsonaro` and `senadoId: \"3830\"` on `alcolumbre`, and no other entry."
+    },
+    {
+      "n": 10,
+      "text": "README documents `senado` in the source list (line 3), the `pnpm ingest` default-sources line (line 9), the `source=` enum in every route that lists one (lines 33, 37, 45, 47, 49), the `senadoId` seed field (near line 75), and a short paragraph next to the `gdelt`/`gkg` paragraphs (near line 27) stating `senado` is on by default with the observed no-rate-limit rationale."
+    },
+    {
+      "n": 11,
+      "text": "`public/design-5.html`'s `segSource` control includes a `senado` button; clicking it sets `state.source = 'senado'` and triggers `load()` — checkable by reading the `buildSeg('segSource', ...)` call, no automated UI test required (no existing UI test harness in this repo)."
+    }
+  ],
+  "diffTokens": 9912,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.78
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.21
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.7
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.81
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.23
+      }
+    ],
+    "costUsd": 0.000807492,
+    "ms": 560,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.068811,
+    "ms": 6446,
+    "error": null
+  }
+}

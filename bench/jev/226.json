@@ -1,0 +1,71 @@
+{
+  "pr": 226,
+  "issue": 206,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "433bc517e627a225623291ffd0878f23ad2714e3",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/people/:unknown-id/lenses` returns 404 with `{ \"error\": \"person not found\" }`."
+    },
+    {
+      "n": 2,
+      "text": "`GET /api/people/:id/lenses?a=domain:<host>&b=lean:right` returns `a.lens === \"domain:<host>\"` and `b.lens === \"lean:right\"`."
+    },
+    {
+      "n": 3,
+      "text": "An unparseable lens (e.g. `a=domain:NOT VALID` or `a=lean:nonsense` or `a` omitted) is echoed back as `a.lens === \"all\"`, and the response still returns 200 with a non-error body."
+    },
+    {
+      "n": 4,
+      "text": "For a term that is one of the tracked person's own name words, `terms[].a` and `terms[].b` are both the string `\"name\"`."
+    },
+    {
+      "n": 5,
+      "text": "For a term inside side `a`'s top lists but absent from side `b`'s top lists (within the fixture's setup), `terms[].b` is `null`, not `0` and not absent from the JSON."
+    },
+    {
+      "n": 6,
+      "text": "A GDELT-sourced lens (e.g. `source:gkg`) yields a non-null `tone` on that side for a term with GDELT hits; a non-GDELT-only lens (e.g. `source:rss`) yields `tone: null` for every term."
+    },
+    {
+      "n": 7,
+      "text": "`a === b` (same normalized lens on both sides) is legal: the response's `a` and `b` term figures are identical for every term."
+    },
+    {
+      "n": 8,
+      "text": "A person with zero documents in the window returns `about: 0` on both sides and `terms: []`, with status 200."
+    },
+    {
+      "n": 9,
+      "text": "`src/graph.ts`'s `queries`/`statements` maps gain a `lenses` entry, and `test/graph.test.ts` pins its rendered SQL text the same way it pins `compare`'s."
+    },
+    {
+      "n": 10,
+      "text": "`pnpm typecheck` and `pnpm test` pass with the new route, query parser and front-end module in place."
+    },
+    {
+      "n": 11,
+      "text": "`test/invariants.test.ts`'s import-direction and markup-tag checks pass unchanged with `figures/lenses.ts` added — it imports only `figure.ts`, `api.ts`, `format.ts`, `render.ts`, `docs-card.ts`, never another figure."
+    },
+    {
+      "n": 12,
+      "text": "`pnpm build` is re-run and `public/bundle.js` is committed alongside the `src/ui` change (`test/bundle-freshness.test.ts`)."
+    },
+    {
+      "n": 13,
+      "text": "`docsText` (across `README.md`/`docs/*.md` as a whole, per `test/docs.ts`) states, as facts and not as a location: that `/api/people/:id/lenses` exists, that a lens is one of a domain, a lean or a source, and that an invalid lens falls back to the full corpus for that side."
+    },
+    {
+      "n": 14,
+      "text": "`test/docs-drift.test.ts` is unaffected — this issue adds no collector and no default source, so no new criterion is written against it."
+    }
+  ],
+  "diffTokens": 43271,
+  "skipped": "diff too large (43271 tokens)",
+  "jev": null,
+  "sonnet": null
+}

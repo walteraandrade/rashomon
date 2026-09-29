@@ -1,0 +1,71 @@
+{
+  "pr": 236,
+  "issue": 216,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "1e4265e79a2daac67e32c6c3cb338e995183f2fe",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/people/:id/attention?days=30` (#211, already merged — not re-tested here) returns `200` with `{ days: 30, series: [] }`, never a non-2xx status, for a person with no `wikipedia` alias. This spec's own tests stub the response via `routeFetch` and never hit a real database."
+    },
+    {
+      "n": 2,
+      "text": "`peakDay` on a series with a single maximum returns that day; on a tie between two or more days sharing the maximum value, returns the earliest (oldest) of the tied days; on an all-zero series, returns `null`."
+    },
+    {
+      "n": 3,
+      "text": "The lag sentence renders \"a imprensa veio N dias antes\" when the mentions peak precedes the views peak by N days (N ≥ 1), \"o público buscou N dias antes\" when the views peak precedes the mentions peak by N days, \"os dois picos caíram no mesmo dia\" when both peaks fall on the same day, and no sentence (a note instead) when either series has no peak (all-zero)."
+    },
+    {
+      "n": 4,
+      "text": "The mentions row's per-day sizes and the views row's per-day sizes are computed from independent maxima: a fixture where mentions are uniformly small (max 3) and views are uniformly large (max 50000) does not make every mentions bar render at floor size relative to a views-scaled ramp — each row's own largest day renders at that row's own ceiling size."
+    },
+    {
+      "n": 5,
+      "text": "`attentionParams(...)` always sends `days=30` regardless of any other input, matching `weekParams`'s fixed-`days=7` precedent."
+    },
+    {
+      "n": 6,
+      "text": "The mentions-series request omits `term` (or sends `term=''`), sends `kind` as the full atlas kind set, and covers whatever `source` the figure's own control selects — never filtered to one term."
+    },
+    {
+      "n": 7,
+      "text": "`src/ui/figures/attention.ts` exports exactly `mount`, does not touch `document` at import time, and is never imported by (and never imports) `atlas.ts`, `testimony.ts`, `compare.ts`, `rising.ts`, `week.ts` or `lenses.ts`. Checkable by adding a `figures/attention.ts` entry to `test/invariants.test.ts`'s existing per-module allowed-imports map (the `figures/lenses.ts` entry there, `test/invariants.test.ts:146`, is the exact precedent) — this is one new map entry, not a new kind of assertion."
+    },
+    {
+      "n": 8,
+      "text": "Clicking a day column opens `#docsDialog` with `owner: 'attention'`, one side, `day` set to that column's UTC date string, `term: ''`, and `kind` the atlas's full kind set; clicking the same day again (or a background click, or Escape) releases it."
+    },
+    {
+      "n": 9,
+      "text": "A person with an empty `/attention` response still renders the figure (present in the DOM, in `FIGURES`), with the views row at floor size, a \"sem dado de pageviews para esta pessoa\" note, and no lag sentence; the mentions row renders normally from `/timeline`."
+    },
+    {
+      "n": 10,
+      "text": "`paintAttentionLoading` returns a ghost with the same two-row/axis shape `paintAttention` draws with data — matching every other figure's ghost-shape convention (`test/render.test.ts`'s existing per-painter pattern is the template for two new tests here, one per state)."
+    },
+    {
+      "n": 11,
+      "text": "`public/como-ler.html` contains an element with `id=\"atencao\"` whose surrounding text states, as facts (loosely matched, not pinned to one exact sentence): that Wikipedia pageviews measure curiosity rather than opinion, and that the two series are drawn on two independently-scaled rows rather than compared as one number against another. This follows the existing precedent for testing this page's own content (`test/leitura-ui-acceptance.test.ts`'s `<div id=\"avaliacao\">...` extraction-then-fact-match, not `test/docs.ts`'s `docsText` — `como-ler.html` is UI copy, not part of `docPages`, which is `README.md` plus `docs/*.md` only)."
+    },
+    {
+      "n": 12,
+      "text": "`public/atlas.html`'s new `#attention` section carries a `.figure-key` and a \"Como ler\" link targeting `como-ler.html#atencao`. This extends `test/leitura-ui-acceptance.test.ts`'s existing \"the page is a sequence of graphs\" test, which already hardcodes the figure id list, the eyebrow-per-figure regexes, the figure count, and the total `.pick` count — those literal arrays/numbers (`['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses']` → add `'attention'`; figure-sub count 6 → 7; add a `Gráfico 7` assertion; the shared `.pick` total → +2 for attention's own person/source sentence) must be edited by hand to include the seventh figure; this is not a fact this issue asserts fresh."
+    },
+    {
+      "n": 13,
+      "text": "No `font-size: …px` literal is introduced by the new CSS rules (`test/leitura-ui-acceptance.test.ts`'s whole-stylesheet scan already covers this; no new test needed)."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` and `pnpm test` pass with the new module, types and CSS in place; `pnpm build` is re-run and `public/bundle.js` committed (`test/bundle-freshness.test.ts`)."
+    }
+  ],
+  "diffTokens": 34292,
+  "skipped": "diff too large (34292 tokens)",
+  "jev": null,
+  "sonnet": null
+}

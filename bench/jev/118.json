@@ -1,0 +1,219 @@
+{
+  "pr": 118,
+  "issue": 112,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "725f1a88ab2062ae0b86904234d5c9322effe430",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/scorers/method.ts` exists and its source contains no `import` statement at all (grep/regex check on the raw file), and no reference to `@huggingface/transformers` or a dynamic `import(...)`."
+    },
+    {
+      "n": 2,
+      "text": "`src/scorers/onnx.ts` no longer declares `dtype`, `modelRevision` or `kikoriMethod` as its own const/function; it imports them from `./method.js`. It still exports `pairIds`, `scoreFromLogits`, and the default `onnx: Scorer`, unchanged in behavior."
+    },
+    {
+      "n": 3,
+      "text": "`methods` exported from `src/scorers/index.ts` and `methods` exported from `src/scorers/method.ts` are the same object (reference equality), so there is exactly one source for the label."
+    },
+    {
+      "n": 4,
+      "text": "A new test walks the import graph starting at `src/server.ts` — resolving every relative specifier in every `.ts` file it reaches under `src/`, recursively, the same regex-walk pattern `test/atlas-modules-acceptance.test.ts` uses for `src/ui` — and asserts `src/scorers/onnx.ts` is never a node in that reachable set. The walk must be generic (follow every import it finds), not a check that one named file (`query.ts`) avoids one named specifier, so it still catches a future edge that reintroduces the reach (e.g. `graph.ts` or `server.ts` importing `scorers/index.js` directly)."
+    },
+    {
+      "n": 5,
+      "text": "`src/query.ts` no longer imports from `./scorers/index.js`; `src/score.ts` is the only file importing `scorers/index.js` outside of `scorers/index.ts` itself and `onnx.ts`'s own module."
+    },
+    {
+      "n": 6,
+      "text": "`package.json`'s `dependencies` no longer lists `@huggingface/transformers`; `optionalDependencies` lists it at the same version range it had in `dependencies` before the change."
+    },
+    {
+      "n": 7,
+      "text": "`pnpm typecheck` and `pnpm test` both pass with `DATA_DIR=memory://` and no network access, exactly as today."
+    },
+    {
+      "n": 8,
+      "text": "`test/testimony-default-method.test.ts` and `test/testimony-revision.test.ts` pass without any change to their assertions — only `test/testimony-revision.test.ts`'s import of `modelRevision` moves from `'../src/scorers/onnx.js'` to `'../src/scorers/method.js'`; the labels it asserts (`kikori:q8`, `kikori:fp32`, `kikori:q8:<rev>`, etc.) are unchanged."
+    },
+    {
+      "n": 9,
+      "text": "`test/kikori.test.ts`, `test/score.test.ts`, `test/testimony-acceptance.test.ts` (AC13/AC13b) and `test/testimony-independent-acceptance.test.ts` (AC13/AC13b) keep passing unmodified: `onnx.ts` still exports `pairIds`, `scoreFromLogits`, `onnx`, and still gates the Hub import behind a dynamic `import()` inside a function body."
+    },
+    {
+      "n": 10,
+      "text": "Manual: run `vercel build` against this branch before and after the change (or against `master` vs. this branch), compare the size of `.vercel/output/functions/api/index.func`; after the change it must not contain `onnxruntime-node`, `@huggingface/transformers` or `sharp` — checkable by `find .vercel/output/functions/api/index.func -iname '*onnxruntime*' -o -iname '*@huggingface*'` returning nothing after, something before."
+    },
+    {
+      "n": 11,
+      "text": "Manual: re-run `pnpm audit` after the `optionalDependencies` move and record the result; the advisories tied to `@huggingface/transformers` are expected to still appear locally (the package is still installed, `pnpm score` still needs it) — this criterion is about recording that fact accurately, not about the count reaching zero."
+    },
+    {
+      "n": 12,
+      "text": "`docs/operations.md` states, as facts: `@huggingface/transformers` is required only by `pnpm score`, ships as an optional dependency, and is excluded from the deployed `/api` function's import graph; and it records the measured before/after size of `.vercel/output/functions/api/index.func` from criterion 10. `test/docs-drift.test.ts` does not cover this (it only checks the collector registry against `docs/sources.md`), so this is a new fact, not a duplicate of an existing check."
+    }
+  ],
+  "diffTokens": 5230,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.99
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.58
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.76
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.48
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.06
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.26
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.91
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.57
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.34
+      }
+    ],
+    "costUsd": 0.00048006,
+    "ms": 459,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.043716,
+    "ms": 7156,
+    "error": null
+  }
+}

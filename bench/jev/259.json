@@ -1,0 +1,231 @@
+{
+  "pr": 259,
+  "issue": 247,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "7db634c6d2a755b2a087b6b5f22b99ebd5d2fce9",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "For every recorte in `test/aggregate.test.ts`'s existing `recortes` list, for every pair drawn from `persons`, once `buildGraphAggregates(persons)` has run for the window, the new compare fast query renders byte-identical `about_a`/`about_b`/`terms` to today's live `compareQuery` — at the production `TOP` (200), no fixture doc additions needed."
+    },
+    {
+      "n": 2,
+      "text": "For every recorte in the same list, for every person, with both `a` and `b` restricted to `all` or `source:<one of SOURCES>`, the new lenses fast query renders byte-identical output to today's live `lensesQuery`, once the window is built."
+    },
+    {
+      "n": 3,
+      "text": "A recorte outside `precomputable(q)` (a `domain`, a `lean`, a comma `source` list, `country=pt`, `country=all`, or a `days` outside `DAYS`) still runs `/api/compare` fully live, unchanged output from before this issue."
+    },
+    {
+      "n": 4,
+      "text": "A `domain:` or `lean:` lens on either side of `/api/people/:id/lenses`, or a `days` outside `DAYS` on either side, keeps the whole lenses request live, unchanged output from before this issue."
+    },
+    {
+      "n": 5,
+      "text": "With `buildGraphAggregates(persons, DAYS, top)` run at a shrunk `top` (mirroring `test/aggregate.test.ts`'s existing \"ceiling on graph_terms\" pattern), there exists at least one fixture pair, window and `limit` in `SMALL_LIMITS` where the compare fast path returns `null` on one side for a term the other person genuinely used (the new, documented meaning) — and, at every `limit` in `SMALL_LIMITS` under that same shrunk build, every key belonging to a side's own top-`limit`-by-count or top-`limit`-by-weighted-PMI selection still reads its exact figure on that side, never `null`."
+    },
+    {
+      "n": 6,
+      "text": "A `source` with zero docs for one or both persons in scope (fixture's `senado`) still answers the compare/lenses fast path: `about` reads `0` on that side and `terms` is `[]`, not a fallback to live."
+    },
+    {
+      "n": 7,
+      "text": "`tone` on both routes is `null` wherever no GDELT doc contributed on that side, identical between the fast and the live path."
+    },
+    {
+      "n": 8,
+      "text": "`docsText` (`test/docs.ts`) states that a `null` side on `/api/compare`/`/api/people/:id/lenses` can mean the term was used below the precomputed aggregate's own kept threshold, not only zero documents."
+    },
+    {
+      "n": 9,
+      "text": "`docsText` states, in plain pt-BR, that a word drawn fully to one end of the compare or lenses ruler can mean the other side used it too, just below what the precomputed build kept."
+    },
+    {
+      "n": 10,
+      "text": "`/compare/bridges` and `/lenses/bridges`: every existing `test/graph.test.ts` assertion for them still passes unmodified — still two live statements, same output."
+    },
+    {
+      "n": 11,
+      "text": "Every existing `risingQuery`/`risingFor` test in `test/graph.test.ts` still passes unmodified; no fast path exists for rising after this issue."
+    },
+    {
+      "n": 12,
+      "text": "`pnpm typecheck` and `pnpm test` pass."
+    },
+    {
+      "n": 13,
+      "text": "`pnpm bench`'s `EXPLAIN (ANALYZE, BUFFERS)` of the new compare and lenses fast builders, run against production-shaped data on a fast-eligible recorte, reads under 200 ms warm and touches only `graph_terms`/`graph_scopes` (primary-key reads), no scan of `doc_terms`/`docs` — manual step, since the suite runs against the in-memory fixture, not production data.\n\n`test/docs-drift.test.ts` is unrelated to this issue (it covers the collector registry against `docs/sources.md`) and needs no new criterion here."
+    }
+  ],
+  "diffTokens": 20132,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.41
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.6
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.58
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.2
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.13
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.28
+      }
+    ],
+    "costUsd": 0.001288266,
+    "ms": 593,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.88
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.88
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.7
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.75
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.106926,
+    "ms": 7025,
+    "error": null
+  }
+}

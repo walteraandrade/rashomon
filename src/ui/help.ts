@@ -1,5 +1,5 @@
 // The in-page guide (#helpDialog). Belongs to no figure: the header link and every figure's
-// "como ler" point at como-ler.html, and this module intercepts those clicks so the reader
+// "como ler" point at /como-ler, and this module intercepts those clicks so the reader
 // never has to leave the graph. Modifier-click, middle-click, target=_blank and data-leave
 // still go to the page, which is the shareable copy of the same text.
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -157,5 +157,15 @@ describe('the prerendered pages carry the script-src policy in a meta tag', () =
       assert.ok(style.includes("'unsafe-inline'"), `${path}: style-src needs unsafe-inline`)
       assert.ok(!style.some((t) => /sha256-|nonce-/.test(t)), `${path}: style-src must carry no hash or nonce`)
     }
+  })
+})
+
+describe('the client bundle', () => {
+  const appDir = join(root, 'build', '_app')
+  const files = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)]))
+
+  it('never ships graphology, which is server-only', { skip: existsSync(appDir) ? false : 'run pnpm build first' }, () => {
+    for (const file of files(appDir)) assert.ok(!readFileSync(file, 'utf8').includes('graphology'), `${file} contains graphology`)
   })
 })

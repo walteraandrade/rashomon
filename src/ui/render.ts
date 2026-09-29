@@ -1298,7 +1298,7 @@ const weekWordMarkup = (
 
 // Size is the week's only encoding and a listed word has none, so the button carries the count.
 // An eyebrow names the list: a 145px column turns a sentence into three lines, taller than
-// the words it explains, and the guide (#help-semana, como-ler.html#semana) says why they are
+// the words it explains, and the guide (#help-semana, /como-ler#semana) says why they are
 // here. Under about 120px even "// Não couberam" wraps onto a second line.
 const weekOverflowMarkup = (
   overflow: { term: string; kind: string; count: number; text: string }[],

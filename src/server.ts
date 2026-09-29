@@ -147,7 +147,6 @@ app.get('/api/agenda', async (c) => c.json(await agendaFor(parseAgendaQuery(c.re
 app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
 app.get('/api/comention', async (c) => c.json(await comentionFor(parseComentionQuery(c.req.query())))) // spans every tracked person, like /api/tone
 
-
 // Importing `app` in tests never binds a port or migrates; only the entrypoint does.
 if (import.meta.url === `file://${process.argv[1]}`) {
   await migrateP()

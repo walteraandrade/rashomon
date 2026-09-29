@@ -99,14 +99,13 @@ for (let round = 1; round <= 2; round++) {
     { label: `tests #${issue} r${round}`, phase: 'Verify', schema: TESTS })
   const head = await role('researcher', `${where}\n\nRun \`git rev-parse HEAD\` inside the worktree and return the full 40-character sha, never an abbreviation.`,
     { label: `head #${issue} r${round}`, phase: 'Verify', schema: HEAD, effort: 'low' })
-  const started = Date.now()
   verdict = await role('validator', `${where}\n\n${specText}\n\nBuilder reports:\n${apiReport}\n\n${uiReport}\n\nTest verifier report (${tests?.failures ?? '?'} failing):\n${tests?.table ?? 'none'}\n\nJudge the branch against the spec and CLAUDE.md. On each gap set criterion to the number of the acceptance criterion it is about, and omit it when the gap spans none.`,
     { label: `validate #${issue} r${round}`, phase: 'Verify', schema: VERDICT })
   verifyRounds.push({
     round,
     headSha: head?.sha ?? null,
     verdict: verdict?.verdict ?? null,
-    ms: Date.now() - started,
+    ms: null,
     gaps: (verdict?.gaps ?? []).map((g) => ({ criterion: g.criterion ?? null, severity: g.severity, area: g.area })),
   })
   const blocking = (verdict?.gaps ?? []).filter((g) => g.severity !== 'nit')

@@ -2730,9 +2730,9 @@ describe('shared graph aggregations (issue #45)', () => {
     assert.equal(await countStatements(() => graphFor(nobody, graphBase)), 2)
   })
 
-  it('once the window is built, the probe is the statement: one for the aggregates, one for links', async () => {
+  it('once the window is built: the aggregates, the empty term_links probe, then live links', async () => {
     await buildGraphAggregates(persons)
-    assert.equal(await countStatements(() => graphFor(lula, graphBase)), 2)
+    assert.equal(await countStatements(() => graphFor(lula, graphBase)), 3)
     assert.equal(await countStatements(() => graphFor(lula, { ...graphBase, domain: 'example.org' })), 2, 'a domain is never precomputed: live statement plus links')
   })
 })
@@ -3760,7 +3760,6 @@ describe('term ids are internal (issue #252)', () => {
       timeline: (await timelineFor(lula, { ...timelineBase, days: 4001, country: 'all', term: 'reforma', bucket: 'week' })).map((b) => b.count),
       graphTerms: (await db.query(`select * from graph_terms order by days, source, person_id, term, kind`)).rows,
       communities: (await db.query(`select * from term_communities order by days, source, person_id, term, kind`)).rows,
-      links: (await db.query(`select * from term_links order by days, source, person_id, a, b`)).rows,
     }
   }
 
@@ -3770,7 +3769,7 @@ describe('term ids are internal (issue #252)', () => {
     assert.ok(normal.testimony.nodes.some((n) => n.testimony), 'sanity: term testimony')
     assert.ok(normal.compare.terms.length > 0 && normal.lenses.terms.length > 0 && normal.rising.terms.length > 0)
     assert.ok(normal.docs.docs.length > 0 && normal.week.buckets.some((b) => b.terms.length > 0))
-    assert.ok(normal.graphTerms.length > 0 && normal.communities.length > 0 && normal.links.length > 0)
+    assert.ok(normal.graphTerms.length > 0 && normal.communities.length > 0)
     assert.ok(normal.timeline.some((c) => c > 0), 'sanity: the term-filtered timeline counts something')
 
     await seedWithReversedVocabulary([

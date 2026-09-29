@@ -139,40 +139,6 @@ const COMMUNITY_SEED = 42
 
 const scopePairsQuery = (days: number) => sql`select distinct source, person_id from graph_terms where days = ${days}`
 
-// The linkable set L: the union of graphFastQuery's own node ids across every sort/min at
-// limit 200 (issue #251), no kind filter (mirrors kind='all', term_links' only built kind set).
-const linkableTermsQuery = (days: number, source: string, personId: string, top = TOP) => {
-  const byPmi = (m: number) => sql.raw(`by_pmi_${m}`)
-  const ranks = MINS.map(
-    (m) => sql`row_number() over (partition by count >= ${m} order by ${pmiRank(sql.raw('count'))} desc, term, kind) as ${byPmi(m)}`,
-  )
-  const kept = MINS.map((m) => sql`(count >= ${m} and ${byPmi(m)} <= ${top})`)
-  return sql`
-  with s as (
-    select tracked, about from graph_scopes where days = ${days} and source = ${source} and person_id = ${personId}
-  ),
-  scored as (
-    select g.term, g.kind, g.c_pt as count,
-      ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
-    from graph_terms g, s
-    where g.days = ${days} and g.source = ${source} and g.person_id = ${personId}
-  ),
-  ranked as (
-    select term, kind, count,
-      row_number() over (order by count desc, term, kind) as by_count,
-      ${sql.join(ranks)}
-    from scored
-  )
-  select kind || ':' || term as id from ranked
-  where by_count <= ${top}
-    or ${sql.join(kept, '\n    or ')}`
-}
-
-const insertLinksQuery = (days: number, source: string, personId: string, as: string[], bs: string[], counts: number[]) => sql`
-  insert into term_links (days, source, person_id, a, b, count)
-  select ${days}::int, ${source}, ${personId}, u.a, u.b, u.count
-  from unnest(${as}::text[], ${bs}::text[], ${counts}::int[]) as u(a, b, count)`
-
 const keptTermsQuery = (days: number, source: string, personId: string) => sql`
   select term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
   order by kind, term`
@@ -220,29 +186,10 @@ const splitId = (id: string): [kind: string, term: string] => {
   return [id.slice(0, at), id.slice(at + 1)]
 }
 
-// Persists communityEdgesQuery's own edges (already fetched by the caller, never re-queried)
-// restricted to L x L (issue #251); `top` threads personTermsQuery's own ceiling, so a test can
-// shrink it without a test-only branch.
-const persistLinks = async (
-  days: number,
-  source: string,
-  personId: string,
-  edgeRows: { a: string; b: string; count: number }[],
-  top: number,
-) => {
-  const { rows: linkableRows } = await run(linkableTermsQuery(days, source, personId, top))
-  const linkable = new Set((linkableRows as { id: string }[]).map((r) => r.id))
-  if (linkable.size === 0) return
-  const kept = edgeRows.filter((e) => linkable.has(e.a) && linkable.has(e.b))
-  if (kept.length === 0) return
-  await run(insertLinksQuery(days, source, personId, kept.map((e) => e.a), kept.map((e) => e.b), kept.map((e) => e.count)))
-}
-
 // One Louvain pass per (days, source, person) with graph_terms rows. A term with no surviving
 // edge still gets its own singleton row, via the self-referencing entry communities() expects.
-// term_links is persisted from the same communityEdgesQuery call (issue #251) rather than
-// re-querying it — that query is the costliest one in the per-scope build.
-const buildCommunitiesForWindow = async (days: number, linkTop: number) => {
+// term_links is only cleared, never filled: its 479.5 MB filled the production disk.
+const buildCommunitiesForWindow = async (days: number) => {
   await run(sql`delete from term_communities where days = ${days}`)
   await run(sql`delete from term_links where days = ${days}`)
   const { rows: pairs } = await run(scopePairsQuery(days))
@@ -269,7 +216,6 @@ const buildCommunitiesForWindow = async (days: number, linkTop: number) => {
       communityIds.push(community)
     }
     if (terms.length) await run(insertCommunitiesQuery(days, source, personId, terms, kinds, communityIds))
-    await persistLinks(days, source, personId, edgeRows as { a: string; b: string; count: number }[], linkTop)
   }
 }
 
@@ -359,10 +305,10 @@ const buildOutletFieldsForWindow = async (days: number, persons: Person[]) => {
 }
 
 // One window per transaction; communities run last over graph_terms, outlet fields/neighbours after.
-const buildWindow = async (days: number, persons: Person[], top: number, linkTop: number) =>
+const buildWindow = async (days: number, persons: Person[], top: number) =>
   inTransaction(async () => {
     for (const q of windowStatements(days, persons, top)) await run(q)
-    await buildCommunitiesForWindow(days, linkTop)
+    await buildCommunitiesForWindow(days)
     await buildOutletFieldsForWindow(days, persons)
   })
 
@@ -375,13 +321,12 @@ export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'te
 
 // Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
-// `top` is the per-ordering ceiling and `linkTop` term_links' own (both TOP in production; tests
-// lower them to see the cut, linkTop alone to cap links over a kept set the fixture can outgrow).
+// `top` is the per-ordering ceiling (TOP in production; tests lower it to see the cut).
 // Analyzes only graph_terms_all and graph_terms, mid-window, for its own later statements; the
 // persisted tables' final statistics stay with the owner process (POST_BUILD_ANALYZED).
-export const buildGraphAggregates = async (persons: Person[], windows: readonly number[] = DAYS, top = TOP, linkTop = top): Promise<AggregateReport> => {
+export const buildGraphAggregates = async (persons: Person[], windows: readonly number[] = DAYS, top = TOP): Promise<AggregateReport> => {
   const started = performance.now()
-  await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons, top, linkTop))), Promise.resolve())
+  await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons, top))), Promise.resolve())
   const { rows: s } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
   const { rows: t } = await db.query<{ n: number }>(`select count(*)::int as n from graph_terms`)
   return { windows: [...windows], scopes: s[0].n, terms: t[0].n, ms: performance.now() - started }
@@ -404,7 +349,6 @@ export const queries = {
   personTerms: personTermsQuery,
   window: windowStatements,
   communityEdges: communityEdgesQuery,
-  linkableTerms: linkableTermsQuery,
   outletTerms: outletTermsQuery,
   outletNeighbors: insertOutletNeighborsQuery,
 }

@@ -412,3 +412,29 @@ describe('the term dictionary is documented (issue #252)', () => {
     assert.match(docsText, /disable[^.\n]*ingest\.yml[^.\n]*deploy[^.\n]*pnpm migrate[^.\n]*re-?enable[^.\n]*ingest\.yml/i)
   })
 })
+
+describe('the warm store is documented', () => {
+  it('states that warm recortes come from a store outside Postgres and fall back to live on a miss', () => {
+    assert.match(docsText, /store outside Postgres/i)
+    assert.match(docsText, /fall back to (the )?live/i)
+  })
+
+  it('names the command, both variables and both headers', () => {
+    for (const name of ['pnpm materialize', 'WARM_STORE_URL', 'BLOB_READ_WRITE_TOKEN', 'x-warm-store', 'x-warm-store-only'])
+      assert.ok(docsText.includes(name), `the docs must name ${name}`)
+  })
+
+  it('says a stored recorte\'s links come from the build\'s own edges and its freshness key is the scope\'s built_at', () => {
+    assert.match(docsText, /links[^.\n]*(come from|sliced from)[^.\n]*build's own[^.\n]*edges/i)
+    assert.match(docsText, /freshness key[^.\n]*`?(graph_scopes\.)?built_at`?/i)
+  })
+
+  it('tells a manual pnpm score to be followed by pnpm materialize', () => {
+    assert.match(docsText, /pnpm score[^.\n]*pnpm materialize|pnpm materialize[^.\n]*after[^.\n]*pnpm score/i)
+  })
+
+  it('no longer says the default recorte\'s links always run live', () => {
+    assert.doesNotMatch(docsText, /`\/graph`'s links always run live/)
+    assert.match(docsText, /links run live off the warm set/)
+  })
+})

@@ -18,7 +18,7 @@ Files: `prompts.md` (the three prompts, verbatim; `run.sh` reads them from there
 | `tool_calls` | `tool_use` blocks in the transcript |
 | `files_read` | distinct paths that exist at that commit, named in a `Read` input, on a Bash command line, or in a `Grep`/`grep`/`rg` result line. A path counts once per session. `CLAUDE.md` is never in this count: Claude Code injects it into the context before the first turn (see below) |
 | `files_edited` | distinct paths in `Edit`/`Write` inputs |
-| `lines_changed_src` | insertions plus deletions under `src/` only; `public/bundle.js` is one minified line and is reported in `notes` instead |
+| `lines_changed_src` | insertions plus deletions under `src/` only; the built bundle was one minified line and is reported in `notes` instead |
 
 One session (T1 on `master`, run 1) was the pilot that validated the harness; its transcript is recorded like the other 26.
 
@@ -70,7 +70,7 @@ Uncached input is 28–128 tokens per session: everything is served from the pro
 - **T2**: `src/ui/figures/compare.ts`, `src/ui/docs-card.ts`, `src/ui/figures/week.ts` (the agent copies the `openedBy` pattern from figure 5), `public/design-5.html`, `public/atlas.css`, and three test files: `test/figures-compare.test.ts`, `test/figures-week.test.ts`, `test/fake-mount-dom.ts`. On `dd64f03` and `1e353ca` also `src/ui/app.ts`.
 - **T3**: `src/ui/app.ts`, `src/ui/figures/atlas.ts`, `src/ui/figures/week.ts`; on `2c8f7a4` also `CLAUDE.md`, `test/app.test.ts`, `test/figures-atlas.test.ts`, `test/figures-week.test.ts`, `test/fake-mount-dom.ts`; on `dd64f03` `test/app.test.ts`, `test/atlas-modules-acceptance.test.ts`, `test/fake-mount-dom.ts`.
 
-Most-read paths over all 27 sessions: `public/bundle.js` and `src/ui/app.ts` 25/27 (the bundle mostly because `grep -rn` over the repo lists it, and commands name it; only one session pulled a large chunk of it into context), `src/ui/figures/week.ts` 18, `src/ui/figures/atlas.ts` 17, `test/fake-mount-dom.ts` 17, `test/figures-week.test.ts` 16, `test/figures-compare.test.ts` 15. `test/atlas-modules-acceptance.test.ts` was read in every T3 run on `dd64f03`, where it still existed; #177 dropped it before `master`.
+Most-read paths over all 27 sessions: `bundle.js` and `src/ui/app.ts` 25/27 (the bundle mostly because `grep -rn` over the repo lists it, and commands name it; only one session pulled a large chunk of it into context), `src/ui/figures/week.ts` 18, `src/ui/figures/atlas.ts` 17, `test/fake-mount-dom.ts` 17, `test/figures-week.test.ts` 16, `test/figures-compare.test.ts` 15. `test/atlas-modules-acceptance.test.ts` was read in every T3 run on `dd64f03`, where it still existed; #177 dropped it before `master`.
 
 `CLAUDE.md` is read as a tool call in 6 of 27 sessions, all T3, and **edited** in 6 of the 9 T3 sessions. Every T3 session also wired the shared person through a new place: `src/ui/state.ts` on `master` (and once on `2c8f7a4`), `src/ui/app.ts` on the two older commits. It is in every session's context regardless: the first turn inside a worktree carries 64 619 tokens against 50 037 in an empty directory, so the repo contributes about 14 600 tokens (`CLAUDE.md` is 3 820–4 028 words) to every one of the session's turns, on top of the 50 000 the harness itself brings (tool schemas and skills). Both are cache reads.
 

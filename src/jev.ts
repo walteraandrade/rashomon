@@ -85,9 +85,9 @@ export const CONVENTIONS: Question[] = [
   ),
   convention(
     'conv-scoring-docs',
-    'If the diff changes scoring in src/graph.ts, src/scoring.ts or src/aggregate.ts, does it also change public/como-ler.html or docs/terms.md?',
-    'The diff does not change scoring in those files, or it also changes public/como-ler.html or docs/terms.md.',
-    'The diff changes scoring in those files and neither public/como-ler.html nor docs/terms.md appears in it.',
+    'If the diff changes scoring in src/graph.ts, src/scoring.ts or src/aggregate.ts, does it also change web/routes/como-ler/+page.svelte or docs/terms.md?',
+    'The diff does not change scoring in those files, or it also changes web/routes/como-ler/+page.svelte or docs/terms.md.',
+    'The diff changes scoring in those files and neither web/routes/como-ler/+page.svelte nor docs/terms.md appears in it.',
   ),
   convention(
     'conv-route-docs',
@@ -269,7 +269,7 @@ export const main = async (env: Env, fetchFn: typeof fetch, git: Git, write: Wri
 
   try {
     const range = `origin/${env.BASE_REF}`
-    const diff = await git(['diff', `${range}...${base.head}`, '--', '.', ':!pnpm-lock.yaml', ':!public/bundle.js'])
+    const diff = await git(['diff', `${range}...${base.head}`, '--', '.', ':!pnpm-lock.yaml'])
     const commits = (await git(['log', '--format=%s', `${range}..${base.head}`])).trim()
     const found = await specFor(fetchFn, env, repo, token)
     const criteria = found.spec === null ? [] : parseCriteria(found.spec)

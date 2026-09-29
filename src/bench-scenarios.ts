@@ -49,6 +49,6 @@ export const scenarios: Scenario[] = [
   s('attention.default', 'attention', (p) => `/api/people/${p}/attention?days=30`),
 ]
 
-// What `public/atlas.html` fires on one atlas load, in order. Measured as a group so the
+// What `web/routes/+page.svelte` fires on one atlas load, in order. Measured as a group so the
 // report carries the statement count of a whole UI refresh, not only of single routes.
 export const atlasScenarios = ['people', 'graph.default', 'sources.default', 'docs.default', 'candidates.default']

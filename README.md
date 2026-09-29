@@ -2,7 +2,7 @@
 
 Rashomon collects what Bluesky, Google News, GDELT, the press and the two houses of Congress say about a tracked politician, then draws the words that keep landing next to that name — how often, how surprising, from which outlet, in what tone.
 
-Live at [rashomon-five.vercel.app](https://rashomon-five.vercel.app). Node + TypeScript, Hono, PGlite, and a front-end of plain ES modules with no build step.
+Live at [rashomon-five.vercel.app](https://rashomon-five.vercel.app). Node + TypeScript, Hono, PGlite, and a SvelteKit-prerendered front end (`vite build`).
 
 ![the atlas](docs/screenshots/atlas-hero.png)
 
@@ -11,7 +11,8 @@ Live at [rashomon-five.vercel.app](https://rashomon-five.vercel.app). Node + Typ
 ```bash
 pnpm install
 pnpm ingest    # collect from the default sources
-pnpm dev       # http://localhost:3210
+pnpm dev:api   # API on http://localhost:3210
+pnpm dev       # site on http://localhost:5173
 ```
 
 `pnpm ingest` writes into a local PGlite database at `./data/pg`. PGlite allows one process per directory, so stop the server before ingesting again.
@@ -21,7 +22,9 @@ pnpm dev       # http://localhost:3210
 | Command | What it does |
 | --- | --- |
 | `pnpm ingest [source...]` | collect; no argument runs every default source, see [sources](docs/sources.md) |
-| `pnpm dev` | serve the API and `public/` on `PORT` (default 3210) |
+| `pnpm dev` | Vite on 5173, `/api` proxied to `PORT` (default 3210) |
+| `pnpm dev:api` | the Hono API on `PORT` (default 3210) |
+| `pnpm build` | `vite build` into `build/` |
 | `pnpm reindex` | recompute terms, phrases, person matches and candidates from stored docs |
 | `pnpm score` | score every unscored `(doc, person)` pair, see [testimony](docs/testimony.md) |
 | `pnpm purge <source>` | delete one source's docs for a clean re-fetch |

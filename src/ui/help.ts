@@ -23,7 +23,7 @@ export const openHelp = (hash = '') => {
 }
 
 const helpHash = (href: string) => {
-  const match = href.match(/(?:^|\/)como-ler\.html(?:#(.*))?$/)
+  const match = href.match(/(?:^|\/)como-ler(?:\.html)?(?:#(.*))?$/)
   return match ? (match[1] ?? '') : null
 }
 

@@ -113,7 +113,7 @@ const prepare = async (deps: Deps, pr: number): Promise<Prepared> => {
   if (head === '') return { skip: `#${pr}: round-1 head not recorded` }
   await deps.exec('git', ['fetch', 'origin', `refs/pull/${pr}/head`]).catch(() => '')
   const diff = await deps
-    .exec('git', ['diff', `${view.baseRefOid}...${head}`, '--', '.', ':!pnpm-lock.yaml', ':!public/bundle.js'])
+    .exec('git', ['diff', `${view.baseRefOid}...${head}`, '--', '.', ':!pnpm-lock.yaml'])
     .catch((e: unknown) => (diffAt === 'round1' ? null : Promise.reject(e)))
   if (diff === null) return { skip: `#${pr}: round-1 head ${head} not found` }
   const criteria = parseCriteria(spec)

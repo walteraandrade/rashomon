@@ -3,17 +3,8 @@
 // `pnpm dev` or any other host has only this one. test/security-headers-acceptance.test.ts holds
 // the two copies together byte for byte.
 
-export const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
-  'font-src https://fonts.gstatic.com',
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "object-src 'none'",
-].join('; ')
+// A <meta> cannot carry frame-ancestors; the prerendered meta carries the script hashes.
+export const CSP = "frame-ancestors 'none'"
 
 export const SECURITY_HEADERS: Record<string, string> = {
   'Content-Security-Policy': CSP,
@@ -23,7 +14,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
 }
 
 // Only the HTML entry points: never /api/* and never a static asset.
-export const HTML_PATHS = ['/', '/atlas.html', '/como-ler.html', '/sobre.html'] as const
+export const HTML_PATHS = ['/', '/como-ler', '/sobre'] as const
 
 /** The exact `headers` array `vercel.json` must hold. */
 export const vercelHeaders = () =>

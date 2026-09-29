@@ -180,7 +180,7 @@ throughput, peak RSS, peak heap and database size for an ingest and for two cons
 | table | key | holds |
 | --- | --- | --- |
 | `graph_scopes` | `(days, source, person_id)` | `docs`, `tracked`, `about` counts and `built_at` |
-| `graph_terms` | `(days, source, person_id, term, kind)` | `c_pt`, `c_t` copied in, mean `tone` — not every term: per `(source, kind)` the top `TOP` (200, `LIMITS`' largest) of each ordering the route can ask for, by count and by `pmi * ln(1 + count)` once per `min` in `MINS`, plus the signature's own five |
+| `graph_terms` | `(days, source, person_id, term, kind)` | `c_pt`, `c_t` copied in, mean `tone`, summed `reach` (reposts, carried and never ranked, so it adds no rows; null on rows built before the column existed until the next build) — not every term: per `(source, kind)` the top `TOP` (200, `LIMITS`' largest) of each ordering the route can ask for, by count and by `pmi * ln(1 + count)` once per `min` in `MINS`, plus the signature's own five |
 
 The PMI denominator, `c_t` over tracked docs per `(days, source, term_id)`, lives in `graph_terms_all`, a `create temp table ... on commit drop` built once per window inside `buildWindow`'s own transaction (issue #203): one corpus-wide scan amortized across every person in that window, gone the moment the window's transaction commits, never a persisted table on disk.
 

@@ -142,6 +142,15 @@ describe('oficial\'s Planalto RDF feed is documented as included, not excluded',
 })
 
 describe('documented facts per route', () => {
+  it('reach on /graph nodes and /rising rows (issue #210 AC2)', () => {
+    assert.match(docsText, /`reach`[^.]{0,200}sum of reposts[^.]{0,120}(documents|docs) in scope[^.]{0,60}carry the term/i)
+    assert.match(docsText, /`reach` is `null` when no contributing document has a known repost count/)
+    assert.match(docsText, /`reach` is the sum of reposts over the documents of the \*\*recent\*\* window/)
+    assert.match(docsText, /baseline window contributes nothing/)
+    assert.match(docsText, /`sort` takes `count` or `pmi` only/)
+    assert.match(docsText, /`sort=reach` reads as `count`/)
+  })
+
   it('/api/compare (issue #93 AC15): the route, its a/b parameters, and the null-vs-"name" distinction', () => {
     assert.match(docsText, /\/api\/compare/)
     assert.match(docsText, /a=<personId>&b=<personId>|`a`.*`b`|`a`\/`b`/)
@@ -294,6 +303,19 @@ describe('docs/operations.md states the dependency and size facts', () => {
 })
 
 describe('docs facts', () => {
+  it('documents the stored Bluesky counts (issue #210 AC1)', () => {
+    assert.match(docsText, /like, repost, reply and quote counts are stored on its doc/i)
+    assert.match(docsText, /Every other source stores none of them \(null, never invented/)
+    assert.match(docsText, /snapshot taken at collection time/)
+    assert.match(docsText, /later search returns the same post again[^.]{0,80}larger/)
+  })
+
+  it('CLAUDE.md says reach exists only on Bluesky docs (issue #210 AC3)', () => {
+    const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
+    const sentences = claude.split(/(?<=\.)\s+/)
+    assert.ok(sentences.some((s) => /reach/i.test(s) && /Bluesky/.test(s) && /null/.test(s) && /never invented/.test(s)))
+  })
+
   it("kind's documented accepted values are exactly hashtag, org, phrase and word, never theme (issue #209)", () => {
     const m = /`kind`:\s*([^.\n]*)/.exec(docsText)
     assert.ok(m, 'no page documents what values `kind` accepts')

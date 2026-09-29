@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit } from 'effect'
 import { SqlClient, type SqlError } from 'effect/unstable/sql'
 import { clampEnv, runInTransaction, runSql } from './db.js'
+import { sql as statement } from './sql.js'
 import { countryOf, discoverNames, personsMentioned, terms } from './extract.js'
 import type { AttentionRow } from './collectors/pageviews.js'
 import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
@@ -153,6 +154,16 @@ export const pruneRemoved = (ps: Person[]): Effect.Effect<string[], SqlError.Sql
     )
   })
 export const pruneRemovedP = (ps: Person[]) => runSql(pruneRemoved(ps))
+
+// One statement, the count taken from the same delete, so no id list crosses the wire. Strict `<`: a doc at the horizon stays, as in every window's `>=`. The doc_* children go by cascade.
+export const trimOlderThan = (days: number): Effect.Effect<number, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    const { text, values } = statement`with gone as (delete from docs where published_at < now() - make_interval(days => ${days}::int) returning 1) select count(*)::int as n from gone`
+    const rows = yield* sql.unsafe<{ n: number }>(text, values)
+    return Number(rows[0].n)
+  })
+export const trimOlderThanP = (days: number) => runSql(trimOlderThan(days))
 
 export const upsertAttention = (rows: readonly AttentionRow[]): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {

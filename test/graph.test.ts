@@ -41,7 +41,7 @@ import { KINDS, brtDate, brtMidnightUtc, DAYS, parseDocsQuery, parsePersistenceQ
 import { inTransaction, insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
 import { docPageText, docsText } from './docs.js'
-import { futureDoc, insertTestimony, persons, reseed, seed, seedWithReversedVocabulary } from './fixture.js'
+import { futureDoc, insertTestimony, persons, reseed, seed, seedReach, seedWithReversedVocabulary } from './fixture.js'
 import { masterStatements } from './statements-master.js'
 import './close.js'
 
@@ -84,10 +84,10 @@ describe('graphFor', () => {
   })
 
   it('widens with the window', async () => {
-    // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
-    const g = await graphFor(lula, { ...graphBase, days: 365 })
-    assert.equal(g.stats.docs, 21)
-    assert.equal(g.stats.about, 11)
+    // 60 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
+    const g = await graphFor(lula, { ...graphBase, days: 60 })
+    assert.equal(g.stats.docs, 20)
+    assert.equal(g.stats.about, 10)
   })
 
   it('never lists the person name as a term', async () => {
@@ -212,7 +212,7 @@ describe('graphFor', () => {
     const g = await graphFor(lula, graphBase)
     assert.deepEqual(Object.keys(g).sort(), ['links', 'nodes', 'outlets', 'person', 'signature', 'stats'])
     assert.deepEqual(Object.keys(g.stats).sort(), ['about', 'docs'])
-    for (const n of g.nodes) assert.deepEqual(Object.keys(n).sort(), ['count', 'id', 'kind', 'pmi', 'term', 'tone'])
+    for (const n of g.nodes) assert.deepEqual(Object.keys(n).sort(), ['count', 'id', 'kind', 'pmi', 'reach', 'term', 'tone'])
     for (const row of g.signature) assert.deepEqual(Object.keys(row).sort(), ['count', 'kind', 'pmi', 'term'])
     for (const link of g.links) assert.deepEqual(Object.keys(link).sort(), ['count', 'source', 'target'])
   })
@@ -838,10 +838,10 @@ describe('docsFor', () => {
   })
 
   it('widens with the window', async () => {
-    // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
-    const { total, docs: found } = await docsFor(lula, { ...docsBase, days: 365 })
-    assert.equal(total, 11)
-    assert.equal(found.length, 11)
+    // 60 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
+    const { total, docs: found } = await docsFor(lula, { ...docsBase, days: 60 })
+    assert.equal(total, 10)
+    assert.equal(found.length, 10)
   })
 
   it('filters by source', async () => {
@@ -968,6 +968,7 @@ describe('risingFor (issue #3)', () => {
       count_recent_raw: 2,
       count_baseline_raw: 0,
       lift: lift(2, 7, 0, 30),
+      reach: null,
     })
     // "defende" appears once in doc /6 (day1, recent) and once in doc /17 (day31, baseline)
     const defende = rnode(r, 'word:defende')
@@ -1422,12 +1423,12 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
   })
 
-  it('holds over a 365-day window, where the bucket series is at its widest', async () => {
-    const q = { ...timelineBase, term: 'golpe', kind: 'word', days: 365, bucket: 'day' as const }
-    await withDocs([{ offset: '-1 days' }, { offset: '0 days' }, { offset: '364 days 23:59:59' }, { offset: '365 days' }], async () => {
+  it('holds over a 60-day window, where the bucket series is at its widest', async () => {
+    const q = { ...timelineBase, term: 'golpe', kind: 'word', days: 60, bucket: 'day' as const }
+    await withDocs([{ offset: '-1 days' }, { offset: '0 days' }, { offset: '59 days 23:59:59' }, { offset: '60 days' }], async () => {
       const rows = await timelineFor(bolsonaro, q)
-      assert.equal(rows.length, 365)
-      assert.equal(rows[364].count, 2, 'today and tomorrow share the newest bucket')
+      assert.equal(rows.length, 60)
+      assert.equal(rows[59].count, 2, 'today and tomorrow share the newest bucket')
       assert.equal(rows[0].count, 2, 'both docs at the clamped oldest edge stay in the series')
       assert.equal(sumOf(rows), 4)
       assert.equal(sumOf(rows), await totalFor(q))
@@ -2031,7 +2032,7 @@ describe('comentionFor (issue #207)', () => {
 describe('statements pin comentionFor\'s rendered SQL shape (issue #207)', () => {
   it('is stable across two calls with different days/min/source/lean values', () => {
     const a = queries.comention({ days: 7, source: 'rss', lean: 'left', min: 1 })
-    const b = queries.comention({ days: 365, source: 'all', lean: 'all', min: 5 })
+    const b = queries.comention({ days: 60, source: 'all', lean: 'all', min: 5 })
     assert.equal(a.text, b.text)
     assert.notDeepEqual(a.values, b.values)
   })
@@ -2111,7 +2112,7 @@ describe('compareFor (issue #93)', () => {
     // term_p before the top-count/top-pmi selection runs (compareSideCte), so when a and b are
     // the same person, both sides' four selection lists are built from the same name-excluded
     // pool and can never select that person's own name word into the union in the first place.
-    const r = await compareFor(lula, lula, { ...compareBase, days: 365 })
+    const r = await compareFor(lula, lula, { ...compareBase, days: 60 })
     assert.ok(r.terms.length > 0)
     for (const t of r.terms) assert.deepEqual(t.a, t.b)
   })
@@ -2119,7 +2120,7 @@ describe('compareFor (issue #93)', () => {
   it('applies both the count-ranked and pmi-ranked selection per side', async () => {
     // at limit=1, tarcisio's own top-count term ("geopolitica") differs from bolsonaro's
     // top-pmi term ("alianca", shared doc /37), so the union must carry both
-    const r = await compareFor(tarcisio, bolsonaro, { ...compareBase, days: 365, limit: 1 })
+    const r = await compareFor(tarcisio, bolsonaro, { ...compareBase, days: 60, limit: 1 })
     assert.ok(r.terms.length > 1, 'both selection criteria must contribute distinct keys')
     assert.ok(r.terms.some((t) => t.term === 'geopolitica'))
     assert.ok(r.terms.some((t) => t.term === 'alianca'))
@@ -2221,7 +2222,7 @@ describe('lensesFor (issue #206)', () => {
   // for the symmetric example), so scoping lula's own lens union widely enough should be able to
   // pull "lula" into his own keys the same way compareFor pulls "tarcisio" into lula's keys.
   it('a term that is one of the tracked person\'s own name words reads the string "name" on both sides, never absent and never a figure (issue #206 AC4)', async () => {
-    const r = await lensesFor(lula, { ...lensesBase, days: 365, limit: 100 })
+    const r = await lensesFor(lula, { ...lensesBase, days: 60, limit: 100 })
     const names = nameTokens(lula)
     const nameTerm = r.terms.find((t) => names.includes(t.term))
     assert.ok(nameTerm, `expected at least one of lula's own name words (${names.join(', ')}) among the union of both lenses' top lists`)
@@ -2417,7 +2418,7 @@ describe('graphFastQuery communities=1 (issue #214)', () => {
   // Pins the default statement's exact text by hash, so any change to graphFastQuery is
   // caught here even though the text itself is too long to keep as a readable literal.
   it('pins graphFast\'s default text by hash', () => {
-    assert.equal(createHash('sha256').update(statements.graphFast).digest('hex'), 'aa7cf8b664f39e3ece3db40a48781662bd25d01deac0bc7c60f252fea282242e')
+    assert.equal(createHash('sha256').update(statements.graphFast).digest('hex'), 'de3d1e260838fde117a35761e6d6373d7ff312a2ba030cc00b47c1b82426a746')
   })
 
   // Pins graphFastCommunities as exactly graphFast plus its three communities=1 insertions
@@ -2430,17 +2431,17 @@ describe('graphFastQuery communities=1 (issue #214)', () => {
     const shifted = statements.graphFast.replace(/\$(\d+)/g, (_, n) => `$${Number(n) >= 7 ? Number(n) + 3 : Number(n)}`)
     const withCommunities = shifted
       .replace(
-        'select g.term, g.kind, g.c_pt as count, g.tone,\n      ln(',
-        'select g.term, g.kind, g.c_pt as count, g.tone, tc.community as community,\n      ln(',
+        'select g.term, g.kind, g.c_pt as count, g.tone, g.reach,\n      ln(',
+        'select g.term, g.kind, g.c_pt as count, g.tone, g.reach, tc.community as community,\n      ln(',
       )
       .replace(
         'from graph_terms g, s',
         'from graph_terms g\n      left join term_communities tc\n        on tc.days = $7 and tc.source = $8 and tc.person_id = $9\n        and tc.term = g.term and tc.kind = g.kind, s',
       )
-      .replace('select term, kind, count,\n      round(', 'select term, kind, count, community,\n      round(')
+      .replace('select term, kind, count, reach,\n      round(', 'select term, kind, count, reach, community,\n      round(')
       .replace(
-        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)",
-        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'community', community)",
+        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'reach', reach)",
+        "json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'reach', reach, 'community', community)",
       )
     assert.equal(statements.graphFastCommunities, withCommunities)
   })
@@ -2595,18 +2596,18 @@ const termsSql = `
     from ${legacyTerms} t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   term_p as (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone, sum(d.reach_reposts)::int as reach
     from ${legacyTerms} t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
     where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
     group by 1, 2
   ),
   scored as (
-    select p.term, p.kind, p.c_pt::int as count, p.tone,
+    select p.term, p.kind, p.c_pt::int as count, p.tone, p.reach,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
     where p.c_pt >= $8
   )
-  select term, kind, count, round(pmi::numeric, 2)::float8 as pmi, round(tone::numeric, 2)::float8 as tone from scored
+  select term, kind, count, round(pmi::numeric, 2)::float8 as pmi, round(tone::numeric, 2)::float8 as tone, reach from scored
   order by (case when $9 = 'pmi' then pmi * ln(1 + count) else count end) desc, term
   limit $10`
 
@@ -2652,7 +2653,7 @@ const splitGraph = async (person: Person, q: GraphQuery) => {
 
 const splitCases: [string, Person, GraphQuery][] = [
   ['default window', lula, graphBase],
-  ['sort=pmi over a wide window', lula, { ...graphBase, days: 365, sort: 'pmi', limit: 10 }],
+  ['sort=pmi over a wide window', lula, { ...graphBase, days: 60, sort: 'pmi', limit: 10 }],
   ['sort=pmi with the same limit as the tie set', lula, { ...graphBase, days: 2000, sort: 'pmi', limit: 200, min: 1 }],
   ['kind=hashtag', lula, { ...graphBase, kind: 'hashtag' }],
   ['kind=word with a min floor and a tight limit', lula, { ...graphBase, kind: 'word', min: 2, limit: 3 }],
@@ -2663,7 +2664,7 @@ const splitCases: [string, Person, GraphQuery][] = [
   ['a source the person has no docs in', lula, { ...graphBase, source: 'senado' }],
   ['a domain filter', lula, { ...graphBase, domain: 'g1.globo.com' }],
   ['toned gdelt docs', tarcisio, graphBase],
-  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 365, min: 1, limit: 200 }],
+  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 60, min: 1, limit: 200 }],
   ['a lean filter', bolsonaro, { ...graphBase, days: 2210, lean: 'left' }],
   ['a domain and lean intersection that is empty', bolsonaro, { ...graphBase, days: 2210, domain: 'g1.globo.com', lean: 'left' }],
   ['signature ties at 1000 days', lula, { ...graphBase, days: 1000 }],
@@ -2746,7 +2747,7 @@ const referenceGraphSql = `
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
   term_p as materialized (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone, sum(d.reach_reposts)::int as reach
     from ${legacyTerms} t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
     where not (t.term = any($7::text[]))
     group by 1, 2
@@ -2756,13 +2757,13 @@ const referenceGraphSql = `
     from ${legacyTerms} t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   nodes_scored as (
-    select p.term, p.kind, p.c_pt::int as count, p.tone,
+    select p.term, p.kind, p.c_pt::int as count, p.tone, p.reach,
       ln((p.c_pt * n.total) / (np.total * a.c_t)) / ln(2) as pmi
     from term_p p join term_all a using (term, kind), n, np
     where p.c_pt >= $8 and ($6 = 'all' or p.kind = $6)
   ),
   nodes_top as (
-    select term, kind, count,
+    select term, kind, count, reach,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
       (case when $9 = 'pmi' then pmi * ln(1 + count) else count end) as sort_key
@@ -2786,7 +2787,7 @@ const referenceGraphSql = `
     (select count(*) from scope)::int as docs,
     (select count(*) from about)::int as about,
     coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'reach', reach)
         order by sort_key desc, term, kind)
       from nodes_top
     ), '[]'::json) as nodes,
@@ -2829,8 +2830,8 @@ const referenceRisingSql = `
     select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = $1
   ),
   recent_terms as (
-    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_recent
-    from ${legacyTerms} t join recent_about a on a.doc_id = t.doc_id
+    select t.term, t.kind, count(distinct t.doc_id)::float8 as c_recent, sum(d.reach_reposts)::int as reach
+    from ${legacyTerms} t join recent_about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
     where ($7 = 'all' or t.kind = $7) and not (t.term = any($8::text[]))
     group by 1, 2
   ),
@@ -2845,7 +2846,8 @@ const referenceRisingSql = `
     round((coalesce(b.c_baseline, 0) / $3)::numeric, 2)::float8 as count_baseline,
     r.c_recent::int as count_recent_raw,
     coalesce(b.c_baseline, 0)::int as count_baseline_raw,
-    round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift
+    round(((r.c_recent / $2) / ((coalesce(b.c_baseline, 0) + 1) / $3))::numeric, 2)::float8 as lift,
+    r.reach
   from recent_terms r left join baseline_terms b using (term, kind)
   where r.c_recent >= $9
   order by lift desc, term, kind
@@ -2928,8 +2930,8 @@ const graphCases: [string, Person, GraphQuery][] = [
   ['the shared window sorted by pmi', lula, { ...sharedWide, sort: 'pmi', limit: 10 }],
   ['kind=hashtag over the shared window', lula, { ...sharedWide, kind: 'hashtag' }],
   ['kind=word over the shared window', bolsonaro, { ...sharedWide, kind: 'word' }],
-  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 365, limit: 200 }],
-  ['a window whose only doc names two persons', bolsonaro, { ...graphBase, days: 365, limit: 200 }],
+  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 60, limit: 200 }],
+  ['a window whose only doc names two persons', bolsonaro, { ...graphBase, days: 60, limit: 200 }],
   ['a min floor above the shared-doc counts', lula, { ...sharedWide, min: 3 }],
   ['a source list over the shared window', lula, { ...sharedWide, source: 'rss,gnews' }],
   ['a domain filter over the shared window', lula, { ...sharedWide, domain: 'example.org' }],
@@ -3015,17 +3017,17 @@ describe('count(*) matches count(distinct doc_id) in the graph path (issue #47)'
 })
 
 
-// risingFor's parser clamps days and baseline to 365 each, so docs 43-45 are out of reach here;
+// Direct calls, past what the parser snaps to (days 60, baseline 30), so docs 43-45 stay out of reach here;
 // the multi-kind case in this window is doc 1's #reforma alongside the word reforma.
 const risingCases: [string, Person, RisingQuery][] = [
   ['default split', lula, risingBase],
   ['one term text under two kinds', lula, { ...risingBase, days: 30, baseline: 30, limit: 100 }],
-  ['the widest split the parser allows', lula, { ...risingBase, days: 365, baseline: 365, limit: 100 }],
+  ['the widest split the parser allows', lula, { ...risingBase, days: 60, baseline: 365, limit: 100 }],
   ['a window whose only doc names two persons', bolsonaro, { ...risingBase, days: 40, baseline: 365, limit: 100 }],
   ['the other person of that shared doc', tarcisio, { ...risingBase, days: 40, baseline: 365, limit: 100 }],
   ['kind=hashtag', lula, { ...risingBase, days: 30, baseline: 30, kind: 'hashtag', limit: 100 }],
   ['a min floor', lula, { ...risingBase, days: 30, baseline: 30, min: 2, limit: 100 }],
-  ['a domain filter', lula, { ...risingBase, days: 365, baseline: 365, domain: 'example.org', limit: 100 }],
+  ['a domain filter', lula, { ...risingBase, days: 60, baseline: 365, domain: 'example.org', limit: 100 }],
   ['a person with no docs at all', nobody, risingBase],
 ]
 
@@ -3046,7 +3048,7 @@ describe('count(*) matches count(distinct doc_id) in the rising path (issue #47)
   })
 
   it('counts a shared doc once for each person it names', async () => {
-    // doc 37 (day 35) names tarcisio and bolsonaro; it is the only bolsonaro doc under 365 days
+    // doc 37 (day 35) names tarcisio and bolsonaro; it is the only bolsonaro doc under 365 days back
     const q: RisingQuery = { ...risingBase, days: 40, baseline: 365, limit: 100 }
     const b = (await risingFor(bolsonaro, q)).terms.find((r) => r.term === 'alianca')
     const t = (await risingFor(tarcisio, q)).terms.find((r) => r.term === 'alianca')
@@ -3059,8 +3061,8 @@ const toneCases: [string, ToneQuery][] = [
   ['the default window and min', { days: 30, min: 3 }],
   ['min lowered to the parser floor', { days: 30, min: 1 }],
   ['a window reaching the shared toned doc', { days: 90, min: 1 }],
-  ['the widest window the parser allows', { days: 365, min: 1 }],
-  ['a min no group reaches', { days: 365, min: 1000 }],
+  ['the widest window the parser allows', { days: 60, min: 1 }],
+  ['a min no group reaches', { days: 60, min: 1000 }],
   ['a window with no toned doc at all', { days: 1, min: 1 }],
 ]
 
@@ -3087,7 +3089,7 @@ describe('tone is not null changes nothing in the tone matrix (issue #47)', () =
 
   it('still drops a group whose docs are all untoned', async () => {
     // lula has no toned doc on g1.globo.com in any window
-    const cells = (await toneFor({ days: 365, min: 1 })).cells
+    const cells = (await toneFor({ days: 60, min: 1 })).cells
     assert.ok(!cells.some((c) => c.person_id === 'lula' && c.domain === 'g1.globo.com'))
     assert.ok(cells.some((c) => c.person_id === 'lula' && c.domain === 'gdeltproject.org'), 'lula keeps its one toned domain')
   })
@@ -3105,8 +3107,8 @@ describe('tone is not null changes nothing in the tone matrix (issue #47)', () =
   })
 
   it('leaves the domains list and the persons list untouched', async () => {
-    const shipped = await toneFor({ days: 365, min: 1 })
-    const reference = await referenceTone({ days: 365, min: 1 })
+    const shipped = await toneFor({ days: 60, min: 1 })
+    const reference = await referenceTone({ days: 60, min: 1 })
     assert.deepEqual(shipped.domains, [...new Set(reference.map((c) => c.domain as string))].sort())
     assert.equal(shipped.persons.length, 3)
   })
@@ -3384,10 +3386,10 @@ describe('weekFor (issue #147)', () => {
     for (const b of r.buckets) assert.equal(new Date(b.start).getUTCHours(), 3)
   })
 
-  it('days=7/30/365 change the bucket count; the page still sends 7', async () => {
+  it('days=7/30/60 change the bucket count; the page still sends 7', async () => {
     assert.equal((await weekFor(lula, { ...weekBase, days: 7 })).buckets.length, 7)
     assert.equal((await weekFor(lula, { ...weekBase, days: 30 })).buckets.length, 30)
-    assert.equal((await weekFor(lula, { ...weekBase, days: 365 })).buckets.length, 365)
+    assert.equal((await weekFor(lula, { ...weekBase, days: 60 })).buckets.length, 60)
   })
 
   it('limit clamps each day\'s terms, not about', async () => {
@@ -3706,7 +3708,7 @@ describe('brtMidnightUtc resolves the same instant as `at time zone` (issue #147
   // The transition days are read out of the tz database rather than hand-listed, so this covers
   // every one of them and cannot fall behind a tzdata update. 1951 is the floor: 1950-04-16 fell
   // back at 01:00 rather than midnight, the one day in 1940-2100 where the two disagree, and it
-  // is unreachable because keepDay only ever asks about dates inside a 7/30/365-day window.
+  // is unreachable because keepDay only ever asks about dates inside a 7/30/60-day window.
   const ymd = (t: number) => new Date(t).toISOString().slice(0, 10)
   // Hoisted: transitions() calls this ~54,000 times, and a fresh Intl.DateTimeFormat per call
   // dominated the suite's runtime for no coverage gain over reusing one formatter.
@@ -3804,6 +3806,107 @@ describe('term ids are internal (issue #252)', () => {
     ]
     assert.ok(texts.some((t) => /order by/.test(t)))
     for (const text of texts) for (const [, clause] of text.matchAll(/order by\s*((?:[^\n]*,[ \t]*\n)*[^\n]*)/g)) assert.doesNotMatch(clause, /\bterm_id\b|\bv\.id\b/, clause)
+  })
+})
+
+describe('tone comes from doc_tone (issue #272)', () => {
+  before(seed)
+
+  it('term counts read doc_tone, not docs', () => {
+    const texts = {
+      graph: queries.graph(lula, graphBase).text,
+      compare: queries.compare(lula, tarcisio, compareBase).text,
+      lenses: queries.lenses(lula, lensesBase).text,
+      personTerms: aggregateQueries.personTerms(30, lula).text,
+    }
+    for (const [name, text] of Object.entries(texts)) {
+      assert.match(text, /left join doc_tone dt on dt\.doc_id = /, name)
+      assert.doesNotMatch(text, /\bd\.tone\b/, name)
+      assert.doesNotMatch(text, /join docs d on d\.id = t\.doc_id/, name)
+    }
+    for (const name of ['compare', 'lenses'] as const) assert.doesNotMatch(texts[name], /join docs\b/, name)
+    // reach is read once per doc, inside the same doc-level subselect as tone
+    assert.match(texts.graph, /left join doc_tone dt on dt\.doc_id = a\.doc_id join docs d on d\.id = a\.doc_id\) x on x\.doc_id = t\.doc_id/)
+    assert.match(texts.personTerms, /left join doc_tone dt on dt\.doc_id = b\.id join docs d on d\.id = b\.id\) a on a\.id = t\.doc_id/)
+  })
+
+  const referenceNodeTone = async (personId: string, days: number, source: string, term: string, kind: string) =>
+    (
+      await db.query<{ tone: number | null }>(
+        `select round(avg(d.tone)::numeric, 2)::float8 as tone
+         from docs d
+         join doc_persons dp on dp.doc_id = d.id and dp.person_id = $1
+         join doc_terms t on t.doc_id = d.id
+         join terms v on v.id = t.term_id
+         where v.term = $2 and v.kind = $3
+           and d.published_at >= now() - make_interval(days => $4)
+           and ($5 = 'all' or d.source = $5)
+           and d.country is distinct from 'pt'`,
+        [personId, term, kind, days, source],
+      )
+    ).rows[0].tone
+
+  it('every node tone equals the docs.tone reference on every recorte', async () => {
+    let toned = 0
+    for (const person of persons)
+      for (const days of [7, 30, 365])
+        for (const source of ['all', 'gkg', 'rss', 'bluesky']) {
+          const g = await graphFor(person, { ...graphBase, days, source, limit: 100 })
+          for (const n of g.nodes) {
+            const expected = await referenceNodeTone(person.id, days, source, n.term, n.kind)
+            assert.equal(n.tone, expected, `${person.id} ${days} ${source} ${n.id}`)
+            if (expected !== null) toned++
+          }
+        }
+    assert.ok(toned > 0, 'sanity: some node carries a tone')
+  })
+})
+
+// Issue #210: a term's reach is the sum of reposts over the Bluesky docs in scope that carry it.
+describe('reach on /graph and /rising (issue #210)', () => {
+  before(seedReach)
+  after(reseed)
+
+  const week: GraphQuery = { ...graphBase, days: 7 }
+  const rrow = (r: Awaited<ReturnType<typeof risingFor>>, id: string, key: 'terms' | 'present' = 'terms') =>
+    r[key].find((t) => `${t.kind}:${t.term}` === id)
+
+  it('graph nodes carry reach summed over Bluesky docs', async () => {
+    const g = await graphFor(lula, week)
+    assert.equal(node(g, 'word:eleicao')?.reach, 16, 'fixture doc 2 (6) + reachDocs (a) 10 + (b) with no counts')
+    assert.equal(node(g, 'word:cronograma')?.reach, 0, 'a known zero is 0, not null')
+    assert.equal(node(g, 'word:tributaria')?.reach, null, 'no Bluesky doc carries it')
+    assert.equal(node(g, 'word:disputam')?.reach, 6, 'a term only fixture doc 2 carries')
+    for (const n of g.nodes) assert.ok(n.reach === null || Number.isInteger(n.reach), n.id)
+  })
+
+  it('graph at 30 days also counts the older Bluesky doc', async () => {
+    assert.equal(node(await graphFor(lula, graphBase), 'word:eleicao')?.reach, 116)
+  })
+
+  it('rising rows carry recent-window reach', async () => {
+    const r = await risingFor(lula, risingBase)
+    assert.equal(rrow(r, 'word:eleicao')?.reach, 16, 'the baseline doc (100 reposts) contributes nothing')
+    assert.equal(rrow(r, 'word:eleicao', 'present')?.reach, 16)
+    assert.equal(rrow(r, 'word:cronograma')?.reach, 0)
+    assert.equal(rrow(r, 'word:tributaria')?.reach, null)
+    assert.equal(rrow(r, 'word:estabilidade'), undefined, 'a term seen only in the baseline has no row')
+  })
+
+  it('sort=reach returns the same nodes as sort=count', async () => {
+    const byReach = await graphFor(lula, parseQuery({ days: '30', sort: 'reach', limit: '20' }))
+    const byCount = await graphFor(lula, parseQuery({ days: '30', sort: 'count', limit: '20' }))
+    assert.deepEqual(byReach.nodes, byCount.nodes)
+  })
+
+  it('compare and lenses statements carry no reach', () => {
+    for (const name of ['compare', 'compareFast', 'compareEdges', 'lenses', 'lensesFast', 'lensEdges'] as const)
+      assert.ok(!/reach/.test(statements[name]), name)
+  })
+
+  it('the fast and live signature stay free of reach', async () => {
+    const g = await graphFor(lula, week)
+    for (const row of g.signature) assert.ok(!('reach' in row))
   })
 })
 

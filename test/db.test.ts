@@ -13,7 +13,7 @@ import { pruneRemovedP, upsertPersonsP } from '../src/store.js'
 import { docsText } from './docs.js'
 import { failingSql } from './effect.js'
 import { withEnv } from './env.js'
-import { derivedRows, indexDefs, lastAnalyzed, legacyDocTerms, persons, planRowEstimate, reseed, seed } from './fixture.js'
+import { collidingUri, derivedRows, indexDefs, lastAnalyzed, legacyDocTerms, persons, planRowEstimate, reseed, seed } from './fixture.js'
 import './close.js'
 
 // src/db.ts: the connection (poolConfig, pure and never opening a socket), the schema migrate()
@@ -240,7 +240,7 @@ describe('graph_terms_all is a temp table, never persisted (issue #203)', () => 
   it('ANALYZED_TABLES no longer lists graph_terms_all', () => {
     assert.deepEqual(
       [...ANALYZED_TABLES],
-      ['docs', 'doc_persons', 'doc_terms', 'terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors', 'term_weeks'],
+      ['docs', 'doc_persons', 'doc_terms', 'terms', 'doc_candidates', 'doc_testimony', 'graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors', 'doc_tone', 'term_weeks'],
     )
   })
 })
@@ -461,6 +461,50 @@ describe('read indexes and planner statistics (issue #44)', () => {
     await db.exec(`reset enable_seqscan`)
     assert.match(plan, /Index Only Scan using doc_persons_person_idx/)
     assert.match(plan, /Index Cond: \(person_id = /)
+  })
+
+  it('docs_window_idx covers the scope predicate columns', async () => {
+    const defs = await indexDefs('docs')
+    assert.ok(
+      defs.some((d) => d.indexname === 'docs_window_idx' && /btree \(published_at\) INCLUDE \(id, source, domain, country\)/.test(d.indexdef)),
+      `expected docs_window_idx, got ${JSON.stringify(defs)}`,
+    )
+  })
+
+  it('keeps docs_published_idx, docs_domain_idx and docs_country_idx beside docs_window_idx', async () => {
+    const names = (await indexDefs('docs')).map((d) => d.indexname)
+    for (const n of ['docs_published_idx', 'docs_domain_idx', 'docs_country_idx', 'docs_window_idx']) assert.ok(names.includes(n), `missing ${n}`)
+  })
+
+  it('migrate is idempotent for docs_window_idx', async () => {
+    await migrateP()
+    const defs = await indexDefs('docs')
+    assert.equal(defs.filter((d) => d.indexname === 'docs_window_idx').length, 1)
+  })
+
+  it('offers the window scan an index-only path over docs_window_idx', async () => {
+    await db.exec(`analyze docs`)
+    await db.exec(`vacuum docs`)
+    try {
+      await db.exec(`set enable_seqscan = off`)
+      await db.exec(`set enable_bitmapscan = off`)
+      const { rows } = await db.query<Record<string, string>>(
+        `explain select d.id from docs d where d.published_at >= now() - make_interval(days => 30) and d.source = any(string_to_array('all', ',')) and d.domain = any(string_to_array('all', ',')) and (d.country is distinct from 'pt')`,
+      )
+      const plan = rows.map((r) => r['QUERY PLAN']).join('\n')
+      assert.match(plan, /Index Only Scan using docs_window_idx/)
+    } finally {
+      await db.exec(`reset enable_seqscan`)
+      await db.exec(`reset enable_bitmapscan`)
+    }
+  })
+
+  it('the window index is documented', () => {
+    assert.match(docsText, /docs_window_idx/)
+    assert.match(docsText, /pg_relation_size/)
+    assert.match(docsText, /docs_window_idx[\s\S]{0,600}ingest/i)
+    assert.match(docsText, /docs_window_idx[\s\S]{0,800}(prod-explain|production plan)/i)
+    assert.match(docsText, /docs_window_idx[\s\S]{0,800}warm\.yml/i)
   })
 })
 
@@ -722,6 +766,140 @@ describe('term dictionary schema (issue #252)', () => {
     assert.equal((await db.query<{ n: number }>(`select count(*)::int as n from doc_terms`)).rows[0].n, rows.length)
     assert.equal(await regclass('terms'), null)
     assert.equal(await regclass('doc_terms_legacy'), null)
+  })
+})
+
+describe('doc_tone (issue #272)', () => {
+  const toned = `select id, tone from docs where tone is not null order by id`
+  const toneRows = async () => (await db.query<{ doc_id: number; tone: number }>(`select doc_id, tone from doc_tone order by doc_id`)).rows
+  const tonedDocs = async () => (await db.query<{ id: number; tone: number }>(toned)).rows
+  const exists = async () => (await db.query<{ t: string | null }>(`select to_regclass('doc_tone') as t`)).rows[0].t
+
+  before(reseed)
+  after(reseed)
+
+  it('doc_tone schema', async () => {
+    const cols = (
+      await db.query<{ column_name: string; data_type: string; is_nullable: string }>(
+        `select column_name, data_type, is_nullable from information_schema.columns where table_name = 'doc_tone' order by column_name`,
+      )
+    ).rows
+    assert.deepEqual(
+      cols.map((c) => [c.column_name, c.data_type, c.is_nullable]),
+      [['doc_id', 'integer', 'NO'], ['tone', 'double precision', 'NO']],
+    )
+    const pk = (
+      await db.query<{ column_name: string }>(
+        `select kcu.column_name from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+         where tc.table_name = 'doc_tone' and tc.constraint_type = 'PRIMARY KEY'`,
+      )
+    ).rows.map((r) => r.column_name)
+    assert.deepEqual(pk, ['doc_id'])
+    const fk = (
+      await db.query<{ ref: string; rule: string }>(
+        `select confrelid::regclass::text as ref, confdeltype as rule from pg_constraint where conrelid = 'doc_tone'::regclass and contype = 'f'`,
+      )
+    ).rows
+    assert.deepEqual(fk, [{ ref: 'docs', rule: 'c' }])
+  })
+
+  it('doc_tone mirrors docs.tone on the fixture', async () => {
+    const expected = await tonedDocs()
+    assert.ok(expected.length > 0)
+    assert.deepEqual(await toneRows(), expected.map((r) => ({ doc_id: r.id, tone: r.tone })))
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_tone dt join docs d on d.id = dt.doc_id where d.source not in ('gkg', 'gdelt')`)
+    assert.equal(rows[0].n, 0)
+    const colliding = await db.query<{ n: number }>(`select count(*)::int as n from doc_tone dt join docs d on d.id = dt.doc_id where d.uri = $1`, [collidingUri])
+    assert.equal(colliding.rows[0].n, 0)
+  })
+
+  it('migrate backfills doc_tone once and only when the table was missing', async () => {
+    await db.exec(`drop table doc_tone`)
+    await migrateP()
+    assert.deepEqual(await toneRows(), (await tonedDocs()).map((r) => ({ doc_id: r.id, tone: r.tone })))
+
+    await db.query(`insert into docs (source, uri, text, published_at, tone) values ('gkg', 'https://example.org/raw-toned', 'x', now(), 1.5)`)
+    await migrateP()
+    const { rows } = await db.query<{ n: number }>(
+      `select count(*)::int as n from doc_tone dt join docs d on d.id = dt.doc_id where d.uri = 'https://example.org/raw-toned'`,
+    )
+    assert.equal(rows[0].n, 0, 'the second migrate does not backfill')
+    await reseed()
+  })
+
+  it('a failed backfill rolls the whole migrate back', async () => {
+    await db.exec(`drop table doc_tone`)
+    const real = await runSql(SqlClient.SqlClient)
+    const exit = await Effect.runPromiseExit(
+      migrate().pipe(Effect.provideService(SqlClient.SqlClient, failingSql(real, /^\s*insert into doc_tone \(doc_id, tone\) select/))),
+    )
+    assert.equal(exit._tag, 'Failure')
+    assert.equal(await exists(), null)
+    await migrateP()
+    assert.deepEqual(await toneRows(), (await tonedDocs()).map((r) => ({ doc_id: r.id, tone: r.tone })))
+    await reseed()
+  })
+
+  it('deleting a doc cascades to doc_tone', async () => {
+    const [{ id }] = await tonedDocs()
+    assert.equal((await toneRows()).some((r) => r.doc_id === id), true)
+    await db.query(`delete from docs where id = $1`, [id])
+    assert.equal((await toneRows()).some((r) => r.doc_id === id), false)
+    await reseed()
+  })
+
+  it('docs describe doc_tone', () => {
+    assert.match(docsText, /`doc_tone`/)
+    assert.match(docsText, /`docs\.tone`[^.\n]*(stays|source|still)|(stays|source|still)[^.\n]*`docs\.tone`/i)
+    assert.match(docsText, /`UPSERT_DOCS_SQL`[^.\n]*`doc_tone`|`doc_tone`[^.\n]*`UPSERT_DOCS_SQL`/)
+    assert.match(docsText, /`migrate`[^.\n]*backfill[^.\n]*once|backfill[^.\n]*runs? once|once[^.\n]*backfill/i)
+  })
+
+  it('docs pause ingest.yml around the doc_tone migrate and deploy', () => {
+    const order = /disable[^.\n]*ingest\.yml[^.\n]*pnpm migrate[^.\n]*(merge|deploy)[^.\n]*re-?enable[^.\n]*ingest\.yml/i
+    assert.match(docsText, order)
+    assert.doesNotMatch('In order: disable `ingest.yml`, deploy, run `pnpm migrate` against `POSTGRES_URL_NON_POOLING` immediately, re-enable `ingest.yml`.', order)
+  })
+
+  it('docs run the doc_tone migrate from the branch checkout', () => {
+    assert.match(docsText, /pnpm migrate[^.\n]*\bfrom\b[^.\n]*(branch|checkout)/i)
+  })
+
+  it('docs say a toned doc written by old code after the backfill never gets a row', () => {
+    assert.match(docsText, /`doc_tone`[^.\n]*(old code|before the deploy)[^.\n]*(no row|never gets a row)|(old code|before the deploy)[^.\n]*`doc_tone`[^.\n]*(no row|never gets a row)|(old code|before the deploy)[^.\n]*(no row|never gets a row)[^.\n]*`doc_tone`/i)
+  })
+})
+
+describe('migrate adds the reach columns (issue #210)', () => {
+  before(seed)
+  after(reseed)
+
+  const reachColumns = async () =>
+    (
+      await db.query<{ table_name: string; column_name: string; data_type: string }>(
+        `select table_name, column_name, data_type from information_schema.columns
+         where table_schema = 'public' and column_name like 'reach%' order by table_name, column_name`,
+      )
+    ).rows.map((r) => `${r.table_name}.${r.column_name}:${r.data_type}`)
+  const expected = [
+    'docs.reach_likes:integer',
+    'docs.reach_quotes:integer',
+    'docs.reach_replies:integer',
+    'docs.reach_reposts:integer',
+    'graph_terms.reach:integer',
+  ]
+
+  it('migrate adds the reach columns to a database that lacks them', async () => {
+    assert.deepEqual(await reachColumns(), expected)
+    await db.exec(`alter table docs drop column reach_likes, drop column reach_reposts, drop column reach_replies, drop column reach_quotes`)
+    await db.exec(`alter table graph_terms drop column reach`)
+    assert.deepEqual(await reachColumns(), [])
+
+    await migrateP()
+    assert.deepEqual(await reachColumns(), expected)
+    await migrateP()
+    assert.deepEqual(await reachColumns(), expected, 'a second migrate is a no-op')
   })
 })
 

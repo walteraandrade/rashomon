@@ -21,6 +21,7 @@ export const SIZE_TABLES = [
   'term_links',
   'outlet_fields',
   'outlet_neighbors',
+  'doc_tone',
   'term_weeks',
 ] as const
 

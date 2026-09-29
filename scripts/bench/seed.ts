@@ -52,6 +52,7 @@ export const clockStatements = [
 export const legacyShapeStatements = [
   `drop table if exists doc_terms`,
   `drop table if exists terms`,
+  `drop table if exists doc_tone`,
   `create table doc_terms (doc_id int references docs(id) on delete cascade, term text not null, kind text not null, primary key (doc_id, term, kind))`,
   `create index doc_terms_term_idx on doc_terms (kind, term)`,
 ]

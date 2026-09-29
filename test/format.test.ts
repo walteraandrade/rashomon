@@ -137,6 +137,16 @@ describe('score / scoreName', () => {
     assert.ok(Math.abs(score(n, 'pmi') - 2 * Math.log1p(10)) < 1e-9)
   })
 
+  it('score and scoreName cover reach (issue #210)', () => {
+    assert.equal(score({ count: 3, pmi: 9, reach: 340 }, 'reach'), 340)
+    assert.equal(score({ count: 3, pmi: 9, reach: null }, 'reach'), 0)
+    assert.equal(score({ count: 3, pmi: 9 }, 'reach'), 0)
+    assert.equal(score({ count: 3, pmi: 9, reach: 340 }, 'count'), 3)
+    assert.ok(scoreName('reach').length > 0)
+    assert.notEqual(scoreName('reach'), scoreName('count'))
+    assert.notEqual(scoreName('reach'), scoreName('pmi'))
+  })
+
   it('scoreName names each sort mode in pt-BR', () => {
     assert.equal(scoreName('count'), 'frequência em documentos')
     assert.equal(scoreName('pmi'), 'PMI × ln(1 + docs)')

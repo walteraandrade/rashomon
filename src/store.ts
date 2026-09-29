@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit } from 'effect'
 import { SqlClient, type SqlError } from 'effect/unstable/sql'
 import { clampEnv, runInTransaction, runSql } from './db.js'
+import { sql as statement } from './sql.js'
 import { countryOf, discoverNames, personsMentioned, terms } from './extract.js'
 import type { AttentionRow } from './collectors/pageviews.js'
 import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
@@ -8,6 +9,19 @@ import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
 // Tone is GDELT-only; a later gkg row must not leak tone into a doc stored by rss/gnews.
 export const tonedSources: Source[] = ['gdelt', 'gkg']
 const toneFor = (doc: RawDoc) => (tonedSources.includes(doc.source) ? doc.tone ?? null : null)
+
+// Reach is Bluesky-only, and a value outside int4 would make jsonb_to_recordset throw for the whole layer.
+const INT4_MAX = 2_147_483_647
+const countOf = (n: number | undefined) => (Number.isInteger(n) && (n as number) >= 0 && (n as number) <= INT4_MAX ? (n as number) : null)
+const reachFor = (doc: RawDoc) => {
+  const on = doc.source === 'bluesky'
+  return {
+    reach_likes: on ? countOf(doc.reach?.likes) : null,
+    reach_reposts: on ? countOf(doc.reach?.reposts) : null,
+    reach_replies: on ? countOf(doc.reach?.replies) : null,
+    reach_quotes: on ? countOf(doc.reach?.quotes) : null,
+  }
+}
 
 // One text per statement, so a writer and its Promise adapter cannot drift.
 const UPSERT_PERSONS_SQL = `insert into persons (id, name, aliases)
@@ -33,7 +47,7 @@ const DELETE_ORPHAN_PERSONS_SQL = `delete from persons where not (id = any($1::t
 const UPSERT_PERSON_ATTENTION_SQL = `insert into person_attention (person_id, day, views) select * from unnest($1::text[], $2::date[], $3::int[])
      on conflict (person_id, day) do update set views = excluded.views`
 // One statement for a whole uriLayers layer: domain keeps first non-null, tone is null for
-// non-GDELT, longer text wins. The layer travels as one json value: sql-pg cannot bind an
+// non-GDELT, longer text wins. doc_tone follows the stored tone (never the incoming one) in the same statement. The layer travels as one json value: sql-pg cannot bind an
 // all-null or mixed int/float array. RETURNING can't see the input row, so it's joined back by uri.
 const UPSERT_DOCS_SQL = `with input as (
        select * from jsonb_to_recordset($1::jsonb)
@@ -50,7 +64,12 @@ const UPSERT_DOCS_SQL = `with input as (
           or docs.country is distinct from coalesce(docs.country, excluded.country)
           or docs.tone is distinct from (case when docs.source = any($2::text[]) then coalesce(docs.tone, excluded.tone) else null end)
           or length(excluded.text) > length(docs.text)
-       returning id, uri, source, extra_terms, extra_names, (xmax = 0) as inserted, text as stored_text
+       returning id, uri, source, extra_terms, extra_names, tone, (xmax = 0) as inserted, text as stored_text
+     ), tone_up as (
+       insert into doc_tone (doc_id, tone) select id, tone from up where tone is not null
+       on conflict (doc_id) do update set tone = excluded.tone
+     ), tone_del as (
+       delete from doc_tone where doc_id in (select id from up where tone is null and not inserted)
      )
      select input.uri, up.id, up.source, up.extra_terms, up.extra_names, up.inserted, (up.stored_text = input.text) as took_incoming
      from up join input using (uri)`
@@ -70,6 +89,24 @@ const upsertDocsParams = (docs: readonly RawDoc[]) => [
   ),
   tonedSources,
 ]
+// Its own statement, never part of UPSERT_DOCS_SQL's staleness clause: a larger count must not make `took_incoming` read true and register as enrichment. Bare `greatest` skips nulls, so a doc with no known count stays null.
+const UPDATE_REACH_SQL = `update docs d set
+       reach_likes = greatest(d.reach_likes, i.reach_likes),
+       reach_reposts = greatest(d.reach_reposts, i.reach_reposts),
+       reach_replies = greatest(d.reach_replies, i.reach_replies),
+       reach_quotes = greatest(d.reach_quotes, i.reach_quotes)
+     from jsonb_to_recordset($1::jsonb) as i(uri text, reach_likes int, reach_reposts int, reach_replies int, reach_quotes int)
+     where d.uri = i.uri and d.source = 'bluesky'
+       and (d.reach_likes is distinct from greatest(d.reach_likes, i.reach_likes)
+         or d.reach_reposts is distinct from greatest(d.reach_reposts, i.reach_reposts)
+         or d.reach_replies is distinct from greatest(d.reach_replies, i.reach_replies)
+         or d.reach_quotes is distinct from greatest(d.reach_quotes, i.reach_quotes))`
+const reachParams = (docs: readonly RawDoc[]) => {
+  const rows = docs
+    .map((d) => ({ uri: d.uri, ...reachFor(d) }))
+    .filter((r) => r.reach_likes !== null || r.reach_reposts !== null || r.reach_replies !== null || r.reach_quotes !== null)
+  return rows.length ? [JSON.stringify(rows)] : null
+}
 type UpsertRow = { uri: string; id: number; source: Source; extra_terms: Term[]; extra_names: string[]; inserted: boolean; took_incoming: boolean }
 
 // A multi-row upsert errors on a repeated uri: the nth occurrence of a uri goes to layer n,
@@ -154,6 +191,16 @@ export const pruneRemoved = (ps: Person[]): Effect.Effect<string[], SqlError.Sql
   })
 export const pruneRemovedP = (ps: Person[]) => runSql(pruneRemoved(ps))
 
+// One statement, the count taken from the same delete, so no id list crosses the wire. Strict `<`: a doc at the horizon stays, as in every window's `>=`. The doc_* children go by cascade.
+export const trimOlderThan = (days: number): Effect.Effect<number, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    const { text, values } = statement`with gone as (delete from docs where published_at < now() - make_interval(days => ${days}::int) returning 1) select count(*)::int as n from gone`
+    const rows = yield* sql.unsafe<{ n: number }>(text, values)
+    return Number(rows[0].n)
+  })
+export const trimOlderThanP = (days: number) => runSql(trimOlderThan(days))
+
 export const upsertAttention = (rows: readonly AttentionRow[]): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     if (!rows.length) return
@@ -188,6 +235,8 @@ const upsertDocsBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[]): Eff
     const results = new Map<RawDoc, UpsertRow>()
     for (const layer of uriLayers(docs)) {
       const rows = yield* sql.unsafe<UpsertRow>(UPSERT_DOCS_SQL, upsertDocsParams(layer))
+      const reach = reachParams(layer)
+      if (reach) yield* sql.unsafe(UPDATE_REACH_SQL, reach)
       const byUri = new Map(rows.map((r) => [r.uri, r]))
       for (const doc of layer) {
         const row = byUri.get(doc.uri)

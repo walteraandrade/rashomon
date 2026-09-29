@@ -25,9 +25,10 @@ const tables: Table[] = [
   { name: 'person_attention', columns: ['person_id', 'day', 'views'], select: ['person_id', 'day::text as day', 'views'] },
   {
     name: 'docs',
-    columns: ['id', 'source', 'uri', 'text', 'published_at', 'collected_at', 'extra_terms', 'domain', 'tone', 'extra_names'],
+    columns: ['id', 'source', 'uri', 'text', 'published_at', 'collected_at', 'extra_terms', 'domain', 'tone', 'reach_likes', 'reach_reposts', 'reach_replies', 'reach_quotes', 'extra_names'],
     json: ['extra_terms', 'extra_names'],
   },
+  { name: 'doc_tone', columns: ['doc_id', 'tone'], select: ['id as doc_id', 'tone'], from: 'docs where tone is not null' },
   { name: 'doc_persons', columns: ['doc_id', 'person_id'] },
   {
     name: 'doc_terms',

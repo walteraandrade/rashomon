@@ -142,6 +142,15 @@ describe('oficial\'s Planalto RDF feed is documented as included, not excluded',
 })
 
 describe('documented facts per route', () => {
+  it('reach on /graph nodes and /rising rows (issue #210 AC2)', () => {
+    assert.match(docsText, /`reach`[^.]{0,200}sum of reposts[^.]{0,120}(documents|docs) in scope[^.]{0,60}carry the term/i)
+    assert.match(docsText, /`reach` is `null` when no contributing document has a known repost count/)
+    assert.match(docsText, /`reach` is the sum of reposts over the documents of the \*\*recent\*\* window/)
+    assert.match(docsText, /baseline window contributes nothing/)
+    assert.match(docsText, /`sort` takes `count` or `pmi` only/)
+    assert.match(docsText, /`sort=reach` reads as `count`/)
+  })
+
   it('/api/compare (issue #93 AC15): the route, its a/b parameters, and the null-vs-"name" distinction', () => {
     assert.match(docsText, /\/api\/compare/)
     assert.match(docsText, /a=<personId>&b=<personId>|`a`.*`b`|`a`\/`b`/)
@@ -294,6 +303,19 @@ describe('docs/operations.md states the dependency and size facts', () => {
 })
 
 describe('docs facts', () => {
+  it('documents the stored Bluesky counts (issue #210 AC1)', () => {
+    assert.match(docsText, /like, repost, reply and quote counts are stored on its doc/i)
+    assert.match(docsText, /Every other source stores none of them \(null, never invented/)
+    assert.match(docsText, /snapshot taken at collection time/)
+    assert.match(docsText, /later search returns the same post again[^.]{0,80}larger/)
+  })
+
+  it('CLAUDE.md says reach exists only on Bluesky docs (issue #210 AC3)', () => {
+    const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8')
+    const sentences = claude.split(/(?<=\.)\s+/)
+    assert.ok(sentences.some((s) => /reach/i.test(s) && /Bluesky/.test(s) && /null/.test(s) && /never invented/.test(s)))
+  })
+
   it("kind's documented accepted values are exactly hashtag, org, phrase and word, never theme (issue #209)", () => {
     const m = /`kind`:\s*([^.\n]*)/.exec(docsText)
     assert.ok(m, 'no page documents what values `kind` accepts')
@@ -410,5 +432,36 @@ describe('the term dictionary is documented (issue #252)', () => {
   it('tells production to run pnpm migrate right after the deploy, with the scheduled ingest paused (AC18)', () => {
     assert.match(docsText, /ingest\.yml/)
     assert.match(docsText, /disable[^.\n]*ingest\.yml[^.\n]*deploy[^.\n]*pnpm migrate[^.\n]*re-?enable[^.\n]*ingest\.yml/i)
+  })
+})
+
+// Issue #270: facts about the 60-day window and retention. Each is a loose match on the fact,
+// so a page may be reworded or split without failing it.
+describe('docs state the 60-day window and retention (issue #270)', () => {
+  it('days takes 7, 30 or 60; a larger value, 365 included, snaps to 60; 45 reads as 30 and 46 as 60 (AC17)', () => {
+    assert.match(docsText, /\b7\b\W{1,6}\b30\b\W{1,6}(or|and)?\W{0,6}\b60\b/)
+    assert.match(docsText, /365[^.\n]{0,160}\b60\b/)
+    assert.match(docsText, /\b45\b[^.\n]{0,40}\b30\b[^.\n]{0,60}\b46\b[^.\n]{0,40}\b60\b/)
+    assert.doesNotMatch(docsText, /\b7\b\W{1,6}\b30\b\W{1,6}(or|and)?\W{0,6}\b365\b/)
+  })
+
+  it('ingest deletes docs older than the widest window (DAYS largest), with their four derived tables; person_attention and terms stay; the count is logged (AC18)', () => {
+    assert.match(docsText, /ingest[^.\n]*delet[^.\n]*(older|published (before|more than))[^.\n]*(widest|DAYS|60 days)/i)
+    assert.match(docsText, /horizon[^.\n]*DAYS/)
+    for (const t of ['doc_terms', 'doc_persons', 'doc_testimony', 'doc_candidates']) assert.match(docsText, new RegExp(t), t)
+    assert.match(docsText, /person_attention[^.\n]*(not trimmed|never trimmed|not deleted|stay|survive|untouched)/i)
+    assert.match(docsText, /`terms`[^.\n]*(not trimmed|never trimmed|not deleted|stay|survive|untouched)/i)
+    assert.match(docsText, /retention:[^.\n]*deleted/)
+  })
+
+  it('reindex cannot recover a deleted doc, and retention frees pages without shrinking pg_database_size (AC19)', () => {
+    assert.match(docsText, /reindex[^\n]*stored[^\n]*deleted[^\n]*(not recovered|gone|never recovered|cannot)/i)
+    assert.match(docsText, /pg_database_size[^.\n]*(not|never|does not) shrink|not shrink[^.\n]*pg_database_size/i)
+    assert.match(docsText, /vacuum/i)
+  })
+
+  it('rising at days=60 has an empty baseline because it lies beyond retention (AC20)', () => {
+    assert.match(docsText, /rising[^]{0,80}days=60[^]{0,300}empty baseline|days=60[^]{0,300}baseline[^]{0,200}(retention|older)/i)
+    assert.match(docsText, /(beyond|older than|past|outside) (the )?retention/i)
   })
 })

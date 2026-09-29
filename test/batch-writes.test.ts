@@ -67,6 +67,13 @@ describe('bounded write batches (issue #50)', () => {
     assert.equal(unbatched, 13)
   })
 
+  it('a toned batch is still three statements', async () => {
+    const toned = docs(4, 'toned').map((d, i) => ({ ...d, source: i < 2 ? ('gkg' as const) : ('rss' as const), tone: i < 2 ? i + 0.5 : undefined }))
+    assert.equal(await statements(() => insertDocsP(toned, persons, 4)), 3)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_tone dt join docs d on d.id = dt.doc_id where d.uri like 'https://example.org/toned/%'`)
+    assert.equal(rows[0].n, 2)
+  })
+
   it('a batch of terms is one doc_terms statement and no vocabulary statement of its own (issue #252) (AC6)', async () => {
     const { rows } = await db.query<{ id: number }>(
       `insert into docs (source, uri, text, published_at) select 'rss', 'https://example.org/vocab/' || i, 'x', now() from generate_series(1, 6) as i returning id`,

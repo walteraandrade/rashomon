@@ -68,6 +68,26 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.match(help, /GDELT/, '#help-atlas must name GDELT as the source')
   })
 
+  it("como-ler.html's #atlas and atlas.html's #help-atlas both explain alcance (issue #210 AC4)", () => {
+    const guide = read('como-ler.html').match(/<div id="atlas">[\s\S]*?(?=<div id="avaliacao">)/)?.[0] ?? ''
+    assert.ok(guide, '#atlas must exist in como-ler.html')
+    const atlasHtml = read('atlas.html')
+    const help = atlasHtml.match(/id="help-atlas"[\s\S]*?(?=<div id="help-pmi")/)?.[0] ?? ''
+    assert.ok(help, '#help-atlas must exist in atlas.html')
+    for (const [name, text] of [['#atlas', guide], ['#help-atlas', help]] as const) {
+      assert.match(text, /alcance/i, `${name} must name alcance`)
+      assert.match(text, /repost/i, `${name} must say what alcance sums`)
+      assert.match(text, /quando[^.]{0,80}colet/i, `${name} must say the count is taken at collection time`)
+      assert.match(text, /S[óo]\s+documentos\s+do\s+Bluesky/i, `${name} must say only Bluesky documents have it`)
+    }
+    const tamanho = (html: string) => /Tamanho<\/dt><dd>([^<]*)<\/dd>/.exec(html)?.[1]
+    const keyDefault = atlasHtml.match(/<dl class="figure-key" id="keyDefault">[\s\S]*?<\/dl>/)?.[0] ?? ''
+    assert.ok(keyDefault, '#keyDefault must exist in atlas.html')
+    assert.match(tamanho(keyDefault) ?? '', /alcance/i, "#keyDefault's Tamanho must name alcance")
+    assert.match(tamanho(help) ?? '', /alcance/i, "#help-atlas's Tamanho must name alcance")
+    assert.equal(tamanho(keyDefault), tamanho(help), 'the two Tamanho lines must not drift')
+  })
+
   it('atlas.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
     const html = read('atlas.html')
     assert.doesNotMatch(html, /id="como-ler"/)

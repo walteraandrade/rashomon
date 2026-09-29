@@ -286,7 +286,7 @@ class FakeInput extends Listenable {
 const DAYS_OPTIONS = [
   { value: '7', text: 'últimos 7 dias' },
   { value: '30', text: 'últimos 30 dias', selected: true },
-  { value: '365', text: 'último ano' },
+  { value: '60', text: 'últimos 60 dias' },
 ]
 
 const atlasIds = () => ({
@@ -297,6 +297,7 @@ const atlasIds = () => ({
   sort: new FakeSelect('sort', [
     { value: 'count', text: 'frequência' },
     { value: 'pmi', text: 'PMI ponderado', selected: true },
+    { value: 'reach', text: 'alcance' },
   ]),
   limit: new FakeSelect('limit', [
     { value: '12', text: '12' },

@@ -78,6 +78,46 @@ describe('push: doc_terms (issue #252)', () => {
   })
 })
 
+describe('push: doc_tone (issue #272)', () => {
+  it('push: doc_tone is copied from docs after docs', async () => {
+    const names = tables.map((t) => t.name)
+    assert.ok(names.indexOf('doc_tone') > names.indexOf('docs'))
+
+    const source = new PGlite('memory://')
+    await source.exec(schema)
+    await source.query(
+      `insert into docs (id, source, uri, text, published_at, tone) values
+         (2001, 'gkg', 'https://example.org/tone-1', 'x', now(), 1.5),
+         (2002, 'rss', 'https://example.org/tone-2', 'x', now(), null),
+         (2003, 'gdelt', 'https://example.org/tone-3', 'x', now(), -2)`,
+    )
+    const target = recordingTarget()
+    await copy(source, target, tables.find((t) => t.name === 'doc_tone')!)
+
+    assert.equal(target.calls.length, 1)
+    assert.deepEqual(target.calls[0], [2001, 1.5, 2003, -2])
+    await source.close()
+  })
+})
+
+describe('push: reach (issue #210)', () => {
+  it('push copies the reach columns of docs', async () => {
+    const source = new PGlite('memory://')
+    await source.exec(schema)
+    await source.query(
+      `insert into docs (id, source, uri, text, published_at, reach_likes, reach_reposts, reach_replies, reach_quotes)
+       values (1, 'bluesky', 'at://x/1', 'x', now(), 4, 6, 1, 0)`,
+    )
+    const target = recordingTarget()
+    await copy(source, target, tables.find((t) => t.name === 'docs')!)
+
+    assert.match(target.texts[0], /reach_likes, reach_reposts, reach_replies, reach_quotes/)
+    const flat = target.calls[0]
+    for (const value of [4, 6, 1, 0]) assert.ok(flat.includes(value), `value ${value} was sent`)
+    await source.close()
+  })
+})
+
 describe('term_weeks', () => {
   it('term_weeks is not a pushed table', () => {
     assert.ok(!tables.some((t) => t.name === 'term_weeks'))

@@ -24,8 +24,9 @@ export const snapTo = (set: readonly number[], v: string | undefined, d: number)
   return set.reduce((best, x) => (Math.abs(x - n) < Math.abs(best - n) ? x : best))
 }
 
-// Only these three windows are cache keys; all route defaults (30 or 7) are members.
-export const DAYS = [7, 30, 365]
+// Only these three windows are cache keys; all route defaults (30 or 7) are members. The largest
+// one is also the retention horizon (ingest.ts deletes docs older than it).
+export const DAYS = [7, 30, 60]
 
 export const snapDays = (v: string | undefined, d: number): number => snapTo(DAYS, v, d)
 
@@ -80,7 +81,7 @@ export const brtMidnightUtc = (day: string): Date => {
   // both cases to standard time, which is the later of the two. Taking the later one is what
   // keeps this in step with `at time zone` on every Brazilian transition since 1951 (the one
   // exception, 1950-04-16, fell back at 01:00 rather than midnight, so neither probe lands past
-  // it; keepDay only ever asks about dates inside a 7/30/365-day window, so it is unreachable).
+  // it; keepDay only ever asks about dates inside a 7/30/60-day window, so it is unreachable).
   const first = naive - zoneOffsetMinutes(new Date(naive), WEEK_TZ) * 60_000
   const second = naive - zoneOffsetMinutes(new Date(first), WEEK_TZ) * 60_000
   return new Date(Math.max(first, second))

@@ -9,7 +9,7 @@ import { inTransaction, insertDocP } from '../src/store.js'
 import type { Person } from '../src/types.js'
 import { ATLAS_KINDS } from '../src/ui/api.js'
 import { docsText } from './docs.js'
-import { indexDefs, persons, reseed, seed, untrackedPerson } from './fixture.js'
+import { indexDefs, persons, reseed, seed, seedReach, untrackedPerson } from './fixture.js'
 import './close.js'
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
@@ -30,7 +30,7 @@ const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) =
 const recortes: Record<string, string>[] = [
   {},
   { days: '7' },
-  { days: '365' },
+  { days: '60' },
   { sort: 'pmi' },
   { sort: 'pmi', limit: '5' },
   { min: '1' },
@@ -215,6 +215,11 @@ describe('buildGraphAggregates', () => {
   before(async () => {
     await seed()
     await buildGraphAggregates(persons)
+  })
+
+  it('builds exactly the windows 7, 30 and 60, and none for 365', async () => {
+    const { rows } = await db.query<{ days: number }>(`select distinct days from graph_scopes order by days`)
+    assert.deepEqual(rows.map((r) => r.days), [7, 30, 60])
   })
 
   it('writes one scope row per window, source and person, zero-doc sources included', async () => {
@@ -421,7 +426,7 @@ describe('compare fast path (issue #247)', () => {
   const compareRecortes: Partial<CompareQuery>[] = [
     {},
     { days: 7 },
-    { days: 365 },
+    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -587,7 +592,7 @@ describe('lenses fast path (issue #247)', () => {
   const lensesRecortes: Partial<LensesQuery>[] = [
     {},
     { days: 7 },
-    { days: 365 },
+    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -640,7 +645,7 @@ describe('lenses fast path (issue #247)', () => {
   // enters graph_terms (personTermsQuery's own exclusion) and cannot rank on the fast lenses
   // ruler at all, unlike the live query's own names_a/names_b union (docs/api.md).
   it("a person's own name word is absent from the fast lenses ruler, unlike live (issue #247)", async () => {
-    const query = lensQ({ days: 365, limit: 100 })
+    const query = lensQ({ days: 60, limit: 100 })
     const liveRow = await liveLensesRow(lula, query)
     const fastRow = await fastLensesRow(lula, query)
     const liveName = liveRow.terms.find((t) => t.is_name)
@@ -1194,13 +1199,120 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
   })
 
   it('tone is identical, and null wherever no GDELT doc contributed, between the fast and live compare paths (AC7)', async () => {
-    const query = cq({ days: 365 })
+    const query = cq({ days: 60 })
     const fastRow = await fastCompareRow(tarcisio, lula, query)
     const liveRow = await liveCompareRow(tarcisio, lula, query)
     const tones = (row: typeof fastRow) => row.terms.map((t) => ({ term: t.term, kind: t.kind, a_tone: t.a_tone, b_tone: t.b_tone }))
     assert.deepEqual(tones(fastRow), tones(liveRow))
     assert.ok(fastRow.terms.some((t) => t.a_tone !== null), 'sanity: tarcisio has at least one gdelt-toned term in scope')
     assert.ok(fastRow.terms.some((t) => t.a_tone === null), 'sanity: at least one untoned term also survives in scope')
+  })
+})
+
+describe('tone from doc_tone equals the docs.tone reference (issue #272)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  const reference = async (personId: string, days: number, source: string, term: string, kind: string) =>
+    (
+      await db.query<{ tone: number | null }>(
+        `select avg(d.tone)::float8 as tone
+         from docs d
+         join doc_persons dp on dp.doc_id = d.id and dp.person_id = $1
+         join doc_terms t on t.doc_id = d.id
+         join terms v on v.id = t.term_id
+         where v.term = $2 and v.kind = $3
+           and d.published_at >= now() - make_interval(days => $4)
+           and ($5 = 'all' or d.source = $5)
+           and d.country is distinct from 'pt'`,
+        [personId, term, kind, days, source],
+      )
+    ).rows[0].tone
+  const close = (actual: number | null, expected: number | null, label: string) =>
+    expected === null || actual === null ? assert.equal(actual, expected, label) : assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`)
+  const round2 = (n: number | null) => (n === null ? null : Math.round(n * 100) / 100)
+
+  it('graph_terms.tone equals the docs.tone reference on every recorte', async () => {
+    const { rows } = await db.query<{ days: number; source: string; person_id: string; term: string; kind: string; tone: number | null }>(
+      `select days, source, person_id, term, kind, tone from graph_terms`,
+    )
+    assert.ok(rows.some((r) => r.tone !== null), 'sanity: some stored tone is set')
+    for (const r of rows) close(r.tone, await reference(r.person_id, r.days, r.source, r.term, r.kind), `${r.person_id} ${r.days} ${r.source} ${r.kind}:${r.term}`)
+  })
+
+  it('compare and lenses tones equal the reference, live and fast', async () => {
+    let checked = 0
+    for (const query of [cq({}), cq({ days: 365, limit: 100 }), cq({ source: 'gkg' }), cq({ domain: 'example.org' })]) {
+      const result = await compareFor(lula, tarcisio, query)
+      for (const t of result.terms)
+        for (const [side, person] of [['a', lula], ['b', tarcisio]] as const) {
+          const cell = t[side]
+          if (cell === null || cell === 'name') continue
+          close(cell.tone, round2(await reference(person.id, query.days, query.source, t.term, t.kind)), `compare ${person.id} ${t.kind}:${t.term}`)
+          checked++
+        }
+    }
+    for (const query of [lensQ({}), lensQ({ days: 365, limit: 100 }), lensQ({ a: rssLens, b: gkgLens }), lensQ({ a: allLens, b: gkgLens, days: 7 })]) {
+      const result = await lensesFor(tarcisio, query)
+      for (const t of result.terms)
+        for (const [side, lens] of [['a', query.a], ['b', query.b]] as const) {
+          const cell = t[side]
+          if (cell === null || cell === 'name') continue
+          close(cell.tone, round2(await reference(tarcisio.id, query.days, lens.source, t.term, t.kind)), `lenses ${lens.lens} ${t.kind}:${t.term}`)
+          checked++
+        }
+    }
+    assert.ok(checked > 0)
+  })
+})
+
+// Issue #210: reach is carried through the build, never ranked, so a recorte whose window holds
+// the Bluesky docs of `reachDocs` must still render the same response on both paths.
+describe('reach through the build (issue #210)', () => {
+  before(async () => {
+    await seedReach()
+    await buildGraphAggregates(persons)
+  })
+  after(reseed)
+
+  const reachRecortes: Record<string, string>[] = [{}, { days: '7' }, { days: '60' }, { min: '1' }, { source: 'bluesky', min: '1' }, { source: 'bluesky', days: '7', min: '1', sort: 'pmi' }]
+
+  for (const over of reachRecortes)
+    it(`renders the same response, reach included, on both paths for ${JSON.stringify(over)}`, async () => {
+      const query = q(over)
+      const expected = await live(lula, query)
+      assert.deepEqual(await fast(lula, query), expected)
+      assert.ok((expected as { nodes: { reach: number | null }[] }).nodes.some((n) => n.reach !== null), 'the recorte holds reach')
+    })
+
+  it('graph_terms.reach equals the live sum for the same term and source', async () => {
+    const cases: [number, string, number][] = [
+      [7, 'all', 16],
+      [30, 'all', 116],
+      [7, 'bluesky', 16],
+      [30, 'gnews', 0],
+    ]
+    for (const [days, source, expected] of cases) {
+      const { rows } = await db.query<{ reach: number | null }>(
+        `select reach from graph_terms where days = $1 and source = $2 and person_id = 'lula' and term = 'eleicao' and kind = 'word'`,
+        [days, source],
+      )
+      const result = await graphFor(lula, q({ days: String(days), source, min: '1', limit: '200' }))
+      const liveReach = result.nodes.find((n) => n.id === 'word:eleicao')?.reach ?? null
+      if (source === 'gnews') {
+        assert.equal(rows.length, 0)
+        assert.equal(liveReach, null)
+        continue
+      }
+      assert.equal(rows[0].reach, expected)
+      assert.equal(liveReach, expected)
+    }
+    const { rows } = await db.query<{ reach: number | null }>(
+      `select reach from graph_terms where days = 7 and source = 'all' and person_id = 'lula' and term = 'cronograma'`,
+    )
+    assert.equal(rows[0].reach, 0)
   })
 })
 

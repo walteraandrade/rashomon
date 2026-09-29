@@ -89,10 +89,10 @@ describe('a bare querystring key seeds both figures; a prefixed one overrides on
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeDefault(calls)
-      await withLocation('?days=7&testimony.days=365', () => appModule.boot())
+      await withLocation('?days=7&testimony.days=60', () => appModule.boot())
       await flush()
       assert.equal(els.days.value, '7', "figure 1 keeps the bare value; it has no prefixed override here")
-      assert.equal(els.testimonyDays.value, '365', 'figure 2 takes its own prefixed value over the bare one')
+      assert.equal(els.testimonyDays.value, '60', 'figure 2 takes its own prefixed value over the bare one')
     })
   })
 
@@ -127,7 +127,7 @@ describe('a control change never crosses figures', () => {
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.testimonyDays.value = '365'
+      els.testimonyDays.value = '60'
       els.testimonyDays.fire('change')
       await flush(220)
       const added = calls.slice(before)
@@ -143,7 +143,7 @@ describe('a control change never crosses figures', () => {
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.days.value = '365'
+      els.days.value = '60'
       els.days.fire('change')
       await flush(220)
       const added = calls.slice(before)
@@ -318,7 +318,7 @@ describe("figure 5 (week) joins app.ts's bootstrap, same bare/prefixed conventio
         '/testimony': emptyTestimony,
         '/week': { days: 7, tz: 'America/Sao_Paulo', buckets: [] },
       })
-      await withLocation(`?person=${personB.id}&days=365&week.source=gdelt&week.limit=5`, () => appModule.boot())
+      await withLocation(`?person=${personB.id}&days=60&week.source=gdelt&week.limit=5`, () => appModule.boot())
       await flush()
       assert.equal(els.weekPerson.value, personB.id, 'the bare person key seeds figure 5 too')
       assert.equal(els.weekLimit.value, '5', 'week.limit overrides figure 5 only')

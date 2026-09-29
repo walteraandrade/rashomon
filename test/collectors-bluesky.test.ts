@@ -167,3 +167,28 @@ describe('bluesky collector, one person failing', () => {
     assert.ok(exit.value.log.some((line) => /dropped 1 malformed post/.test(line)))
   })
 })
+
+describe('bluesky collector, reach (issue #210)', () => {
+  const docsOf = async (posts: unknown[]) => {
+    const fetchFn = fakeFetch(() => json({ posts }))
+    const exit = await withEnv(anonymous, () => runTest(drain(collect([ana]), PAUSE), fetchFn))
+    assert.ok(Exit.isSuccess(exit) && Exit.isSuccess(exit.value.exit))
+    return exit.value.exit.value
+  }
+
+  it('decodes the four counts of a post', async () => {
+    const [doc] = await docsOf([post(1, { likeCount: 4, repostCount: 6, replyCount: 1, quoteCount: 0 })])
+    assert.deepEqual(doc.reach, { likes: 4, reposts: 6, replies: 1, quotes: 0 })
+  })
+
+  it('decodes a post with no counts', async () => {
+    const [doc] = await docsOf([post(1)])
+    assert.equal('reach' in doc, false)
+  })
+
+  it('decodes a post with only repostCount', async () => {
+    const [doc] = await docsOf([post(1, { repostCount: 7 })])
+    assert.deepEqual(doc.reach, { reposts: 7 })
+  })
+})
+

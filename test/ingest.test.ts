@@ -9,8 +9,10 @@ import { fetchClient } from '../src/http.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
 import { RssError } from '../src/collectors/rss.js'
 import { ingest, IngestFailure } from '../src/ingest.js'
+import { DAYS } from '../src/query.js'
+import { insertDocP } from '../src/store.js'
 import type { RawDoc, Source } from '../src/types.js'
-import { persons, reseed } from './fixture.js'
+import { attentionRows, insertCandidate, insertTestimony, persons, reseed } from './fixture.js'
 import { failingSql, failureOf, fakeFetch, json } from './effect.js'
 import { withEnv } from './env.js'
 import { docsText } from './docs.js'
@@ -520,5 +522,125 @@ describe('defaultSources runs gkg before RSS collectors (issue #234)', () => {
     assert.equal(row.source, 'rss')
     assert.equal(row.tone, null)
     assert.ok(!terms.some((t) => t.kind === 'org'))
+  })
+})
+
+describe('ingest retention (issue #270)', () => {
+  after(reseed)
+
+  const HORIZON = Math.max(...DAYS)
+  const aged = (uri: string, days: number): RawDoc => ({ ...doc(uri, 'Lula discute a reforma tributária'), publishedAt: new Date(Date.now() - days * 86_400_000).toISOString() })
+  const idOf = async (uri: string) => (await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])).rows[0]?.id as number
+  const children = async (id: number) =>
+    (
+      await db.query<{ persons: number; terms: number; testimony: number; candidates: number }>(
+        `select (select count(*) from doc_persons where doc_id = $1)::int as persons,
+                (select count(*) from doc_terms where doc_id = $1)::int as terms,
+                (select count(*) from doc_testimony where doc_id = $1)::int as testimony,
+                (select count(*) from doc_candidates where doc_id = $1)::int as candidates`,
+        [id],
+      )
+    ).rows[0]
+  const uriAt = (days: number) => `https://ingest-retention.example/d${days}`
+  const seedAged = async (ages: number[]) => {
+    for (const days of ages) {
+      await insertDocP(aged(uriAt(days), days), persons)
+      await insertTestimony(uriAt(days), 'lula', 'stub', 1)
+      await insertCandidate(uriAt(days), 'renan calheiros')
+    }
+  }
+  const dropAged = (ages: number[]) => db.exec(`delete from docs where uri like 'https://ingest-retention.example/%'`).then(() => ages)
+  const clearOlderThanHorizon = () => db.query(`delete from docs where published_at < now() - make_interval(days => $1::int)`, [HORIZON])
+  const runIngest = async (match?: RegExp) => Effect.runPromise(run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([]) } }), await testLayer(match)))
+
+  it('deletes docs older than the widest window and keeps the rest, cascading to the four derived tables', async () => {
+    const ages = [45, 59, 61, 100]
+    await seedAged(ages)
+    const before = new Map(await Promise.all(ages.map(async (d) => [d, await idOf(uriAt(d))] as const)))
+    for (const id of before.values()) {
+      const c = await children(id)
+      assert.deepEqual([c.persons, c.testimony, c.candidates], [1, 1, 1])
+      assert.ok(c.terms > 0)
+    }
+    const { exit } = await runIngest()
+    assert.ok(Exit.isSuccess(exit))
+    for (const d of [61, 100]) {
+      assert.equal(await idOf(uriAt(d)), undefined, `${d}-day doc is gone`)
+      assert.deepEqual(await children(before.get(d)!), { persons: 0, terms: 0, testimony: 0, candidates: 0 }, `${d}-day doc's derived rows are gone`)
+    }
+    for (const d of [45, 59]) {
+      assert.ok(await idOf(uriAt(d)), `${d}-day doc stays`)
+      const c = await children(before.get(d)!)
+      assert.equal(c.persons, 1)
+      assert.ok(c.terms > 0)
+      assert.equal(c.testimony, 1)
+      assert.equal(c.candidates, 1)
+    }
+    await dropAged(ages)
+  })
+
+  it('reports the deleted count and the trimmed total, logged before total docs', async () => {
+    await clearOlderThanHorizon()
+    await seedAged([10, 61, 100])
+    const { exit, logs } = await runIngest()
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.deleted, 2)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
+    assert.equal(exit.value.totalDocs, rows[0].n)
+    const line = logs.findIndex((l) => l === `retention: deleted 2 docs older than ${HORIZON} days`)
+    assert.ok(line >= 0, `no retention line in ${JSON.stringify(logs)}`)
+    assert.ok(logs.findIndex((l) => l.startsWith('[pageviews]')) < line)
+    assert.equal(logs.findIndex((l) => l.startsWith('total docs:')), line + 1)
+    await dropAged([])
+  })
+
+  it('takes its horizon from DAYS, never a second constant', async () => {
+    await clearOlderThanHorizon()
+    await seedAged([45, 59, 61, 100])
+    const original = [...DAYS]
+    DAYS.push(90)
+    try {
+      const { exit, logs } = await runIngest()
+      assert.ok(Exit.isSuccess(exit))
+      assert.equal(exit.value.deleted, 1, 'only the 100-day doc lies beyond a 90-day horizon')
+      assert.ok(logs.includes('retention: deleted 1 docs older than 90 days'))
+      assert.ok(await idOf(uriAt(61)), 'the 61-day doc is inside the widened horizon')
+    } finally {
+      DAYS.splice(0, DAYS.length, ...original)
+    }
+    await dropAged([])
+  })
+
+  it('with nothing older than the horizon reports zero and still succeeds', async () => {
+    await clearOlderThanHorizon()
+    const { exit, logs } = await runIngest()
+    assert.ok(Exit.isSuccess(exit))
+    assert.equal(exit.value.deleted, 0)
+    assert.ok(logs.includes(`retention: deleted 0 docs older than ${HORIZON} days`))
+  })
+
+  it('leaves person_attention alone', async () => {
+    const old = new Date(Date.now() - 200 * 86_400_000).toISOString().slice(0, 10)
+    await attentionRows('lula', [{ day: old, views: 321 }])
+    try {
+      const { exit } = await runIngest()
+      assert.ok(Exit.isSuccess(exit))
+      const { rows } = await db.query<{ views: number }>(`select views from person_attention where person_id = 'lula' and day = $1`, [old])
+      assert.deepEqual(rows, [{ views: 321 }])
+    } finally {
+      await db.query(`delete from person_attention where person_id = 'lula' and day = $1`, [old])
+    }
+  })
+
+  it('fails the whole run with IngestFailure({ stage: "retention" }) when the delete rejects, before any later stage', async () => {
+    await db.exec(`delete from graph_scopes`)
+    const { exit } = await runIngest(/delete from docs/)
+    assert.ok(Exit.isFailure(exit))
+    const failure = failureOf(exit)
+    assert.ok(failure instanceof IngestFailure)
+    assert.equal(failure.stage, 'retention')
+    assert.ok(failure.cause instanceof SqlError.SqlError)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
+    assert.equal(rows[0].n, 0, 'buildGraphAggregates never ran')
   })
 })

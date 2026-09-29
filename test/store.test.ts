@@ -22,6 +22,7 @@ import {
   writeDerivedP,
   type Derived,
 } from '../src/store.js'
+import type { RawDoc } from '../src/types.js'
 import { collidingUri, derivedCounts, derivedRows, docs, enrichmentDocs, orphanTermCount, persons, reseed, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
 import './close.js'
 
@@ -807,5 +808,133 @@ describe('the terms vocabulary (issue #252)', () => {
     await insertDocP(doc(5, 'Ninguem citado aqui, apenas pinguimlaranja'), persons)
     assert.equal((await db.query<{ n: number }>(`select count(*)::int as n from terms`)).rows[0].n, before)
     assert.deepEqual(await vocabulary('pinguimlaranja', 'word'), [])
+  })
+})
+
+describe('doc_tone follows the writer (issue #272)', () => {
+  before(seed)
+  after(reseed)
+  const toneRow = async (uri: string) =>
+    (await db.query<{ tone: number }>(`select dt.tone from doc_tone dt join docs d on d.id = dt.doc_id where d.uri = $1`, [uri])).rows[0]?.tone ?? null
+
+  it('insertDoc writes doc_tone when a later row fills tone', async () => {
+    const uri = 'https://example.org/tone-later'
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
+    assert.equal(await toneRow(uri), null)
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now(), tone: 2.5 }, persons)
+    assert.equal(await toneRow(uri), 2.5)
+    assert.equal((await stored(uri)).tone, 2.5)
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now(), tone: -4 }, persons)
+    assert.equal(await toneRow(uri), 2.5, 'the first tone stays in both tables')
+    assert.equal((await stored(uri)).tone, 2.5)
+  })
+
+  it('a toned gkg doc followed by an rss row with the same uri keeps its row', async () => {
+    const uri = 'https://example.org/tone-then-rss'
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now(), tone: 1.25 }, persons)
+    await insertDocP({ source: 'rss', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
+    assert.equal(await toneRow(uri), 1.25)
+  })
+
+  it('insertDoc keeps doc_tone in step when the conflict branch nulls tone', async () => {
+    const uri = 'https://example.org/tone-legacy'
+    await insertDocP({ source: 'rss', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
+    await db.query(`update docs set tone = 3 where uri = $1`, [uri])
+    await db.query(`insert into doc_tone (doc_id, tone) select id, tone from docs where uri = $1`, [uri])
+    assert.equal(await toneRow(uri), 3)
+    await insertDocP({ source: 'rss', uri, text: 'Lula visita fábrica em Brasília', publishedAt: now() }, persons)
+    assert.equal((await stored(uri)).tone, null)
+    assert.equal(await toneRow(uri), null)
+  })
+
+  it('a non-toned source never gets a doc_tone row', async () => {
+    const uri = 'https://example.org/tone-gnews'
+    await insertDocP({ source: 'gnews', uri, text: 'Lula sanciona lei', publishedAt: now(), tone: 1 }, persons)
+    assert.equal(await toneRow(uri), null)
+    assert.equal(await toneRow(collidingUri), null)
+  })
+
+  it('a batch of toned docs writes one row each, in order, duplicates replayed', async () => {
+    const uri = 'https://example.org/tone-batch'
+    await insertDocsP(
+      [
+        { source: 'gdelt', uri, text: 'Lula fala', publishedAt: now() },
+        { source: 'gdelt', uri, text: 'Lula fala', publishedAt: now(), tone: 0.75 },
+      ],
+      persons,
+    )
+    assert.equal(await toneRow(uri), 0.75)
+  })
+})
+
+describe('insertDoc reach (issue #210)', () => {
+  before(seed)
+
+  const reachOf = async (uri: string) =>
+    (await db.query<{ reach_likes: number | null; reach_reposts: number | null; reach_replies: number | null; reach_quotes: number | null }>(
+      `select reach_likes, reach_reposts, reach_replies, reach_quotes from docs where uri = $1`,
+      [uri],
+    )).rows[0]
+  const post = (uri: string, reach: RawDoc['reach'], extra: Partial<RawDoc> = {}): RawDoc => ({
+    source: 'bluesky',
+    uri,
+    text: 'Lula comenta a pesquisa',
+    publishedAt: now(),
+    domain: 'ana.bsky.social',
+    reach,
+    ...extra,
+  })
+
+  it('upsertDoc stores the four reach counts', async () => {
+    const uri = 'at://did:plc:x/post/reach-1'
+    await insertDocP(post(uri, { likes: 3, reposts: 5, replies: 1, quotes: 0 }), persons)
+    assert.deepEqual(await reachOf(uri), { reach_likes: 3, reach_reposts: 5, reach_replies: 1, reach_quotes: 0 })
+  })
+
+  it('upsertDoc keeps the larger reach count per field', async () => {
+    const uri = 'at://did:plc:x/post/reach-2'
+    await insertDocP(post(uri, { likes: 3, reposts: 5, replies: 1, quotes: 2 }), persons)
+    await insertDocP(post(uri, { likes: 1, reposts: 4, replies: 0, quotes: 1 }), persons)
+    assert.deepEqual(await reachOf(uri), { reach_likes: 3, reach_reposts: 5, reach_replies: 1, reach_quotes: 2 })
+    await insertDocP(post(uri, { likes: 1, reposts: 9 }), persons)
+    assert.deepEqual(await reachOf(uri), { reach_likes: 3, reach_reposts: 9, reach_replies: 1, reach_quotes: 2 })
+  })
+
+  it('re-collecting a post with larger reposts updates reach without enriching or touching doc_terms', async () => {
+    const uri = 'at://did:plc:x/post/reach-3'
+    assert.deepEqual(await insertDocsP([post(uri, { reposts: 1 })], persons), { written: 1, enriched: 0, failed: 0 })
+    const before = await termsOf(uri)
+    assert.ok(before.length > 0)
+    assert.deepEqual(await insertDocsP([post(uri, { reposts: 50 })], persons), { written: 0, enriched: 0, failed: 0 })
+    assert.equal((await reachOf(uri)).reach_reposts, 50)
+    assert.deepEqual(await termsOf(uri), before)
+  })
+
+  it('upsertDoc never stores reach for a non-Bluesky doc', async () => {
+    const uri = 'https://example.org/reach-gnews'
+    await insertDocP(post(uri, { likes: 1, reposts: 2, replies: 3, quotes: 4 }, { source: 'gnews', domain: 'example.org' }), persons)
+    assert.deepEqual(await reachOf(uri), { reach_likes: null, reach_reposts: null, reach_replies: null, reach_quotes: null })
+  })
+
+  it('upsertDoc never adds reach to a uri another source stored first', async () => {
+    const uri = 'https://example.org/reach-collision'
+    await insertDocP(post(uri, undefined, { source: 'gnews', domain: 'example.org' }), persons)
+    await insertDocP(post(uri, { likes: 9, reposts: 9, replies: 9, quotes: 9 }), persons)
+    assert.deepEqual(await reachOf(uri), { reach_likes: null, reach_reposts: null, reach_replies: null, reach_quotes: null })
+  })
+
+  it('upsertDoc stores null for a fractional or negative count', async () => {
+    const uri = 'at://did:plc:x/post/reach-4'
+    const neighbour = 'at://did:plc:x/post/reach-5'
+    const totals = await insertDocsP([post(uri, { likes: 2.5, reposts: -1, replies: 3, quotes: 2 ** 31 }), post(neighbour, { reposts: 8 })], persons)
+    assert.deepEqual(totals, { written: 2, enriched: 0, failed: 0 })
+    assert.deepEqual(await reachOf(uri), { reach_likes: null, reach_reposts: null, reach_replies: 3, reach_quotes: null })
+    assert.equal((await reachOf(neighbour)).reach_reposts, 8)
+  })
+
+  it('a Bluesky post with no counts stays null, not zero', async () => {
+    const uri = 'at://did:plc:x/post/reach-6'
+    await insertDocP(post(uri, undefined), persons)
+    assert.deepEqual(await reachOf(uri), { reach_likes: null, reach_reposts: null, reach_replies: null, reach_quotes: null })
   })
 })

@@ -122,6 +122,7 @@ describe('pnpm size', () => {
           'term_links',
           'outlet_fields',
           'outlet_neighbors',
+          'doc_tone',
           'term_weeks',
         ].sort(),
       )

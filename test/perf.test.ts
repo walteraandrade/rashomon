@@ -39,30 +39,93 @@ describe('instrumentation is opt-in', () => {
 })
 
 // PERF is read once, at import time, by src/perf.ts, so `measure`'s own instrumentation of
-// db.query/db.exec only exists with PERF=1 -- one subprocess per test, the same pattern as
-// the PERF=1 test in the serverTiming describe below.
-const runMeasured = (script: string) => {
-  const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
-    env: { ...process.env, PERF: '1', PERF_LOG: '0', DATA_DIR: 'memory://' },
-    encoding: 'utf8',
+// db.query/db.exec only exists with PERF=1 and the on state needs a process of its own: one
+// child for every PERF=1 case, which migrates once and runs the cases one after another so no
+// measure() scope overlaps another. It closes the database at the end: PGlite would hold the
+// event loop open for ten seconds otherwise.
+const CHILD_SCRIPT = `
+  const { db, migrateP } = await import('./src/db.ts')
+  const { measure } = await import('./src/perf.ts')
+  const { app } = await import('./src/server.ts')
+  await migrateP()
+  const run = async (label, body) => {
+    try {
+      console.log(JSON.stringify({ case: label, ...(await body()) }))
+    } catch (err) {
+      console.log(JSON.stringify({ case: label, error: String(err?.stack ?? err) }))
+    }
+  }
+  await run('statements', async () => {
+    const { value, sql, dbMs, ms } = await measure(async () => {
+      const a = await db.query('select count(*)::int as n from docs')
+      const b = await db.query('select count(*)::int as n from persons')
+      return a.rows[0].n + b.rows[0].n
+    })
+    return { value, sql, dbMs, ms }
   })
+  await run('zero', async () => {
+    const { sql, dbMs } = await measure(async () => 1)
+    return { sql, dbMs }
+  })
+  await run('outside', async () => {
+    const { rows } = await db.query('select 1::int as n')
+    return { n: rows[0].n }
+  })
+  await run('concurrent', async () => {
+    const { sql } = await measure(async () => {
+      await Promise.all([db.query('select 1'), db.query('select 2'), db.query('select 3')])
+    })
+    return { sql }
+  })
+  await run('serverTiming', async () => {
+    const res = await app.request('/api/people/nobody/graph?days=30')
+    return { status: res.status, header: res.headers.get('server-timing') }
+  })
+  await db.close()
+`
+
+type Payload = Record<string, any>
+type Child = { status: number | null; stderr: string; cases: Record<string, Payload> }
+
+const parseCases = (stdout: string): Record<string, Payload> =>
+  Object.fromEntries(
+    stdout
+      .split('\n')
+      .flatMap((line): Payload[] => {
+        try {
+          const parsed = JSON.parse(line)
+          return parsed && typeof parsed === 'object' && typeof parsed.case === 'string' ? [parsed] : []
+        } catch {
+          return []
+        }
+      })
+      .map((parsed) => [parsed.case, parsed]),
+  )
+
+let cached: Child | undefined
+const perfChild = (): Child => {
+  if (!cached) {
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', CHILD_SCRIPT], {
+      env: { ...process.env, PERF: '1', PERF_LOG: '0', DATA_DIR: 'memory://' },
+      encoding: 'utf8',
+    })
+    cached = { status: child.status, stderr: child.stderr, cases: parseCases(child.stdout) }
+  }
+  return cached
+}
+
+const caseOf = (label: string): Payload => {
+  const child = perfChild()
   assert.equal(child.status, 0, child.stderr)
-  return JSON.parse(child.stdout.trim().split('\n').pop() as string)
+  const payload = child.cases[label]
+  assert.ok(payload, `missing case ${label}\n${child.stderr}`)
+  assert.equal(payload.error, undefined, payload.error)
+  return payload
 }
 
 describe('measure', () => {
   it('counts statements and db time through the real SqlClient path', () => {
-    const out = runMeasured(`
-      const { db, migrateP } = await import('./src/db.ts')
-      const { measure } = await import('./src/perf.ts')
-      await migrateP()
-      const { value, sql, dbMs, ms } = await measure(async () => {
-        const a = await db.query('select count(*)::int as n from docs')
-        const b = await db.query('select count(*)::int as n from persons')
-        return a.rows[0].n + b.rows[0].n
-      })
-      console.log(JSON.stringify({ value, sql, dbMs, ms }))
-    `)
+    const out = caseOf('statements')
     assert.equal(out.sql, 2)
     assert.ok(out.value >= 0)
     assert.ok(out.dbMs >= 0)
@@ -70,36 +133,17 @@ describe('measure', () => {
   })
 
   it('reports zero when no statement runs', () => {
-    const out = runMeasured(`
-      const { measure } = await import('./src/perf.ts')
-      const { sql, dbMs } = await measure(async () => 1)
-      console.log(JSON.stringify({ sql, dbMs }))
-    `)
+    const out = caseOf('zero')
     assert.equal(out.sql, 0)
     assert.equal(out.dbMs, 0)
   })
 
   it('does not throw when a query runs outside a measured scope', () => {
-    const out = runMeasured(`
-      const { db, migrateP } = await import('./src/db.ts')
-      await migrateP()
-      const { rows } = await db.query('select 1::int as n')
-      console.log(JSON.stringify({ n: rows[0].n }))
-    `)
-    assert.equal(out.n, 1)
+    assert.equal(caseOf('outside').n, 1)
   })
 
   it('counts statements issued concurrently', () => {
-    const out = runMeasured(`
-      const { db, migrateP } = await import('./src/db.ts')
-      const { measure } = await import('./src/perf.ts')
-      await migrateP()
-      const { sql } = await measure(async () => {
-        await Promise.all([db.query('select 1'), db.query('select 2'), db.query('select 3')])
-      })
-      console.log(JSON.stringify({ sql }))
-    `)
-    assert.equal(out.sql, 3)
+    assert.equal(caseOf('concurrent').sql, 3)
   })
 })
 
@@ -132,22 +176,8 @@ describe('serverTiming', () => {
     assert.deepEqual(metrics, ['db', 'total'])
   })
 
-  // perfEnabled is read once at import, so the on state needs its own process: an
-  // in-memory database, migrate, one request, the header on stdout.
   it('PERF=1 sets server-timing on an API response through the middleware, on a 404 too', () => {
-    const script = `
-      const { migrateP } = await import('./src/db.ts')
-      const { app } = await import('./src/server.ts')
-      await migrateP()
-      const res = await app.request('/api/people/nobody/graph?days=30')
-      console.log(JSON.stringify({ status: res.status, header: res.headers.get('server-timing') }))
-    `
-    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
-      env: { ...process.env, PERF: '1', PERF_LOG: '0', DATA_DIR: 'memory://' },
-      encoding: 'utf8',
-    })
-    assert.equal(child.status, 0, child.stderr)
-    const out = JSON.parse(child.stdout.trim().split('\n').pop() as string) as { status: number; header: string }
+    const out = caseOf('serverTiming')
     assert.equal(out.status, 404)
     assert.match(out.header, /^db;dur=\d+(\.\d+)?;desc="\d+ sql", total;dur=\d+(\.\d+)?$/)
   })

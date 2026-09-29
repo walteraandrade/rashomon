@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { narrowToSources, params, sourcesParams } from '../src/ui/api.js'
-import { createHandlers, docsQuery, mount, scopeKeys } from '../src/ui/figures/atlas.js'
+import { createHandlers, docsQuery, layoutKey, mount, scopeKeys } from '../src/ui/figures/atlas.js'
 import { mountDocsCard } from '../src/ui/docs-card.js'
 import { SOURCE_SEGMENTS, sourceLabels } from '../src/ui/format.js'
 import { clearScopes, fromScope } from '../src/ui/state.js'
@@ -745,7 +745,7 @@ describe('figure 1 fetches the inspector sparkline on its own fixed recorte', ()
     await flush()
   }
 
-  it('picking a word requests /timeline with days=7&bucket=day for that term/kind, even when the atlas itself is set to days=365', async () => {
+  it('picking a word requests /timeline with days=7&bucket=day for that term/kind, even when the atlas itself is set to days=60', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/graph': graph(), '/docs': { docs: [], total: 0 }, '/timeline': [] })
@@ -753,7 +753,7 @@ describe('figure 1 fetches the inspector sparkline on its own fixed recorte', ()
       mountDocsCard()
       mount(els.workspace, { people, initial: {} })
       await flush()
-      els.days.value = '365'
+      els.days.value = '60'
       els.days.fire('change')
       await flush()
       calls.length = 0
@@ -829,5 +829,101 @@ describe('figure 1 fetches the inspector sparkline on its own fixed recorte', ()
       await flush()
       assert.ok(!els.inspector.innerHTML.includes('99'), 'the stale golpe response must not paint once reforma is selected')
     })
+  })
+})
+
+describe('figure 1: alcance sizes the words by reposts (issue #210)', () => {
+  const people = persons.map(({ id, name }) => ({ id, name }))
+  const graphOf = (nodes: unknown[]) => ({ person: people[0], nodes, links: [], stats: { about: 10 } })
+  const viaReach = [
+    { id: 'word:comum', term: 'comum', kind: 'word', count: 40, pmi: 1, reach: 2 },
+    { id: 'word:raro', term: 'raro', kind: 'word', count: 3, pmi: 1, reach: 900 },
+    { id: 'word:medio', term: 'medio', kind: 'word', count: 10, pmi: 1, reach: 50 },
+  ]
+  const graphCalls = (calls: string[]) => calls.filter((u) => new URL(u, 'http://localhost').pathname.endsWith('/graph'))
+  const firstOf = (html: string, attr: string) => new RegExp(`${attr}="([^"]+)"`).exec(html)?.[1]
+
+  it('layoutKey changes with reach', () => {
+    const a = [{ id: 'word:x', term: 'x', kind: 'word', count: 4, pmi: 1, reach: 10 }]
+    const b = [{ ...a[0], reach: 11 }]
+    const c = [{ ...a[0], reach: null }]
+    assert.notEqual(layoutKey(persons[0], a, 'reach', '18'), layoutKey(persons[0], b, 'reach', '18'))
+    assert.notEqual(layoutKey(persons[0], a, 'reach', '18'), layoutKey(persons[0], c, 'reach', '18'))
+    assert.equal(layoutKey(persons[0], a, 'reach', '18'), layoutKey(persons[0], [...a], 'reach', '18'))
+  })
+
+  it('choosing alcance resizes without a refetch when the wire sort is unchanged', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/graph': graphOf(viaReach) })
+      mount(els.workspace, { people, initial: { sort: 'count' } })
+      await flush()
+      assert.equal(els.sort.value, 'count')
+      const before = graphCalls(calls).length
+      assert.equal(before, 1)
+      els.sort.value = 'reach'
+      els.sort.fire('change')
+      await flush(200)
+      assert.equal(graphCalls(calls).length, before, 'sort=reach travels as sort=count, so the memoized request answers')
+      assert.match(els.legend.innerHTML, /alcance/)
+      assert.doesNotMatch(els.legend.innerHTML, /frequência/)
+      els.sort.value = 'pmi'
+      els.sort.fire('change')
+      await flush(200)
+      assert.equal(graphCalls(calls).length, before + 1, 'pmi asks for a differently ranked node set')
+    })
+  })
+
+  it('legend names reach and the all-null note', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const bare = viaReach.map(({ reach, ...n }) => ({ ...n, reach: null }))
+      routeFetch(calls, { '/graph': graphOf(bare) })
+      mount(els.workspace, { people, initial: { sort: 'reach' } })
+      await flush()
+      assert.match(els.legend.innerHTML, /alcance/)
+      assert.match(els.legend.innerHTML, /Nenhum documento do Bluesky/)
+      assert.doesNotMatch(els.viewport.innerHTML, /NaN/)
+    })
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/graph': graphOf(viaReach) })
+      mount(els.workspace, { people, initial: { sort: 'reach' } })
+      await flush()
+      assert.doesNotMatch(els.legend.innerHTML, /Nenhum documento do Bluesky/)
+    })
+  })
+
+  it('reach mode places and lists the highest-reach node first, ties by term then kind', async () => {
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      const tied = [
+        { id: 'word:b', term: 'b', kind: 'word', count: 9, pmi: 1, reach: 5 },
+        { id: 'hashtag:b', term: 'b', kind: 'hashtag', count: 8, pmi: 1, reach: 5 },
+        { id: 'word:a', term: 'a', kind: 'word', count: 7, pmi: 1, reach: 5 },
+      ]
+      routeFetch(calls, { '/graph': graphOf([...viaReach, ...tied]) })
+      mount(els.workspace, { people, initial: { sort: 'reach' } })
+      await flush()
+      els.modeColumns.fire('click')
+      assert.equal(firstOf(els.viewport.innerHTML, 'data-node'), 'word:raro', 'the packer places the highest reach first')
+      assert.equal(firstOf(els.columns.innerHTML, 'data-col'), 'word:raro')
+      assert.equal(firstOf(els.inspector.innerHTML, 'data-related'), 'word:raro')
+      const order = [...els.columns.innerHTML.matchAll(/data-col="([^"]+)"/g)].map((m) => m[1])
+      assert.deepEqual(order, ['word:raro', 'word:medio', 'word:a', 'hashtag:b', 'word:b', 'word:comum'])
+    })
+  })
+
+  it('pmi and count keep the server order', async () => {
+    for (const sort of ['pmi', 'count']) {
+      await withFiguresDom(async (els, calls) => {
+        clearScopes()
+        routeFetch(calls, { '/graph': graphOf(viaReach) })
+        mount(els.workspace, { people, initial: { sort } })
+        await flush()
+        els.modeColumns.fire('click')
+        assert.equal(firstOf(els.columns.innerHTML, 'data-col'), 'word:comum', sort)
+      })
+    }
   })
 })

@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict'
-import { after, before, describe, it } from 'node:test'
-import { AGGREGATE_TABLES, buildGraphAggregates, hasGraphAggregates, queries as aggregateQueries, TOP } from '../src/aggregate.js'
+import { after, afterEach, before, beforeEach, describe, it } from 'node:test'
+import { AGGREGATE_TABLES, buildGraphAggregates, buildTermWeeks, hasGraphAggregates, queries as aggregateQueries, TERM_WEEKS_TOP, TOP } from '../src/aggregate.js'
 import { db } from '../src/db.js'
-import { compareFor, graphFor, lensesFastEligible, lensesFor, precomputable, queries, sourcesFor } from '../src/graph.js'
+import { compareFor, graphFor, lensesFastEligible, lensesFor, persistenceFor, precomputable, queries, sourcesFor } from '../src/graph.js'
 import type { CompareQuery, GraphQuery, LensesQuery, LensSide } from '../src/graph.js'
-import { DAYS, LIMITS, MINS, parseQuery, SMALL_LIMITS, SOURCES } from '../src/query.js'
+import { brtDate, DAYS, LIMITS, MINS, parseQuery, SMALL_LIMITS, SOURCES } from '../src/query.js'
 import { inTransaction, insertDocP } from '../src/store.js'
 import type { Person } from '../src/types.js'
 import { ATLAS_KINDS } from '../src/ui/api.js'
-import { persons, reseed, seed, untrackedPerson } from './fixture.js'
+import { docsText } from './docs.js'
+import { indexDefs, persons, reseed, seed, seedReach, untrackedPerson } from './fixture.js'
 import './close.js'
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
@@ -29,7 +30,7 @@ const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) =
 const recortes: Record<string, string>[] = [
   {},
   { days: '7' },
-  { days: '365' },
+  { days: '60' },
   { sort: 'pmi' },
   { sort: 'pmi', limit: '5' },
   { min: '1' },
@@ -214,6 +215,11 @@ describe('buildGraphAggregates', () => {
   before(async () => {
     await seed()
     await buildGraphAggregates(persons)
+  })
+
+  it('builds exactly the windows 7, 30 and 60, and none for 365', async () => {
+    const { rows } = await db.query<{ days: number }>(`select distinct days from graph_scopes order by days`)
+    assert.deepEqual(rows.map((r) => r.days), [7, 30, 60])
   })
 
   it('writes one scope row per window, source and person, zero-doc sources included', async () => {
@@ -420,7 +426,7 @@ describe('compare fast path (issue #247)', () => {
   const compareRecortes: Partial<CompareQuery>[] = [
     {},
     { days: 7 },
-    { days: 365 },
+    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -586,7 +592,7 @@ describe('lenses fast path (issue #247)', () => {
   const lensesRecortes: Partial<LensesQuery>[] = [
     {},
     { days: 7 },
-    { days: 365 },
+    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -639,7 +645,7 @@ describe('lenses fast path (issue #247)', () => {
   // enters graph_terms (personTermsQuery's own exclusion) and cannot rank on the fast lenses
   // ruler at all, unlike the live query's own names_a/names_b union (docs/api.md).
   it("a person's own name word is absent from the fast lenses ruler, unlike live (issue #247)", async () => {
-    const query = lensQ({ days: 365, limit: 100 })
+    const query = lensQ({ days: 60, limit: 100 })
     const liveRow = await liveLensesRow(lula, query)
     const fastRow = await fastLensesRow(lula, query)
     const liveName = liveRow.terms.find((t) => t.is_name)
@@ -1193,12 +1199,308 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
   })
 
   it('tone is identical, and null wherever no GDELT doc contributed, between the fast and live compare paths (AC7)', async () => {
-    const query = cq({ days: 365 })
+    const query = cq({ days: 60 })
     const fastRow = await fastCompareRow(tarcisio, lula, query)
     const liveRow = await liveCompareRow(tarcisio, lula, query)
     const tones = (row: typeof fastRow) => row.terms.map((t) => ({ term: t.term, kind: t.kind, a_tone: t.a_tone, b_tone: t.b_tone }))
     assert.deepEqual(tones(fastRow), tones(liveRow))
     assert.ok(fastRow.terms.some((t) => t.a_tone !== null), 'sanity: tarcisio has at least one gdelt-toned term in scope')
     assert.ok(fastRow.terms.some((t) => t.a_tone === null), 'sanity: at least one untoned term also survives in scope')
+  })
+})
+
+describe('tone from doc_tone equals the docs.tone reference (issue #272)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  const reference = async (personId: string, days: number, source: string, term: string, kind: string) =>
+    (
+      await db.query<{ tone: number | null }>(
+        `select avg(d.tone)::float8 as tone
+         from docs d
+         join doc_persons dp on dp.doc_id = d.id and dp.person_id = $1
+         join doc_terms t on t.doc_id = d.id
+         join terms v on v.id = t.term_id
+         where v.term = $2 and v.kind = $3
+           and d.published_at >= now() - make_interval(days => $4)
+           and ($5 = 'all' or d.source = $5)
+           and d.country is distinct from 'pt'`,
+        [personId, term, kind, days, source],
+      )
+    ).rows[0].tone
+  const close = (actual: number | null, expected: number | null, label: string) =>
+    expected === null || actual === null ? assert.equal(actual, expected, label) : assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`)
+  const round2 = (n: number | null) => (n === null ? null : Math.round(n * 100) / 100)
+
+  it('graph_terms.tone equals the docs.tone reference on every recorte', async () => {
+    const { rows } = await db.query<{ days: number; source: string; person_id: string; term: string; kind: string; tone: number | null }>(
+      `select days, source, person_id, term, kind, tone from graph_terms`,
+    )
+    assert.ok(rows.some((r) => r.tone !== null), 'sanity: some stored tone is set')
+    for (const r of rows) close(r.tone, await reference(r.person_id, r.days, r.source, r.term, r.kind), `${r.person_id} ${r.days} ${r.source} ${r.kind}:${r.term}`)
+  })
+
+  it('compare and lenses tones equal the reference, live and fast', async () => {
+    let checked = 0
+    for (const query of [cq({}), cq({ days: 365, limit: 100 }), cq({ source: 'gkg' }), cq({ domain: 'example.org' })]) {
+      const result = await compareFor(lula, tarcisio, query)
+      for (const t of result.terms)
+        for (const [side, person] of [['a', lula], ['b', tarcisio]] as const) {
+          const cell = t[side]
+          if (cell === null || cell === 'name') continue
+          close(cell.tone, round2(await reference(person.id, query.days, query.source, t.term, t.kind)), `compare ${person.id} ${t.kind}:${t.term}`)
+          checked++
+        }
+    }
+    for (const query of [lensQ({}), lensQ({ days: 365, limit: 100 }), lensQ({ a: rssLens, b: gkgLens }), lensQ({ a: allLens, b: gkgLens, days: 7 })]) {
+      const result = await lensesFor(tarcisio, query)
+      for (const t of result.terms)
+        for (const [side, lens] of [['a', query.a], ['b', query.b]] as const) {
+          const cell = t[side]
+          if (cell === null || cell === 'name') continue
+          close(cell.tone, round2(await reference(tarcisio.id, query.days, lens.source, t.term, t.kind)), `lenses ${lens.lens} ${t.kind}:${t.term}`)
+          checked++
+        }
+    }
+    assert.ok(checked > 0)
+  })
+})
+
+// Issue #210: reach is carried through the build, never ranked, so a recorte whose window holds
+// the Bluesky docs of `reachDocs` must still render the same response on both paths.
+describe('reach through the build (issue #210)', () => {
+  before(async () => {
+    await seedReach()
+    await buildGraphAggregates(persons)
+  })
+  after(reseed)
+
+  const reachRecortes: Record<string, string>[] = [{}, { days: '7' }, { days: '60' }, { min: '1' }, { source: 'bluesky', min: '1' }, { source: 'bluesky', days: '7', min: '1', sort: 'pmi' }]
+
+  for (const over of reachRecortes)
+    it(`renders the same response, reach included, on both paths for ${JSON.stringify(over)}`, async () => {
+      const query = q(over)
+      const expected = await live(lula, query)
+      assert.deepEqual(await fast(lula, query), expected)
+      assert.ok((expected as { nodes: { reach: number | null }[] }).nodes.some((n) => n.reach !== null), 'the recorte holds reach')
+    })
+
+  it('graph_terms.reach equals the live sum for the same term and source', async () => {
+    const cases: [number, string, number][] = [
+      [7, 'all', 16],
+      [30, 'all', 116],
+      [7, 'bluesky', 16],
+      [30, 'gnews', 0],
+    ]
+    for (const [days, source, expected] of cases) {
+      const { rows } = await db.query<{ reach: number | null }>(
+        `select reach from graph_terms where days = $1 and source = $2 and person_id = 'lula' and term = 'eleicao' and kind = 'word'`,
+        [days, source],
+      )
+      const result = await graphFor(lula, q({ days: String(days), source, min: '1', limit: '200' }))
+      const liveReach = result.nodes.find((n) => n.id === 'word:eleicao')?.reach ?? null
+      if (source === 'gnews') {
+        assert.equal(rows.length, 0)
+        assert.equal(liveReach, null)
+        continue
+      }
+      assert.equal(rows[0].reach, expected)
+      assert.equal(liveReach, expected)
+    }
+    const { rows } = await db.query<{ reach: number | null }>(
+      `select reach from graph_terms where days = 7 and source = 'all' and person_id = 'lula' and term = 'cronograma'`,
+    )
+    assert.equal(rows[0].reach, 0)
+  })
+})
+
+// term_weeks: every date is derived from an injected `now`, never from the real clock's position
+// in a week. Tests that assert exact rows use a `now` later than every fixture doc, so the
+// fixture's own recent docs fall before the previous week and never compete.
+describe('buildTermWeeks', () => {
+  const DAY = 86_400_000
+  const shift = (date: string, n: number) => {
+    const d = new Date(`${date}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+  const mondayOf = (date: string) => shift(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7))
+  const noon = (date: string) => `${date}T15:00:00.000Z`
+  const later = () => new Date(Date.now() + 30 * DAY)
+  const curOf = (now: Date) => mondayOf(brtDate(now))
+  let seq = 0
+  const put = (date: string, text: string) =>
+    insertDocP({ source: 'rss', uri: `https://persist.test/${seq++}`, text, publishedAt: noon(date), domain: 'persist.test' }, persons)
+  const putMany = async (date: string, text: string, times: number) => {
+    for (let i = 0; i < times; i++) await put(date, text)
+  }
+  const rows = async () =>
+    (await db.query<{ person_id: string; term: string; kind: string; week: string; count: number; c_t: number }>(
+      `select person_id, term, kind, week::text as week, count, c_t from term_weeks order by person_id, week, term, kind`,
+    )).rows
+  const weeksWritten = async () => (await db.query<{ week: string }>(`select distinct week::text as week from term_weeks order by 1`)).rows.map((r) => r.week)
+
+  before(seed)
+  beforeEach(() => db.exec(`delete from term_weeks`))
+  afterEach(() => db.exec(`delete from docs where uri like 'https://persist.test/%'`))
+  after(reseed)
+
+  it('term_weeks has the primary key and cascades (AC1)', async () => {
+    const defs = (await indexDefs('term_weeks')).map((d) => d.indexdef).join('\n')
+    assert.match(defs, /\(person_id, term, kind, week\)/)
+    await db.query(`insert into persons (id, name, aliases) values ('cascade', 'Cascade', array['Cascade'])`)
+    const insert = `insert into term_weeks (person_id, term, kind, week, count, c_t) values ('cascade', 'x', 'word', '2026-09-07', 2, 3)`
+    await db.exec(insert)
+    await assert.rejects(db.exec(insert))
+    await db.exec(`delete from persons where id = 'cascade'`)
+    assert.equal((await rows()).length, 0)
+  })
+
+  it('is idempotent for one now (AC2)', async () => {
+    const now = later()
+    const cur = curOf(now)
+    await putMany(cur, 'Lula flamingo girassol', 2)
+    await putMany(shift(cur, -7), 'Lula flamingo', 3)
+    await buildTermWeeks(persons, now)
+    const first = await rows()
+    assert.ok(first.length > 0)
+    await buildTermWeeks(persons, now)
+    assert.deepEqual(await rows(), first)
+  })
+
+  it('a later build never rewrites earlier weeks (AC3)', async () => {
+    const now = later()
+    const cur = curOf(now)
+    const prev = shift(cur, -7)
+    await putMany(shift(cur, -14), 'Lula girassol', 3)
+    await putMany(prev, 'Lula flamingo girassol', 2)
+    await putMany(cur, 'Lula flamingo', 2)
+    await putMany(shift(cur, 7), 'Lula flamingo', 2)
+    await buildTermWeeks(persons, now)
+    assert.deepEqual(await weeksWritten(), [prev, cur])
+    const beforeRows = (await rows()).filter((r) => r.week === prev)
+    assert.ok(beforeRows.length > 0)
+    await buildTermWeeks(persons, new Date(now.getTime() + 7 * DAY))
+    assert.deepEqual(await weeksWritten(), [prev, cur, shift(cur, 7)])
+    assert.deepEqual((await rows()).filter((r) => r.week === prev), beforeRows)
+  })
+
+  it('writes the older of its two weeks only from the build that targets it (AC3)', async () => {
+    const now = later()
+    const cur = curOf(now)
+    await putMany(shift(cur, -14), 'Lula girassol', 3)
+    await putMany(shift(cur, -7), 'Lula flamingo', 2)
+    await putMany(cur, 'Lula flamingo', 2)
+    await buildTermWeeks(persons, new Date(now.getTime() + 7 * DAY))
+    assert.deepEqual(await weeksWritten(), [cur])
+  })
+
+  it('Monday boundary agrees between SQL and JS at 02:59Z and 03:00Z (AC4)', async () => {
+    for (const [iso, cur, prev] of [
+      ['2026-09-14T02:59:00Z', '2026-09-07', '2026-08-31'],
+      ['2026-09-14T03:00:00Z', '2026-09-14', '2026-09-07'],
+    ]) {
+      const now = new Date(iso)
+      assert.equal(curOf(now), cur)
+      const sqlCur = await db.query<{ cur: string }>(`select date_trunc('week', $1::timestamptz at time zone 'America/Sao_Paulo')::date::text as cur`, [iso])
+      assert.equal(sqlCur.rows[0].cur, cur)
+      await db.exec(`delete from term_weeks`)
+      await putMany(cur, 'Lula pardal', 2)
+      await putMany(prev, 'Lula pardal', 2)
+      await putMany(shift(prev, -7), 'Lula pardal', 2)
+      await buildTermWeeks(persons, now)
+      assert.deepEqual(await weeksWritten(), [prev, cur], iso)
+      const route = await persistenceFor(lula, { weeks: 4, limit: 40 }, now)
+      assert.equal(route.terms.find((t) => t.term === 'pardal')?.series.at(-1)?.week, cur, iso)
+      await db.exec(`delete from docs where uri like 'https://persist.test/%'`)
+    }
+  })
+
+  it('rebuild drops terms that left the top N (AC5)', async () => {
+    const now = later()
+    const cur = curOf(now)
+    await putMany(cur, 'Lula aardvark badger cheetah', 2)
+    await buildTermWeeks(persons, now, 2)
+    assert.deepEqual((await rows()).map((r) => r.term), ['aardvark', 'badger'])
+    await putMany(cur, 'Lula cheetah', 2)
+    await buildTermWeeks(persons, now, 2)
+    assert.deepEqual((await rows()).map((r) => r.term), ['aardvark', 'cheetah'])
+  })
+
+  it('top N bounds rows per person and week (AC5)', async () => {
+    const now = later()
+    const cur = curOf(now)
+    await putMany(cur, 'Lula aardvark badger cheetah dingo', 2)
+    await putMany(shift(cur, -7), 'Lula aardvark badger cheetah dingo', 2)
+    await buildTermWeeks(persons, now, 3)
+    const perWeek = (await rows()).reduce<Record<string, number>>((acc, r) => ({ ...acc, [`${r.person_id}:${r.week}`]: (acc[`${r.person_id}:${r.week}`] ?? 0) + 1 }), {})
+    assert.deepEqual(Object.values(perWeek), [3, 3])
+    assert.equal(TERM_WEEKS_TOP, 50)
+  })
+
+  it('floor, c_t, name and kind invariants (AC6)', async () => {
+    const now = later()
+    const cur = curOf(now)
+    await putMany(cur, 'Lula flamingo #tucano Luiz Inácio Silva', 2)
+    await put(cur, 'Lula singleton')
+    await putMany(shift(cur, -7), 'Lula flamingo', 2)
+    await buildTermWeeks(persons, now)
+    const written = await rows()
+    assert.ok(written.some((r) => r.term === 'flamingo'))
+    assert.ok(written.some((r) => r.term === 'tucano' && r.kind === 'hashtag'))
+    assert.ok(!written.some((r) => r.term === 'singleton'), 'a single-document word is below the floor')
+    for (const r of written) {
+      assert.ok(r.count >= 2, `${r.term} count`)
+      assert.ok(r.c_t >= r.count, `${r.term} c_t`)
+      assert.ok(['word', 'hashtag', 'phrase'].includes(r.kind), r.kind)
+      assert.ok(!/(^| )(lula|luiz|inacio)( |$)/.test(r.term), `${r.term} carries a name word`)
+    }
+    const named = await db.query(`select 1 from terms where term = 'lula' and kind = 'word'`)
+    assert.equal(named.rows.length, 1, 'sanity: the name word exists in the vocabulary')
+  })
+
+  it('an injected now far before real time still writes rows with c_t >= count (AC6)', async () => {
+    const now = new Date(Date.now() - (Math.max(...DAYS) + 30) * DAY)
+    const cur = curOf(now)
+    await putMany(cur, 'Lula sabia', 2)
+    await putMany(shift(cur, -7), 'Lula sabia', 3)
+    await buildTermWeeks(persons, now)
+    const written = (await rows()).filter((r) => r.term === 'sabia')
+    assert.deepEqual(written.map((r) => [r.week, r.count]), [[shift(cur, -7), 3], [cur, 2]])
+    for (const r of await rows()) {
+      assert.ok(r.count >= 2 && r.c_t >= r.count)
+      assert.ok(['word', 'hashtag', 'phrase'].includes(r.kind))
+    }
+  })
+
+  it('future-dated docs fold into the current week (AC7)', async () => {
+    const now = later()
+    const cur = curOf(now)
+    await putMany(shift(brtDate(now), 1), 'Lula quokka', 2)
+    await buildTermWeeks(persons, now)
+    assert.deepEqual((await rows()).map((r) => [r.term, r.week, r.count]), [['quokka', cur, 2]])
+  })
+
+  it('person without docs or without a persons row writes nothing (AC8)', async () => {
+    const now = later()
+    await putMany(curOf(now), 'Lula flamingo', 2)
+    const ghost: Person = { id: 'ghost', name: 'Ghost', aliases: ['Ghost'] }
+    await buildTermWeeks([ghost, persons.find((p) => p.id === 'tarcisio')!], now)
+    assert.deepEqual(await rows(), [])
+  })
+})
+
+describe('term_weeks build, as documented (issue #215)', () => {
+  it('states the weekly top-50 build, its rewrite rule, floor, size bound and deploy steps', () => {
+    assert.match(docsText, /term_weeks/)
+    assert.match(docsText, /top 50/i)
+    assert.match(docsText, /current and (the )?previous week/i)
+    assert.match(docsText, /delete(s|d)? and rewrite|delete-then-insert|delete-and-rewrite/i)
+    assert.match(docsText, /count (floor|of at least 2)|at least 2 documents|floor of 2/i)
+    assert.match(docsText, /70k rows|size bound|rows a year/i)
+    assert.match(docsText, /pnpm push[^.\n]*(never|not)[^.\n]*term_weeks|term_weeks[^.\n]*(never|not)[^.\n]*pnpm push/i)
+    assert.match(docsText, /pnpm migrate[^.\n]*before[^.\n]*(deploy|term_weeks)/i)
   })
 })

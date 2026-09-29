@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { persons } from './fixture.js'
+import { docsText } from './docs.js'
 import { clearScopes } from '../src/ui/state.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
@@ -85,10 +89,10 @@ describe('a bare querystring key seeds both figures; a prefixed one overrides on
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeDefault(calls)
-      await withLocation('?days=7&testimony.days=365', () => appModule.boot())
+      await withLocation('?days=7&testimony.days=60', () => appModule.boot())
       await flush()
       assert.equal(els.days.value, '7', "figure 1 keeps the bare value; it has no prefixed override here")
-      assert.equal(els.testimonyDays.value, '365', 'figure 2 takes its own prefixed value over the bare one')
+      assert.equal(els.testimonyDays.value, '60', 'figure 2 takes its own prefixed value over the bare one')
     })
   })
 
@@ -123,7 +127,7 @@ describe('a control change never crosses figures', () => {
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.testimonyDays.value = '365'
+      els.testimonyDays.value = '60'
       els.testimonyDays.fire('change')
       await flush(220)
       const added = calls.slice(before)
@@ -139,7 +143,7 @@ describe('a control change never crosses figures', () => {
       await withLocation('', () => appModule.boot())
       await flush()
       const before = calls.length
-      els.days.value = '365'
+      els.days.value = '60'
       els.days.fire('change')
       await flush(220)
       const added = calls.slice(before)
@@ -314,7 +318,7 @@ describe("figure 5 (week) joins app.ts's bootstrap, same bare/prefixed conventio
         '/testimony': emptyTestimony,
         '/week': { days: 7, tz: 'America/Sao_Paulo', buckets: [] },
       })
-      await withLocation(`?person=${personB.id}&days=365&week.source=gdelt&week.limit=5`, () => appModule.boot())
+      await withLocation(`?person=${personB.id}&days=60&week.source=gdelt&week.limit=5`, () => appModule.boot())
       await flush()
       assert.equal(els.weekPerson.value, personB.id, 'the bare person key seeds figure 5 too')
       assert.equal(els.weekLimit.value, '5', 'week.limit overrides figure 5 only')
@@ -346,5 +350,78 @@ describe('figure 6 (lenses) has no bare a=/b= fallback, unlike figure 3\'s a', (
       assert.equal(qs.get('a'), 'all', 'a bare a= must never leak into the lenses figure (keys: [\'a\', null])')
       assert.equal(qs.get('b'), 'lean:right', 'lenses.b= (prefixed) must still seed it')
     })
+  })
+})
+
+// Issue #215 (figure 10, persistence): `weeks` is the one control no other figure has, so it is
+// read from its own prefixed key only, like figure 6's a/b; person and limit seed bare or prefixed.
+describe('figure 10 (persistence) seeds weeks from the prefixed key only', () => {
+  const persistenceCall = (calls: string[]) => {
+    const url = calls.find((u) => u.includes('/persistence'))
+    assert.ok(url, 'figure 10 must have requested /persistence')
+    return { url: url!, qs: new URL(url!, 'http://localhost').searchParams }
+  }
+  const boot = async (search: string) => {
+    let seen = null as { url: string; qs: URLSearchParams } | null
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      routeFetch(calls, {
+        '/api/people': people,
+        '/graph': emptyGraph(personA),
+        '/sources': [],
+        '/testimony': emptyTestimony,
+        '/persistence': { weeks: 12, since: '2026-09-09', horizon: 90, first_week: null, terms: [] },
+      })
+      await withLocation(search, () => appModule.boot())
+      await flush()
+      seen = persistenceCall(calls)
+      void els
+    })
+    return seen!
+  }
+
+  it('a bare weeks= never seeds the persistence weeks select; persistence.weeks=4 does', async () => {
+    const bare = await boot('?weeks=4')
+    assert.equal(bare.qs.get('weeks'), '12', 'a bare weeks= must never leak into the figure (keys: [\'weeks\', null])')
+    const prefixed = await boot('?persistence.weeks=4')
+    assert.equal(prefixed.qs.get('weeks'), '4')
+  })
+
+  it('person and limit seed bare or prefixed', async () => {
+    const bare = await boot(`?person=${personB.id}&limit=20`)
+    assert.ok(bare.url.includes(`/people/${personB.id}/persistence`), bare.url)
+    assert.equal(bare.qs.get('limit'), '20')
+    const prefixed = await boot(`?persistence.person=${people[2].id}&persistence.limit=60`)
+    assert.ok(prefixed.url.includes(`/people/${people[2].id}/persistence`), prefixed.url)
+    assert.equal(prefixed.qs.get('limit'), '60')
+  })
+
+  it('a prefixed key overrides the bare one for this figure only', async () => {
+    const seen = await boot(`?person=${personA.id}&persistence.person=${personB.id}`)
+    assert.ok(seen.url.includes(`/people/${personB.id}/persistence`), seen.url)
+  })
+
+  it('a failed GET /api/people paints the outage in the figure notice, #persistenceNote, which exists in the page', async () => {
+    const root = dirname(dirname(fileURLToPath(import.meta.url)))
+    assert.match(readFileSync(join(root, 'public', 'atlas.html'), 'utf8'), /id="persistenceNote"/)
+    await withFiguresDom(async (els, calls) => {
+      clearScopes()
+      globalThis.fetch = (async (input: unknown) => {
+        calls.push(String(input))
+        throw new Error('network down')
+      }) as typeof fetch
+      await withLocation('', () => appModule.boot())
+      await flush()
+      assert.match(els.persistenceNote.textContent, /Falha de rede ou base indispon[ií]vel/)
+      assert.equal(calls.some((u) => u.includes('/persistence')), false)
+    })
+  })
+})
+
+describe('figure 10 querystring keys are documented (issue #215)', () => {
+  it('names the persistence figure id, person and limit bare or prefixed, and weeks prefixed only', () => {
+    assert.match(docsText, /persistence\.weeks/)
+    assert.match(docsText, /persistence[\s\S]{0,600}\bperson\b[\s\S]{0,120}\blimit\b[\s\S]{0,200}(bare|prefixed)/i)
+    assert.match(docsText, /persistence[\s\S]{0,800}\bweeks\b[\s\S]{0,250}(prefixed only|no bare|only (the )?prefixed|never (a )?bare)/i)
   })
 })

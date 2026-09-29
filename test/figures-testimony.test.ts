@@ -54,7 +54,7 @@ describe('the outlet in focus is local to this figure', () => {
       assert.ok(button, 'the mocked /sources row must render one clickable outlet')
       button.fire('click')
       assert.equal(els.domainLabel.textContent, ' · g1.globo.com', 'picking an outlet focuses it locally, inside this figure')
-      els.testimonyDays.value = '365'
+      els.testimonyDays.value = '60'
       els.testimonyDays.fire('change')
       await flush(200)
       assert.equal(els.domainLabel.textContent, '', "changing this figure's own period control released the outlet")

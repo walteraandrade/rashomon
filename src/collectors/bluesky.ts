@@ -13,6 +13,10 @@ const Post = Schema.Struct({
   indexedAt: Schema.optional(Schema.String),
   record: Schema.optional(Schema.Struct({ text: Schema.optional(Schema.String), createdAt: Schema.optional(Schema.String) })),
   author: Schema.optional(Schema.Struct({ handle: Schema.optional(Schema.String) })),
+  likeCount: Schema.optional(Schema.Number),
+  repostCount: Schema.optional(Schema.Number),
+  replyCount: Schema.optional(Schema.Number),
+  quoteCount: Schema.optional(Schema.Number),
 })
 type Post = typeof Post.Type
 
@@ -66,13 +70,18 @@ const fetchPage = (s: Session, q: string, cursor: string | undefined) =>
     }).pipe(Effect.timeout(REQUEST_TIMEOUT_MS))
   })
 
-const toDoc = (p: Post): RawDoc => ({
-  source: 'bluesky',
-  uri: p.uri,
-  text: p.record?.text ?? '',
-  publishedAt: p.record?.createdAt ?? p.indexedAt ?? '',
-  domain: p.author?.handle,
-})
+const toDoc = (p: Post): RawDoc => {
+  const counts = { likes: p.likeCount, reposts: p.repostCount, replies: p.replyCount, quotes: p.quoteCount }
+  const known = Object.entries(counts).filter(([, n]) => typeof n === 'number')
+  return {
+    source: 'bluesky',
+    uri: p.uri,
+    text: p.record?.text ?? '',
+    publishedAt: p.record?.createdAt ?? p.indexedAt ?? '',
+    domain: p.author?.handle,
+    ...(known.length ? { reach: Object.fromEntries(known) } : {}),
+  }
+}
 
 type Cursor = { cursor: string | undefined; left: number }
 

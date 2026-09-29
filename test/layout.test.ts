@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
 
@@ -612,5 +612,58 @@ describe('matrixLayout (figure 9, issue #207)', () => {
     assert.equal(narrow.cellSize, MATRIX_CELL_MIN)
     const wide = matrixLayout(persons, [], 4000)
     assert.equal(wide.cellSize, MATRIX_CELL_MAX)
+  })
+})
+
+// Issue #215 (figure 10): persistenceLayout is a fixed table grid, not a beeswarm: one row per
+// term, one cell per week in series order, and a level per cell on ONE ramp for the whole
+// figure, keyed to the largest count shown. It takes the GET /persistence payload and returns
+// { rows: [{ term, kind, cells: [{ week, count, level }] }] }; a null count has level 0 and a
+// positive count never does.
+describe('persistenceLayout (figure 10, issue #215)', () => {
+  const weeks = (n: number) => Array.from({ length: n }, (_, i) => `2026-08-${String(3 + 7 * i).padStart(2, '0')}`)
+  const row = (term: string, counts: (number | null)[], kind = 'word') => ({
+    term,
+    kind,
+    series: counts.map((count, i) => ({ week: weeks(counts.length)[i], count })),
+    streak: 0,
+    half_life: null,
+  })
+  const payload = (terms: ReturnType<typeof row>[]) => ({ weeks: terms[0]?.series.length ?? 0, since: '2026-09-09', first_week: '2026-08-03', horizon: 60, terms })
+  const cellsOf = (l: ReturnType<typeof persistenceLayout>) => (l as unknown as { rows: { term: string; kind: string; cells: { week: string; count: number | null; level: number }[] }[] }).rows
+
+  it('one row per term and one cell per week, in series order, so every row has the same number of columns', () => {
+    const rows = cellsOf(persistenceLayout(payload([row('anistia', [null, 2, 3, 4]), row('golpe', [5, null, null, 1])]) as never))
+    assert.equal(rows.length, 2)
+    assert.deepEqual(rows.map((r) => r.term), ['anistia', 'golpe'])
+    for (const r of rows) assert.deepEqual(r.cells.map((c) => c.week), weeks(4))
+  })
+
+  it('a null count is level 0 and every positive count is above it, however small next to the largest', () => {
+    const rows = cellsOf(persistenceLayout(payload([row('anistia', [null, 1, 500, 2])]) as never))
+    const [none, one, big, two] = rows[0].cells
+    assert.equal(none.level, 0)
+    assert.ok(one.level > 0, 'a count of 1 next to 500 is still visibly filled')
+    assert.ok(two.level > 0)
+    assert.ok(big.level >= two.level && two.level >= one.level, 'level never falls as the count grows')
+  })
+
+  it('one ramp for the whole figure: the same count has the same level in every row, and the largest count anywhere has the top level', () => {
+    const rows = cellsOf(persistenceLayout(payload([row('anistia', [3, 3, null, 10]), row('golpe', [40, 3, 10, null])]) as never))
+    const all = rows.flatMap((r) => r.cells)
+    const levelOf = (count: number) => new Set(all.filter((c) => c.count === count).map((c) => c.level))
+    for (const count of [3, 10, 40]) assert.equal(levelOf(count).size, 1, `count ${count} has one level across rows`)
+    const top = Math.max(...all.map((c) => c.level))
+    assert.equal([...levelOf(40)][0], top)
+    assert.ok([...levelOf(3)][0] < top)
+  })
+
+  it('a grid of one count everywhere never paints an empty cell', () => {
+    const rows = cellsOf(persistenceLayout(payload([row('anistia', [2, 2, 2, 2])]) as never))
+    assert.ok(rows[0].cells.every((c) => c.level > 0))
+  })
+
+  it('no terms lays out no rows', () => {
+    assert.deepEqual(cellsOf(persistenceLayout({ weeks: 12, since: '2026-09-09', first_week: null, horizon: 60, terms: [] } as never)), [])
   })
 })

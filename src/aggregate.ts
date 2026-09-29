@@ -2,7 +2,7 @@ import seedJson from '../seed.json' with { type: 'json' }
 import { communities as louvainCommunities, neighbors as outletNeighbors, type CommunityEdge, type OutletPair } from './communities.js'
 import { db, migrateP } from './db.js'
 import { nameTokens } from './extract.js'
-import { DAYS, LIMITS, MINS, SOURCES } from './query.js'
+import { DAYS, LIMITS, MINS, SOURCES, WEEK_TZ } from './query.js'
 import { countryFilter, isName, outletDomain, pmiRank, signatureFloor } from './scoring.js'
 import { sql } from './sql.js'
 import { inTransaction } from './store.js'
@@ -77,31 +77,32 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
     select s.id, s.source from scope s join doc_persons dp on dp.doc_id = s.id and dp.person_id = ${person.id}
   ),
   p as (
-    select g.source, v.id as term_id, v.term, v.kind, g.c_pt, g.tone
+    select g.source, v.id as term_id, v.term, v.kind, g.c_pt, g.tone, g.reach
     from (
-      select coalesce(a.source, 'all') as source, t.term_id, count(*)::int as c_pt, avg(d.tone)::float8 as tone
-      from doc_terms t join about a on a.id = t.doc_id join docs d on d.id = t.doc_id
+      select coalesce(a.source, 'all') as source, t.term_id, count(*)::int as c_pt, avg(a.tone)::float8 as tone, sum(a.reach_reposts)::int as reach
+      from doc_terms t
+      join (select b.id, b.source, dt.tone, d.reach_reposts from about b left join doc_tone dt on dt.doc_id = b.id join docs d on d.id = b.id) a on a.id = t.doc_id
       group by grouping sets ((a.source, t.term_id), (t.term_id))
     ) g
     join terms v on v.id = g.term_id
     where not ${isName(sql.raw('v.term'), exclude)}
   ),
   scored as (
-    select p.source, p.term, p.kind, p.c_pt, ta.c_t, p.tone, gs.about,
+    select p.source, p.term, p.kind, p.c_pt, ta.c_t, p.tone, p.reach, gs.about,
       ln((p.c_pt::float8 * gs.tracked::float8) / (gs.about::float8 * ta.c_t::float8)) / ln(2) as pmi
     from p
     join graph_terms_all ta on ta.days = ${days}::int and ta.source = p.source and ta.term_id = p.term_id
     join graph_scopes gs on gs.days = ${days}::int and gs.source = p.source and gs.person_id = ${person.id}
   ),
   ranked as (
-    select source, term, kind, c_pt, c_t, tone, about,
+    select source, term, kind, c_pt, c_t, tone, reach, about,
       row_number() over (partition by source, kind order by c_pt desc, term, kind) as by_count,
       ${sql.join(ranks)},
       row_number() over (partition by source, c_pt >= ${signatureFloor(sql.raw('about'))} order by pmi desc, term, kind) as by_signature
     from scored
   )
-  insert into graph_terms (days, source, person_id, term, kind, c_pt, c_t, tone)
-  select ${days}::int, source, ${person.id}, term, kind, c_pt, c_t, tone
+  insert into graph_terms (days, source, person_id, term, kind, c_pt, c_t, tone, reach)
+  select ${days}::int, source, ${person.id}, term, kind, c_pt, c_t, tone, reach
   from ranked
   where by_count <= ${top}
     or ${sql.join(kept, '\n    or ')}
@@ -304,6 +305,110 @@ const buildOutletFieldsForWindow = async (days: number, persons: Person[]) => {
   }
 }
 
+// The weekly persistence table: per person, the top TERM_WEEKS_TOP terms of the current and the
+// previous BRT week only (older weeks are a record and are never rewritten). At most TERM_WEEKS_TOP
+// rows per (person, week): lifting that bound needs its own spec (term_links filled the disk, #267).
+export const TERM_WEEKS_TOP = 50
+// The /graph default `min`: without it a week's top is single-document words that cannot persist.
+export const TERM_WEEKS_MIN = 2
+const TERM_WEEKS_KINDS = ['word', 'hashtag', 'phrase']
+
+// One instant per build, bound as a value: nothing in the term_weeks build reads now().
+const at = (now: Date) => sql`${now.toISOString()}::timestamptz`
+
+// c_t: tracked docs containing the term over the widest window, no upper bound so future-dated docs
+// are in, plus n, the tracked docs of that window. The whole build's second full scan, once per build.
+const termWeeksUniverseQuery = (now: Date) => sql`
+  create temp table term_weeks_universe on commit drop as
+  with scope as (
+    select d.id from docs d
+    where d.published_at >= ${at(now)} - make_interval(days => ${Math.max(...DAYS)})
+      and ${countryFilter('br')}
+  ),
+  tracked as materialized (
+    select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
+  ),
+  total as (select count(*)::int as n from tracked)
+  select v.id as term_id, v.term, v.kind, g.c_t, (select n from total) as n
+  from (
+    select t.term_id, count(*)::int as c_t
+    from doc_terms t join tracked k on k.id = t.doc_id
+    group by t.term_id
+  ) g
+  join terms v on v.id = g.term_id
+  where v.kind = any(${TERM_WEEKS_KINDS}::text[])`
+
+const termWeeksUniverseKey = sql`alter table term_weeks_universe add primary key (term_id)`
+const analyzeTermWeeksUniverse = sql`analyze term_weeks_universe`
+
+// cur is the BRT Monday of `now`, computed here from the same bound instant the JS side reads.
+const clearTermWeeksQuery = (now: Date, persons: Pick<Person, 'id'>[]) => sql`
+  delete from term_weeks
+  where person_id = any(${persons.map((p) => p.id)}::text[])
+    and week in (
+      date_trunc('week', ${at(now)} at time zone ${WEEK_TZ})::date,
+      date_trunc('week', ${at(now)} at time zone ${WEEK_TZ})::date - 7
+    )`
+
+const termWeeksQuery = (now: Date, person: Person, top = TERM_WEEKS_TOP) => {
+  const exclude = nameTokens(person)
+  return sql`
+  with clock as (
+    select date_trunc('week', ${at(now)} at time zone ${WEEK_TZ})::date as cur
+  ),
+  weeks as (
+    select cur as week, cur::timestamp at time zone ${WEEK_TZ} as start, null::timestamptz as stop from clock
+    union all
+    select cur - 7, (cur - 7)::timestamp at time zone ${WEEK_TZ}, cur::timestamp at time zone ${WEEK_TZ} from clock
+  ),
+  week_docs as (
+    select w.week, d.id
+    from weeks w
+    join docs d on d.published_at >= w.start and (w.stop is null or d.published_at < w.stop)
+    join doc_persons dp on dp.doc_id = d.id and dp.person_id = ${person.id}
+    where ${countryFilter('br')}
+  ),
+  about as (select week, count(*)::int as about from week_docs group by week),
+  counted as (
+    select wd.week, t.term_id, count(*)::int as c_pt
+    from week_docs wd join doc_terms t on t.doc_id = wd.id
+    group by wd.week, t.term_id
+    having count(*) >= ${TERM_WEEKS_MIN}
+  ),
+  scored as (
+    select c.week, u.term, u.kind, c.c_pt, u.c_t,
+      ln((c.c_pt::float8 * u.n::float8) / (a.about::float8 * u.c_t::float8)) / ln(2) as pmi
+    from counted c
+    join term_weeks_universe u on u.term_id = c.term_id
+    join about a on a.week = c.week
+    where not ${isName(sql.raw('u.term'), exclude)}
+  ),
+  ranked as (
+    select week, term, kind, c_pt, c_t,
+      row_number() over (partition by week order by ${pmiRank(sql.raw('c_pt'))} desc, term, kind) as rn
+    from scored
+  )
+  insert into term_weeks (person_id, term, kind, week, count, c_t)
+  select p.id, r.term, r.kind, r.week, r.c_pt, r.c_t
+  from ranked r cross join (select id from persons where id = ${person.id}) p
+  where r.rn <= ${top}`
+}
+
+// Idempotent for one `now`. One transaction; the universe and every target week hang off the same
+// injected instant, so a week's docs are always inside the universe and c_t >= count holds.
+export const buildTermWeeks = async (persons: Person[], now = new Date(), top = TERM_WEEKS_TOP): Promise<void> => {
+  await inTransaction(async () => {
+    for (const q of [
+      workMem,
+      termWeeksUniverseQuery(now),
+      termWeeksUniverseKey,
+      analyzeTermWeeksUniverse,
+      clearTermWeeksQuery(now, persons),
+      ...persons.map((p) => termWeeksQuery(now, p, top)),
+    ]) await run(q)
+  })
+}
+
 // One window per transaction; communities run last over graph_terms, outlet fields/neighbours after.
 const buildWindow = async (days: number, persons: Person[], top: number) =>
   inTransaction(async () => {
@@ -317,7 +422,7 @@ export type AggregateReport = { windows: number[]; scopes: number; terms: number
 // The tables the build fills, for the owner process (ingest, reindex) to analyze afterwards.
 export const AGGREGATE_TABLES = ['graph_scopes', 'graph_terms'] as const
 
-export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'] as const
+export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors', 'term_weeks'] as const
 
 // Rebuilds graph_scopes and graph_terms from docs/doc_terms/doc_persons. Idempotent; the whole
 // build reads the corpus once per window per person and once per window for the universe.
@@ -327,6 +432,7 @@ export const POST_BUILD_ANALYZED = [...AGGREGATE_TABLES, 'term_communities', 'te
 export const buildGraphAggregates = async (persons: Person[], windows: readonly number[] = DAYS, top = TOP): Promise<AggregateReport> => {
   const started = performance.now()
   await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons, top))), Promise.resolve())
+  await buildTermWeeks(persons)
   const { rows: s } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
   const { rows: t } = await db.query<{ n: number }>(`select count(*)::int as n from graph_terms`)
   return { windows: [...windows], scopes: s[0].n, terms: t[0].n, ms: performance.now() - started }
@@ -351,6 +457,8 @@ export const queries = {
   communityEdges: communityEdgesQuery,
   outletTerms: outletTermsQuery,
   outletNeighbors: insertOutletNeighborsQuery,
+  termWeeksUniverse: termWeeksUniverseQuery,
+  termWeeks: termWeeksQuery,
 }
 
 const main = async (argv: string[]) => {

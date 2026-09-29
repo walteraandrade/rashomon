@@ -4,7 +4,7 @@ import outletsJson from '../../outlets.json' with { type: 'json' }
 
 export type TermTestimony = { score: number; n: number }
 // `community` is a plain number: src/communities.ts's Louvain/graphology types never reach the UI.
-export type Term = { id: string; term: string; kind: string; count: number; pmi: number; testimony?: TermTestimony | null; community?: number | null }
+export type Term = { id: string; term: string; kind: string; count: number; pmi: number; reach?: number | null; testimony?: TermTestimony | null; community?: number | null }
 export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
@@ -68,6 +68,11 @@ export type Rising = { days: number; baseline: number; terms: RisingTerm[]; pres
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }
+// /api/people/:id/persistence (issue #215): a null count is a week outside that week's top 50 (or
+// before first_week), never zero.
+export type PersistenceWeek = { week: string; count: number | null }
+export type PersistenceTerm = { term: string; kind: string; series: PersistenceWeek[]; streak: number; half_life: number | null }
+export type Persistence = { weeks: number; since: string; first_week: string | null; horizon: number; terms: PersistenceTerm[] }
 // /api/agenda (issue #208): one row per top domain, one cell per (person, domain) pair that
 // has at least one tracked doc there. `share` is relative to the domain's own tracked
 // coverage, so a domain with docs naming two tracked people can sum above 1 across its cells.
@@ -132,7 +137,7 @@ const WEEK_TZ = 'America/Sao_Paulo'
 export const weekDayIso = (startIso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(startIso))
 
 // "seg 8": weekday abbreviation, no trailing period, plus the day of month. Never a year or
-// month, since every bucket is inside the last 7 (or 30/365) days.
+// month, since every bucket is inside the last 7 (or 30/60) days.
 export const weekDayLabel = (startIso: string) => {
   const d = new Date(startIso)
   const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: WEEK_TZ, weekday: 'short' }).format(d).replace(/\.$/, '')
@@ -172,10 +177,10 @@ export const SOURCE_SEGMENTS: [string, string][] = [
 
 // sort='pmi' orders by pmi * ln(1 + count), matching src/graph.ts's sort=pmi so node sizing
 // never drifts from the server's ordering.
-export const score = (n: { pmi?: number; count?: number }, sort: string) =>
-  sort === 'pmi' ? Number(n.pmi || 0) * Math.log1p(Number(n.count || 0)) : Number(n.count || 0)
+export const score = (n: { pmi?: number; count?: number; reach?: number | null }, sort: string) =>
+  sort === 'reach' ? Number(n.reach || 0) : sort === 'pmi' ? Number(n.pmi || 0) * Math.log1p(Number(n.count || 0)) : Number(n.count || 0)
 
-export const scoreName = (sort: string) => (sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
+export const scoreName = (sort: string) => (sort === 'reach' ? 'alcance (reposts)' : sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
 
 export const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
 
@@ -389,3 +394,41 @@ export const safeDocUrl = (d: Doc) => {
   } catch {}
   return null
 }
+
+// Figure 10's dates are BRT calendar dates written YYYY-MM-DD; all arithmetic is on the date,
+// never on an instant, so no daylight-saving edge can move a Monday.
+export const shiftDate = (date: string, days: number) => {
+  const d = new Date(`${date}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+export const mondayOf = (date: string) => shiftDate(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7))
+
+export const todayBrt = (now = new Date()) => weekDayIso(now.toISOString())
+
+const MONTH_ABBR = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.']
+
+const dayMonth = (date: string) => {
+  const [, month, day] = date.split('-').map(Number)
+  return { day, month: MONTH_ABBR[month - 1], sameMonthAs: (other: string) => Number(other.split('-')[1]) === month }
+}
+
+// "de 15 a 21 de set." inside a month, "de 29 de set. a 5 de out." across two.
+export const weekSpanLabel = (monday: string) => {
+  const sunday = shiftDate(monday, 6)
+  const from = dayMonth(monday)
+  const to = dayMonth(sunday)
+  return from.sameMonthAs(sunday) ? `de ${from.day} a ${to.day} de ${to.month}` : `de ${from.day} de ${from.month} a ${to.day} de ${to.month}`
+}
+
+export const weekHeadLabel = (monday: string) => {
+  const d = dayMonth(monday)
+  return `${d.day} ${d.month}`
+}
+
+export const sinceLabel = (since: string) => `a série começa em ${dayMonth(since).day} de ${dayMonth(since).month} de ${since.slice(0, 4)}`
+
+// Mondays from first_week to the current one, both included; null with no series yet.
+export const seriesWeeks = (firstWeek: string | null, now = new Date()) =>
+  firstWeek ? Math.max(1, Math.round((Date.parse(mondayOf(todayBrt(now))) - Date.parse(firstWeek)) / (7 * 86_400_000)) + 1) : null

@@ -21,14 +21,14 @@ export const longText = `Jair Bolsonaro ${filler(300)} Lula ${filler(120, 300)}`
 
 export const docs: RawDoc[] = [
   { source: 'gnews', uri: 'https://g1.globo.com/1', text: 'Lula anuncia reforma tributária #reforma', publishedAt: day1, domain: 'g1.globo.com' },
-  { source: 'bluesky', uri: 'at://did:plc:x/post/2', text: 'Lula e Tarcísio disputam a eleição', publishedAt: daysAgo(2), domain: 'ana.bsky.social' },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/2', text: 'Lula e Tarcísio disputam a eleição', publishedAt: daysAgo(2), domain: 'ana.bsky.social', reach: { likes: 4, reposts: 6, replies: 1, quotes: 0 } },
   { source: 'gkg', uri: 'https://folha.uol.com.br/3', text: 'Tarcísio inaugura rodovia no interior', publishedAt: daysAgo(3), domain: 'folha.uol.com.br', tone: -1.5 },
   { source: 'rss', uri: 'https://example.org/4', text: 'Congresso avança na pauta econômica', publishedAt: daysAgo(4), domain: 'example.org' },
   { source: 'gnews', uri: 'https://valor.globo.com/6', text: 'Lula defende reforma tributária', publishedAt: day1, domain: 'valor.globo.com' },
   { source: 'gnews', uri: 'https://g1.globo.com/5', text: 'Lula viaja para a Bahia', publishedAt: daysAgo(100), domain: 'g1.globo.com' },
   { source: 'rss', uri: 'https://example.org/7', text: 'Lula fala muito sobre reforma', publishedAt: daysAgo(1), domain: 'example.org' },
   // docs 8-13: two extra terms ("inflacao", "desemprego") that each hit 3 mentions,
-  // dated past the 365-day ceiling so they only surface in wide-window signature tests.
+  // dated past the 60-day ceiling (the widest window, `DAYS`' largest) so they only surface in wide-window signature tests.
   { source: 'rss', uri: 'https://example.org/8', text: 'Lula fala sobre a inflação persistente', publishedAt: daysAgo(400), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/9', text: 'Lula cita novamente a inflação alta', publishedAt: daysAgo(401), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/10', text: 'Lula reafirma compromisso com a inflação', publishedAt: daysAgo(402), domain: 'example.org' },
@@ -46,7 +46,7 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/16', text: 'Lula prioriza educação, saúde e segurança no plano de governo', publishedAt: daysAgo(1504), domain: 'example.org' },
   // docs 17-19: "estabilidade fiscal" appears twice in a 31-50 day range, so it sits
   // outside the days:30 window used by the pre-existing graphFor/docsFor/sourcesFor
-  // assertions but inside the days:365 ones, and inside risingFor's baseline window
+  // assertions but inside the days:60 ones, and inside risingFor's baseline window
   // at the default days:7/baseline:30 split — a term present only in the baseline,
   // which risingFor must exclude by construction (its recent count is zero).
   { source: 'rss', uri: 'https://example.org/17', text: 'Lula defende estabilidade fiscal para o país', publishedAt: daysAgo(31), domain: 'example.org' },
@@ -70,7 +70,7 @@ export const docs: RawDoc[] = [
   // window, tones -2/-1/0 (avg -1, n=3) — the "meets the default min=3" fixture for
   // issue #5's tone-by-outlet matrix. "geopolitica" is used nowhere else in the fixture
   // so it cannot shift any pinned term-level pmi/count/tone assertion; adding these docs
-  // to the days:30/365/1000/2000 scope does shift the person-agnostic n.total used by
+  // to the days:30/60/1000/2000 scope does shift the person-agnostic n.total used by
   // the graph statement's pmi formula, so every pinned pmi literal at those windows in
   // graph.test.ts/signature.test.ts/signature-acceptance.test.ts was recomputed to match.
   { source: 'gdelt', uri: 'https://estadao.com.br/30', text: 'Tarcísio discute geopolítica durante evento internacional', publishedAt: daysAgo(6), domain: 'estadao.com.br', tone: -2 },
@@ -94,7 +94,7 @@ export const docs: RawDoc[] = [
   // without toned docs" fixture; (b) sits at day 35, just outside the default 30-day window, so
   // bolsonaro's "zero docs in the default window" timeline fixture (all other bolsonaro docs are
   // 2100+ days old) stays intact; (c) avoids "golpe", bolsonaro's pinned timeline term. It still
-  // falls inside the wider 365/1000/2000-day windows, so pinned pmi/stats literals for lula at
+  // falls inside the wider 60/1000/2000-day windows, so pinned pmi/stats literals for lula at
   // those windows were recomputed (n.total only — the doc names neither lula nor a lula term).
   { source: 'gdelt', uri: 'https://poder360.com.br/37', text: 'Tarcísio e Bolsonaro debatem aliança para o pleito em reunião reservada', publishedAt: daysAgo(35), domain: 'poder360.com.br', tone: 0.4 },
   // doc 38: gkg doc about lula, day1 (in the default 30-day window), toned 0.6 — issue #8's
@@ -203,7 +203,7 @@ export const docs: RawDoc[] = [
   { source: 'rss', uri: 'https://exemplo.pt/56', text: 'Lula recebe homenagem lusotropicalista em Lisboa', publishedAt: daysAgo(3800), domain: 'exemplo.pt' },
   { source: 'rss', uri: 'https://example.org/57', text: 'Lula participa de festival colaborativo sem cobertura tradicional', publishedAt: daysAgo(3800) },
   // doc 58: a second .pt doc, this one inside the default 30-day window (unlike docs 56-57,
-  // which sit past day 3800 so they don't shift any pinned days:30/365/1000/2000 pmi/stats
+  // which sit past day 3800 so they don't shift any pinned days:30/60/1000/2000 pmi/stats
   // literal). buildGraphAggregates' windowScope must exclude it from the days:30 build the
   // same way scopeCte excludes it live, or AC8's fast-vs-live equality at country=br would
   // pass even with the exclusion missing from windowScope. Vocabulary ("lusotropicalismo")
@@ -351,6 +351,19 @@ export const candidateDocs: RawDoc[] = [
   { source: 'rss', uri: 'https://example.org/c9', text: 'Davi Alcolumbre fala com Rodrigo Pacheco. Rodrigo Pacheco responde', publishedAt: daysAgo(1), domain: 'example.org' },
 ]
 
+// Issue #210: four Bluesky docs about Lula on top of the shared fixture, seeded only by the tests that need them (adding to `docs` would shift every pinned total). "eleição" is doc 2's word: recent-window reach 6 + 10 + null = 16, 116 with (d), which sits in the baseline window.
+export const reachDocs: RawDoc[] = [
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r1', text: 'Lula comenta a eleição', publishedAt: daysAgo(1), domain: 'ana.bsky.social', reach: { reposts: 10 } },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r2', text: 'Lula repete a eleição', publishedAt: daysAgo(1.5), domain: 'ana.bsky.social', reach: {} },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r3', text: 'Lula revela cronograma', publishedAt: daysAgo(1.2), domain: 'ana.bsky.social', reach: { reposts: 0 } },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r4', text: 'Lula critica a eleição', publishedAt: daysAgo(20), domain: 'ana.bsky.social', reach: { reposts: 100 } },
+]
+
+export const seedReach = async () => {
+  await seed()
+  for (const d of reachDocs) await insertDocP(d, persons)
+}
+
 export const seedCandidates = async () => {
   await seed()
   for (const d of candidateDocs) await insertDocP(d, persons)
@@ -366,6 +379,11 @@ export const insertTestimony = async (uri: string, personId: string, method: str
     method,
     score,
   ])
+}
+
+export const insertCandidate = async (uri: string, name: string) => {
+  const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])
+  await db.query(`insert into doc_candidates (doc_id, name) values ($1, $2) on conflict do nothing`, [rows[0].id, name])
 }
 
 // Direct insert, parallel to insertTestimony: person_attention has no derivation from RawDoc,

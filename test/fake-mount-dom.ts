@@ -98,6 +98,19 @@ const dataABStubs = (html: string) =>
     return stub
   })
 
+// Figure 10's filled cells (issue #215): one <button> per (week, term, kind), the three
+// attributes read independently since the painter may order them any way. A gap or expired
+// cell is not a button and never carries data-week as a click target.
+const dataWeekStubs = (html: string) =>
+  [...html.matchAll(/<button\b[^>]*>/g)]
+    .map(([tag]) => ({ tag, week: /\bdata-week="([^"]*)"/.exec(tag)?.[1], term: /\bdata-term="([^"]*)"/.exec(tag)?.[1], kind: /\bdata-kind="([^"]*)"/.exec(tag)?.[1] }))
+    .filter((t) => t.week !== undefined)
+    .map(({ week, term, kind }) => {
+      const stub = new Listenable() as Listenable & { dataset: Record<string, string> }
+      stub.dataset = { week: week!, term: term ?? '', kind: kind ?? '' }
+      return stub
+    })
+
 // A generic node: covers every button/div/dialog id both figures touch. `innerHTML` is kept
 // as plain text (this harness parses nothing beyond the two data-* attributes above), which is
 // enough since no criterion here asserts markup shape — only requests and control wiring.
@@ -116,7 +129,7 @@ class FakeBox extends Listenable {
   // Memoized per current innerHTML: paintOutlets/paintStrip query, then wire a click listener
   // onto, the very stubs this returns — a fresh array on every call would wire listeners onto
   // objects the test could never reach again. Invalidated only when innerHTML is reassigned.
-  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-related' | 'data-day' | 'data-person' | 'data-a'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> | ReturnType<typeof dataPersonStubs> | ReturnType<typeof dataABStubs> }[] = []
+  private domainStubs: { attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-related' | 'data-day' | 'data-person' | 'data-a' | 'data-week'; html: string; stubs: ReturnType<typeof dataStubs> | ReturnType<typeof dataTermStubs> | ReturnType<typeof personDocsStubs> | ReturnType<typeof dataPersonStubs> | ReturnType<typeof dataABStubs> | ReturnType<typeof dataWeekStubs> }[] = []
   classList = {
     toggle: (name: string, on?: boolean) => {
       this.classes[name] = on ?? !this.classes[name]
@@ -149,10 +162,10 @@ class FakeBox extends Listenable {
   querySelector() {
     return null
   }
-  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-related' | 'data-day' | 'data-person' | 'data-a') {
+  private stubsFor(attr: 'data-domain' | 'data-strip-domain' | 'data-term' | 'data-col' | 'data-node' | 'data-person-docs' | 'data-related' | 'data-day' | 'data-person' | 'data-a' | 'data-week') {
     const cached = this.domainStubs.find((e) => e.attr === attr && e.html === this.html)
     if (cached) return cached.stubs
-    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : attr === 'data-person' ? dataPersonStubs(this.html) : attr === 'data-a' ? dataABStubs(this.html) : dataStubs(this.html, attr)
+    const stubs = attr === 'data-term' ? dataTermStubs(this.html) : attr === 'data-person-docs' ? personDocsStubs(this.html) : attr === 'data-person' ? dataPersonStubs(this.html) : attr === 'data-a' ? dataABStubs(this.html) : attr === 'data-week' ? dataWeekStubs(this.html) : dataStubs(this.html, attr)
     this.domainStubs.push({ attr, html: this.html, stubs })
     return stubs
   }
@@ -167,6 +180,7 @@ class FakeBox extends Listenable {
     if (selector === '[data-related]') return this.stubsFor('data-related')
     if (selector === '[data-day]') return this.stubsFor('data-day')
     if (selector === '[data-a]') return this.stubsFor('data-a')
+    if (selector === '[data-week]') return this.stubsFor('data-week')
     return []
   }
   style: Record<string, string> = {}
@@ -272,7 +286,7 @@ class FakeInput extends Listenable {
 const DAYS_OPTIONS = [
   { value: '7', text: 'últimos 7 dias' },
   { value: '30', text: 'últimos 30 dias', selected: true },
-  { value: '365', text: 'último ano' },
+  { value: '60', text: 'últimos 60 dias' },
 ]
 
 const atlasIds = () => ({
@@ -283,6 +297,7 @@ const atlasIds = () => ({
   sort: new FakeSelect('sort', [
     { value: 'count', text: 'frequência' },
     { value: 'pmi', text: 'PMI ponderado', selected: true },
+    { value: 'reach', text: 'alcance' },
   ]),
   limit: new FakeSelect('limit', [
     { value: '12', text: '12' },
@@ -507,6 +522,25 @@ const comentionIds = () => ({
   comentionAbout: new FakeBox('comentionAbout'),
 })
 
+// Figure 10 (issue #215): its own person/weeks/limit selects, the chart host and its note (the
+// short-series and empty-series notes). No source/kind control.
+const persistenceIds = () => ({
+  persistence: new FakeBox('persistence'),
+  persistencePerson: new FakeSelect('persistencePerson'),
+  persistenceWeeks: new FakeSelect('persistenceWeeks', [
+    { value: '4', text: '4' },
+    { value: '12', text: '12', selected: true },
+    { value: '26', text: '26' },
+  ]),
+  persistenceLimit: new FakeSelect('persistenceLimit', [
+    { value: '20', text: '20' },
+    { value: '40', text: '40', selected: true },
+    { value: '60', text: '60' },
+  ]),
+  persistenceChart: new FakeBox('persistenceChart'),
+  persistenceNote: new FakeBox('persistenceNote'),
+})
+
 export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof testimonyIds> &
   ReturnType<typeof compareIds> &
@@ -515,7 +549,8 @@ export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof lensesIds> &
   ReturnType<typeof attentionIds> &
   ReturnType<typeof agendaIds> &
-  ReturnType<typeof comentionIds>
+  ReturnType<typeof comentionIds> &
+  ReturnType<typeof persistenceIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -527,7 +562,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds(), ...agendaIds(), ...comentionIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds(), ...agendaIds(), ...comentionIds(), ...persistenceIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

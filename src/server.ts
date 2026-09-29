@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import personsSeed from '../seed.json' with { type: 'json' }
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
-import { agendaFor, attentionFor, candidatesFor, comentionFor, compareBridgesFor, compareFor, docsFor, graphFor, lensBridgesFor, lensesFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
+import { agendaFor, attentionFor, candidatesFor, comentionFor, compareBridgesFor, compareFor, docsFor, graphFor, lensBridgesFor, lensesFor, persistenceFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
@@ -18,6 +18,7 @@ import {
   parseCompareQuery,
   parseDocsQuery,
   parseLensesQuery,
+  parsePersistenceQuery,
   parseQuery,
   parseRisingQuery,
   parseTestimonyQuery,
@@ -123,6 +124,9 @@ app.get('/api/people/:id/lenses/bridges', async (c) =>
   c.json(await lensBridgesFor(c.get('person'), parseLensesQuery(c.req.query()), parseBridgeIds(c.req.query('ids')))),
 )
 app.get('/api/people/:id/attention', async (c) => c.json(await attentionFor(c.get('person'), parseAttentionQuery(c.req.query()))))
+app.get('/api/people/:id/persistence', async (c) =>
+  c.json(await persistenceFor(c.get('person'), parsePersistenceQuery(c.req.query()))),
+)
 
 // Not nested under /people/:id: spans two specific people.
 const comparePair = async (aRaw: string | undefined, bRaw: string | undefined) => {

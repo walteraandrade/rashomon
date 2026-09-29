@@ -2,7 +2,7 @@ import { betweenness } from './communities.js'
 import { db } from './db.js'
 import { nameTokens } from './extract.js'
 import { labelFor, resolveScope } from './outlets.js'
-import { BRIDGE_NODES, DAYS, KINDS } from './query.js'
+import { addDays, BRIDGE_NODES, brtDate, DAYS, KINDS, mondayOf, PERSISTENCE_SINCE } from './query.js'
 import { countryFilter, isName, outletDomain, pmiLog2, pmiRank, signatureFloor, sortKey } from './scoring.js'
 import { sql, type Sql } from './sql.js'
 import type { Person } from './types.js'
@@ -37,6 +37,7 @@ export type DocsQuery = {
   offset: number
   day: string
   with: string // other tracked person's id, or '' for no filter; see docsWithPerson
+  week?: string // a BRT Monday, or ''/absent for no filter; see docsWeek
 }
 
 export type RisingQuery = {
@@ -114,12 +115,15 @@ export type WeekQuery = {
   method?: string | null
 }
 
+// One fixed scope (all sources, word/hashtag/phrase, country=br): term_weeks stores nothing else.
+export type PersistenceQuery = { weeks: number; limit: number }
+
 // No scope: pageviews is a curiosity signal, outside the text pipeline's filters.
 export type AttentionQuery = { days: number }
 
 // `community` only appears in the row shape graphFastQuery renders when q.communities is true;
 // graphFor adds/omits the key on the response object, never leaving it present-but-undefined.
-type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null; community?: number | null }
+type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null; reach: number | null; community?: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 // field/neighbors: issue #218, from the window's own aggregate build, never the live query.
 type SourceRow = {
@@ -143,6 +147,7 @@ type RisingRow = {
   count_recent_raw: number
   count_baseline_raw: number
   lift: number
+  reach: number | null
 }
 type RisingAggregates = { about_recent: number; about_baseline: number; words_recent: number; words_baseline: number; terms: RisingRow[]; present: RisingRow[] }
 type TimelineRow = { bucket_start: Date; count: number }
@@ -204,11 +209,12 @@ const scopeCte = (person: Person, q: Scope) => {
 // aggregate hashes integers and the text is read once per distinct term, not once per row. No order by
 // or tie-break ever uses term_id: ids follow insertion order, the text is what makes a result stable.
 // `about` is a CTE name; `exclude` (a person's own name tokens) drops a name word or a phrase carrying one.
-const termCounts = (about: Sql, exclude?: string[]) => sql`
-    select v.id as term_id, v.term, v.kind, c.c_pt, c.tone
+const termCounts = (about: Sql, exclude?: string[], withReach = false) => sql`
+    select v.id as term_id, v.term, v.kind, c.c_pt, c.tone${withReach ? sql`, c.reach` : sql``}
     from (
-      select t.term_id, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
-      from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+      select t.term_id, count(*)::float8 as c_pt, avg(x.tone)::float8 as tone${withReach ? sql`, sum(x.reach_reposts)::int as reach` : sql``}
+      from doc_terms t
+      join (select a.doc_id, dt.tone${withReach ? sql`, d.reach_reposts` : sql``} from ${about} a left join doc_tone dt on dt.doc_id = a.doc_id${withReach ? sql` join docs d on d.id = a.doc_id` : sql``}) x on x.doc_id = t.doc_id
       group by t.term_id
     ) c
     join terms v on v.id = c.term_id${exclude ? sql`
@@ -243,18 +249,18 @@ const graphQuery = (person: Person, q: GraphQuery) => {
   with ${scopeCte(person, q)}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
-  term_p as materialized (${termCounts(sql.raw('about'), exclude)}
+  term_p as materialized (${termCounts(sql.raw('about'), exclude, true)}
   ),
   term_all as materialized (${termTotals(sql.raw('tracked'))}
   ),
   nodes_scored as (
-    select p.term, p.kind, p.c_pt::int as count, p.tone,
+    select p.term, p.kind, p.c_pt::int as count, p.tone, p.reach,
       ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql.raw('np.total'), sql.raw('a.c_t'))} as pmi
     from term_p p join term_all a using (term_id), n, np
     where p.c_pt >= ${q.min} and (${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ',')))
   ),
   nodes_top as (
-    select term, kind, count,
+    select term, kind, count, reach,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
       ${sortKeyExpr} as sort_key
@@ -278,7 +284,7 @@ const graphQuery = (person: Person, q: GraphQuery) => {
     (select count(*) from scope)::int as docs,
     (select count(*) from about)::int as about,
     coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'reach', reach)
         order by sort_key desc, term, kind)
       from nodes_top
     ), '[]'::json) as nodes,
@@ -313,13 +319,13 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
         select 1 from graph_terms g where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}))
   ),
   scored as (
-    select g.term, g.kind, g.c_pt as count, g.tone${communityCol},
+    select g.term, g.kind, g.c_pt as count, g.tone, g.reach${communityCol},
       ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
     from graph_terms g${communityJoin}, s
     where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}
   ),
   nodes_top as (
-    select term, kind, count${q.communities ? sql`, community` : sql``},
+    select term, kind, count, reach${q.communities ? sql`, community` : sql``},
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
       ${sortKeyExpr} as sort_key
@@ -339,7 +345,7 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
     s.docs::int as docs,
     s.about::int as about,
     coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded${communityJson})
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'reach', reach${communityJson})
         order by sort_key desc, term, kind)
       from nodes_top
     ), '[]'::json) as nodes,
@@ -541,12 +547,21 @@ const docsDay = (day: string) =>
 const docsWithPerson = (withId: string) =>
   withId === '' ? sql`` : sql` and exists (select 1 from doc_persons dp2 where dp2.doc_id = d.id and dp2.person_id = ${withId})`
 
+// The week's seven BRT calendar days, folded the way docsDay folds them. Renders nothing for
+// ''/undefined so every caller that predates it keeps its text and its $n numbering; the value is
+// bound twice, hence the casts.
+const docsWeek = (week?: string) =>
+  !week
+    ? sql``
+    : sql` and least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) >= ${week}::date
+    and least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) < ${week}::date + 7`
+
 const docsQuery = (person: Person, q: DocsQuery) => sql`
   with ${scopeCte(person, q)}
   select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone
   from docs d join about a on a.doc_id = d.id
   where ${docsWhere(q.term, q.kind)}
-    and ${docsDay(q.day)}${docsWithPerson(q.with)}
+    and ${docsDay(q.day)}${docsWithPerson(q.with)}${docsWeek(q.week)}
   order by d.published_at desc, d.id desc
   limit ${q.limit} offset ${q.offset}`
 
@@ -555,7 +570,7 @@ const docsCountQuery = (person: Person, q: DocsQuery) => sql`
   select count(*)::int as total
   from docs d join about a on a.doc_id = d.id
   where ${docsWhere(q.term, q.kind)}
-    and ${docsDay(q.day)}${docsWithPerson(q.with)}`
+    and ${docsDay(q.day)}${docsWithPerson(q.with)}${docsWeek(q.week)}`
 
 export const docsFor = async (person: Person, q: DocsQuery) => {
   const { outlets } = resolveScope(q.domain, q.lean)
@@ -761,11 +776,11 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 const risingQuery = (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)
-  const termsOf = (about: Sql, count: Sql) => sql`
-    select v.id as term_id, v.term, v.kind, c.${count}
+  const termsOf = (about: Sql, count: Sql, withReach = false) => sql`
+    select v.id as term_id, v.term, v.kind, c.${count}${withReach ? sql`, c.reach` : sql``}
     from (
-      select t.term_id, count(*)::float8 as ${count}
-      from doc_terms t join ${about} a on a.doc_id = t.doc_id
+      select t.term_id, count(*)::float8 as ${count}${withReach ? sql`, sum(a.reach_reposts)::int as reach` : sql``}
+      from doc_terms t join ${withReach ? sql`(select b.doc_id, d.reach_reposts from ${about} b join docs d on d.id = b.doc_id)` : about} a on a.doc_id = t.doc_id
       group by t.term_id
     ) c
     join terms v on v.id = c.term_id
@@ -793,7 +808,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
   baseline_about as (
     select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
-  recent_terms as (${termsOf(sql.raw('recent_about'), sql.raw('c_recent'))}
+  recent_terms as (${termsOf(sql.raw('recent_about'), sql.raw('c_recent'), true)}
   ),
   baseline_terms as (${termsOf(sql.raw('baseline_about'), sql.raw('c_baseline'))}
   ),
@@ -803,7 +818,8 @@ const risingQuery = (person: Person, q: RisingQuery) => {
       round((coalesce(b.c_baseline, 0) / ${q.baseline})::numeric, 2)::float8 as count_baseline,
       r.c_recent::int as count_recent_raw,
       coalesce(b.c_baseline, 0)::int as count_baseline_raw,
-      round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
+      round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift,
+      r.reach
     from recent_terms r left join baseline_terms b using (term_id)
     where r.c_recent >= ${q.min}
   ),
@@ -821,14 +837,14 @@ const risingQuery = (person: Person, q: RisingQuery) => {
     coalesce((
       select json_agg(json_build_object(
         'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
-        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
+        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift, 'reach', reach
       ) order by lift desc, term, kind)
       from lifted
     ), '[]'::json) as terms,
     coalesce((
       select json_agg(json_build_object(
         'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
-        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
+        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift, 'reach', reach
       ) order by lift desc, term, kind)
       from present
     ), '[]'::json) as present`
@@ -887,6 +903,63 @@ const attentionQuery = (person: Person, q: AttentionQuery) => sql`
 export const attentionFor = async (person: Person, q: AttentionQuery): Promise<{ days: number; series: AttentionRow[] }> => {
   const { rows } = await run<AttentionRow>(attentionQuery(person, q))
   return { days: q.days, series: rows.map((r) => ({ day: r.day, views: r.views })) }
+}
+
+const persistenceQuery = (person: Person, oldestWeek: string) => sql`
+  select term, kind, week::text as week, count from term_weeks
+  where person_id = ${person.id} and week >= ${oldestWeek}::date
+  order by term, kind, week`
+
+const persistenceFirstWeek = (person: Person) => sql`select min(week)::text as first_week from term_weeks where person_id = ${person.id}`
+
+// Consecutive non-null weeks back from the newest, or from the week before it when the newest
+// (in progress) is empty. Half-life reads complete weeks only: the weeks from the peak (highest
+// count, latest on a tie) to the first later week at or under half of it, a null counting as a fall.
+export const persistenceStats = (counts: (number | null)[]): { streak: number; half_life: number | null } => {
+  const start = counts.length && counts[counts.length - 1] !== null ? counts.length - 1 : counts.length - 2
+  let streak = 0
+  for (let i = start; i >= 0 && counts[i] !== null; i--) streak++
+  const complete = counts.slice(0, -1)
+  const peak = complete.reduce<number>((best, c, i) => (c !== null && c >= (complete[best] ?? 0) ? i : best), -1)
+  if (complete.length < 2 || peak < 0) return { streak, half_life: null }
+  const half = (complete[peak] ?? 0) / 2
+  const fall = complete.findIndex((c, i) => i > peak && (c ?? 0) <= half)
+  return { streak, half_life: fall < 0 ? null : fall - peak }
+}
+
+type PersistenceRow = { term: string; kind: string; week: string; count: number }
+
+export const persistenceFor = async (person: Person, q: PersistenceQuery, now = new Date()) => {
+  const cur = mondayOf(brtDate(now))
+  const slots = Array.from({ length: q.weeks }, (_, i) => addDays(cur, -7 * (q.weeks - 1 - i)))
+  const [rows, first] = await Promise.all([
+    run<PersistenceRow>(persistenceQuery(person, slots[0])),
+    run<{ first_week: string | null }>(persistenceFirstWeek(person)),
+  ])
+  const byTerm = new Map<string, { term: string; kind: string; counts: Map<string, number> }>()
+  for (const r of rows.rows) {
+    const key = `${r.kind}:${r.term}`
+    if (!byTerm.has(key)) byTerm.set(key, { term: r.term, kind: r.kind, counts: new Map() })
+    byTerm.get(key)!.counts.set(r.week, r.count)
+  }
+  const terms = [...byTerm.values()]
+    .map(({ term, kind, counts }) => {
+      const series = slots.map((week) => ({ week, count: counts.get(week) ?? null }))
+      const values = series.map((x) => x.count)
+      return {
+        term,
+        kind,
+        series,
+        ...persistenceStats(values),
+        weeks_present: values.filter((c) => c !== null).length,
+        total: values.reduce<number>((sum, c) => sum + (c ?? 0), 0),
+      }
+    })
+    .filter((t) => t.weeks_present > 0)
+    .sort((a, b) => b.streak - a.streak || b.weeks_present - a.weeks_present || b.total - a.total || (a.term < b.term ? -1 : a.term > b.term ? 1 : 0) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0))
+    .slice(0, q.limit)
+    .map(({ term, kind, series, streak, half_life }) => ({ term, kind, series, streak, half_life }))
+  return { weeks: q.weeks, since: PERSISTENCE_SINCE, first_week: first.rows[0]?.first_week ?? null, horizon: Math.max(...DAYS), terms }
 }
 
 export const risingFor = async (person: Person, q: RisingQuery) => {
@@ -1478,6 +1551,8 @@ export const queries = {
   weekTestimony: weekTestimonyQuery,
   attention: attentionQuery,
   comention: comentionQuery,
+  persistence: persistenceQuery,
+  persistenceFirstWeek,
 } as const
 
 // The text each builder emits. Numbering follows statement shape, not values, so what a
@@ -1516,4 +1591,6 @@ export const statements = {
   weekTestimony: queries.weekTestimony(samplePerson, { ...sampleScope, days: 7, limit: 8 }, 'stub').text,
   attention: queries.attention(samplePerson, { days: 30 }).text,
   comention: queries.comention(sampleComention).text,
+  persistence: queries.persistence(samplePerson, '2026-09-07').text,
+  persistenceFirstWeek: queries.persistenceFirstWeek(samplePerson).text,
 } as const

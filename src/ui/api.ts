@@ -12,8 +12,9 @@ export type GraphOpts = { days: string; sort: string; limit: string; source: str
 
 // `testimony=1`/`communities=1` ask /graph for kikori means and term communities; always
 // included so cycling either colouring never refetches. No `domain`: the atlas answers whole.
+// The server has no reach ordering: `reach` resizes the words a count-ranked request already returned, so it shares that request.
 export const params = ({ days, sort, limit, source, kind = ATLAS_KINDS, min = '2' }: GraphOpts) =>
-  new URLSearchParams({ days, sort, limit, min, source, kind, testimony: '1', communities: '1' })
+  new URLSearchParams({ days, sort: sort === 'reach' ? 'count' : sort, limit, min, source, kind, testimony: '1', communities: '1' })
 
 // Drop sort, limit, testimony and communities so a term-ordering change does not evict the outlet list.
 export const narrowToSources = (graphParams: URLSearchParams) => {
@@ -32,16 +33,18 @@ export const narrowToTestimony = (graphParams: URLSearchParams) =>
 export const testimonyParams = (opts: GraphOpts) => narrowToTestimony(params(opts))
 
 // `domain` travels only when a figure names an outlet; `day` only when figure 5 names a column;
+// `week` only when figure 10 names a cell (a Monday);
 // `lean` only when a figure 6 lens is `lean:<value>` — /docs already accepts it server-side.
-export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; lean?: string; limit?: string; day?: string; withId?: string }
+export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; lean?: string; limit?: string; day?: string; week?: string; withId?: string }
 
 // `withId` (`with` is a reserved word) travels only when the comention matrix names the other
 // person of the pair (issue #207); every other caller keeps sending byte-identical params.
-export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', lean = '', limit = '5', day = '', withId = '' }: DocsOpts) => {
+export const docsParams = ({ days, source, term = '', kind = 'all', domain = '', lean = '', limit = '5', day = '', week = '', withId = '' }: DocsOpts) => {
   const q = new URLSearchParams({ days, source, term, kind, limit })
   if (domain) q.set('domain', domain)
   if (lean) q.set('lean', lean)
   if (day) q.set('day', day)
+  if (week) q.set('week', week)
   if (withId) q.set('with', withId)
   return q
 }
@@ -113,6 +116,11 @@ export const loadRising = (personId: string, queryParams: URLSearchParams, signa
 export const weekParams = ({ source, limit }: { source: string; limit: string }) => new URLSearchParams({ days: '7', source, kind: FIXED_KINDS, limit })
 
 export const loadWeek = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/week?' + queryParams, signal)
+
+// Figure 10: one fixed scope (all sources, word/hashtag/phrase), so only the two figure values travel.
+export const persistenceParams = ({ weeks, limit }: { weeks: string; limit: string }) => new URLSearchParams({ weeks, limit })
+
+export const loadPersistence = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/persistence?' + queryParams, signal)
 
 // Figure 1's inspector sparkline: the last 7 rolling days for one word, independent of the
 // atlas's own days chip (issue #147 AC20).

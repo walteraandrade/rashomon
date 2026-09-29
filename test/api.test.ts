@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { ATLAS_KINDS, attentionParams, bridgeParams, candidatesQuery, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams, bridgeParams, candidatesQuery, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadPersistence, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, persistenceParams, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -93,6 +93,14 @@ describe('params', () => {
     assert.equal(p.get('source'), 'all')
     // No outlet: picking one is a reading inside the second figure, so it never reaches a route.
     assert.equal(p.has('domain'), false)
+  })
+
+  it('params maps reach to count on the wire (issue #210)', () => {
+    const base = { days: '30', limit: '18', source: 'all' }
+    assert.equal(params({ ...base, sort: 'reach' }).get('sort'), 'count')
+    assert.equal(params({ ...base, sort: 'pmi' }).get('sort'), 'pmi')
+    assert.equal(params({ ...base, sort: 'count' }).get('sort'), 'count')
+    assert.equal(params({ ...base, sort: 'reach' }).toString(), params({ ...base, sort: 'count' }).toString())
   })
 
   it('lets an explicit kind/min override the defaults', () => {
@@ -274,5 +282,40 @@ describe('sparklineParams / loadTimeline, the inspector sparkline', () => {
 describe('ATLAS_KINDS gains org (issue #209 AC12)', () => {
   it("ATLAS_KINDS equals 'word,hashtag,phrase,org'", () => {
     assert.equal(ATLAS_KINDS, 'word,hashtag,phrase,org')
+  })
+})
+
+// Issue #215 (figure 10): docsParams gains an optional week, persistenceParams/loadPersistence
+// build and fetch GET /api/people/:id/persistence.
+describe('docsParams accepts an optional week, appended only when set (issue #215)', () => {
+  it('week unset or empty leaves the query string byte-identical to what every other caller already sends', () => {
+    const before = docsParams({ days: '7', source: 'gdelt', term: 'reforma', kind: 'word' }).toString()
+    assert.equal(docsParams({ days: '7', source: 'gdelt', term: 'reforma', kind: 'word', week: '' }).toString(), before)
+    assert.equal(docsParams({ days: '7', source: 'gdelt', term: 'reforma', kind: 'word', week: undefined }).toString(), before)
+    assert.equal(docsParams({ days: '7', source: 'all' }).has('week'), false)
+  })
+
+  it('a set week travels as week=<Monday> beside days, term and kind', () => {
+    const q = docsParams({ days: '90', source: 'all', term: 'anistia', kind: 'word', week: '2026-09-14' })
+    assert.equal(q.get('week'), '2026-09-14')
+    assert.equal(q.get('days'), '90')
+    assert.equal(q.get('term'), 'anistia')
+    assert.equal(q.get('kind'), 'word')
+    assert.equal(q.has('day'), false)
+  })
+})
+
+describe('persistenceParams / loadPersistence (issue #215)', () => {
+  it('persistenceParams sends weeks and limit and nothing else', () => {
+    const q = persistenceParams({ weeks: '26', limit: '20' })
+    assert.equal(q.get('weeks'), '26')
+    assert.equal(q.get('limit'), '20')
+    assert.deepEqual([...q.keys()].sort(), ['limit', 'weeks'])
+  })
+
+  it('loadPersistence calls GET /api/people/:id/persistence', async () => {
+    const calls = stubFetch(true, { terms: [] })
+    await loadPersistence('lula', persistenceParams({ weeks: '12', limit: '40' }))
+    assert.equal(calls[0].url, '/api/people/lula/persistence?' + persistenceParams({ weeks: '12', limit: '40' }).toString())
   })
 })

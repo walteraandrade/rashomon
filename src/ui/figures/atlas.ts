@@ -2,7 +2,7 @@
 // hands it a root element, so node:test can import the pieces without a document.
 
 import * as api from '../api.js'
-import { communityRanking, fmt, html, kinds, label, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type MaskState, type Measure, type Sparkline, type Term } from '../format.js'
+import { communityRanking, fmt, html, kinds, label, score, SOURCE_SEGMENTS, sourceLabels, type Graph, type Layout, type Link, type MaskState, type Measure, type Sparkline, type Term } from '../format.js'
 import { centerLabel, pack } from '../layout.js'
 import {
   createCanvasMeasure,
@@ -127,8 +127,14 @@ export const createHandlers = ({
   docsClose: () => closeDocs(),
 })
 
+// The server ranks by count, and packing, the list and the inspector all follow array order, so a word sized by reach has to lead them too.
+const byReach = (nodes: Term[], sort: string) =>
+  sort === 'reach'
+    ? [...nodes].sort((a, b) => score(b, 'reach') - score(a, 'reach') || a.term.localeCompare(b.term) || a.kind.localeCompare(b.kind))
+    : nodes
+
 export const layoutKey = (person: Person | undefined, terms: Term[], sort: string, limit: string) =>
-  JSON.stringify(person ? [person.id, person.name, sort, limit, terms.map((n) => [n.id, n.term, n.kind, n.count, n.pmi])] : [])
+  JSON.stringify(person ? [person.id, person.name, sort, limit, terms.map((n) => [n.id, n.term, n.kind, n.count, n.pmi, n.reach ?? null])] : [])
 
 // `sort` and `min` are dropped: parseDocsQuery reads neither, so keeping them would make every
 // sort change look like a new query to the memo and any HTTP cache.
@@ -330,7 +336,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   const render = () => {
     if (busy || !graph) return
     const current = graph
-    nodes = current.nodes.slice(0, Number($('limit').value))
+    nodes = byReach(current.nodes.slice(0, Number($('limit').value)), $('sort').value)
     ranking = communityRanking(nodes)
     const ids = new Set(nodes.map((n) => n.id))
     links = current.links.filter((l) => ids.has(l.source) && ids.has(l.target))

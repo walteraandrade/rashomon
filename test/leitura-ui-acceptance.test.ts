@@ -68,6 +68,26 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.match(help, /GDELT/, '#help-atlas must name GDELT as the source')
   })
 
+  it("como-ler.html's #atlas and atlas.html's #help-atlas both explain alcance (issue #210 AC4)", () => {
+    const guide = read('como-ler.html').match(/<div id="atlas">[\s\S]*?(?=<div id="avaliacao">)/)?.[0] ?? ''
+    assert.ok(guide, '#atlas must exist in como-ler.html')
+    const atlasHtml = read('atlas.html')
+    const help = atlasHtml.match(/id="help-atlas"[\s\S]*?(?=<div id="help-pmi")/)?.[0] ?? ''
+    assert.ok(help, '#help-atlas must exist in atlas.html')
+    for (const [name, text] of [['#atlas', guide], ['#help-atlas', help]] as const) {
+      assert.match(text, /alcance/i, `${name} must name alcance`)
+      assert.match(text, /repost/i, `${name} must say what alcance sums`)
+      assert.match(text, /quando[^.]{0,80}colet/i, `${name} must say the count is taken at collection time`)
+      assert.match(text, /S[óo]\s+documentos\s+do\s+Bluesky/i, `${name} must say only Bluesky documents have it`)
+    }
+    const tamanho = (html: string) => /Tamanho<\/dt><dd>([^<]*)<\/dd>/.exec(html)?.[1]
+    const keyDefault = atlasHtml.match(/<dl class="figure-key" id="keyDefault">[\s\S]*?<\/dl>/)?.[0] ?? ''
+    assert.ok(keyDefault, '#keyDefault must exist in atlas.html')
+    assert.match(tamanho(keyDefault) ?? '', /alcance/i, "#keyDefault's Tamanho must name alcance")
+    assert.match(tamanho(help) ?? '', /alcance/i, "#help-atlas's Tamanho must name alcance")
+    assert.equal(tamanho(keyDefault), tamanho(help), 'the two Tamanho lines must not drift')
+  })
+
   it('atlas.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
     const html = read('atlas.html')
     assert.doesNotMatch(html, /id="como-ler"/)
@@ -160,7 +180,7 @@ describe('the page is a sequence of graphs', () => {
     // after #rising; issue #206 adds a sixth, the lenses ruler, after #week; issue #216 (AC12)
     // adds a seventh, attention vs mentions, after #lenses; issue #208 adds an eighth, the
     // agenda grid, after #attention; issue #207 adds a ninth, the comention matrix, after #agenda.
-    assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses', 'attention', 'agenda', 'comention'])
+    assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses', 'attention', 'agenda', 'comention', 'persistence'])
     // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
     // <b id="testimonyLabel"> in figure 2's own heading below.
     assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
@@ -172,8 +192,9 @@ describe('the page is a sequence of graphs', () => {
     assert.match(html, /<span class="eyebrow">Gráfico 7<\/span><h2 id="attentionTitle">/)
     assert.match(html, /<span class="eyebrow">Gráfico 8<\/span><h2 id="agendaTitle">/)
     assert.match(html, /<span class="eyebrow">Gráfico 9<\/span><h2 id="comentionTitle">/)
-    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 9)
-    for (const id of ['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses', 'attention', 'agenda', 'comention']) {
+    assert.match(html, /<span class="eyebrow">Gráfico 10<\/span><h2 id="persistenceTitle">/)
+    assert.equal(html.match(/<p class="figure-sub">/g)?.length, 10)
+    for (const id of ['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses', 'attention', 'agenda', 'comention', 'persistence']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
       // Issue #149 AC8 gave #workspace's default key an id="keyDefault" (a sibling id="keyStrip"
       // now follows it), so the match tolerates an id attribute rather than only the bare tag.
@@ -198,8 +219,8 @@ describe('the page is a sequence of graphs', () => {
     // (agendaDays/agendaSource, no person select -- it spans every tracked person at once);
     // issue #207 adds figure 9's own four (comentionDays/comentionSource/comentionLean/
     // comentionMin, no person control at all: a shared count is never one person's) — the
-    // shared count is 32 now, split per figure below.
-    assert.equal(html.match(/<span class="pick">/g)?.length, 32)
+    // shared count is 35 now (figure 10 adds person/weeks/limit), split per figure below.
+    assert.equal(html.match(/<span class="pick">/g)?.length, 35)
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
     const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
@@ -209,6 +230,7 @@ describe('the page is a sequence of graphs', () => {
     const attention = html.match(/id="attention"[\s\S]*?<\/section>/)?.[0] ?? ''
     const agenda = html.match(/id="agenda"[\s\S]*?<\/section>/)?.[0] ?? ''
     const comention = html.match(/id="comention"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const persistence = html.match(/id="persistence"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.equal(workspace.match(/<span class="pick">/g)?.length, 5, "figure 1's sentence keeps its five controls")
     assert.equal(testimony.match(/<span class="pick">/g)?.length, 3, "figure 2's own sentence has person/days/source, no sort/limit")
     assert.equal(compare.match(/<span class="pick">/g)?.length, 6, "figure 3's own sentence has both people, days, source, measure and limit")
@@ -218,6 +240,7 @@ describe('the page is a sequence of graphs', () => {
     assert.equal(attention.match(/<span class="pick">/g)?.length, 2, "figure 7's own sentence has only person and source; days stays fixed at 30")
     assert.equal(agenda.match(/<span class="pick">/g)?.length, 2, "figure 8's own sentence has only days and source; no person select, it spans every tracked person")
     assert.equal(comention.match(/<span class="pick">/g)?.length, 4, "figure 9's own sentence has days, source, lean and min; no person control")
+    assert.equal(persistence.match(/<span class="pick">/g)?.length, 3, "figure 10's own sentence has person, weeks and limit; no source or kind control")
   })
 
   // issue #147 AC17 (the automatable half; the seven-column render itself is manual): the

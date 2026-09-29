@@ -1,7 +1,7 @@
 import { normalize } from './extract.js'
 import { LEANS } from './outlets.js'
 import { methods } from './scorers/method.js'
-import type { AgendaQuery, AttentionQuery, CandidatesQuery, ComentionQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
+import type { AgendaQuery, AttentionQuery, CandidatesQuery, ComentionQuery, CompareQuery, DocsQuery, GraphQuery, LensesQuery, LensSide, PersistenceQuery, RisingQuery, TestimonyQuery, TimelineQuery, ToneQuery, WeekQuery } from './graph.js'
 
 // Resolved lazily per request through the `methods` map. The label matches doc_testimony only
 // when TESTIMONY_DTYPE and TESTIMONY_REVISION are set the same way in every process.
@@ -24,8 +24,9 @@ export const snapTo = (set: readonly number[], v: string | undefined, d: number)
   return set.reduce((best, x) => (Math.abs(x - n) < Math.abs(best - n) ? x : best))
 }
 
-// Only these three windows are cache keys; all route defaults (30 or 7) are members.
-export const DAYS = [7, 30, 365]
+// Only these three windows are cache keys; all route defaults (30 or 7) are members. The largest
+// one is also the retention horizon (ingest.ts deletes docs older than it).
+export const DAYS = [7, 30, 60]
 
 export const snapDays = (v: string | undefined, d: number): number => snapTo(DAYS, v, d)
 
@@ -35,6 +36,11 @@ export const snapDays = (v: string | undefined, d: number): number => snapTo(DAY
 export const LIMITS = [1, 5, 8, 12, 18, 20, 24, 30, 40, 50, 60, 100, 200]
 
 export const WEEK_TZ = 'America/Sao_Paulo'
+
+// The Monday term_weeks' first build could have written; no series starts before it.
+export const PERSISTENCE_SINCE = '2026-09-09'
+
+export const PERSISTENCE_WEEKS = [4, 12, 26]
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -75,7 +81,7 @@ export const brtMidnightUtc = (day: string): Date => {
   // both cases to standard time, which is the later of the two. Taking the later one is what
   // keeps this in step with `at time zone` on every Brazilian transition since 1951 (the one
   // exception, 1950-04-16, fell back at 01:00 rather than midnight, so neither probe lands past
-  // it; keepDay only ever asks about dates inside a 7/30/365-day window, so it is unreachable).
+  // it; keepDay only ever asks about dates inside a 7/30/60-day window, so it is unreachable).
   const first = naive - zoneOffsetMinutes(new Date(naive), WEEK_TZ) * 60_000
   const second = naive - zoneOffsetMinutes(new Date(first), WEEK_TZ) * 60_000
   return new Date(Math.max(first, second))
@@ -90,6 +96,19 @@ const nextCalendarDay = (day: string): string => {
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
 }
 
+const shiftDay = (day: string, by: number): string => {
+  const [y, m, d] = day.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + by)).toISOString().slice(0, 10)
+}
+
+// Pure calendar arithmetic on a YYYY-MM-DD date: no zone is involved, the caller already read a BRT date.
+export const mondayOf = (day: string): string => {
+  const dow = new Date(`${day}T00:00:00Z`).getUTCDay()
+  return shiftDay(day, -((dow + 6) % 7))
+}
+
+export const addDays = shiftDay
+
 export const dayOverlapsWindow = (day: string, days: number, now = new Date()): boolean => {
   if (day > brtDate(now)) return false
   const start = brtMidnightUtc(day)
@@ -102,9 +121,22 @@ export const dayOverlapsWindow = (day: string, days: number, now = new Date()): 
 // filter" -- the request unfilters to the full window rather than to zero docs, the same
 // fallback-to-default convention every other parser here uses. Pinned by test/server.test.ts's
 // "day= unfilters on a bad value" tests.
-const keepDay = (raw: string | undefined, days: number): string => {
+const keepDay = (raw: string | undefined, days: number, now: Date): string => {
   const day = calendarDay(raw ?? '')
-  return day && dayOverlapsWindow(day, days) ? day : ''
+  return day && dayOverlapsWindow(day, days, now) ? day : ''
+}
+
+// week=<date> snaps to that date's Monday. Same '' fallback as keepDay for a malformed, future or
+// out-of-window week; a resolved day always wins, so precedence lives here and not in SQL. The week
+// counts as inside the window when its last non-future day is.
+const keepWeek = (raw: string | undefined, day: string, days: number, now: Date): string => {
+  const date = calendarDay(raw ?? '')
+  if (!date || day !== '') return ''
+  const monday = mondayOf(date)
+  const today = brtDate(now)
+  if (monday > today) return ''
+  const lastDay = shiftDay(monday, 6)
+  return dayOverlapsWindow(lastDay > today ? today : lastDay, days, now) ? monday : ''
 }
 
 // compare and rising cap at 100: each unioned key costs two exact figures instead of one.
@@ -194,15 +226,17 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
 })
 
 // personId is the route's own :id, rejecting a self-referential `with`; omitted by every caller that predates it.
-export const parseDocsQuery = (q: Record<string, string | undefined>, personId = ''): DocsQuery => {
+export const parseDocsQuery = (q: Record<string, string | undefined>, personId = '', now = new Date()): DocsQuery => {
   const scope = parseScope(q, { days: 30 })
+  const day = keepDay(q.day, scope.days, now)
   return {
     ...scope,
     term: normalize((q.term ?? '').trim()),
     limit: snapTo(LIMITS, q.limit, 50),
     offset: snapTo(OFFSETS, q.offset, 0),
-    day: keepDay(q.day, scope.days),
+    day,
     with: withId(q.with, personId),
+    week: keepWeek(q.week, day, scope.days, now),
   }
 }
 
@@ -309,4 +343,9 @@ export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery
   // Same gating as /graph (testimony=1 opts in), same label resolution as /testimony (charset
   // check, then the shared default).
   method: q.testimony === '1' ? (METHOD_TOKEN.test(q.method ?? '') ? q.method! : defaultTestimonyMethod()) : null,
+})
+
+export const parsePersistenceQuery = (q: Record<string, string | undefined>): PersistenceQuery => ({
+  weeks: snapTo(PERSISTENCE_WEEKS, q.weeks, 12),
+  limit: snapTo(LIMITS, q.limit, 40),
 })

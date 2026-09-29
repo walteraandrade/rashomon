@@ -13,7 +13,7 @@ import { pruneRemovedP, upsertPersonsP } from '../src/store.js'
 import { docsText } from './docs.js'
 import { failingSql } from './effect.js'
 import { withEnv } from './env.js'
-import { derivedRows, indexDefs, lastAnalyzed, legacyDocTerms, persons, planRowEstimate, reseed, seed } from './fixture.js'
+import { collidingUri, derivedRows, indexDefs, lastAnalyzed, legacyDocTerms, persons, planRowEstimate, reseed, seed } from './fixture.js'
 import './close.js'
 
 // src/db.ts: the connection (poolConfig, pure and never opening a socket), the schema migrate()
@@ -766,6 +766,8 @@ describe('doc_tone (issue #272)', () => {
     assert.deepEqual(await toneRows(), expected.map((r) => ({ doc_id: r.id, tone: r.tone })))
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from doc_tone dt join docs d on d.id = dt.doc_id where d.source not in ('gkg', 'gdelt')`)
     assert.equal(rows[0].n, 0)
+    const colliding = await db.query<{ n: number }>(`select count(*)::int as n from doc_tone dt join docs d on d.id = dt.doc_id where d.uri = $1`, [collidingUri])
+    assert.equal(colliding.rows[0].n, 0)
   })
 
   it('migrate backfills doc_tone once and only when the table was missing', async () => {

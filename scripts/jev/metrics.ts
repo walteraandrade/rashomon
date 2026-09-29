@@ -71,8 +71,11 @@ export const parseVerifyBlock = (prBody: string): Round[] => {
 }
 
 // A PR older than the factory-verify block only tells its round-1 outcome when its body says so.
+const approvesRoundOne = (line: string): boolean =>
+  /\bround 1\b/i.test(line) && /\bapprove[ds]?\b/i.test(line) && !/\bnot\b|n't\b|\bnever\b|\breturn(ed|s)?\b|\bround [2-9]\b/i.test(line)
+
 export const legacyRounds = (prBody: string, headSha: string): Round[] =>
-  /approve[^\n]*\bround 1\b|\bround 1\b[^\n]*approve/i.test(prBody) ? [{ round: 1, headSha, verdict: 'approve', ms: null, gaps: [] }] : []
+  prBody.split('\n').some(approvesRoundOne) ? [{ round: 1, headSha, verdict: 'approve', ms: null, gaps: [] }] : []
 
 const unmetAt = (a: Answer, t: number): boolean => 1 - a.pTrue >= t - 1e-9
 
@@ -91,13 +94,15 @@ const answersOf = (row: Row, model: Model): { n: number; answer: Answer }[] =>
     return n === null ? [] : [{ n, answer }]
   })
 
-const unmetByValidator = (row: Row): Set<number> =>
-  new Set((row.rounds[0]?.gaps ?? []).flatMap((g) => (g.criterion !== null && g.severity !== 'nit' ? [g.criterion] : [])))
+const roundOne = (row: Row): Round | undefined => row.rounds.find((r) => r.round === 1)
 
-const isReturned = (row: Row): boolean => row.diffAt === 'round1' && row.rounds[0]?.verdict === 'return'
+const unmetByValidator = (row: Row): Set<number> =>
+  new Set((roundOne(row)?.gaps ?? []).flatMap((g) => (g.criterion !== null && g.severity !== 'nit' ? [g.criterion] : [])))
+
+const isReturned = (row: Row): boolean => row.diffAt === 'round1' && roundOne(row)?.verdict === 'return'
 
 const isLabelled = (row: Row): boolean =>
-  row.diffAt === 'round1' && (row.rounds[0]?.verdict === 'approve' || (row.rounds[0]?.gaps ?? []).some((g) => g.criterion !== null))
+  row.diffAt === 'round1' && (roundOne(row)?.verdict === 'approve' || (roundOne(row)?.gaps ?? []).some((g) => g.criterion !== null))
 
 const mean = (xs: (number | null)[]): number | null => {
   const known = xs.filter((x): x is number => x !== null)
@@ -110,7 +115,7 @@ export const metrics = (rows: Row[], model: Model, t: number): Metrics => {
   const usable = usableRows(rows, model)
   const flags = (row: Row) => answersOf(row, model).filter(({ answer }) => unmetAt(answer, t))
   const returned = usable.filter(isReturned)
-  const clean = usable.filter((r) => r.rounds[0]?.verdict === 'approve')
+  const clean = usable.filter((r) => roundOne(r)?.verdict === 'approve')
   const pairs = usable.filter(isLabelled).flatMap((row) => {
     const truth = unmetByValidator(row)
     return answersOf(row, model).map(({ n, answer }) => ({ predicted: unmetAt(answer, t), actual: truth.has(n) }))
@@ -132,7 +137,7 @@ export const metrics = (rows: Row[], model: Model, t: number): Metrics => {
     flaggedAny: returned.filter((r) => flags(r).length > 0).length,
     costMean: mean(usable.map((r) => runOf(r, model)?.costUsd ?? null)),
     msMean: mean(usable.map((r) => runOf(r, model)?.ms ?? null)),
-    validatorMsMean: mean(usable.map((r) => r.rounds[0]?.ms ?? null)),
+    validatorMsMean: mean(usable.map((r) => roundOne(r)?.ms ?? null)),
   }
 }
 

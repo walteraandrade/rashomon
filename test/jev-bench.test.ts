@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { main, type Deps } from '../scripts/jev-bench.js'
-import { decide, metrics, parseCriteria, parseVerifyBlock, renderTable, type Gap, type Row } from '../scripts/jev/metrics.js'
+import { decide, legacyRounds, metrics, parseCriteria, parseVerifyBlock, renderTable, type Gap, type Row } from '../scripts/jev/metrics.js'
 import {
   CHAT_URL,
   CONVENTION_QUESTIONS,
@@ -219,6 +219,17 @@ describe('jev bench metrics', () => {
     assert.equal(m.agreed, 0)
   })
 
+  it('a row without a round-1 entry is neither clean, returned nor labelled', () => {
+    const later = (verdict: 'approve' | 'return') => ({ ...row({ pr: 1, gaps: [blocker(1)], pTrue: { 1: 0.01 } }), rounds: [{ round: 2, headSha: 'h2', verdict, ms: 1, gaps: [blocker(1)] }] })
+    ;(['approve', 'return'] as const).forEach((verdict) => {
+      const m = metrics([later(verdict)], 'jev', 0.9)
+      assert.equal(m.clean, 0)
+      assert.equal(m.returned, 0)
+      assert.equal(m.agreed, 0)
+      assert.equal(m.validatorMsMean, null)
+    })
+  })
+
   it('cost and wall time are the model means against the validator round mean', () => {
     const rows = [row({ pr: 1 }), { ...row({ pr: 2 }), jev: { answers: [], costUsd: 0.008, ms: 4000, error: null } }]
     const m = metrics(rows, 'jev', 0.9)
@@ -409,6 +420,16 @@ describe('jev bench cli', () => {
     assert.deepEqual(w.fetched, [])
   })
 
+  it('collect never promotes a later round when round 1 has no verdict', async () => {
+    const block = '```json factory-verify\n[{"round":1,"headSha":"a","verdict":null,"gaps":[{"criterion":1,"severity":"blocker","area":"api"}]},{"round":2,"headSha":"b","verdict":"approve"}]\n```'
+    const w = world({ prBody: `Closes #101\n\n${block}` })
+    assert.equal(await main(['collect', '--pr', '7', '--dir', 'out'], w.deps), 0)
+    assert.equal(w.files.size, 0)
+    assert.deepEqual(w.fetched, [])
+    assert.equal(w.execed.some((c) => c.includes('diff')), false)
+    assert.match(w.logs.join('\n'), /#7: round-1 verdict not recorded/)
+  })
+
   it('collect skips a PR the factory did not produce', async () => {
     const noIssue = world({ prBody: 'just a change' })
     assert.equal(await main(['collect', '--pr', '7', '--dir', 'out'], noIssue.deps), 0)
@@ -474,6 +495,17 @@ describe('jev bench cli', () => {
     assert.deepEqual(w.fetched, [])
   })
 
+  it('import fails with a message when the artifact is not JSON or the PR cannot be prepared', async () => {
+    const bad = world({ files: new Map([['a.json', 'not json']]) })
+    assert.equal(await main(['import', 'a.json', '--pr', '7', '--dir', 'out'], bad.deps), 1)
+    assert.match(bad.errs.join('\n'), /a\.json/)
+    const artifact = new Map([['a.json', JSON.stringify({ pr: 7, status: 'ok', response: DECISIONS_RESPONSE })]])
+    const w = world({ files: artifact })
+    const deps: Deps = { ...w.deps, exec: async () => Promise.reject(new Error('no pull request found')) }
+    assert.equal(await main(['import', 'a.json', '--pr', '7', '--dir', 'out'], deps), 1)
+    assert.match(w.errs.join('\n'), /no pull request found/)
+  })
+
   it('import creates a shadow row when none exists, and refuses another PR', async () => {
     const artifact = JSON.stringify({ pr: 7, head: 'h', status: 'ok', response: DECISIONS_RESPONSE })
     const w = world({ files: new Map([['a.json', artifact]]) })
@@ -482,6 +514,16 @@ describe('jev bench cli', () => {
     const other = world({ files: new Map([['a.json', artifact]]) })
     assert.equal(await main(['import', 'a.json', '--pr', '8', '--dir', 'out'], other.deps), 1)
     assert.equal(other.files.has('out/8.json'), false)
+  })
+})
+
+describe('jev legacy rounds', () => {
+  it('reads a round-1 approval only from a line that does not negate or return it', () => {
+    const at = (line: string) => legacyRounds(line, 'h').length
+    assert.equal(at('Validator: round 1 did not approve; blockers fixed later.'), 0)
+    assert.equal(at('Validator: round 1 returned 2 blockers, round 2 approved.'), 0)
+    assert.equal(at('Round 1 returned; approved after fixes.'), 0)
+    assert.deepEqual(legacyRounds('Validator: approve with 0 nits (round 1).', 'h'), [{ round: 1, headSha: 'h', verdict: 'approve', ms: null, gaps: [] }])
   })
 })
 

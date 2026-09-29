@@ -105,9 +105,11 @@ const prepare = async (deps: Deps, pr: number): Promise<Prepared> => {
   const spec = findSpec(thread.comments)
   if (spec === null) return { skip: `#${pr}: issue #${issue} has no spec comment` }
   const verify = parseVerifyBlock(body)
+  const r1 = verify.find((r) => r.round === 1)
+  if (verify.length > 0 && r1 === undefined) return { skip: `#${pr}: round-1 verdict not recorded` }
   const rounds = verify.length > 0 ? verify : legacyRounds(body, view.headRefOid)
-  const diffAt = verify.length > 0 ? 'round1' : 'final'
-  const head = diffAt === 'round1' ? verify[0].headSha : view.headRefOid
+  const diffAt = r1 === undefined ? 'final' : 'round1'
+  const head = r1 === undefined ? view.headRefOid : r1.headSha
   if (head === '') return { skip: `#${pr}: round-1 head not recorded` }
   await deps.exec('git', ['fetch', 'origin', `refs/pull/${pr}/head`]).catch(() => '')
   const diff = await deps
@@ -213,6 +215,10 @@ const importArtifact = async (deps: Deps, args: Args): Promise<number> => {
   const [path] = args.positional
   const [pr] = args.prs
   if (path === undefined || pr === undefined) return fail('import needs <artifact.json> --pr <n>')
+  return merge(deps, args, path, pr, fail).catch((e: unknown) => fail(`${path}: ${e instanceof Error ? e.message : String(e)}`))
+}
+
+const merge = async (deps: Deps, args: Args, path: string, pr: number, fail: (line: string) => number): Promise<number> => {
   const artifact = json(await deps.readFile(path)) as Artifact
   if (artifact.pr !== pr) return fail(`${path}: artifact is for PR ${artifact.pr}, not ${pr}`)
   const existing = await deps.readFile(rowPath(args.dir, pr)).then(

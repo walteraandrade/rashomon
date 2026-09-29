@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { before, after, describe, it } from 'node:test'
-import { buildGraphAggregates } from '../src/aggregate.js'
+import { buildGraphAggregates, queries as aggregateQueries } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import {
@@ -39,7 +39,8 @@ import { KINDS, brtMidnightUtc, parseQuery, parseSourceList } from '../src/query
 import { inTransaction, insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
 import { docPageText, docsText } from './docs.js'
-import { futureDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
+import { futureDoc, insertTestimony, persons, reseed, seed, seedWithReversedVocabulary } from './fixture.js'
+import { masterStatements } from './statements-master.js'
 import './close.js'
 
 // Every statement in src/graph.ts, one section per route, against the shared fixture. A
@@ -913,9 +914,9 @@ describe('docsFor', () => {
   it('with= unchanged output when omitted: byte-identical rendered SQL to before this parameter existed', () => {
     const preExisting = {
       docs:
-        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)\n  order by d.published_at desc, d.id desc\n  limit $17 offset $18",
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select d.id, d.source, d.domain, d.published_at, d.text, d.uri, d.tone\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t join terms v on v.id = t.term_id where t.doc_id = d.id and v.term = $11\n        and ($12 = 'all' or v.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)\n  order by d.published_at desc, d.id desc\n  limit $17 offset $18",
       docsCount:
-        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select count(*)::int as total\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t where t.doc_id = d.id and t.term = $11\n        and ($12 = 'all' or t.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)",
+        "\n  with \n  scope as (\n    select d.id from docs d\n    where d.published_at >= now() - make_interval(days => $1)\n      and ($2 = 'all' or d.source = any(string_to_array($3, ',')))\n      and ($4 = 'all' or d.domain = any(string_to_array($5, ',')))\n      and (($6 = 'all' or ($7 = 'pt' and d.country = 'pt') or ($8 = 'br' and d.country is distinct from 'pt')))\n  ),\n  about as (\n    select dp.doc_id from doc_persons dp join scope s on s.id = dp.doc_id where dp.person_id = $9\n  )\n  select count(*)::int as total\n  from docs d join about a on a.doc_id = d.id\n  where (\n    $10 = '' or exists (\n      select 1 from doc_terms t join terms v on v.id = t.term_id where t.doc_id = d.id and v.term = $11\n        and ($12 = 'all' or v.kind = any(string_to_array($13, ',')) or not (string_to_array($14, ',') <@ array['hashtag', 'word', 'phrase', 'org']))\n    )\n  )\n    and ($15 = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif($16, '')::date)",
     }
     assert.equal(statements.docs, preExisting.docs)
     assert.equal(statements.docsCount, preExisting.docsCount)
@@ -2521,8 +2522,8 @@ describe('statements render the same text the routes run (issue #131)', () => {
   const ids = ['word:a', 'phrase:primeiro turno', 'hashtag:lula2026']
   const pairMatched = (text: string) => {
     assert.ok(
-      text.includes("join unnest($") && /wanted\(kind, term\) on wanted\.kind = \w+\.kind and wanted\.term = \w+\.term/.test(text),
-      'doc_terms is joined to unnest(kinds, terms) on both columns',
+      text.includes('unnest($') && /join terms v on v\.kind = w\.kind and v\.term = w\.term/.test(text) && /join wanted w on w\.id = t\.term_id/.test(text),
+      'the pairs are resolved to term_ids on both columns, and doc_terms is joined on the id',
     )
     assert.ok(!/(\|\|\s*':'\s*\|\||concat\()[^\n]*(=|in)\s*(any\s*)?\(/i.test(text), 'no concatenated expression is filtered or joined on')
     assert.ok(!/\.kind\s*=\s*any\(/.test(text) && !/\.term\s*=\s*any\(/.test(text), 'kind and term are never filtered independently')
@@ -2540,7 +2541,7 @@ describe('statements render the same text the routes run (issue #131)', () => {
   it('termTestimony matches its ids the same way', () => {
     const q = queries.termTestimony(lula, scope, 'kikori', ids)
     pairMatched(q.text)
-    assert.deepEqual(q.values.slice(-2), [
+    assert.deepEqual(q.values.filter(Array.isArray), [
       ['word', 'phrase', 'hashtag'],
       ['a', 'primeiro turno', 'lula2026'],
     ])
@@ -2560,6 +2561,9 @@ describe('statements render the same text the routes run (issue #131)', () => {
 // order by of nodes, signature and rising. Two kinds of one term text tying on (count/pmi/lift,
 // term) were previously ranked by nothing at all, so the reference statements would otherwise
 // differ from the shipped ones purely by plan. The tie itself is pinned separately below.
+
+// The reference statements keep the legacy (doc_id, term, kind) text shape they were written against; this presents the term dictionary through it.
+const legacyTerms = `(select dt.doc_id, v.term, v.kind from doc_terms dt join terms v on v.id = dt.term_id)`
 
 const scopeCte = `
   scope as (
@@ -2584,11 +2588,11 @@ const termsSql = `
   np as (select count(*)::float8 as total from about),
   term_all as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
-    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
+    from ${legacyTerms} t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   term_p as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
+    from ${legacyTerms} t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
     where ($6 = 'all' or t.kind = $6) and not (t.term = any($7::text[]))
     group by 1, 2
   ),
@@ -2608,11 +2612,11 @@ const signatureSql = `
   np as (select count(*)::float8 as total from about),
   term_all as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
-    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
+    from ${legacyTerms} t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   term_p as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt
-    from doc_terms t join about a on a.doc_id = t.doc_id
+    from ${legacyTerms} t join about a on a.doc_id = t.doc_id
     where not (t.term = any($6::text[]))
     group by 1, 2
   ),
@@ -2739,13 +2743,13 @@ const referenceGraphSql = `
   np as materialized (select count(*)::float8 as total from about),
   term_p as materialized (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
+    from ${legacyTerms} t join about a on a.doc_id = t.doc_id join docs d on d.id = t.doc_id
     where not (t.term = any($7::text[]))
     group by 1, 2
   ),
   term_all as materialized (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_t
-    from doc_terms t join tracked s on s.id = t.doc_id group by 1, 2
+    from ${legacyTerms} t join tracked s on s.id = t.doc_id group by 1, 2
   ),
   nodes_scored as (
     select p.term, p.kind, p.c_pt::int as count, p.tone,
@@ -2791,8 +2795,8 @@ const referenceGraphSql = `
 const referenceLinksSql = `
   with ${scopeCte}
   select a.kind || ':' || a.term as s, b.kind || ':' || b.term as t, count(distinct a.doc_id)::int as count
-  from doc_terms a
-  join doc_terms b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
+  from ${legacyTerms} a
+  join ${legacyTerms} b on a.doc_id = b.doc_id and (a.kind || ':' || a.term) < (b.kind || ':' || b.term)
   join about x on x.doc_id = a.doc_id
   where (a.kind || ':' || a.term) = any($6::text[]) and (b.kind || ':' || b.term) = any($6::text[])
   group by 1, 2 having count(distinct a.doc_id) >= 2`
@@ -2822,13 +2826,13 @@ const referenceRisingSql = `
   ),
   recent_terms as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_recent
-    from doc_terms t join recent_about a on a.doc_id = t.doc_id
+    from ${legacyTerms} t join recent_about a on a.doc_id = t.doc_id
     where ($7 = 'all' or t.kind = $7) and not (t.term = any($8::text[]))
     group by 1, 2
   ),
   baseline_terms as (
     select t.term, t.kind, count(distinct t.doc_id)::float8 as c_baseline
-    from doc_terms t join baseline_about a on a.doc_id = t.doc_id
+    from ${legacyTerms} t join baseline_about a on a.doc_id = t.doc_id
     where ($7 = 'all' or t.kind = $7) and not (t.term = any($8::text[]))
     group by 1, 2
   )
@@ -2953,7 +2957,7 @@ describe('count(*) matches count(distinct doc_id) in the graph path (issue #47)'
     assert.equal(b.nodes.find((n) => n.id === 'word:coalizao')?.count, 2)
     // c_t is 3, not 4: the shared doc must not enter `tracked` twice
     const { rows } = await db.query<{ c_t: number }>(
-      `select count(*)::int as c_t from doc_terms t
+      `select count(*)::int as c_t from ${legacyTerms} t
        where t.term = 'coalizao' and t.kind = 'word'
          and exists (select 1 from doc_persons dp where dp.doc_id = t.doc_id)`,
     )
@@ -3648,7 +3652,7 @@ describe('weekFor: own-name phrase filter (issue #147)', () => {
 
   it('V3: sanity, the doc really carries a "jair bolsonaro" phrase term', async () => {
     const { rows } = await db.query<{ n: number }>(
-      `select count(*)::int as n from doc_terms t join docs d on d.id = t.doc_id where t.kind = 'phrase' and t.term = 'jair bolsonaro' and d.uri = $1`,
+      `select count(*)::int as n from ${legacyTerms} t join docs d on d.id = t.doc_id where t.kind = 'phrase' and t.term = 'jair bolsonaro' and d.uri = $1`,
       [namePhraseUri],
     )
     assert.equal(rows[0].n, 1)
@@ -3730,5 +3734,72 @@ describe('brtMidnightUtc resolves the same instant as `at time zone` (issue #147
       const { rows } = await db.query<{ pg: Date }>(`select ('${day}'::timestamp at time zone 'America/Sao_Paulo') as pg`)
       assert.equal(brtMidnightUtc(day).toISOString(), new Date(rows[0].pg).toISOString(), day)
     }
+  })
+})
+
+// issue #252: term ids follow insertion order, so nothing a route returns may depend on them.
+describe('term ids are internal (issue #252)', () => {
+  before(seed)
+  after(reseed)
+
+  const live = { ...graphBase, days: 4001, country: 'all' as const, limit: 80 }
+
+  const outputs = async () => {
+    await buildGraphAggregates(persons)
+    return {
+      graph: await graphFor(lula, live),
+      graphPmi: await graphFor(lula, { ...live, sort: 'pmi', min: 2 }),
+      testimony: await graphFor(lula, { ...live, method: 'stub' }),
+      compare: await compareFor(lula, tarcisio, { ...compareBase, days: 4001, country: 'all', limit: 60, bridges: true }),
+      lenses: await lensesFor(lula, { ...lensesBase, days: 4001, limit: 60, bridges: true }),
+      rising: await risingFor(lula, { ...risingBase, days: 400, baseline: 2000, country: 'all' }),
+      week: await weekFor(lula, { ...weekBase, days: 7, limit: 20 }),
+      // A reseed hands out new doc ids; the documents themselves are what must match.
+      docs: (({ docs, ...rest }) => ({ ...rest, docs: docs.map(({ id: _id, ...doc }) => doc) }))(await docsFor(lula, { ...docsBase, days: 4001, country: 'all', term: 'reforma' })),
+      // Bucket edges move with now(); the counts are what must match.
+      timeline: (await timelineFor(lula, { ...timelineBase, days: 4001, country: 'all', term: 'reforma', bucket: 'week' })).map((b) => b.count),
+      graphTerms: (await db.query(`select * from graph_terms order by days, source, person_id, term, kind`)).rows,
+      communities: (await db.query(`select * from term_communities order by days, source, person_id, term, kind`)).rows,
+      links: (await db.query(`select * from term_links order by days, source, person_id, a, b`)).rows,
+    }
+  }
+
+  it('route output does not depend on term_id order (issue #252)', async () => {
+    const normal = await outputs()
+    assert.ok(normal.graph.nodes.length > 10 && normal.graph.links.length > normal.graph.nodes.length, 'sanity: nodes and term-term links')
+    assert.ok(normal.testimony.nodes.some((n) => n.testimony), 'sanity: term testimony')
+    assert.ok(normal.compare.terms.length > 0 && normal.lenses.terms.length > 0 && normal.rising.terms.length > 0)
+    assert.ok(normal.docs.docs.length > 0 && normal.week.buckets.some((b) => b.terms.length > 0))
+    assert.ok(normal.graphTerms.length > 0 && normal.communities.length > 0 && normal.links.length > 0)
+    assert.ok(normal.timeline.some((c) => c > 0), 'sanity: the term-filtered timeline counts something')
+
+    await seedWithReversedVocabulary([
+      { term: 'zzz-junk', kind: 'word' },
+      { term: 'aaa-junk', kind: 'hashtag' },
+      { term: 'junk phrase', kind: 'phrase' },
+    ])
+    const { rows: order } = await db.query<{ reversed: boolean }>(
+      `select array_agg(v.id order by v.id) = array_agg(v.id order by v.kind desc, v.term desc) as reversed from terms v where exists (select 1 from doc_terms t where t.term_id = v.id)`,
+    )
+    assert.equal(order[0].reversed, true, 'sanity: ids run against the text order')
+    const reversed = await outputs()
+
+    for (const key of Object.keys(normal) as (keyof typeof normal)[]) assert.deepEqual(reversed[key], normal[key], key)
+  })
+
+  it('statements that never read doc_terms are byte-identical (issue #252)', () => {
+    for (const [name, text] of Object.entries(masterStatements)) assert.equal(statements[name as keyof typeof statements], text, name)
+  })
+
+  it('no statement orders by term_id (issue #252)', () => {
+    const texts = [
+      ...Object.values(statements),
+      ...aggregateQueries.window(30, persons).map((q) => q.text),
+      aggregateQueries.communityEdges(30, 'all', 'lula').text,
+      aggregateQueries.outletTerms(30, persons[0]).text,
+      aggregateQueries.personTerms(30, persons[0]).text,
+    ]
+    assert.ok(texts.some((t) => /order by/.test(t)))
+    for (const text of texts) for (const [, clause] of text.matchAll(/order by ([^\n]*)/g)) assert.doesNotMatch(clause, /\bterm_id\b|\bv\.id\b/, clause)
   })
 })

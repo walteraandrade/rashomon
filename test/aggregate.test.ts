@@ -66,7 +66,7 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
     const texts = aggregateQueries.window(30, persons).map((s) => s.text)
     assert.equal(texts.filter((t) => /graph_terms_all/.test(t) && /\bdelete\b/i.test(t)).length, 0)
     const create = texts.findIndex((t) => /create temp table graph_terms_all on commit drop as/.test(t))
-    const key = texts.findIndex((t) => /alter table graph_terms_all add primary key \(days, source, term, kind\)/.test(t))
+    const key = texts.findIndex((t) => /alter table graph_terms_all add primary key \(days, source, term_id\)/.test(t))
     const firstTerms = texts.findIndex((t) => /insert into graph_terms \(/.test(t))
     assert.ok(create >= 0 && create < key && key < firstTerms)
   })

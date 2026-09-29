@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { after, before, describe, it } from 'node:test'
 import { db } from '../src/db.js'
 import { purgeThemes, resolveTarget } from '../src/purge.js'
-import { docs, insertTestimony, reseed, seed } from './fixture.js'
+import { docs, insertDocTerm, insertTestimony, reseed, seed } from './fixture.js'
 import './close.js'
 
 // main() itself is never imported by tests (it calls process.argv, migrate() and db.close());
@@ -40,8 +40,8 @@ const seedLegacyThemeState = async () => {
   const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[3].uri])
   const docId = rows[0].id
   await db.query(`update docs set extra_terms = '[{"term":"tax_econ","kind":"theme"},{"term":"petrobras","kind":"org"}]'::jsonb where id = $1`, [docId])
-  await db.query(`insert into doc_terms (doc_id, term, kind) values ($1, 'tax_econ', 'theme') on conflict do nothing`, [docId])
-  await db.query(`insert into doc_terms (doc_id, term, kind) values ($1, 'petrobras', 'org') on conflict do nothing`, [docId])
+  await insertDocTerm(docId, 'tax_econ', 'theme')
+  await insertDocTerm(docId, 'petrobras', 'org')
   await insertTestimony(docs[2].uri, 'tarcisio', 'kikori:q8', 5)
   await insertTestimony(docs[2].uri, 'tarcisio', 'kikori:q8:d03d785300c13e97', 6)
   await insertTestimony(docs[2].uri, 'tarcisio', 'stub', 7)
@@ -57,7 +57,7 @@ describe('purge themes (issue #108)', () => {
 
     await purgeThemes()
 
-    const { rows: themeTerms } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'theme'`)
+    const { rows: themeTerms } = await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t join terms v on v.id = t.term_id where v.kind = 'theme'`)
     assert.equal(themeTerms[0].n, 0)
 
     assert.equal(await themeElementCount(), 0)
@@ -65,7 +65,7 @@ describe('purge themes (issue #108)', () => {
     const { rows: extra } = await db.query<{ extra_terms: { term: string; kind: string }[] }>(`select extra_terms from docs where id = $1`, [docId])
     assert.deepEqual(extra[0].extra_terms, [{ term: 'petrobras', kind: 'org' }], 'the org element must survive while the theme element is stripped')
 
-    const { rows: orgTerms } = await db.query<{ term: string }>(`select term from doc_terms where doc_id = $1 and kind = 'org'`, [docId])
+    const { rows: orgTerms } = await db.query<{ term: string }>(`select v.term from doc_terms t join terms v on v.id = t.term_id where t.doc_id = $1 and v.kind = 'org'`, [docId])
     assert.deepEqual(orgTerms.map((r) => r.term), ['petrobras'], 'the live org doc_terms row must survive purge themes')
 
     const { rows: methods } = await db.query<{ method: string }>(
@@ -80,7 +80,7 @@ describe('purge themes (issue #108)', () => {
 
   it('runs again against a database with nothing left to purge, without error and reporting zero', async () => {
     const before = {
-      terms: (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'theme'`)).rows[0].n,
+      terms: (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t join terms v on v.id = t.term_id where v.kind = 'theme'`)).rows[0].n,
       extra: await themeElementCount(),
       testimony: (await db.query<{ n: number }>(`select count(*)::int as n from doc_testimony where method like 'kikori:%' and method not like 'kikori:%:%'`)).rows[0].n,
     }
@@ -89,7 +89,7 @@ describe('purge themes (issue #108)', () => {
     await assert.doesNotReject(purgeThemes())
 
     const after = {
-      terms: (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms where kind = 'theme'`)).rows[0].n,
+      terms: (await db.query<{ n: number }>(`select count(*)::int as n from doc_terms t join terms v on v.id = t.term_id where v.kind = 'theme'`)).rows[0].n,
       extra: await themeElementCount(),
       testimony: (await db.query<{ n: number }>(`select count(*)::int as n from doc_testimony where method like 'kikori:%' and method not like 'kikori:%:%'`)).rows[0].n,
     }
@@ -100,7 +100,7 @@ describe('purge themes (issue #108)', () => {
     const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[5].uri])
     const docId = rows[0].id
     await db.query(`update docs set extra_terms = '[{"term":"wb_678_economy","kind":"theme"}]'::jsonb where id = $1`, [docId])
-    await db.query(`insert into doc_terms (doc_id, term, kind) values ($1, 'wb_678_economy', 'theme') on conflict do nothing`, [docId])
+    await insertDocTerm(docId, 'wb_678_economy', 'theme')
 
     await purgeThemes()
 
@@ -120,15 +120,36 @@ describe('purge themes strips only theme elements, keeps org (issue #209 AC7, ve
     const docId = rows[0].id
 
     await db.query(`update docs set extra_terms = '[{"term":"wb_econ","kind":"theme"},{"term":"ministerio","kind":"org"}]'::jsonb where id = $1`, [docId])
-    await db.query(`insert into doc_terms (doc_id, term, kind) values ($1, 'wb_econ', 'theme') on conflict do nothing`, [docId])
-    await db.query(`insert into doc_terms (doc_id, term, kind) values ($1, 'ministerio', 'org') on conflict do nothing`, [docId])
+    await insertDocTerm(docId, 'wb_econ', 'theme')
+    await insertDocTerm(docId, 'ministerio', 'org')
 
     await purgeThemes()
 
     const { rows: extra } = await db.query<{ extra_terms: { term: string; kind: string }[] }>(`select extra_terms from docs where id = $1`, [docId])
     assert.deepEqual(extra[0].extra_terms, [{ term: 'ministerio', kind: 'org' }])
 
-    const { rows: termRows } = await db.query<{ term: string; kind: string }>(`select term, kind from doc_terms where doc_id = $1 and kind in ('theme', 'org') order by kind`, [docId])
+    const { rows: termRows } = await db.query<{ term: string; kind: string }>(`select v.term, v.kind from doc_terms t join terms v on v.id = t.term_id where t.doc_id = $1 and v.kind in ('theme', 'org') order by v.kind`, [docId])
     assert.deepEqual(termRows, [{ term: 'ministerio', kind: 'org' }])
+  })
+})
+
+describe('purge themes removes theme vocabulary (issue #252)', () => {
+  before(seed)
+  after(reseed)
+
+  it('purge themes removes theme vocabulary (issue #252)', async () => {
+    await seedLegacyThemeState()
+    await db.query(`insert into terms (term, kind) values ('wb_unreferenced', 'theme')`)
+    const { rows: docRow } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[3].uri])
+
+    await purgeThemes()
+
+    const { rows: theme } = await db.query<{ n: number }>(`select count(*)::int as n from terms where kind = 'theme'`)
+    assert.equal(theme[0].n, 0, 'referenced and unreferenced theme vocabulary is gone')
+    const { rows: org } = await db.query<{ term: string }>(
+      `select v.term from terms v join doc_terms t on t.term_id = v.id where v.kind = 'org' and t.doc_id = $1`,
+      [docRow[0].id],
+    )
+    assert.deepEqual(org.map((r) => r.term), ['petrobras'], 'the org term and its doc_terms row stay')
   })
 })

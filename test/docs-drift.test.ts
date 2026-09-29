@@ -387,3 +387,17 @@ describe('CLAUDE.md and docs/factory.md describe the current test-file layout, n
     assert.match(docsText, /\binvariants\b/, 'docs/factory.md must list invariants.test.ts among the cross-cutting files')
   })
 })
+
+describe('the term dictionary is documented (issue #252)', () => {
+  it('states the vocabulary table, the term_id key, the in-place conversion and the reindex rebuild', () => {
+    assert.match(docsText, /distinct `\(term, kind\)`[^.]*stored once in `terms[^`]*`/)
+    assert.match(docsText, /`doc_terms \(doc_id, term_id\)` references it/)
+    assert.match(docsText, /`pnpm migrate` converts a `doc_terms` still shaped `\(doc_id, term, kind\)` in place, in the same transaction/)
+    assert.match(docsText, /does not read `docs\.text`, so it needs no reindex/)
+    assert.match(docsText, /`pnpm reindex` truncates `terms` with the rows it rebuilds/)
+  })
+
+  it('tells production to run pnpm migrate right after the deploy, with the scheduled ingest paused', () => {
+    assert.match(docsText, /disable `ingest\.yml`, deploy, run `pnpm migrate` against `POSTGRES_URL_NON_POOLING` immediately, re-enable `ingest\.yml`/)
+  })
+})

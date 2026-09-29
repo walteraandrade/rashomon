@@ -471,6 +471,11 @@ describe('read indexes and planner statistics (issue #44)', () => {
     )
   })
 
+  it('AC4: docs_published_idx, docs_domain_idx and docs_country_idx still exist beside docs_window_idx', async () => {
+    const names = (await indexDefs('docs')).map((d) => d.indexname)
+    for (const n of ['docs_published_idx', 'docs_domain_idx', 'docs_country_idx', 'docs_window_idx']) assert.ok(names.includes(n), `missing ${n}`)
+  })
+
   it('migrate is idempotent for docs_window_idx', async () => {
     await migrateP()
     const defs = await indexDefs('docs')

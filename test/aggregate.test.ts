@@ -29,7 +29,7 @@ const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) =
 const recortes: Record<string, string>[] = [
   {},
   { days: '7' },
-  { days: '365' },
+  { days: '60' },
   { sort: 'pmi' },
   { sort: 'pmi', limit: '5' },
   { min: '1' },
@@ -214,6 +214,11 @@ describe('buildGraphAggregates', () => {
   before(async () => {
     await seed()
     await buildGraphAggregates(persons)
+  })
+
+  it('builds exactly the windows 7, 30 and 60, and none for 365', async () => {
+    const { rows } = await db.query<{ days: number }>(`select distinct days from graph_scopes order by days`)
+    assert.deepEqual(rows.map((r) => r.days), [7, 30, 60])
   })
 
   it('writes one scope row per window, source and person, zero-doc sources included', async () => {
@@ -420,7 +425,7 @@ describe('compare fast path (issue #247)', () => {
   const compareRecortes: Partial<CompareQuery>[] = [
     {},
     { days: 7 },
-    { days: 365 },
+    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -586,7 +591,7 @@ describe('lenses fast path (issue #247)', () => {
   const lensesRecortes: Partial<LensesQuery>[] = [
     {},
     { days: 7 },
-    { days: 365 },
+    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -639,7 +644,7 @@ describe('lenses fast path (issue #247)', () => {
   // enters graph_terms (personTermsQuery's own exclusion) and cannot rank on the fast lenses
   // ruler at all, unlike the live query's own names_a/names_b union (docs/api.md).
   it("a person's own name word is absent from the fast lenses ruler, unlike live (issue #247)", async () => {
-    const query = lensQ({ days: 365, limit: 100 })
+    const query = lensQ({ days: 60, limit: 100 })
     const liveRow = await liveLensesRow(lula, query)
     const fastRow = await fastLensesRow(lula, query)
     const liveName = liveRow.terms.find((t) => t.is_name)
@@ -1193,7 +1198,7 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
   })
 
   it('tone is identical, and null wherever no GDELT doc contributed, between the fast and live compare paths (AC7)', async () => {
-    const query = cq({ days: 365 })
+    const query = cq({ days: 60 })
     const fastRow = await fastCompareRow(tarcisio, lula, query)
     const liveRow = await liveCompareRow(tarcisio, lula, query)
     const tones = (row: typeof fastRow) => row.terms.map((t) => ({ term: t.term, kind: t.kind, a_tone: t.a_tone, b_tone: t.b_tone }))

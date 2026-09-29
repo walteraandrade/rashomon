@@ -15,7 +15,7 @@ const ymd = (d: Date) => d.toISOString().slice(0, 10)
 const daysAgoYmd = (n: number) => ymd(new Date(Date.now() - n * 86_400_000))
 const recentDay = daysAgoYmd(1)
 const olderDay = daysAgoYmd(2)
-const outsideDay = daysAgoYmd(40) // outside days:30, inside days:365
+const outsideDay = daysAgoYmd(40) // outside days:30, inside days:60
 
 describe('#211: GET /api/people/:id/attention', () => {
   before(async () => {
@@ -41,14 +41,14 @@ describe('#211: GET /api/people/:id/attention', () => {
     })
   })
 
-  it('excludes a row outside the days:30 window, and includes it at days:365 (AC2)', async () => {
+  it('excludes a row outside the days:30 window, and includes it at days:60 (AC2)', async () => {
     const res30 = await app.request(`/api/people/${lula.id}/attention?days=30`)
     const body30 = await res30.json()
     assert.ok(!body30.series.some((r: { day: string }) => r.day === outsideDay))
 
-    const res365 = await app.request(`/api/people/${lula.id}/attention?days=365`)
-    const body365 = await res365.json()
-    assert.ok(body365.series.some((r: { day: string }) => r.day === outsideDay))
+    const res60 = await app.request(`/api/people/${lula.id}/attention?days=60`)
+    const body60 = await res60.json()
+    assert.ok(body60.series.some((r: { day: string }) => r.day === outsideDay))
   })
 
   it('a tracked person with no wikipedia field and no rows returns { days: 30, series: [] } with 200 (AC3)', async () => {
@@ -63,7 +63,7 @@ describe('#211: GET /api/people/:id/attention', () => {
     assert.deepEqual(await res.json(), { error: 'person not found' })
   })
 
-  it('?days=45 snaps to 30, the nearest of [7, 30, 365] (AC5)', () => {
+  it('?days=45 snaps to 30, the nearest of [7, 30, 60] (AC5)', () => {
     assert.equal(parseAttentionQuery({ days: '45' }).days, 30)
   })
 

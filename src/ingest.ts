@@ -8,19 +8,21 @@ import { collectors, defaultSources } from './collectors/index.js'
 import { fetchClient } from './http.js'
 import { collect as collectPageviews } from './collectors/pageviews.js'
 import { loadPhrases } from './phrases.js'
-import { insertDocs, pruneRemoved, upsertAttention, upsertPersons } from './store.js'
+import { DAYS } from './query.js'
+import { insertDocs, pruneRemoved, trimOlderThan, upsertAttention, upsertPersons } from './store.js'
 import type { Collector, Person, Phrases, RawDoc, Source } from './types.js'
 
 export type SourceResult = { name: string; fetched: number; written: number; enriched: number; failed: number; error?: string }
 export type IngestReport = {
   removed: string[]
   sources: SourceResult[]
+  deleted: number
   totalDocs: number
   analyzed: readonly AnalyzedTable[]
   aggregates: AggregateReport
 }
 
-export type IngestStage = 'migrate' | 'upsertPersons' | 'pruneRemoved' | 'loadPhrases' | 'docCount' | 'analyzeAfterWrite' | 'buildGraphAggregates' | 'analyzeTables' | 'pageviews'
+export type IngestStage = 'migrate' | 'upsertPersons' | 'pruneRemoved' | 'loadPhrases' | 'docCount' | 'analyzeAfterWrite' | 'buildGraphAggregates' | 'analyzeTables' | 'pageviews' | 'retention'
 export class IngestFailure extends Data.TaggedError('IngestFailure')<{ stage: IngestStage; cause: unknown }> {}
 
 export type IngestOptions = {
@@ -73,6 +75,10 @@ export const ingest = (
     const attentionRows = yield* collectPageviews(persons)
     yield* upsertAttention(attentionRows).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'pageviews', cause })))
     yield* Console.log(`[pageviews] wrote ${attentionRows.length} rows`)
+    // Before docCount, so the total, the analyze decision and the aggregates all see the trimmed corpus.
+    const horizon = Math.max(...DAYS)
+    const deleted = yield* trimOlderThan(horizon).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'retention', cause })))
+    yield* Console.log(`retention: deleted ${deleted} docs older than ${horizon} days`)
     const totalDocs = yield* docCount().pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'docCount', cause })))
     yield* Console.log(`total docs: ${totalDocs}`)
     const analyzed = yield* analyzeAfterWrite(written).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'analyzeAfterWrite', cause })))
@@ -85,7 +91,7 @@ export const ingest = (
     const aggregates = yield* Effect.tryPromise({ try: () => buildGraphAggregates(persons), catch: (cause) => new IngestFailure({ stage: 'buildGraphAggregates', cause }) })
     yield* analyzeTables(POST_BUILD_ANALYZED).pipe(Effect.mapError((cause) => new IngestFailure({ stage: 'analyzeTables', cause })))
     yield* Console.log(`graph aggregates: ${aggregates.scopes} scopes, ${aggregates.terms} terms, ${Math.round(aggregates.ms)} ms`)
-    return { removed, sources, totalDocs, analyzed, aggregates } satisfies IngestReport
+    return { removed, sources, deleted, totalDocs, analyzed, aggregates } satisfies IngestReport
   })
 
 const isMain = process.argv[1] && import.meta.url === new URL(process.argv[1], 'file://').href

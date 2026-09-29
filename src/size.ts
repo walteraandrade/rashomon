@@ -8,6 +8,7 @@ export const SIZE_TABLES = [
   'docs',
   'doc_persons',
   'doc_terms',
+  'terms',
   'doc_candidates',
   'doc_testimony',
   'gkg_files',

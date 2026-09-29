@@ -16,7 +16,7 @@ const purgeOrphanTerms = async () => {
        delete from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id) returning 1
      ) select count(*)::int as n from d`,
   )
-  await db.exec(`vacuum full doc_terms`)
+  await vacuumFull(['doc_terms', 'terms'])
   console.log(`purged ${rows[0].n} doc_terms rows without a tracked person`)
 }
 
@@ -27,7 +27,7 @@ const vacuumFull = (tables: readonly string[]) =>
 const purgeSource = async (source: string) => {
   const { rows } = await db.query<{ n: number }>(`with d as (delete from docs where source = $1 returning 1) select count(*)::int as n from d`, [source])
   if (source === 'gkg') await db.query(`delete from gkg_files`)
-  if (rows[0].n) await vacuumFull(['docs', 'doc_terms', 'doc_persons', 'doc_candidates', 'doc_testimony'])
+  if (rows[0].n) await vacuumFull(['docs', 'doc_terms', 'terms', 'doc_persons', 'doc_candidates', 'doc_testimony'])
   console.log(`purged ${rows[0].n} docs from ${source}`)
 }
 
@@ -43,14 +43,15 @@ export const purgeThemes = async () => {
      ) select count(*)::int as n from d`,
   )
   const { rows: terms } = await db.query<{ n: number }>(
-    `with d as (delete from doc_terms where kind = 'theme' returning 1) select count(*)::int as n from d`,
+    `with d as (delete from doc_terms t using terms v where v.id = t.term_id and v.kind = 'theme' returning 1) select count(*)::int as n from d`,
   )
+  const { rows: vocabulary } = await db.query<{ n: number }>(`with d as (delete from terms where kind = 'theme' returning 1) select count(*)::int as n from d`)
   const { rows: testimony } = await db.query<{ n: number }>(
     `with d as (
        delete from doc_testimony where method like 'kikori:%' and method not like 'kikori:%:%' returning 1
      ) select count(*)::int as n from d`,
   )
-  const tables = [...(extra[0].n ? ['docs'] : []), ...(terms[0].n || testimony[0].n ? ['doc_terms', 'doc_testimony'] : [])]
+  const tables = [...(extra[0].n ? ['docs'] : []), ...(terms[0].n || vocabulary[0].n || testimony[0].n ? ['doc_terms', 'terms', 'doc_testimony'] : [])]
   if (tables.length) await vacuumFull(tables)
   console.log(`purged ${terms[0].n} theme terms, ${extra[0].n} extra_terms rows and ${testimony[0].n} stale testimony rows`)
 }

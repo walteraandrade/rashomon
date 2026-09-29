@@ -16,7 +16,14 @@ const UPSERT_PERSONS_SQL = `insert into persons (id, name, aliases)
          on conflict (id) do update set name = excluded.name, aliases = excluded.aliases
          where persons.name is distinct from excluded.name or persons.aliases is distinct from excluded.aliases`
 const INSERT_DOC_PERSONS_SQL = `insert into doc_persons (doc_id, person_id) select * from unnest($1::int[], $2::text[]) on conflict do nothing`
-const INSERT_DOC_TERMS_SQL = `insert into doc_terms (doc_id, term, kind) select * from unnest($1::int[], $2::text[], $3::text[]) on conflict do nothing`
+// One statement resolves the vocabulary itself, so a batch costs no round-trip for ids. A data-modifying CTE's rows are invisible to `terms` in the same statement, hence the coalesce over `ins`.
+export const INSERT_DOC_TERMS_SQL = `with v as (select * from unnest($1::int[], $2::text[], $3::text[]) as v(doc_id, term, kind)),
+     ins as (insert into terms (term, kind) select distinct term, kind from v on conflict (kind, term) do nothing returning id, term, kind)
+     insert into doc_terms (doc_id, term_id)
+     select v.doc_id, coalesce(ins.id, t.id)
+     from v left join ins on ins.kind = v.kind and ins.term = v.term
+            left join terms t on t.kind = v.kind and t.term = v.term
+     on conflict do nothing`
 const INSERT_DOC_CANDIDATES_SQL = `insert into doc_candidates (doc_id, name) select * from unnest($1::int[], $2::text[]) on conflict do nothing`
 const DELETE_DOC_TERMS_SQL = `delete from doc_terms where doc_id = any($1::int[])`
 const DELETE_DOC_CANDIDATES_SQL = `delete from doc_candidates where doc_id = any($1::int[])`

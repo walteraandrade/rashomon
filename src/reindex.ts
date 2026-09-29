@@ -112,7 +112,7 @@ export const reindexAll = async (persons: Person[], size = writeBatchDocs()) => 
   const phrases = await buildPhrases(persons.flatMap(nameTokens))
   const lexicon = await loadPhrasesP()
   // `truncate` not `delete`: PGlite has no autovacuum; delete would leave dead pages forever.
-  await db.exec(`truncate doc_terms, doc_persons, doc_candidates`)
+  await db.exec(`truncate doc_terms, doc_persons, doc_candidates, terms restart identity`)
   const docs = await eachPage(size, (rows) =>
     inTransaction(() =>
       writeDerivedP(rows.map((r) => derive(r.id, { source: r.source, text: r.text, extraTerms: r.extra_terms, extraNames: r.extra_names }, persons, lexicon))),

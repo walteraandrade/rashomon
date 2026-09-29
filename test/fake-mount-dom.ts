@@ -283,6 +283,7 @@ const atlasIds = () => ({
   sort: new FakeSelect('sort', [
     { value: 'count', text: 'frequência' },
     { value: 'pmi', text: 'PMI ponderado', selected: true },
+    { value: 'reach', text: 'alcance' },
   ]),
   limit: new FakeSelect('limit', [
     { value: '12', text: '12' },

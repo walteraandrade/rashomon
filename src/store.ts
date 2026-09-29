@@ -10,6 +10,19 @@ import type { Person, Phrases, RawDoc, Source, Term } from './types.js'
 export const tonedSources: Source[] = ['gdelt', 'gkg']
 const toneFor = (doc: RawDoc) => (tonedSources.includes(doc.source) ? doc.tone ?? null : null)
 
+// Reach is Bluesky-only, and a value outside int4 would make jsonb_to_recordset throw for the whole layer.
+const INT4_MAX = 2_147_483_647
+const countOf = (n: number | undefined) => (Number.isInteger(n) && (n as number) >= 0 && (n as number) <= INT4_MAX ? (n as number) : null)
+const reachFor = (doc: RawDoc) => {
+  const on = doc.source === 'bluesky'
+  return {
+    reach_likes: on ? countOf(doc.reach?.likes) : null,
+    reach_reposts: on ? countOf(doc.reach?.reposts) : null,
+    reach_replies: on ? countOf(doc.reach?.replies) : null,
+    reach_quotes: on ? countOf(doc.reach?.quotes) : null,
+  }
+}
+
 // One text per statement, so a writer and its Promise adapter cannot drift.
 const UPSERT_PERSONS_SQL = `insert into persons (id, name, aliases)
          select p->>'id', p->>'name', array(select jsonb_array_elements_text(p->'aliases'))
@@ -76,6 +89,24 @@ const upsertDocsParams = (docs: readonly RawDoc[]) => [
   ),
   tonedSources,
 ]
+// Its own statement, never part of UPSERT_DOCS_SQL's staleness clause: a larger count must not make `took_incoming` read true and register as enrichment. Bare `greatest` skips nulls, so a doc with no known count stays null.
+const UPDATE_REACH_SQL = `update docs d set
+       reach_likes = greatest(d.reach_likes, i.reach_likes),
+       reach_reposts = greatest(d.reach_reposts, i.reach_reposts),
+       reach_replies = greatest(d.reach_replies, i.reach_replies),
+       reach_quotes = greatest(d.reach_quotes, i.reach_quotes)
+     from jsonb_to_recordset($1::jsonb) as i(uri text, reach_likes int, reach_reposts int, reach_replies int, reach_quotes int)
+     where d.uri = i.uri and d.source = 'bluesky'
+       and (d.reach_likes is distinct from greatest(d.reach_likes, i.reach_likes)
+         or d.reach_reposts is distinct from greatest(d.reach_reposts, i.reach_reposts)
+         or d.reach_replies is distinct from greatest(d.reach_replies, i.reach_replies)
+         or d.reach_quotes is distinct from greatest(d.reach_quotes, i.reach_quotes))`
+const reachParams = (docs: readonly RawDoc[]) => {
+  const rows = docs
+    .map((d) => ({ uri: d.uri, ...reachFor(d) }))
+    .filter((r) => r.reach_likes !== null || r.reach_reposts !== null || r.reach_replies !== null || r.reach_quotes !== null)
+  return rows.length ? [JSON.stringify(rows)] : null
+}
 type UpsertRow = { uri: string; id: number; source: Source; extra_terms: Term[]; extra_names: string[]; inserted: boolean; took_incoming: boolean }
 
 // A multi-row upsert errors on a repeated uri: the nth occurrence of a uri goes to layer n,
@@ -204,6 +235,8 @@ const upsertDocsBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[]): Eff
     const results = new Map<RawDoc, UpsertRow>()
     for (const layer of uriLayers(docs)) {
       const rows = yield* sql.unsafe<UpsertRow>(UPSERT_DOCS_SQL, upsertDocsParams(layer))
+      const reach = reachParams(layer)
+      if (reach) yield* sql.unsafe(UPDATE_REACH_SQL, reach)
       const byUri = new Map(rows.map((r) => [r.uri, r]))
       for (const doc of layer) {
         const row = byUri.get(doc.uri)

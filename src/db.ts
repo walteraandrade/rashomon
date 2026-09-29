@@ -150,6 +150,10 @@ export const schema = `
     alter table docs add column if not exists extra_terms jsonb not null default '[]';
     alter table docs add column if not exists domain text;
     alter table docs add column if not exists tone float8;
+    alter table docs add column if not exists reach_likes int;
+    alter table docs add column if not exists reach_reposts int;
+    alter table docs add column if not exists reach_replies int;
+    alter table docs add column if not exists reach_quotes int;
     create index if not exists docs_domain_idx on docs (domain);
     alter table docs add column if not exists country text;
     create index if not exists docs_country_idx on docs (country);
@@ -212,6 +216,7 @@ export const schema = `
       tone float8,
       primary key (days, source, person_id, term, kind)
     );
+    alter table graph_terms add column if not exists reach int;
     create table if not exists person_attention (
       person_id text not null references persons(id) on delete cascade,
       day date not null,

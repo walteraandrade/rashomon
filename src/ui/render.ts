@@ -151,7 +151,8 @@ export const drawMap = ({
         }
       })
   }
-  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${sort === 'pmi' ? 'PMI × ln(1 + documentos)' : 'frequência em documentos'}</span><span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}${themeLegend(ranking)}`
+  const noReach = sort === 'reach' && [...placed, ...overflow].every((n) => score(n, 'reach') === 0)
+  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${scoreName(sort)}</span>${noReach ? html`<span>Nenhum documento do Bluesky neste recorte tem alcance registrado: as palavras ficam do mesmo tamanho.</span>` : ''}<span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}${themeLegend(ranking)}`
 }
 
 // Repaints selection classes, search note, edge routes and the columns view.

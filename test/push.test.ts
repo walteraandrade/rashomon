@@ -99,3 +99,21 @@ describe('push: doc_tone (issue #272)', () => {
     await source.close()
   })
 })
+
+describe('push: reach (issue #210)', () => {
+  it('push copies the reach columns of docs', async () => {
+    const source = new PGlite('memory://')
+    await source.exec(schema)
+    await source.query(
+      `insert into docs (id, source, uri, text, published_at, reach_likes, reach_reposts, reach_replies, reach_quotes)
+       values (1, 'bluesky', 'at://x/1', 'x', now(), 4, 6, 1, 0)`,
+    )
+    const target = recordingTarget()
+    await copy(source, target, tables.find((t) => t.name === 'docs')!)
+
+    assert.match(target.texts[0], /reach_likes, reach_reposts, reach_replies, reach_quotes/)
+    const flat = target.calls[0]
+    for (const value of [4, 6, 1, 0]) assert.ok(flat.includes(value), `value ${value} was sent`)
+    await source.close()
+  })
+})

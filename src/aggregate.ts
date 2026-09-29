@@ -77,32 +77,32 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
     select s.id, s.source from scope s join doc_persons dp on dp.doc_id = s.id and dp.person_id = ${person.id}
   ),
   p as (
-    select g.source, v.id as term_id, v.term, v.kind, g.c_pt, g.tone
+    select g.source, v.id as term_id, v.term, v.kind, g.c_pt, g.tone, g.reach
     from (
-      select coalesce(a.source, 'all') as source, t.term_id, count(*)::int as c_pt, avg(a.tone)::float8 as tone
+      select coalesce(a.source, 'all') as source, t.term_id, count(*)::int as c_pt, avg(a.tone)::float8 as tone, sum(a.reach_reposts)::int as reach
       from doc_terms t
-      join (select b.id, b.source, dt.tone from about b left join doc_tone dt on dt.doc_id = b.id) a on a.id = t.doc_id
+      join (select b.id, b.source, dt.tone, d.reach_reposts from about b left join doc_tone dt on dt.doc_id = b.id join docs d on d.id = b.id) a on a.id = t.doc_id
       group by grouping sets ((a.source, t.term_id), (t.term_id))
     ) g
     join terms v on v.id = g.term_id
     where not ${isName(sql.raw('v.term'), exclude)}
   ),
   scored as (
-    select p.source, p.term, p.kind, p.c_pt, ta.c_t, p.tone, gs.about,
+    select p.source, p.term, p.kind, p.c_pt, ta.c_t, p.tone, p.reach, gs.about,
       ln((p.c_pt::float8 * gs.tracked::float8) / (gs.about::float8 * ta.c_t::float8)) / ln(2) as pmi
     from p
     join graph_terms_all ta on ta.days = ${days}::int and ta.source = p.source and ta.term_id = p.term_id
     join graph_scopes gs on gs.days = ${days}::int and gs.source = p.source and gs.person_id = ${person.id}
   ),
   ranked as (
-    select source, term, kind, c_pt, c_t, tone, about,
+    select source, term, kind, c_pt, c_t, tone, reach, about,
       row_number() over (partition by source, kind order by c_pt desc, term, kind) as by_count,
       ${sql.join(ranks)},
       row_number() over (partition by source, c_pt >= ${signatureFloor(sql.raw('about'))} order by pmi desc, term, kind) as by_signature
     from scored
   )
-  insert into graph_terms (days, source, person_id, term, kind, c_pt, c_t, tone)
-  select ${days}::int, source, ${person.id}, term, kind, c_pt, c_t, tone
+  insert into graph_terms (days, source, person_id, term, kind, c_pt, c_t, tone, reach)
+  select ${days}::int, source, ${person.id}, term, kind, c_pt, c_t, tone, reach
   from ranked
   where by_count <= ${top}
     or ${sql.join(kept, '\n    or ')}

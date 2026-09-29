@@ -8,7 +8,7 @@ import { DAYS, LIMITS, MINS, parseQuery, SMALL_LIMITS, SOURCES } from '../src/qu
 import { inTransaction, insertDocP } from '../src/store.js'
 import type { Person } from '../src/types.js'
 import { ATLAS_KINDS } from '../src/ui/api.js'
-import { persons, reseed, seed, untrackedPerson } from './fixture.js'
+import { persons, reseed, seed, seedReach, untrackedPerson } from './fixture.js'
 import './close.js'
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
@@ -1264,5 +1264,53 @@ describe('tone from doc_tone equals the docs.tone reference (issue #272)', () =>
         }
     }
     assert.ok(checked > 0)
+  })
+})
+
+// Issue #210: reach is carried through the build, never ranked, so a recorte whose window holds
+// the Bluesky docs of `reachDocs` must still render the same response on both paths.
+describe('reach through the build (issue #210)', () => {
+  before(async () => {
+    await seedReach()
+    await buildGraphAggregates(persons)
+  })
+  after(reseed)
+
+  const reachRecortes: Record<string, string>[] = [{}, { days: '7' }, { days: '60' }, { min: '1' }, { source: 'bluesky', min: '1' }, { source: 'bluesky', days: '7', min: '1', sort: 'pmi' }]
+
+  for (const over of reachRecortes)
+    it(`renders the same response, reach included, on both paths for ${JSON.stringify(over)}`, async () => {
+      const query = q(over)
+      const expected = await live(lula, query)
+      assert.deepEqual(await fast(lula, query), expected)
+      assert.ok((expected as { nodes: { reach: number | null }[] }).nodes.some((n) => n.reach !== null), 'the recorte holds reach')
+    })
+
+  it('graph_terms.reach equals the live sum for the same term and source', async () => {
+    const cases: [number, string, number][] = [
+      [7, 'all', 16],
+      [30, 'all', 116],
+      [7, 'bluesky', 16],
+      [30, 'gnews', 0],
+    ]
+    for (const [days, source, expected] of cases) {
+      const { rows } = await db.query<{ reach: number | null }>(
+        `select reach from graph_terms where days = $1 and source = $2 and person_id = 'lula' and term = 'eleicao' and kind = 'word'`,
+        [days, source],
+      )
+      const result = await graphFor(lula, q({ days: String(days), source, min: '1', limit: '200' }))
+      const liveReach = result.nodes.find((n) => n.id === 'word:eleicao')?.reach ?? null
+      if (source === 'gnews') {
+        assert.equal(rows.length, 0)
+        assert.equal(liveReach, null)
+        continue
+      }
+      assert.equal(rows[0].reach, expected)
+      assert.equal(liveReach, expected)
+    }
+    const { rows } = await db.query<{ reach: number | null }>(
+      `select reach from graph_terms where days = 7 and source = 'all' and person_id = 'lula' and term = 'cronograma'`,
+    )
+    assert.equal(rows[0].reach, 0)
   })
 })

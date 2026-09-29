@@ -190,7 +190,7 @@ throughput, peak RSS, peak heap and database size for an ingest and for two cons
 | table | key | holds |
 | --- | --- | --- |
 | `graph_scopes` | `(days, source, person_id)` | `docs`, `tracked`, `about` counts and `built_at` |
-| `graph_terms` | `(days, source, person_id, term, kind)` | `c_pt`, `c_t` copied in, mean `tone` — not every term: per `(source, kind)` the top `TOP` (200, `LIMITS`' largest) of each ordering the route can ask for, by count and by `pmi * ln(1 + count)` once per `min` in `MINS`, plus the signature's own five |
+| `graph_terms` | `(days, source, person_id, term, kind)` | `c_pt`, `c_t` copied in, mean `tone`, summed `reach` (reposts, carried and never ranked, so it adds no rows; null on rows built before the column existed until the next build) — not every term: per `(source, kind)` the top `TOP` (200, `LIMITS`' largest) of each ordering the route can ask for, by count and by `pmi * ln(1 + count)` once per `min` in `MINS`, plus the signature's own five |
 
 The PMI denominator, `c_t` over tracked docs per `(days, source, term_id)`, lives in `graph_terms_all`, a `create temp table ... on commit drop` built once per window inside `buildWindow`'s own transaction (issue #203): one corpus-wide scan amortized across every person in that window, gone the moment the window's transaction commits, never a persisted table on disk.
 
@@ -298,7 +298,7 @@ The writer is one statement (`INSERT_DOC_TERMS_SQL` in `src/store.ts`): it inser
 
 ## The tone side table
 
-`doc_tone (doc_id, tone)` holds exactly the documents whose `docs.tone` is not null, that is the GDELT ones, so the term counts read tone from a small table instead of probing `docs` once per `doc_terms` row (issue #272). `docs.tone` stays the value the API serves: `/docs`, `/sources`, `/tone` and `pnpm export-docs` still read it, and only `termCounts` (`/graph`, `/compare`, `/lenses`) and the aggregate build's `personTermsQuery` read `doc_tone`, joined at the document level before `doc_terms`. The rounded tone they return is unchanged.
+`doc_tone (doc_id, tone)` holds exactly the documents whose `docs.tone` is not null, that is the GDELT ones, so the term counts read tone from a small table instead of probing `docs` once per `doc_terms` row (issue #272). `docs.tone` stays the value the API serves: `/docs`, `/sources`, `/tone` and `pnpm export-docs` still read it, and only `termCounts` (`/graph`, `/compare`, `/lenses`) and the aggregate build's `personTermsQuery` read `doc_tone`, joined at the document level before `doc_terms`. The rounded tone they return is unchanged. `reach` (issue #210) follows the same rule: `/graph`'s `termCounts`, `/rising`'s recent-window counts and `personTermsQuery` read `docs.reach_reposts` inside that same per-document subselect, and a statement that serves no `reach` (`/compare`, `/lenses`, `/rising`'s baseline) never joins `docs` there at all.
 
 `UPSERT_DOCS_SQL` writes `docs` and `doc_tone` together in the one statement per layer of `src/store.ts`, from the stored tone and never the incoming one: a row is upserted when the stored tone is set and deleted when the conflict branch nulled it, so a batch still costs three statements. A non-toned source never gets a row. Deleting a document removes its row by cascade, `pnpm push` copies the table from `docs where tone is not null`, and the bench seed never inserts into it (`legacyShapeStatements` drops it, so a candidate's own `migrate` backfills it).
 

@@ -854,3 +854,10 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     assert.doesNotMatch(ops, /still free integers/, 'docs/operations.md still says the other parameters are free integers')
   })
 })
+
+describe('sort=reach (issue #210)', () => {
+  it('sort=reach resolves to count', () => {
+    assert.equal(parseQuery({ sort: 'reach' }).sort, 'count')
+    assert.equal(parseQuery({ sort: 'pmi' }).sort, 'pmi')
+  })
+})

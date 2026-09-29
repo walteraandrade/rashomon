@@ -870,3 +870,35 @@ describe('doc_tone (issue #272)', () => {
     assert.match(docsText, /`doc_tone`[^.\n]*(old code|before the deploy)[^.\n]*(no row|never gets a row)|(old code|before the deploy)[^.\n]*`doc_tone`[^.\n]*(no row|never gets a row)|(old code|before the deploy)[^.\n]*(no row|never gets a row)[^.\n]*`doc_tone`/i)
   })
 })
+
+describe('migrate adds the reach columns (issue #210)', () => {
+  before(seed)
+  after(reseed)
+
+  const reachColumns = async () =>
+    (
+      await db.query<{ table_name: string; column_name: string; data_type: string }>(
+        `select table_name, column_name, data_type from information_schema.columns
+         where table_schema = 'public' and column_name like 'reach%' order by table_name, column_name`,
+      )
+    ).rows.map((r) => `${r.table_name}.${r.column_name}:${r.data_type}`)
+  const expected = [
+    'docs.reach_likes:integer',
+    'docs.reach_quotes:integer',
+    'docs.reach_replies:integer',
+    'docs.reach_reposts:integer',
+    'graph_terms.reach:integer',
+  ]
+
+  it('migrate adds the reach columns to a database that lacks them', async () => {
+    assert.deepEqual(await reachColumns(), expected)
+    await db.exec(`alter table docs drop column reach_likes, drop column reach_reposts, drop column reach_replies, drop column reach_quotes`)
+    await db.exec(`alter table graph_terms drop column reach`)
+    assert.deepEqual(await reachColumns(), [])
+
+    await migrateP()
+    assert.deepEqual(await reachColumns(), expected)
+    await migrateP()
+    assert.deepEqual(await reachColumns(), expected, 'a second migrate is a no-op')
+  })
+})

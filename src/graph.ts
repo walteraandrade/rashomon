@@ -207,8 +207,9 @@ const scopeCte = (person: Person, q: Scope) => {
 const termCounts = (about: Sql, exclude?: string[]) => sql`
     select v.id as term_id, v.term, v.kind, c.c_pt, c.tone
     from (
-      select t.term_id, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
-      from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
+      select t.term_id, count(*)::float8 as c_pt, avg(x.tone)::float8 as tone
+      from doc_terms t
+      join (select a.doc_id, dt.tone from ${about} a left join doc_tone dt on dt.doc_id = a.doc_id) x on x.doc_id = t.doc_id
       group by t.term_id
     ) c
     join terms v on v.id = c.term_id${exclude ? sql`

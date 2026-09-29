@@ -160,6 +160,10 @@ export const schema = `
     );
     create index if not exists docs_published_idx on docs (published_at);
     create index if not exists docs_window_idx on docs (published_at) include (id, source, domain, country);
+    create table if not exists doc_tone (
+      doc_id int primary key references docs(id) on delete cascade,
+      tone float8 not null
+    );
     create index if not exists doc_terms_term_id_idx on doc_terms (term_id, doc_id);
     create table if not exists doc_testimony (
       doc_id int references docs(id) on delete cascade,
@@ -262,6 +266,9 @@ const LEGACY_DOC_TERMS_SQL = `select 1 as legacy from information_schema.columns
 const STALE_WINDOW_DAYS = 365
 const WINDOWED_TABLES = ['graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'] as const
 const staleWindowStatements = WINDOWED_TABLES.map((t) => `delete from ${t} where days = ${STALE_WINDOW_DAYS}`)
+// The backfill cannot live in the schema string (split on ';', and it would seq-scan docs at every start); it runs once, when the probe finds the table missing.
+const DOC_TONE_PROBE_SQL = `select to_regclass('doc_tone') as t`
+const DOC_TONE_BACKFILL_SQL = `insert into doc_tone (doc_id, tone) select id, tone from docs where tone is not null on conflict do nothing`
 
 // The legacy doc_terms carries its own term/kind text; move it aside so the canonical names are free for the new table.
 const legacyAside = [
@@ -284,10 +291,12 @@ export const migrate = (): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlC
     return sql.withTransaction(
       Effect.gen(function* () {
         const legacy = (yield* sql.unsafe(LEGACY_DOC_TERMS_SQL)).length > 0
+        const toneMissing = (yield* sql.unsafe<{ t: string | null }>(DOC_TONE_PROBE_SQL))[0]?.t == null
         if (legacy) yield* run(legacyAside)
         yield* run(schemaStatements)
         yield* run(staleWindowStatements)
         if (legacy) yield* run(legacyConvert)
+        if (toneMissing) yield* sql.unsafe(DOC_TONE_BACKFILL_SQL)
       }),
     )
   })
@@ -307,6 +316,7 @@ export const ANALYZED_TABLES = [
   'term_links',
   'outlet_fields',
   'outlet_neighbors',
+  'doc_tone',
 ] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 

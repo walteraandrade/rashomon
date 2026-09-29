@@ -79,8 +79,9 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
   p as (
     select g.source, v.id as term_id, v.term, v.kind, g.c_pt, g.tone
     from (
-      select coalesce(a.source, 'all') as source, t.term_id, count(*)::int as c_pt, avg(d.tone)::float8 as tone
-      from doc_terms t join about a on a.id = t.doc_id join docs d on d.id = t.doc_id
+      select coalesce(a.source, 'all') as source, t.term_id, count(*)::int as c_pt, avg(a.tone)::float8 as tone
+      from doc_terms t
+      join (select b.id, b.source, dt.tone from about b left join doc_tone dt on dt.doc_id = b.id) a on a.id = t.doc_id
       group by grouping sets ((a.source, t.term_id), (t.term_id))
     ) g
     join terms v on v.id = g.term_id

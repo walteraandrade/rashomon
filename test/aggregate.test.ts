@@ -1207,3 +1207,62 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
     assert.ok(fastRow.terms.some((t) => t.a_tone === null), 'sanity: at least one untoned term also survives in scope')
   })
 })
+
+describe('tone from doc_tone equals the docs.tone reference (issue #272)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  const reference = async (personId: string, days: number, source: string, term: string, kind: string) =>
+    (
+      await db.query<{ tone: number | null }>(
+        `select avg(d.tone)::float8 as tone
+         from docs d
+         join doc_persons dp on dp.doc_id = d.id and dp.person_id = $1
+         join doc_terms t on t.doc_id = d.id
+         join terms v on v.id = t.term_id
+         where v.term = $2 and v.kind = $3
+           and d.published_at >= now() - make_interval(days => $4)
+           and ($5 = 'all' or d.source = $5)
+           and d.country is distinct from 'pt'`,
+        [personId, term, kind, days, source],
+      )
+    ).rows[0].tone
+  const close = (actual: number | null, expected: number | null, label: string) =>
+    expected === null || actual === null ? assert.equal(actual, expected, label) : assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`)
+  const round2 = (n: number | null) => (n === null ? null : Math.round(n * 100) / 100)
+
+  it('graph_terms.tone equals the docs.tone reference on every recorte', async () => {
+    const { rows } = await db.query<{ days: number; source: string; person_id: string; term: string; kind: string; tone: number | null }>(
+      `select days, source, person_id, term, kind, tone from graph_terms`,
+    )
+    assert.ok(rows.some((r) => r.tone !== null), 'sanity: some stored tone is set')
+    for (const r of rows) close(r.tone, await reference(r.person_id, r.days, r.source, r.term, r.kind), `${r.person_id} ${r.days} ${r.source} ${r.kind}:${r.term}`)
+  })
+
+  it('compare and lenses tones equal the reference, live and fast', async () => {
+    let checked = 0
+    for (const query of [cq({}), cq({ days: 365, limit: 100 }), cq({ source: 'gkg' }), cq({ domain: 'example.org' })]) {
+      const result = await compareFor(lula, tarcisio, query)
+      for (const t of result.terms)
+        for (const [side, person] of [['a', lula], ['b', tarcisio]] as const) {
+          const cell = t[side]
+          if (cell === null || cell === 'name') continue
+          close(cell.tone, round2(await reference(person.id, query.days, query.source, t.term, t.kind)), `compare ${person.id} ${t.kind}:${t.term}`)
+          checked++
+        }
+    }
+    for (const query of [lensQ({}), lensQ({ days: 365, limit: 100 }), lensQ({ a: rssLens, b: gkgLens }), lensQ({ a: allLens, b: gkgLens, days: 7 })]) {
+      const result = await lensesFor(tarcisio, query)
+      for (const t of result.terms)
+        for (const [side, lens] of [['a', query.a], ['b', query.b]] as const) {
+          const cell = t[side]
+          if (cell === null || cell === 'name') continue
+          close(cell.tone, round2(await reference(tarcisio.id, query.days, lens.source, t.term, t.kind)), `lenses ${lens.lens} ${t.kind}:${t.term}`)
+          checked++
+        }
+    }
+    assert.ok(checked > 0)
+  })
+})

@@ -97,10 +97,20 @@ describe('bench harness stats', () => {
 })
 
 describe('bench harness seed and cases', () => {
+  const seedStatementTexts: string[] = []
   before(async () => {
     await migrateP()
-    await runSeed((t, p) => db.query(t, p), 400, seedJson as Person[], nameTokens, () => {})
+    await runSeed((t, p) => (seedStatementTexts.push(t), db.query(t, p)), 400, seedJson as Person[], nameTokens, () => {})
     await migrateP()
+  })
+
+  it('bench seed leaves doc_tone to migrate', async () => {
+    assert.equal(seedStatementTexts.filter((t) => /insert into doc_tone/i.test(t)).length, 0)
+    const norm = (rows: { doc_id?: number; id?: number; tone: number }[]) => rows.map((r) => [r.doc_id ?? r.id, r.tone])
+    const mirror = (await db.query<{ doc_id: number; tone: number }>(`select doc_id, tone from doc_tone order by doc_id`)).rows
+    const toned = (await db.query<{ id: number; tone: number }>(`select id, tone from docs where tone is not null order by id`)).rows
+    assert.ok(toned.length > 0)
+    assert.deepEqual(norm(mirror), norm(toned))
   })
 
   it('freezes the clock at the anchor', async () => {

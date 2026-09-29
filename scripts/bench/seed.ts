@@ -47,6 +47,15 @@ export const clockStatements = [
   SEARCH_PATH,
 ]
 
+// The seed's doc_terms keeps the legacy (doc_id, term, kind) shape whatever tree runs it: a base tree reads it as is,
+// a candidate's own migrate converts it, and GENERATOR_VERSION stays valid.
+export const legacyShapeStatements = [
+  `drop table if exists doc_terms`,
+  `drop table if exists terms`,
+  `create table doc_terms (doc_id int references docs(id) on delete cascade, term text not null, kind text not null, primary key (doc_id, term, kind))`,
+  `create index doc_terms_term_idx on doc_terms (kind, term)`,
+]
+
 // Deterministic: every value is a hash of the row id, so the same scale always yields the same rows.
 export const seedStatements = (docs: number, persons: Person[], nameTokens: (p: Person) => string[]): [string, unknown[]][] => {
   const ids = persons.map((p) => p.id)
@@ -140,7 +149,7 @@ export const seedStatements = (docs: number, persons: Person[], nameTokens: (p: 
 }
 
 export const runSeed = async (exec: Exec, docs: number, persons: Person[], nameTokens: (p: Person) => string[], log: (line: string) => void) => {
-  for (const s of clockStatements) await exec(s)
+  for (const s of [...clockStatements, ...legacyShapeStatements]) await exec(s)
   for (const [text, params] of seedStatements(docs, persons, nameTokens)) {
     const started = performance.now()
     await exec(text, params)

@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import seedJson from '../../seed.json' with { type: 'json' }
 import type { Person } from '../../src/types.js'
-import { ALL_CASES, BUILD_CASE, buildResultSql, idsSql, readCases, type Ctx, type Queries } from './cases.js'
+import { ALL_CASES, BUILD_CASE, buildResultSql, idsFor, readCases, type Ctx, type Queries } from './cases.js'
 import { ANCHOR, GENERATOR_VERSION, SCALES, SEARCH_PATH, runSeed } from './seed.js'
 import { median, p95, resultHash, type Cell, type Report } from './stats.js'
 
@@ -166,7 +166,7 @@ const measurePhase = async (scale: string, work: string) => {
   if (explainDir) await mkdir(explainDir, { recursive: true })
 
   for (const w of windows) {
-    const ids = (await db.query<{ id: string }>(idsSql, [person.id, w])).rows.map((r) => r.id)
+    const ids = await idsFor((t, p) => db.query(t, p), person.id, w)
     const ctx: Ctx = { person, other, ids, term: 'w1', window: w }
     for (const c of readCases.filter((c) => wanted.has(c.name))) {
       const key = cellKey(c.name, w)

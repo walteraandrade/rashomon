@@ -55,11 +55,19 @@ export const BUILD_CASE = 'aggregate'
 export const ALL_CASES = [BUILD_CASE, ...readCases.map((c) => c.name)]
 
 // The id list the atlas hands to links/termTestimony: the person's 40 most frequent terms in the window.
-export const idsSql = `
-  select t.kind || ':' || t.term as id
-  from doc_terms t join doc_persons p on p.doc_id = t.doc_id join docs d on d.id = t.doc_id
+// The seed is legacy-shaped until the tree's own migrate converts it, so one seed serves a base tree and a candidate.
+export const idsSql = (converted: boolean) => `
+  select ${converted ? 'v.kind || \':\' || v.term' : 't.kind || \':\' || t.term'} as id
+  from doc_terms t ${converted ? 'join terms v on v.id = t.term_id ' : ''}join doc_persons p on p.doc_id = t.doc_id join docs d on d.id = t.doc_id
   where p.person_id = $1 and d.published_at >= now() - make_interval(days => $2::int)
-  group by t.kind, t.term order by count(*) desc, t.kind, t.term limit 40`
+  group by ${converted ? 'v.id, v.kind, v.term' : 't.kind, t.term'} order by count(*) desc, ${converted ? 'v.kind, v.term' : 't.kind, t.term'} limit 40`
+
+type Query = (text: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>
+
+export const idsFor = async (query: Query, person: string, window: number): Promise<string[]> => {
+  const converted = (await query(`select to_regclass('public.terms') is not null as converted`)).rows[0].converted === true
+  return (await query(idsSql(converted), [person, window])).rows.map((r) => String(r.id))
+}
 
 export const buildResultSql = [
   `select days, source, person_id, docs, tracked, about from graph_scopes where days = $1 order by source, person_id`,

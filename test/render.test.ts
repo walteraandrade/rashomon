@@ -86,7 +86,7 @@ const sample = {
 
 const lula = { id: 'lula', name: 'Lula' }
 const bolsonaro = { id: 'bolsonaro', name: 'Jair Bolsonaro' }
-const compareData = (terms: CompareTerm[]): Compare => ({ days: 365, a: { person: lula, about: 900 }, b: { person: bolsonaro, about: 700 }, terms })
+const compareData = (terms: CompareTerm[]): Compare => ({ days: 60, a: { person: lula, about: 900 }, b: { person: bolsonaro, about: 700 }, terms })
 const lensesData = (terms: CompareTerm[], a = 'all', b = 'lean:right'): Lenses => ({ days: 30, a: { lens: a, about: 900 }, b: { lens: b, about: 700 }, terms })
 const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
 

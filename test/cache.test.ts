@@ -68,7 +68,7 @@ describe('Cache-Control on /api reads', () => {
   })
 
   it('keeps the window when query parameters vary, since the CDN keys on the full URL', async () => {
-    assert.deepEqual(await header('/api/people/lula/graph?days=365&sort=pmi&limit=5'), { status: 200, cache: ROLLING })
+    assert.deepEqual(await header('/api/people/lula/graph?days=60&sort=pmi&limit=5'), { status: 200, cache: ROLLING })
   })
 
   it('leaves the response body and status untouched', async () => {

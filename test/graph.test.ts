@@ -82,10 +82,10 @@ describe('graphFor', () => {
   })
 
   it('widens with the window', async () => {
-    // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
-    const g = await graphFor(lula, { ...graphBase, days: 365 })
-    assert.equal(g.stats.docs, 21)
-    assert.equal(g.stats.about, 11)
+    // 60 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
+    const g = await graphFor(lula, { ...graphBase, days: 60 })
+    assert.equal(g.stats.docs, 20)
+    assert.equal(g.stats.about, 10)
   })
 
   it('never lists the person name as a term', async () => {
@@ -836,10 +836,10 @@ describe('docsFor', () => {
   })
 
   it('widens with the window', async () => {
-    // 365 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
-    const { total, docs: found } = await docsFor(lula, { ...docsBase, days: 365 })
-    assert.equal(total, 11)
-    assert.equal(found.length, 11)
+    // 60 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
+    const { total, docs: found } = await docsFor(lula, { ...docsBase, days: 60 })
+    assert.equal(total, 10)
+    assert.equal(found.length, 10)
   })
 
   it('filters by source', async () => {
@@ -1420,12 +1420,12 @@ describe('timelineFor bucket edges against a frozen reference time', () => {
     })
   })
 
-  it('holds over a 365-day window, where the bucket series is at its widest', async () => {
-    const q = { ...timelineBase, term: 'golpe', kind: 'word', days: 365, bucket: 'day' as const }
-    await withDocs([{ offset: '-1 days' }, { offset: '0 days' }, { offset: '364 days 23:59:59' }, { offset: '365 days' }], async () => {
+  it('holds over a 60-day window, where the bucket series is at its widest', async () => {
+    const q = { ...timelineBase, term: 'golpe', kind: 'word', days: 60, bucket: 'day' as const }
+    await withDocs([{ offset: '-1 days' }, { offset: '0 days' }, { offset: '59 days 23:59:59' }, { offset: '60 days' }], async () => {
       const rows = await timelineFor(bolsonaro, q)
-      assert.equal(rows.length, 365)
-      assert.equal(rows[364].count, 2, 'today and tomorrow share the newest bucket')
+      assert.equal(rows.length, 60)
+      assert.equal(rows[59].count, 2, 'today and tomorrow share the newest bucket')
       assert.equal(rows[0].count, 2, 'both docs at the clamped oldest edge stay in the series')
       assert.equal(sumOf(rows), 4)
       assert.equal(sumOf(rows), await totalFor(q))
@@ -2029,7 +2029,7 @@ describe('comentionFor (issue #207)', () => {
 describe('statements pin comentionFor\'s rendered SQL shape (issue #207)', () => {
   it('is stable across two calls with different days/min/source/lean values', () => {
     const a = queries.comention({ days: 7, source: 'rss', lean: 'left', min: 1 })
-    const b = queries.comention({ days: 365, source: 'all', lean: 'all', min: 5 })
+    const b = queries.comention({ days: 60, source: 'all', lean: 'all', min: 5 })
     assert.equal(a.text, b.text)
     assert.notDeepEqual(a.values, b.values)
   })
@@ -2109,7 +2109,7 @@ describe('compareFor (issue #93)', () => {
     // term_p before the top-count/top-pmi selection runs (compareSideCte), so when a and b are
     // the same person, both sides' four selection lists are built from the same name-excluded
     // pool and can never select that person's own name word into the union in the first place.
-    const r = await compareFor(lula, lula, { ...compareBase, days: 365 })
+    const r = await compareFor(lula, lula, { ...compareBase, days: 60 })
     assert.ok(r.terms.length > 0)
     for (const t of r.terms) assert.deepEqual(t.a, t.b)
   })
@@ -2117,7 +2117,7 @@ describe('compareFor (issue #93)', () => {
   it('applies both the count-ranked and pmi-ranked selection per side', async () => {
     // at limit=1, tarcisio's own top-count term ("geopolitica") differs from bolsonaro's
     // top-pmi term ("alianca", shared doc /37), so the union must carry both
-    const r = await compareFor(tarcisio, bolsonaro, { ...compareBase, days: 365, limit: 1 })
+    const r = await compareFor(tarcisio, bolsonaro, { ...compareBase, days: 60, limit: 1 })
     assert.ok(r.terms.length > 1, 'both selection criteria must contribute distinct keys')
     assert.ok(r.terms.some((t) => t.term === 'geopolitica'))
     assert.ok(r.terms.some((t) => t.term === 'alianca'))
@@ -2219,7 +2219,7 @@ describe('lensesFor (issue #206)', () => {
   // for the symmetric example), so scoping lula's own lens union widely enough should be able to
   // pull "lula" into his own keys the same way compareFor pulls "tarcisio" into lula's keys.
   it('a term that is one of the tracked person\'s own name words reads the string "name" on both sides, never absent and never a figure (issue #206 AC4)', async () => {
-    const r = await lensesFor(lula, { ...lensesBase, days: 365, limit: 100 })
+    const r = await lensesFor(lula, { ...lensesBase, days: 60, limit: 100 })
     const names = nameTokens(lula)
     const nameTerm = r.terms.find((t) => names.includes(t.term))
     assert.ok(nameTerm, `expected at least one of lula's own name words (${names.join(', ')}) among the union of both lenses' top lists`)
@@ -2648,7 +2648,7 @@ const splitGraph = async (person: Person, q: GraphQuery) => {
 
 const splitCases: [string, Person, GraphQuery][] = [
   ['default window', lula, graphBase],
-  ['sort=pmi over a wide window', lula, { ...graphBase, days: 365, sort: 'pmi', limit: 10 }],
+  ['sort=pmi over a wide window', lula, { ...graphBase, days: 60, sort: 'pmi', limit: 10 }],
   ['sort=pmi with the same limit as the tie set', lula, { ...graphBase, days: 2000, sort: 'pmi', limit: 200, min: 1 }],
   ['kind=hashtag', lula, { ...graphBase, kind: 'hashtag' }],
   ['kind=word with a min floor and a tight limit', lula, { ...graphBase, kind: 'word', min: 2, limit: 3 }],
@@ -2659,7 +2659,7 @@ const splitCases: [string, Person, GraphQuery][] = [
   ['a source the person has no docs in', lula, { ...graphBase, source: 'senado' }],
   ['a domain filter', lula, { ...graphBase, domain: 'g1.globo.com' }],
   ['toned gdelt docs', tarcisio, graphBase],
-  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 365, min: 1, limit: 200 }],
+  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 60, min: 1, limit: 200 }],
   ['a lean filter', bolsonaro, { ...graphBase, days: 2210, lean: 'left' }],
   ['a domain and lean intersection that is empty', bolsonaro, { ...graphBase, days: 2210, domain: 'g1.globo.com', lean: 'left' }],
   ['signature ties at 1000 days', lula, { ...graphBase, days: 1000 }],
@@ -2924,8 +2924,8 @@ const graphCases: [string, Person, GraphQuery][] = [
   ['the shared window sorted by pmi', lula, { ...sharedWide, sort: 'pmi', limit: 10 }],
   ['kind=hashtag over the shared window', lula, { ...sharedWide, kind: 'hashtag' }],
   ['kind=word over the shared window', bolsonaro, { ...sharedWide, kind: 'word' }],
-  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 365, limit: 200 }],
-  ['a window whose only doc names two persons', bolsonaro, { ...graphBase, days: 365, limit: 200 }],
+  ['toned and untoned docs mixed in one window', tarcisio, { ...graphBase, days: 60, limit: 200 }],
+  ['a window whose only doc names two persons', bolsonaro, { ...graphBase, days: 60, limit: 200 }],
   ['a min floor above the shared-doc counts', lula, { ...sharedWide, min: 3 }],
   ['a source list over the shared window', lula, { ...sharedWide, source: 'rss,gnews' }],
   ['a domain filter over the shared window', lula, { ...sharedWide, domain: 'example.org' }],
@@ -3011,17 +3011,17 @@ describe('count(*) matches count(distinct doc_id) in the graph path (issue #47)'
 })
 
 
-// risingFor's parser clamps days and baseline to 365 each, so docs 43-45 are out of reach here;
+// Direct calls, past what the parser snaps to (days 60, baseline 30), so docs 43-45 stay out of reach here;
 // the multi-kind case in this window is doc 1's #reforma alongside the word reforma.
 const risingCases: [string, Person, RisingQuery][] = [
   ['default split', lula, risingBase],
   ['one term text under two kinds', lula, { ...risingBase, days: 30, baseline: 30, limit: 100 }],
-  ['the widest split the parser allows', lula, { ...risingBase, days: 365, baseline: 365, limit: 100 }],
+  ['the widest split the parser allows', lula, { ...risingBase, days: 60, baseline: 365, limit: 100 }],
   ['a window whose only doc names two persons', bolsonaro, { ...risingBase, days: 40, baseline: 365, limit: 100 }],
   ['the other person of that shared doc', tarcisio, { ...risingBase, days: 40, baseline: 365, limit: 100 }],
   ['kind=hashtag', lula, { ...risingBase, days: 30, baseline: 30, kind: 'hashtag', limit: 100 }],
   ['a min floor', lula, { ...risingBase, days: 30, baseline: 30, min: 2, limit: 100 }],
-  ['a domain filter', lula, { ...risingBase, days: 365, baseline: 365, domain: 'example.org', limit: 100 }],
+  ['a domain filter', lula, { ...risingBase, days: 60, baseline: 365, domain: 'example.org', limit: 100 }],
   ['a person with no docs at all', nobody, risingBase],
 ]
 
@@ -3042,7 +3042,7 @@ describe('count(*) matches count(distinct doc_id) in the rising path (issue #47)
   })
 
   it('counts a shared doc once for each person it names', async () => {
-    // doc 37 (day 35) names tarcisio and bolsonaro; it is the only bolsonaro doc under 365 days
+    // doc 37 (day 35) names tarcisio and bolsonaro; it is the only bolsonaro doc under 365 days back
     const q: RisingQuery = { ...risingBase, days: 40, baseline: 365, limit: 100 }
     const b = (await risingFor(bolsonaro, q)).terms.find((r) => r.term === 'alianca')
     const t = (await risingFor(tarcisio, q)).terms.find((r) => r.term === 'alianca')
@@ -3055,8 +3055,8 @@ const toneCases: [string, ToneQuery][] = [
   ['the default window and min', { days: 30, min: 3 }],
   ['min lowered to the parser floor', { days: 30, min: 1 }],
   ['a window reaching the shared toned doc', { days: 90, min: 1 }],
-  ['the widest window the parser allows', { days: 365, min: 1 }],
-  ['a min no group reaches', { days: 365, min: 1000 }],
+  ['the widest window the parser allows', { days: 60, min: 1 }],
+  ['a min no group reaches', { days: 60, min: 1000 }],
   ['a window with no toned doc at all', { days: 1, min: 1 }],
 ]
 
@@ -3083,7 +3083,7 @@ describe('tone is not null changes nothing in the tone matrix (issue #47)', () =
 
   it('still drops a group whose docs are all untoned', async () => {
     // lula has no toned doc on g1.globo.com in any window
-    const cells = (await toneFor({ days: 365, min: 1 })).cells
+    const cells = (await toneFor({ days: 60, min: 1 })).cells
     assert.ok(!cells.some((c) => c.person_id === 'lula' && c.domain === 'g1.globo.com'))
     assert.ok(cells.some((c) => c.person_id === 'lula' && c.domain === 'gdeltproject.org'), 'lula keeps its one toned domain')
   })
@@ -3101,8 +3101,8 @@ describe('tone is not null changes nothing in the tone matrix (issue #47)', () =
   })
 
   it('leaves the domains list and the persons list untouched', async () => {
-    const shipped = await toneFor({ days: 365, min: 1 })
-    const reference = await referenceTone({ days: 365, min: 1 })
+    const shipped = await toneFor({ days: 60, min: 1 })
+    const reference = await referenceTone({ days: 60, min: 1 })
     assert.deepEqual(shipped.domains, [...new Set(reference.map((c) => c.domain as string))].sort())
     assert.equal(shipped.persons.length, 3)
   })
@@ -3380,10 +3380,10 @@ describe('weekFor (issue #147)', () => {
     for (const b of r.buckets) assert.equal(new Date(b.start).getUTCHours(), 3)
   })
 
-  it('days=7/30/365 change the bucket count; the page still sends 7', async () => {
+  it('days=7/30/60 change the bucket count; the page still sends 7', async () => {
     assert.equal((await weekFor(lula, { ...weekBase, days: 7 })).buckets.length, 7)
     assert.equal((await weekFor(lula, { ...weekBase, days: 30 })).buckets.length, 30)
-    assert.equal((await weekFor(lula, { ...weekBase, days: 365 })).buckets.length, 365)
+    assert.equal((await weekFor(lula, { ...weekBase, days: 60 })).buckets.length, 60)
   })
 
   it('limit clamps each day\'s terms, not about', async () => {
@@ -3702,7 +3702,7 @@ describe('brtMidnightUtc resolves the same instant as `at time zone` (issue #147
   // The transition days are read out of the tz database rather than hand-listed, so this covers
   // every one of them and cannot fall behind a tzdata update. 1951 is the floor: 1950-04-16 fell
   // back at 01:00 rather than midnight, the one day in 1940-2100 where the two disagree, and it
-  // is unreachable because keepDay only ever asks about dates inside a 7/30/365-day window.
+  // is unreachable because keepDay only ever asks about dates inside a 7/30/60-day window.
   const ymd = (t: number) => new Date(t).toISOString().slice(0, 10)
   // Hoisted: transitions() calls this ~54,000 times, and a fresh Intl.DateTimeFormat per call
   // dominated the suite's runtime for no coverage gain over reusing one formatter.

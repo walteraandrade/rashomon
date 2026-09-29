@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { before, describe, it } from 'node:test'
 import seedJson from '../seed.json' with { type: 'json' }
 import { idsSql, readCases } from '../scripts/bench/cases.js'
 import { ANCHOR, runSeed } from '../scripts/bench/seed.js'
-import { compare, median, p95, resultHash, type Report } from '../scripts/bench/stats.js'
+import { compare, median, p95, resultHash, table, type Report, type Verdict } from '../scripts/bench/stats.js'
 import { db, migrateP } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import { queries } from '../src/graph.js'
 import type { Person } from '../src/types.js'
 import './close.js'
+
+const pexec = promisify(execFile)
 
 const report = (cells: [string, number, number, string][]): Report => ({
   meta: { src: '', rev: '', node: '', cpu: '', anchor: ANCHOR, runs: 5, windows: [], scales: [], calibrationMs: 1, startedAt: '' },
@@ -28,25 +35,64 @@ describe('bench harness stats', () => {
     assert.notEqual(resultHash([{ a: 0.3 }]), resultHash([{ a: 0.31 }]))
   })
 
-  it('keeps a candidate only when every cell matches and every targeted cell gains 20%', () => {
+  it('keeps a candidate whose rows match regardless of speed', () => {
     const base = report([['graph', 7, 100, 'x'], ['graph', 30, 200, 'y'], ['docs', 7, 10, 'z']])
-    assert.equal(compare(base, report([['graph', 7, 80, 'x'], ['graph', 30, 150, 'y'], ['docs', 7, 30, 'z']]), ['graph']).kept, true)
-    assert.equal(compare(base, report([['graph', 7, 80, 'x'], ['graph', 30, 170, 'y'], ['docs', 7, 10, 'z']]), ['graph']).kept, false)
+    const r = compare(base, report([['graph', 7, 300, 'x'], ['graph', 30, 600, 'y'], ['docs', 7, 30, 'z']]), ['graph'])
+    assert.equal(r.kept, true)
+    assert.equal('slow' in r, false)
+    assert.equal('fast' in r.verdicts[0], false)
+    assert.ok(r.verdicts.every((v) => Number.isFinite(v.ratio)))
+  })
+
+  it('rejects on diverged rows, missing targeted cells, no targets, strict missing', () => {
+    const base = report([['graph', 7, 100, 'x'], ['graph', 30, 200, 'y'], ['docs', 7, 10, 'z']])
     assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y'], ['docs', 7, 10, 'other']]), ['graph']).kept, false)
     assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['docs', 7, 10, 'z']]), ['graph']).kept, false)
     assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y']]), ['graph']).kept, true)
-    assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y']]), ['graph'], 0.2, true).kept, false)
+    assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y'], ['docs', 7, 10, 'z']]), ['nothing']).kept, false)
+    assert.equal(compare(base, report([['graph', 7, 50, 'x'], ['graph', 30, 50, 'y']]), ['graph'], true).kept, false)
   })
 
-  it('a timed-out side is never diffed, and a timed-out candidate is never fast', () => {
+  it('a timed-out side is never diffed', () => {
     const base = report([['aggregate', 30, 600000, 'timeout'], ['graphFast', 30, 5, 'empty']])
     base.cells[0].timedOut = true
     const r = compare(base, report([['aggregate', 30, 9000, 'rows'], ['graphFast', 30, 4, 'full']]), ['aggregate'])
     assert.equal(r.kept, true)
     assert.equal(r.unverified.length, 2)
-    const slow = report([['aggregate', 30, 600000, 'timeout'], ['graphFast', 30, 4, 'empty']])
-    slow.cells[0].timedOut = true
-    assert.equal(compare(base, slow, ['aggregate']).kept, false)
+    assert.equal(r.diverged.length, 0)
+  })
+
+  it('the verdict has no speed field and compare takes no gain', () => {
+    const v = {} as Verdict
+    // @ts-expect-error Verdict.fast was removed
+    void v.fast
+    const base = report([['graph', 7, 100, 'x']])
+    // @ts-expect-error the gain parameter was removed
+    assert.equal(compare(base, base, ['graph'], 0.2).kept, true)
+  })
+
+  it('table keeps the ratio column', () => {
+    const r = compare(report([['graph', 7, 100, 'x']]), report([['graph', 7, 300, 'x']]), ['graph'])
+    const out = table(r.verdicts)
+    assert.match(out, /\| new \/ base \|/)
+    assert.match(out, /\| 3\.00 \|/)
+  })
+
+  it('compare.ts exits 0 on identical hashes and a slower candidate, with no percentage in the verdict', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'compare-'))
+    const write = async (name: string, ms: number) => {
+      const path = join(dir, name)
+      await writeFile(path, JSON.stringify(report([['graph', 7, ms, 'x'], ['graph', 30, ms * 2, 'y']])))
+      return path
+    }
+    try {
+      const { stdout } = await pexec(process.execPath, ['--import', 'tsx', 'scripts/bench/compare.ts', await write('base.json', 100), await write('cand.json', 300), '--cases', 'graph'])
+      const verdict = stdout.split('\n').find((l) => l.startsWith('verdict:'))!
+      assert.match(verdict, /^verdict: KEEP \(0 diverged, 0 unverifiable, 0 missing\)$/)
+      assert.doesNotMatch(verdict, /%/)
+    } finally {
+      await rm(dir, { recursive: true })
+    }
   })
 })
 

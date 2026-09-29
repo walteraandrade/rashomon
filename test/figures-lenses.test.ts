@@ -103,11 +103,11 @@ describe('changing a lens control triggers exactly one new /lenses call with the
       mount(els.lenses, { people, initial: {} })
       await flush()
       let before = calls.length
-      els.lensesDays.value = '365'
+      els.lensesDays.value = '60'
       els.lensesDays.fire('change')
       await flush(220)
       let qs = new URL(calls.slice(before).find((u) => u.includes('/lenses'))!, 'http://localhost').searchParams
-      assert.equal(qs.get('days'), '365')
+      assert.equal(qs.get('days'), '60')
       clearScopes()
       before = calls.length
       els.lensesLimit.value = '100'
@@ -188,7 +188,7 @@ describe('changing lensesDays re-fetches /sources too, since its own window chan
       mount(els.lenses, { people, initial: {} })
       await flush()
       const before = calls.length
-      els.lensesDays.value = '365'
+      els.lensesDays.value = '60'
       els.lensesDays.fire('change')
       await flush(220)
       const sourcesCalls = calls.slice(before).filter((u) => u.includes('/sources'))

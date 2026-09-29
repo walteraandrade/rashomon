@@ -16,7 +16,7 @@ describe('warmPaths', () => {
     assert.equal(paths[2], '/api/people/lula/sources?' + sourcesParams(opts))
     assert.equal(paths[3], '/api/people/lula/testimony?' + testimonyParams(opts))
     assert.ok(paths.some((p) => p.startsWith('/api/people/tarc%C3%ADsio/graph?days=30&')))
-    assert.ok(paths.every((p) => !p.includes('days=365')), 'the year stays cold on purpose')
+    assert.ok(paths.every((p) => !/days=(60|365)\b/.test(p)), 'the longest window stays cold on purpose')
   })
 })
 

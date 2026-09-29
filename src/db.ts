@@ -258,6 +258,11 @@ const schemaStatements = schema
 // The schema string cannot hold a `do $$` block (it is split on ';'), so the legacy check lives here.
 const LEGACY_DOC_TERMS_SQL = `select 1 as legacy from information_schema.columns where table_schema = current_schema() and table_name = 'doc_terms' and column_name = 'term'`
 
+// A window that no longer exists (the old 365) leaves rows no request can reach; `days` leads every primary key, so each delete is an index range. One-off, hence the literal.
+const STALE_WINDOW_DAYS = 365
+const WINDOWED_TABLES = ['graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors'] as const
+const staleWindowStatements = WINDOWED_TABLES.map((t) => `delete from ${t} where days = ${STALE_WINDOW_DAYS}`)
+
 // The legacy doc_terms carries its own term/kind text; move it aside so the canonical names are free for the new table.
 const legacyAside = [
   `alter table doc_terms rename to doc_terms_legacy`,
@@ -281,6 +286,7 @@ export const migrate = (): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlC
         const legacy = (yield* sql.unsafe(LEGACY_DOC_TERMS_SQL)).length > 0
         if (legacy) yield* run(legacyAside)
         yield* run(schemaStatements)
+        yield* run(staleWindowStatements)
         if (legacy) yield* run(legacyConvert)
       }),
     )

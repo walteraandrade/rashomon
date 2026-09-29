@@ -27,6 +27,7 @@ export type RawDoc = {
   publishedAt: string
   domain?: string
   tone?: number
+  reach?: { likes?: number; reposts?: number; replies?: number; quotes?: number }
   extraTerms?: Term[]
   extraNames?: string[]
 }

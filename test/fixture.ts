@@ -21,7 +21,7 @@ export const longText = `Jair Bolsonaro ${filler(300)} Lula ${filler(120, 300)}`
 
 export const docs: RawDoc[] = [
   { source: 'gnews', uri: 'https://g1.globo.com/1', text: 'Lula anuncia reforma tributária #reforma', publishedAt: day1, domain: 'g1.globo.com' },
-  { source: 'bluesky', uri: 'at://did:plc:x/post/2', text: 'Lula e Tarcísio disputam a eleição', publishedAt: daysAgo(2), domain: 'ana.bsky.social' },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/2', text: 'Lula e Tarcísio disputam a eleição', publishedAt: daysAgo(2), domain: 'ana.bsky.social', reach: { likes: 4, reposts: 6, replies: 1, quotes: 0 } },
   { source: 'gkg', uri: 'https://folha.uol.com.br/3', text: 'Tarcísio inaugura rodovia no interior', publishedAt: daysAgo(3), domain: 'folha.uol.com.br', tone: -1.5 },
   { source: 'rss', uri: 'https://example.org/4', text: 'Congresso avança na pauta econômica', publishedAt: daysAgo(4), domain: 'example.org' },
   { source: 'gnews', uri: 'https://valor.globo.com/6', text: 'Lula defende reforma tributária', publishedAt: day1, domain: 'valor.globo.com' },
@@ -350,6 +350,19 @@ export const candidateDocs: RawDoc[] = [
   // first sentence only, since it opens the second one.
   { source: 'rss', uri: 'https://example.org/c9', text: 'Davi Alcolumbre fala com Rodrigo Pacheco. Rodrigo Pacheco responde', publishedAt: daysAgo(1), domain: 'example.org' },
 ]
+
+// Issue #210: four Bluesky docs about Lula on top of the shared fixture, seeded only by the tests that need them (adding to `docs` would shift every pinned total). "eleição" is doc 2's word: recent-window reach 6 + 10 + null = 16, 116 with (d), which sits in the baseline window.
+export const reachDocs: RawDoc[] = [
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r1', text: 'Lula comenta a eleição', publishedAt: daysAgo(1), domain: 'ana.bsky.social', reach: { reposts: 10 } },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r2', text: 'Lula repete a eleição', publishedAt: daysAgo(1.5), domain: 'ana.bsky.social', reach: {} },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r3', text: 'Lula revela cronograma', publishedAt: daysAgo(1.2), domain: 'ana.bsky.social', reach: { reposts: 0 } },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/r4', text: 'Lula critica a eleição', publishedAt: daysAgo(20), domain: 'ana.bsky.social', reach: { reposts: 100 } },
+]
+
+export const seedReach = async () => {
+  await seed()
+  for (const d of reachDocs) await insertDocP(d, persons)
+}
 
 export const seedCandidates = async () => {
   await seed()

@@ -26,8 +26,11 @@ type ListLike = {
   hidden: boolean
   innerHTML: string
   addEventListener: (type: string, fn: (e?: any) => void) => void
-  querySelector?: (selector: string) => { scrollIntoView?: (opts: unknown) => void } | null
+  scrollTop?: number
+  clientHeight?: number
+  querySelector?: (selector: string) => Row | null
 }
+type Row = { offsetTop: number; offsetHeight: number }
 
 export type Combobox = { sync: () => void; close: () => void; items: () => ComboItem[] }
 
@@ -42,14 +45,23 @@ export const filterItems = (items: ComboItem[], query: string): ComboItem[] => {
 }
 
 export const listMarkup = (listId: string, items: ComboItem[], active: number, current: string) => {
-  if (!items.length) return html`<div class="combo-empty">Nada com esse nome</div>`
+  if (!items.length) return html`<span class="combo-empty">Nada com esse nome</span>`
   let lastGroup: string | null = null
   return html`${items.map((item, i) => {
-    const head = item.group && item.group !== lastGroup ? html`<div class="combo-group eyebrow" role="presentation">${item.group}</div>` : null
+    const head = item.group && item.group !== lastGroup ? html`<span class="combo-group eyebrow" role="presentation">${item.group}</span>` : null
     lastGroup = item.group
-    return html`${head}<div class="combo-option ${i === active ? 'is-active' : ''}" role="option" id="${listId}-${i}" data-value="${item.value}" aria-selected="${String(item.value === current)}">${item.label}</div>`
+    return html`${head}<span class="combo-option ${i === active ? 'is-active' : ''}" role="option" id="${listId}-${i}" data-value="${item.value}" aria-selected="${String(item.value === current)}">${item.label}</span>`
   })}`
 }
+
+// The scrollTop that brings `row` into view inside `box`, touching nothing else: scrollIntoView
+// would also scroll the page whenever the list hangs past the viewport edge.
+export const revealTop = (row: Row, box: { scrollTop: number; clientHeight: number }) =>
+  row.offsetTop < box.scrollTop
+    ? row.offsetTop
+    : row.offsetTop + row.offsetHeight > box.scrollTop + box.clientHeight
+      ? row.offsetTop + row.offsetHeight - box.clientHeight
+      : box.scrollTop
 
 export const attachCombobox = ({ select, input, list }: { select: SelectLike; input: InputLike; list: ListLike }): Combobox => {
   let open = false
@@ -64,7 +76,8 @@ export const attachCombobox = ({ select, input, list }: { select: SelectLike; in
   const render = () => {
     list.innerHTML = String(listMarkup(list.id, shown, active, select.value))
     input.setAttribute('aria-activedescendant', active >= 0 ? `${list.id}-${active}` : '')
-    list.querySelector?.('.is-active')?.scrollIntoView?.({ block: 'nearest' })
+    const row = list.querySelector?.('.is-active')
+    if (row && list.scrollTop !== undefined && list.clientHeight !== undefined) list.scrollTop = revealTop(row, { scrollTop: list.scrollTop, clientHeight: list.clientHeight })
   }
 
   const show = (query: string) => {

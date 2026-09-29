@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse, type DefaultTreeAdapterMap } from 'parse5'
 import { app } from '../src/server.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { paintCandidates, paintDocs, paintOutlets, wordMarkup } from '../src/ui/render.js'
@@ -95,6 +96,41 @@ describe('atlas.html carries no styles and no logic of its own', () => {
     })
     for (const value of inlineStyles(emitted)) assert.ok(value.startsWith('--'), `a painter emitted style="${value}"`)
     assert.match(emitted, /style="--tone:/, 'tone is the one genuinely dynamic value and stays a --var override')
+  })
+})
+
+describe('every page parses the way it is written', () => {
+  // The HTML parser silently repairs markup the source never meant: a <div> inside a <p> closes
+  // the <p> right there, so everything after it leaves the sentence and an absolute child loses
+  // its positioned parent. A repaired element shows up as one with no start tag (implied) or,
+  // though not void and not self-closed, no end tag.
+  type Element = DefaultTreeAdapterMap['element']
+  const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'])
+  const elements = (node: { childNodes?: unknown[]; content?: unknown }): Element[] => {
+    const own = 'tagName' in node ? [node as Element] : []
+    const children = [...(node.childNodes ?? []), ...(node.content ? [node.content] : [])] as Element[]
+    return [...own, ...children.flatMap(elements)]
+  }
+  const repairs = (source: string) =>
+    elements(parse(source, { sourceCodeLocationInfo: true })).flatMap((el) => {
+      const loc = el.sourceCodeLocation
+      if (!loc) return [`<${el.tagName}> the source never opened`]
+      const selfClosed = source.slice(loc.startTag!.startOffset, loc.startTag!.endOffset).endsWith('/>')
+      return VOID.has(el.tagName) || selfClosed || loc.endTag ? [] : [`<${el.tagName}> at line ${loc.startLine} closed by the parser, not by its own end tag`]
+    })
+
+  it('flags a block element inside a <p>', () => {
+    const page = '<!doctype html><html><head></head><body>\n<p>a <span><div></div></span> b</p>\n</body></html>'
+    assert.deepEqual(repairs(page), [
+      '<p> at line 2 closed by the parser, not by its own end tag',
+      '<span> at line 2 closed by the parser, not by its own end tag',
+      '<p> the source never opened',
+    ])
+  })
+
+  it('no page in public/ needs the parser to repair it', () => {
+    const pages = readdirSync(join(root, 'public')).filter((f) => f.endsWith('.html'))
+    for (const page of pages) assert.deepEqual(repairs(readFileSync(join(root, 'public', page), 'utf8')), [], `public/${page}`)
   })
 })
 

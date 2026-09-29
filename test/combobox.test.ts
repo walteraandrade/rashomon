@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { attachCombobox, filterItems, itemsOf, listMarkup, type ComboItem } from '../src/ui/combobox.js'
+import { attachCombobox, filterItems, itemsOf, listMarkup, revealTop, type ComboItem } from '../src/ui/combobox.js'
 
 // src/ui/combobox.ts: the searchable face figure 6's two lens selects wear. The <select> stays
 // the value store, so every assertion here reads the select's own value and change event.
@@ -97,6 +97,17 @@ describe('listMarkup (pure)', () => {
   })
 })
 
+describe('revealTop (pure)', () => {
+  const box = { scrollTop: 100, clientHeight: 200 }
+  it('keeps the scroll when the row is already inside the box', () => {
+    assert.equal(revealTop({ offsetTop: 150, offsetHeight: 20 }, box), 100)
+  })
+  it('scrolls up to a row above the box and down just enough for a row below it', () => {
+    assert.equal(revealTop({ offsetTop: 40, offsetHeight: 20 }, box), 40)
+    assert.equal(revealTop({ offsetTop: 330, offsetHeight: 20 }, box), 150)
+  })
+})
+
 describe('attachCombobox', () => {
   it('hides the select, shows the input with the current label, and never fires change on attach', () => {
     const { select, input } = mounted('lean:right')
@@ -148,6 +159,16 @@ describe('attachCombobox', () => {
     assert.match(list.innerHTML, /is-active"[^>]*data-value="all"/)
     input.fire('keydown', { key: 'ArrowDown' })
     assert.match(list.innerHTML, /is-active"[^>]*data-value="domain:folha.uol.com.br"/)
+  })
+
+  it('the active row scrolls the list alone, never the page', () => {
+    const select = fakeSelect(lensOptions, 'all')
+    const input = fakeInput()
+    const row = { offsetTop: 100, offsetHeight: 20, scrollIntoView: () => assert.fail('scrollIntoView scrolls the page too') }
+    const list = Object.assign(fakeList(), { scrollTop: 0, clientHeight: 40, querySelector: () => row })
+    attachCombobox({ select, input, list })
+    input.fire('focus')
+    assert.equal(list.scrollTop, 80)
   })
 
   it('Escape and blur close without picking and restore the current label', () => {

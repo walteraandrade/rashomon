@@ -76,7 +76,7 @@ export const closedIssue = (prBody: string): number | null => {
 // Every question is worded so that "true" means the diff conforms: one polarity for the whole table.
 const convention = (id: string, question: string, yes: string, no: string): Question => ({ id, type: 'noul', question, criteria: { true: yes, false: no } })
 
-const CONVENTIONS: Question[] = [
+export const CONVENTIONS: Question[] = [
   convention(
     'conv-comment',
     'Does every comment the diff adds state a constraint or a non-obvious reason, rather than history, a retelling of the issue, or what the next line plainly does?',

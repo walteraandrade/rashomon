@@ -19,15 +19,16 @@ const windowScope = (days: number) => sql`
 
 // Session-temp, dropped on commit. Safe as a fixed name only while windows build sequentially:
 // a concurrent-window build needs a per-window-unique name, or two windows on one session collide.
+// Keyed on term_id like every doc_terms aggregate; the text stays in `terms`, read only where a name filter or an output needs it.
 const universeQuery = (days: number) => sql`
   create temp table graph_terms_all on commit drop as
   with ${windowScope(days)},
   tracked as (
     select s.id, s.source from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )
-  select ${days}::int as days, coalesce(s.source, 'all') as source, t.term, t.kind, count(*)::int as c_t
+  select ${days}::int as days, coalesce(s.source, 'all') as source, t.term_id, count(*)::int as c_t
   from doc_terms t join tracked s on s.id = t.doc_id
-  group by grouping sets ((s.source, t.term, t.kind), (t.term, t.kind))`
+  group by grouping sets ((s.source, t.term_id), (t.term_id))`
 
 // Every listed source gets a row even with zero docs, so /graph never falls back to the
 // live scan for a source that simply has nothing in the window. Persons are the argument
@@ -76,16 +77,20 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
     select s.id, s.source from scope s join doc_persons dp on dp.doc_id = s.id and dp.person_id = ${person.id}
   ),
   p as (
-    select coalesce(a.source, 'all') as source, t.term, t.kind, count(*)::int as c_pt, avg(d.tone)::float8 as tone
-    from doc_terms t join about a on a.id = t.doc_id join docs d on d.id = t.doc_id
-    where not ${isName(sql.raw('t.term'), exclude)}
-    group by grouping sets ((a.source, t.term, t.kind), (t.term, t.kind))
+    select g.source, v.id as term_id, v.term, v.kind, g.c_pt, g.tone
+    from (
+      select coalesce(a.source, 'all') as source, t.term_id, count(*)::int as c_pt, avg(d.tone)::float8 as tone
+      from doc_terms t join about a on a.id = t.doc_id join docs d on d.id = t.doc_id
+      group by grouping sets ((a.source, t.term_id), (t.term_id))
+    ) g
+    join terms v on v.id = g.term_id
+    where not ${isName(sql.raw('v.term'), exclude)}
   ),
   scored as (
     select p.source, p.term, p.kind, p.c_pt, ta.c_t, p.tone, gs.about,
       ln((p.c_pt::float8 * gs.tracked::float8) / (gs.about::float8 * ta.c_t::float8)) / ln(2) as pmi
     from p
-    join graph_terms_all ta on ta.days = ${days}::int and ta.source = p.source and ta.term = p.term and ta.kind = p.kind
+    join graph_terms_all ta on ta.days = ${days}::int and ta.source = p.source and ta.term_id = p.term_id
     join graph_scopes gs on gs.days = ${days}::int and gs.source = p.source and gs.person_id = ${person.id}
   ),
   ranked as (
@@ -104,7 +109,7 @@ const personTermsQuery = (days: number, person: Person, top = TOP) => {
 }
 
 // `create table ... as` carries no key, and every personTermsQuery joins the universe on it.
-const universeKey = sql`alter table graph_terms_all add primary key (days, source, term, kind)`
+const universeKey = sql`alter table graph_terms_all add primary key (days, source, term_id)`
 
 // The build is one session; `set local` dies with the window's transaction, so no request sees it.
 // Never copy it into poolConfig: 128 MB per sort on a 1 GB instance is safe only for a single session.
@@ -187,13 +192,15 @@ const communityEdgesQuery = (days: number, source: string, personId: string) => 
       and (${source} = 'all' or d.source = ${source})
   ),
   kept as materialized (
-    select kind || ':' || term as id, term, kind from graph_terms where days = ${days} and source = ${source} and person_id = ${personId}
+    select v.id as term_id, g.kind || ':' || g.term as id
+    from graph_terms g join terms v on v.kind = g.kind and v.term = g.term
+    where g.days = ${days} and g.source = ${source} and g.person_id = ${personId}
   ),
   doc_ids as (
     select t.doc_id, array_agg(k.id) as ids
     from about a
     join doc_terms t on t.doc_id = a.doc_id
-    join kept k on k.kind = t.kind and k.term = t.term
+    join kept k on k.term_id = t.term_id
     group by t.doc_id
   )
   select a, b, count(*)::int as count
@@ -283,17 +290,22 @@ const outletTermsQuery = (days: number, person: Person, top = OUTLET_TERMS_TOP) 
     join doc_persons dp on dp.doc_id = s.id and dp.person_id = ${person.id}
   ),
   p as (
-    select a.domain, t.term, t.kind, count(*)::int as c_pt
-    from doc_terms t join about a on a.id = t.doc_id
-    where a.domain is not null and a.domain <> '' and not ${isName(sql.raw('t.term'), exclude)}
-    group by a.domain, t.term, t.kind
-    having count(*) >= ${OUTLET_TERMS_FLOOR}
+    select g.domain, v.id as term_id, v.term, v.kind, g.c_pt
+    from (
+      select a.domain, t.term_id, count(*)::int as c_pt
+      from doc_terms t join about a on a.id = t.doc_id
+      where a.domain is not null and a.domain <> ''
+      group by a.domain, t.term_id
+      having count(*) >= ${OUTLET_TERMS_FLOOR}
+    ) g
+    join terms v on v.id = g.term_id
+    where not ${isName(sql.raw('v.term'), exclude)}
   ),
   scored as (
     select p.domain, p.term, p.kind, p.c_pt,
       ln((p.c_pt::float8 * gs.tracked::float8) / (gs.about::float8 * ta.c_t::float8)) / ln(2) as pmi
     from p
-    join graph_terms_all ta on ta.days = ${days}::int and ta.source = 'all' and ta.term = p.term and ta.kind = p.kind
+    join graph_terms_all ta on ta.days = ${days}::int and ta.source = 'all' and ta.term_id = p.term_id
     join graph_scopes gs on gs.days = ${days}::int and gs.source = 'all' and gs.person_id = ${person.id}
   ),
   ranked as (

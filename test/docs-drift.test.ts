@@ -386,4 +386,12 @@ describe('CLAUDE.md and docs/factory.md describe the current test-file layout, n
   it('docs/factory.md lists invariants.test.ts, not atlas-modules-acceptance.test.ts, among the cross-cutting test files', () => {
     assert.match(docsText, /\binvariants\b/, 'docs/factory.md must list invariants.test.ts among the cross-cutting files')
   })
+
+  it('documents the jev-review shadow workflow', () => {
+    assert.match(docsText, /jev-review/)
+    assert.match(docsText, /OPENROUTER_API_KEY/)
+    assert.match(docsText, /only comments and never blocks a merge/i)
+    for (const id of ['conv-comment', 'conv-scoring-docs', 'conv-route-docs', 'conv-class', 'conv-issue-test', 'conv-commits'])
+      assert.ok(docsText.includes(id), `the docs must list the ${id} check`)
+  })
 })

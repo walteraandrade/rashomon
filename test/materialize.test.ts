@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { after, before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { statements } from '../src/graph.js'
 import { main } from '../src/materialize.js'
@@ -142,6 +143,16 @@ describe('--if-stale and --dry-run', () => {
     puts.length = 0
     assert.equal(await run({ get: async () => null }), 0)
     assert.equal(puts.length, total, 'with no store to read from, everything is rewritten')
+  })
+
+  it('rewrites every entry once a fresh aggregate build moves every built_at', async () => {
+    const { store, puts, put } = recordingPut()
+    const run = () => main(['--if-stale'], withToken, { put, reader: store, log: () => undefined })
+    assert.equal(await run(), 0)
+    puts.length = 0
+    await buildGraphAggregates(persons)
+    assert.equal(await run(), 0)
+    assert.deepEqual(puts.sort(), warmRecortes(ids).map((r) => r.pathname).sort())
   })
 
   it('writes nothing to any real store on --dry-run, needs neither token nor url, and reports size', async () => {

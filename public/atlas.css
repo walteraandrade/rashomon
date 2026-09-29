@@ -1014,3 +1014,5 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
   .comention-grid { display: none; }
   .comention-list { display: block; }
 }
+
+.app-root { display: contents; }

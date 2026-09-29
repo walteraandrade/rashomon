@@ -1,18 +1,8 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<svelte:head>
 <title>rashomon · como ler</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
-<link rel="stylesheet" href="atlas.css">
-</head>
-<body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="28" height="28">rashomon<span>.</span></a><nav><a class="help-link" href="/">atlas</a><a class="help-link" href="sobre.html">sobre</a></nav></header>
+</svelte:head>
+
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="28" height="28">rashomon<span>.</span></a><nav><a class="help-link" href="/">atlas</a><a class="help-link" href="/sobre">sobre</a></nav></header>
 <main class="reading">
   <header class="masthead">
     <p class="eyebrow">Rashomon · guia</p>
@@ -172,6 +162,3 @@
     <p class="chapter-foot"><span>Tom por termo continua na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>
   </section>
 </main>
-<script defer src="/_vercel/insights/script.js"></script>
-</body>
-</html>

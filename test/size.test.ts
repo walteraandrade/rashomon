@@ -73,7 +73,8 @@ describe('pnpm size', () => {
     // non-negative total, against the fixture-seeded database, never an exact byte count.
     it('reports every SIZE_TABLES name with a non-negative size and a non-negative total', async () => {
       await seed()
-      const { tables, total } = await collectSizes(db.query.bind(db))
+      const { tables, missing, total } = await collectSizes(db.query.bind(db))
+      assert.deepEqual(missing, [])
       assert.deepEqual(new Set(Object.keys(tables)), new Set(SIZE_TABLES))
       for (const size of Object.values(tables)) {
         assert.equal(typeof size, 'number')
@@ -81,6 +82,23 @@ describe('pnpm size', () => {
       }
       assert.equal(typeof total, 'number')
       assert.ok(total >= 0)
+    })
+
+    it('omits a table that does not exist, names it in missing, and still reports the rest', async () => {
+      await seed()
+      await db.exec('alter table outlet_neighbors rename to outlet_neighbors_hidden')
+      try {
+        const { tables, missing, total } = await collectSizes(db.query.bind(db))
+        assert.deepEqual(missing, ['outlet_neighbors'])
+        assert.deepEqual(
+          new Set(Object.keys(tables)),
+          new Set(SIZE_TABLES.filter((t) => t !== 'outlet_neighbors')),
+        )
+        for (const size of Object.values(tables)) assert.ok(size >= 0)
+        assert.ok(total >= 0)
+      } finally {
+        await db.exec('alter table outlet_neighbors_hidden rename to outlet_neighbors')
+      }
     })
 
     it('SIZE_TABLES has exactly the seventeen documented table names (AC13)', () => {

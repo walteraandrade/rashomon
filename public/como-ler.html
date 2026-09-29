@@ -21,7 +21,7 @@
   </header>
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
     <p class="chapter-intro">Tudo vale só para o recorte da frase: pessoa, período e fonte.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#em-alta">Em alta</a><a href="#semana">A semana</a><a href="#lentes">Lentes</a><a href="#atencao">Atenção</a><a href="#agenda">Agenda</a><a href="#junto">Quem aparece junto</a></nav>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#em-alta">Em alta</a><a href="#semana">A semana</a><a href="#lentes">Lentes</a><a href="#atencao">Atenção</a><a href="#agenda">Agenda</a><a href="#junto">Quem aparece junto</a><a href="#persistencia">Persistência</a></nav>
     <div class="chapter-grid">
       <div id="analise">
         <h2>Como fazer uma análise</h2>
@@ -149,6 +149,22 @@
         <p>Abre os textos daquele par, os mesmos textos que citam as duas pessoas juntas. Clique de novo na mesma célula, ou fora da matriz, fecha.</p>
         <h3>Tela estreita</h3>
         <p>Abaixo de 700px de largura a matriz vira uma lista, do par com mais textos em comum para o com menos, e o clique funciona igual.</p>
+      </div>
+      <div id="persistencia">
+        <h2>Gráfico 10 · Persistência</h2>
+        <p>Uma linha por palavra, uma célula por semana, de segunda a domingo na hora de Brasília: a mais antiga à esquerda, a atual à direita. A figura responde a uma pergunta que os outros não respondem: a palavra ficou, ou foi só um pico?</p>
+        <h3>Célula</h3>
+        <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, só mais clara. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>
+        <h3>Célula vazia não é zero</h3>
+        <p>Cada semana guarda só as 50 palavras mais fortes da pessoa, pela mesma conta do PMI ponderado (PMI × ln(1 + documentos)), com pelo menos 2 documentos. Uma célula vazia diz que a palavra ficou fora dessas 50, não que não apareceu. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A palavra do nome da própria pessoa não entra.</p>
+        <h3>Sequência</h3>
+        <p>Semanas seguidas com a palavra, contadas da atual para trás. A semana em curso ainda está incompleta: se estiver vazia, a contagem parte da anterior. É a leitura de quem ficou.</p>
+        <h3>Meia-vida</h3>
+        <p>Só semanas completas. Acha-se o pico da palavra (o mais recente, se houver empate) e conta-se quantas semanas passam até a primeira em que ela caiu à metade do pico ou menos; uma semana vazia conta como queda. &ldquo;Sem queda&rdquo; quer dizer que isso ainda não aconteceu, inclusive quando o pico é a última semana completa.</p>
+        <h3>Série curta</h3>
+        <p>A série começa em 9 de setembro de 2026 e cresce uma semana por vez; nada é reconstruído para trás. Enquanto houver menos de quatro semanas, uma nota diz quantas existem. As semanas guardadas continuam como foram gravadas, com o vocabulário do seu tempo.</p>
+        <h3>Clique</h3>
+        <p>Abre os textos da pessoa naquela semana com aquela palavra. Semanas mais antigas que o período de documentos guardado (365 dias) mostram o número, mas não abrem textos. Clique de novo na mesma célula, ou fora da tabela, fecha.</p>
       </div>
     </div>
     <p class="chapter-foot"><span>Tom por termo continua na API, sem página própria.</span><span>Sem dados fictícios em produção.</span></p>

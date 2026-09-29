@@ -13,9 +13,14 @@ import {
   mergeOutlets,
   normalize,
   personInitials,
+  type Persistence,
   relatedTo,
   safeDocUrl,
   score,
+  seriesWeeks,
+  shiftDate,
+  sinceLabel,
+  todayBrt,
   scoreName,
   foldTestimonyDomains,
   MASK_MIN,
@@ -58,8 +63,9 @@ import {
   type WeekBucket,
   weekDayIso,
   weekDayLabel,
+  weekHeadLabel,
 } from './format.js'
-import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, matrixLayout, peakDay, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
+import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, matrixLayout, peakDay, persistenceLayout, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
 import { axis, frame, overflowList } from './marks.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
@@ -1744,4 +1750,99 @@ export const paintComentionError = () => {
   root.innerHTML = html`<p class="note">Não foi possível carregar quem aparece junto.</p>`
   const about = $('comentionAbout')
   if (about) about.textContent = ''
+}
+
+// ---------- persistence (figure 10, issue #215): one row per word, one cell per week ----------
+
+export type PersistenceSelection = { week: string; term: string; kind: string } | null
+
+const PERSISTENCE_GAP_LABEL = 'fora das 50 mais fortes'
+const PERSISTENCE_NODATA_LABEL = 'sem dados'
+const PERSISTENCE_EXPIRED_LABEL = 'documentos fora do período guardado'
+
+const persistenceNoteText = (data: Persistence) => {
+  const n = seriesWeeks(data.first_week)
+  if (n === null) return 'Ainda sem série: a primeira semana é gravada na próxima atualização.'
+  if (n < 4) return `${n} ${n === 1 ? 'semana' : 'semanas'} de série; a leitura começa a valer com quatro.`
+  return ''
+}
+
+const persistenceCellMarkup = (
+  cell: { week: string; count: number | null; level: number },
+  row: { term: string; kind: string },
+  firstWeek: string | null,
+  oldestPickable: string,
+  selected: PersistenceSelection,
+) => {
+  if (cell.count === null) {
+    const noData = !firstWeek || cell.week < firstWeek
+    const text = noData ? PERSISTENCE_NODATA_LABEL : PERSISTENCE_GAP_LABEL
+    return html`<span class="persistence-cell ${noData ? 'is-nodata' : 'is-gap'}" data-gap="1" title="${text}" role="img" aria-label="${text}"></span>`
+  }
+  if (cell.week < oldestPickable)
+    return html`<span class="persistence-cell is-expired" data-lv="${cell.level}" data-expired="1" title="${PERSISTENCE_EXPIRED_LABEL}" role="img" aria-label="${PERSISTENCE_EXPIRED_LABEL}">${fmt(cell.count)}</span>`
+  const isSelected = !!selected && selected.week === cell.week && selected.term === row.term && selected.kind === row.kind
+  return html`<button type="button" class="persistence-cell${isSelected ? ' is-selected' : ''}" data-lv="${cell.level}" data-week="${cell.week}" data-term="${row.term}" data-kind="${row.kind}" aria-pressed="${isSelected}" aria-label="${row.term}, semana de ${cell.week}: ${fmt(cell.count)} ${cell.count === 1 ? 'documento' : 'documentos'}">${fmt(cell.count)}</button>`
+}
+
+// Draws #persistenceChart and the series note in #persistenceNote. Never a blank figure: with
+// no series or no word the note says why.
+export const paintPersistence = ({ data, selected, onPick }: { data: Persistence; selected: PersistenceSelection; onPick: (week: string, term: string, kind: string) => void }) => {
+  const chart = $('persistenceChart')
+  const note = $('persistenceNote')
+  const since = $('persistenceSince')
+  if (since) since.textContent = sinceLabel(data.since)
+  const seriesNote = persistenceNoteText(data)
+  if (!chart) {
+    if (note) note.textContent = seriesNote
+    return
+  }
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'false')
+  if (!data.terms.length) {
+    chart.hidden = true
+    chart.innerHTML = ''
+    if (note) note.textContent = seriesNote || 'Nenhuma palavra ficou nesta janela.'
+    return
+  }
+  chart.hidden = false
+  const { rows } = persistenceLayout(data)
+  const oldestPickable = shiftDate(todayBrt(), -data.horizon)
+  const stats = (t: Persistence['terms'][number]) =>
+    html`<dl class="stat"><div><dt>sequência</dt><dd>${fmt(t.streak)}</dd></div></dl><dl class="stat"><div><dt>meia-vida</dt><dd>${t.half_life === null ? 'sem queda' : fmt(t.half_life)}</dd></div></dl>`
+  chart.innerHTML = html`<div class="persistence-scroll"><table class="persistence-table">
+    <caption class="sr-only">Palavras por semana, com sequência e meia-vida</caption>
+    <thead><tr><th scope="col"></th>${(rows[0]?.cells ?? []).map((c, i) => html`<th scope="col" class="persistence-week">${i === 0 || c.week.slice(8) <= '07' ? html`<span>${weekHeadLabel(c.week)}</span>` : ''}</th>`)}<th scope="col"></th></tr></thead>
+    <tbody>${rows.map(
+      (row, i) =>
+        html`<tr><th scope="row" class="persistence-term" title="${row.term}">${row.term}</th>${row.cells.map((cell) => html`<td class="persistence-c">${persistenceCellMarkup(cell, row, data.first_week, oldestPickable, selected)}</td>`)}<td class="persistence-stats">${stats(data.terms[i])}</td></tr>`,
+    )}</tbody>
+  </table></div>`
+  queryAll('[data-week]', chart).forEach((el) => el.addEventListener('click', () => onPick(String(el.dataset.week), String(el.dataset.term), String(el.dataset.kind))))
+  if (note) note.textContent = seriesNote
+}
+
+export const paintPersistenceLoading = () => {
+  const chart = $('persistenceChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'true')
+  const widths = ['', 'is-mid', 'is-short']
+  chart.innerHTML = html`<div class="persistence-ghost ghost-field" aria-hidden="true">${[0, 1, 2, 3, 4, 5].map(
+    (i) => html`<div class="persistence-ghost-row">${ghostBar(`ghost-outlet-d ${widths[i % 3]}`)}${Array.from({ length: 12 }, () => html`<span class="persistence-cell ghost"></span>`)}</div>`,
+  )}</div><p class="sr-only">Lendo a persistência.</p>`
+  const note = $('persistenceNote')
+  if (note) note.textContent = ''
+}
+
+export const paintPersistenceError = () => {
+  const chart = $('persistenceChart')
+  if (!chart) return
+  chart.hidden = false
+  chart.classList.remove('is-loading')
+  chart.setAttribute('aria-busy', 'false')
+  chart.innerHTML = html`<p class="note">Não foi possível carregar a persistência.</p>`
+  const note = $('persistenceNote')
+  if (note) note.textContent = ''
 }

@@ -352,7 +352,7 @@ Two key forms, read in this order:
 The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
 `compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`),
 `lenses` (figure 6, `#lenses`), `attention` (figure 7, `#attention`), `agenda` (figure 8,
-`#agenda`) and `comention` (figure 9, `#comention`). Figure 1 reads `person`,
+`#agenda`), `comention` (figure 9, `#comention`) and `persistence` (figure 10, `#persistence`). Figure 1 reads `person`,
 `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
 sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
 Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
@@ -370,6 +370,10 @@ tracked person at once, so it has no `person` key, and it sends no `min`, which 
 route's own default of 5. Figure 9 reads `days` and `source` (bare or prefixed) plus `lean` and
 `min`, prefixed only (`comention.lean`, `comention.min`, no bare fallback, like figure 6's
 `a`/`b`) — it has no `person` key at all, since a shared count is never one person's.
+The figure id `persistence` (figure 10, `#persistence`) reads `person` and `limit`, bare or
+prefixed (`persistence.person`, `persistence.limit`), and `weeks`, prefixed only
+(`persistence.weeks`, no bare fallback, like figure 6's `a`/`b`): no other figure has a
+`weeks` control, so a bare `?weeks=` never reaches it.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

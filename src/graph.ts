@@ -119,7 +119,7 @@ export type AttentionQuery = { days: number }
 
 // `community` only appears in the row shape graphFastQuery renders when q.communities is true;
 // graphFor adds/omits the key on the response object, never leaving it present-but-undefined.
-type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null; community?: number | null }
+type TermRow = { term: string; kind: string; count: number; pmi: number; tone: number | null; reach: number | null; community?: number | null }
 type SignatureRow = { term: string; kind: string; count: number; pmi: number }
 // field/neighbors: issue #218, from the window's own aggregate build, never the live query.
 type SourceRow = {
@@ -143,6 +143,7 @@ type RisingRow = {
   count_recent_raw: number
   count_baseline_raw: number
   lift: number
+  reach: number | null
 }
 type RisingAggregates = { about_recent: number; about_baseline: number; words_recent: number; words_baseline: number; terms: RisingRow[]; present: RisingRow[] }
 type TimelineRow = { bucket_start: Date; count: number }
@@ -204,10 +205,10 @@ const scopeCte = (person: Person, q: Scope) => {
 // aggregate hashes integers and the text is read once per distinct term, not once per row. No order by
 // or tie-break ever uses term_id: ids follow insertion order, the text is what makes a result stable.
 // `about` is a CTE name; `exclude` (a person's own name tokens) drops a name word or a phrase carrying one.
-const termCounts = (about: Sql, exclude?: string[]) => sql`
-    select v.id as term_id, v.term, v.kind, c.c_pt, c.tone
+const termCounts = (about: Sql, exclude?: string[], withReach = false) => sql`
+    select v.id as term_id, v.term, v.kind, c.c_pt, c.tone${withReach ? sql`, c.reach` : sql``}
     from (
-      select t.term_id, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone
+      select t.term_id, count(*)::float8 as c_pt, avg(d.tone)::float8 as tone${withReach ? sql`, sum(d.reach_reposts)::int as reach` : sql``}
       from doc_terms t join ${about} x on x.doc_id = t.doc_id join docs d on d.id = t.doc_id
       group by t.term_id
     ) c
@@ -243,18 +244,18 @@ const graphQuery = (person: Person, q: GraphQuery) => {
   with ${scopeCte(person, q)}, ${trackedCte},
   n as materialized (select count(*)::float8 as total from tracked),
   np as materialized (select count(*)::float8 as total from about),
-  term_p as materialized (${termCounts(sql.raw('about'), exclude)}
+  term_p as materialized (${termCounts(sql.raw('about'), exclude, true)}
   ),
   term_all as materialized (${termTotals(sql.raw('tracked'))}
   ),
   nodes_scored as (
-    select p.term, p.kind, p.c_pt::int as count, p.tone,
+    select p.term, p.kind, p.c_pt::int as count, p.tone, p.reach,
       ${pmiLog2(sql.raw('p.c_pt'), sql.raw('n.total'), sql.raw('np.total'), sql.raw('a.c_t'))} as pmi
     from term_p p join term_all a using (term_id), n, np
     where p.c_pt >= ${q.min} and (${q.kind} = 'all' or p.kind = any(string_to_array(${q.kind}, ',')))
   ),
   nodes_top as (
-    select term, kind, count,
+    select term, kind, count, reach,
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
       ${sortKeyExpr} as sort_key
@@ -278,7 +279,7 @@ const graphQuery = (person: Person, q: GraphQuery) => {
     (select count(*) from scope)::int as docs,
     (select count(*) from about)::int as about,
     coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded)
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'reach', reach)
         order by sort_key desc, term, kind)
       from nodes_top
     ), '[]'::json) as nodes,
@@ -313,13 +314,13 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
         select 1 from graph_terms g where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}))
   ),
   scored as (
-    select g.term, g.kind, g.c_pt as count, g.tone${communityCol},
+    select g.term, g.kind, g.c_pt as count, g.tone, g.reach${communityCol},
       ln((g.c_pt::float8 * s.tracked::float8) / (s.about::float8 * g.c_t::float8)) / ln(2) as pmi
     from graph_terms g${communityJoin}, s
     where g.days = ${q.days} and g.source = ${q.source} and g.person_id = ${person.id}
   ),
   nodes_top as (
-    select term, kind, count${q.communities ? sql`, community` : sql``},
+    select term, kind, count, reach${q.communities ? sql`, community` : sql``},
       round(pmi::numeric, 2)::float8 as pmi_rounded,
       round(tone::numeric, 2)::float8 as tone_rounded,
       ${sortKeyExpr} as sort_key
@@ -339,7 +340,7 @@ const graphFastQuery = (person: Person, q: GraphQuery) => {
     s.docs::int as docs,
     s.about::int as about,
     coalesce((
-      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded${communityJson})
+      select json_agg(json_build_object('term', term, 'kind', kind, 'count', count, 'pmi', pmi_rounded, 'tone', tone_rounded, 'reach', reach${communityJson})
         order by sort_key desc, term, kind)
       from nodes_top
     ), '[]'::json) as nodes,
@@ -761,11 +762,11 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
 const risingQuery = (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)
-  const termsOf = (about: Sql, count: Sql) => sql`
-    select v.id as term_id, v.term, v.kind, c.${count}
+  const termsOf = (about: Sql, count: Sql, withReach = false) => sql`
+    select v.id as term_id, v.term, v.kind, c.${count}${withReach ? sql`, c.reach` : sql``}
     from (
-      select t.term_id, count(*)::float8 as ${count}
-      from doc_terms t join ${about} a on a.doc_id = t.doc_id
+      select t.term_id, count(*)::float8 as ${count}${withReach ? sql`, sum(d.reach_reposts)::int as reach` : sql``}
+      from doc_terms t join ${about} a on a.doc_id = t.doc_id${withReach ? sql` join docs d on d.id = t.doc_id` : sql``}
       group by t.term_id
     ) c
     join terms v on v.id = c.term_id
@@ -793,7 +794,7 @@ const risingQuery = (person: Person, q: RisingQuery) => {
   baseline_about as (
     select dp.doc_id from doc_persons dp join baseline_scope s on s.id = dp.doc_id where dp.person_id = ${person.id}
   ),
-  recent_terms as (${termsOf(sql.raw('recent_about'), sql.raw('c_recent'))}
+  recent_terms as (${termsOf(sql.raw('recent_about'), sql.raw('c_recent'), true)}
   ),
   baseline_terms as (${termsOf(sql.raw('baseline_about'), sql.raw('c_baseline'))}
   ),
@@ -803,7 +804,8 @@ const risingQuery = (person: Person, q: RisingQuery) => {
       round((coalesce(b.c_baseline, 0) / ${q.baseline})::numeric, 2)::float8 as count_baseline,
       r.c_recent::int as count_recent_raw,
       coalesce(b.c_baseline, 0)::int as count_baseline_raw,
-      round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift
+      round(((r.c_recent / ${q.days}) / ((coalesce(b.c_baseline, 0) + 1) / ${q.baseline}))::numeric, 2)::float8 as lift,
+      r.reach
     from recent_terms r left join baseline_terms b using (term_id)
     where r.c_recent >= ${q.min}
   ),
@@ -821,14 +823,14 @@ const risingQuery = (person: Person, q: RisingQuery) => {
     coalesce((
       select json_agg(json_build_object(
         'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
-        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
+        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift, 'reach', reach
       ) order by lift desc, term, kind)
       from lifted
     ), '[]'::json) as terms,
     coalesce((
       select json_agg(json_build_object(
         'term', term, 'kind', kind, 'count_recent', count_recent, 'count_baseline', count_baseline,
-        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift
+        'count_recent_raw', count_recent_raw, 'count_baseline_raw', count_baseline_raw, 'lift', lift, 'reach', reach
       ) order by lift desc, term, kind)
       from present
     ), '[]'::json) as present`

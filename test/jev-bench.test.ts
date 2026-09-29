@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { main, type Deps } from '../scripts/jev-bench.js'
-import { decide, metrics, parseVerifyBlock, renderTable, type Gap, type Row } from '../scripts/jev/metrics.js'
+import { decide, metrics, parseCriteria, parseVerifyBlock, renderTable, type Gap, type Row } from '../scripts/jev/metrics.js'
 import {
   CHAT_URL,
   CONVENTION_QUESTIONS,
   DECISIONS_URL,
   JEV_DIFF_CAP_TOKENS,
+  SONNET_BASELINE_MODEL,
   criterionQuestions,
   decisionRequest,
   parseDecisions,
@@ -193,6 +194,46 @@ describe('jev bench metrics', () => {
     const rows = [row({ pr: 1, verdict: 'return', gaps: [blocker(null)], pTrue: { 1: 0.01 } })]
     assert.equal(metrics(rows, 'jev', 0.9).agreed, 0)
   })
+
+  it('unmet at t means 1 - pTrue >= t, boundary included', () => {
+    const at = (pTrue: number) => metrics([row({ pr: 1, pTrue: { 1: pTrue } })], 'jev', 0.85).cleanFlagged
+    assert.equal(at(0.15), 1)
+    assert.equal(at(0.16), 0)
+  })
+
+  it('convention answers and a row without criteria never flag a PR', () => {
+    const withConvention = { ...row({ pr: 1, criteria: 0 }), jev: { answers: [{ id: 'convention:comment', pTrue: 0.01 }], costUsd: 0.001, ms: 1, error: null } }
+    const m = metrics([withConvention], 'jev', 0.7)
+    assert.equal(m.cleanFlagged, 0)
+    assert.equal(m.agreed, 0)
+    const returned = { ...withConvention, rounds: [{ ...withConvention.rounds[0], verdict: 'return' as const, gaps: [blocker(null)] }] }
+    assert.equal(metrics([returned], 'jev', 0.7).flaggedAny, 0)
+  })
+
+  it('an approve known only at the final head counts among clean PRs, never among round-1 returns', () => {
+    const legacy = row({ pr: 1, diffAt: 'final', pTrue: { 1: 0.05 } })
+    const m = metrics([legacy], 'jev', 0.9)
+    assert.equal(m.clean, 1)
+    assert.equal(m.cleanFlagged, 1)
+    assert.equal(m.returned, 0)
+    assert.equal(m.agreed, 0)
+  })
+
+  it('cost and wall time are the model means against the validator round mean', () => {
+    const rows = [row({ pr: 1 }), { ...row({ pr: 2 }), jev: { answers: [], costUsd: 0.008, ms: 4000, error: null } }]
+    const m = metrics(rows, 'jev', 0.9)
+    assert.ok(Math.abs((m.costMean ?? NaN) - 0.006) < 1e-12)
+    assert.equal(m.msMean, 3000)
+    assert.equal(m.validatorMsMean, 400000)
+    const line = renderTable(rows).find((l) => /^jev\s+0\.90/.test(l)) ?? ''
+    assert.match(line, /vs n\/a/)
+  })
+
+  it('no gate baseline shows zero false positives and zero rounds saved', () => {
+    const none = renderTable(fixture({ flaggedReturns: 2, approvedPTrue: 0.12 })).find((l) => /^none\s/.test(l)) ?? ''
+    assert.match(none, /0\/15/)
+    assert.match(none, /0\/5/)
+  })
 })
 
 describe('jev bench cli', () => {
@@ -215,6 +256,91 @@ describe('jev bench cli', () => {
     const broken = world({ files: new Map([['/tmp/bad/12.json', '{not json']]) })
     assert.equal(await main(['--offline', '--dir', '/tmp/bad'], broken.deps), 1)
     assert.match(broken.errs.join('\n'), /\/tmp\/bad\/12\.json/)
+  })
+
+  it('offline reads bench/jev by default and starts with a header', async () => {
+    const w = world({ files: rowsInDir('bench/jev', fixture({ flaggedReturns: 2, approvedPTrue: 0.12 })) })
+    assert.equal(await main(['--offline'], w.deps), 0)
+    assert.match(w.logs[0], /^model\s/)
+    assert.equal(w.logs[w.logs.length - 1], 'DECISION: SHIP t=0.90')
+  })
+
+  it('collect writes bench/jev/<pr>.json with the documented row shape', async () => {
+    const w = world()
+    assert.equal(await main(['collect', '--pr', '7'], w.deps), 0)
+    const written = JSON.parse(w.files.get('bench/jev/7.json') ?? 'null')
+    for (const key of ['pr', 'issue', 'source', 'merged', 'baseSha', 'rounds', 'criteria', 'diffTokens', 'skipped', 'jev', 'sonnet']) assert.ok(key in written, key)
+    assert.equal(written.pr, 7)
+    assert.equal(written.issue, 101)
+    assert.equal(written.merged, true)
+    assert.equal(written.baseSha, 'base0')
+    assert.equal(written.skipped, null)
+    assert.deepEqual(written.criteria, parseCriteria(SPEC))
+    assert.deepEqual(Object.keys(written.jev).sort(), ['answers', 'costUsd', 'error', 'ms'])
+    assert.deepEqual(Object.keys(written.sonnet).sort(), ['answers', 'costUsd', 'error', 'ms'])
+    assert.equal(written.sonnet.costUsd, 0.012)
+  })
+
+  it('collect diffs base...head without the lockfile and the bundle', async () => {
+    const w = world()
+    await main(['collect', '--pr', '7', '--dir', 'out'], w.deps)
+    assert.ok(w.execed.includes('git diff base0...headfinal -- . :!pnpm-lock.yaml :!public/bundle.js'))
+  })
+
+  it('the diff cap is 32000 estimated tokens of chars / 4, never truncated', async () => {
+    assert.equal(JEV_DIFF_CAP_TOKENS, 32000)
+    const atCap = world({ diff: 'x'.repeat(128000) })
+    await main(['collect', '--pr', '7', '--dir', 'out'], atCap.deps)
+    assert.equal(JSON.parse(atCap.files.get('out/7.json') ?? 'null').skipped, null)
+    assert.equal(atCap.fetched.length, 2)
+    const over = world({ diff: 'x'.repeat(128001) })
+    await main(['collect', '--pr', '7', '--dir', 'out'], over.deps)
+    assert.equal(JSON.parse(over.files.get('out/7.json') ?? 'null').skipped, 'diff too large (32001 tokens)')
+  })
+
+  it('both models get one question per parsed criterion plus every convention, on the same diff and spec', async () => {
+    const bodies = new Map<string, any>()
+    const w = world({
+      diff: 'DIFFTEXT',
+      fetch: (async (url: string | URL | Request, init?: RequestInit) => {
+        bodies.set(String(url), JSON.parse(String(init?.body)))
+        return new Response(JSON.stringify(String(url) === DECISIONS_URL ? DECISIONS_RESPONSE : { choices: [{ message: { content: '{"answers":[]}' } }] }))
+      }) as typeof fetch,
+    })
+    await main(['collect', '--pr', '7', '--dir', 'out'], w.deps)
+    const ids = [...parseCriteria(SPEC).map((c) => `criterion:${c.n}`), ...CONVENTION_QUESTIONS.map((q) => q.id)]
+    const jev = bodies.get(DECISIONS_URL)
+    assert.equal(jev.model, 'typesafe/jev-1.13')
+    assert.deepEqual(Object.keys(jev.questions), ids)
+    assert.equal(jev.state.diff, 'DIFFTEXT')
+    assert.equal(jev.state.spec, SPEC)
+    const sonnet = bodies.get(CHAT_URL)
+    assert.equal(sonnet.model, SONNET_BASELINE_MODEL)
+    const prompt = JSON.stringify(sonnet.messages)
+    assert.match(prompt, /p_true/)
+    assert.ok(prompt.includes('DIFFTEXT'))
+    for (const id of ids) assert.ok(prompt.includes(id), id)
+  })
+
+  it('--sonnet-model overrides the baseline model', async () => {
+    let model = ''
+    const w = world({
+      fetch: (async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === CHAT_URL) model = JSON.parse(String(init?.body)).model
+        return new Response(JSON.stringify(DECISIONS_RESPONSE))
+      }) as typeof fetch,
+    })
+    await main(['collect', '--pr', '7', '--dir', 'out', '--sonnet-model', 'acme/other-1'], w.deps)
+    assert.equal(model, 'acme/other-1')
+  })
+
+  it('collect labels an older PR approved at round 1 from its body, diffed at the final head', async () => {
+    const w = world({ prBody: 'Closes #101\n\nValidator: round 1 verdict approve with 2 nits.' })
+    await main(['collect', '--pr', '7', '--dir', 'out'], w.deps)
+    const written = JSON.parse(w.files.get('out/7.json') ?? 'null')
+    assert.equal(written.diffAt, 'final')
+    assert.equal(written.rounds[0].verdict, 'approve')
+    assert.equal(metrics([written], 'jev', 0.9).returned, 0)
   })
 
   it('collect refuses without OPENROUTER_API_KEY', async () => {

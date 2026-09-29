@@ -101,7 +101,7 @@ describe('pnpm size', () => {
       }
     })
 
-    it('SIZE_TABLES has exactly the seventeen documented table names (AC13)', () => {
+    it('SIZE_TABLES has exactly the eighteen documented table names (AC13)', () => {
       assert.deepEqual(
         [...SIZE_TABLES].sort(),
         [
@@ -122,6 +122,7 @@ describe('pnpm size', () => {
           'term_links',
           'outlet_fields',
           'outlet_neighbors',
+          'doc_tone',
         ].sort(),
       )
     })

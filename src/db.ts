@@ -159,6 +159,10 @@ export const schema = `
       processed_at timestamptz not null default now()
     );
     create index if not exists docs_published_idx on docs (published_at);
+    create table if not exists doc_tone (
+      doc_id int primary key references docs(id) on delete cascade,
+      tone float8 not null
+    );
     create index if not exists doc_terms_term_id_idx on doc_terms (term_id, doc_id);
     create table if not exists doc_testimony (
       doc_id int references docs(id) on delete cascade,
@@ -257,6 +261,10 @@ const schemaStatements = schema
 // The schema string cannot hold a `do $$` block (it is split on ';'), so the legacy check lives here.
 const LEGACY_DOC_TERMS_SQL = `select 1 as legacy from information_schema.columns where table_schema = current_schema() and table_name = 'doc_terms' and column_name = 'term'`
 
+// The backfill cannot live in the schema string (split on ';', and it would seq-scan docs at every start); it runs once, when the probe finds the table missing.
+const DOC_TONE_PROBE_SQL = `select to_regclass('doc_tone') as t`
+const DOC_TONE_BACKFILL_SQL = `insert into doc_tone (doc_id, tone) select id, tone from docs where tone is not null on conflict do nothing`
+
 // The legacy doc_terms carries its own term/kind text; move it aside so the canonical names are free for the new table.
 const legacyAside = [
   `alter table doc_terms rename to doc_terms_legacy`,
@@ -278,9 +286,11 @@ export const migrate = (): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlC
     return sql.withTransaction(
       Effect.gen(function* () {
         const legacy = (yield* sql.unsafe(LEGACY_DOC_TERMS_SQL)).length > 0
+        const toneMissing = (yield* sql.unsafe<{ t: string | null }>(DOC_TONE_PROBE_SQL))[0]?.t == null
         if (legacy) yield* run(legacyAside)
         yield* run(schemaStatements)
         if (legacy) yield* run(legacyConvert)
+        if (toneMissing) yield* sql.unsafe(DOC_TONE_BACKFILL_SQL)
       }),
     )
   })
@@ -300,6 +310,7 @@ export const ANALYZED_TABLES = [
   'term_links',
   'outlet_fields',
   'outlet_neighbors',
+  'doc_tone',
 ] as const
 export type AnalyzedTable = (typeof ANALYZED_TABLES)[number]
 

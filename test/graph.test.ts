@@ -3802,3 +3802,52 @@ describe('term ids are internal (issue #252)', () => {
     for (const text of texts) for (const [, clause] of text.matchAll(/order by\s*((?:[^\n]*,[ \t]*\n)*[^\n]*)/g)) assert.doesNotMatch(clause, /\bterm_id\b|\bv\.id\b/, clause)
   })
 })
+
+describe('tone comes from doc_tone (issue #272)', () => {
+  before(seed)
+
+  it('term counts read doc_tone, not docs', () => {
+    const texts = {
+      graph: queries.graph(lula, graphBase).text,
+      compare: queries.compare(lula, tarcisio, compareBase).text,
+      lenses: queries.lenses(lula, lensesBase).text,
+      personTerms: aggregateQueries.personTerms(30, lula).text,
+    }
+    for (const [name, text] of Object.entries(texts)) {
+      assert.match(text, /left join doc_tone dt on dt\.doc_id = /, name)
+      assert.doesNotMatch(text, /\bd\.tone\b/, name)
+      assert.doesNotMatch(text, /join docs\b/, name)
+    }
+  })
+
+  const referenceNodeTone = async (personId: string, days: number, source: string, term: string, kind: string) =>
+    (
+      await db.query<{ tone: number | null }>(
+        `select round(avg(d.tone)::numeric, 2)::float8 as tone
+         from docs d
+         join doc_persons dp on dp.doc_id = d.id and dp.person_id = $1
+         join doc_terms t on t.doc_id = d.id
+         join terms v on v.id = t.term_id
+         where v.term = $2 and v.kind = $3
+           and d.published_at >= now() - make_interval(days => $4)
+           and ($5 = 'all' or d.source = $5)
+           and d.country is distinct from 'pt'`,
+        [personId, term, kind, days, source],
+      )
+    ).rows[0].tone
+
+  it('every node tone equals the docs.tone reference on every recorte', async () => {
+    let toned = 0
+    for (const person of persons)
+      for (const days of [7, 30, 365])
+        for (const source of ['all', 'gkg', 'rss', 'bluesky']) {
+          const g = await graphFor(person, { ...graphBase, days, source, limit: 100 })
+          for (const n of g.nodes) {
+            const expected = await referenceNodeTone(person.id, days, source, n.term, n.kind)
+            assert.equal(n.tone, expected, `${person.id} ${days} ${source} ${n.id}`)
+            if (expected !== null) toned++
+          }
+        }
+    assert.ok(toned > 0, 'sanity: some node carries a tone')
+  })
+})

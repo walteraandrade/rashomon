@@ -33,7 +33,7 @@ const DELETE_ORPHAN_PERSONS_SQL = `delete from persons where not (id = any($1::t
 const UPSERT_PERSON_ATTENTION_SQL = `insert into person_attention (person_id, day, views) select * from unnest($1::text[], $2::date[], $3::int[])
      on conflict (person_id, day) do update set views = excluded.views`
 // One statement for a whole uriLayers layer: domain keeps first non-null, tone is null for
-// non-GDELT, longer text wins. The layer travels as one json value: sql-pg cannot bind an
+// non-GDELT, longer text wins. doc_tone follows the stored tone (never the incoming one) in the same statement. The layer travels as one json value: sql-pg cannot bind an
 // all-null or mixed int/float array. RETURNING can't see the input row, so it's joined back by uri.
 const UPSERT_DOCS_SQL = `with input as (
        select * from jsonb_to_recordset($1::jsonb)
@@ -50,7 +50,12 @@ const UPSERT_DOCS_SQL = `with input as (
           or docs.country is distinct from coalesce(docs.country, excluded.country)
           or docs.tone is distinct from (case when docs.source = any($2::text[]) then coalesce(docs.tone, excluded.tone) else null end)
           or length(excluded.text) > length(docs.text)
-       returning id, uri, source, extra_terms, extra_names, (xmax = 0) as inserted, text as stored_text
+       returning id, uri, source, extra_terms, extra_names, tone, (xmax = 0) as inserted, text as stored_text
+     ), tone_up as (
+       insert into doc_tone (doc_id, tone) select id, tone from up where tone is not null
+       on conflict (doc_id) do update set tone = excluded.tone
+     ), tone_del as (
+       delete from doc_tone where doc_id in (select id from up where tone is null and not inserted)
      )
      select input.uri, up.id, up.source, up.extra_terms, up.extra_names, up.inserted, (up.stored_text = input.text) as took_incoming
      from up join input using (uri)`

@@ -809,3 +809,59 @@ describe('the terms vocabulary (issue #252)', () => {
     assert.deepEqual(await vocabulary('pinguimlaranja', 'word'), [])
   })
 })
+
+describe('doc_tone follows the writer (issue #272)', () => {
+  before(seed)
+  after(reseed)
+  const toneRow = async (uri: string) =>
+    (await db.query<{ tone: number }>(`select dt.tone from doc_tone dt join docs d on d.id = dt.doc_id where d.uri = $1`, [uri])).rows[0]?.tone ?? null
+
+  it('insertDoc writes doc_tone when a later row fills tone', async () => {
+    const uri = 'https://example.org/tone-later'
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
+    assert.equal(await toneRow(uri), null)
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now(), tone: 2.5 }, persons)
+    assert.equal(await toneRow(uri), 2.5)
+    assert.equal((await stored(uri)).tone, 2.5)
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now(), tone: -4 }, persons)
+    assert.equal(await toneRow(uri), 2.5, 'the first tone stays in both tables')
+    assert.equal((await stored(uri)).tone, 2.5)
+  })
+
+  it('a toned gkg doc followed by an rss row with the same uri keeps its row', async () => {
+    const uri = 'https://example.org/tone-then-rss'
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now(), tone: 1.25 }, persons)
+    await insertDocP({ source: 'rss', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
+    assert.equal(await toneRow(uri), 1.25)
+  })
+
+  it('insertDoc keeps doc_tone in step when the conflict branch nulls tone', async () => {
+    const uri = 'https://example.org/tone-legacy'
+    await insertDocP({ source: 'rss', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
+    await db.query(`update docs set tone = 3 where uri = $1`, [uri])
+    await db.query(`insert into doc_tone (doc_id, tone) select id, tone from docs where uri = $1`, [uri])
+    assert.equal(await toneRow(uri), 3)
+    await insertDocP({ source: 'rss', uri, text: 'Lula visita fábrica em Brasília', publishedAt: now() }, persons)
+    assert.equal((await stored(uri)).tone, null)
+    assert.equal(await toneRow(uri), null)
+  })
+
+  it('a non-toned source never gets a doc_tone row', async () => {
+    const uri = 'https://example.org/tone-gnews'
+    await insertDocP({ source: 'gnews', uri, text: 'Lula sanciona lei', publishedAt: now(), tone: 1 }, persons)
+    assert.equal(await toneRow(uri), null)
+    assert.equal(await toneRow(collidingUri), null)
+  })
+
+  it('a batch of toned docs writes one row each, in order, duplicates replayed', async () => {
+    const uri = 'https://example.org/tone-batch'
+    await insertDocsP(
+      [
+        { source: 'gdelt', uri, text: 'Lula fala', publishedAt: now() },
+        { source: 'gdelt', uri, text: 'Lula fala', publishedAt: now(), tone: 0.75 },
+      ],
+      persons,
+    )
+    assert.equal(await toneRow(uri), 0.75)
+  })
+})

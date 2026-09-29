@@ -1,0 +1,159 @@
+{
+  "pr": 223,
+  "issue": 205,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "18aec5f272377dfa1c311d9a9515c7222f6a873d",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`pnpm size` exits 0 against a migrated database and prints one JSON line (`JSON.parse` on the last stdout line succeeds) whose `tables` key has exactly the eleven names in `SIZE_TABLES`, each a number ≥ 0, and whose `total` key is a number ≥ 0."
+    },
+    {
+      "n": 2,
+      "text": "`pnpm size` sends only `select` statements and never migrates, analyzes or writes. `size.ts` exports the size-collecting function taking its query function as a parameter (`(query) => Promise<{ tables, total }>`); the test hands it a recording wrapper around the fixture database's `db.query` and asserts every recorded statement, trimmed and lowercased, starts with `select`. No test reads `src/size.ts`'s source (CLAUDE.md: source reads only for repo-wide invariants in `test/invariants.test.ts`)."
+    },
+    {
+      "n": 3,
+      "text": "On a query failure, `size.ts`'s `main()` sets `process.exitCode = 1` and does not call `process.exit()` anywhere in the file."
+    },
+    {
+      "n": 4,
+      "text": "`.github/workflows/ingest.yml` runs `pnpm size` after the `pnpm ingest` step and appends its output to `$GITHUB_STEP_SUMMARY` — checkable by grepping the workflow file for a step whose `run` pipes `pnpm size` output to `$GITHUB_STEP_SUMMARY` and that appears after the existing `pnpm ingest` step."
+    },
+    {
+      "n": 5,
+      "text": "`docs/operations.md` documents that `pnpm size` exists, that it reports `pg_total_relation_size` per table plus `pg_database_size` for the database total, and that it is read-only (no analyze, vacuum or write) — checkable against `docsText` (`test/docs.ts`) containing these facts, not against a heading or file name."
+    },
+    {
+      "n": 6,
+      "text": "`test/size.test.ts` exists and imports `size.ts`'s pure/exported pieces (the table list and the function that shapes rows into the `{tables, total}` object) rather than shelling out to `pnpm size`, and asserts shape (key set, non-negative numbers) against `test/fixture.ts`'s seeded database — never an exact byte count, since PGlite's page sizes are an implementation detail this repo does not own."
+    },
+    {
+      "n": 7,
+      "text": "`pnpm typecheck` and `pnpm test` both pass with `src/size.ts` and `test/size.test.ts` added."
+    }
+  ],
+  "diffTokens": 3033,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.64
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.42
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.36
+      }
+    ],
+    "costUsd": 0.00029526,
+    "ms": 408,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.027975,
+    "ms": 5014,
+    "error": null
+  }
+}

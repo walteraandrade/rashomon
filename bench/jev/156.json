@@ -1,0 +1,171 @@
+{
+  "pr": 156,
+  "issue": 150,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "252bb6b60bd43192167e78d09a00c72b3884d12b",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /week` with no `testimony` param returns a response with no bucket carrying a `testimony` key, for every existing query-parameter combination — checked by asserting `'testimony' in bucket === false` across the fixture, both at the route (`test/server.test.ts`) and at `weekFor` (`test/graph.test.ts`)."
+    },
+    {
+      "n": 2,
+      "text": "`parseWeekQuery({}).method` is `null`; `parseWeekQuery({ testimony: '1' })` resolves `method` to the shared default; `parseWeekQuery({ testimony: '1', method: 'stub' }).method` is `'stub'`; `parseWeekQuery({ testimony: '1', method: 'bad label!' }).method` falls back to the same default as no `method` at all; `parseWeekQuery({ testimony: 'yes', method: 'stub' }).method` is `null` (the literal `1` is required, `yes` does not opt in)."
+    },
+    {
+      "n": 3,
+      "text": "`weekFor(tarcisio, { ...weekBase, days: 30, testimony: true, method: 'stub' })` (or the route equivalent) returns, for the bucket at `daysAgo(7)` (which holds both doc `estadao.com.br/31`, `stub` score 6, and doc `estadao.com.br/36`, `stub` score `null`), `testimony: { score: 6, n: 1 }` — proving the null-scored doc is excluded from both the mean and the count while the bucket still exists."
+    },
+    {
+      "n": 4,
+      "text": "The same call's bucket at `daysAgo(6)` (doc `estadao.com.br/30`, `stub` score 4, the only scored doc that day) returns `testimony: { score: 4, n: 1 }`."
+    },
+    {
+      "n": 5,
+      "text": "A bucket with `about: 0` for the same call returns `testimony: null`."
+    },
+    {
+      "n": 6,
+      "text": "`testimony=1&method=` set to a label with no rows in `doc_testimony` returns `testimony: null` on every bucket, not a 4xx."
+    },
+    {
+      "n": 7,
+      "text": "`weekTestimonyQuery`'s rendered SQL text (via the `statements` export, alongside `statements.week`) is identical across two sample calls with different `days`/`source`/`method` values — the existing \"statements render the same text the routes run\" invariant, extended to the new builder."
+    },
+    {
+      "n": 8,
+      "text": "The docs state, somewhere in `docsText` (`test/docs.ts`), that `/week` accepts a `testimony=1` flag, that it adds a per-bucket `testimony: { score, n } | null` value, that the response is byte-for-byte unchanged without the flag, and that `method` resolves through the same charset check and shared default as `/testimony`. Not covered by `test/docs-drift.test.ts` (that suite only checks the collector registry against `docs/sources.md`); this is a new fact, asserted against `docsText`, never against one page's heading or wording."
+    }
+  ],
+  "diffTokens": 5016,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.81
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.37
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.27
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.77
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.28
+      }
+    ],
+    "costUsd": 0.000506268,
+    "ms": 495,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.043419,
+    "ms": 5380,
+    "error": null
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "pr": 14,
+  "issue": 3,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "0cae5c23e0ef8dbcf655074e75d0554bb130a18e",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/people/nobody/rising` returns 404 with `{ \"error\": \"person not found\" }` — checked manually (`curl`) or added as the first `test/server.test.ts`, since no existing route (`graph`/`sources`/`docs`) has an automated 404 test today either; `risingFor` itself only receives an already-resolved `Person`, so it cannot express this case."
+    },
+    {
+      "n": 2,
+      "text": "Default query (`days=7`, `baseline=30`, `limit=20`, `min=3`) returns `{ days, baseline, terms }`, `terms` sorted by `lift` descending, ties broken by `term` ascending."
+    },
+    {
+      "n": 3,
+      "text": "`count_recent` equals the raw doc count for the term in the last `days` days about the person, divided by `days`, rounded to 2 decimals. `count_baseline` equals the raw doc count in the `baseline` days immediately preceding the recent window (never overlapping it), divided by `baseline`, rounded to 2 decimals."
+    },
+    {
+      "n": 4,
+      "text": "`lift` equals `round( (count_recent_raw / days) / ((count_baseline_raw + 1) / baseline), 2 )` exactly — pinned formula."
+    },
+    {
+      "n": 5,
+      "text": "A term with docs only in the recent window (`count_baseline_raw = 0`) is included, with `count_baseline = 0` and a finite `lift`, and outranks a term present in both windows at a comparable recent rate."
+    },
+    {
+      "n": 6,
+      "text": "A term whose per-day rate is the same in both windows (equal `count_recent_raw / days` and `count_baseline_raw / baseline`, tested with `days = baseline` so the smoothing effect is symmetric) has `lift` exactly `1` for the specific fixture counts pinned in the test (see Test plan) — demonstrating \"stable ≈ 1\" with an exact, not approximate, assertion."
+    },
+    {
+      "n": 7,
+      "text": "`min` filters on the raw recent count: with `min` above a term's raw recent doc count, that term is excluded even though it would otherwise qualify; lowering `min` includes it again."
+    },
+    {
+      "n": 8,
+      "text": "The person's own alias tokens never appear as a `term` in the response."
+    },
+    {
+      "n": 9,
+      "text": "`kind`, `source`, `domain` behave like the equivalent parameters on `graph`/`docs`: an unrecognized value falls back to `all`; a recognized value filters both the recent and baseline windows identically."
+    },
+    {
+      "n": 10,
+      "text": "A person with no docs, or a `days` window with no docs, returns `{ days, baseline, terms: [] }`, not an error."
+    },
+    {
+      "n": 11,
+      "text": "`limit` clamps the returned array to at most `limit` rows (default 20), verified with a fixture that has more than `limit` qualifying terms or by asserting the clamp on an out-of-range input."
+    },
+    {
+      "n": 12,
+      "text": "Manual: in `design-5.html`, checking \"em alta (7d)\" adds a gold ring to the matching atlas nodes without changing their fill color or radius, and unchecking removes it."
+    },
+    {
+      "n": 13,
+      "text": "Manual: the \"em alta\" side list shows at most 10 rows with a `×`-suffixed lift value, in pt-BR, and shows `carregando…` while the request is in flight and `nada em alta agora` when `terms` is empty."
+    }
+  ],
+  "diffTokens": 7447,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.73
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.82
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.83
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.69
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.9
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.19
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.76
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.18
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.8
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.24
+      }
+    ],
+    "costUsd": 0.000713832,
+    "ms": 461,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.062124,
+    "ms": 8609,
+    "error": null
+  }
+}

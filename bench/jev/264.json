@@ -1,0 +1,327 @@
+{
+  "pr": 264,
+  "issue": 258,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "e89738afe0d0d157712ee55e3745f6667d34592f",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`pnpm bench:jev --offline --dir <tmp>` over fixture rows prints one line per `t` in {0.70, 0.80, 0.85, 0.90, 0.95} for `jev` and for `sonnet`, one `none` baseline line, and a final `DECISION:` line. It is tested through `main(argv, deps)` with `deps.fetch` and `deps.exec` that throw when called: neither is called."
+    },
+    {
+      "n": 2,
+      "text": "On a fixture of 20 rows (5 returned at round 1, 15 approved) where Jev flags the round-1 criterion of 2 of the 5 returned PRs at `pTrue = 0.08` and flags one approved PR at `pTrue = 0.12`: `decide` returns `SHIP` at `t = 0.90`, the lowest `t` with zero clean-PR false positives, with rounds saved at 2/5 = 40%. Moving the approved PR to `pTrue = 0.03` makes it `HOLD (no threshold without false positives)`."
+    },
+    {
+      "n": 3,
+      "text": "With the same fixture but only 1 of the 5 returned PRs flagged (20% < 25%), `decide` returns `HOLD t=0.90 saved=20%`."
+    },
+    {
+      "n": 4,
+      "text": "19 usable rows, or 20 rows with 4 round-1 returns, give `INSUFFICIENT DATA` with the right counts. So do rows with `diffAt: \"final\"` in place of the missing returns."
+    },
+    {
+      "n": 5,
+      "text": "`metrics` counts a nit-only round-1 gap as met, and counts a flagged criterion that round 1 did not mark unmet as a precision miss, not a round saved."
+    },
+    {
+      "n": 6,
+      "text": "A row with no Jev answer for criterion 2 is excluded from criterion agreement for criterion 2 and does not raise that PR's false-positive count."
+    },
+    {
+      "n": 7,
+      "text": "An empty dir prints `DECISION: INSUFFICIENT DATA (rows=0, returned=0)` and exits 0. A dir holding one malformed `.json` exits 1 and names the file."
+    },
+    {
+      "n": 8,
+      "text": "`parseVerifyBlock` returns the `rounds` array from a PR body holding a `` ```json factory-verify `` block, and `[]` from a body without one (for example PR #259's actual body, pasted into the test)."
+    },
+    {
+      "n": 9,
+      "text": "`collect` with `OPENROUTER_API_KEY` unset exits 1 before `deps.fetch` is called. When the stubbed `exec` returns a diff above 32 000 estimated tokens, the written row has `skipped` set and `deps.fetch` was never called."
+    },
+    {
+      "n": 10,
+      "text": "`decisionRequest` returns a body with `model: \"typesafe/jev-1.13\"`, `state: {diff, spec}`, and one `criterion:<n>` question per parsed acceptance criterion plus every `CONVENTION_QUESTIONS` entry. `parseDecisions` on a recorded response fixture (the shape #257 fixes) returns `pTrue` per `id` and `usage.cost` as `costUsd`."
+    },
+    {
+      "n": 11,
+      "text": "No row written by `collect` in the test contains the value of `OPENROUTER_API_KEY` (a sentinel string set in the stubbed env)."
+    },
+    {
+      "n": 12,
+      "text": "`build.js`: the `VERDICT` schema accepts an optional integer `criterion` on each gap and still requires `severity, area, location, fix`. Manual step: run `build` on any approved issue. The PR body holds a `factory-verify` json block with one entry per validator round, each with a `headSha` that `git cat-file -e` resolves in the PR's commits. The loop still runs at most 2 rounds with test-verifier before validator, as today."
+    },
+    {
+      "n": 13,
+      "text": "The docs state that `pnpm bench:jev` exists, that `--offline` makes no network call, the decision rule (lowest threshold with zero clean-PR false positives, ship only if at least 25% of round-1 returns are saved, at least 20 PRs with 5 returns), and that the Jev gate never approves a branch. Checked against `docsText` from `test/docs.ts`. `test/docs-drift.test.ts` does not cover any of this (it covers collectors only)."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` and `pnpm test` pass. `scripts/` is already in `tsconfig.json`'s `include`."
+    },
+    {
+      "n": 15,
+      "text": "Manual: `pnpm bench:jev collect` has run on every merged factory PR whose issue carries a spec comment. The resulting `bench/jev/*.json` rows are committed, and the `--offline` output, including the `DECISION:` line, is posted as a comment on #258.\n\nPart B (second PR, build only if criterion 15's comment reads `DECISION: SHIP t=<t>`):"
+    },
+    {
+      "n": 16,
+      "text": "`JEV_THRESHOLD` in `scripts/jev/questions.ts` equals the `t` from that comment."
+    },
+    {
+      "n": 17,
+      "text": "`scripts/jev-gate.ts --spec-file <f> --base <branch>`, run in a worktree, prints one JSON object `{ \"gaps\": [...], \"skipped\": null | \"<reason>\" }` and always exits 0. Each gap is `{ severity: \"blocker\", area, location: \"criterion <n>\", fix: \"<criterion text>\" }`. `area` is `\"ui\"` when the criterion text names a path under `public/` and no path under `src/`, otherwise `\"api\"`. It is tested through its `main(argv, deps)`: a fetch that rejects, times out (`JEV_TIMEOUT_MS`, 60 000) or returns non-2xx gives `gaps: []` and a `skipped` reason, never a non-zero exit. A missing key does the same."
+    },
+    {
+      "n": 18,
+      "text": "Only criteria with `1 - pTrue >= JEV_THRESHOLD` become gaps. Convention answers never become gaps."
+    },
+    {
+      "n": 19,
+      "text": "`build.js` runs the gate once, after the Build phase and before the round loop (phase `Verify`, label `jev #<issue> r0`). A non-empty `gaps` goes to `builder-api`/`builder-ui` through the same fix prompt the loop uses. Then the unchanged loop runs: test-verifier, then validator, max 2 rounds. Round 0 does not count toward the 2. An agent failure or `skipped` logs one line and continues. Jev output never sets `verdict`, and nothing in the gate can make the build reach Release without the validator's `approve`."
+    },
+    {
+      "n": 20,
+      "text": "The `factory-verify` block gains a `{ \"round\": 0, \"source\": \"jev\", \"gaps\": [...], \"skipped\": ... }` entry, so later benchmarks can see what the gate did."
+    },
+    {
+      "n": 21,
+      "text": "The docs state the gate's threshold value, that a Jev failure or timeout skips the step and never blocks a build, and that the validator still runs after it. Checked against `docsText`."
+    }
+  ],
+  "diffTokens": 17875,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.87
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.69
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.44
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.09
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.04
+      },
+      {
+        "id": "criterion:17",
+        "pTrue": 0.03
+      },
+      {
+        "id": "criterion:18",
+        "pTrue": 0.08
+      },
+      {
+        "id": "criterion:19",
+        "pTrue": 0.02
+      },
+      {
+        "id": "criterion:20",
+        "pTrue": 0.03
+      },
+      {
+        "id": "criterion:21",
+        "pTrue": 0.06
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.49
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.34
+      }
+    ],
+    "costUsd": 0.001343832,
+    "ms": 698,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.88
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.87
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.86
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.88
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.75
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.05
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.02
+      },
+      {
+        "id": "criterion:17",
+        "pTrue": 0.02
+      },
+      {
+        "id": "criterion:18",
+        "pTrue": 0.02
+      },
+      {
+        "id": "criterion:19",
+        "pTrue": 0.02
+      },
+      {
+        "id": "criterion:20",
+        "pTrue": 0.02
+      },
+      {
+        "id": "criterion:21",
+        "pTrue": 0.02
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.7
+      }
+    ],
+    "costUsd": 0.115182,
+    "ms": 8528,
+    "error": null
+  }
+}

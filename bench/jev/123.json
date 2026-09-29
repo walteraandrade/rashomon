@@ -1,0 +1,91 @@
+{
+  "pr": 123,
+  "issue": 108,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "aad0eefce490086852fc45bced49d4ec75449078",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`Term` (`src/types.ts`) no longer includes `'theme'` in `kind`'s union. `pnpm typecheck` passes."
+    },
+    {
+      "n": 2,
+      "text": "A GKG doc collected after this change produces `extraTerms: []`; no code path constructs a `Term` with `kind: 'theme'` anymore (`src/collectors/gkg.ts`, `src/bench-corpus.ts`)."
+    },
+    {
+      "n": 3,
+      "text": "`KINDS` (`src/query.ts`) and the literal kind array inside `docsWhereSql` (`src/graph.ts`) are the same three values, `['hashtag', 'word', 'phrase']`, checked by a test that reads both instead of re-typing a third copy."
+    },
+    {
+      "n": 4,
+      "text": "`GET /people/:id/graph?kind=theme`, `GET /people/:id/docs?kind=theme`, `GET /people/:id/rising?kind=theme` and `GET /people/:id/timeline?term=...&kind=theme` all behave exactly as they already do for any other unrecognized kind token (`kind=bogus`): `/graph`/`/rising` return nodes/terms filtered to nothing (an unknown token is not a subset match); `/docs`/`/timeline` fall back to matching the term under any kind, unchanged from today's \"unknown kind still matches\" behaviour. No route errors or changes status code."
+    },
+    {
+      "n": 5,
+      "text": "`pnpm purge themes` exists, is reachable as `target === 'themes'` in `src/purge.ts`, and against a fixture-seeded database: zeroes every row's `extra_terms`, deletes every `doc_terms` row with `kind = 'theme'`, deletes every `doc_testimony` row whose `method` is exactly `kikori:<dtype>` with no revision suffix, and leaves untouched every `doc_testimony` row whose `method` carries a revision (`kikori:<dtype>:<hash>`) or is not a kikori method at all (`stub`, `onnx`)."
+    },
+    {
+      "n": 6,
+      "text": "`pnpm purge themes` against a database with no `gkg` docs and no `kikori:q8`-style rows completes without error and reports zero rows purged."
+    },
+    {
+      "n": 7,
+      "text": "`pnpm purge` with no argument, or an argument that is neither a known source, `orphan-terms` nor `themes`, still throws the existing usage error, now naming all three: `usage: pnpm purge <source|orphan-terms|themes>`."
+    },
+    {
+      "n": 8,
+      "text": "`GET /index.html` and `GET /atlas-legacy.html` return 404. Neither file exists under `public/`."
+    },
+    {
+      "n": 9,
+      "text": "`GET /` and `GET /atlas.css` and `GET /bundle.js` are unaffected (still 200, unchanged content-type) — the deletion touches only the two legacy files."
+    },
+    {
+      "n": 10,
+      "text": "`test/unified-atlas-acceptance.test.ts`'s \"legacy atlas remains reachable and links back to root\" test block is removed, not just its file-existence assertion; nothing in that suite references `public/atlas-legacy.html` anymore."
+    },
+    {
+      "n": 11,
+      "text": "`public/bundle.js` is byte-identical to its pre-change state (`test/bundle-freshness.test.ts` passes without a rebuild) — this issue touches no `src/ui` module."
+    },
+    {
+      "n": 12,
+      "text": "Fixture docs 43 and 44 (`test/fixture.ts`) no longer carry a `theme`-kind `extraTerms` entry; they keep their hashtag+word occurrences of \"coalizao\" exactly as today. Doc 45 is unchanged (it already carried no `extraTerms`). The fixture comment above docs 43-45 is rewritten to describe a two-kind case (hashtag, word), not three."
+    },
+    {
+      "n": 13,
+      "text": "Every test that asserted a third, `theme`-kind node/pair/row for \"coalizao\" (`test/distinct-counts.test.ts`'s \"keeps one term text under three kinds...\", \"links the same term text across kinds...\", \"breaks a (count, term) tie across kinds...\", the `kind=theme` graph case, and `test/phrases-acceptance.test.ts`'s \"the list the atlas sends returns every kind except theme\") is rewritten to assert exactly two kinds (hashtag, word) with counts consistent with docs 43/44/45's actual content, or deleted where the theme dimension was the entire point of the case (the standalone `kind=theme` graph case, and the \"returns every kind except theme\" phrases test, which has nothing left to exclude)."
+    },
+    {
+      "n": 14,
+      "text": "`test/bench.test.ts`'s \"gives themes to gkg docs only\" is replaced by a case asserting every synthetic doc, `gkg` included, carries `extraTerms: []`."
+    },
+    {
+      "n": 15,
+      "text": "`test/format.test.ts`'s `label({ kind: 'theme', ... })` case and `test/graph-aggregations.test.ts`'s `kind=theme` case and `test/timeline-acceptance.test.ts` AC5's `withTheme` branch are left exactly as they are: none of them pins a `Term`-typed value or an assertion that depends on the fixture ever having stored a theme node, so none needs to change for this issue (verified: `kind` is a plain `string` on every `*Query` type in `src/graph.ts`, and `label`'s parameter type is `{ kind?: string; term: string }`, neither imports `Term`). A criterion here is that these three continue to pass unmodified — a diff touching them is a sign of scope creep, not a requirement."
+    },
+    {
+      "n": 16,
+      "text": "`signature-acceptance.test.ts` AC3's third case, which used `kind: 'theme'` only to prove the node-query `kind` parameter has no effect on `.signature`, is repointed at a different, still-present kind (e.g. `'phrase'`) so the criterion keeps exercising three distinct kind values instead of quietly losing one."
+    },
+    {
+      "n": 17,
+      "text": "The docs state, as facts findable anywhere in `docsText` (README.md + every `docs/*.md` page, not pinned to one page's wording): `kind` accepts `hashtag`, `word` and `phrase` (no `theme`); `pnpm purge themes` clears GDELT's stored theme terms, the `extra_terms` column and the pre-revision `kikori:q8`-style testimony rows; `public/index.html` is gone, not \"the legacy UI reachable by name\". `test/docs-drift.test.ts` already covers the collector-registry-vs-`docs/sources.md` facts and needs no new criterion here — this issue does not touch the collector registry or `defaultSources`."
+    },
+    {
+      "n": 18,
+      "text": "`CLAUDE.md`'s sentence describing `kind`'s atlas/API split (\"GDELT's theme codes stay out of the atlas but stay in the API\") is corrected: they no longer exist anywhere, atlas or API. `CLAUDE.md`'s line describing `public/index.html` as reachable legacy UI is removed along with the file."
+    },
+    {
+      "n": 19,
+      "text": "`src/ui/api.ts`'s comment above `ATLAS_KINDS` (lines 7-12) is corrected to stop claiming theme codes \"stay in the API\" and stop claiming `atlas-legacy.html` still shows them; `ATLAS_KINDS`'s string value, `'word,hashtag,phrase'`, is unchanged (it already excluded theme)."
+    }
+  ],
+  "diffTokens": 34029,
+  "skipped": "diff too large (34029 tokens)",
+  "jev": null,
+  "sonnet": null
+}

@@ -1,0 +1,243 @@
+{
+  "pr": 222,
+  "issue": 204,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "18aec5f272377dfa1c311d9a9515c7222f6a873d",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/db.ts`'s schema adds `docs.country` (nullable text) via `alter table ... add column if not exists`, plus `create index if not exists docs_country_idx on docs (country)` — checkable by running `pnpm migrate`/tests against a fresh `memory://` database and querying `information_schema.columns`/`pg_indexes`."
+    },
+    {
+      "n": 2,
+      "text": "`countryOf(domain)` in `src/extract.ts` returns `'pt'` for a `.pt`-suffixed domain, `'br'` for a `.br`-suffixed domain, and `undefined` for every other domain and for `undefined` input — a unit test in `test/extract.test.ts` covering at least `sapo.pt`, `folha.uol.com.br`, `g1.globo.com`, and `undefined`."
+    },
+    {
+      "n": 3,
+      "text": "Inserting a doc via `store.ts`'s upsert path sets `docs.country` from its `domain` with no separate write; a `reindex.ts` backfill pass (mirroring `backfillDomains`) sets `country` on existing rows where `domain is not null and country is null` and leaves rows with `domain is null` untouched."
+    },
+    {
+      "n": 4,
+      "text": "`parseCountryList`/`parseScope` (`src/query.ts`): omitted or fully-invalid `country` parses to `'br'` (not `'all'`); `country=all` parses to `'all'`; `country=pt` parses to `'pt'`; `country=br,pt`, `country=all,pt`, and any input naming both `br` and `pt` all parse to `'all'`; `country=xx` (unknown token) parses to `'br'`. Pinned by `test/query.test.ts` round-trip tests across `parseQuery`, `parseDocsQuery`, `parseRisingQuery`, `parseTimelineQuery`, `parseCompareQuery`, `parseWeekQuery`."
+    },
+    {
+      "n": 5,
+      "text": "`GET /api/people/:id/graph` (default `country`) excludes every `.pt`-country doc from `stats.docs`, `stats.about` and every node's `count`/`pmi`; `GET /api/people/:id/graph?country=all` includes them; `GET /api/people/:id/graph?country=pt` returns only-`.pt` figures. Pinned against `test/fixture.ts`'s new `.pt` doc (see Test plan) in `test/graph.test.ts`."
+    },
+    {
+      "n": 6,
+      "text": "A `null`-country doc (no domain, or a domain classified neither `br` nor `pt`) is counted under the default `country` scope and under `country=all`, and excluded under `country=pt` — pinned by a fixture doc with `domain: undefined` or a bare `.com` domain."
+    },
+    {
+      "n": 7,
+      "text": "`precomputable(q)` returns `true` only when `q.country === 'br'` (alongside the existing `domain`/`lean`/`source`/`days` conditions), `false` for `q.country === 'pt'` and `q.country === 'all'` — extends `test/aggregate.test.ts`'s existing `precomputable` describe block."
+    },
+    {
+      "n": 8,
+      "text": "`graphFor` at the default (`country` omitted) reads from `graph_terms`/`graph_scopes` when a build exists for that window/source, and its output equals the live statement's — extends `test/aggregate.test.ts`'s \"renders the same response as the live query\" table."
+    },
+    {
+      "n": 9,
+      "text": "`graphFor` at `country=pt` and `country=all` always falls back to the live statement even after a build exists, and its `docs`/`about` equal the live statement's — extends `test/aggregate.test.ts`'s \"falls back to the live query for a domain, a lean or a source list\" test with two more cases."
+    },
+    {
+      "n": 10,
+      "text": "`docs/api.md`'s \"Shared filters\" section documents `country` alongside `source`/`kind`/`domain`/`lean`: its two valid tokens (`br`, `pt`), that `all` is the explicit way to disable the exclusion, and that the *default differs from every other shared filter's default* (it filters even when omitted). Checked against `test/docs.ts`'s `docsText`, not against any one file's heading or wording."
+    },
+    {
+      "n": 11,
+      "text": "The docs state, as a fact independent of any file's structure, that a `null`-country document (not yet classified, or classified neither `br` nor `pt`) is kept under the default scope and under `country=all`, and dropped under `country=pt` — checked against `docsText`."
+    },
+    {
+      "n": 12,
+      "text": "The docs state that the graph aggregate tables hold only the default (`country=br`) universe, and that `country=pt`/`country=all` always run the live statement — checked against `docsText`, phrased as a fact (what the aggregate tables cover), not as a reference to `aggregate.ts`'s comments."
+    },
+    {
+      "n": 13,
+      "text": "`test/docs-drift.test.ts` is not touched by this issue: it drives collector documentation from the collector registry, and `country` is not a collector or a `source`/`kind` filter value, so no new drift criterion is written there."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` and `pnpm test` both pass."
+    }
+  ],
+  "diffTokens": 19184,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.56
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.18
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.13
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.26
+      }
+    ],
+    "costUsd": 0.001267938,
+    "ms": 603,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.106953,
+    "ms": 6854,
+    "error": null
+  }
+}

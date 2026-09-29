@@ -1,0 +1,219 @@
+{
+  "pr": 18,
+  "issue": 7,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "55ef7f9b75e3469a8a38645e58c4324b7799ab4e",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`public/compare.html` exists, is valid, self-contained HTML/CSS/JS (no build step, no external JS dependency beyond Google Fonts), and loads without console errors when served by `pnpm dev` and opened at `/compare.html`."
+    },
+    {
+      "n": 2,
+      "text": "On load, both person `<select>` elements are populated from `GET /api/people` and default to two distinct people (manual check against the fixture/seeded data: e.g. Lula and Tarcísio)."
+    },
+    {
+      "n": 3,
+      "text": "Changing the shared `days`/`source`/`kind`/`min`/`sort`/`limit` controls issues exactly two `GET /api/people/:id/graph` requests (one per side) with identical query-string values for every parameter except `id`, verifiable via browser devtools network tab."
+    },
+    {
+      "n": 4,
+      "text": "Given person A's and B's node lists, the three columns partition `idsA ∪ idsB` with no overlap and no omission: `|exclusiveA| + |shared| + |exclusiveB| = |idsA ∪ idsB|`, and `shared = idsA ∩ idsB` exactly, checkable by manually comparing a small fixture-backed pair of responses against the rendered columns."
+    },
+    {
+      "n": 5,
+      "text": "Selecting the same person for A and B does not error, does not block the fetch, renders a \"comparando a mesma pessoa\" pt-BR notice, and results in `exclusiveA = exclusiveB = []` (manual check: both columns empty, shared column = full list)."
+    },
+    {
+      "n": 6,
+      "text": "Clicking a chip toggles a visible highlight state on that chip only; clicking it again removes the highlight; clicking a different chip moves the highlight (never two chips highlighted at once). Manual check."
+    },
+    {
+      "n": 7,
+      "text": "With both filters set so no docs are `about` either person (e.g. `days=1` on the fixture's 100-day-old-only doc scenario, or `min` above any real count), all three columns show the \"nada nessa janela.\" empty state, not a blank/broken layout."
+    },
+    {
+      "n": 8,
+      "text": "If one side's fetch is made to fail (e.g. temporarily point one `id` at a nonexistent person id via URL manipulation, which 404s), that side's column area shows the pt-BR error copy instead of throwing a JS exception, and the other two columns still render correctly from the succeeding side (treating the failed side as `[]`)."
+    },
+    {
+      "n": 9,
+      "text": "`public/design-5.html` diff is limited to: (a) the new `.compare-link` anchor placed between `.person-pick` and `#stats` inside the existing `<header>`, and (b) its companion CSS rule(s) inside the existing `<style>` block. No other markup, script, or style in `design-5.html` changes — checkable via `git diff public/design-5.html` showing only additive header/CSS lines."
+    },
+    {
+      "n": 10,
+      "text": "`pnpm typecheck` and `pnpm test` both still pass unmodified (this feature adds no `.ts` files and no server route, so neither suite's behavior changes) — checkable by running both commands."
+    },
+    {
+      "n": 11,
+      "text": "Page is visually usable at exactly 1440×900 viewport: header, shared toolbar, and all three columns are visible without horizontal scroll and without columns collapsing/overlapping (manual visual check, the human review gate for this issue per the brief)."
+    },
+    {
+      "n": 12,
+      "text": "Node chips never display a coerced-to-zero tone value; `tone: null` nodes render with no tone indicator (manual code-read check: no `?? 0` or `|| 0` applied to `.tone` anywhere in `compare.html`)."
+    }
+  ],
+  "diffTokens": 6084,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.72
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.2
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.64
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.28
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.67
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.66
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.28
+      }
+    ],
+    "costUsd": 0.000614586,
+    "ms": 455,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.88
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.15
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.02
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.053481,
+    "ms": 6279,
+    "error": null
+  }
+}

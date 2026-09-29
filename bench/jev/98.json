@@ -1,0 +1,95 @@
+{
+  "pr": 98,
+  "issue": 91,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "12373acb09768e77ccff8ba895229939eb9ce315",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`public/js/figures/compare.js` exists, is importable under `node:test` with no `document` defined, touches `document` only inside `mount()`, and exports exactly `mount`."
+    },
+    {
+      "n": 2,
+      "text": "`test/atlas-modules-acceptance.test.ts`'s import-graph fixture gains `figures/compare.js: ['./api.js', './format.js', './render.js', './state.js']` (no direct `layout.js` import — the swarm packing lives inside `render.js`'s new painter, mirroring `figures/testimony.js`'s shape) and `app.js: ['./figures/atlas.js', './figures/testimony.js', './figures/compare.js']`; the acyclic-import test passes against this graph."
+    },
+    {
+      "n": 3,
+      "text": "`public/js/api.js` exports `compareParams` and `loadCompare`; `compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '40' })` produces a query string that, sent to a running server, resolves to the same body as calling `GET /api/compare` directly with those params plus `kind=word,hashtag,phrase` and no `domain`/`lean` (both left at the server default)."
+    },
+    {
+      "n": 4,
+      "text": "`public/js/format.js` exports `balanceColor`; `balanceColor(0)` equals `SCALE_MID`; `balanceColor(-1)` and `balanceColor(1)` are two distinct, non-grey colours; `balanceColor` is monotonic in `|balance|` for each sign (a unit test walks a few sample points, not every float)."
+    },
+    {
+      "n": 5,
+      "text": "Given a fixture response where a term is present only for `a` (`b: null`), the computed `balance` for that term is exactly `-1` under `measure: 'count'`; symmetrically `+1` for a `b`-only term. A term with identical `{count, pmi}` on both sides has `balance === 0` regardless of `measure`."
+    },
+    {
+      "n": 6,
+      "text": "Switching `compareMeasure` between `count` and `pmi` changes at least one already-rendered term's `x` position without changing any term's computed `combined` (area) value — proving the measure drives position only, never area, checked by asserting `combined` is computed once, independent of `measure`, in the pure logic module."
+    },
+    {
+      "n": 7,
+      "text": "A term where either side's value is the string `'name'` is absent from the rendered set — checked by feeding `paintRuler`/the layout step a fixture where one term is `'name'` on one side and asserting it produces no dot and increments the hidden-word count exposed to the note."
+    },
+    {
+      "n": 8,
+      "text": "`#compareHiddenNote` (or the equivalent painted note) is absent from the DOM when the hidden-name count is `0`, and present with that exact count otherwise."
+    },
+    {
+      "n": 9,
+      "text": "Given `a === b` in the bootstrap query, the fetched `/api/compare` response has every term's `a`/`b` values deep-equal (already guaranteed by #93 AC10) and the figure renders `#compareStatus` visible with the exact string `\"Os dois lados mostram a mesma pessoa.\"`; given `a !== b`, `#compareStatus` stays `hidden`."
+    },
+    {
+      "n": 10,
+      "text": "Clicking a rendered dot updates `#compareDetail`'s content to name both people and, for a side whose value is `null`, read the exact string `nenhum documento` (not `0 documentos`); clicking the same dot again, or a click event on the ruler's own background (not on any dot), returns `#compareDetail` to its empty-hint copy."
+    },
+    {
+      "n": 11,
+      "text": "Changing `compareA`, `compareB`, `compareDays`, `compareSource`, `compareMeasure` or `compareLimit` triggers exactly one new `loadCompare` call and zero new calls to `loadGraph`/`loadSources`/`loadTestimony`, and vice versa: changing figure 1's or figure 2's own controls triggers zero new `loadCompare` calls. Checked by spying `fetch` call counts per figure, mirroring #92's own isolation tests."
+    },
+    {
+      "n": 12,
+      "text": "No word rendered by the ruler ever opens `#docsDialog`; a rendered dot's markup carries no `data-docs-open`-style attribute or click handler that references the dialog."
+    },
+    {
+      "n": 13,
+      "text": "`public/design-5.html` contains a third `<section class=\"figure\" id=\"compare\">` after `#testimony`, with an eyebrow reading \"Gráfico 3\" and a `.sentence-line` inside its `.figure-head` containing `#compareA`, `#compareB`, `#compareDays`, `#compareSource`, `#compareMeasure`, `#compareLimit`."
+    },
+    {
+      "n": 14,
+      "text": "`public/compare.html` no longer exists in the repository."
+    },
+    {
+      "n": 15,
+      "text": "`public/design-5.html`'s header nav link has `href=\"#compare\"` (no longer `href=\"compare.html\"`), same visible text \"comparar pessoas\"."
+    },
+    {
+      "n": 16,
+      "text": "`public/como-ler.html` contains an anchor `id=\"comparar\"` with a paragraph explaining position (de quem é a palavra), area (documentos somados) and the middle pile (palavra dividida) — checked against `docsText`-style content assertions, not a specific heading string."
+    },
+    {
+      "n": 17,
+      "text": "`pnpm build` is rerun and `public/bundle.js` is committed; `test/bundle-freshness.test.ts` passes."
+    },
+    {
+      "n": 18,
+      "text": "`pnpm typecheck` passes (every new module and every new/changed function parameter carries the JSDoc types `tsc` needs under `allowJs`/`checkJs`)."
+    },
+    {
+      "n": 19,
+      "text": "`pnpm test` passes in full, including `test/leitura-ui-acceptance.test.ts` updated for the nav link and the `compare.html`-specific assertions (see §7) and every other currently-green suite this issue touches."
+    },
+    {
+      "n": 20,
+      "text": "`CLAUDE.md`'s Layout section describes three figures on the main page — `#workspace`, `#testimony` and a third comparing two tracked people — and no longer describes a standalone comparison page; a human reviewer confirms this by reading, not a test that greps for a heading or a file name."
+    }
+  ],
+  "diffTokens": 37086,
+  "skipped": "diff too large (37086 tokens)",
+  "jev": null,
+  "sonnet": null
+}

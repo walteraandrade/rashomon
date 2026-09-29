@@ -1,0 +1,147 @@
+{
+  "pr": 261,
+  "issue": 234,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "52fa118914c102c2681826c9587fa85ee4a116e5",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "In `defaultSources`, `gkg`'s index is lower than the index of each of `rss`, `juridico`, `oficial` and `nicho`, and `bluesky` is still the last entry. Tested against the exported array."
+    },
+    {
+      "n": 2,
+      "text": "Run `ingest` with stub collectors. The names are `defaultSources` filtered to `gkg` and `rss`, keeping the array's own order, not a hand-written list. The `gkg` stub returns a doc with uri U, short text naming a tracked person, `tone: 0.3` and `extraTerms: [{ term: 'petrobras', kind: 'org' }]`. The `rss` stub returns a doc with the same uri U and longer text. Afterwards the stored row has `source = 'gkg'`, the rss text, and `tone = 0.3`. Its `doc_terms` includes both `petrobras` (kind `org`) and a word found only in the rss text. The test fails if `rss` is placed back ahead of `gkg`."
+    },
+    {
+      "n": 3,
+      "text": "Same stubs, but `names` given explicitly as `['rss', 'gkg']`. The stored row has `source = 'rss'`, `tone` is null, and `doc_terms` has no `org`-kind row for it. This pins that no org or tone ever lands on a non-GDELT row. It fails if someone implements option (b)."
+    },
+    {
+      "n": 4,
+      "text": "The existing test \"insertDoc keeps a gkg doc's org terms through a later enrichment (issue #209)\" still passes unchanged."
+    },
+    {
+      "n": 5,
+      "text": "The docs state these facts:\n   - In a default ingest, `gkg` runs before the RSS-family collectors, so an article both see is stored as `gkg`, with its organizations, V1Persons names and tone, and the RSS body enriches its text.\n   - An article an RSS collector stored first (for example, an explicit `pnpm ingest rss` run before gkg) still has no organizations and no tone, and `pnpm reindex` cannot recover them.\n   - Shared articles count under `gkg` rather than the RSS source from the next ingest on.\n\n   Checked by manual review of the rendered docs. `test/docs-drift.test.ts` covers `defaultSources` membership only, not order, so it does not cover this fact."
+    },
+    {
+      "n": 6,
+      "text": "`pnpm typecheck` and `pnpm test` pass."
+    }
+  ],
+  "diffTokens": 2053,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.6
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.55
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.42
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.33
+      }
+    ],
+    "costUsd": 0.000255528,
+    "ms": 641,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.023871,
+    "ms": 4415,
+    "error": null
+  }
+}

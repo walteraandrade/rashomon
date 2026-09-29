@@ -1,0 +1,195 @@
+{
+  "pr": 171,
+  "issue": 170,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "dd64f03343a6b695bf6bfad403e72a4058c18974",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/ui/marks.ts` exists, exports `frame` and `axis` (and `overflowList`), imports only `./format.js`, and contains no reference to `document` (`grep -c '\\bdocument\\b' src/ui/marks.ts` is 0) — checkable the same way `test/atlas-modules-acceptance.test.ts`'s existing DOM-free list works today; that list (`layout.ts`, `format.ts`, `state.ts`, `perf.ts`, `api.ts`) must include `marks.ts`."
+    },
+    {
+      "n": 2,
+      "text": "`test/atlas-modules-acceptance.test.ts`'s `expected` import-graph dict gains `'marks.ts': ['./format.js']` and `'render.ts'` gains `'./marks.js'` in its own entry; `pnpm test` fails without both edits (delete either one locally and confirm the existing `AC2: the import graph is acyclic…` test goes red, then restore)."
+    },
+    {
+      "n": 3,
+      "text": "Every template literal `marks.ts` builds and hands to a caller for `innerHTML`/`insertAdjacentHTML` is produced with `format.ts`'s `html` tag, not a bare backtick — covered by the existing scan in `test/atlas-modules-acceptance.test.ts` (\"no module but format.ts calls esc()\", \"every template literal that looks like markup is tagged html\"), which already walks every file under `src/ui` and therefore needs no new criterion, only `marks.ts` to exist and be picked up by `jsFiles()`."
+    },
+    {
+      "n": 4,
+      "text": "For every existing `render.test.ts` assertion that matches a substring of painter output (frame attributes, axis line/tick markup, overflow list copy, word mark attributes), the assertion still passes unmodified after the refactor — i.e. no test in `test/render.test.ts` changes its expected strings, only (if at all) its setup. This is `pnpm test` passing with a `git diff` on `test/render.test.ts` touching no `assert.match`/`assert.equal` expected value tied to markup shape."
+    },
+    {
+      "n": 5,
+      "text": "`paintRuler`, `paintRisingRuler`, `paintTermStrip`, `paintStrip`, `drawMap`, `paintWeek` and every `paint*Loading`/`paint*Error` function keep their existing exported names and return shapes — reuse the issue #151 acceptance style: `paintRuler`'s test (\"keeps its own exported shape after the shared paintRulerBody extraction\") stays green with no edits, and an equivalent check exists (new or reused) that `paintWeek` and `paintTermStrip` still return/paint what they did before."
+    },
+    {
+      "n": 6,
+      "text": "`paintAtlasLoading`, `paintTestimonyLoading`, `paintCompareLoading`, `paintRisingLoading` and `paintWeekLoading` build their `<svg>` frame and axis (where they have one) by calling the same `frame`/`axis` functions from `marks.ts` that their live counterpart calls with `ghost: true`/`ghost: false` — checkable by grepping `render.ts` for the ghost painters' bodies and confirming they call `frame(`/`axis(` rather than writing a literal `<svg` or `<line class=\"…-axis\"` themselves; the existing \"loading ghosts hold each figure's silhouette, with no invented words\" tests in `render.test.ts` keep passing unmodified (criterion 4 covers this already; named here because it is the issue's stated risk)."
+    },
+    {
+      "n": 7,
+      "text": "`render.ts` contains no more than one literal `<svg` string per figure family (atlas/strip/ruler/week) and no literal `<line class=\"…-axis\"` anywhere — grep-checkable: `grep -c '<svg' src/ui/render.ts` drops from its pre-refactor count, and `grep -c 'axis\"' src/ui/render.ts` (the class-attribute literal, not calls into `marks.ts`) is 0 outside `marks.ts` itself."
+    },
+    {
+      "n": 8,
+      "text": "`pnpm typecheck`, `pnpm test` and `pnpm build` all exit 0, and `public/bundle.js` is regenerated and committed — `test/bundle-freshness.test.ts` passing is the check."
+    },
+    {
+      "n": 9,
+      "text": "`CLAUDE.md`'s Layout section names `marks.ts`, states it sits between `layout.ts` and `render.ts` in the import order and is DOM-free, and names which pieces it owns (frame, axis, overflow list, and word mark if step 2 landed) — a fact check against `CLAUDE.md`'s prose, not a line-count or heading-position check."
+    },
+    {
+      "n": 10,
+      "text": "No route, response shape, SQL statement or `seed.json`/fixture entry changes: `git diff` touches only `src/ui/marks.ts`, `src/ui/render.ts`, `test/atlas-modules-acceptance.test.ts`, `test/render.test.ts` (and/or a new `test/marks.test.ts`), `public/bundle.js` and `CLAUDE.md`. `src/server.ts`, `src/graph.ts`, `src/extract.ts`, `src/query.ts`, `test/fixture.ts` and `public/design-5.html` are untouched."
+    }
+  ],
+  "diffTokens": 11484,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.76
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.82
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.78
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.88
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.13
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.76
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.11
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.91
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.89
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.29
+      }
+    ],
+    "costUsd": 0.000902748,
+    "ms": 518,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.075528,
+    "ms": 6289,
+    "error": null
+  }
+}

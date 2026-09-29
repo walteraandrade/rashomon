@@ -1,0 +1,255 @@
+{
+  "pr": 10,
+  "issue": 2,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "8f46569e0c59d2363d406d844411d371baaf7a22",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/people/lula/docs` (no `term`, default `days=30`) returns `total: 3, docs.length: 3`, matching `graphFor`'s existing `stats.about === 3` for Lula at `days=30`. — `test/docs.test.ts`"
+    },
+    {
+      "n": 2,
+      "text": "`docs` are ordered newest-first: for #1, `docs[0].published_at > docs[1].published_at > docs[2].published_at`. — `test/docs.test.ts`"
+    },
+    {
+      "n": 3,
+      "text": "`term=reforma&kind=word` for Lula returns `total: 2` (both \"reforma\"/\"tributária\" docs). — `test/docs.test.ts`"
+    },
+    {
+      "n": 4,
+      "text": "`term=reforma&kind=bogus` returns the same `total: 2` as `kind=all` (unknown kind falls back to `all`). — `test/docs.test.ts`"
+    },
+    {
+      "n": 5,
+      "text": "`days=365` widens Lula's no-term `total` to `4` (matches `graphFor`'s `stats.about === 4` at `days=365`). — `test/docs.test.ts`"
+    },
+    {
+      "n": 6,
+      "text": "`source=bluesky` (no term) for Lula returns `total: 1`. — `test/docs.test.ts`"
+    },
+    {
+      "n": 7,
+      "text": "`domain=g1.globo.com` (no term) for Lula returns `total: 1`. — `test/docs.test.ts`"
+    },
+    {
+      "n": 8,
+      "text": "`term=reforma&kind=word&limit=1&offset=0` then `offset=1` for Lula each return `docs.length: 1`, `total: 2` on both calls, and the two calls return different, correctly-ordered doc ids (newest first). — `test/docs.test.ts`"
+    },
+    {
+      "n": 9,
+      "text": "A doc from a non-GDELT source in the response always has `tone: null` — never a synthesized value. — `test/docs.test.ts`"
+    },
+    {
+      "n": 10,
+      "text": "A person with zero matching docs (empty window, e.g. `days=1` on a person whose only docs are older, or a person with no docs at all) returns `total: 0, docs: []`. — `test/docs.test.ts`"
+    },
+    {
+      "n": 11,
+      "text": "`GET /api/people/nobody/docs` returns HTTP 404 with `{ error: 'person not found' }` — checked the same way as the existing `/graph` and `/sources` routes (no dedicated HTTP-layer test exists for those either): manual step, `curl -s -o /dev/null -w '%{http_code}\\n' localhost:3210/api/people/nobody/docs` → `404`."
+    },
+    {
+      "n": 12,
+      "text": "Clicking a hashtag/word/theme node in `public/design-5.html` opens `#docPanel` with that term's docs; clicking a person node does nothing. — manual step in the browser."
+    },
+    {
+      "n": 13,
+      "text": "`Esc` and the panel's close button both hide `#docPanel`; `aside#sources` remains visible and interactive throughout. — manual step in the browser."
+    },
+    {
+      "n": 14,
+      "text": "With zero matching docs, the panel shows the empty-state copy and no `carregar mais` button. — manual step in the browser."
+    },
+    {
+      "n": 15,
+      "text": "README's API section lists the new route with its query params and response shape, in the same one-liner style as the existing three routes. — manual review of the README diff."
+    }
+  ],
+  "diffTokens": 4931,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.6
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.13
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.88
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.27
+      }
+    ],
+    "costUsd": 0.00052521,
+    "ms": 632,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.048693,
+    "ms": 6735,
+    "error": null
+  }
+}

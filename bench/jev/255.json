@@ -1,0 +1,243 @@
+{
+  "pr": 255,
+  "issue": 251,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "fefe923f451d120b57175db5077b8dbc31f98d6c",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`term_links` exists with primary key `(days, source, person_id, a, b)` and a `person_id` foreign key with `on delete cascade`, mirroring `term_communities`'s shape."
+    },
+    {
+      "n": 2,
+      "text": "`term_links` is in `ANALYZED_TABLES` and in `POST_BUILD_ANALYZED`, and is absent from `AGGREGATE_TABLES`."
+    },
+    {
+      "n": 3,
+      "text": "`hasGraphAggregates()` still returns `true` after `term_links` is emptied (mirrors the existing `term_communities` test at `test/aggregate.test.ts:327-330`) — a missing or stale `term_links` never triggers a full rebuild."
+    },
+    {
+      "n": 4,
+      "text": "For every recorte in `test/aggregate.test.ts`'s existing `recortes` table, crossed with both fixture persons, the fast `term_links` read and `linksQuery`'s live read return the identical `{s, t, count}` set (order-insensitive comparison is fine; the existing parity tests compare full `graphFor` output, so this criterion is satisfied by extending that same parity assertion to include `links`)."
+    },
+    {
+      "n": 5,
+      "text": "When `term_links` has no row for an otherwise-precomputable, built scope (e.g. after `delete from term_links where days = ... and source = ... and person_id = ...`), `graphFor` for that scope still returns the same `links` array the live `linksQuery` would produce — proving the fallback, not an empty array."
+    },
+    {
+      "n": 6,
+      "text": "When the fast node path itself falls back to live (an unbuilt window, or a scope where `graph_terms` has no rows for that person), the links path also runs live — never a broken join where fast-links is queried against a node set the live path produced."
+    },
+    {
+      "n": 7,
+      "text": "A window rebuild (`buildGraphAggregates`) is idempotent for `term_links`: a second build with no new docs leaves the same rows (mirrors the existing `graph_terms` idempotency test)."
+    },
+    {
+      "n": 8,
+      "text": "`pnpm typecheck` and `pnpm test` pass."
+    },
+    {
+      "n": 9,
+      "text": "`test/graph.test.ts`'s `statements` map includes the new fast-links query's rendered SQL text, so its shape is pinned like every other builder in `queries`."
+    },
+    {
+      "n": 10,
+      "text": "`GET /api/people/:id/graph`'s response for a fixed recorte, sources against `master` before this change, is byte-for-byte identical after it (a snapshot/diff check, not a new field)."
+    },
+    {
+      "n": 11,
+      "text": "Every `term_links` row for a built scope has both `a` and `b` inside that scope's linkable set `L` (definition above), and every `communityEdgesQuery` edge with both ends in `L` is present — the stored set is exactly `communityEdgesQuery ∩ (L × L)`, no more, no less."
+    },
+    {
+      "n": 12,
+      "text": "For every recorte in the `recortes` table × both fixture persons × every `sort` × every `min` in `MINS` × `limit` ∈ {smallest, default 40, largest in `LIMITS`}, with `kind` = the full `KINDS` set, `graphFor`'s `links` equals the live `linksQuery` result — the cap never drops an edge a request can ask for."
+    },
+    {
+      "n": 13,
+      "text": "A `graphFor` request with a narrower `kind` (e.g. `word` alone, or `word,hashtag`) on a built, precomputable scope runs `linksQuery` live and returns the live result, even when some of its edges happen to be in `term_links`."
+    },
+    {
+      "n": 14,
+      "text": "Production size gate, checked before merge and reported in the PR body: after one full build, `pg_total_relation_size('term_links')` is at most that of `graph_terms`. If it is larger, the PR does not merge; the builder reports the number and the per-`(days, source)` row counts instead."
+    }
+  ],
+  "diffTokens": 14325,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.61
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.31
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.05
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.21
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.83
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.33
+      }
+    ],
+    "costUsd": 0.00095823,
+    "ms": 720,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.080556,
+    "ms": 6639,
+    "error": null
+  }
+}

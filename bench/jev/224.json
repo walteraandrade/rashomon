@@ -1,0 +1,243 @@
+{
+  "pr": 224,
+  "issue": 214,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "66fbf4d60e87c722a4db8bbfeb884f42ed953427",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`term_communities` exists in `src/db.ts`'s `schema` with the exact primary key `(days, source, person_id, term, kind)`, and `pnpm typecheck && pnpm test` pass with the new table present (a fresh in-memory `migrate()` picks it up with no separate migration step)."
+    },
+    {
+      "n": 2,
+      "text": "`term_communities` is in `ANALYZED_TABLES` and is **not** in `AGGREGATE_TABLES`; `hasGraphAggregates()`'s query text still names only `graph_scopes` and `graph_terms`."
+    },
+    {
+      "n": 3,
+      "text": "`src/communities.ts` exports a pure `communities(edges, seed)` with no import from `db.ts`, `store.ts`, `aggregate.ts` or any Effect/SQL module; a unit test feeds it a small fixed edge list and pins the returned community assignment (same input, same seed ⇒ same output, asserted by calling it twice)."
+    },
+    {
+      "n": 4,
+      "text": "`graphology` and `graphology-communities-louvain` are dependencies in `package.json` pinned to an exact version string (no `^`, no `~`, no range)."
+    },
+    {
+      "n": 5,
+      "text": "`pnpm build`'s esbuild bundle (`public/bundle.js`) does not grow to include `graphology`: `test/bundle-freshness.test.ts` still passes, and grepping the built bundle for `graphology` finds nothing — the dependency reaches only `aggregate.ts`/`communities.ts`, never `src/ui/*` or `src/server.ts`'s import graph."
+    },
+    {
+      "n": 6,
+      "text": "`GET /graph` with no `communities` parameter returns byte-identical JSON to the pre-#214 shape: no `community` key on any node, for both the fast and the live path (extends the existing \"fast and live render the same response\" equality tests in `test/aggregate.test.ts` to also prove neither has grown an unexpected key)."
+    },
+    {
+      "n": 7,
+      "text": "`GET /graph?communities=1` on a precomputable recorte (built window, no domain/lean, one source) returns an integer `community` on every node."
+    },
+    {
+      "n": 8,
+      "text": "`GET /graph?communities=1` on a non-precomputable recorte (a window outside `DAYS`, a `domain` filter set, a `lean` filter set, or more than one `source`) returns `community: null` on every node — the live path never computes communities."
+    },
+    {
+      "n": 9,
+      "text": "`GET /graph?communities=1` for a recorte whose window is built but predates any community rows (simulate by deleting from `term_communities` for that `(days, source, person)` after a normal `buildGraphAggregates` run) still returns `community: null` on every node, and the rest of the response (`nodes`, `stats`, `signature`) is unaffected — a missing community build degrades, it does not error or fall back to the live query."
+    },
+    {
+      "n": 10,
+      "text": "`signature` never carries a `community` key, with or without `communities=1`."
+    },
+    {
+      "n": 11,
+      "text": "`pnpm aggregate` (or `buildGraphAggregates` called directly in a test) inserts at least one `term_communities` row per person per window it builds, for every `(term, kind)` present in `graph_terms` for that `(days, source, person_id)` — no kept term is left with no community row inside a build that ran the community step."
+    },
+    {
+      "n": 12,
+      "text": "A term with no surviving co-occurrence edge (below the `>= 2` floor) still receives a `community` value inside a built recorte — proven against the fixture (a term unique to one document keeps a non-null community, distinct from a term that never made it into `graph_terms` at all, which correctly stays absent from `term_communities`)."
+    },
+    {
+      "n": 13,
+      "text": "`test/graph.test.ts`'s `statements.graphFast` (rendered with `communities: false`, the sample query's default) is unchanged from before this issue; a second pinned sample rendered with `communities: true` captures the new joined SQL text, so a future edit to the join is caught the same way `sortKey` changes already are."
+    },
+    {
+      "n": 14,
+      "text": "`docs/api.md`'s `## graph` section documents `communities=1`: that it adds an integer-or-null `community` per node, that `null` means the window was not built (precomputable) or the community step has not yet covered that recorte, and that `signature` is never tagged. Checked against `docsText` (all pages together), not against one file's heading or wording."
+    }
+  ],
+  "diffTokens": 15360,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.86
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.81
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.23
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.86
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.25
+      }
+    ],
+    "costUsd": 0.001071084,
+    "ms": 556,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.089391,
+    "ms": 7825,
+    "error": null
+  }
+}

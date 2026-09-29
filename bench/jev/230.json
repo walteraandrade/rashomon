@@ -1,0 +1,91 @@
+{
+  "pr": 230,
+  "issue": 208,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "67f19965610dce29045c30039d9781ea2495bd57",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/agenda` with no query string returns `{ days: 30, persons, domains, cells }` and nothing else (`Object.keys(...).sort()` is exactly `['cells', 'days', 'domains', 'persons']`)."
+    },
+    {
+      "n": 2,
+      "text": "`persons` lists every tracked person, `{ id, name }` only, ordered by name, present even when `cells` is empty."
+    },
+    {
+      "n": 3,
+      "text": "A `(person, domain)` pair whose person has fewer tracked docs on that domain than the domain's own total never has `share === 1` unless it is in fact the only person on that domain; `share` for a domain with docs from two different tracked people, each with a distinct doc count, matches `docs_a / (docs_a + docs_b)` and `docs_b / (docs_a + docs_b)` to 2 decimals (computed against `test/fixture.ts`'s docs, values pinned in the test itself)."
+    },
+    {
+      "n": 4,
+      "text": "A domain with a doc naming two tracked people counts that doc once toward the domain's own total (denominator) and once toward each of those two people's own `docs` (numerator) — asserted directly, not inferred from a share value alone."
+    },
+    {
+      "n": 5,
+      "text": "A domain below `min` tracked docs appears in neither `domains` nor `cells`; raising `min` via `agendaFor` removes a domain that `min - 1` still included, at the exact boundary count (mirrors `toneFor`'s \"lowers the threshold when min is set explicitly\" test)."
+    },
+    {
+      "n": 6,
+      "text": "`domains` is sorted alphabetically and contains no duplicate."
+    },
+    {
+      "n": 7,
+      "text": "Calling `agendaFor` with a `limit` lower than the number of domains that clear `min` returns exactly that many top domains, ranked by tracked-doc total descending, ties broken by domain name ascending, and never a domain that failed `min` even if it would otherwise rank inside that limit."
+    },
+    {
+      "n": 8,
+      "text": "A doc with no `domain` never appears in `domains` and is never counted toward any cell or any domain total, even when it is the only tracked doc that would otherwise meet `min`."
+    },
+    {
+      "n": 9,
+      "text": "An empty window (`days` short enough that no docs fall inside it) returns `domains: []`, `cells: []`, and `persons` still has every tracked person."
+    },
+    {
+      "n": 10,
+      "text": "`source` filtering narrows a domain's total and every person's `docs` on that domain identically: filtering to a single source that excludes half of a domain's docs changes `docs`/`total` together, and a share pinned at the wider scope either stays the same or changes because a doc dropped out of both sides, never because of an asymmetry between numerator and denominator."
+    },
+    {
+      "n": 11,
+      "text": "`GET /api/agenda`'s response, called through `app.request`, is byte-identical (`JSON.parse(JSON.stringify(...))`) to a direct `agendaFor(parseAgendaQuery({}))` call, following the existing `/api/tone`-parity pattern in `test/server.test.ts`."
+    },
+    {
+      "n": 12,
+      "text": "`parseAgendaQuery` snaps `days` onto `DAYS`, `min` onto `MINS` with its own default (5), parses `source` with `parseSourceList` (unknown tokens dropped, empty/all-invalid falls back to `'all'`), and always sets `limit` to the fixed constant regardless of any `limit`/`domain`/`lean`/`kind` query parameter present in the request."
+    },
+    {
+      "n": 13,
+      "text": "`cacheControl` resolves `/api/agenda` (any status-200 GET under that path) to the same `rolling` (6h) window as `/api/tone` and `/api/graph`, asserted directly against `cacheControl`/`tierOf`'s behavior, not against a doc string."
+    },
+    {
+      "n": 14,
+      "text": "The docs describe `GET /api/agenda`'s query parameters (`days`, `source`, `min`), its response shape (`persons`/`domains`/`cells`, each cell's `person_id`/`domain`/`docs`/`share`), that `share` is relative to the domain's own tracked coverage rather than the person's total coverage, and that `/api/agenda` is cached at the same 6-hour class as `/api/tone` and `/api/graph` — checked against `docsText` (every page at once), never against one page's wording or heading."
+    },
+    {
+      "n": 15,
+      "text": "`src/ui/figures/agenda.ts` exists, is imported only by `app.ts` (never by `atlas.ts`/`testimony.ts`/`compare.ts`/`rising.ts`/`week.ts`), and imports `figure.ts` in the same direction every other figure module does (`test/invariants.test.ts`'s import-direction check passes with the new module included)."
+    },
+    {
+      "n": 16,
+      "text": "Clicking a rendered cell opens `#docsDialog` with exactly one side, that cell's person, and a `domain=` query with no `term`; clicking it again, or the figure's empty background, releases it and closes the card, verified through `createHandlers`/the painter that emits the markup, never by grepping `atlas.html`."
+    },
+    {
+      "n": 17,
+      "text": "The empty state (`domains.length === 0`) paints a note, not an empty grid; the loading state paints a ghost of the grid's own shape, not the word \"Carregando\" and not the previous data."
+    },
+    {
+      "n": 18,
+      "text": "`pnpm build` is re-run and `public/bundle.js` committed alongside the `src/ui` changes (`test/bundle-freshness.test.ts` passes)."
+    },
+    {
+      "n": 19,
+      "text": "`pnpm typecheck` and `pnpm test` both pass with the new module, route and fixture docs included."
+    }
+  ],
+  "diffTokens": 38280,
+  "skipped": "diff too large (38280 tokens)",
+  "jev": null,
+  "sonnet": null
+}

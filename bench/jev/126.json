@@ -1,0 +1,195 @@
+{
+  "pr": 126,
+  "issue": 114,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "09fdc5bed0f9a5f164f7cd68d06ff4181d258fca",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`vercel.json` remains valid JSON and has no top-level `routes` key."
+    },
+    {
+      "n": 2,
+      "text": "`vercel.json` has a top-level `rewrites` array with exactly two entries: `/api/(.*)` → `/api/index` and `/` → `/design-5.html` (same `src`/`dest` pairs as the old `routes`, renamed to `source`/`destination`). No explicit `filesystem` handle entry exists (Vercel's implicit fallback under `rewrites` is what serves `public/` statics — this is a manual pre-merge check via a Vercel preview deploy, not something `node --test` can prove, per the issue's own sequencing)."
+    },
+    {
+      "n": 3,
+      "text": "`vercel.json`'s `$schema`, `framework`, `buildCommand` and `outputDirectory` keys are present and hold the same values as before this change."
+    },
+    {
+      "n": 4,
+      "text": "`vercel.json` has a top-level `headers` array containing at least one entry each whose `source` exactly matches `/`, `/design-5.html` and `/como-ler.html` — three distinct matched paths, verifiable by resolving every entry's `source` field programmatically."
+    },
+    {
+      "n": 5,
+      "text": "For each of those three matched paths, the resolved header set includes a `Content-Security-Policy` value whose `script-src` directive is exactly `'self'` (no `unsafe-inline`, no `unsafe-eval`, no external host)."
+    },
+    {
+      "n": 6,
+      "text": "For each of those three matched paths, the CSP's `style-src` directive includes `'self'` and `'unsafe-inline'` (required for the `--size`/`--tone` inline overrides `render.ts` writes)."
+    },
+    {
+      "n": 7,
+      "text": "For each of those three matched paths, the resolved header set includes `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a `Permissions-Policy` value that denies `camera`, `microphone` and `geolocation` (each appears with an empty allowlist, e.g. `camera=()`)."
+    },
+    {
+      "n": 8,
+      "text": "`VERCEL_INSIGHTS` (`test/pages.ts`) is a same-origin path (starts with `/`, no scheme/host), so it is covered by `script-src 'self'` with no additional `connect-src`/`script-src` exception needed — checked by asserting the constant is host-relative, not by re-deriving CSP semantics."
+    },
+    {
+      "n": 9,
+      "text": "`pnpm typecheck` and `pnpm test` both pass with the new test included; `pnpm build` is unaffected (no `src/ui` file changed, so `test/bundle-freshness.test.ts` needs no rebuild)."
+    },
+    {
+      "n": 10,
+      "text": "`docsText` (every docs page concatenated, per `test/docs.ts`) states both of these facts somewhere: the CSP forbids inline/eval scripts, and the CSP allows inline styles for the per-value `--size`/`--tone` overrides. Not covered by `test/docs-drift.test.ts` (that suite is scoped to the collector/source registry, unrelated to headers) — this is a new fact, so a new criterion, checked against concatenated `docsText`, never against one file's wording or heading."
+    }
+  ],
+  "diffTokens": 3496,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.45
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.25
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.84
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.34
+      }
+    ],
+    "costUsd": 0.00036183,
+    "ms": 375,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.034149,
+    "ms": 6316,
+    "error": null
+  }
+}

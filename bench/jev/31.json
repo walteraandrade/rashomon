@@ -1,0 +1,219 @@
+{
+  "pr": 31,
+  "issue": 26,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "a387e335a96f21a273b5e96001f2e22fe72c1eec",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`outlets.json` exists at repo root with exactly the five entries and field values from the issue body, unmodified (`domain`, `lean`, `basis`, `note`, `sources` byte-identical) — checked by a test that deep-equals the imported file against a literal copy of the issue's JSON."
+    },
+    {
+      "n": 2,
+      "text": "A single `domain=<host>` query, on every route that accepts it, behaves identically to pre-issue behavior — `test/graph.test.ts:58-61` (`filters by source and by domain`), `test/graph.test.ts:266-276` (rising's AC9), `test/docs.test.ts:47-48` (AC7) pass unmodified."
+    },
+    {
+      "n": 3,
+      "text": "`domain=a,b` matches docs whose domain is any listed value, dedupes repeated tokens, and falls back to `all` when every token is invalid — new test, mirroring `parseSourceList`'s existing test coverage."
+    },
+    {
+      "n": 4,
+      "text": "A new `lean` parser accepts comma-separated `left`/`right`/`center`, drops unknown tokens silently, and falls back to `all` when nothing valid survives."
+    },
+    {
+      "n": 5,
+      "text": "`lean=right` (domain unset) scopes to every outlets.json domain labeled `right` (`oantagonista.com.br`, `crusoe.com.br`) and no others; a doc on an unlabeled domain (e.g. `example.org`) never appears under any `lean` value, including when its own docs otherwise clearly dominate the window."
+    },
+    {
+      "n": 6,
+      "text": "`domain=<x>&lean=<y>` intersects: a domain that satisfies `domain` but not `lean` (or vice versa) is excluded; the case where the intersection is empty returns zero docs, not an error, not `all`."
+    },
+    {
+      "n": 7,
+      "text": "`GET /api/people/:id/sources` now actually filters by `q.domain` (regression test proves a `domain=` param changes the returned rows, where before it was silently ignored)."
+    },
+    {
+      "n": 8,
+      "text": "`graphFor`, `docsFor`, `risingFor` responses carry a top-level `outlets: {domain,lean,basis}[]`, empty when `lean` is unset/`all`, populated with the matched outlets.json entries when `lean` narrows the scope."
+    },
+    {
+      "n": 9,
+      "text": "`GET /api/people/:id/sources` rows carry `lean`/`basis` (`null` when the row's domain is absent from `outlets.json`), present on every row regardless of whether `lean` was passed, and the route's top-level response stays a bare array."
+    },
+    {
+      "n": 10,
+      "text": "`GET /api/people/:id/timeline` response stays a bare `{bucket_start,count}[]` array (no `outlets` field, no wrapper) while still honoring `lean` for which docs count toward each bucket."
+    },
+    {
+      "n": 11,
+      "text": "No existing pinned `pmi`/`tone`/`count` literal in `graph.test.ts`, `signature*.test.ts`, `timeline*.test.ts`, `docs.test.ts`, `rising`-related tests changes."
+    },
+    {
+      "n": 12,
+      "text": "`pnpm typecheck` and `pnpm test` both pass."
+    }
+  ],
+  "diffTokens": 16816,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.86
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.83
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.61
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.19
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.89
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.18
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.72
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.23
+      }
+    ],
+    "costUsd": 0.001206366,
+    "ms": 574,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.85
+      }
+    ],
+    "costUsd": 0.100863,
+    "ms": 6388,
+    "error": null
+  }
+}

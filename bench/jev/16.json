@@ -1,0 +1,231 @@
+{
+  "pr": 16,
+  "issue": 5,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "43c371327fbf93edf8e43b731a61a23e3a643a0f",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/tone` with no query params returns HTTP 200 and a body with exactly the keys `persons`, `domains`, `cells`."
+    },
+    {
+      "n": 2,
+      "text": "`days` missing or non-numeric defaults to 30; values are clamped to [1, 365]."
+    },
+    {
+      "n": 3,
+      "text": "`min` missing or non-numeric defaults to 3; values are clamped to [1, 1000]; this default and clamp are independent of `GraphQuery.min`'s default of 2 (verified by a test that does not touch `parseQuery`/`GraphQuery`)."
+    },
+    {
+      "n": 4,
+      "text": "`persons` contains every row from the `persons` table, ordered by name, shaped `{ id, name }`, with no `aliases` field."
+    },
+    {
+      "n": 5,
+      "text": "A `(person, domain)` pair with fewer toned docs than `min` in the window produces **no** entry in `cells` (not an entry with `n < min`)."
+    },
+    {
+      "n": 6,
+      "text": "A `(person, domain)` pair with toned-doc count `>= min` produces exactly one `cells` entry whose `tone` (rounded to 2 decimals) and `n` match a hand-computed average over the fixture's docs for that pair."
+    },
+    {
+      "n": 7,
+      "text": "A person with zero toned docs across all domains appears in `persons` and has zero entries in `cells`."
+    },
+    {
+      "n": 8,
+      "text": "A doc with `domain` unset never causes a `null`/empty-string entry in `domains`, even when its tone would otherwise clear `min` on its own."
+    },
+    {
+      "n": 9,
+      "text": "Lowering `min` (e.g. to 2) surfaces at least one pair that was absent at the default `min=3`, using the fixture."
+    },
+    {
+      "n": 10,
+      "text": "`pnpm typecheck` and `pnpm test` both pass, including the new tone tests."
+    },
+    {
+      "n": 11,
+      "text": "Manual: in `public/design-5.html`, toggling to \"tom por veículo\" replaces the atlas view with the heat table without a full page reload, and the \"tom só existe em textos do GDELT\" note is visible."
+    },
+    {
+      "n": 12,
+      "text": "Manual: hovering a filled cell shows its `n` in a tooltip; a cell with no data shows a dash, is not colored, and is not clickable."
+    },
+    {
+      "n": 13,
+      "text": "Manual: switching back to \"atlas\" shows the same person and filters that were selected before switching to the tone view."
+    }
+  ],
+  "diffTokens": 10752,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.84
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.72
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.86
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.17
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.71
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.17
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.52
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.24
+      }
+    ],
+    "costUsd": 0.000831852,
+    "ms": 462,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.9
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.05
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.07278,
+    "ms": 6829,
+    "error": null
+  }
+}

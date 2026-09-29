@@ -1,0 +1,87 @@
+{
+  "pr": 97,
+  "issue": 92,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "8fb3779bd316c2fdcc595711da25b28b3ace28c4",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`public/js/figures/atlas.js` and `public/js/figures/testimony.js` exist, are importable under `node:test` with no `document` defined, and neither one touches `document` at import time (same side-effect-free rule `app.js` has today) — checked by extending the existing \"app.js is importable outside a browser\" test to the two new files."
+    },
+    {
+      "n": 2,
+      "text": "The import-graph test's `jsFiles()`/`moduleSource()` walk the `figures/` subdirectory too, and its `expected` graph is: `format.js: []`, `state.js: []`, `api.js: []`, `layout.js: ['./format.js']`, `render.js: ['./format.js', './layout.js']`, `figures/atlas.js: ['./api.js', './format.js', './layout.js', './render.js', './state.js']`, `figures/testimony.js: ['./api.js', './format.js', './render.js', './state.js']`, `app.js: ['./figures/atlas.js', './figures/testimony.js']`. The acyclic-import test passes against this graph."
+    },
+    {
+      "n": 3,
+      "text": "`import('../public/js/app.js')` exposes exactly one export, `boot` (`Object.keys(module)` equals `['boot']`)."
+    },
+    {
+      "n": 4,
+      "text": "`import('../public/js/figures/atlas.js')` exposes `mount`, `createHandlers`, `layoutKey`, `docsQuery`, `scopeKeys`; `import('../public/js/state.js')` exposes `fromScope` and `debounce` alongside the existing scope-memo exports; neither `state.js` nor `figures/testimony.js` exposes `outlet`/`zoom`/`layoutCache`/`mask`/request-id helpers."
+    },
+    {
+      "n": 5,
+      "text": "`test/atlas-request-reuse-acceptance.test.ts` and `test/unified-atlas-acceptance.test.ts` import `createHandlers`/`docsQuery`/`scopeKeys` from `../public/js/figures/atlas.js` and `fromScope`/`debounce` from `../public/js/state.js`; every assertion in both files that is not about `resetOutlet` (see #6) passes unchanged."
+    },
+    {
+      "n": 6,
+      "text": "`figures/atlas.js`'s `createHandlers` accepts no `resetOutlet` action and its `control('person')` handler never references an outlet; the \"only the person control releases the outlet in focus\" assertion is replaced by an equivalent one against `figures/testimony.js`'s own local handler table: changing testimony's own person, days or source control releases testimony's own focused outlet."
+    },
+    {
+      "n": 7,
+      "text": "Given the fixture's two seeded people, mounting the page with `?atlas.person=<A>&testimony.person=<B>` results in figure 1's graph request naming `<A>` and figure 2's sources/testimony requests naming `<B>` — the two figures show different people at once. Checked by driving each figure's `mount()` with a fake DOM and a spied `fetch`, asserting the two request URLs."
+    },
+    {
+      "n": 8,
+      "text": "Given `?days=7` alone, both figures' first request carries `days=7`; given `?days=7&testimony.days=365`, figure 1's request carries `days=7` and figure 2's carries `days=365`."
+    },
+    {
+      "n": 9,
+      "text": "Changing figure 2's own person, days or source control triggers a new figure-2 request and does not trigger a new figure-1 request, and vice versa — checked by spying `fetch` call counts per figure before and after each change."
+    },
+    {
+      "n": 10,
+      "text": "`#stats` no longer exists inside `<header class=\"top\">` in `design-5.html`; `#atlasStats` exists inside `#workspace`'s `.figure-title`."
+    },
+    {
+      "n": 11,
+      "text": "The top-level `<section class=\"sentence\">` no longer exists in `design-5.html`; `#workspace`'s `.figure-head` contains a `.sentence-line` with `#person`, `#days`, `#source`, `#sort`, `#limit`; `#testimony`'s `.figure-head` contains a `.sentence-line` with `#testimonyPerson`, `#testimonyDays`, `#testimonySource`."
+    },
+    {
+      "n": 12,
+      "text": "`GET /api/people` is fetched exactly once during `boot()` regardless of how many figures mount — checked by spying the fetch/`api.loadPeople` call count."
+    },
+    {
+      "n": 13,
+      "text": "`figures/testimony.js`'s strip repaint on resize is driven by a `ResizeObserver` scoped to `#strip`; `figures/atlas.js`'s resize handling no longer reads or writes `#strip`, `#testimonyList` or `#outletList`."
+    },
+    {
+      "n": 14,
+      "text": "`design-5.html` still has no `<style>` block, no inline `style=` beyond a `--var` override, and loads only `./bundle.js` as its one module script (the existing markup-shape assertions, re-run against the new markup)."
+    },
+    {
+      "n": 15,
+      "text": "`pnpm build` is rerun and `public/bundle.js` committed; the bundle-freshness test passes."
+    },
+    {
+      "n": 16,
+      "text": "`pnpm typecheck` passes (every new module and every new/changed function parameter carries the JSDoc types `tsc` needs under `allowJs`/`checkJs`)."
+    },
+    {
+      "n": 17,
+      "text": "`pnpm test` passes in full, including every currently-green suite this issue touches."
+    },
+    {
+      "n": 18,
+      "text": "`CLAUDE.md`'s architecture description and the docs describe the front-end as one module per figure under `public/js/figures/`, `app.js` as a shell that mounts them and exports only `boot`, and `state.js` as holding only the shared scope memo and the two generic helpers — a fact a human reviewer confirms by reading, not a string a test greps for.\n\nNote: this issue's front-end tests are new territory for `test/docs-drift.test.ts` (that suite is about the collector registry and `docs/sources.md`, unrelated here) — no existing test covers criterion 18, so it stays a criterion, phrased against the fact rather than a file or heading."
+    }
+  ],
+  "diffTokens": 41818,
+  "skipped": "diff too large (41818 tokens)",
+  "jev": null,
+  "sonnet": null
+}

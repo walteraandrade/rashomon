@@ -1,0 +1,59 @@
+{
+  "pr": 177,
+  "issue": 175,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "4fc8d8c7e6c860a8c563221dff6533312626df0f",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`test/atlas-modules-acceptance.test.ts` no longer exists in the repository."
+    },
+    {
+      "n": 2,
+      "text": "`test/invariants.test.ts` exists and, run alone (`node --test test/invariants.test.ts`), passes, covering: import-graph acyclicity, the DOM-free module list, the `html`-tag-only markup scan (including a `templateLiterals` export), the public-file-served check, and the design-5 no-style/no-inline-script checks — every one of these previously in `atlas-modules-acceptance.test.ts` still has a passing assertion somewhere in the suite."
+    },
+    {
+      "n": 3,
+      "text": "No test anywhere in the repository asserts that `render.ts`'s source text matches `/\\bframe\\s*\\(/` or `/\\baxis\\s*\\(/`, counts literal `<svg` or `<line class=\"…-axis\"` occurrences in `render.ts`, or extracts a named export's body by string search on `export const ${name} = `. (Grep for `frame\\s*\\(/` / `<svg\\\\b/g` / `export const \\$\\{name\\}` inside `test/*.ts` — the pattern must not exist outside `src/ui/marks.ts`/`render.ts` themselves or `marks.test.ts`'s own direct calls to `frame`/`axis`.)"
+    },
+    {
+      "n": 4,
+      "text": "`grep -c \"moduleSource(\\|readFileSync(.*src/ui\" test/*.ts` (or equivalent) returns nonzero only for `test/invariants.test.ts`, `test/bundle-freshness.test.ts` and `test/docs-drift.test.ts`."
+    },
+    {
+      "n": 5,
+      "text": "No `describe(` or `it(` call anywhere under `test/` opens its label string with `AC` followed by a digit, or with `issue #`. (`grep -rEn \"^\\s*(describe|it)\\(['\\\"](AC[0-9]|issue #)\" test/` returns no matches.)"
+    },
+    {
+      "n": 6,
+      "text": "`render.test.ts`'s existing assertions on ghost-painter `innerHTML` (the `strip-axis`, `ruler-axis` and equivalent class-name checks already present) are untouched and still pass, confirming no visible-output coverage was lost when the implementation pins were deleted."
+    },
+    {
+      "n": 7,
+      "text": "`CLAUDE.md`'s `test/` bullet states that a test asserts on output or behaviour, and that reading a module's source is permitted only to check a repo-wide invariant named in `test/invariants.test.ts`."
+    },
+    {
+      "n": 8,
+      "text": "Nothing in `CLAUDE.md` or `docs/factory.md` names `atlas-modules-acceptance.test.ts` any more."
+    },
+    {
+      "n": 9,
+      "text": "`docs/factory.md`'s description of where a new acceptance criterion goes no longer instructs putting an issue number in a label's title."
+    },
+    {
+      "n": 10,
+      "text": "`pnpm typecheck` passes."
+    },
+    {
+      "n": 11,
+      "text": "`pnpm test` passes, and its total test count changes by exactly the number of assertions deleted in point 3 (the two `frame(`/`axis(`/`<svg` pins plus the per-ghost body scanner) — no other test is added or removed as a side effect of the rename."
+    }
+  ],
+  "diffTokens": 52846,
+  "skipped": "diff too large (52846 tokens)",
+  "jev": null,
+  "sonnet": null
+}

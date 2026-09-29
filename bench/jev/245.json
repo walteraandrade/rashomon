@@ -1,0 +1,267 @@
+{
+  "pr": 245,
+  "issue": 218,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "2939d2afb5be8ceaf26a1d58318085ff12435a8e",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`outlet_fields` and `outlet_neighbors` exist in `schema` (`src/db.ts`) with the exact columns and primary keys above, checkable via `information_schema`/`pg_index` against a migrated test database."
+    },
+    {
+      "n": 2,
+      "text": "`outlet_fields` and `outlet_neighbors` are **not** members of `AGGREGATE_TABLES`; both are members of `POST_BUILD_ANALYZED` (`src/aggregate.ts`) and `ANALYZED_TABLES` (`src/db.ts`)."
+    },
+    {
+      "n": 3,
+      "text": "`buildGraphAggregates` run twice back-to-back does not throw, and leaves each table with no duplicate `(days, person_id, domain[, neighbor])` rows (delete-then-rebuild per window, mirroring `term_communities`)."
+    },
+    {
+      "n": 4,
+      "text": "For a person/window with at least two domains each carrying 3+ qualifying docs and at least one shared `(term, kind)`, `outlet_neighbors` holds a row for that ordered pair with `similarity > 0`; a third domain with 3+ docs sharing no term with either produces no row against them."
+    },
+    {
+      "n": 5,
+      "text": "A domain with fewer than 3 qualifying docs in the window never appears in `outlet_fields`, nor as `domain` or `neighbor` in `outlet_neighbors`, for that `(days, person)`."
+    },
+    {
+      "n": 6,
+      "text": "Every domain with a nonempty term set gets exactly one `outlet_fields` row, including one with zero surviving Jaccard edges (a Louvain singleton)."
+    },
+    {
+      "n": 7,
+      "text": "`GET /api/people/:id/sources` rows are identical to the pre-#218 shape except for the two additive keys `field` and `neighbors`; every field documented in `docs/api.md`'s `sources` section before this change keeps its existing meaning and null-handling."
+    },
+    {
+      "n": 8,
+      "text": "On a window/person with no built aggregate, or a domain the build dropped, the row's `field` is `null` and `neighbors` is `[]` — never absent, never `null` for `neighbors`."
+    },
+    {
+      "n": 9,
+      "text": "`neighbors` entries are ordered `similarity` desc then `domain` asc; a fixture with a tied pair pins the tie-break."
+    },
+    {
+      "n": 10,
+      "text": "`docs/api.md` names `field` and `neighbors` as additive, build-time, possibly stale relative to the live row — checked against `test/docs.ts`'s `docsText`, never against a heading or exact wording."
+    },
+    {
+      "n": 11,
+      "text": "`test/docs-drift.test.ts` needs no new criterion: it covers collector-to-`sources.md` parity only, unrelated to this feature."
+    },
+    {
+      "n": 12,
+      "text": "`paintOutlets` groups rows by `field`, with `field: null` rows in their own trailing group, verified against emitted markup via `test/fake-dom.ts` — no field number appears in any visible text, only domain names in the eyebrow."
+    },
+    {
+      "n": 13,
+      "text": "The focused outlet's own row (not `#docsDialog`) renders its `neighbors` as `domain — similarity` pairs, or the \"nenhum veículo parecido\" line when empty — checked via markup assertions."
+    },
+    {
+      "n": 14,
+      "text": "`docs/como-ler.html`'s testimony/`#avaliacao` section states both caveats (shared vocabulary is not lean; a field's number carries no meaning across rebuilds) — checked against `test/docs.ts`'s page-text helper for facts, never a heading match."
+    },
+    {
+      "n": 15,
+      "text": "`test/invariants.test.ts` passes unchanged: no new import-direction violation, no bare template literal bypassing the `html` tag."
+    },
+    {
+      "n": 16,
+      "text": "`neighbors(sets, topK)` in `src/communities.ts` is a pure function with no SQL/DB import, covered by unit tests for: empty input, a single domain (no pairs), a tied similarity pair, `topK` truncation, and a domain with a nonempty set but zero edges still appearing in the returned `edges` as its own self-loop-eligible node."
+    }
+  ],
+  "diffTokens": 19491,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.47
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.46
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.43
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.12
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.87
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.26
+      }
+    ],
+    "costUsd": 0.001277388,
+    "ms": 668,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.10815,
+    "ms": 7717,
+    "error": null
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "pr": 235,
+  "issue": 207,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "425597402c81b5d45ce845f3bf1d7cb15b057a58",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/comention` with no query parameters returns `{ days: 30, persons, pairs }`; `persons` lists every row from `select id, name from persons order by name` (`test/server.test.ts`)."
+    },
+    {
+      "n": 2,
+      "text": "A pair whose shared-doc count in the window is `>= min` appears exactly once in `pairs`, keyed `a`/`b` with `a` the lexicographically smaller person id; a pair below `min`, or with zero shared docs, is absent from `pairs` (`test/graph.test.ts`, extending the fixture per §7)."
+    },
+    {
+      "n": 3,
+      "text": "`comentionFor`'s rendered SQL text, captured via the `statements` export, is stable across two calls with different `days`/`min`/`source`/`lean` values (shape, not value, per every other builder in `src/graph.ts`) (`test/graph.test.ts`)."
+    },
+    {
+      "n": 4,
+      "text": "`parseComentionQuery` snaps `days` via the same three-value rule as every other route, `min` via `MINS` with default 3, and drops an unrecognized `source`/`lean` token to `all` (`test/query.test.ts`)."
+    },
+    {
+      "n": 5,
+      "text": "`GET /api/people/:id/docs?with=<b>` returns only docs where `doc_persons` also has a row for `<b>` on the same `doc_id`; omitting `with`, or passing `with` equal to `:id` itself, or an id not in `persons`, returns byte-identical output to today's route with no `with` sent at all (`test/graph.test.ts`, `test/server.test.ts`)."
+    },
+    {
+      "n": 6,
+      "text": "`parseDocsQuery` maps an unknown or self-referential `with` value to `''` (`test/query.test.ts`)."
+    },
+    {
+      "n": 7,
+      "text": "`docsQuery`'s and `docsCountQuery`'s rendered text for `with: ''` is byte-identical to the pre-existing text before this change (`test/graph.test.ts`'s `statements` regression check) — a caller who never sends `with` sees no query-shape change."
+    },
+    {
+      "n": 8,
+      "text": "`/api/comention`'s path is cached under the `rolling` (6h) tier: `tierOf('/api/comention')` returns `'rolling'` (`test/cache.test.ts`)."
+    },
+    {
+      "n": 9,
+      "text": "`src/ui/figures/comention.ts` exports `mount`, imports `figure.js`, and is checked by the existing import-direction and `html`-tag invariants alongside every other figure module (`test/invariants.test.ts`, no new criterion needed beyond the existing rule already covering \"every module\")."
+    },
+    {
+      "n": 10,
+      "text": "Clicking a filled matrix cell calls `docs-card.ts`'s `open` with one side scoped to `{ person: a, with: b }` (or the response's own `a`), never two sides; this is asserted through `createHandlers`/the figure's own handler function, never by grepping `atlas.html` (`test/comention.test.ts` or a `figures/comention` suite, per the repo's front-end testing rule)."
+    },
+    {
+      "n": 11,
+      "text": "`docs/api.md` describes `GET /api/comention` and the `with` parameter on `/api/people/:id/docs`, and states that `comention` has no `domain`/`kind`/`sort` parameter. (Checked against `docsText`, not a specific heading or file — `test/docs-drift.test.ts` does not cover this route since it is not a collector fact, so this is a genuinely new criterion, not a duplicate of that suite.)"
+    },
+    {
+      "n": 12,
+      "text": "`CLAUDE.md`'s enumeration of `public/atlas.html`'s figures names six, including `#comention`'s DOM id and its docs-card entry point, matching the same level of detail every other figure already gets there."
+    }
+  ],
+  "diffTokens": 45171,
+  "skipped": "diff too large (45171 tokens)",
+  "jev": null,
+  "sonnet": null
+}

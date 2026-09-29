@@ -1,0 +1,255 @@
+{
+  "pr": 15,
+  "issue": 4,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "c2c8c2783bbd01212f6c3ceb45f1f25b4318e301",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/people/:id/timeline` with no query params returns HTTP 200 and a JSON array of exactly `ceil(30/7) = 5` objects (default `days=30`, default `bucket=week`), each with `bucket_start` and `count`, ordered oldest `bucket_start` first."
+    },
+    {
+      "n": 2,
+      "text": "For a fixed `term`/`kind`/`days`/`source`/`domain`, the sum of every bucket's `count` equals `docsFor(person, sameParams).total`."
+    },
+    {
+      "n": 3,
+      "text": "A bucket with zero matching docs is present in the array with `count: 0` — never omitted."
+    },
+    {
+      "n": 4,
+      "text": "With `bucket=day`, two docs that fall in the same 7-day span but on different calendar days land in two different buckets (`count: 1` each); with `bucket=week` over the same window they land in the same bucket (`count: 2`)."
+    },
+    {
+      "n": 5,
+      "text": "Omitting `term` counts every doc about the person per bucket regardless of the `kind` value passed (kind has no effect without a term)."
+    },
+    {
+      "n": 6,
+      "text": "Passing a `kind` value outside `hashtag|word|theme` directly to `timelineFor` (bypassing the HTTP whitelist) still matches `term` under any kind, same fallback as `docsFor`."
+    },
+    {
+      "n": 7,
+      "text": "A person with zero docs anywhere returns every bucket with `count: 0` and does not error."
+    },
+    {
+      "n": 8,
+      "text": "A `days` value narrow enough that no doc falls in the window still returns a non-empty array with every `count: 0`."
+    },
+    {
+      "n": 9,
+      "text": "Filtering by `source` or `domain` to a value with zero matches for the person zeroes every bucket without erroring; filtering to a value with matches narrows counts the same way it narrows `docsFor`'s total."
+    },
+    {
+      "n": 10,
+      "text": "`GET /api/people/:id/timeline` for an unknown person id returns HTTP 404 with `{ \"error\": \"person not found\" }` and never calls `timelineFor`."
+    },
+    {
+      "n": 11,
+      "text": "`bucket` values other than `day`/`week` fall back to `week`; `days` outside `1..365` clamps to the nearest bound, same as every other route's `int()` usage."
+    },
+    {
+      "n": 12,
+      "text": "No object in the timeline response ever contains a `tone` key."
+    },
+    {
+      "n": 13,
+      "text": "In `design-5.html`, hovering a non-person node twice in a row (without leaving it) triggers at most one `/timeline` fetch for that node/filter combination (verify via network panel or a request counter during manual QA)."
+    },
+    {
+      "n": 14,
+      "text": "In `design-5.html`, clicking \"linha do tempo\" in the open doc panel renders a chart under the atlas with the term's per-bucket counts, using `var(--person)` as its only accent color and no `var(--line-strong)` gridlines."
+    },
+    {
+      "n": 15,
+      "text": "In `design-5.html`, the timeline chart shows \"carregando linha do tempo…\" during the fetch, a pt-BR error message on failure, and \"nenhuma menção nessa janela.\" when every bucket is zero."
+    }
+  ],
+  "diffTokens": 9460,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.33
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.91
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.24
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.8
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.77
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.24
+      }
+    ],
+    "costUsd": 0.0008169,
+    "ms": 472,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.8
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.9
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.15
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.05
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.071661,
+    "ms": 10931,
+    "error": null
+  }
+}

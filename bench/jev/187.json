@@ -1,0 +1,315 @@
+{
+  "pr": 187,
+  "issue": 184,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "1e48f7d7e0fc6c6140ec87494636e9cde948aa8d",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/db.ts` exports `Db`, `clampEnv`, `poolConfig`, `db`, `schema`, `migrate`, `ANALYZED_TABLES`, `AnalyzedTable`, `analyzeMinDocs`, `analyzeTables`, `analyzeAfterWrite` with the same call signatures as today; every current importer (`graph.ts`, `aggregate.ts`, `server.ts`, `phrases.ts`, `reindex.ts`, `purge.ts`, `push.ts`, `score.ts`, `export-docs.ts`, `migrate.ts`, `gkg.ts`) compiles with no source change beyond, at most, an import path."
+    },
+    {
+      "n": 2,
+      "text": "`poolConfig` stays pure and synchronous: given a `postgres://` URL it returns a config object without opening a socket, throws the same message as today when `PG_SSL_CA` is unset for a non-local host, and returns `ssl: undefined` for `localhost`/`127.0.0.1` with or without `PG_SSL_CA` set."
+    },
+    {
+      "n": 3,
+      "text": "`poolConfig`'s pool-size field is `PG_POOL_MAX`-clamped 1..20, default 3, and its connect-timeout field resolves to 10 seconds — both asserted by test, field names whatever `PgPoolConfig` requires."
+    },
+    {
+      "n": 4,
+      "text": "With no `DATABASE_URL`/`POSTGRES_URL`, `db` answers a trivial query (`select 1`) against an embedded PGlite instance, at `DATA_DIR` or in-memory for `memory://`, exactly as `embedded()` does today."
+    },
+    {
+      "n": 5,
+      "text": "With `DATABASE_URL`/`POSTGRES_URL` set, `db` is built from `poolConfig`'s output through `@effect/sql-pg`, never through `pg.Pool` — no code path in `src/db.ts` imports `pg` for this driver."
+    },
+    {
+      "n": 6,
+      "text": "`PERF=1` still wraps `db.query`/`db.exec` with `perf.ts`'s `instrument`, and its Proxy's `typeof value === 'function'` check finds both — an existing or new test on the returned object's shape passes."
+    },
+    {
+      "n": 7,
+      "text": "`inTransaction(fn)` keeps its `<T>(fn: () => Promise<T>) => Promise<T>` signature; `store.ts` no longer holds a module-level `open` flag."
+    },
+    {
+      "n": 8,
+      "text": "A nested `inTransaction` whose inner call throws and is caught by the outer rolls back only the inner's writes; the outer's own writes made before and after the inner call remain when the outer commits."
+    },
+    {
+      "n": 9,
+      "text": "A nested `inTransaction` whose outer call throws rolls back every write made by both inner and outer."
+    },
+    {
+      "n": 10,
+      "text": "A `db.query`/`db.exec` call made directly inside an `inTransaction` callback (not through a `store.ts` writer) reads that transaction's own uncommitted rows."
+    },
+    {
+      "n": 11,
+      "text": "`test/graph.test.ts`'s frozen-`now()` transaction block (the `inTransaction` + thrown-sentinel `rollback` pattern, currently around lines 945-983) passes unchanged."
+    },
+    {
+      "n": 12,
+      "text": "A `db.query`/`db.exec` call made with no open `inTransaction` runs outside any transaction, as today."
+    },
+    {
+      "n": 13,
+      "text": "`store.ts`'s `pruneRemoved`, `upsertPersons`, `writeDerived`, `insertDoc`, `insertDocs` keep their current Promise signatures and behavior; `test/store.test.ts`'s existing suite passes unchanged; `ingest.ts`, `reindex.ts`, `push.ts` and `test/fixture.ts` need no source change."
+    },
+    {
+      "n": 14,
+      "text": "Each of those five writers has an `Effect`-suffixed counterpart (`pruneRemovedEffect`, `upsertPersonsEffect`, `writeDerivedEffect`, `insertDocEffect`, `insertDocsEffect`) typed as an `Effect` requiring `SqlClient.SqlClient` and failing with `SqlError`, and produces the same written/enriched/failed counts and the same rows as its Promise counterpart for the same input."
+    },
+    {
+      "n": 15,
+      "text": "`aggregate.ts` needs no source change; `test/aggregate.test.ts` passes unchanged."
+    },
+    {
+      "n": 16,
+      "text": "`package.json` adds `@effect/sql-pglite` and `@effect/sql-pg` at `4.0.0-rc.117` (no `@effect/sql`: those modules are `effect/unstable/sql`); `pg` and `@types/pg` remain listed (see §6) and `src/push.ts` is untouched."
+    },
+    {
+      "n": 17,
+      "text": "`pnpm typecheck` and `pnpm test` pass, with no test file outside `test/db.test.ts`/`test/store.test.ts` needing an edit for a reason other than an import path."
+    },
+    {
+      "n": 18,
+      "text": "The docs (checked against `docsText`, across every page) state that database driver selection follows `DATABASE_URL`/`POSTGRES_URL` between an embedded and a managed Postgres client, and keep present the facts that `PG_SSL_CA` is required for a non-local host, that the connection-pool size defaults to 3 and clamps to 1..20 via `PG_POOL_MAX`, and that `PG_SSL_CA` must be set before a deploy against a non-local database. `test/docs-drift.test.ts` does not cover this (it pins the collector/source registry only); no criterion here overlaps it."
+    },
+    {
+      "n": 19,
+      "text": "`CLAUDE.md`'s description of `src/db.ts`/`src/store.ts` states that a transaction is always opened through `inTransaction` (Promise call sites) or `sql.withTransaction` (Effect call sites), never a raw `begin`/`commit`/`rollback` string."
+    },
+    {
+      "n": 20,
+      "text": "Manual, pre-merge, by a human with `.env.local` (`vercel env pull`), on a `DATA_DIR`/worktree the builder alone owns: `pnpm migrate` succeeds and one `pnpm bench` round completes with matching `/api/people` row counts against both `POSTGRES_URL` (the pooler, transaction-mode, port 6543) and `POSTGRES_URL_NON_POOLING`. This gate is not satisfied by green CI alone — CI never sets `DATABASE_URL`."
+    }
+  ],
+  "diffTokens": 15958,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.63
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.42
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.74
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.58
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:17",
+        "pTrue": 0.32
+      },
+      {
+        "id": "criterion:18",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:19",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:20",
+        "pTrue": 0.08
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.22
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.91
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.29
+      }
+    ],
+    "costUsd": 0.001164828,
+    "ms": 618,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:16",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:17",
+        "pTrue": 0.75
+      },
+      {
+        "id": "criterion:18",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:19",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:20",
+        "pTrue": 0.05
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.9
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.02
+      }
+    ],
+    "costUsd": 0.100269,
+    "ms": 8626,
+    "error": null
+  }
+}

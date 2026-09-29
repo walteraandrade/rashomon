@@ -1,0 +1,171 @@
+{
+  "pr": 260,
+  "issue": 256,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "bacf32a5a55dde91c91f3debafd2a99383911907",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`pnpm typecheck` and `pnpm test` pass, and `pnpm test` runs with `PERF` unset in the parent: the existing `is disabled unless PERF is set` test still passes, unmodified."
+    },
+    {
+      "n": 2,
+      "text": "The five `PERF=1` `it`s keep their current names and their current describe placement (four under `measure`, one under `serverTiming`). Each asserts exactly what it asserts today:\n   - `statements`: `sql === 2`, `value >= 0`, `dbMs >= 0`, `ms >= dbMs - 0.001`.\n   - `zero`: `sql === 0`, `dbMs === 0`.\n   - `outside`: `n === 1`.\n   - `concurrent`: `sql === 3`.\n   - `serverTiming`: `status === 404`, and `header` matches `/^db;dur=\\d+(\\.\\d+)?;desc=\"\\d+ sql\", total;dur=\\d+(\\.\\d+)?$/`."
+    },
+    {
+      "n": 3,
+      "text": "One child process serves all five cases. Manual check: add a temporary `console.error('BOOT', process.pid)` at the top of the child script and run `node --import tsx --test test/perf.test.ts`. The stderr shows exactly one `BOOT` line. Remove the line afterwards."
+    },
+    {
+      "n": 4,
+      "text": "The child calls `migrateP()` once. Manual check: a temporary counter or log around `migrateP` in the child script fires once per run."
+    },
+    {
+      "n": 5,
+      "text": "Isolation of a failing case. Manual check: temporarily change the `outside` case's query to `select nope`. Only `does not throw when a query runs outside a measured scope` fails, and its message contains the SQL error. The other four `PERF=1` `it`s pass. Revert afterwards."
+    },
+    {
+      "n": 6,
+      "text": "Boot failure surfaces stderr. Manual check: temporarily import a non-existent module in the child script. All five `PERF=1` `it`s fail, and each message contains the child's stderr. Revert afterwards."
+    },
+    {
+      "n": 7,
+      "text": "Wall time. Manual check on the dev machine (20 cores, warm cache): `node --import tsx --test test/perf.test.ts` reports a total `duration_ms` under 15 000."
+    },
+    {
+      "n": 8,
+      "text": "`git diff master -- src/` is empty.\n\nNo documentation criterion: no documented fact changes, and `test/docs-drift.test.ts` is unaffected."
+    }
+  ],
+  "diffTokens": 1803,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.66
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.77
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.74
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.8
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.59
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.9
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.69
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.99
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.42
+      }
+    ],
+    "costUsd": 0.000246498,
+    "ms": 479,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.024528,
+    "ms": 4971,
+    "error": null
+  }
+}

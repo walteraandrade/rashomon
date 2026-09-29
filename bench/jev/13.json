@@ -1,0 +1,171 @@
+{
+  "pr": 13,
+  "issue": 6,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "88fc01f51e9749b5748b0b23bcdc83b6114cdeff",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/people/lula/graph?days=30` on the fixture returns `signature` equal to `[{ term: 'reforma', kind: 'word', count: 3, pmi: 0.58 }]` (see Test plan for the fixture doc that produces this)."
+    },
+    {
+      "n": 2,
+      "text": "`signature` never contains a term equal to any of the person's own name tokens (mirrors the existing `nodes` guarantee)."
+    },
+    {
+      "n": 3,
+      "text": "`signature` is unchanged when `kind`, `min`, `limit`, or `sort` are varied on an otherwise identical request (proves independence from those params)."
+    },
+    {
+      "n": 4,
+      "text": "`signature.length <= 5` always; when fewer than 5 terms meet the floor, the array is shorter — never padded."
+    },
+    {
+      "n": 5,
+      "text": "For a person with `stats.about === 0` (fixture's `nobody` person, or any scope with no docs about the person), `signature` deep-equals `[]`."
+    },
+    {
+      "n": 6,
+      "text": "`signature` is ordered by `pmi` descending; ties are broken by `term` ascending (checkable with a fixture that produces two terms at the same `count`/`pmi`, or by direct assertion on a manufactured pair of rows in a unit-level test of the ordering comparator if the fixture cannot produce a tie cheaply)."
+    },
+    {
+      "n": 7,
+      "text": "Manual: in `public/design-5.html`, selecting Lula shows an \"assinatura\" chip for \"reforma\"; hovering it dims all non-neighbor nodes in `#chart` exactly like hovering the `word:reforma` node does; hovering a signature chip whose term is not present in the currently rendered `nodes` (e.g. after switching `kind` to `hashtag`) does not dim anything."
+    },
+    {
+      "n": 8,
+      "text": "Manual: for a person/window with no qualifying signature terms, the assinatura block is absent from the header (not rendered empty)."
+    }
+  ],
+  "diffTokens": 6145,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.32
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.61
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.87
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.65
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.25
+      }
+    ],
+    "costUsd": 0.00054453,
+    "ms": 430,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.047751,
+    "ms": 5740,
+    "error": null
+  }
+}

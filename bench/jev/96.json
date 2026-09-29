@@ -1,0 +1,255 @@
+{
+  "pr": 96,
+  "issue": 93,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "f2b7ca860e54a70a0c498f1fb0b7ef065279976d",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`GET /api/compare?a=lula&b=bolsonaro` (defaults otherwise) returns 200 with a body of exactly `{ days, a: { person, about }, b: { person, about }, terms }` — no `links`, `signature`, `nodes` or `outlets` keys."
+    },
+    {
+      "n": 2,
+      "text": "`a.person` and `b.person` are each `{ id, name, aliases }`, matching the row in `persons` for that id."
+    },
+    {
+      "n": 3,
+      "text": "`GET /api/compare?a=nobody&b=lula` and `GET /api/compare?a=lula&b=nobody` both return 404 with body `{ \"error\": \"person not found\" }`."
+    },
+    {
+      "n": 4,
+      "text": "`GET /api/compare` with `a`/`b` omitted returns 404 with the same body."
+    },
+    {
+      "n": 5,
+      "text": "`a.about` for `a=lula` at a given `days`/`source`/`domain`/`lean` equals `graphFor(lula, sameQuery).stats.about` — proving `about` is unfiltered by term/kind and matches `/graph`'s existing meaning."
+    },
+    {
+      "n": 6,
+      "text": "A term present in the fixture only for `lula` (e.g. \"reforma tributária\", `days: 30`) appears in the response with a real `{ count, pmi, tone }` object under `a` and `null` under `b` — not omitted from `terms`, not a `{ count: 0, ... }` object."
+    },
+    {
+      "n": 7,
+      "text": "Symmetrically, a term that only `tarcisio`'s docs carry appears with a real figure on that side and `null` on the other when compared against a person whose docs never mention it."
+    },
+    {
+      "n": 8,
+      "text": "A term equal to (or containing) one side's own name word — e.g. the term \"lula\" when `a=lula` — reads `\"name\"` under `a`. If that same term is genuine vocabulary for `b` (has doc_terms rows about `b` outside `b`'s own name), it reads a real `{ count, pmi, tone }` object under `b` in the same response."
+    },
+    {
+      "n": 9,
+      "text": "For a `(term, kind)` present in `graphFor(lula, q).nodes` (an overlapping query scope), `/api/compare?a=lula&b=...`'s `a` figure for that same term has the identical `count`, `pmi` and `tone` as the `/graph` node — proving the per-side computation reuses the same formula and the same shared PMI universe."
+    },
+    {
+      "n": 10,
+      "text": "`GET /api/compare?a=lula&b=lula` returns, for every term, an identical value under `a` and `b` (deep-equal), including `\"name\"` entries."
+    },
+    {
+      "n": 11,
+      "text": "`limit=1` still returns more than one term when both the count-ranked and pmi-ranked top-1 differ per side (up to 4 distinct keys unioned) — proving both selection criteria are applied, not just one."
+    },
+    {
+      "n": 12,
+      "text": "`terms` is ordered by `term` asc, then `kind` asc."
+    },
+    {
+      "n": 13,
+      "text": "An out-of-window query (`days=1`, scoped so neither person has a doc that recent) returns `terms: []` and `about: 0` on both sides, not an error."
+    },
+    {
+      "n": 14,
+      "text": "`GET /api/compare` appears in the cache-control test's rolling-window list (`s-maxage` matching the existing `ROLLING` tier) and its 404s return `no-store` — both already implied by `src/cache.ts`'s existing `tierOf` logic (the last path segment `compare` is not in `TREND`, so no `src/cache.ts` change is needed; only the test list grows)."
+    },
+    {
+      "n": 15,
+      "text": "`docs/api.md` names the `/api/compare` route, its `a`/`b` parameters, and states that a term absent from one side's figures is distinguishable in the payload from a term hidden as that side's own name (checked against `docsText`, never against one page's heading or wording)."
+    }
+  ],
+  "diffTokens": 11609,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.83
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.17
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.82
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.98
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.73
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.28
+      }
+    ],
+    "costUsd": 0.000895776,
+    "ms": 746,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.07764,
+    "ms": 6652,
+    "error": null
+  }
+}

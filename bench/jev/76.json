@@ -1,0 +1,243 @@
+{
+  "pr": 76,
+  "issue": 72,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "5c86160dbbbca15261c455ffe3de55f3bfb66749",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`pnpm typecheck` passes with `Source` including `'juridico' | 'oficial' | 'nicho'` and `collectors: Record<Source, Collector>` registering all three (compile-time; not independently runtime-testable, verified by running `pnpm typecheck` directly, green on the diff)."
+    },
+    {
+      "n": 2,
+      "text": "`src/collectors/index.ts`'s `collectors.juridico`, `.oficial`, `.nicho` are each `typeof === 'function'`; `defaultSources` **includes** all three (`assert.ok(defaultSources.includes('juridico'))` etc.), so `pnpm ingest` with no arguments runs them."
+    },
+    {
+      "n": 3,
+      "text": "Each of `src/collectors/juridico.ts`, `oficial.ts`, `nicho.ts`, read as source text, imports `fetchFeed` from `../rss.js` (or `./rss.js`), calls it once per feed URL, and contains no bespoke `fetch(` or XML parsing of its own — structural regex assertions on the file text, mirroring `camara-acceptance.test.ts:22-32`."
+    },
+    {
+      "n": 4,
+      "text": "Each new collector called with `[]` returns a resolved `Promise` of `[]` with zero thrown/logged errors and no network call (assert via elapsed time under e.g. 50ms, mirroring `senado-independent-acceptance.test.ts`'s AC2 pattern) — collectors are integration code and tests never hit the network, so this is checked by never invoking them with real feed URLs and instead exercising the empty-persons short-circuit if one exists, or by asserting the returned `RawDoc[]`'s `source` literal via static analysis of the file text (`source: 'juridico'` etc.) when the collector has no early-return branch to test without a live fetch."
+    },
+    {
+      "n": 5,
+      "text": "`tonedSources` (`src/store.ts`) stays exactly `['gdelt', 'gkg']`; a doc inserted with `source: 'juridico'|'oficial'|'nicho'` and a numeric `tone` in its `RawDoc` literal lands with `tone: null` in the `docs` table (mirrors `camara-acceptance.test.ts` AC6)."
+    },
+    {
+      "n": 6,
+      "text": "`parseSourceList('juridico')` resolves to `'juridico'`; `parseSourceList('juridico,oficial,nicho')` resolves to `'juridico,oficial,nicho'` unchanged order-preserved-post-dedupe."
+    },
+    {
+      "n": 7,
+      "text": "`parseRisingQuery({ source: 'oficial' }).source === 'oficial'` and `parseTimelineQuery({ source: 'nicho' }).source === 'nicho'` (not `'all'`) — the risk this spec calls out in section 3."
+    },
+    {
+      "n": 8,
+      "text": "`SOURCE_SEGMENTS.find(([v]) => v === 'juridico')` equals `['juridico', 'jurídico']` (same for `oficial`, `nicho`), and driving each through `createHandlers({...}).source('juridico')()` calls `setSource`/`load`/`updateHeader` in that order — mirrors `camara-acceptance.test.ts` AC14, proving the new options reuse the shared handler with no bespoke wiring."
+    },
+    {
+      "n": 9,
+      "text": "`sourceLabels.juridico === 'Jurídico'`, `.oficial === 'Oficial'`, `.nicho === 'Nicho'`."
+    },
+    {
+      "n": 10,
+      "text": "Adding the three new fixture docs (one per family, see 7) requires zero changes to any pre-existing pinned literal elsewhere in the suite — a diff-shape criterion verified by running the full pre-existing suite (graph/signature/timeline/tone/rising/...) unmodified alongside the new fixture docs and confirming every pinned assertion still holds."
+    },
+    {
+      "n": 11,
+      "text": "A fixture doc from each new source tags exactly the person its text names, with `tone: null`, `source` equal to its own family — same shape as `camara-acceptance.test.ts` AC10."
+    },
+    {
+      "n": 12,
+      "text": "`README.md`'s `source=all|...` enumeration is updated identically in all four places it's spelled out (graph, docs, rising, timeline) to include `juridico|oficial|nicho` after `senado`, and documents the three new collectors (feed lists, that they are part of `defaultSources`, and the RDF/Planalto exclusion) in prose next to the existing `camara`/`senado`/`rss` paragraphs."
+    },
+    {
+      "n": 13,
+      "text": "`pnpm ingest juridico oficial nicho` against a scratch `DATA_DIR` (never the same directory as a running server, per `CLAUDE.md`) completes without throwing on at least one real run performed by the builder before opening the PR, and the PR description records, for one person with existing volume (e.g. a Supreme Court justice) and one without: total doc count and the top-5 `sort=pmi` terms before the new collectors ran and after — a manual, human-checkable step, not a `pnpm test` assertion, satisfying the \"ranking still makes sense\" question the issue raises. A green `pnpm test` suite alone does not satisfy this criterion."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` and `pnpm test` are both green with no other route, SQL statement or `sort=pmi` formula literal touched (`git diff` against `src/graph.ts:163,165` is empty)."
+    }
+  ],
+  "diffTokens": 6844,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.51
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.73
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.99
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.72
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.07
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.65
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.24
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.92
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.75
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.8
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.26
+      }
+    ],
+    "costUsd": 0.000684516,
+    "ms": 438,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.059649,
+    "ms": 6490,
+    "error": null
+  }
+}

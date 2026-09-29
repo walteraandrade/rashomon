@@ -1,0 +1,243 @@
+{
+  "pr": 17,
+  "issue": 8,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "86d8919e9164745787f617a4d55d09414ded6b61",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`graphFor`/`sourcesFor`/`docsFor` given `source: 'gnews,rss,gkg'` count only docs whose `source` is `gnews`, `rss`, or `gkg` — checked by a fixture-backed test asserting `stats.docs`/`stats.about`/`total` against a hand-counted expectation."
+    },
+    {
+      "n": 2,
+      "text": "Given `source: 'gnews,bogus'`, the three functions above produce results identical to `source: 'gnews'` — unknown token silently dropped, checked by comparing two calls."
+    },
+    {
+      "n": 3,
+      "text": "Given `source: 'bogus1,bogus2'` (every token invalid), results are identical to `source: 'all'` — checked by comparing two calls."
+    },
+    {
+      "n": 4,
+      "text": "Given `source: ''` or `source` omitted, both produce results identical to `source: 'all'` — checked by comparing calls (already partly covered for the omitted case by existing tests; add the empty-string case)."
+    },
+    {
+      "n": 5,
+      "text": "Given a single valid token (`source: 'bluesky'`), behavior is byte-for-byte the same as before this change — the existing \"filters by source and by domain\" test in `graph.test.ts:52-58` passes unmodified."
+    },
+    {
+      "n": 6,
+      "text": "`parseSourceList`, exported from `server.ts`, returns `'all'` for `undefined`, `''`, `'all'`, and `'bogus'`; returns `'gnews'` for `'gnews'` and for `'gnews,bogus'`; returns `'gnews,rss'` for `'gnews,rss'` and for `'gnews,rss,gnews'` (dedup) — unit-tested in a new `test/server.test.ts`."
+    },
+    {
+      "n": 7,
+      "text": "Mixing a GDELT and a non-GDELT source in one list (`gnews,rss,gkg`) yields a non-null `tone` only for terms whose docs include the `gkg` doc, and `null` tone for terms found only in `gnews`/`rss` docs — checked with the new fixture `gkg` doc."
+    },
+    {
+      "n": 8,
+      "text": "In `public/design-5.html`, checking \"imprensa × rede\" shows two columns and fires two `/graph` requests, one with `source=gnews,rss,gkg` and one with `source=bluesky`, both carrying the same `days`/`kind`/`sort`/`limit`/`min`/`domain` as the toolbar's current shared state — manual check via the browser network tab."
+    },
+    {
+      "n": 9,
+      "text": "While split mode is active, `#segSource` is disabled and changing `dias`, `tipo`, `ordem`, `nós`, or `mín. docs` refetches both columns with the new shared value — manual check."
+    },
+    {
+      "n": 10,
+      "text": "Unchecking \"imprensa × rede\" returns to the single radial atlas exactly as it rendered before split mode was entered, with `#segSource` re-enabled — manual check."
+    },
+    {
+      "n": 11,
+      "text": "A term id present in both columns' node lists shows the gold marker in both places; a term id present in only one column shows no marker — manual check, cross-referenced against the two responses' node id sets in devtools."
+    },
+    {
+      "n": 12,
+      "text": "Clicking a term row in the right (\"rede\") column opens the doc panel showing only docs with `source: \"bluesky\"`; clicking a row in the left (\"imprensa\") column shows only docs with `source` in `{gnews, rss, gkg}` — manual check."
+    },
+    {
+      "n": 13,
+      "text": "A column with no matching docs in the current window shows the same empty-state copy as the single-atlas `#empty` div, and does not block the other column from rendering — manual check (e.g. narrow `dias` to a window where one side is empty)."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm typecheck` and `pnpm test` both pass."
+    }
+  ],
+  "diffTokens": 10562,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.87
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.5
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.45
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.86
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.59
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.12
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.83
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.57
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.81
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.82
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.24
+      }
+    ],
+    "costUsd": 0.00090069,
+    "ms": 688,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.9
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.077181,
+    "ms": 7877,
+    "error": null
+  }
+}

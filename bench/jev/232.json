@@ -1,0 +1,255 @@
+{
+  "pr": 232,
+  "issue": 209,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "989c3e42a20fb63df68e7b8b87b2c243f3ae45f9",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/collectors/gkg.ts`'s `col.orgs` is `13`; a GKG row whose `V1Organizations` field (0-indexed column 13) holds `Petrobras;Banco Central` yields a doc whose `extraTerms` includes `{ term: 'petrobras', kind: 'org' }` and `{ term: 'banco central', kind: 'org' }`, normalized and deduplicated, verified against a fixture row with real GKG-shaped columns (not by reading the code)."
+    },
+    {
+      "n": 2,
+      "text": "A GKG row with an empty `V1Organizations` field yields `extraTerms: []`."
+    },
+    {
+      "n": 3,
+      "text": "A GKG row whose `V1Organizations` repeats the same organization twice (with differing case/accent) yields exactly one `org` term for it."
+    },
+    {
+      "n": 4,
+      "text": "`src/types.ts`'s `Term['kind']` union and `src/query.ts`'s `KINDS` both include `'org'`; `parseKindList('org')` and `parseKindList('word,org')` both resolve to strings containing `org` unchanged, and `parseKindList('bogus')` still falls back to `'all'`."
+    },
+    {
+      "n": 5,
+      "text": "`GET /api/people/:id/graph?kind=org` returns nodes only of kind `org`, scored by the same PMI/count/signature rules as every other kind (existing `graph.test.ts`/`aggregate.test.ts` coverage parametrized or extended to include an `org` fixture term, not a new code path)."
+    },
+    {
+      "n": 6,
+      "text": "An `org` term equal to a tracked person's alias word (or, for a multi-word org, sharing every word with the person's name tokens) is absent from that person's `/graph` nodes — same mechanism `isName` already applies to `word`/`phrase`."
+    },
+    {
+      "n": 7,
+      "text": "`pnpm purge themes`, run against a database holding both a legacy `theme`-kind element and a live `org`-kind element in the same doc's `extra_terms`, removes the `theme` element and its `doc_terms` row while leaving the `org` element and its `doc_terms` row intact (this replaces test/purge.test.ts's current assertion that `extra_terms` always ends at `'[]'` — a doc with only theme elements still ends at `[]`, one with a mix does not)."
+    },
+    {
+      "n": 8,
+      "text": "`test/collectors-gkg.test.ts`'s issue #108 describe block (\"`extraTerms` is always `[]` for gkg\") is rewritten: it now asserts that a GKG row carrying **only** V2Themes content (nothing in `V1Organizations`) still yields `extraTerms: []` — themes stay unread — while a separate case with organizations present yields the corresponding `org` terms."
+    },
+    {
+      "n": 9,
+      "text": "`docs/api.md`'s `kind` line lists exactly `hashtag`, `org`, `phrase`, `word` (sorted) and `test/docs-drift.test.ts`'s \"kind's documented accepted values\" test is updated to expect that four-element sorted list rather than three — this is a new fact (`org` did not exist before), not one `test/docs-drift.test.ts` already covers elsewhere; the collector/`sources.md` registry check that file also runs is untouched by this issue."
+    },
+    {
+      "n": 10,
+      "text": "`docs/terms.md` and `docs.ts`'s `docsText` (every page combined) state, in prose, that `org` is sourced only from GDELT/`gkg` and is never derived from text for any other source."
+    },
+    {
+      "n": 11,
+      "text": "`public/como-ler.html` contains a paragraph describing the `org` kind in pt-BR, reachable from `#helpDialog`."
+    },
+    {
+      "n": 12,
+      "text": "`src/ui/api.ts`'s `ATLAS_KINDS` equals `'word,hashtag,phrase,org'`."
+    },
+    {
+      "n": 13,
+      "text": "`src/ui/format.ts`'s `kinds` map has an `org` entry, and `wordMarkup`'s emitted markup for an `org`-kind term carries `data-kind=\"org\"`; for a `word`/`hashtag`/`phrase` term it carries the matching `data-kind` value (asserted through the painter, not by grepping `atlas.css`)."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm build` is run and `public/bundle.js` is committed; `test/bundle-freshness.test.ts` passes."
+    },
+    {
+      "n": 15,
+      "text": "`pnpm typecheck` and `pnpm test` both pass."
+    }
+  ],
+  "diffTokens": 20492,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.93
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.91
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.85
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.99
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0.09
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.45
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.09
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.93
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.21
+      }
+    ],
+    "costUsd": 0.001354752,
+    "ms": 632,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:14",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:15",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.113109,
+    "ms": 7589,
+    "error": null
+  }
+}

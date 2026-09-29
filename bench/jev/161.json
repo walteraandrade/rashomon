@@ -1,0 +1,231 @@
+{
+  "pr": 161,
+  "issue": 149,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "259485c595e4baddc4099f15833bce0ee37ceffb",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`figures/atlas.ts`'s `mode` accepts `'strip'`; `createHandlers` exposes a `modeStrip` action that calls `setMode('strip')`, tested the same way `modeMap`/`modeColumns` are tested in `test/figures-atlas.test.ts:56-64`."
+    },
+    {
+      "n": 2,
+      "text": "`render.ts` exports a pure layout function (e.g. `termStripLayout(nodes, personTestimony, width)`) that: includes exactly the nodes for which `termMask(node, personScore) !== null`; excludes every node with `testimony === null`, `testimony === undefined`, or `testimony.n < 3`; excludes every node when `personTestimony?.score` is null/undefined; and, among included nodes, produces `x` values monotonically non-decreasing in `testimony.score`."
+    },
+    {
+      "n": 3,
+      "text": "The same function widens `domainMax - domainMin` to at least 2 when it would otherwise be smaller, verified with a fixture of exactly one eligible word and with a fixture where every eligible word ties the person's mean."
+    },
+    {
+      "n": 4,
+      "text": "`render.ts` exports a painter (e.g. `paintTermStrip`) that draws one circle per node the layout function includes, none for any excluded node, each carrying `data-node=\"<id>\"` and an inline `--tone` set to `termMask`'s return value; a dashed line and a `média da pessoa {score}` label appear only when `stats.testimony.score` is not null/undefined; the function returns (or the caller computes) the count of excluded nodes for the hidden note."
+    },
+    {
+      "n": 5,
+      "text": "`mount()`, exercised through `test/fake-mount-dom.ts`'s `withFiguresDom` (extended with `modeStrip`, `atlasStrip`, `stripHiddenNote`, `zoomGroup`, `keyDefault`, `keyStrip` entries), on `modeStrip.fire('click')`: hides `#viewport`/`#columns`, shows `#atlasStrip`, hides `#mask` and `#zoomGroup`, and paints circles from the currently loaded graph without issuing any new request (same \"local repaint, no reload\" guarantee `test/figures-atlas.test.ts:56-64` already asserts for the other two mode buttons)."
+    },
+    {
+      "n": 6,
+      "text": "Clicking a circle in strip mode calls the same `choose`/`pick` path a map word click uses (assert via `createHandlers`, mirroring `test/figures-atlas.test.ts:151-176`), and opens `#docsDialog` with a single `sides` entry (`docsQuery` unchanged, `atlas.ts:127-128`), never the two-column layout."
+    },
+    {
+      "n": 7,
+      "text": "A click on empty space inside `#atlasStrip` releases the selection, verified through `handlers.background` the same way `test/figures-atlas.test.ts:184-196` already covers `#viewport`/`#columns`."
+    },
+    {
+      "n": 8,
+      "text": "`design-5.html` carries `<button id=\"modeStrip\">Avaliação</button>` inside the same `.segment[role=group]` as `#modeMap`/`#modeColumns`, and a second `<dl class=\"figure-key\" id=\"keyStrip\" hidden>` inside `#workspace` with exactly the four rows Posição/Tamanho/Cor/Clique from the UI section above; the first `<dl class=\"figure-key\">` in `#workspace` (`#keyDefault`) still has exactly `Tamanho/Cor/Posição/Clique`, unchanged, so `test/leitura-ui-acceptance.test.ts:70-80` keeps passing."
+    },
+    {
+      "n": 9,
+      "text": "`test/figures-atlas.test.ts:345`'s literal match on the segment's closing markup (`...aria-pressed=\"false\">Lista</button></div><button id=\"mask\"...`) is updated to the new three-button markup; it still asserts `#mask`'s `aria-pressed` starts `true`."
+    },
+    {
+      "n": 10,
+      "text": "Every new/changed rule in `atlas.css` uses `font-size: var(--t-*)`, never a px literal (`test/leitura-ui-acceptance.test.ts:119-129` keeps passing unmodified)."
+    },
+    {
+      "n": 11,
+      "text": "`public/como-ler.html`'s `#avaliacao` section states, in plain words, that the strip's word position and figure 1's mask colour are the same kikori number and the same delta-from-mean colour, read by a manual check of that section (no `docsText`/`sourceTable` assertion applies — this is UI copy, not the `docs/*.md` reference `test/docs-drift.test.ts` and the documentation-criterion rule govern)."
+    },
+    {
+      "n": 12,
+      "text": "`pnpm typecheck` and `pnpm test` pass; `pnpm build` is rerun and `public/bundle.js` committed, so `test/bundle-freshness.test.ts` passes."
+    },
+    {
+      "n": 13,
+      "text": "`test/atlas-modules-acceptance.test.ts` keeps passing unmodified: the new render.ts exports are used only by `figures/atlas.ts`, nothing in `atlas.ts` reaches into `figures/testimony.ts` or `figures/compare.ts`, and no new template literal feeds `innerHTML` without the `html` tag."
+    }
+  ],
+  "diffTokens": 18691,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.18
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.8
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.12
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.04
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.27
+      }
+    ],
+    "costUsd": 0.001308846,
+    "ms": 638,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0
+      }
+    ],
+    "costUsd": 0.107676,
+    "ms": 7572,
+    "error": null
+  }
+}

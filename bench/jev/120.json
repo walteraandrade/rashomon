@@ -1,0 +1,231 @@
+{
+  "pr": 120,
+  "issue": 113,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "aa97bc33845c884b88f4b13a122ee5e895281553",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`src/http.ts` exports `MAX_RESPONSE_BYTES` equal to `32 * 1024 * 1024`."
+    },
+    {
+      "n": 2,
+      "text": "`slowGet` rejects once the response's declared `content-length` exceeds `MAX_RESPONSE_BYTES`, without reading any of the body."
+    },
+    {
+      "n": 3,
+      "text": "`slowGet` rejects once the accumulated bytes of a response with no (or an understated) `content-length` exceed `MAX_RESPONSE_BYTES` while streaming, and never resolves a partial/truncated body in that case."
+    },
+    {
+      "n": 4,
+      "text": "`http.ts` exposes the byte-over-limit decision as a pure, network-free unit, callable directly with synthetic byte counts (no socket, no `fetch`), so its accept/reject boundary is unit-tested without a server."
+    },
+    {
+      "n": 5,
+      "text": "`gkg.ts`'s `download` checks the zip response's `content-length` against `MAX_RESPONSE_BYTES` before touching the body, and resolves `{ status: 'oversize', stage: 'compressed', bytes, limit }` when it is over, without calling `res.arrayBuffer()`/reading the stream."
+    },
+    {
+      "n": 6,
+      "text": "`gkg.ts`'s decompression is bounded by `MAX_EXPANDED_BYTES` (`256 * 1024 * 1024`), enforced while streaming through fflate's `Unzip`, and this bound is exercised by an exported, network-free unit a test can drive with a synthetically built zip (e.g. via `fflate`'s own `zipSync`) to prove both a payload under the limit resolving `ok` with the correct decoded text, and a payload whose decompressed size crosses a (test-injected, small) limit resolving `{ status: 'oversize', stage: 'expanded' }`."
+    },
+    {
+      "n": 7,
+      "text": "`download` still returns `{ status: 'missing' }` for a 404, unchanged from today's `null`-for-404 behaviour, and an empty zip still resolves `{ status: 'ok', csv: '' }`."
+    },
+    {
+      "n": 8,
+      "text": "`processSlot` inserts into `gkg_files` only on `{ status: 'ok' }`; on `{ status: 'oversize' }` it logs the stage, the observed bytes and the limit, returns `[]`, and performs no `gkg_files` insert for that slot."
+    },
+    {
+      "n": 9,
+      "text": "`gkg()`'s slot loop (`sequential(pending, processSlot)`) completes and returns the docs of every non-oversize slot even when one slot in the batch resolves oversize — an oversize result never throws out of `processSlot`."
+    },
+    {
+      "n": 10,
+      "text": "`rss.ts`'s `fetchFeed` performs the same `content-length` preflight and streaming byte cap against `MAX_RESPONSE_BYTES` (imported from `http.ts`, not a re-declared literal) before `res.arrayBuffer()`."
+    },
+    {
+      "n": 11,
+      "text": "`src/collectors/gdelt.ts`, `src/collectors/camara.ts`, `src/collectors/senado.ts` are unchanged by this issue (verified by diff/review) and their existing test suites (`collectors-senado.test.ts`, `senado-independent-acceptance.test.ts`, `camara-acceptance.test.ts`, `bluesky-timeout.test.ts` insofar as it documents the shared 45 s ceiling) stay green."
+    },
+    {
+      "n": 12,
+      "text": "`docsText` (across `README.md` and `docs/*.md` together, per `test/docs.ts`) states the 32 MB and 256 MB figures and the fact that an oversized GKG slot is skipped without being marked done, so it is retried on a later run. (`test/docs-drift.test.ts`'s existing collector-registry checks already cover `gkg`'s row in the source table and its filter-value documentation; this issue adds no new source, so no new criterion is needed there.)"
+    },
+    {
+      "n": 13,
+      "text": "`pnpm typecheck` and `pnpm test` are both green."
+    }
+  ],
+  "diffTokens": 12996,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.99
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.92
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.94
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.5
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.08
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.37
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.51
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.94
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.97
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.79
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.82
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.32
+      }
+    ],
+    "costUsd": 0.00092904,
+    "ms": 532,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.15
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.25
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.85
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.5
+      }
+    ],
+    "costUsd": 0.082851,
+    "ms": 11459,
+    "error": null
+  }
+}

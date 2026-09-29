@@ -1,0 +1,95 @@
+{
+  "pr": 265,
+  "issue": 252,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "29d4b4f13b8cb0bb5dd8cb029886a29b9670cf25",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "After `migrateP()` on `memory://`: `terms` has columns `id`, `term`, `kind` and a unique constraint on `(kind, term)`. `doc_terms` has exactly the columns `doc_id` and `term_id`. `indexDefs('doc_terms')` returns `doc_terms_pkey` on `(doc_id, term_id)` and an index on `(term_id, doc_id)`, and no index definition on `doc_terms` names a `term` or `kind` column."
+    },
+    {
+      "n": 2,
+      "text": "Legacy conversion: in a database where `doc_terms` has been recreated in the legacy `(doc_id, term, kind)` shape with known rows, including one text under two kinds, `migrateP()` leaves `doc_terms join terms` returning the identical `(doc_id, kind, term)` set. `terms` then holds exactly one row per distinct pair, and `to_regclass('public.doc_terms_legacy')` is null."
+    },
+    {
+      "n": 3,
+      "text": "Running `migrateP()` a second time on a converted database leaves the `terms` ids and the `doc_terms` row count unchanged."
+    },
+    {
+      "n": 4,
+      "text": "If the conversion's `doc_terms` fill fails (`failingSql` matching that insert), `migrate` fails with a `SqlError` and the legacy `doc_terms` still has its original columns and row count."
+    },
+    {
+      "n": 5,
+      "text": "Seeding the fixture yields the same `(doc_id, kind, term)` set as before this change. The `derivedRows()`/`termsOf()` helpers read through the join, and every existing store/reindex assertion on them passes with unchanged expected values."
+    },
+    {
+      "n": 6,
+      "text": "`test/batch-writes.test.ts`'s statement counts per batch are unchanged: one `doc_terms` statement per batch, and no extra vocabulary statement."
+    },
+    {
+      "n": 7,
+      "text": "Writing two docs that share a term yields one `terms` row for that pair. A later write reuses its id."
+    },
+    {
+      "n": 8,
+      "text": "After `reindexAll`, every `terms` row is referenced by at least one `doc_terms` row, and `derivedRows()` equals its value before the reindex."
+    },
+    {
+      "n": 9,
+      "text": "Id independence: pre-insert into `terms` every fixture pair in reverse alphabetical order, plus unreferenced junk pairs, then seed. These outputs must then be deep-equal to the same calls on a normally seeded fixture: `graphFor` on a live recorte (`country: 'all'`) with links, `compareFor` live, `lensesFor` live, `risingFor`, `weekFor`, `docsFor` with a `term`, the term-filtered timeline, `termTestimony` via `graphFor`'s `testimony`, and the `graph_terms`/`term_communities`/`term_links` rows `buildGraphAggregates` writes."
+    },
+    {
+      "n": 10,
+      "text": "These rendered statements in `statements` are byte-identical to `master`: `graphFast` (its pinned sha256 is unchanged), `graphFastCommunities`, `linksFast`, `sources`, `tone`, `agenda`, `testimonySummary`, `candidates`, `compareFast`, `lensesFast`, `attention`, `comention`."
+    },
+    {
+      "n": 11,
+      "text": "No rendered statement in `statements`, and none of `aggregate.ts`'s build statements, contains an `order by` term that references `term_id`. A test checks this with a regex over the texts."
+    },
+    {
+      "n": 12,
+      "text": "`test/aggregate.test.ts`'s fast/live equality and window-edge tests pass without edits to their assertions."
+    },
+    {
+      "n": 13,
+      "text": "`ANALYZED_TABLES` contains `terms`, and `analyzeTablesP()` gives `terms` a `reltuples` of 0 or more. `SIZE_TABLES` contains `terms`."
+    },
+    {
+      "n": 14,
+      "text": "`pnpm purge themes` on a database with a `theme`-kind term leaves no `terms` row with `kind = 'theme'` and keeps the `org` term and its `doc_terms` row."
+    },
+    {
+      "n": 15,
+      "text": "`copy` for `doc_terms`, run against the recording `QueryTarget` in `test/push.test.ts`, sends term text and kind as bound values and never sends a `term_id`. `terms` is not in the copied table list."
+    },
+    {
+      "n": 16,
+      "text": "Manual step with `scripts/bench`: `run.ts` on `master` (`--src` pointing at a `master` checkout) and on this branch, at `--scales 10k,100k --windows 7,30`, then `compare.ts base.json cand.json --gain 0 --all` must report `0 diverged`. The PR description attaches the verdict line."
+    },
+    {
+      "n": 17,
+      "text": "Manual step: that candidate run with `--explain` shows, for `graph`, `compare`, `lenses`, `rising` and `aggregate` at 100k/30d, every HashAggregate/GroupAggregate over `doc_terms` rows keyed on `term_id` (or `terms.id`), never on `term`. The PR attaches the excerpts."
+    },
+    {
+      "n": 18,
+      "text": "Docs: `docsText` states that distinct `(term, kind)` pairs live in a `terms` vocabulary table and that `doc_terms` references them by `term_id`. It also states that `pnpm migrate` converts a legacy `doc_terms` in place in one transaction without a reindex, that `pnpm reindex` rebuilds the vocabulary from scratch, and that production needs `pnpm migrate` run right after the deploy that ships this, with the scheduled ingest paused in between."
+    },
+    {
+      "n": 19,
+      "text": "`pnpm typecheck` and `pnpm test` pass, and `test/bundle-freshness.test.ts` passes with no `public/bundle.js` change."
+    },
+    {
+      "n": 20,
+      "text": "Post-deploy manual step, not blocking merge: `pnpm size` on production shows `doc_terms` plus `terms` at least 80 MB below the 202 MB baseline. `EXPLAIN (ANALYZE, BUFFERS)` of the live 30-day `graphQuery` shows `Batches: 1` on the `term_all`/`term_p` aggregates at the current `work_mem`, or the measured batch counts are posted on the issue."
+    }
+  ],
+  "diffTokens": 35600,
+  "skipped": "diff too large (35600 tokens)",
+  "jev": null,
+  "sonnet": null
+}

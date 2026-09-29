@@ -1,0 +1,231 @@
+{
+  "pr": 27,
+  "issue": 24,
+  "source": "replay",
+  "merged": true,
+  "baseSha": "126dec465427c469010f55a0953ceb929e8640ed",
+  "diffAt": "final",
+  "rounds": [],
+  "criteria": [
+    {
+      "n": 1,
+      "text": "`Source` (`src/types.ts`) includes `'camara'`; `Person` includes an optional `camaraId?: string`; `pnpm typecheck` passes."
+    },
+    {
+      "n": 2,
+      "text": "`src/collectors/camara.ts` exports `camara: Collector` with signature `(persons: Person[]) => Promise<RawDoc[]>`, built only from `sequential`/`sleep`/`slowGet` in `src/http.ts` — no bespoke retry/fetch logic (manual review of the diff; no direct `fetch(...)` or hand-rolled `setTimeout` retry loop in the file)."
+    },
+    {
+      "n": 3,
+      "text": "A person with no `camaraId` produces zero HTTP requests and zero thrown/logged errors from the collector (unit-level check via a stub/mock in manual verification, since collectors are integration code and untested directly per `CLAUDE.md`)."
+    },
+    {
+      "n": 4,
+      "text": "Every `RawDoc` the collector can produce has `source: 'camara'` and `tone` either `undefined` or absent — never a number (code review + the fixture doc round-tripping with `tone: null` in the DB, criterion 8)."
+    },
+    {
+      "n": 5,
+      "text": "`src/collectors/index.ts` registers `camara` in the `collectors` record but **not** in `defaultSources` — `pnpm ingest` with no arguments does not include it; `pnpm ingest camara` runs it alone. (`defaultSources` array literally excludes `'camara'`; `collectors.camara` is defined — checkable by reading the file.)"
+    },
+    {
+      "n": 6,
+      "text": "`src/store.ts`'s `tonedSources` stays exactly `['gdelt', 'gkg']` — a camara doc always lands with `tone = null` in the `docs` table even in the pathological case a collector bug sets `RawDoc.tone` (covered by `store.test.ts`'s existing tone-suite pattern, extended with a camara case)."
+    },
+    {
+      "n": 7,
+      "text": "`parseSourceList('camara')` returns `'camara'` (test in `test/server.test.ts`, following the existing `parseSourceList` assertions at lines 8-32)."
+    },
+    {
+      "n": 8,
+      "text": "`parseRisingQuery({ source: 'camara' })` and `parseTimelineQuery({ source: 'camara' })` both resolve `source` to `'camara'`, not `'all'` (new assertions, `test/query`-adjacent suite — see Test plan)."
+    },
+    {
+      "n": 9,
+      "text": "Adding the new `camara` fixture doc to `test/fixture.ts` requires **zero** changes to any pinned literal (PMI, stats, tone averages, timeline buckets) in any existing test file — verified by running `pnpm test` after only touching `test/fixture.ts`, `git diff` shows no other test file changed."
+    },
+    {
+      "n": 10,
+      "text": "The new fixture doc round-trips: `personsMentioned` tags it with exactly the one person named in its injected prefix (no other tracked person), and its row in `docs` has `tone = null`, `source = 'camara'` (new assertions in `test/store.test.ts`)."
+    },
+    {
+      "n": 11,
+      "text": "`seed.json` gains `camaraId` only on entries that are verifiably sitting/former federal deputies (candidates flagged for the builder to confirm against a live `dadosabertos.camara.leg.br/api/v2/deputados` lookup before merging: Nikolas Ferreira, Eduardo Bolsonaro, Hugo Motta, and — with the caveat that his floor-speech era predates the ingest window and he will simply never surface a doc — Jair Bolsonaro). No fabricated/guessed numeric ID reaches `seed.json`; a candidate the builder cannot verify is left without `camaraId` rather than guessed."
+    },
+    {
+      "n": 12,
+      "text": "`README.md`'s \"Run\" section documents `camaraId` in the seed bullet, adds a `camara` paragraph (API, no-key, window, domain) next to the `gdelt` paragraph, and states its opt-in status in the `pnpm ingest` command block, mirroring the existing `gdelt` line."
+    },
+    {
+      "n": 13,
+      "text": "`pnpm test` and `pnpm typecheck` both pass on the final diff."
+    }
+  ],
+  "diffTokens": 5648,
+  "skipped": null,
+  "jev": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 0.84
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 0.98
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 0.89
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 0.97
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 0.95
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 0.19
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 0.9
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 0.72
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 0.96
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0.47
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 0.34
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 0.95
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 0.65
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 0.96
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0.83
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 0.22
+      }
+    ],
+    "costUsd": 0.00060648,
+    "ms": 452,
+    "error": null
+  },
+  "sonnet": {
+    "answers": [
+      {
+        "id": "criterion:1",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:2",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:3",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:4",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:5",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:6",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:7",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:8",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:9",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:10",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:11",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:12",
+        "pTrue": 1
+      },
+      {
+        "id": "criterion:13",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:comment",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:scoring-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:route-docs",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:class",
+        "pTrue": 1
+      },
+      {
+        "id": "convention:issue-test",
+        "pTrue": 0
+      },
+      {
+        "id": "convention:commits",
+        "pTrue": 1
+      }
+    ],
+    "costUsd": 0.054033,
+    "ms": 6761,
+    "error": null
+  }
+}

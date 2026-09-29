@@ -471,7 +471,7 @@ describe('read indexes and planner statistics (issue #44)', () => {
     )
   })
 
-  it('AC4: docs_published_idx, docs_domain_idx and docs_country_idx still exist beside docs_window_idx', async () => {
+  it('keeps docs_published_idx, docs_domain_idx and docs_country_idx beside docs_window_idx', async () => {
     const names = (await indexDefs('docs')).map((d) => d.indexname)
     for (const n of ['docs_published_idx', 'docs_domain_idx', 'docs_country_idx', 'docs_window_idx']) assert.ok(names.includes(n), `missing ${n}`)
   })

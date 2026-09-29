@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FONT_DISPLAY, FONT_MONO } from '../src/ui/layout.js'
 import { SOURCE_SEGMENTS } from '../src/ui/format.js'
 import { VERCEL_INSIGHTS_TAG } from './pages.js'
+import { ROUTES, appTemplate, pageMarkup, siteFile } from './pages.js'
 
 // The "Leitura" redesign: one sentence of controls, the map as the figure, a "Como ler"
 // chapter that defines PMI on the page itself, and one stylesheet shared by every page. These
@@ -13,7 +14,7 @@ import { VERCEL_INSIGHTS_TAG } from './pages.js'
 // through the modules, in the per-module files.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
+const read = (name: string) => siteFile(name)
 
 describe('Leitura UI: the recorte is one sentence', () => {
   it('atlas.html holds the five controls inside the sentence, the source one as a select fed by SOURCE_SEGMENTS', () => {
@@ -46,7 +47,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.match(chapter, /mais do que apareceria por acaso/, 'PMI must be defined in plain words')
     assert.match(chapter, /PMI × ln\(1 \+ documentos\)/, 'the weighted size must be spelled out')
     assert.match(chapter, /Só existe nos textos que vêm do GDELT/, 'tone stays a GDELT-only fact')
-    assert.match(html, /<link rel="stylesheet" href="atlas\.css">/)
+    assert.match(appTemplate(), /<link rel="stylesheet" href="\/atlas\.css">/)
     assert.doesNotMatch(html, /<style[\s>]/i, 'the reading page is markup only')
     // Nothing but the platform analytics tag: no inline script, no module of our own.
     assert.doesNotMatch(html.replaceAll(VERCEL_INSIGHTS_TAG, ''), /<script/i, 'the reading page runs no JavaScript of its own')
@@ -93,9 +94,9 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.doesNotMatch(html, /id="como-ler"/)
     // Issue #91: compare.html is deleted, the third figure lives on this page instead, so the
     // nav link now points at an in-page anchor rather than a separate file (AC15).
-    assert.match(html, /<nav><a class="help-link" href="como-ler\.html">como ler<\/a>/, 'the header still names the shareable guide')
-    assert.match(html, /href="como-ler\.html#atlas"/)
-    assert.match(html, /href="como-ler\.html#avaliacao"/)
+    assert.match(html, /<nav><a class="help-link" href="\/como-ler">como ler<\/a>/, 'the header still names the shareable guide')
+    assert.match(html, /href="\/como-ler#atlas"/)
+    assert.match(html, /href="\/como-ler#avaliacao"/)
     assert.match(html, /id="helpDialog"/, 'the atlas intercepts those links into an in-page dialog')
     for (const id of ['workspace', 'testimony', 'compare']) {
       const figure = html.match(new RegExp(`id="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
@@ -145,7 +146,7 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     assert.ok(FONT_DISPLAY.startsWith("'IBM Plex Sans Condensed'"), 'the centre name is measured with the display face')
     // compare.html is gone (issue #91): the ruler now lives on atlas.html, already in this
     // loop, so the deleted page's own slot is dropped rather than replaced.
-    for (const page of ['atlas.html', 'como-ler.html']) assert.match(read(page), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*IBM\+Plex\+Sans\+Condensed/, `${page} loads the three faces`)
+    assert.match(appTemplate(), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*IBM\+Plex\+Sans\+Condensed/, 'the shared shell loads the three faces')
   })
 
   it('the mask and ruler swatches use SCALE_MID, not --muted', () => {
@@ -254,7 +255,7 @@ describe('the page is a sequence of graphs', () => {
     const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.deepEqual(dts(week), ['Tamanho', 'Posição', 'Clique'])
     assert.match(week, /<dt>Posição<\/dt><dd>só o dia; a altura na coluna não mede nada<\/dd>/, 'the key says the vertical position means nothing, so the swarm never reads as a ranking')
-    assert.match(week, /href="como-ler\.html#semana"/, 'the figure\'s own "Como ler" points at the #semana chapter')
+    assert.match(week, /href="\/como-ler#semana"/, 'the figure\'s own "Como ler" points at the #semana chapter')
     assert.match(html, /id="help-semana"/, 'the in-page guide carries a matching chapter for that href to land on')
   })
 })
@@ -289,15 +290,16 @@ describe('the sentence and the stats badge moved into each figure', () => {
 })
 
 describe('every page finds what it names', () => {
-  it('every relative href and src in a served page resolves to a file under public/', () => {
-    for (const page of readdirSync(join(root, 'public')).filter((f) => f.endsWith('.html'))) {
-      const html = readFileSync(join(root, 'public', page), 'utf8')
-      const hrefs = [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1])
+  it('every internal href and src in a page is a route, an anchor or a file under public/', () => {
+    const routes = new Set(['/', '/como-ler', '/sobre'])
+    for (const { path, legacy } of ROUTES) {
+      const html = pageMarkup(path)
+      const hrefs = [...html.matchAll(/(?:href|src)="([^"{]+)"/g)].map((m) => m[1])
       const local = hrefs.filter((h) => !/^(https?:)?\/\/|^#|^mailto:|^\/_vercel\//.test(h))
       for (const href of local) {
-        const rel = href.split(/[?#]/)[0].replace(/^\//, '')
-        if (!rel) continue
-        assert.ok(existsSync(join(root, 'public', rel)), `public/${page} links to ${href}, which does not exist under public/`)
+        assert.ok(href.startsWith('/'), `${legacy}: ${href} must be an absolute path, so it resolves the same on every route`)
+        const rel = href.split(/[?#]/)[0]
+        assert.ok(routes.has(rel) || existsSync(join(root, 'public', rel.slice(1))), `${legacy} links to ${href}, which is neither a route nor a file under public/`)
       }
     }
   })

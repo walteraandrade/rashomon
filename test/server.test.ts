@@ -707,42 +707,14 @@ describe('GET /api/people/:id/docs?with= validates against the persons table, no
 })
 
 describe('the static pages', () => {
-  it('GET / serves the atlas as HTML, not a build artifact', async () => {
-    const res = await app.request('/')
-    assert.equal(res.status, 200)
-    assert.match(res.headers.get('content-type') ?? '', /text\/html/)
+  it('Hono serves no page and no static file: the site is the prerendered build', async () => {
+    for (const path of ['/', '/como-ler', '/sobre', '/como-ler.html', '/atlas.css', '/bundle.js', '/index.html', '/atlas-legacy.html'])
+      assert.equal((await app.request(path)).status, 404, `GET ${path} must 404`)
   })
 
-  it('the extracted stylesheet and the one script the page loads are served with the right mime type', async () => {
-    const css = await app.request('/atlas.css')
-    assert.equal(css.status, 200)
-    assert.match(css.headers.get('content-type') ?? '', /text\/css/)
-    // The modules are TypeScript under src/ui now, so public/bundle.js is the only script the
-    // page loads and the only one that can carry a JavaScript mime type.
-    const bundle = await app.request('/bundle.js')
-    assert.equal(bundle.status, 200, '/bundle.js must be served')
-    assert.match(bundle.headers.get('content-type') ?? '', /javascript/, '/bundle.js must be served with a JavaScript content type')
-  })
-
-  // Issue #108: the two legacy pages are deleted outright, not just unlinked. Neither
-  // public/index.html nor public/atlas-legacy.html exists any more, and both 404 through the
-  // same catch-all static handler that already 404s an archived design.
-  it('the two deleted legacy pages 404 and no longer exist under public/', async () => {
-    for (const rel of ['index.html', 'atlas-legacy.html']) {
+  it('the two deleted legacy pages no longer exist under public/', () => {
+    for (const rel of ['index.html', 'atlas-legacy.html', 'atlas.html', 'como-ler.html', 'sobre.html', 'bundle.js'])
       assert.ok(!existsSync(join(root, 'public', rel)), `public/${rel} must not exist`)
-      const res = await app.request(`/${rel}`)
-      assert.equal(res.status, 404, `GET /${rel} must 404`)
-    }
-  })
-
-  // Deleting atlas-legacy.html left two dead hrefs in como-ler.html while the suite stayed
-  // green: nothing checked that a link between served pages resolves. A page that names a
-  // file is a page that must find it, whichever attribute names it.
-
-  it('GET /como-ler.html answers with the reading page', async () => {
-    const res = await app.request('/como-ler.html')
-    assert.equal(res.status, 200)
-    assert.match(await res.text(), /Como ler o rashomon/)
   })
 })
 

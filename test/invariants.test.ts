@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse, type DefaultTreeAdapterMap } from 'parse5'
 import { app } from '../src/server.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
+import { pageMarkup, pageSource, ROUTES } from './pages.js'
 import { paintCandidates, paintDocs, paintOutlets, wordMarkup } from '../src/ui/render.js'
 
 // Repo-wide invariants: shapes the whole codebase must hold, not one issue's acceptance
@@ -24,7 +25,7 @@ const jsFiles = (dir = jsDir, prefix = ''): string[] =>
     entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.ts') ? [`${prefix}${entry.name}`] : [],
   )
 const moduleSource = (name: string) => readFileSync(join(jsDir, name), 'utf8')
-const atlasPage = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
+const atlasPage = () => pageMarkup('/')
 const testFileNames = () => readdirSync(testDir).filter((f) => f.endsWith('.test.ts'))
 const testFileSource = (name: string) => readFileSync(join(testDir, name), 'utf8')
 
@@ -42,33 +43,54 @@ const srcSource = (name: string) => readFileSync(join(srcDir, name), 'utf8')
 // multi-line `import {\n ... \n} from './render.js'`, must not slip through and pass vacuously.
 const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 
-describe('public/ serves every file it ships and nothing under src/ui', () => {
-  it('every file left in public/ answers 200 by name', async () => {
-    for (const entry of readdirSync(join(root, 'public'), { withFileTypes: true })) {
-      if (entry.isDirectory()) continue
-      const res = await app.request(`/${entry.name}`)
-      assert.equal(res.status, 200, `public/${entry.name} is shipped but not reachable`)
-    }
+describe('hono no longer serves the site', () => {
+  it('hono answers 404 for site paths', async () => {
+    for (const path of ['/', '/como-ler', '/sobre', '/atlas.html', '/como-ler.html', '/sobre.html', '/atlas.css', '/bundle.js'])
+      assert.equal((await app.request(path)).status, 404, `${path} must not be served by the Hono app`)
   })
 
-  it('no TypeScript source under src/ui is reachable at /js/<file>: only the built bundle is served', async () => {
+  it('no TypeScript source under src/ui is reachable at /js/<file>', async () => {
     for (const file of jsFiles()) assert.equal((await app.request(`/js/${file}`)).status, 404, `/js/${file} must not be served`)
+  })
+
+  it('every file in public/ is an asset the build copies, not a page or a script', () => {
+    for (const entry of readdirSync(join(root, 'public'), { withFileTypes: true }))
+      assert.doesNotMatch(entry.name, /\.(html|js|ts)$/, `public/${entry.name} must not ship a page or a script`)
   })
 })
 
-describe('atlas.html carries no styles and no logic of its own', () => {
-  it('has no <style> block, no inline style= and no inline script body', () => {
-    const html = atlasPage()
-    assert.doesNotMatch(html, /<style[\s>]/i, 'every rule belongs in public/atlas.css')
-    assert.deepEqual(inlineStyles(html), [], 'no inline style= in the markup, not even a --var override')
-    // An inline script body is what made the old page ungreppable-but-untestable; the page
-    // may only reference a module file.
-    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
-    for (const [, attrs, body] of scripts) {
-      assert.match(attrs, /\bsrc=/, `atlas.html must not carry an inline script body: ${body.slice(0, 80)}`)
-      assert.equal(body.trim(), '')
+describe('the client output stays free of the server graph libraries', () => {
+  it('no module under src/ui imports graphology', () => {
+    for (const file of jsFiles()) assert.ok(!/graphology/.test(importsOf(moduleSource(file)).join(' ')), `${file} must not import graphology`)
+  })
+})
+
+describe('the esbuild bundle is gone', () => {
+  it('bundle.js, its freshness test and the esbuild script no longer exist and nothing refers to them', () => {
+    assert.equal(existsSync(join(root, 'public', 'bundle.js')), false)
+    assert.equal(existsSync(join(testDir, 'bundle-freshness.test.ts')), false)
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+    assert.equal(pkg.scripts.build, 'vite build')
+    assert.doesNotMatch(JSON.stringify(pkg), /esbuild/)
+    const needle = ['public', 'bundle.js'].join('/')
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]))
+    const files = ['src', 'scripts', 'test', 'docs'].flatMap((d) => walk(join(root, d))).filter((f) => /\.(ts|md|js|json|svelte)$/.test(f))
+    const offenders = files.filter((f) => readFileSync(f, 'utf8').includes(needle)).map((f) => f.slice(root.length + 1))
+    assert.deepEqual(offenders, [], 'nothing may refer to the deleted bundle')
+  })
+})
+
+describe('the pages under web/ carry no styles and no logic of their own', () => {
+  it('has no <style> block, no inline style= and no inline script in any page', () => {
+    for (const { file, path } of ROUTES) {
+      const html = pageSource(path)
+      assert.doesNotMatch(html, /<style[\s>]/i, `${file}: every rule belongs in public/atlas.css`)
+      assert.deepEqual(inlineStyles(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')), [], `${file}: no inline style= in the markup`)
+      const markup = html.replace(/<script\s+lang="ts"[^>]*>[\s\S]*?<\/script>/, '')
+      assert.doesNotMatch(markup, /<script\b/i, `${file}: no inline script beyond the one component script block`)
+      assert.doesNotMatch(markup, /\b(?:href|src)="[^"#:]*\.html(?:#[^"]*)?"/, `${file}: an internal link must be a route, never *.html`)
     }
-    assert.match(html, /<script type="module" src="\.\/bundle\.js"><\/script>/)
   })
 
   it('every style="..." the modules write is a CSS custom property, not a hardcoded declaration', () => {
@@ -128,9 +150,11 @@ describe('every page parses the way it is written', () => {
     ])
   })
 
-  it('no page in public/ needs the parser to repair it', () => {
-    const pages = readdirSync(join(root, 'public')).filter((f) => f.endsWith('.html'))
-    for (const page of pages) assert.deepEqual(repairs(readFileSync(join(root, 'public', page), 'utf8')), [], `public/${page}`)
+  it('no page under web/ needs the parser to repair it', () => {
+    for (const { path, file } of ROUTES) {
+      const markup = pageMarkup(path).replace(/<svelte:head>[\s\S]*?<\/svelte:head>/, '')
+      assert.deepEqual(repairs(`<!doctype html><html><head></head><body>\n${markup}\n</body></html>`), [], file)
+    }
   })
 })
 
@@ -419,8 +443,8 @@ describe('the test suite stays behaviour-first: no source-scanning pins, no issu
     }
   })
 
-  it('only invariants.test.ts, bundle-freshness.test.ts and docs-drift.test.ts read src/ui source text', () => {
-    const allowed = new Set(['invariants.test.ts', 'bundle-freshness.test.ts', 'docs-drift.test.ts'])
+  it('only invariants.test.ts and docs-drift.test.ts read src/ui source text', () => {
+    const allowed = new Set(['invariants.test.ts', 'docs-drift.test.ts'])
     const readsSource = /moduleSource\(|readFileSync\([^)]*src\/ui/
     for (const file of testFileNames()) {
       if (allowed.has(file)) continue
@@ -505,7 +529,7 @@ describe('CLAUDE.md documents the comention figure (issue #207)', () => {
 
   it("CLAUDE.md's atlas.html bullet enumerates every .figure section actually on the page, comention included", () => {
     const ids = figureIds()
-    assert.ok(ids.includes('comention'), 'public/atlas.html must carry a #comention .figure section')
+    assert.ok(ids.includes('comention'), 'web/routes/+page.svelte must carry a #comention .figure section')
     const md = claudeMd()
     for (const id of ids) assert.match(md, new RegExp('`#' + id + '`'), `CLAUDE.md's atlas.html bullet must name #${id}`)
   })

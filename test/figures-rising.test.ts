@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { clearScopes } from '../src/ui/state.js'
 import { risingParams } from '../src/ui/api.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Rising, RisingTerm } from '../src/ui/format.js'
+import { pageMarkup } from './pages.js'
 
 // src/ui/figures/rising.ts, figure 4 (issue #151): its own mount(), fixed-parameter request
 // builder, and the empty/error/loading branches painted through #risingRuler and #risingAbout.
@@ -15,8 +13,7 @@ import type { Rising, RisingTerm } from '../src/ui/format.js'
 // are exercised directly (as pure exports and painters) in test/render.test.ts; picking a word
 // and opening #docsDialog is exercised in test/docs-card.test.ts, alongside the other figures.
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
+const design5 = () => pageMarkup('/')
 
 const personA = { id: 'lula', name: 'Lula' }
 const personB = { id: 'bolsonaro', name: 'Bolsonaro' }

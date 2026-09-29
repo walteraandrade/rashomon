@@ -38,6 +38,7 @@ import {
 } from '../src/graph.js'
 import { resolveScope } from '../src/outlets.js'
 import { KINDS, brtDate, brtMidnightUtc, DAYS, parseDocsQuery, parsePersistenceQuery, parseQuery, parseSourceList, PERSISTENCE_SINCE } from '../src/query.js'
+import { pageMarkup } from './pages.js'
 import { inTransaction, insertDocP, upsertPersonsP } from '../src/store.js'
 import type { Person, Source } from '../src/types.js'
 import { docPageText, docsText } from './docs.js'
@@ -2336,7 +2337,7 @@ describe('null meaning, bridges and rising unaffected (issue #247)', () => {
   // docsText (test/docs.ts only concatenates README.md and docs/*.md, never public/*) -- the
   // fact behind AC9, not the page docsText happens to cover.
   it('como-ler.html tells the reader, in pt-BR, that a word drawn fully to one end of the compare or lenses ruler can mean the other side used it too, just below what the build kept (AC9)', () => {
-    const html = readFileSync(new URL('../public/como-ler.html', import.meta.url), 'utf8')
+    const html = pageMarkup('/como-ler')
     const section = (id: string) => {
       const start = html.indexOf(`id="${id}"`)
       assert.ok(start >= 0, `public/como-ler.html has no id="${id}" section`)

@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { clearScopes } from '../src/ui/state.js'
 import { weekParams } from '../src/ui/api.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Week, WeekBucket } from '../src/ui/format.js'
+import { pageMarkup } from './pages.js'
 
 // src/ui/figures/week.ts, figure 5 (issue #147): its own mount(), the fixed days=7 request
 // builder, and the empty/error/loading branches painted through #weekChart and #weekNote.
@@ -15,8 +13,7 @@ import type { Week, WeekBucket } from '../src/ui/format.js'
 // test/render.test.ts, and weekLayout in test/layout.test.ts; picking a word and opening
 // #docsDialog with a day is exercised here since it is this figure's own contract.
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
+const design5 = () => pageMarkup('/')
 
 const personA = { id: 'lula', name: 'Lula' }
 const personB = { id: 'bolsonaro', name: 'Bolsonaro' }

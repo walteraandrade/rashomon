@@ -11,14 +11,15 @@ import { SMALL_LIMITS } from '../src/query.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { Compare, CompareTerm } from '../src/ui/format.js'
+import { pageMarkup } from './pages.js'
 
 // src/ui/figures/compare.ts, figure 3 (issues #91, #93, #99): its mount(), its own controls, the
 // selected word, and the markup of its card. rulerTerms and paintRuler are in
 // test/render.test.ts, rulerLayout in test/layout.test.ts and balanceColor in test/format.test.ts.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
-const comoLer = () => readFileSync(join(root, 'public', 'como-ler.html'), 'utf8')
+const design5 = () => pageMarkup('/')
+const comoLer = () => pageMarkup('/como-ler')
 
 const personA = { id: 'lula', name: 'Lula' }
 const personB = { id: 'bolsonaro', name: 'Bolsonaro' }

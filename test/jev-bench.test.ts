@@ -292,10 +292,10 @@ describe('jev bench cli', () => {
     assert.equal(written.sonnet.costUsd, 0.012)
   })
 
-  it('collect diffs base...head without the lockfile and the bundle', async () => {
+  it('collect diffs base...head without the lockfile', async () => {
     const w = world()
     await main(['collect', '--pr', '7', '--dir', 'out'], w.deps)
-    assert.ok(w.execed.includes('git diff base0...headfinal -- . :!pnpm-lock.yaml :!public/bundle.js'))
+    assert.ok(w.execed.includes('git diff base0...headfinal -- . :!pnpm-lock.yaml'))
   })
 
   it('the diff cap is 32000 estimated tokens of chars / 4, never truncated', async () => {

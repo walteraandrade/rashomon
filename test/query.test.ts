@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { parse } from 'parse5'
+import { pageMarkup } from './pages.js'
 import {
   BASELINES,
   BRIDGE_NODES,
@@ -635,7 +636,7 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
     const walk = (n: Node): Node[] => [n, ...[...(n.childNodes ?? []), ...(n.content ? [n.content] : [])].flatMap(walk)]
     const attr = (n: Node, name: string) => n.attrs?.find((a) => a.name === name)?.value
     const text = (n: Node): string => (n.childNodes ?? []).map((c) => (c.tagName ? text(c) : c.value ?? '')).join('')
-    const page = walk(parse(readFileSync(new URL('../public/atlas.html', import.meta.url), 'utf8')) as Node)
+    const page = walk(parse(pageMarkup('/')) as Node)
     const ids = ['days', 'testimonyDays', 'compareDays', 'lensesDays', 'agendaDays', 'comentionDays']
     for (const id of ids) {
       const select = page.find((n) => n.tagName === 'select' && attr(n, 'id') === id)
@@ -730,7 +731,7 @@ const numbers = (markup: string) => [...markup.matchAll(/<option[^>]*>(\d+)<\/op
 
 describe('parameter enumeration acceptance criteria (issue #127)', () => {
   it('every limit the page sends is a member of LIMITS', () => {
-    const page = readFileSync(new URL('../public/atlas.html', import.meta.url), 'utf8')
+    const page = pageMarkup('/')
     const atlas = page.match(/<select id="limit"[\s\S]*?<\/select>/)?.[0]
     assert.ok(atlas, 'atlas.html should carry the atlas limit select')
     const offered = numbers(atlas)

@@ -95,6 +95,14 @@ describe('params', () => {
     assert.equal(p.has('domain'), false)
   })
 
+  it('params maps reach to count on the wire (issue #210)', () => {
+    const base = { days: '30', limit: '18', source: 'all' }
+    assert.equal(params({ ...base, sort: 'reach' }).get('sort'), 'count')
+    assert.equal(params({ ...base, sort: 'pmi' }).get('sort'), 'pmi')
+    assert.equal(params({ ...base, sort: 'count' }).get('sort'), 'count')
+    assert.equal(params({ ...base, sort: 'reach' }).toString(), params({ ...base, sort: 'count' }).toString())
+  })
+
   it('lets an explicit kind/min override the defaults', () => {
     const p = params({ days: '7', sort: 'count', limit: '12', source: 'gdelt', kind: 'hashtag', min: '5' })
     assert.equal(p.get('kind'), 'hashtag')

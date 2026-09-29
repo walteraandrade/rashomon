@@ -4,7 +4,7 @@ import outletsJson from '../../outlets.json' with { type: 'json' }
 
 export type TermTestimony = { score: number; n: number }
 // `community` is a plain number: src/communities.ts's Louvain/graphology types never reach the UI.
-export type Term = { id: string; term: string; kind: string; count: number; pmi: number; testimony?: TermTestimony | null; community?: number | null }
+export type Term = { id: string; term: string; kind: string; count: number; pmi: number; reach?: number | null; testimony?: TermTestimony | null; community?: number | null }
 export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
@@ -172,10 +172,10 @@ export const SOURCE_SEGMENTS: [string, string][] = [
 
 // sort='pmi' orders by pmi * ln(1 + count), matching src/graph.ts's sort=pmi so node sizing
 // never drifts from the server's ordering.
-export const score = (n: { pmi?: number; count?: number }, sort: string) =>
-  sort === 'pmi' ? Number(n.pmi || 0) * Math.log1p(Number(n.count || 0)) : Number(n.count || 0)
+export const score = (n: { pmi?: number; count?: number; reach?: number | null }, sort: string) =>
+  sort === 'reach' ? Number(n.reach || 0) : sort === 'pmi' ? Number(n.pmi || 0) * Math.log1p(Number(n.count || 0)) : Number(n.count || 0)
 
-export const scoreName = (sort: string) => (sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
+export const scoreName = (sort: string) => (sort === 'reach' ? 'alcance (reposts)' : sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
 
 export const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
 

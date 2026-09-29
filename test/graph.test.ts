@@ -4018,9 +4018,12 @@ describe('docsFor with week (issue #215)', () => {
   })
 
   it('week narrows inside days: a week only partly inside the window returns its inside part', async () => {
-    const q = request({ week: cur, days: 7 })
-    const { total } = await docsFor(lula, q)
-    assert.ok(total >= 1)
+    const DAY = 86_400_000
+    const sinceCur = Date.now() - brtMidnightUtc(cur).getTime()
+    const days = Math.floor((sinceCur + 2 * HOUR) / DAY) + 1
+    const { total, docs } = await docsFor(lula, request({ week: prev, days }))
+    assert.deepEqual(docs.map((d) => d.uri), ['https://week.test/2'], 'the window edge falls inside the previous week: only its later part is returned')
+    assert.equal(total, 1)
   })
 })
 

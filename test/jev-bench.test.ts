@@ -430,6 +430,15 @@ describe('jev bench cli', () => {
     assert.match(w.logs.join('\n'), /#7: round-1 verdict not recorded/)
   })
 
+  it('collect skips a block whose only round is a null-verdict round 1', async () => {
+    const block = '```json factory-verify\n[{"round":1,"headSha":"a","verdict":null,"gaps":[{"criterion":1,"severity":"blocker","area":"api"}]}]\n```'
+    const w = world({ prBody: `Closes #101\n\n${block}` })
+    assert.equal(await main(['collect', '--pr', '7', '--dir', 'out'], w.deps), 0)
+    assert.equal(w.files.size, 0)
+    assert.deepEqual(w.fetched, [])
+    assert.match(w.logs.join('\n'), /#7: round-1 verdict not recorded/)
+  })
+
   it('collect skips a PR the factory did not produce', async () => {
     const noIssue = world({ prBody: 'just a change' })
     assert.equal(await main(['collect', '--pr', '7', '--dir', 'out'], noIssue.deps), 0)

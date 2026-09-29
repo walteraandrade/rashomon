@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { promisify } from 'node:util'
 import { closedIssue, estimateTokens, findSpec } from '../src/jev.js'
-import { legacyRounds, parseCriteria, parseVerifyBlock, renderTable, type ModelRun, type Row } from './jev/metrics.js'
+import { hasVerifyBlock, legacyRounds, parseCriteria, parseVerifyBlock, renderTable, type ModelRun, type Row } from './jev/metrics.js'
 import {
   CHAT_URL,
   CONVENTION_QUESTIONS,
@@ -106,8 +106,8 @@ const prepare = async (deps: Deps, pr: number): Promise<Prepared> => {
   if (spec === null) return { skip: `#${pr}: issue #${issue} has no spec comment` }
   const verify = parseVerifyBlock(body)
   const r1 = verify.find((r) => r.round === 1)
-  if (verify.length > 0 && r1 === undefined) return { skip: `#${pr}: round-1 verdict not recorded` }
-  const rounds = verify.length > 0 ? verify : legacyRounds(body, view.headRefOid)
+  if (hasVerifyBlock(body) && r1 === undefined) return { skip: `#${pr}: round-1 verdict not recorded` }
+  const rounds = hasVerifyBlock(body) ? verify : legacyRounds(body, view.headRefOid)
   const diffAt = r1 === undefined ? 'final' : 'round1'
   const head = r1 === undefined ? view.headRefOid : r1.headSha
   if (head === '') return { skip: `#${pr}: round-1 head not recorded` }

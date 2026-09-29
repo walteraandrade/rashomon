@@ -59,6 +59,8 @@ const toRound = (r: unknown): Round | null => {
   return { round: r.round, headSha: typeof r.headSha === 'string' ? r.headSha : '', verdict: r.verdict, ms: typeof r.ms === 'number' ? r.ms : null, gaps }
 }
 
+export const hasVerifyBlock = (prBody: string): boolean => FENCE.test(prBody)
+
 export const parseVerifyBlock = (prBody: string): Round[] => {
   const m = FENCE.exec(prBody)
   if (!m) return []

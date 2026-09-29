@@ -412,3 +412,34 @@ describe('the term dictionary is documented (issue #252)', () => {
     assert.match(docsText, /disable[^.\n]*ingest\.yml[^.\n]*deploy[^.\n]*pnpm migrate[^.\n]*re-?enable[^.\n]*ingest\.yml/i)
   })
 })
+
+// Issue #270: facts about the 60-day window and retention. Each is a loose match on the fact,
+// so a page may be reworded or split without failing it.
+describe('docs state the 60-day window and retention (issue #270)', () => {
+  it('AC17: days takes 7, 30 or 60; a larger value, 365 included, snaps to 60; 45 reads as 30 and 46 as 60', () => {
+    assert.match(docsText, /\b7\b\W{1,6}\b30\b\W{1,6}(or|and)?\W{0,6}\b60\b/)
+    assert.match(docsText, /365[^.\n]{0,160}\b60\b/)
+    assert.match(docsText, /\b45\b[^.\n]{0,40}\b30\b[^.\n]{0,60}\b46\b[^.\n]{0,40}\b60\b/)
+    assert.doesNotMatch(docsText, /\b7\b\W{1,6}\b30\b\W{1,6}(or|and)?\W{0,6}\b365\b/)
+  })
+
+  it('AC18: ingest deletes docs older than the widest window (DAYS largest), with their four derived tables; person_attention and terms stay; the count is logged', () => {
+    assert.match(docsText, /ingest[^.\n]*delet[^.\n]*(older|published (before|more than))[^.\n]*(widest|DAYS|60 days)/i)
+    assert.match(docsText, /horizon[^.\n]*DAYS/)
+    for (const t of ['doc_terms', 'doc_persons', 'doc_testimony', 'doc_candidates']) assert.match(docsText, new RegExp(t), t)
+    assert.match(docsText, /person_attention[^.\n]*(not trimmed|never trimmed|not deleted|stay|survive|untouched)/i)
+    assert.match(docsText, /`terms`[^.\n]*(not trimmed|never trimmed|not deleted|stay|survive|untouched)/i)
+    assert.match(docsText, /retention:[^.\n]*deleted/)
+  })
+
+  it('AC19: reindex cannot recover a deleted doc, and retention frees pages without shrinking pg_database_size', () => {
+    assert.match(docsText, /reindex[^\n]*stored[^\n]*deleted[^\n]*(not recovered|gone|never recovered|cannot)/i)
+    assert.match(docsText, /pg_database_size[^.\n]*(not|never|does not) shrink|not shrink[^.\n]*pg_database_size/i)
+    assert.match(docsText, /vacuum/i)
+  })
+
+  it('AC20: rising at days=60 has an empty baseline because it lies beyond retention', () => {
+    assert.match(docsText, /rising[^]{0,80}days=60[^]{0,300}empty baseline|days=60[^]{0,300}baseline[^]{0,200}(retention|older)/i)
+    assert.match(docsText, /(beyond|older than|past|outside) (the )?retention/i)
+  })
+})

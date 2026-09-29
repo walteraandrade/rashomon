@@ -20,6 +20,7 @@ Every route is a public, read-only `GET` under `/api`. Query parameters are pars
 | `/api/people/:id/lenses` | one person, exact count/PMI/tone under two independently-scoped lenses |
 | `/api/people/:id/lenses/bridges` | betweenness of given terms across one person's two lenses |
 | `/api/comention` | how many documents in a window name each pair of tracked people together |
+| `/api/people/:id/persistence` | which words stuck across consecutive weeks for one person, and which faded |
 
 The contract is stable: `/api/people`, `/api/people/:id/graph` and `/api/people/:id/sources` never lose a field. A new capability is a new route or a new optional parameter, never a breaking change to an existing one.
 
@@ -78,9 +79,11 @@ Returns `{ person, stats, nodes, links, signature, outlets }`. With `domain=all`
 
 ## docs
 
-`GET /api/people/:id/docs?term=&kind=all&days=30&source=all&domain=all&lean=all&limit=50&offset=0&day=` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs, outlets }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings. `outlets` follows the same rule as `graph`'s.
+`GET /api/people/:id/docs?term=&kind=all&days=30&source=all&domain=all&lean=all&limit=50&offset=0&day=&week=` lists the docs behind a graph term (or every doc about the person when `term` is omitted): `{ total, docs, outlets }`, each doc `{ id, source, domain, published_at, text, uri, tone }`, newest first. `term` matches normalized tokens exactly, not substrings. `outlets` follows the same rule as `graph`'s.
 
 `day` is optional. A doc's calendar day is its `published_at` converted to `America/Sao_Paulo`, except that a `published_at` after the end of today BRT counts as today — the same fold `/week` applies to its own last bucket. So `day=<today's BRT date>` returns today's docs plus every future-dated one, while `day=<any earlier date>` returns the docs whose BRT date is that day and that also fall inside the `days` window — `day` intersects the window, it does not replace it, so the oldest admissible date can come back partial, missing whatever in that calendar day falls before the window's edge. The fold is deliberate: it is what keeps a `/week` bucket's `about` equal to `/docs?day=<that bucket's date>`'s `total` for today's bucket, the invariant issue #150's click from one into the other depends on; a past bucket needs no fold to already agree.
+
+`week` is optional (issue #215): `week=<YYYY-MM-DD>` snaps to that date's Monday (a BRT calendar date, pure date arithmetic) and keeps the docs whose BRT date falls on that Monday-to-Sunday span, by the same fold `day` uses, so on the current week a future-dated doc counts on today. Like `day` it intersects the `days` window rather than replacing it: a week only partly inside the window returns its inside part. A malformed date, a week whose Monday is after today, or a week that does not overlap the window parses to empty and the request behaves as if `week` were absent. The resolved `day` wins: when `day` is a valid in-window date, `week` is ignored (the parser returns an empty `week`, so `day=X&week=Y` returns exactly what `day=X` returns); a malformed, future or out-of-window `day` resolves to empty first, and then a valid `week` still applies. A caller that never sends `week` gets byte-for-byte the same request and response it always did.
 
 A value that is missing, malformed, not `YYYY-MM-DD`, not a real calendar day (`2026-02-31`), entirely before the `days` window, or a calendar date after today parses to empty. An empty `day` is not a request for the empty day: the route falls back to behaving exactly as it did before `day` existed, so a caller sending a bad date gets the *whole* `days` window back, not zero docs. The response fields do not change.
 
@@ -131,6 +134,18 @@ When `?method` is omitted or fails its charset check it resolves through the sam
 ## attention
 
 `GET /api/people/:id/attention?days=30` returns `{ days, series }`. `days` snaps through the shared `DAYS` list (`[7, 30, 365]`, default 30) like every other window; no other parameter. `series` holds one `{ day, views }` row per calendar day that has a stored Wikipedia pageview count, ordered ascending by `day` (an ISO `YYYY-MM-DD` string, Wikimedia's own UTC daily bucket, never re-bucketed into `America/Sao_Paulo`); `views` is a non-negative integer. A day never collected is simply absent — there is no zero-fill. A person with no `wikipedia` title in `seed.json`, or with a title but zero rows ever collected, returns `{ days: 30, series: [] }` (HTTP 200). This is a curiosity signal — how much a person is being *looked up*, not how much the corpus writes about her — collected from the Wikimedia pageviews API and stored outside the text pipeline entirely: it carries no `tone`, contributes to no `count`/`pmi`, and appears on no other route's response. Cached with the rolling 6h class (the last path segment is not in the trend list).
+
+## persistence
+
+`GET /api/people/:id/persistence?weeks=12&limit=40` (issue #215) returns which words have stuck for one person across consecutive Brazilian weeks, read from the persisted weekly table `term_weeks` ([operations](operations.md#graph-aggregates)): `{ weeks, since, first_week, horizon, terms }`. `weeks` snaps onto 4, 12 or 26 (default 12; a tie goes to the smaller value, so `8` gives 4 and `19` gives 12) and `limit` snaps through the shared `LIMITS` list (default 40). There is no `days`, `source`, `kind`, `min`, `domain` or `lean`: the table has one fixed scope (all sources, `word`, `hashtag` and `phrase`, `country=br`), and an unknown key is ignored. An unknown person is 404, like every `/people/:id/*` route; a known person with no rows is 200 with `terms: []` and `first_week: null`. Cached with the rolling 6h class.
+
+- `since` is the constant `2026-09-09`, the earliest week the first build could have written.
+- `first_week` is the earliest week the person has in `term_weeks`, all time and not limited to the window, `null` when she has no row. It tells "no series yet" apart from "outside the top 50".
+- `horizon` is the widest `days` a `/docs` request can reach (365); a week older than that has no stored documents behind it.
+- Each term is `{ term, kind, series, streak, half_life }`. `series` has exactly `weeks` entries, oldest first, one per Monday, ending at the current BRT Monday, each `{ week, count }`. `count: null` means no row that week (the term was outside that week's top 50, or the week is before `first_week`): it is never `0`, and a stored row always has `count >= 2`.
+- `streak` is the number of consecutive weeks with a non-null count, counted back from the current week when it is non-null and from the week before otherwise, because the current week is still in progress and its absence alone does not end a streak. It is 0 when the starting week is also null.
+- `half_life` reads complete weeks only (the series without its last, in-progress entry). It is the number of weeks from the peak (highest count, the most recent on a tie) to the first later week whose count is at most half the peak, a null counting as a fall. It is `null` while no such week exists, when the peak is the last complete week, when every complete week is null, or with fewer than two complete weeks; otherwise an integer of at least 1.
+- `terms` holds every `(term, kind)` with at least one non-null week in the window, ordered by `streak` descending, then number of non-null weeks descending, then total count descending, then `term` and `kind` ascending, cut at `limit`. It cannot be ranked by PMI: the table keeps `count` and `c_t` only, not the document totals PMI needs.
 
 ## compare
 

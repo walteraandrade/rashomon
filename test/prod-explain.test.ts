@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { promisify } from 'node:util'
 import { before, describe, it } from 'node:test'
 import { readCases } from '../scripts/bench/cases.js'
-import { caseNames, explainOf, inBuildWindow, renderCases, run, summarize, type Client, type Opts } from '../scripts/prod-explain.js'
+import { caseNames, explainOf, inBuildWindow, renderCases, run, statStatementsSql, summarize, type Client, type Opts } from '../scripts/prod-explain.js'
 import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { queries } from '../src/graph.js'
 import { docsText } from './docs.js'
 import { persons, seed } from './fixture.js'
 import './close.js'
+
+const pexec = promisify(execFile)
 
 const [lula, tarcisio] = persons
 const ctx = { person: lula, other: tarcisio, ids: ['word:reforma', 'word:tributaria'], term: 'reforma', window: 30 }
@@ -65,7 +69,7 @@ const fake = (over: (text: string, values?: unknown[]) => Record<string, unknown
 }
 
 const opts = (over: Partial<Opts> = {}): Opts => ({ person: 'lula', now: new Date('2026-09-28T09:30:00Z'), ...over })
-const explains = (sent: { text: string }[]) => sent.filter((s) => s.text.startsWith('explain '))
+const explains = (sent: { text: string; values?: unknown[] }[]) => sent.filter((s) => s.text.startsWith('explain '))
 
 describe('prod-explain rendering', () => {
   before(async () => {
@@ -82,8 +86,16 @@ describe('prod-explain rendering', () => {
       linksFast: queries.linksFast(lula, { days: 30, source: 'all' }, ctx.ids),
       compareFast: queries.compareFast(lula, tarcisio, { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'word,hashtag,phrase,org', limit: 40, bridges: false }),
     }
+    const lensesFast = queries.lensesFast(lula, {
+      days: 30,
+      kind: 'word,hashtag,phrase,org',
+      limit: 40,
+      bridges: false,
+      a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
+      b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
+    })
     const byName = new Map(rendered.map((r) => [r.name, r]))
-    for (const [name, sql] of Object.entries(expected)) {
+    for (const [name, sql] of Object.entries({ ...expected, lensesFast })) {
       assert.equal(byName.get(name)!.text, sql.text, name)
       assert.deepEqual(byName.get(name)!.values, sql.values, name)
     }
@@ -118,6 +130,18 @@ describe('prod-explain rendering', () => {
     const result = await run(client, opts({ cases: ['links', 'termTestimony', 'docs.term'] }))
     assert.equal(result.failed, false)
     assert.equal(explains(sent).length, 6)
+  })
+})
+
+describe('prod-explain pure halves', () => {
+  it('explainOf prefixes the statement and keeps its values', () => {
+    assert.deepEqual(explainOf({ text: 'select $1', values: [7] }), { text: 'explain (analyze, buffers, format text) select $1', values: [7] })
+  })
+
+  it('statStatementsSql selects the seven columns by total time with one bound limit', () => {
+    const { text, values } = statStatementsSql(25)
+    assert.match(text, /^select query, calls, total_exec_time, mean_exec_time, temp_blks_read, temp_blks_written, shared_blks_read from pg_stat_statements order by total_exec_time desc limit \$1$/)
+    assert.deepEqual(values, [25])
   })
 })
 
@@ -224,6 +248,24 @@ describe('prod-explain run', () => {
     assert.match(badPerson.report, /lula, tarcisio/)
   })
 
+  it('an unknown other person sends no explain and lists the known ids', async () => {
+    const { client, sent } = fake((text, values) => (text.includes('from persons where id = $1') && (values as string[])[0] === 'ghost' ? [] : undefined))
+    const result = await run(client, opts({ other: 'ghost' }))
+    assert.equal(result.failed, true)
+    assert.equal(explains(sent).length, 0)
+    assert.match(result.report, /unknown person: ghost/)
+    assert.match(result.report, /lula, tarcisio/)
+  })
+
+  it('days snap onto the route windows and the term seeds from the first word id', async () => {
+    const { client, sent } = fake()
+    const { report } = await run(client, opts({ days: 10, cases: ['docs.term'] }))
+    assert.match(report, /### docs\.term \(lula, 7d\)/)
+    const ids = sent.find((s) => s.text.includes('doc_terms'))!
+    assert.deepEqual(ids.values, ['lula', 7])
+    assert.ok(explains(sent).some((s) => (s.values ?? []).includes('reforma')))
+  })
+
   it('refuses inside the build window unless forced', async () => {
     const a = fake()
     const refused = await run(a.client, opts({ now: new Date('2026-09-28T06:30:00Z') }))
@@ -243,6 +285,29 @@ describe('prod-explain run', () => {
   })
 })
 
+describe('prod-explain cli', () => {
+  const cli = (args: string[], env: Record<string, string>) =>
+    pexec(process.execPath, ['--import', 'tsx', 'scripts/prod-explain.ts', ...args], {
+      env: { PATH: process.env.PATH ?? '', ...env },
+    }).then(
+      (r) => ({ code: 0, out: r.stdout + r.stderr }),
+      (e: { code: number; stdout: string; stderr: string }) => ({ code: e.code, out: e.stdout + e.stderr }),
+    )
+
+  it('exits 1 naming the three connection variables when none is set', async () => {
+    const r = await cli(['--person', 'lula'], {})
+    assert.equal(r.code, 1)
+    for (const name of ['POSTGRES_URL_NON_POOLING', 'DATABASE_URL', 'POSTGRES_URL']) assert.ok(r.out.includes(name), name)
+  })
+
+  it('an unknown case exits 1 listing the valid ones before any statement', async () => {
+    const r = await cli(['--person', 'lula', '--cases', 'nope', '--force'], { DATABASE_URL: 'postgres://u:p@127.0.0.1:1/db' })
+    assert.equal(r.code, 1)
+    assert.match(r.out, /unknown case: nope/)
+    assert.ok(caseNames.every((n) => r.out.includes(n)))
+  })
+})
+
 describe('prod-explain docs', () => {
   it('the docs name production EXPLAIN and pg_stat_statements as the timing source and give both reasons', () => {
     const at = docsText.indexOf('prod-explain')
@@ -255,6 +320,10 @@ describe('prod-explain docs', () => {
     assert.match(near, /PG_SSL_CA/)
     assert.match(near, /read-only/i)
     assert.match(near, /build window/i)
+    assert.match(near, /identical rows and plan shape/i)
+    assert.match(near, /PGlite[^.]*\bRAM\b/i)
+    assert.match(near, /EXPLAIN \(ANALYZE, BUFFERS\)/)
+    assert.match(near, /cold[^.]*not a flushed/i)
   })
 
   it('the harness readme no longer sells speed as a keep condition', () => {

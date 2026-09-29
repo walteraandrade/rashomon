@@ -8,7 +8,7 @@ import { before, describe, it } from 'node:test'
 import seedJson from '../seed.json' with { type: 'json' }
 import { idsSql, readCases } from '../scripts/bench/cases.js'
 import { ANCHOR, runSeed } from '../scripts/bench/seed.js'
-import { compare, median, p95, resultHash, table, type Report } from '../scripts/bench/stats.js'
+import { compare, median, p95, resultHash, table, type Report, type Verdict } from '../scripts/bench/stats.js'
 import { db, migrateP } from '../src/db.js'
 import { nameTokens } from '../src/extract.js'
 import { queries } from '../src/graph.js'
@@ -60,6 +60,15 @@ describe('bench harness stats', () => {
     assert.equal(r.kept, true)
     assert.equal(r.unverified.length, 2)
     assert.equal(r.diverged.length, 0)
+  })
+
+  it('the verdict has no speed field and compare takes no gain', () => {
+    const v = {} as Verdict
+    // @ts-expect-error Verdict.fast was removed
+    void v.fast
+    const base = report([['graph', 7, 100, 'x']])
+    // @ts-expect-error the gain parameter was removed
+    assert.equal(compare(base, base, ['graph'], 0.2).kept, true)
   })
 
   it('table keeps the ratio column', () => {

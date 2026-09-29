@@ -330,7 +330,7 @@ The benchmark builds the graph aggregates after generating its corpus, so `graph
 
 Three separate things. Two are local only: opt-in instrumentation on the running API (`PERF=1`) and a benchmark that builds its own database (`pnpm bench`). One runs in every browser, production included: the User Timing marks the page records, which exist to be read next to Vercel's `x-vercel-cache` header.
 
-**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms`, `x-perf-sql-count` and `server-timing` (`db;dur=446.2;desc="5 sql", total;dur=227.6`, the same two numbers in the shape DevTools draws on a request's Timing tab), plus one JSON line on stdout:
+**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev:api` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms`, `x-perf-sql-count` and `server-timing` (`db;dur=446.2;desc="5 sql", total;dur=227.6`, the same two numbers in the shape DevTools draws on a request's Timing tab), plus one JSON line on stdout:
 
 ```json
 {"perf":"request","method":"GET","path":"/api/people/lula/graph","query":"days=30","status":200,"ms":227.6,"db_ms":446.2,"sql":5}
@@ -353,7 +353,7 @@ Placing a wait is a decision keyed on the `api:*` entry's `detail.cache`, never 
 | `memory` | the page's own memo, ~0 | `figure − api` is layout and paint; nothing else to place |
 | `HIT` | the CDN answering | short is the CDN working; ignore `server` (it is the origin fill, not this request) |
 | `MISS` / `STALE` | the origin: cold start, connection, SQL, transfer | with `server`: `db` is SQL, `api − total` is network, cold start and connection; without it, only the total is known |
-| `null` | no CDN in front (local `pnpm dev`) | with `PERF=1`: same split as `MISS` |
+| `null` | no CDN in front (local `pnpm dev:api`, or through `pnpm dev`'s `/api` proxy) | with `PERF=1`: same split as `MISS` |
 
 `figure − api` is layout and paint on every row. The one exception is `figure:docs` with two sides (the ruler): two `api:docs` run in `Promise.all`, so the figure is `max(api, api) + paint`, and `detail.urls` names both.
 
@@ -462,7 +462,7 @@ Four rules hold it there, and `test/pet-acceptance.test.ts` pins each one:
   own grid (106×78 and 52×74), the `<img>` carries that same size so the box cannot grow under
   the reader, and `.pet` sets `image-rendering: pixelated`. A pixel sprite at a fractional scale,
   or smoothed, is a blurred sprite.
-- **It is a state, never furniture.** Neither `atlas.html` nor `como-ler.html` may mention
+- **It is a state, never furniture.** Neither `web/routes/+page.svelte` nor `web/routes/como-ler/+page.svelte` may mention
   `pet-caracara`: the sprite exists only where a painter decides it should.
 
 `OUTAGE` covers both of figure 1's ways into that box — a failed `GET /api/people` and a failed
@@ -470,7 +470,7 @@ graph fetch. They carry identical copy, so painting only one of them would show 
 sometimes and not others for what a reader sees as the same box. An empty `seed.json` still
 paints no bird: nobody tracked is a different fact from nothing answering.
 
-Both files sit under `public/` and are served by the static handler like any other asset. They
+Both files sit under `public/` and `pnpm build` copies them into `build/` at the same path. They
 are quantised to the site's own palette tokens — seven colours in the flying sprite, six in the
 perched one, no hue outside `--cmp-b` — which is why they weigh 3 KB and 533 bytes.
 

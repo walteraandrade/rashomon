@@ -41,7 +41,7 @@ END=$(date +%s)
 cd "$WT" || exit 5
 git add -A
 git diff --cached --name-status "$SHA" > "$LOGS/$ID.files"
-git diff --cached "$SHA" -- . ':!public/bundle.js' ':!pnpm-lock.yaml' > "$LOGS/$ID.patch"
+git diff --cached "$SHA" -- . ':!pnpm-lock.yaml' > "$LOGS/$ID.patch"
 SRC=$(git diff --cached --shortstat "$SHA" -- src | tr -d '\n')
 TEST=$(git diff --cached --shortstat "$SHA" -- test | tr -d '\n')
 PUBLIC=$(git diff --cached --shortstat "$SHA" -- public | tr -d '\n')

@@ -40,7 +40,7 @@ const GATE = {
 const HEAD = {
   type: 'object',
   required: ['sha'],
-  properties: { sha: { type: 'string', description: 'output of git rev-parse HEAD in the worktree' } },
+  properties: { sha: { type: 'string', pattern: '^[0-9a-f]{40}$', description: 'full 40-character output of git rev-parse HEAD in the worktree' } },
 }
 const TESTS = {
   type: 'object',
@@ -97,7 +97,7 @@ const verifyRounds = []
 for (let round = 1; round <= 2; round++) {
   tests = await role('test-verifier', `${where}\n\n${specText}\n\nWrite acceptance tests from the spec's criteria, run pnpm test, commit them, and report.`,
     { label: `tests #${issue} r${round}`, phase: 'Verify', schema: TESTS })
-  const head = await role('researcher', `${where}\n\nRun \`git rev-parse HEAD\` inside the worktree and return the sha.`,
+  const head = await role('researcher', `${where}\n\nRun \`git rev-parse HEAD\` inside the worktree and return the full 40-character sha, never an abbreviation.`,
     { label: `head #${issue} r${round}`, phase: 'Verify', schema: HEAD, effort: 'low' })
   const started = Date.now()
   verdict = await role('validator', `${where}\n\n${specText}\n\nBuilder reports:\n${apiReport}\n\n${uiReport}\n\nTest verifier report (${tests?.failures ?? '?'} failing):\n${tests?.table ?? 'none'}\n\nJudge the branch against the spec and CLAUDE.md. On each gap set criterion to the number of the acceptance criterion it is about, and omit it when the gap spans none.`,
@@ -105,7 +105,7 @@ for (let round = 1; round <= 2; round++) {
   verifyRounds.push({
     round,
     headSha: head?.sha ?? null,
-    verdict: verdict?.verdict ?? 'return',
+    verdict: verdict?.verdict ?? null,
     ms: Date.now() - started,
     gaps: (verdict?.gaps ?? []).map((g) => ({ criterion: g.criterion ?? null, severity: g.severity, area: g.area })),
   })

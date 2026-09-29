@@ -108,8 +108,12 @@ const prepare = async (deps: Deps, pr: number): Promise<Prepared> => {
   const rounds = verify.length > 0 ? verify : legacyRounds(body, view.headRefOid)
   const diffAt = verify.length > 0 ? 'round1' : 'final'
   const head = diffAt === 'round1' ? verify[0].headSha : view.headRefOid
+  if (head === '') return { skip: `#${pr}: round-1 head not recorded` }
   await deps.exec('git', ['fetch', 'origin', `refs/pull/${pr}/head`]).catch(() => '')
-  const diff = await deps.exec('git', ['diff', `${view.baseRefOid}...${head}`, '--', '.', ':!pnpm-lock.yaml', ':!public/bundle.js'])
+  const diff = await deps
+    .exec('git', ['diff', `${view.baseRefOid}...${head}`, '--', '.', ':!pnpm-lock.yaml', ':!public/bundle.js'])
+    .catch((e: unknown) => (diffAt === 'round1' ? null : Promise.reject(e)))
+  if (diff === null) return { skip: `#${pr}: round-1 head ${head} not found` }
   const criteria = parseCriteria(spec)
   const diffTokens = estimateTokens(diff)
   const row: Row = {
@@ -174,7 +178,10 @@ const collect = async (deps: Deps, args: Args): Promise<number> => {
     return 1
   }
   for (const pr of args.prs) {
-    const prepared = await prepare(deps, pr)
+    const prepared = await prepare(deps, pr).then(
+      (p) => p,
+      (e: unknown) => ({ skip: `#${pr}: ${failure(key, e)}` }),
+    )
     if ('skip' in prepared) {
       deps.log(prepared.skip)
       continue

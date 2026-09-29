@@ -250,6 +250,39 @@ describe('jev bench cli', () => {
     assert.deepEqual(written.rounds, [])
   })
 
+  it('collect goes on after a PR fails to prepare', async () => {
+    const w = world()
+    const exec = w.deps.exec
+    const deps: Deps = {
+      ...w.deps,
+      exec: async (cmd, args) => {
+        if (cmd === 'gh' && args[0] === 'pr' && args[2] === '1') throw new Error('no pull request found')
+        return exec(cmd, args)
+      },
+    }
+    assert.equal(await main(['collect', '--pr', '1', '--pr', '2', '--dir', 'out'], deps), 0)
+    assert.equal(w.files.has('out/1.json'), false)
+    assert.ok(w.files.has('out/2.json'))
+    assert.match(w.logs.join('\n'), /#1: no pull request found/)
+  })
+
+  it('collect skips a PR whose round-1 head git cannot resolve', async () => {
+    const block = '```json factory-verify\n[{"round":1,"headSha":"gone","verdict":"return","ms":1,"gaps":[]}]\n```'
+    const w = world({ prBody: `Closes #101\n\n${block}` })
+    const exec = w.deps.exec
+    const deps: Deps = {
+      ...w.deps,
+      exec: async (cmd, args) => {
+        if (args[0] === 'diff') throw new Error('bad revision')
+        return exec(cmd, args)
+      },
+    }
+    assert.equal(await main(['collect', '--pr', '7', '--dir', 'out'], deps), 0)
+    assert.equal(w.files.size, 0)
+    assert.match(w.logs.join('\n'), /#7: round-1 head gone not found/)
+    assert.deepEqual(w.fetched, [])
+  })
+
   it('collect skips a PR the factory did not produce', async () => {
     const noIssue = world({ prBody: 'just a change' })
     assert.equal(await main(['collect', '--pr', '7', '--dir', 'out'], noIssue.deps), 0)

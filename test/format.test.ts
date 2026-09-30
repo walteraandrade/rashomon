@@ -503,3 +503,12 @@ describe('sourceLabels / SOURCE_SEGMENTS', () => {
     assert.ok(SOURCE_SEGMENTS.length >= 8, 'every source still has an option')
   })
 })
+
+describe('attention copy', () => {
+  it('labels a day in UTC and words the lag', async () => {
+    const { attentionDayLabel, attentionNoteText } = await import('../src/ui/format.js')
+    assert.match(attentionDayLabel('2026-08-03'), /seg.* 3/)
+    assert.equal(attentionNoteText('2026-08-14', '2026-08-16'), 'a imprensa veio 2 dias antes')
+    assert.equal(attentionNoteText(null, '2026-08-16'), '')
+  })
+})

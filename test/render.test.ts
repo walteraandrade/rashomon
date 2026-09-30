@@ -37,7 +37,6 @@ import {
   liftBalance,
   liftOfPerson,
   rareRisers,
-  attentionDayLabel,
   risingRulerItems,
   shareBalance,
   rulerTerms,

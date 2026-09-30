@@ -4,6 +4,7 @@ import { persons } from './fixture.js'
 import { docsText } from './docs.js'
 import { clearScopes } from '../src/ui/state.js'
 import { pageMarkup } from './pages.js'
+import { bootData } from '../src/ui/boot.svelte.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 // src/ui/app.ts, the shell: boot() fetches /api/people once, seeds each figure from the
@@ -431,5 +432,35 @@ describe('figure 10 querystring keys are documented (issue #215)', () => {
     assert.match(docsText, /persistence\.weeks/)
     assert.match(docsText, /persistence[\s\S]{0,600}\bperson\b[\s\S]{0,120}\blimit\b[\s\S]{0,200}(bare|prefixed)/i)
     assert.match(docsText, /persistence[\s\S]{0,800}\bweeks\b[\s\S]{0,250}(prefixed only|no bare|only (the )?prefixed|never (a )?bare)/i)
+  })
+})
+
+describe('boot() publishes bootData once /api/people settles', () => {
+  it('a successful fetch sets ready, people and search', async () => {
+    await withFiguresDom(async (_els, calls) => {
+      clearScopes()
+      routeDefault(calls)
+      await withLocation('?days=7', () => appModule.boot())
+      await flush()
+      assert.equal(bootData.ready, true)
+      assert.deepEqual(bootData.people, people)
+      assert.equal(bootData.peopleError, null)
+      assert.equal(bootData.search, '?days=7')
+    })
+  })
+
+  it('a failed fetch still sets ready, with peopleError', async () => {
+    await withFiguresDom(async (_els, calls) => {
+      clearScopes()
+      globalThis.fetch = (async (input: unknown) => {
+        calls.push(String(input))
+        throw new Error('network down')
+      }) as typeof fetch
+      await withLocation('', () => appModule.boot())
+      await flush()
+      assert.equal(bootData.ready, true)
+      assert.deepEqual(bootData.people, [])
+      assert.ok(bootData.peopleError)
+    })
   })
 })

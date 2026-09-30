@@ -22,9 +22,6 @@ import {
   paintLensesLoading,
   paintOutlets,
   paintOutletsLoading,
-  paintPersistence,
-  paintPersistenceError,
-  paintPersistenceLoading,
   paintRisingLoading,
   paintRisingRuler,
   paintRisingRulerError,
@@ -58,7 +55,6 @@ import {
 } from '../src/ui/render.js'
 import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
-import { brtDate } from '../src/query.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
 
@@ -1969,169 +1965,5 @@ describe('atlas.css never gives the attention views row --accent', () => {
     assert.ok(block, 'the attention figure CSS block must exist')
     assert.doesNotMatch(block, /data-row="views"\s*\.attention-mark/)
     assert.doesNotMatch(block, /var\(--accent\)/)
-  })
-})
-
-// Issue #215 (figure 10): paintPersistence draws one row per word and one cell per week from a
-// GET /persistence payload; paintPersistenceLoading and paintPersistenceError are its ghost and
-// its error note. Dates come from the real BRT calendar, never a literal, so the horizon cut
-// (which is relative to today) holds on any day.
-describe('paintPersistence / paintPersistenceLoading / paintPersistenceError, figure 10 (issue #215)', () => {
-  const shift = (date: string, n: number) => {
-    const d = new Date(`${date}T00:00:00Z`)
-    d.setUTCDate(d.getUTCDate() + n)
-    return d.toISOString().slice(0, 10)
-  }
-  const cur = shift(brtDate(new Date()), -((new Date(`${brtDate(new Date())}T00:00:00Z`).getUTCDay() + 6) % 7))
-  const series = (counts: (number | null)[]) => counts.map((count, i) => ({ week: shift(cur, -7 * (counts.length - 1 - i)), count }))
-  const nulls = (n: number) => Array.from({ length: n }, () => null)
-  const term = (word: string, counts: (number | null)[], over: Record<string, unknown> = {}) => ({ term: word, kind: 'word', series: series(counts), streak: 3, half_life: null, ...over })
-  const data = (terms: unknown[], over: Record<string, unknown> = {}) => ({ weeks: 12, since: '2026-09-09', first_week: shift(cur, -77), horizon: 60, terms, ...over })
-  const paint = (payload: unknown, els: Record<string, { innerHTML: string; textContent: string; hidden: boolean }>) => {
-    void els
-    paintPersistence({ data: payload as never, selected: null, onPick: () => {} })
-  }
-  const IDS = ['persistenceChart', 'persistenceNote']
-  const tagsOf = (markup: string) => [...markup.matchAll(/<(\w+)\b([^>]*)>/g)].map(([tag, name, attrs]) => ({ tag, name, attrs }))
-
-  it('a null cell after first_week is data-gap="1", labelled "fora das 50 mais fortes", and not a button (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(4), 3, null, null, 4, 5, null, 2, 6])]), els)
-      const gaps = tagsOf(els.persistenceChart.innerHTML).filter((t) => /\bdata-gap="1"/.test(t.attrs))
-      assert.ok(gaps.length >= 4, 'the four nulls after the first stored week are gaps')
-      assert.ok(gaps.every((t) => t.name !== 'button'), 'a gap is never a button')
-      assert.match(els.persistenceChart.innerHTML, /fora das 50 mais fortes/)
-    })
-  })
-
-  it('a null cell before first_week is labelled "sem dados", also data-gap="1" and not a button (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(9), 3, 4, 5], { streak: 3 })], { first_week: shift(cur, -14) }), els)
-      const html = els.persistenceChart.innerHTML
-      assert.match(html, /sem dados/)
-      const gaps = tagsOf(html).filter((t) => /\bdata-gap="1"/.test(t.attrs))
-      assert.equal(gaps.length, 9, 'every null of this series is a gap, before first_week or after it')
-      assert.ok(gaps.every((t) => t.name !== 'button'))
-    })
-  })
-
-  it('a filled cell is a button carrying data-week, data-term and data-kind, with that cell Monday (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(10), 3, 4])]), els)
-      const buttons = tagsOf(els.persistenceChart.innerHTML).filter((t) => t.name === 'button' && /\bdata-week=/.test(t.attrs))
-      assert.equal(buttons.length, 2)
-      for (const b of buttons) {
-        assert.match(b.attrs, /\bdata-term="anistia"/)
-        assert.match(b.attrs, /\bdata-kind="word"/)
-        const label = /\baria-label="([^"]*)"/.exec(b.attrs)![1]
-        assert.match(label, /semana de \d+ (de \S+ )?a \d+ de \S+: \d+ documentos?/)
-        assert.doesNotMatch(label, /\d{4}-\d{2}-\d{2}/)
-      }
-      assert.deepEqual(
-        buttons.map((b) => /\bdata-week="([^"]*)"/.exec(b.attrs)![1]),
-        [shift(cur, -7), cur],
-      )
-    })
-  })
-
-  it('a positive count is never painted as the empty cell, however small next to the largest (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(9), 1, 40, 2])]), els)
-      const tags = tagsOf(els.persistenceChart.innerHTML)
-      const gaps = tags.filter((t) => /\bdata-gap="1"/.test(t.attrs))
-      assert.equal(gaps.length, 9, 'exactly the nine nulls are gaps; the three positive counts are not')
-      const filled = tags.filter((t) => /\bdata-week=/.test(t.attrs) || /\bdata-expired="1"/.test(t.attrs))
-      assert.ok(filled.length >= 3)
-      assert.ok(filled.every((t) => !/\bdata-gap=/.test(t.attrs)))
-    })
-  })
-
-  it('half_life null paints "sem queda"; a number paints the number; the markup never carries an em dash, null, NaN or undefined (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(9), 3, 4, 5], { half_life: null }), term('golpe', [...nulls(6), 8, 7, 3, 1, 1, null], { half_life: 2, streak: 0 })]), els)
-      const html = els.persistenceChart.innerHTML
-      assert.match(html, /sem queda/)
-      assert.match(html, /class="[^"]*\bstat\b[^"]*"[\s\S]*?\b2\b/, 'half_life 2 is spelled out as a number in its .stat')
-      for (const bad of ['—', 'null', 'NaN', 'undefined']) assert.ok(!html.includes(bad), `the markup must not contain "${bad}"`)
-      assert.equal((html.match(/sem queda/g) ?? []).length, 1, 'only the word that has not halved says so')
-    })
-  })
-
-  it('streak and half_life close every row as .stat pairs (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(9), 3, 4, 5], { streak: 3 }), term('golpe', [...nulls(9), 3, 4, 5], { streak: 3 })]), els)
-      assert.ok((els.persistenceChart.innerHTML.match(/class="[^"]*\bstat\b/g) ?? []).length >= 4, 'two stats per row, two rows')
-    })
-  })
-
-  it('a cell whose Monday is older than horizon days is filled, data-expired="1", not a button, labelled "documentos fora do período guardado" (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3])], { horizon: 60 }), els)
-      const html = els.persistenceChart.innerHTML
-      const expired = tagsOf(html).filter((t) => /\bdata-expired="1"/.test(t.attrs))
-      assert.ok(expired.length >= 2, 'the oldest weeks are past a 60-day horizon')
-      assert.ok(expired.every((t) => t.name !== 'button' && !/\bdata-gap=/.test(t.attrs)))
-      assert.match(html, /documentos fora do período guardado/)
-      const buttons = tagsOf(html).filter((t) => t.name === 'button' && /\bdata-week=/.test(t.attrs))
-      assert.ok(buttons.length >= 1 && buttons.length + expired.length === 12, 'every filled cell is either a button or expired, never both')
-      assert.ok(buttons.every((b) => new Date(`${/\bdata-week="([^"]*)"/.exec(b.attrs)![1]}T00:00:00Z`).getTime() >= new Date(`${shift(brtDate(new Date()), -60)}T00:00:00Z`).getTime()), 'a button sits inside the horizon')
-    })
-  })
-
-  it('no cell is expired when the horizon reaches past the oldest week (AC18)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3])], { horizon: 400 }), els)
-      assert.doesNotMatch(els.persistenceChart.innerHTML, /data-expired/)
-    })
-  })
-
-  it('every word of the payload is written on its own row', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(11), 3]), term('golpe', [...nulls(11), 4]), term('urna eletrônica', [...nulls(11), 5], { kind: 'phrase' })]), els)
-      for (const w of ['anistia', 'golpe', 'urna eletrônica']) assert.ok(els.persistenceChart.innerHTML.includes(w), w)
-    })
-  })
-
-  it('markup values are escaped: a word with markup in it never becomes an element', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('<img src=x>', [...nulls(11), 3])]), els)
-      assert.ok(!els.persistenceChart.innerHTML.includes('<img'))
-    })
-  })
-
-  it('first_week null paints the empty-series note, not a blank figure (AC19)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([], { first_week: null }), els)
-      assert.match(els.persistenceNote.textContent, /Ainda sem série: a primeira semana é gravada na próxima atualização\./)
-    })
-  })
-
-  it('N = 1 reads "1 semana de série", N = 3 reads "3 semanas de série", N = 4 shows no note (AC19)', () => {
-    withFakeDocument(IDS, (els) => {
-      paint(data([term('anistia', [...nulls(11), 3])], { first_week: cur }), els)
-      assert.match(els.persistenceNote.textContent, /^1 semana de série; a leitura começa a valer com quatro\./)
-      paint(data([term('anistia', [...nulls(9), 2, 3, 3])], { first_week: shift(cur, -14) }), els)
-      assert.match(els.persistenceNote.textContent, /^3 semanas de série; a leitura começa a valer com quatro\./)
-      paint(data([term('anistia', [...nulls(8), 2, 3, 3, 3])], { first_week: shift(cur, -21) }), els)
-      assert.doesNotMatch(els.persistenceNote.textContent, /semanas? de série|Ainda sem série/)
-    })
-  })
-
-  it('paintPersistenceLoading paints a ghost of the rows, never the word Carregando', () => {
-    withFakeDocument(IDS, (els) => {
-      paintPersistenceLoading()
-      assert.match(els.persistenceChart.innerHTML, /ghost-field/)
-      assert.doesNotMatch(els.persistenceChart.innerHTML, /Carregando/)
-      assert.equal(els.persistenceChart.getAttribute('aria-busy'), 'true')
-    })
-  })
-
-  it('paintPersistenceError paints a note and drops the ghost', () => {
-    withFakeDocument(IDS, (els) => {
-      paintPersistenceLoading()
-      paintPersistenceError()
-      assert.match(els.persistenceChart.innerHTML, /Não foi possível/)
-      assert.doesNotMatch(els.persistenceChart.innerHTML, /ghost-field/)
-    })
   })
 })

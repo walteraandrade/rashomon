@@ -3,7 +3,6 @@ import { mount as mountAttention } from './figures/attention.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountLenses } from './figures/lenses.js'
-import { mount as mountPersistence } from './figures/persistence.js'
 import { mount as mountRising } from './figures/rising.js'
 import { mount as mountTestimony } from './figures/testimony.js'
 import { mount as mountWeek } from './figures/week.js'
@@ -14,7 +13,6 @@ import {
   paintCompareLoading,
   paintLensesLoading,
   paintOutletsLoading,
-  paintPersistenceLoading,
   paintRisingLoading,
   paintTestimonyLoading,
   paintWeekLoading,
@@ -49,8 +47,6 @@ const FIGURES: FigureEntry[] = [
   { id: 'lenses', sectionId: 'lenses', keys: ['person', ['a', null], ['b', null], 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
   // days stays fixed at 30, never seeded: figure 7 has no period control, like week's fixed 7.
   { id: 'attention', sectionId: 'attention', keys: ['person', 'source'], noticeId: 'attentionNote', mount: mountAttention },
-  // `weeks` is prefixed only: no other figure has a weeks control, so a bare weeks= means nothing here.
-  { id: 'persistence', sectionId: 'persistence', keys: ['person', ['weeks', null], 'limit'], noticeId: 'persistenceNote', mount: mountPersistence },
 ]
 
 const loadPeople = (): Promise<Person[]> => api.loadPeople()
@@ -66,7 +62,6 @@ const paintBootLoading = () => {
   paintWeekLoading()
   paintLensesLoading()
   paintAttentionLoading()
-  paintPersistenceLoading()
 }
 
 export const boot = async () => {

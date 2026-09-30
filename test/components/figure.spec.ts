@@ -52,7 +52,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-const setup = (over: Record<string, unknown> = {}) => {
+const setup = (over: Record<string, unknown> = {}, bound = false) => {
   const calls = { ghost: 0, paint: [] as unknown[], paintError: 0, release: 0, fetches: [] as Deferred[] }
   let current = 'a=1'
   const opts = {
@@ -72,7 +72,7 @@ const setup = (over: Record<string, unknown> = {}) => {
     ...over,
   }
   let handle: any
-  instance = mount(FigureProbe, { target, props: { opts, onHandle: (f: any) => (handle = f) } })
+  instance = mount(FigureProbe, { target, props: { opts, bound, onHandle: (f: any) => (handle = f) } })
   flushSync()
   return { calls, handle: handle as any, opts, set: (q: string) => (current = q) }
 }
@@ -80,6 +80,25 @@ const setup = (over: Record<string, unknown> = {}) => {
 const text = (id: string) => target.querySelector(`#${id}`)?.textContent
 
 describe('createFigure', () => {
+  it('wires a bind:this element handed over as a getter', async () => {
+    const { calls, handle } = setup({}, true)
+    const chart = target.querySelector('#probe-chart') as HTMLElement
+    Object.defineProperty(chart, 'clientWidth', { value: 500, configurable: true })
+    const first = handle.load()
+    calls.fetches[0].resolve({ v: 1 })
+    await first
+    flushSync()
+    chart.querySelector('.mark')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(calls.release).toBe(0)
+    chart.querySelector('.bg')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(calls.release).toBe(1)
+    const before = calls.paint.length
+    Object.defineProperty(chart, 'clientWidth', { value: 640, configurable: true })
+    observers[0].cb()
+    expect(calls.paint.length).toBe(before + 1)
+    expect(calls.fetches).toHaveLength(1)
+  })
+
   it('drops a stale result', async () => {
     const { calls, handle, set } = setup()
     const first = handle.load()

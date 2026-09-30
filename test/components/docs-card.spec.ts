@@ -165,18 +165,27 @@ describe('DocsCard', () => {
       Object.assign(e, { clientX: x, clientY: y, button: 0, pointerId: 1 })
       grip.dispatchEvent(e)
     }
+    vi.spyOn(dialog(), 'getBoundingClientRect').mockReturnValue({ width: 380, height: 300, left: 10, top: 10, right: 390, bottom: 310, x: 10, y: 10, toJSON: () => ({}) })
     pointer('pointerdown', 10, 10)
     pointer('pointermove', 99999, 99999)
     flushSync()
-    const left = parseFloat(dialog().style.getPropertyValue('--docs-x'))
-    const top = parseFloat(dialog().style.getPropertyValue('--docs-y'))
-    expect(left).toBeLessThanOrEqual(window.innerWidth)
-    expect(top).toBeLessThanOrEqual(window.innerHeight)
+    expect(dialog().style.getPropertyValue('--docs-x')).toBe(`${window.innerWidth - 388}px`)
+    expect(dialog().style.getPropertyValue('--docs-y')).toBe(`${window.innerHeight - 308}px`)
     pointer('pointermove', -5000, -5000)
     flushSync()
-    expect(parseFloat(dialog().style.getPropertyValue('--docs-x'))).toBeGreaterThanOrEqual(0)
-    expect(parseFloat(dialog().style.getPropertyValue('--docs-y'))).toBeGreaterThanOrEqual(0)
+    expect(dialog().style.getPropertyValue('--docs-x')).toBe('8px')
+    expect(dialog().style.getPropertyValue('--docs-y')).toBe('8px')
     pointer('pointerup', 0, 0)
+  })
+
+  it('open with nothing mounted still tracks the request and never fetches', async () => {
+    await open(req([side('term=a')], 'orphan'))
+    expect(isOpen()).toBe(true)
+    expect(openedBy('orphan')).toBe(true)
+    expect(calls).toHaveLength(0)
+    close()
+    expect(isOpen()).toBe(false)
+    expect(openedBy('orphan')).toBe(false)
   })
 
   it('two sides are wide with two columns', async () => {

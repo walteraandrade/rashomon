@@ -17,7 +17,7 @@ export type FigureOptions<T> = {
   paint: (data: T) => void
   paintError: (e: unknown) => void
   detail?: (data: T, params: URLSearchParams) => Record<string, string | number | null>
-  el?: FigureTarget | FigureTarget[]
+  el?: FigureTarget | FigureTarget[] | (() => FigureTarget | FigureTarget[] | undefined)
   markSelector?: string
   onRelease?: () => void
 }
@@ -25,7 +25,7 @@ export type FigureOptions<T> = {
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 export const createFigure = <T>(opts: FigureOptions<T>) => {
-  const { name, scope = name, params, fetch, ghost, paint, paintError, detail, el, markSelector, onRelease } = opts
+  const { name, scope = name, params, fetch, ghost, paint, paintError, detail, onRelease } = opts
   let data = $state.raw<T | undefined>(undefined)
   let loading = $state(false)
   let error = $state.raw<unknown>(null)
@@ -89,6 +89,9 @@ export const createFigure = <T>(opts: FigureOptions<T>) => {
   $effect(() => {
     alive = true
     const stop = new AbortController()
+    // Read here, after mount: a bind:this element is undefined at createFigure() time.
+    const el = typeof opts.el === 'function' ? opts.el() : opts.el
+    const markSelector = opts.markSelector
     const targets = el ? (Array.isArray(el) ? el : [el]) : []
     if (el) {
       if (markSelector) {

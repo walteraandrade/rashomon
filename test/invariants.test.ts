@@ -243,10 +243,22 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
     // The docs card and the guide are .svelte.ts now; a caller may name either specifier form.
     const canon = (spec: string) => spec.replace(/^(\.\/(?:docs-card|help))\.svelte\.js$/, '$1.js')
+    const components: Record<string, string[]> = {
+      'DocsCard.svelte': ['./docs-card.svelte.js'],
+      'HelpDialog.svelte': ['./help.svelte.js'],
+      'Combobox.svelte': ['./combobox.js'],
+      'Proof.svelte': [],
+    }
+    for (const [file, allowed] of Object.entries(components)) {
+      const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))
+      assert.deepEqual(specs.sort(), [...allowed].sort(), `${file} may only import ${allowed.join(', ')}`)
+    }
+    const declared = readdirSync(jsDir).filter((f) => f.endsWith('.svelte')).sort()
+    assert.deepEqual(declared, Object.keys(components).sort(), 'every component in src/ui must be declared')
     for (const [file, allowed] of Object.entries(expected)) {
       if (file.endsWith('.svelte.ts')) {
         const own = importsOf(moduleSource(file))
-        for (const spec of own.filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))) assert.ok(allowed.includes(spec), `${file} may only import ${allowed.join(', ') || 'nothing'}, not ${spec}`)
+        assert.deepEqual(own.filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/')).sort(), [...allowed].sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
         continue
       }
       // A module under figures/ imports its siblings (../api.js, not ./api.js); importsOf

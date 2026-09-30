@@ -464,3 +464,12 @@ describe('boot() publishes bootData once /api/people settles', () => {
     })
   })
 })
+
+describe('figure 9 is a Svelte component', () => {
+  it('documents that comention is a Svelte component seeded from days, source, lean and min, sharing the single /api/people fetch (AC16)', () => {
+    assert.match(docsText, /comention[\s\S]{0,300}Svelte component/i)
+    assert.match(docsText, /Comention\.svelte/)
+    assert.match(docsText, /comention[\s\S]{0,600}\bdays\b[\s\S]{0,120}\bsource\b[\s\S]{0,200}\blean\b[\s\S]{0,120}\bmin\b/i)
+    assert.match(docsText, /comention[\s\S]{0,1200}\/api\/people[\s\S]{0,200}(once|single|shared|one fetch)/i)
+  })
+})

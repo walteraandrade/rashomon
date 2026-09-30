@@ -20,9 +20,6 @@ import {
   paintLensRuler,
   paintLensRulerError,
   paintLensesLoading,
-  paintComention,
-  paintComentionLoading,
-  paintComentionError,
   paintOutlets,
   paintOutletsLoading,
   paintPersistence,
@@ -59,7 +56,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { communityRanking, signed, termMask, type Comention, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { brtDate } from '../src/query.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
@@ -1734,91 +1731,6 @@ describe('paintWeek and paintTermStrip keep their exported shape after the marks
   })
 })
 
-describe('paintComention / paintComentionLoading / paintComentionError, figure 9 (issue #207)', () => {
-  const persons = [
-    { id: 'bolsonaro', name: 'Jair Bolsonaro' },
-    { id: 'lula', name: 'Lula' },
-    { id: 'tarcisio', name: 'Tarcísio' },
-  ]
-  const comentionData = (pairs: Comention['pairs']): Comention => ({ days: 30, persons, pairs })
-
-  it('paints one clickable [data-a] cell per pair clearing min, plus the same pair in .comention-list, and no cell for a missing pair', () => {
-    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
-      paintComention({ data: comentionData([{ a: 'lula', b: 'tarcisio', count: 4 }]), width: 900, selected: null, onPick: () => {} })
-      assert.equal(els.comentionMatrix.hidden, false)
-      const html = els.comentionMatrix.innerHTML
-      const dataAOccurrences = html.match(/data-a="/g) ?? []
-      assert.equal(dataAOccurrences.length, 2, 'one clickable grid cell plus the same pair in .comention-list, and no other pair (e.g. bolsonaro/lula, bolsonaro/tarcisio)')
-      assert.match(html, /data-a="lula" data-b="tarcisio"/)
-    })
-  })
-
-  it('an empty pairs list still paints the full matrix, with #comentionAbout reading the empty-window sentence', () => {
-    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
-      paintComention({ data: comentionData([]), width: 900, selected: null, onPick: () => {} })
-      assert.equal(els.comentionMatrix.hidden, false)
-      assert.match(els.comentionMatrix.innerHTML, /comention-grid/)
-      assert.equal(els.comentionMatrix.innerHTML.match(/data-a="/g), null, 'no pair clears the floor, so no cell is clickable')
-      assert.equal(els.comentionAbout.textContent, 'Ninguém apareceu junto o suficiente nesta janela.')
-    })
-  })
-
-  it('paintComentionLoading paints a ghost matrix, not the word Carregando, and stays mute on #comentionAbout', () => {
-    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
-      els.comentionAbout.textContent = '3 pares de pessoas citadas juntas nos 30 dias.'
-      paintComentionLoading()
-      assert.match(els.comentionMatrix.innerHTML, /comention-grid is-ghost/)
-      assert.doesNotMatch(els.comentionMatrix.innerHTML, /Carregando/)
-      assert.equal(els.comentionMatrix.getAttribute('aria-busy'), 'true')
-      assert.equal(els.comentionAbout.textContent, '', 'the ghost clears the previous sentence rather than leaving it stale')
-    })
-  })
-
-  // atlas.css hides .comention-grid and shows .comention-list below 700px; a ghost of the grid
-  // alone left a phone's first load looking like an empty figure (issue #235 review).
-  it('paintComentionLoading also paints a ghost .comention-list, so a phone-width first load is not empty', () => {
-    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
-      paintComentionLoading()
-      assert.match(els.comentionMatrix.innerHTML, /comention-list is-ghost/)
-      assert.match(els.comentionMatrix.innerHTML, /<li><span class="comention-listitem ghost"><\/span><\/li>/)
-    })
-  })
-
-  it('paintComentionError paints the "could not load" note', () => {
-    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
-      els.comentionMatrix.hidden = true
-      paintComentionError()
-      assert.equal(els.comentionMatrix.hidden, false)
-      assert.match(els.comentionMatrix.innerHTML, /Não foi possível carregar quem aparece junto/)
-    })
-  })
-
-  // The grid keys a cell's a/b by row/column (name order) while the ranked list keys a pair's
-  // a/b by id (comentionFor's own SQL order, b.person_id > a.person_id). Here the two persons
-  // are named the opposite of their id order (Zeta Pessoa is listed first, id 'zeta'; Alpha
-  // Pessoa second, id 'alpha'), so the grid cell's a/b (name order) is the exact reverse of the
-  // pair's a/b (id order) -- the mismatch the bug hinges on.
-  it('marks the same pair is-selected in both the grid and the list, even when name order and id order disagree', () => {
-    const mismatched = [
-      { id: 'zeta', name: 'Zeta Pessoa' },
-      { id: 'alpha', name: 'Alpha Pessoa' },
-    ]
-    const data: Comention = { days: 30, persons: mismatched, pairs: [{ a: 'alpha', b: 'zeta', count: 4 }] }
-    withFakeDocument(['comentionMatrix', 'comentionAbout'], (els) => {
-      // The pair as comentionFor would report it (id order: 'alpha' < 'zeta').
-      paintComention({ data, width: 900, selected: { a: 'alpha', b: 'zeta' }, onPick: () => {} })
-      const html = els.comentionMatrix.innerHTML
-      // The grid cell is keyed by row/column (name) order: row 'zeta' (Zeta Pessoa, listed
-      // first), column 'alpha' (Alpha Pessoa) -- the reverse of the selected pair's a/b.
-      const cellMatch = /<button[^>]*data-a="zeta" data-b="alpha"[^>]*>/.exec(html)
-      assert.ok(cellMatch, 'must paint the zeta/alpha cell')
-      assert.match(cellMatch![0], /is-selected/, 'the grid cell must read is-selected despite its a/b being the reverse of the selected pair')
-      const listMatch = /<button[^>]*class="comention-listitem[^"]*"[^>]*data-a="alpha" data-b="zeta"[^>]*>/.exec(html)
-      assert.ok(listMatch, 'must paint the alpha/zeta list item')
-      assert.match(listMatch![0], /is-selected/, 'the list item must also read is-selected for the same pair')
-    })
-  })
-})
 
 // Issue #174.
 describe('one class scheme, one rx source, one text shape for the three word marks', () => {

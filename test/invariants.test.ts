@@ -219,8 +219,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 7 (issue #216), attention vs mentions: same shape as figures/lenses.ts, imported
       // by nothing but app.ts, and reaching into no other figure's DOM.
       'figures/attention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
-      // Figure 9 (#207), the comention matrix: same shape again, imported by nothing but app.ts.
-      'figures/comention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'figures/persistence.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
@@ -228,7 +226,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './docs-card.js',
         './figures/atlas.js',
         './figures/attention.js',
-        './figures/comention.js',
         './figures/compare.js',
         './figures/lenses.js',
         './figures/persistence.js',
@@ -249,6 +246,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Combobox.svelte': ['./combobox.js'],
       'Agenda.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
       'Proof.svelte': [],
+      'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
       const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))
@@ -790,5 +788,16 @@ describe('component test harness', () => {
 
   it('devDependencies vitest, happy-dom, svelte-check are exact-pinned', () => {
     for (const name of ['vitest', 'happy-dom', 'svelte-check']) assert.match(pkg.devDependencies[name], /^\d/, `${name} must be pinned exact`)
+  })
+})
+
+describe('figure 9 lives only in Comention.svelte', () => {
+  const ui = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'ui')
+  it('figures/comention.ts is gone and no .ts module wires figure 9 any more (AC12)', () => {
+    assert.equal(existsSync(join(ui, 'figures', 'comention.ts')), false)
+    assert.doesNotMatch(readFileSync(join(ui, 'render.ts'), 'utf8'), /paintComention/)
+    assert.doesNotMatch(readFileSync(join(ui, 'app.ts'), 'utf8'), /comention/i)
+    const tsFiles = [ui, join(ui, 'figures')].flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)))
+    for (const file of tsFiles) assert.doesNotMatch(readFileSync(file, 'utf8'), /Comention\.svelte/, file)
   })
 })

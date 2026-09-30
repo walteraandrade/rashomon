@@ -6,6 +6,7 @@
   import { onMount } from 'svelte'
   import Agenda from '$lib/Agenda.svelte'
   import Atlas from '$lib/Atlas.svelte'
+  import Lenses from '$lib/Lenses.svelte'
   import Compare from '$lib/Compare.svelte'
   import Comention from '$lib/Comention.svelte'
   import Attention from '$lib/Attention.svelte'
@@ -54,36 +55,7 @@
 
   <Week />
 
-  <section class="figure lenses" id="lenses" aria-labelledby="lensesTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 6</span><h2 id="lensesTitle">Uma pessoa, duas lentes</h2></div>
-      <p class="figure-sub">A mesma pessoa lida por dois recortes ao mesmo tempo: um veículo, um viés ou uma fonte contra outro. <a href="/como-ler#lentes">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt>Posição</dt><dd>de qual lente a palavra é mais</dd></div>
-        <div><dt>Tamanho</dt><dd>documentos das duas lentes, somados</dd></div>
-        <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>para que lente ela pende</dd></div>
-        <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>palavra que liga o vocabulário das duas lentes</dd></div>
-        <div><dt>Clique</dt><dd>textos das duas lentes, neste gráfico</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="lensesPerson" aria-label="Pessoa (lentes)"></select></span> sob <span class="pick"><select id="lensesA" aria-label="Lente A">
-        <option value="all">Tudo</option>
-        <optgroup label="Veículo" id="lensesAOutlets"></optgroup>
-        <optgroup label="Viés"><option value="lean:left">Esquerda</option><option value="lean:center">Centro</option><option value="lean:right">Direita</option></optgroup>
-        <optgroup label="Fonte"><option value="source:bluesky">Bluesky</option><option value="source:gdelt">GDELT</option><option value="source:rss">RSS</option><option value="source:gnews">Google News</option><option value="source:gkg">GKG</option><option value="source:camara">Câmara</option><option value="source:senado">Senado</option><option value="source:juridico">Jurídico</option><option value="source:oficial">Oficial</option><option value="source:nicho">Nicho</option></optgroup>
-      </select><input id="lensesAInput" class="combo-input" type="text" hidden autocomplete="off" spellcheck="false" role="combobox" aria-label="Lente A" placeholder="Buscar…" aria-autocomplete="list" aria-expanded="false" aria-controls="lensesAList"><span id="lensesAList" class="combo-list" role="listbox" aria-label="Opções da lente A" hidden></span></span> e <span class="keep"><span class="pick"><select id="lensesB" aria-label="Lente B">
-        <option value="all">Tudo</option>
-        <optgroup label="Veículo" id="lensesBOutlets"></optgroup>
-        <optgroup label="Viés"><option value="lean:left">Esquerda</option><option value="lean:center">Centro</option><option value="lean:right">Direita</option></optgroup>
-        <optgroup label="Fonte"><option value="source:bluesky">Bluesky</option><option value="source:gdelt">GDELT</option><option value="source:rss">RSS</option><option value="source:gnews">Google News</option><option value="source:gkg">GKG</option><option value="source:camara">Câmara</option><option value="source:senado">Senado</option><option value="source:juridico">Jurídico</option><option value="source:oficial">Oficial</option><option value="source:nicho">Nicho</option></optgroup>
-      </select><input id="lensesBInput" class="combo-input" type="text" hidden autocomplete="off" spellcheck="false" role="combobox" aria-label="Lente B" placeholder="Buscar…" aria-autocomplete="list" aria-expanded="false" aria-controls="lensesBList"><span id="lensesBList" class="combo-list" role="listbox" aria-label="Opções da lente B" hidden></span></span>,</span> nos últimos <span class="keep"><span class="pick"><select id="lensesDays" aria-label="Período (lentes)"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option></select></span>.</span> Mostrar <span class="pick"><select id="lensesLimit" aria-label="Quantidade de palavras (lentes)">
-        <option value="20">20</option><option value="40" selected>40</option><option value="60">60</option><option value="100">100</option>
-      </select></span> palavras.</p></div>
-    </header>
-    <p class="status" id="lensesStatus" role="status" hidden>Os dois lados mostram o mesmo recorte.</p>
-    <figure class="ruler" id="lensesRuler" aria-label="Régua comparando duas lentes da mesma pessoa" hidden></figure>
-    <div class="detail" id="lensesDetail"><span class="empty-hint">Clique numa palavra para ver os números das duas lentes.</span></div>
-    <p class="note" id="lensesHiddenNote" hidden></p>
-  </section>
+  <Lenses />
 
   <Attention />
 

@@ -1,9 +1,7 @@
 import { mountDocsCard } from './docs-card.js'
-import { mount as mountLenses } from './figures/lenses.js'
 import { mount as mountRising } from './figures/rising.js'
 import { mountHelp } from './help.js'
 import {
-  paintLensesLoading,
   paintRisingLoading,
 } from './render.js'
 import * as api from './api.js'
@@ -22,14 +20,12 @@ type FigureEntry = {
 
 const FIGURES: FigureEntry[] = [
   { id: 'rising', sectionId: 'rising', keys: ['person', 'source'], noticeId: 'risingAbout', mount: mountRising },
-  { id: 'lenses', sectionId: 'lenses', keys: ['person', ['a', null], ['b', null], 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
 ]
 
 const loadPeople = (): Promise<Person[]> => api.loadPeople()
 
 const paintBootLoading = () => {
   paintRisingLoading()
-  paintLensesLoading()
 }
 
 export const boot = async () => {

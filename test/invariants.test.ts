@@ -190,15 +190,11 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
       // app.ts, and reaching into no other figure's DOM.
       'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
-      // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
-      // nothing but app.ts, and reaching into no other figure's DOM.
       'atlas-model.ts': ['./api.js', './format.js'],
-      'figures/lenses.ts': ['./api.js', './combobox.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
         './boot.svelte.js',
         './docs-card.js',
-        './figures/lenses.js',
         './figures/rising.js',
         './help.js',
         './render.js',
@@ -221,6 +217,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Atlas.svelte': ['./api.js', './atlas-model.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './render.js', './seed.js'],
       'Compare.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
+      'Lenses.svelte': ['./Ruler.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Ruler.svelte': ['./format.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {

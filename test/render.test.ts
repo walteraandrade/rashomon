@@ -7,10 +7,6 @@ import {
   paintDocs,
   paintDocsHead,
   paintDocsLoading,
-  paintLensDetail,
-  paintLensRuler,
-  paintLensRulerError,
-  paintLensesLoading,
   paintRisingLoading,
   paintRisingRuler,
   paintRisingRulerError,
@@ -25,7 +21,7 @@ import {
   stripLayout,
 } from '../src/ui/render.js'
 import * as renderModule from '../src/ui/render.js'
-import { type CompareTerm, type Lenses, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { STRIP_MAX_HEIGHT, STRIP_MIN_R, rulerLayout, stripRadius } from '../src/ui/layout.js'
 import { withFakeDocument } from './fake-dom.js'
 
@@ -36,7 +32,6 @@ import { withFakeDocument } from './fake-dom.js'
 // browser, a deterministic stand-in here.
 const metrics = (text: string, size: number) => text.length * size * 0.6
 
-const lensesData = (terms: CompareTerm[], a = 'all', b = 'lean:right'): Lenses => ({ days: 30, a: { lens: a, about: 900 }, b: { lens: b, about: 700 }, terms })
 const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
 
 describe('paintDocsHead / paintDocs: the card that holds the documents', () => {
@@ -298,145 +293,6 @@ describe('rulerTerms: a term where either side is the string "name" is absent fr
     const { items, hiddenCount } = rulerTerms(terms, 'count')
     assert.deepEqual(items.map((t) => t.term), ['reforma'])
     assert.equal(hiddenCount, 2, 'a name on the b side hides the term just as one on the a side does')
-  })
-})
-
-describe('paintLensRuler (figure 6, issue #206): empty-state markup and own-name hidden count', () => {
-  it('paints "Nenhuma palavra neste recorte." when terms is empty', () => {
-    withFakeDocument(['lensesRuler'], (els) => {
-      const { hiddenCount, shown, overflowCount } = paintLensRuler({ data: lensesData([]), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
-      assert.match(els.lensesRuler.innerHTML, /Nenhuma palavra neste recorte\./)
-      assert.equal(hiddenCount, 0)
-      assert.equal(shown, 0)
-      assert.equal(overflowCount, 0)
-    })
-  })
-
-  it('drops a term that is "name" on either side and reports it in hiddenCount', () => {
-    withFakeDocument(['lensesRuler'], (els) => {
-      const terms: CompareTerm[] = [
-        { term: 'lula', kind: 'word', a: 'name', b: 'name' },
-        { term: 'reforma', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 2, pmi: 0.5, tone: null } },
-      ]
-      const { hiddenCount } = paintLensRuler({ data: lensesData(terms), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
-      assert.equal(hiddenCount, 1)
-      assert.doesNotMatch(els.lensesRuler.innerHTML, /data-term="lula"/)
-      assert.match(els.lensesRuler.innerHTML, /data-term="reforma"/)
-    })
-  })
-
-  it('positions by pmi always, with no measure parameter to switch it', () => {
-    withFakeDocument(['lensesRuler'], (els) => {
-      // Two terms whose pmi- and count-based orderings disagree in opposite directions:
-      // "reforma" leans to b by pmi (5 > 0.1) but to a by count (40 > 2); "eleicao" leans to a
-      // by pmi (5 > 0.1) but to b by count (2 < 40). Positioning by count would place each word
-      // on the opposite side of where pmi puts it, so asserting only that the node exists (the
-      // previous version of this test) passes even if paintLensRuler were fed 'count' instead.
-      const terms: CompareTerm[] = [
-        { term: 'reforma', kind: 'word', a: { count: 40, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } },
-        { term: 'eleicao', kind: 'word', a: { count: 2, pmi: 5, tone: null }, b: { count: 40, pmi: 0.1, tone: null } },
-      ]
-      const byPmi = rulerTerms(terms, 'pmi')
-      const byCount = rulerTerms(terms, 'count')
-      assert.notEqual(byPmi.items[0].balance, byCount.items[0].balance, 'fixture assumption: pmi and count order "reforma" differently')
-      assert.ok(byPmi.items[0].balance > 0 && byCount.items[0].balance < 0, 'fixture assumption: pmi and count put "reforma" on opposite sides')
-      assert.ok(byPmi.items[1].balance < 0 && byCount.items[1].balance > 0, 'fixture assumption: pmi and count put "eleicao" on opposite sides')
-
-      paintLensRuler({ data: lensesData(terms), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
-      const expected = rulerLayout(metrics, byPmi.items, 860)
-      const xOf = (term: string) => {
-        const m = new RegExp(`<g[^>]*transform="translate\\(([-\\d.]+),[^)]*\\)"[^>]*data-term="${term}"`).exec(els.lensesRuler.innerHTML)
-        assert.ok(m, `expected a rendered word for "${term}"`)
-        return Number(m![1])
-      }
-      for (const term of ['reforma', 'eleicao']) {
-        const expectedWord = expected.words.find((w) => w.term === term)
-        assert.ok(expectedWord, `rulerLayout must place "${term}"`)
-        assert.equal(xOf(term), expectedWord!.x, `"${term}" must sit exactly where rulerLayout put it from the pmi-ranked items, never the count-ranked ones`)
-      }
-      // "reforma" leans toward b (positive balance) so it sits right of centre; "eleicao"
-      // leans toward a so it sits left of centre -- the opposite of what a count-based
-      // ordering would produce.
-      assert.ok(xOf('reforma') > expected.x(0), '"reforma" must sit on the b side, matching its pmi balance')
-      assert.ok(xOf('eleicao') < expected.x(0), '"eleicao" must sit on the a side, matching its pmi balance')
-    })
-  })
-})
-
-describe('paintLensRulerError / paintLensesLoading', () => {
-  it('paintLensRulerError paints the failure note', () => {
-    withFakeDocument(['lensesRuler'], (els) => {
-      paintLensRulerError()
-      assert.match(els.lensesRuler.innerHTML, /Não foi possível carregar as lentes/)
-    })
-  })
-
-  it('paintLensesLoading paints a ghost, never the word Carregando', () => {
-    withFakeDocument(['lensesRuler', 'lensesDetail'], (els) => {
-      paintLensesLoading()
-      assert.match(els.lensesRuler.innerHTML, /ghost-field/)
-      assert.doesNotMatch(els.lensesRuler.innerHTML, /Carregando/)
-      assert.match(els.lensesDetail.innerHTML, /ghost-field/)
-    })
-  })
-})
-
-describe('paintLensDetail', () => {
-  it('shows the empty hint when no term is selected', () => {
-    withFakeDocument(['lensesDetail'], (els) => {
-      paintLensDetail({ term: null, endA: 'Tudo', endB: 'Direita' })
-      assert.match(els.lensesDetail.innerHTML, /Clique numa palavra/)
-    })
-  })
-
-  it('labels each side by its lens, not by a person, and reads "nenhum documento" for a null side', () => {
-    withFakeDocument(['lensesDetail'], (els) => {
-      const term: CompareTerm = { term: 'reforma', kind: 'word', a: { count: 5, pmi: 1.2, tone: null }, b: null }
-      paintLensDetail({ term, endA: 'Folha de S.Paulo', endB: 'Direita' })
-      assert.match(els.lensesDetail.innerHTML, /<dt>Folha de S\.Paulo<\/dt>/)
-      assert.match(els.lensesDetail.innerHTML, /<dt>Direita<\/dt><dd class="empty-hint">nenhum documento<\/dd>/)
-    })
-  })
-
-  it('reads a "name" side as the person\'s own name, never as "nenhum documento"', () => {
-    withFakeDocument(['lensesDetail'], (els) => {
-      const term: CompareTerm = { term: 'lula', kind: 'word', a: 'name', b: 'name' }
-      paintLensDetail({ term, endA: 'Folha de S.Paulo', endB: 'Direita' })
-      assert.doesNotMatch(els.lensesDetail.innerHTML, /nenhum documento/)
-      assert.match(els.lensesDetail.innerHTML, /nome da pessoa/)
-    })
-  })
-
-  it('names a bridge term with "ponte" when its bridge is at or above the threshold (issue #219 AC14)', () => {
-    withFakeDocument(['lensesDetail'], (els) => {
-      const bridging = { term: 'ponte', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.7 } as CompareTerm & { bridge: number }
-      paintLensDetail({ term: bridging, endA: 'Folha de S.Paulo', endB: 'Direita' })
-      assert.match(els.lensesDetail.innerHTML, /ponte/i)
-      const notBridging = { term: 'comum', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.1 } as CompareTerm & { bridge: number }
-      paintLensDetail({ term: notBridging, endA: 'Folha de S.Paulo', endB: 'Direita' })
-      assert.doesNotMatch(els.lensesDetail.innerHTML, /ponte/i)
-    })
-  })
-})
-
-describe('paintLensRuler carries the ruler-bridge mark through the shared body (issue #219 AC14)', () => {
-  it('a lens ruler term with bridge >= 0.5 paints with class="ruler-bridge"', () => {
-    const terms = [
-      { term: 'ponteforte', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.6 },
-      { term: 'pontefraca', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: { count: 5, pmi: 1, tone: null }, bridge: 0.1 },
-    ] as (CompareTerm & { bridge: number })[]
-    withFakeDocument(['lensesRuler'], (els) => {
-      paintLensRuler({ data: lensesData(terms as CompareTerm[]), endA: 'Tudo', endB: 'Direita', metrics, selected: null, onPick: () => {} })
-      const html = els.lensesRuler.innerHTML
-      const tagFor = (term: string) => {
-        const idx = html.indexOf(`data-term="${term}"`)
-        const start = html.lastIndexOf('<g', idx)
-        const end = html.indexOf('>', idx)
-        return html.slice(start, end + 1)
-      }
-      assert.match(tagFor('ponteforte'), /ruler-bridge/)
-      assert.doesNotMatch(tagFor('pontefraca'), /ruler-bridge/)
-    })
   })
 })
 
@@ -740,5 +596,16 @@ describe('atlas.css never gives the attention views row --accent', () => {
     assert.ok(block, 'the attention figure CSS block must exist')
     assert.doesNotMatch(block, /data-row="views"\s*\.attention-mark/)
     assert.doesNotMatch(block, /var\(--accent\)/)
+  })
+})
+
+describe('figure 6 leaves the imperative layer', () => {
+  it('render.ts exports none of the four lens painters and figures/lenses.ts is gone', async () => {
+    const mod = (await import('../src/ui/render.js')) as Record<string, unknown>
+    for (const name of ['paintLensRuler', 'paintLensRulerError', 'paintLensDetail', 'paintLensesLoading']) {
+      assert.equal(name in mod, false, `${name} still exported`)
+    }
+    const { existsSync } = await import('node:fs')
+    assert.equal(existsSync(new URL('../src/ui/figures/lenses.ts', import.meta.url)), false)
   })
 })

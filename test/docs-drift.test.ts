@@ -557,3 +557,12 @@ describe('figure 1 is a Svelte component (#297)', () => {
     assert.doesNotMatch(docsText, /figures\/atlas\.ts/)
   })
 })
+
+describe('#294 figure 6 (lenses) is a Svelte component', () => {
+  it('docs say figure 6 is Lenses.svelte, and that Combobox takes { select, inputId, listId, label, listLabel } and is mounted by it', () => {
+    assert.ok(docsText.includes('Lenses.svelte'), 'docs never mention Lenses.svelte')
+    for (const prop of ['inputId', 'listId', 'listLabel']) assert.ok(docsText.includes(prop), `docs never mention the Combobox prop ${prop}`)
+    assert.match(docsText, /Combobox\.svelte[\s\S]{0,600}Lenses|Lenses\.svelte[\s\S]{0,1200}Combobox/)
+    assert.doesNotMatch(docsText, /figures\/lenses\.ts/, 'docs still describe the deleted figures/lenses.ts')
+  })
+})

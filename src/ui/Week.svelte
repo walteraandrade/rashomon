@@ -6,7 +6,7 @@
   import { createFigure } from './figure.svelte.js'
   import { fmt, kinds, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
   import { WEEK_COLUMN_WIDTH, weekLayout } from './layout.js'
-  import { createCanvasMeasure } from './render.js'
+  import { createCanvasMeasure } from './measure.js'
   import { seedFor } from './seed.js'
 
   type Picked = { day: string; term: string; kind: string }

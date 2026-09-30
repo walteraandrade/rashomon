@@ -6,7 +6,7 @@
   import { createFigure } from './figure.svelte.js'
   import { SOURCE_SEGMENTS, attentionDayLabel, attentionNoteText, fmt, sourceLabels, type Attention } from './format.js'
   import { ATTENTION_ROW_WIDTH, attentionLayout, peakDay, type AttentionMark } from './layout.js'
-  import { createCanvasMeasure } from './render.js'
+  import { createCanvasMeasure } from './measure.js'
   import { seedFor } from './seed.js'
 
   type TimelineBucket = { bucket_start: string; count: number }

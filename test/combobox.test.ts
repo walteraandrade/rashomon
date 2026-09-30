@@ -2,8 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { filterItems, itemsOf, revealTop } from '../src/ui/combobox.js'
 
-// src/ui/combobox.ts: the searchable face figure 6's two lens selects wear. The <select> stays
-// the value store, so every assertion here reads the select's own value and change event.
+// src/ui/combobox.ts: the pure halves of the searchable face Combobox.svelte wears.
 
 type Listener = (e?: any) => void
 class Node {

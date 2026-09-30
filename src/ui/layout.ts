@@ -1,7 +1,6 @@
 import { balanceColor, fmt, isBridge, kinds, label, score, termMask, type PersonTestimony, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Literal copies of atlas.css's --sans / --mono / --display: canvas measurement cannot read custom properties.
-export const FONT_SANS = "'IBM Plex Sans', system-ui, sans-serif"
 export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 export const FONT_DISPLAY = "'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif"
 
@@ -223,7 +222,7 @@ export const swarmBy = <T extends { x: number }>(
   return { placed, overflow }
 }
 
-// Circle swarm; no overflow, the strip shrinks its radii in render.ts instead.
+// Circle swarm; no overflow, the strip shrinks its radii in strip-model.ts instead.
 export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5): (T & { y: number })[] =>
   swarmBy(items, {
     size: (d) => d.r,
@@ -314,7 +313,7 @@ export const WEEK_SIZE_MIN = 12
 const WEEK_SIZE_MAX = 30
 // The cap only guards a runaway day: the widest limit the sentence offers (12) always fits.
 export const WEEK_MAX_HEIGHT = 480
-export const WEEK_MAX_TERMS = 12
+const WEEK_MAX_TERMS = 12
 export const WEEK_COLUMN_WIDTH = 120
 const WEEK_GAP_X = 6
 const WEEK_GAP_Y = 3
@@ -405,8 +404,8 @@ export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
 
 export const ATTENTION_ROW_WIDTH = 640
 // Bar height, not font size: width is bounded by the column step, never by a label's own width.
-export const ATTENTION_BAR_MIN = 3
-export const ATTENTION_BAR_MAX = 44
+const ATTENTION_BAR_MIN = 3
+const ATTENTION_BAR_MAX = 44
 // Gap a bar always leaves before its neighbour's, so two adjacent columns can never touch.
 const ATTENTION_BAR_GAP = 3
 const ATTENTION_BAR_MIN_WIDTH = 2
@@ -440,7 +439,7 @@ export const attentionLayout = (measure: Measure, mentions: { day: string; count
 // The comention matrix (figure 9): a half-matrix, upper triangle only; a two-axis grid, no packing.
 export const MATRIX_CELL_MIN = 26
 export const MATRIX_CELL_MAX = 42
-export const MATRIX_ROWHEAD = 140
+const MATRIX_ROWHEAD = 140
 
 export type MatrixCell = { a: string; b: string; count: number | null; ink: number }
 export type MatrixLayout = { cellSize: number; cells: MatrixCell[] }
@@ -464,7 +463,7 @@ export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[],
 }
 
 // Figure 10: level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest count; 0 is only a null count.
-export const PERSISTENCE_LEVELS = 5
+const PERSISTENCE_LEVELS = 5
 
 export type PersistenceCell = { week: string; count: number | null; level: number }
 export type PersistenceRow = { term: string; kind: string; cells: PersistenceCell[] }

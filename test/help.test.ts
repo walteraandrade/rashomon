@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { pageMarkup } from './pages.js'
-import { closeHelp, mountHelp, openHelp } from '../src/ui/help.js'
+import { closeHelp, openHelp } from '../src/ui/help.svelte.js'
 
 const atlasPage = () => pageMarkup('/')
 
@@ -62,7 +62,7 @@ const withHelpDom = <T>(
   }
 }
 
-describe('help.ts: openHelp and closeHelp (link interception lives in test/components/help.spec.ts)', () => {
+describe('help.svelte.ts: openHelp and closeHelp (link interception lives in test/components/help.spec.ts)', () => {
 
   it('openHelp/closeHelp are a no-op without a dialog, and close a mounted one', () => {
     const previous = (globalThis as { document?: unknown }).document
@@ -74,7 +74,6 @@ describe('help.ts: openHelp and closeHelp (link interception lives in test/compo
       ;(globalThis as { document?: unknown }).document = previous
     }
     withHelpDom(({ dialog, scrolled }) => {
-      mountHelp()
       openHelp('pmi')
       assert.equal(dialog.open, true)
       assert.deepEqual(scrolled, ['help-pmi'])
@@ -87,7 +86,6 @@ describe('help.ts: openHelp and closeHelp (link interception lives in test/compo
   // figure's, not fall through HELP_SECTIONS and scroll nowhere.
   it("openHelp('#junto') opens the dialog at figure 9's section", () => {
     withHelpDom(({ dialog, scrolled }) => {
-      mountHelp()
       openHelp('#junto')
       assert.equal(dialog.open, true)
       assert.deepEqual(scrolled, ['help-junto'])
@@ -98,7 +96,6 @@ describe('help.ts: openHelp and closeHelp (link interception lives in test/compo
   // other figure's, not fall through HELP_SECTIONS and scroll nowhere.
   it("openHelp('#persistencia') opens the dialog at figure 10's section", () => {
     withHelpDom(({ dialog, scrolled }) => {
-      mountHelp()
       openHelp('#persistencia')
       assert.equal(dialog.open, true)
       assert.deepEqual(scrolled, ['help-persistencia'])
@@ -112,7 +109,6 @@ describe('help.ts: openHelp and closeHelp (link interception lives in test/compo
     for (const hash of hashes) {
       assert.match(html, new RegExp(`id="help-${hash}"`), `atlas.html has no id="help-${hash}" for the /como-ler#${hash} link`)
       withHelpDom(({ scrolled }) => {
-        mountHelp()
         openHelp(`#${hash}`)
         assert.deepEqual(scrolled, [`help-${hash}`], `openHelp('#${hash}') must scroll to #help-${hash}, not fall through HELP_SECTIONS`)
       })

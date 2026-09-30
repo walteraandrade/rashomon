@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
-import { close, isOpen, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
+import { close, isOpen, open, openedBy } from '../../src/ui/docs-card.svelte.js'
 import { clearScopes } from '../../src/ui/state.js'
 
 let target: HTMLElement
@@ -18,7 +18,6 @@ const body = () => document.getElementById('docs')!
 
 const mountCard = () => {
   instance = mount(DocsCard, { target })
-  mountDocsCard()
   flushSync()
 }
 
@@ -271,7 +270,6 @@ describe('DocsCard', () => {
       }) as any)
     }
     mountCard()
-    mountDocsCard()
     unmount(instance!)
     instance = undefined
     for (const [type, fn] of adds) expect(removes.some(([t, f]) => t === type && f === fn), `${type} listener left behind`).toBe(true)

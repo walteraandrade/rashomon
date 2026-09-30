@@ -3,12 +3,12 @@ import { flushSync, mount, unmount } from 'svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
 import Week from '../../src/ui/Week.svelte'
 import { setBoot } from '../../src/ui/boot.svelte.js'
-import { close, isOpen, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
+import { close, isOpen, open, openedBy } from '../../src/ui/docs-card.svelte.js'
 import { weekLayout } from '../../src/ui/layout.js'
 import { clearScopes } from '../../src/ui/state.js'
 
-vi.mock('../../src/ui/render.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/ui/render.js')>()),
+vi.mock('../../src/ui/measure.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/ui/measure.js')>()),
   createCanvasMeasure: () => (text: string, size: number) => text.length * size * 0.6,
 }))
 
@@ -62,7 +62,6 @@ const mountWeek = async (ms = 0) => {
   cardTarget = document.createElement('div')
   document.body.append(cardTarget)
   instances.push(mount(DocsCard, { target: cardTarget }))
-  mountDocsCard()
   instances.push(mount(Week, { target }))
   flushSync()
   await settle(ms)

@@ -68,7 +68,6 @@ const boot = (patch: Partial<{ ready: boolean; people: typeof people; peopleErro
 const start = async () => {
   instances.push(mount(Compare, { target }))
   instances.push(mount(DocsCard, { target }))
-  docsCard.mountDocsCard()
   flushSync()
   await settle()
 }
@@ -715,6 +714,8 @@ describe('Compare (#293)', () => {
     }
     await change('compareDays', '7')
     expect($('compareRuler').textContent).toContain('Não foi possível carregar a comparação.')
+    expect($('compareRuler').querySelector('img'), 'the outage is words only, no pet').toBeNull()
+    expect($('compareDetail').querySelector('img')).toBeNull()
     expect($('compareDetail').textContent).toContain('Clique numa palavra para ver os números dos dois lados.')
     expect(words()).toHaveLength(0)
     width = 350

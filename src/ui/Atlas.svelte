@@ -30,7 +30,7 @@
   } from './format.js'
   import { centerLabel, pack, routesFrom, STRIP_PAD, termStripLayout } from './layout.js'
   import { seedFor } from './seed.js'
-  import { createCanvasMeasure } from './render.js'
+  import { createCanvasMeasure } from './measure.js'
 
   const OWNER = 'atlas'
   const DAYS = ['7', '30', '60']

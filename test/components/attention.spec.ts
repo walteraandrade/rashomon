@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import Attention from '../../src/ui/Attention.svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
-import { close, mountDocsCard, openedBy, open } from '../../src/ui/docs-card.svelte.js'
+import { close, openedBy, open } from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { ATLAS_KINDS, attentionParams } from '../../src/ui/api.js'
 import { SOURCE_SEGMENTS } from '../../src/ui/format.js'
@@ -52,7 +52,6 @@ const render = (withCard = false) => {
     document.body.append(c)
     targets.push(c)
     instances.push(mount(DocsCard, { target: c }))
-    mountDocsCard()
   }
   flushSync()
 }

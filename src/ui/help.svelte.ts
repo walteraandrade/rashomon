@@ -26,7 +26,7 @@ export const openHelp = (hash = '') => {
   target?.scrollIntoView?.({ block: 'start' })
 }
 
-export const helpHash = (href: string) => {
+const helpHash = (href: string) => {
   const match = href.match(/(?:^|\/)como-ler(?:\.html)?(?:#(.*))?$/)
   return match ? (match[1] ?? '') : null
 }
@@ -41,6 +41,3 @@ export const onGuideClick = (event: MouseEvent) => {
   event.preventDefault()
   openHelp(hash)
 }
-
-// Kept for app.ts: the component owns every listener, so there is nothing to attach.
-export const mountHelp = () => {}

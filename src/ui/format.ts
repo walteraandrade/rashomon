@@ -91,7 +91,7 @@ const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (c) => HTML_ES
 const HTML_BRAND: unique symbol = Symbol('html')
 export type Html = { readonly [HTML_BRAND]: true; toString(): string }
 
-export const isHtml = (value: unknown): value is Html => typeof value === 'object' && value !== null && HTML_BRAND in value
+const isHtml = (value: unknown): value is Html => typeof value === 'object' && value !== null && HTML_BRAND in value
 
 export const raw = (markup: string): Html => ({ [HTML_BRAND]: true, toString: () => markup })
 
@@ -104,7 +104,7 @@ export const html = (strings: TemplateStringsArray, ...values: unknown[]): Html 
 // Mirrors query.ts's SMALL_LIMITS (client code cannot import the server module); compare.spec pins the two together.
 export const SMALL_LIMITS = [1, 5, 8, 12, 18, 20, 24, 30, 40, 50, 60, 100]
 
-export const BRIDGE_THRESHOLD = 0.5
+const BRIDGE_THRESHOLD = 0.5
 
 export const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_THRESHOLD
 
@@ -329,7 +329,7 @@ export const testimonyFocus = (rows: TestimonyDomainRow[], domain: string): { sc
 type OutletEntry = { domain: string; lean: keyof typeof LEAN_LABELS }
 const LEAN_BY_DOMAIN = new Map((outletsJson as OutletEntry[]).map((o) => [o.domain, o.lean]))
 
-export const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
+const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
 
 // Domains in the route's order, cells keyed by person id: a missing pair is a blank, not a zero.
 export const agendaRows = (data: Agenda): { domain: string; lean: string | null; cells: Map<string, AgendaCell> }[] => {
@@ -411,7 +411,7 @@ const dayWord = (n: number) => (n === 1 ? 'dia' : 'dias')
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
 
-export const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
+const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
   const lag = daysBetween(mentionsPeak, viewsPeak)
   if (lag > 0) return `a imprensa veio ${lag} ${dayWord(lag)} antes`
   if (lag < 0) return `o público buscou ${Math.abs(lag)} ${dayWord(Math.abs(lag))} antes`

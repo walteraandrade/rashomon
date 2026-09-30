@@ -3,59 +3,15 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  paintDocs,
-  paintDocsHead,
-  paintDocsLoading,
-  rulerTerms,
-  stripLayout,
-} from '../src/ui/render.js'
-import * as renderModule from '../src/ui/render.js'
+import { rulerTerms } from '../src/ui/ruler-model.js'
+import { stripLayout } from '../src/ui/strip-model.js'
 import { hasShares, liftBalance, liftOfPerson, rareRisers, risingRulerItems, shareBalance, type CompareTerm, type RisingTerm } from '../src/ui/format.js'
 import { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripRadius } from '../src/ui/layout.js'
-import { withFakeDocument } from './fake-dom.js'
 
-// src/ui/render.ts: the painters, driven against a fake document and asserted on the markup
-// they emit. Nothing here fetches.
+// The pure models behind the figures (ruler-model, strip-model, format's rising helpers) and the
+// stylesheet rules the figures rely on. Nothing here fetches.
 
 const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
-
-describe('paintDocsHead / paintDocs: the card that holds the documents', () => {
-  it('paintDocsHead writes whatever the figure that asked calls its own reading', () => {
-    withFakeDocument(['docsKicker', 'docsTitle'], (els) => {
-      paintDocsHead({ kicker: 'Documentos com palavra', title: 'reforma' })
-      assert.equal(els.docsKicker.textContent, 'Documentos com palavra')
-      assert.equal(els.docsTitle.textContent, 'reforma')
-      paintDocsHead({ kicker: 'Documentos de', title: 'g1.globo.com' })
-      assert.equal(els.docsKicker.textContent, 'Documentos de')
-      assert.equal(els.docsTitle.textContent, 'g1.globo.com')
-    })
-  })
-
-  // The ruler asks the same word of both people at once, so the card has to answer in two
-  // labelled columns; every other figure asks one side and must keep the plain single list.
-  it('paintDocs writes one plain list for one side and two labelled columns for two', () => {
-    const side = (name: string | null) => ({ label: name, data: { docs: [{ source: 'rss', domain: 'example.org', text: 'um texto', url: 'https://example.org/a' }], total: 3 } })
-    withFakeDocument(['docs'], (els) => {
-      paintDocs([side(null)])
-      assert.doesNotMatch(els.docs.innerHTML, /docs-columns/)
-      assert.match(els.docs.innerHTML, /Mostrando 1 de 3 documentos\./)
-    })
-    withFakeDocument(['docs'], (els) => {
-      paintDocs([side('Lula'), side('Bolsonaro')])
-      assert.match(els.docs.innerHTML, /<div class="docs-columns">/)
-      assert.match(els.docs.innerHTML, /<p class="eyebrow docs-side-name">Lula<\/p>/)
-      assert.match(els.docs.innerHTML, /<p class="eyebrow docs-side-name">Bolsonaro<\/p>/)
-    })
-  })
-
-  it('an empty side says so instead of leaving a blank column', () => {
-    withFakeDocument(['docs'], (els) => {
-      paintDocs([{ label: 'Lula', data: { docs: [], total: 0 } }, { label: 'Bolsonaro', data: { docs: [], total: 0 } }])
-      assert.equal(els.docs.innerHTML.match(/Nenhum documento encontrado\./g)?.length, 2)
-    })
-  })
-})
 
 describe('stripLayout: the outlets on the axis', () => {
   it('stripLayout puts -10 at the left pad, +10 at the right pad and sizes dots by texts', () => {
@@ -318,17 +274,6 @@ describe('rulerTerms: the amended balance formula clamps each side at zero befor
   })
 })
 
-describe('loading ghosts hold each figure\'s silhouette, with no invented words', () => {
-  it('paintDocsLoading keeps geometry and stays mute', () => {
-    withFakeDocument(['docs'], (els) => {
-      paintDocsLoading()
-      assert.match(els.docs.innerHTML, /Lendo os documentos/)
-      assert.equal(els.docs.getAttribute('aria-busy'), 'true')
-      assert.doesNotMatch(els.docs.innerHTML, /Carregando/)
-    })
-  })
-})
-
 // issue #151: figure 4's own pure pre-layout step, checked directly (per the issue's own test
 // plan) against the exports rather than against painted markup.
 const risingTerm = (over: Partial<RisingTerm> = {}): RisingTerm => ({
@@ -416,16 +361,8 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
   })
 })
 
-describe('render.ts no longer carries the atlas or week painters', () => {
-  it('exports none of the painters that moved into Atlas.svelte and Week.svelte', () => {
-    for (const name of ['paintTermStrip', 'termStripLayout', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'wordMarkup', 'paintAtlasLoading', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError', 'paintWeek', 'paintWeekLoading', 'paintWeekError', 'paintRisingRuler', 'paintRisingRulerError', 'paintRisingLoading']) assert.equal((renderModule as Record<string, unknown>)[name], undefined, `${name} is gone`)
-  })
-})
-
-// Issue #174.
-describe('one class scheme, one rx source, one text shape for the three word marks', () => {
+describe('one rx source for the word marks', () => {
   const root = dirname(dirname(fileURLToPath(import.meta.url)))
-  const renderSrc = readFileSync(join(root, 'src', 'ui', 'render.ts'), 'utf8')
   const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
 
   // The block-body finder for a class selector, tolerant of a rule declared with several
@@ -444,16 +381,8 @@ describe('one class scheme, one rx source, one text shape for the three word mar
     return found ? Number(found[1]) : undefined
   }
 
-  it('render.ts carries no literal word-button, word-glow, word-hit or class="word" string', () => {
-    for (const literal of ['word-button', 'word-glow', 'word-hit', 'class="word"'])
-      assert.ok(!renderSrc.includes(literal), `render.ts must not contain ${JSON.stringify(literal)}`)
-  })
-
   it('the map-svg.is-masked mask-and-underline rule still targets the atlas word class', () => {
     assert.match(css, /\.map-svg\.is-masked \.atlas-word/)
-  })
-
-  it('no glow or hit rect emitted by any of the three builders carries an rx attribute', async () => {
   })
 
   it('atlas.css sets rx on the six rules, at the same values the markup used to carry', () => {
@@ -463,11 +392,6 @@ describe('one class scheme, one rx source, one text shape for the three word mar
     assert.equal(rxOf('.ruler-hit'), 5)
     assert.equal(rxOf('.week-glow'), 8)
     assert.equal(rxOf('.week-hit'), 5)
-  })
-
-  it('marks.ts still exports only frame, axis and overflowList — no wordMark', async () => {
-    const marks = await import('../src/ui/marks.js')
-    assert.deepEqual(Object.keys(marks).sort(), ['axis', 'frame', 'overflowList'])
   })
 })
 
@@ -482,16 +406,5 @@ describe('atlas.css never gives the attention views row --accent', () => {
     assert.ok(block, 'the attention figure CSS block must exist')
     assert.doesNotMatch(block, /data-row="views"\s*\.attention-mark/)
     assert.doesNotMatch(block, /var\(--accent\)/)
-  })
-})
-
-describe('figure 6 leaves the imperative layer', () => {
-  it('render.ts exports none of the four lens painters and figures/lenses.ts is gone', async () => {
-    const mod = (await import('../src/ui/render.js')) as Record<string, unknown>
-    for (const name of ['paintLensRuler', 'paintLensRulerError', 'paintLensDetail', 'paintLensesLoading']) {
-      assert.equal(name in mod, false, `${name} still exported`)
-    }
-    const { existsSync } = await import('node:fs')
-    assert.equal(existsSync(new URL('../src/ui/figures/lenses.ts', import.meta.url)), false)
   })
 })

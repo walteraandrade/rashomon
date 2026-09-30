@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
-import { rulerTerms } from '../src/ui/render.js'
+import { rulerTerms } from '../src/ui/ruler-model.js'
 import type { CompareTerm } from '../src/ui/format.js'
 import { balanceColor } from '../src/ui/format.js'
 
-// src/ui/layout.ts: pure geometry. rulerTerms (render.ts) is imported only to build the items
+// src/ui/layout.ts: pure geometry. rulerTerms (ruler-model.ts) is imported only to build the items
 // rulerLayout packs, the same way the browser hands them over.
 
-// Deterministic stand-in for the browser canvas adapter (public/js/render.js's
+// Deterministic stand-in for the browser canvas adapter (measure.ts's
 // createCanvasMeasure): width scales linearly with character count and font size, so wrapping
 // and packing behave predictably without a real <canvas>.
 const measure = (text: string, size: number) => text.length * size * 0.6

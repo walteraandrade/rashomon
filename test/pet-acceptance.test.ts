@@ -3,10 +3,6 @@ import { describe, it } from 'node:test'
 import { readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import * as appModule from '../src/ui/app.js'
-import { clearScopes } from '../src/ui/state.js'
-import { flush, withFiguresDom } from './fake-mount-dom.js'
-import './close.js'
 import { pageSource, siteFile } from './pages.js'
 
 // The pet: one pixel sprite, allowed in exactly two boxes and nowhere else. The site draws every
@@ -24,16 +20,6 @@ const PERCHED = 'pet-caracara-perched.png'
 // The sprites' own pixel grids. Every width the CSS may use is an integer multiple of these.
 const GRID = { [FLYING]: { w: 106, h: 78 }, [PERCHED]: { w: 26, h: 37 } }
 
-const withLocation = async <T>(fn: () => Promise<T> | T): Promise<T> => {
-  const previous = (globalThis as { location?: unknown }).location
-  ;(globalThis as { location?: unknown }).location = { search: '', reload: () => {} }
-  try {
-    return await fn()
-  } finally {
-    ;(globalThis as { location?: unknown }).location = previous
-  }
-}
-
 describe('the pet: the files it ships as', () => {
   it('both sprites exist under public/ and are small enough to inline on a phone', () => {
     for (const name of [FLYING, PERCHED]) {
@@ -45,24 +31,7 @@ describe('the pet: the files it ships as', () => {
 })
 
 // Figure 1's outage (the perched bird, the retry button, the no-fiction caveat) is Atlas.svelte's own
-// and is pinned in test/components/atlas.spec.ts.
-describe('the pet: the outage in figure 3', () => {
-  it('figure 3 prints the outage in words only: a bird beyond the two boxes would read as decoration', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      globalThis.fetch = (async (input: unknown) => {
-        calls.push(String(input))
-        throw new Error('network down')
-      }) as typeof fetch
-      await withLocation(async () => {
-        await appModule.boot()
-        await flush()
-        assert.doesNotMatch(els.compareDetail.innerHTML, /<img/, 'figure 3 states the outage in words')
-      })
-    })
-  })
-})
-
+// and is pinned in test/components/atlas.spec.ts; figure 3's words-only outage in compare.spec.ts.
 describe('the pet: the rules atlas.css holds it to', () => {
   it('every .pet is drawn as pixels, never smoothed', () => {
     assert.match(readPublic('atlas.css'), /\.pet\s*\{[^}]*image-rendering:\s*pixelated/, 'a pixel sprite scaled with smoothing is a blurred sprite')

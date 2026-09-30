@@ -54,10 +54,11 @@
 
   const model = $derived.by(() => {
     if (!data) return null
-    const shares = hasShares(data)
-    const balance = shares ? (t: RisingTerm) => shareBalance(t, data!.about as never) : ((lp) => (t: RisingTerm) => liftBalance(t, lp))(liftOfPerson(data.about, data.days, data.baseline))
-    const items = risingRulerItems(shares ? data.present! : data.terms, balance)
-    const rareAll = shares ? risingRulerItems(rareRisers(data.terms, data.present!), balance) : []
+    const d = data
+    const shares = hasShares(d)
+    const balance = shares ? (t: RisingTerm) => shareBalance(t, d.about) : ((lp) => (t: RisingTerm) => liftBalance(t, lp))(liftOfPerson(d.about, d.days, d.baseline))
+    const items = risingRulerItems(shares ? d.present : d.terms, balance)
+    const rareAll = shares ? risingRulerItems(rareRisers(d.terms, d.present), balance) : []
     if (!items.length && !rareAll.length) return { empty: true as const }
     const laid = rulerModel(rulerLayout(measured(), items, width || 860))
     return {

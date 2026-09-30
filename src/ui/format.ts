@@ -64,7 +64,6 @@ export type Rising = { days: number; baseline: number; terms: RisingTerm[]; pres
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }
-// A null count is a week outside that week's top 50 (or before first_week), never zero.
 export type PersistenceWeek = { week: string; count: number | null }
 export type PersistenceTerm = { term: string; kind: string; series: PersistenceWeek[]; streak: number; half_life: number | null }
 export type Persistence = { weeks: number; since: string; first_week: string | null; horizon: number; terms: PersistenceTerm[] }
@@ -72,18 +71,14 @@ export type Persistence = { weeks: number; since: string; first_week: string | n
 export type AgendaCell = { person_id: string; domain: string; docs: number; share: number }
 export type Agenda = { days: number; persons: PersonRef[]; domains: string[]; cells: AgendaCell[] }
 
-// A pair below `min`, or with zero shared docs, is absent from `pairs`, never a zero-count row.
 export type ComentionPerson = { id: string; name: string }
 export type ComentionPair = { a: string; b: string; count: number }
 export type Comention = { days: number; persons: ComentionPerson[]; pairs: ComentionPair[] }
-// The normalized token /lenses echoes back: domain:<host>, lean:<value>, source:<name> or 'all'.
 export type Lens = string
 export type LensSide = { lens: Lens; about: number }
 export type Lenses = { days: number; a: LensSide; b: LensSide; terms: CompareTerm[] }
-// 'loading' paints a ghost, 'ready' the counts /timeline returned, 'error' leaves the hole empty.
 export type SparklineState = 'loading' | 'ready' | 'error'
 export type Sparkline = { state: SparklineState; counts?: number[] }
-// Two independently-scaled series on one day axis; field names never overlap (views vs count).
 export type AttentionDay = { day: string; views: number }
 export type Attention = { days: number; series: AttentionDay[] }
 export type AttentionMentionDay = { day: string; count: number }
@@ -129,7 +124,6 @@ const WEEK_TZ = 'America/Sao_Paulo'
 
 export const weekDayIso = (startIso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(startIso))
 
-// "seg 8": weekday abbreviation plus day of month, never a year or month.
 export const weekDayLabel = (startIso: string) => {
   const d = new Date(startIso)
   const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: WEEK_TZ, weekday: 'short' }).format(d).replace(/\.$/, '')
@@ -221,11 +215,8 @@ type Ramp = [number[], number[], number]
 
 const mix = (from: number[], to: number[], k: number) => from.map((v, i) => Math.round(v + (to[i] - v) * k)).join(',')
 
-// Quiet grey for "on the mean": absence of signal, not a third colour.
 export const SCALE_MID = '#8b909c'
 
-// Null/NaN renders transparent rather than a fake neutral.
-// With `fade`, alpha thins toward the middle so neutral words recede.
 const scaleColor = (value: number | null | undefined, span: number, fade = false) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return 'transparent'
   const x = Math.max(-span, Math.min(span, Number(value)))
@@ -253,11 +244,9 @@ export const MASK_SPAN = 1.5
 
 export const maskColor = (delta: number) => scaleColor(delta, MASK_SPAN, true)
 
-// Kept in step with atlas.css's --cmp-a/--cmp-b.
 const CMP_A_HEX = hex('#7fa8ff')
 const CMP_B_HEX = hex('#ff9d6b')
 
-// balance = 0 returns SCALE_MID itself so a term dead centre reads as "on the mean".
 export const balanceColor = (balance: number) => {
   const x = Math.max(-1, Math.min(1, Number(balance) || 0))
   if (x === 0) return SCALE_MID
@@ -275,7 +264,6 @@ export const termMask = (term: { testimony?: TermTestimony | null }, personScore
 
 export type MaskState = 'avaliacao' | 'tema' | 'off'
 
-// Top 6 by node count, ties broken by ascending id; a 7th+ community is simply absent from the map.
 export const communityRanking = (nodes: { community?: number | null }[]): Map<number, number> => {
   const counts = new Map<number, number>()
   for (const n of nodes) {
@@ -285,7 +273,6 @@ export const communityRanking = (nodes: { community?: number | null }[]): Map<nu
   return new Map([...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 6).map(([community], i) => [community, i + 1]))
 }
 
-// A discrete bucket needs no interpolation: a CSS token, not a computed rgb(...) string.
 export const themeMask = (term: { community?: number | null }, ranking: Map<number, number>): string | null => {
   const c = term.community
   if (c === null || c === undefined) return null
@@ -310,7 +297,6 @@ export const foldTestimonyDomains = (rows: TestimonyDomainRow[]): { domain: stri
   return [...byDomain.values()].map(({ sum, ...e }) => ({ ...e, score: sum / e.n })).sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
 }
 
-// Joins /sources doc counts and /testimony means; an outlet under the floor has no mean.
 export const mergeOutlets = (
   rows: OutletRow[],
   testimonyRows: TestimonyDomainRow[],
@@ -356,7 +342,6 @@ export const agendaRows = (data: Agenda): { domain: string; lean: string | null;
   return data.domains.map((domain) => ({ domain, lean: leanFor(domain), cells: byDomain.get(domain) ?? new Map() }))
 }
 
-// bsky.app URL for a bluesky doc's at:// URI; every other source falls through to safeDocUrl.
 export const bskyUrl = (d: Doc | null | undefined) => {
   try {
     if (!d || d.source !== 'bluesky' || !d.domain || typeof d.uri !== 'string' || !d.uri.startsWith('at://')) return null
@@ -411,7 +396,6 @@ export const weekHeadLabel = (monday: string) => {
 
 export const sinceLabel = (since: string) => `a série começa em ${dayMonth(since).day} de ${dayMonth(since).month} de ${since.slice(0, 4)}`
 
-// Mondays from first_week to the current one, both included; null with no series yet.
 export const seriesWeeks = (firstWeek: string | null, now = new Date()) =>
   firstWeek ? Math.max(1, Math.round((Date.parse(mondayOf(todayBrt(now))) - Date.parse(firstWeek)) / (7 * 86_400_000)) + 1) : null
 
@@ -427,7 +411,6 @@ const dayWord = (n: number) => (n === 1 ? 'dia' : 'dias')
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
 
-// lag > 0: views peaked after mentions (press led). lag < 0: views peaked first (public led).
 export const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
   const lag = daysBetween(mentionsPeak, viewsPeak)
   if (lag > 0) return `a imprensa veio ${lag} ${dayWord(lag)} antes`
@@ -435,7 +418,6 @@ export const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) =>
   return 'os dois picos caíram no mesmo dia'
 }
 
-// A peakless row states its own "sem dado", so the shared note stays silent.
 export const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => (mentionsPeak && viewsPeak ? attentionLagSentence(mentionsPeak, viewsPeak) : '')
 
 export type RisingShares = RisingAbout & { words_recent: number; words_baseline: number }
@@ -444,6 +426,7 @@ export type RisingShares = RisingAbout & { words_recent: number; words_baseline:
 export const hasShares = (data: Rising): data is Rising & { present: RisingTerm[]; about: RisingShares } =>
   Array.isArray(data.present) && Number.isFinite(data.about.words_recent) && Number.isFinite(data.about.words_baseline)
 
+// Shares, not doc counts, so longer texts do not push every word right.
 export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingShares) => {
   if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
   if (about.words_recent <= 0) return -1
@@ -451,6 +434,7 @@ export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: 
   return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
 }
 
+// The server's +1 smoothing keeps it finite.
 export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
 
 export const liftBalance = (t: { lift: number }, liftPerson: number) => {
@@ -458,10 +442,11 @@ export const liftBalance = (t: { lift: number }, liftPerson: number) => {
   return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
 }
 
-export type RisingItem = { term: string; kind: string; balance: number; combined: number; lift: number }
+export type RisingItem = { term: string; kind: string; balance: number; combined: number }
 
+// Exact counts, so size never compounds rounding.
 export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
-  terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
+  terms.map((t) => ({ term: t.term, kind: t.kind, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
 
 export const RARE_SHOWN = 12
 

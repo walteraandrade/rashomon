@@ -6,7 +6,7 @@ import * as docsCard from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { risingParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
-import { balanceColor, RARE_SHOWN } from '../../src/ui/format.js'
+import { balanceColor, RARE_SHOWN, shareBalance } from '../../src/ui/format.js'
 import type { Rising as RisingData, RisingTerm } from '../../src/ui/format.js'
 
 const lula = { id: 'lula', name: 'Lula' }
@@ -1018,6 +1018,28 @@ describe('Rising (#292)', () => {
       click(words()[0])
       await settle()
       expect(document.querySelector('#docs .docs-side-name')?.textContent).toBe('Lula')
+    })
+
+    it('clicking the same rare riser again releases the pick and closes the card', async () => {
+      const riser = term({ term: 'sigilo', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 })
+      pickRare([riser])
+      boot()
+      await start()
+      click(rare()[0])
+      await settle()
+      expect(docsCard.openedBy('rising')).toBe(true)
+      click(rare()[0])
+      await settle()
+      expect(docsCard.isOpen()).toBe(false)
+      expect(rare()[0].getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('a rare riser is coloured by its own share balance', async () => {
+      const riser = term({ term: 'sigilo', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 })
+      pickRare([riser])
+      boot()
+      await start()
+      expect(rare()[0].getAttribute('style')).toContain(`--cmp: ${balanceColor(shareBalance(riser, about))}`)
     })
 
     it('a person change while people are stale never asks for a person that is not registered', async () => {

@@ -379,6 +379,10 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
     assert.equal(shareBalance({ count_recent_raw: 0, count_baseline_raw: 0 }, { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 }), 0)
   })
 
+  it('no words in the recent window reads -1, whatever the counts', () => {
+    assert.equal(shareBalance({ count_recent_raw: 4, count_baseline_raw: 2 }, { recent: 0, baseline: 5, words_recent: 0, words_baseline: 9 }), -1)
+  })
+
   it('combined is the raw recent+baseline doc count, independent of balance', () => {
     const items = risingRulerItems([risingTerm({ term: 'soma', count_recent_raw: 12, count_baseline_raw: 3 })], byShare(about))
     assert.equal(items[0].combined, 15)
@@ -392,6 +396,8 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
     assert.equal(liftBalance({ lift: lp / 8 }, lp), -1)
     const zero = liftOfPerson({ recent: 5, baseline: 0 }, 7, 30)
     assert.ok(Number.isFinite(zero) && zero > 0)
+    assert.equal(liftBalance({ lift: 3 }, 0), 1, 'a person with no pace at all: any lift reads +1')
+    assert.equal(liftBalance({ lift: 0 }, 0), 0, 'and no lift against no pace reads the middle')
   })
 
   it('hasShares is true only when present and both word totals arrived', () => {

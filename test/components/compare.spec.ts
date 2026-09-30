@@ -776,3 +776,18 @@ describe('Compare (#293)', () => {
     expect(style).not.toMatch(/font-size/)
   })
 })
+
+describe('figure 3 states a people outage in words only (ported from pet-acceptance)', () => {
+  it('no <img> anywhere in #compare when /api/people failed', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
+    vi.stubGlobal('fetch', async () => { throw new Error('network down') })
+    setBoot({ ready: true, people: [], peopleError: new Error('down'), search: '' })
+    const target = document.createElement('div')
+    document.body.append(target)
+    const instance = mount(Compare, { target })
+    flushSync()
+    expect(document.getElementById('compareRetry')).not.toBeNull()
+    expect(target.querySelector('img')).toBeNull()
+    unmount(instance); target.remove(); vi.unstubAllGlobals()
+  })
+})

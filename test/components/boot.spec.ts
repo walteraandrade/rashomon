@@ -56,3 +56,18 @@ describe('#298 page boot', () => {
     cleanup()
   })
 })
+
+describe('#298 page boot seeds the querystring', () => {
+  it('publishes location.search as bootData.search before ready', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) =>
+      /\/api\/people(\?|$)/.test(String(input)) ? new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }) : new Response('x', { status: 503 }))
+    history.replaceState(null, '', '/?days=7&compare.b=p2')
+    setBoot({ people: [], peopleError: null, ready: false, search: '' })
+    const target = document.createElement('div')
+    document.body.append(target)
+    const instance = mount(Page, { target })
+    await vi.waitFor(() => expect(bootData.ready).toBe(true))
+    expect(bootData.search).toBe('?days=7&compare.b=p2')
+    unmount(instance); target.remove(); vi.unstubAllGlobals(); history.replaceState(null, '', '/')
+  })
+})

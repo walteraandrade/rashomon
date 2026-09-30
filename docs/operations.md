@@ -393,6 +393,11 @@ own sentence of `<select>`s and its own fetches. `src/ui/app.ts` reads the query
 at mount, to seed them. Nothing is ever written back to `location` or `history`: the controls
 change what a figure shows, never the URL.
 
+A figure ported to Svelte (`src/ui/Agenda.svelte` first) reads its own seeds: once
+`bootData.ready`, it calls `seedFor('<figure>', <keys>, bootData.search)` from `src/ui/seed.ts`,
+and the prefixed key wins over the bare one there too. `app.ts` seeds only the figures still
+mounted through `FIGURES`.
+
 Two key forms, read in this order:
 
 | Form | Example | Effect |

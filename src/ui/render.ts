@@ -1,14 +1,12 @@
 // DOM layer: painters only — all data and callbacks arrive as parameters.
 
 import {
-  agendaRows,
   balanceColor,
   domainSuffix,
   fmt,
   html,
   kinds,
   label,
-  LEAN_LABELS,
   matching,
   mergeOutlets,
   normalize,
@@ -33,7 +31,6 @@ import {
   testimonyFocus,
   testimonyPosition,
   trendOf,
-  type Agenda,
   type AttentionDay,
   type AttentionMentionDay,
   type Candidate,
@@ -1585,79 +1582,6 @@ export const paintAttentionError = () => {
   chart.innerHTML = html`<p class="note">Não foi possível carregar as menções.</p>`
   const note = $('attentionNote')
   if (note) note.textContent = ''
-}
-
-// ---------- agenda (figure 8, issue #208): domain × person coverage share ----------
-
-export const paintAgendaLoading = () => {
-  const grid = $('agendaGrid')
-  if (!grid) return
-  grid.hidden = false
-  grid.classList.remove('is-loading')
-  grid.setAttribute('aria-busy', 'true')
-  const widths = ['', 'is-mid', 'is-short']
-  grid.innerHTML = html`<div class="agenda-ghost ghost-field" aria-hidden="true">${[0, 1, 2, 3, 4, 5].map(
-    (i) => html`<div class="agenda-ghost-row">${ghostBar(`ghost-outlet-d ${widths[i % 3]}`)}${[0, 1, 2, 3].map(() => ghostBar('ghost-outlet-n'))}</div>`,
-  )}</div><p class="sr-only">Lendo a agenda.</p>`
-}
-
-export const paintAgendaError = (onRetry: () => void) => {
-  const grid = $('agendaGrid')
-  if (!grid) return
-  grid.hidden = false
-  grid.classList.remove('is-loading')
-  grid.setAttribute('aria-busy', 'false')
-  grid.innerHTML = '<p class="note">Não foi possível carregar a agenda. <button class="quiet-button" id="agendaErrorRetry">Tentar novamente</button></p>'
-  $('agendaErrorRetry')?.addEventListener('click', onRetry)
-}
-
-export type AgendaSelection = { personId: string; domain: string } | null
-
-// A domain's cells can sum above 1: a doc naming two tracked people counts once per person.
-export const paintAgenda = ({
-  data,
-  min,
-  selected,
-  onPick,
-}: {
-  data: Agenda
-  min: number
-  selected: AgendaSelection
-  onPick: (personId: string, personName: string, domain: string) => void
-}) => {
-  const grid = $('agendaGrid')
-  if (!grid) return
-  grid.hidden = false
-  grid.classList.remove('is-loading')
-  grid.setAttribute('aria-busy', 'false')
-  if (!data.domains.length) {
-    grid.innerHTML = html`<p class="note">Nenhum veículo atingiu o mínimo de ${min} documentos rastreados nesta janela.</p>`
-    return
-  }
-  const rows = agendaRows(data)
-  grid.innerHTML = html`<div class="agenda-scroll"><table class="agenda-table">
-    <caption class="sr-only">Fatia da cobertura de cada veículo, por pessoa</caption>
-    <thead><tr><th scope="col"></th>${data.persons.map((p) => html`<th scope="col">${p.name}</th>`)}</tr></thead>
-    <tbody>${rows.map(
-      (row) =>
-        html`<tr><th scope="row"><span class="d">${row.domain}</span>${row.lean ? html`<span class="lean-chip">${LEAN_LABELS[row.lean] ?? row.lean}</span>` : ''}</th>${data.persons.map((p) => {
-          const cell = row.cells.get(p.id)
-          if (!cell) return html`<td class="agenda-cell is-empty"><span class="sr-only">sem documentos</span></td>`
-          const isSelected = !!selected && selected.personId === p.id && selected.domain === row.domain
-          const pct = Math.round(cell.share * 100)
-          const label = cell.docs > 0 && pct === 0 ? '<1%' : `${pct}%`
-          return html`<td class="agenda-cell"><button class="agenda-pick${isSelected ? ' is-active' : ''}" data-person="${p.id}" data-domain="${row.domain}" aria-pressed="${String(isSelected)}" style="--share:${Math.max(pct, 1)}%" title="${fmt(cell.docs)} ${cell.docs === 1 ? 'documento' : 'documentos'}">${label}</button></td>`
-        })}</tr>`,
-    )}</tbody>
-  </table></div><p class="note">A fatia é da cobertura rastreada do próprio veículo, não da pessoa. A soma de uma linha pode passar de 100%: um documento que cita duas pessoas rastreadas conta para as duas.</p>`
-  queryAll('[data-person]', grid).forEach((el) =>
-    el.addEventListener('click', () => {
-      const personId = String(el.dataset.person)
-      const domain = String(el.dataset.domain)
-      const person = data.persons.find((p) => p.id === personId)
-      onPick(personId, person?.name ?? personId, domain)
-    }),
-  )
 }
 
 // Comention matrix (figure 9, #207): ink weight only, no --hostile/--favor/--cmp-a/--cmp-b.

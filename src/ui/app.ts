@@ -1,5 +1,4 @@
 import { mountDocsCard } from './docs-card.js'
-import { mount as mountAgenda } from './figures/agenda.js'
 import { mount as mountAttention } from './figures/attention.js'
 import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountComention } from './figures/comention.js'
@@ -11,7 +10,6 @@ import { mount as mountTestimony } from './figures/testimony.js'
 import { mount as mountWeek } from './figures/week.js'
 import { mountHelp } from './help.js'
 import {
-  paintAgendaLoading,
   paintAtlasLoading,
   paintAttentionLoading,
   paintComentionLoading,
@@ -53,9 +51,6 @@ const FIGURES: FigureEntry[] = [
   { id: 'lenses', sectionId: 'lenses', keys: ['person', ['a', null], ['b', null], 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
   // days stays fixed at 30, never seeded: figure 7 has no period control, like week's fixed 7.
   { id: 'attention', sectionId: 'attention', keys: ['person', 'source'], noticeId: 'attentionNote', mount: mountAttention },
-  // Spans every tracked person at once, so no 'person' key: the route's own persons list feeds
-  // the grid's columns.
-  { id: 'agenda', sectionId: 'agenda', keys: ['days', 'source'], noticeId: 'agendaGrid', mount: mountAgenda },
   // Spans every tracked person, so there is no `person` key here.
   { id: 'comention', sectionId: 'comention', keys: ['days', 'source', ['lean', null], ['min', null]], noticeId: 'comentionAbout', mount: mountComention },
   // `weeks` is prefixed only: no other figure has a weeks control, so a bare weeks= means nothing here.
@@ -75,7 +70,6 @@ const paintBootLoading = () => {
   paintWeekLoading()
   paintLensesLoading()
   paintAttentionLoading()
-  paintAgendaLoading()
   paintComentionLoading()
   paintPersistenceLoading()
 }

@@ -85,19 +85,19 @@ describe('Agenda (issue #288)', () => {
 
   it('agenda AC2: paints one row per domain and one column per person', async () => {
     body = data({
-      domains: ['g1.globo.com', 'g2.example'],
+      domains: ['g1.globo.com', 'poder360.com.br'],
       cells: [
         { person_id: 'lula', domain: 'g1.globo.com', docs: 8, share: 0.8 },
         { person_id: 'tarcisio', domain: 'g1.globo.com', docs: 2, share: 0.2 },
-        { person_id: 'lula', domain: 'g2.example', docs: 5, share: 1 },
+        { person_id: 'lula', domain: 'poder360.com.br', docs: 5, share: 1 },
       ],
     })
     await start()
     expect(grid().hidden).toBe(false)
     expect(grid().textContent).toContain('g1.globo.com')
-    expect(grid().textContent).toContain('g2.example')
+    expect(grid().textContent).toContain('poder360.com.br')
     expect(grid().textContent).toContain('Tarcísio')
-    expect(picks().map((p) => `${p.dataset.person}/${p.dataset.domain}`).sort()).toEqual(['lula/g1.globo.com', 'lula/g2.example', 'tarcisio/g1.globo.com'])
+    expect(picks().map((p) => `${p.dataset.person}/${p.dataset.domain}`).sort()).toEqual(['lula/g1.globo.com', 'lula/poder360.com.br', 'tarcisio/g1.globo.com'])
     expect(grid().querySelectorAll('.agenda-cell').length).toBe(4)
     expect(grid().querySelectorAll('.agenda-cell.is-empty').length).toBe(1)
     expect(grid().querySelector('.lean-chip')).not.toBeNull()

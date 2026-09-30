@@ -58,83 +58,15 @@ const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promis
   }
 }
 
-describe('a bare querystring key seeds both figures; a prefixed one overrides only its own', () => {
-  it('bare days= seeds figure 1', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeDefault(calls)
-      await withLocation('?days=7', () => appModule.boot())
-      await flush()
-      assert.equal(els.days.value, '7')
-    })
-  })
-
-  it('bare source= seeds figure 1', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeDefault(calls)
-      await withLocation('?source=gnews', () => appModule.boot())
-      await flush()
-      assert.equal(els.source.value, 'gnews')
-    })
-  })
-
-  it('atlas.days overrides figure 1 only, leaving figure 2 on the bare value', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeDefault(calls)
-      await withLocation('?days=30&atlas.days=7', () => appModule.boot())
-      await flush()
-      assert.equal(els.days.value, '7', "figure 1 takes its own prefixed override")
-    })
-  })
-})
-
-describe('a control change never crosses figures', () => {
-  it("changing figure 1's own control reloads only figure 1", async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeDefault(calls)
-      await withLocation('', () => appModule.boot())
-      await flush()
-      const before = calls.length
-      els.days.value = '60'
-      els.days.fire('change')
-      await flush(220)
-      const added = calls.slice(before)
-      assert.ok(added.some((u) => u.includes('/graph')), 'figure 1 must reload')
-      assert.ok(!added.some((u) => u.includes('/sources') || u.includes('/testimony')), `figure 2 must not reload: ${JSON.stringify(added)}`)
-    })
-  })
-
-  it("changing figure 1's source control reloads only figure 1", async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeDefault(calls)
-      await withLocation('', () => appModule.boot())
-      await flush()
-      const before = calls.length
-      els.source.value = 'gnews'
-      els.source.fire('change')
-      await flush(220)
-      const added = calls.slice(before)
-      assert.ok(added.some((u) => u.includes('/graph')), 'figure 1 must reload')
-      assert.ok(!added.some((u) => u.includes('/sources') || u.includes('/testimony')), `figure 2 must not reload: ${JSON.stringify(added)}`)
-    })
-  })
-
-})
-
-describe('/api/people is fetched exactly once, and seeds both figures', () => {
-  it('one call to /api/people mounts the person select', async () => {
-    await withFiguresDom(async (els, calls) => {
+describe('/api/people is fetched exactly once, and seeds every figure', () => {
+  it('one call to /api/people serves every figure', async () => {
+    await withFiguresDom(async (_els, calls) => {
       clearScopes()
       routeDefault(calls)
       await withLocation('', () => appModule.boot())
       await flush()
       const peopleCalls = calls.filter((u) => new URL(u, 'http://localhost').pathname === '/api/people')
       assert.equal(peopleCalls.length, 1, `boot() must fetch /api/people exactly once regardless of how many figures mount: ${JSON.stringify(calls)}`)
-      assert.equal(els.person.options.length, people.length)
     })
   })
 })
@@ -155,44 +87,21 @@ const withLocationAndReload = async <T>(search: string, fn: (reloads: number[]) 
 }
 
 describe('a failed GET /api/people is an outage, never an empty seed', () => {
-  it('paints the error copy and a working retry in both figures, not the empty-seed copy', async () => {
+  it('paints the error copy and a working retry in figure 4, not the empty-seed copy', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       globalThis.fetch = (async (input: unknown) => {
         calls.push(String(input))
         throw new Error('network down')
       }) as typeof fetch
-      await withLocationAndReload('', async (reloads) => {
+      await withLocationAndReload('', async () => {
         await appModule.boot()
         await flush()
-
-        assert.equal(els.status.textContent, 'Não foi possível carregar dados reais.')
-        assert.equal(els.status.classes.error, true, 'the status badge must carry the .error class')
-        assert.match(els.viewport.innerHTML, /Falha de rede ou base indispon[ií]vel/)
-        assert.match(els.viewport.innerHTML, /Nenhum gr[aá]fico fict[ií]cio ser[aá] exibido|Nenhum grafo fict[ií]cio ser[aá] exibido/)
-        assert.match(els.viewport.innerHTML, /id="retry"/, 'the retry button must be emitted, not just resolvable')
-        assert.doesNotMatch(els.viewport.innerHTML, /seed\.json/, 'an outage must never claim the seed is empty')
-        assert.notEqual(els.status.textContent, 'Nenhuma pessoa cadastrada.')
 
         // Figure 4 has no retry of its own: same outage copy in #risingAbout, ruler hidden.
         assert.equal(els.risingAbout.textContent, 'Falha de rede ou base indisponível.')
         assert.equal(els.risingRuler.hidden, true)
-
-        els.retry.fire('click')
-        assert.equal(reloads.length, 1, 'every retry button must be wired to a real re-fetch')
       })
-    })
-  })
-
-  it('an empty people list still reads as an empty seed, not as an outage', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, { '/api/people': [] })
-      await withLocation('', () => appModule.boot())
-      await flush()
-      assert.equal(els.status.textContent, 'Nenhuma pessoa cadastrada.')
-      assert.match(els.viewport.innerHTML, /seed\.json/)
-      assert.doesNotMatch(els.viewport.innerHTML, /Falha de rede/)
     })
   })
 })
@@ -207,9 +116,6 @@ describe('the loading ghost shows before /api/people resolves', () => {
       }) as typeof fetch
       await withLocation('', async () => {
         const booting = appModule.boot()
-        assert.equal(els.status.textContent, 'Lendo as pessoas.', 'a cold start must not show bare static markup')
-        assert.match(els.viewport.innerHTML, /ghost-field/)
-        assert.match(els.viewport.innerHTML, /class="ghost"/)
         assert.equal(els.risingRuler.hidden, false, 'issue #151: figure 4 gets its own boot ghost too')
         assert.match(els.risingRuler.innerHTML, /ruler-axis/)
         void booting

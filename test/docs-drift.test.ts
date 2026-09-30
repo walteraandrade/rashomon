@@ -540,3 +540,20 @@ describe('ported figures read their own seeds (#288)', () => {
     assert.match(docsText, /prefixed[\s\S]{0,200}wins over the bare|wins over the bare[\s\S]{0,200}prefixed/i)
   })
 })
+
+describe('figure 1 is a Svelte component (#297)', () => {
+  it('atlas AC14: docs say figure 1 is a Svelte component reading boot data and seeding through seedFor', () => {
+    assert.match(docsText, /figure 1[\s\S]{0,300}Svelte component|atlas[\s\S]{0,200}Svelte component|Atlas\.svelte/i)
+    assert.match(docsText, /seedFor\('atlas'/, "docs never name seedFor('atlas', ...)")
+    assert.match(docsText, /boot data|bootData/)
+  })
+
+  it('atlas AC14: docs say the atlas keeps its own sparkline fetch outside createFigure', () => {
+    assert.match(docsText, /sparkline[\s\S]{0,300}createFigure|createFigure[\s\S]{0,300}sparkline/i)
+    assert.match(docsText, /sparkline[\s\S]{0,300}outside|outside[\s\S]{0,300}sparkline|own sparkline/i)
+  })
+
+  it('atlas AC14: no page still lists figures/atlas.ts as a module', () => {
+    assert.doesNotMatch(docsText, /figures\/atlas\.ts/)
+  })
+})

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
 import { balanceColor } from '../src/ui/format.js'
@@ -705,5 +705,109 @@ describe('rulerModel maps a ruler layout to what Ruler.svelte draws', () => {
     assert.ok(model.overflow.length > 0)
     assert.deepEqual(Object.keys(model.overflow[0]).sort(), ['cmp', 'kind', 'term', 'text'])
     assert.equal(model.overflow[0].cmp, balanceColor(0))
+  })
+})
+
+describe('#149 AC2/AC3/AC4: termStripLayout, words on the kikori axis (moved from render.ts by #297)', () => {
+  const personTestimony = { method: 'kikori:q8', score: -1, n: 200 }
+  const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }
+  const reforma = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0, n: 6 } }
+  const agenda = { id: 'word:agenda', term: 'agenda', kind: 'word', count: 15, pmi: 1.1, testimony: { score: 2.5, n: 9 } }
+  const rare = { id: 'word:rare', term: 'rara', kind: 'word', count: 3, pmi: 0.5, testimony: { score: 4, n: 2 } } // n < MASK_MIN
+  const unscored = { id: 'word:unscored', term: 'silencio', kind: 'word', count: 7, pmi: 0.8, testimony: null } // testimony: null
+  const missing = { id: 'word:missing', term: 'ausente', kind: 'word', count: 5, pmi: 0.6 } // testimony: undefined
+  const stripNodes = [golpe, reforma, agenda, rare, unscored, missing]
+
+  it('only the nodes termMask accepts are included, and x is monotonic non-decreasing in score', () => {
+    const layout = termStripLayout(stripNodes, personTestimony, 860)
+    const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
+    assert.deepEqual(ids, new Set(['word:golpe', 'word:reforma', 'word:agenda']), 'rare (n<3), unscored (testimony: null) and missing (testimony: undefined) must be excluded')
+    const byScore = [...layout.dots].sort((a: { score: number }, b: { score: number }) => a.score - b.score)
+    for (let i = 1; i < byScore.length; i++) assert.ok(byScore[i].x >= byScore[i - 1].x, 'x must never decrease as score increases')
+  })
+
+  it('excludes every node when the person has no eligible score (stats.testimony absent or its score null/undefined)', () => {
+    assert.equal(termStripLayout(stripNodes, { method: 'kikori', score: null, n: 0 }, 860).dots.length, 0, 'a null person score')
+    assert.equal(termStripLayout(stripNodes, undefined, 860).dots.length, 0, 'an absent stats.testimony')
+  })
+
+  it('the domain widens to at least 2 with exactly one eligible word', () => {
+    const layout = termStripLayout([golpe], personTestimony, 860)
+    assert.equal(layout.dots.length, 1)
+    assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen for a single point: got [${layout.domainMin}, ${layout.domainMax}]`)
+  })
+
+  it('the domain widens when every eligible word ties the person mean', () => {
+    const tied = [
+      { id: 'word:a', term: 'a', kind: 'word', count: 5, pmi: 1, testimony: { score: -1, n: 4 } },
+      { id: 'word:b', term: 'b', kind: 'word', count: 6, pmi: 1, testimony: { score: -1, n: 5 } },
+    ]
+    const layout = termStripLayout(tied, personTestimony, 860)
+    assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen when every word ties the mean: got [${layout.domainMin}, ${layout.domainMax}]`)
+  })
+
+  // issue #149 gap: a float personScore (e.g. -3.97) can sit a hair from its floor/ceil edge
+  // (-4) without ever equaling it, so an exact-value guard misses it and the dashed mean line
+  // draws on the last slice of the axis.
+  it('gap: a float person score near its domain edge still gets pushed off the edge', () => {
+    const floatPerson = { method: 'kikori:q8', score: -3.97, n: 200 }
+    const wide = [
+      { id: 'word:a', term: 'a', kind: 'word', count: 20, pmi: 1, testimony: { score: -1, n: 10 } },
+      { id: 'word:b', term: 'b', kind: 'word', count: 20, pmi: 1, testimony: { score: 2, n: 10 } },
+    ]
+    const layout = termStripLayout(wide, floatPerson, 860)
+    assert.ok(layout.domainMin < Math.floor(floatPerson.score), `domainMin must widen past the plain floor(-3.97) = -4: got ${layout.domainMin}`)
+    const overallX = layout.x(floatPerson.score)
+    const innerStart = STRIP_PAD
+    const span = layout.domainMax - layout.domainMin
+    const fraction = (overallX - innerStart) / (860 - 2 * innerStart)
+    assert.ok(fraction > 0.03, `the mean must sit clear of the left edge, got fraction=${fraction} (domain [${layout.domainMin}, ${layout.domainMax}], span ${span})`)
+  })
+
+  // issue #149 gap: termStripLayout only reads the nodes array it is handed; it filters
+  // eligibility with termMask but never applies any alias/own-name filtering of its own.
+  it('gap: termStripLayout consumes only the nodes array it is handed, never filtering by name', () => {
+    const layout = termStripLayout([golpe], personTestimony, 860)
+    const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
+    assert.deepEqual(ids, new Set(['word:golpe']), 'a node absent from the given array never appears, regardless of what it is named')
+    // A node shaped like a tracked person's own name: real alias filtering happens upstream
+    // in graphFor, so it never reaches here in production, but termStripLayout itself must
+    // apply no such rule — an eligible node it is handed is drawn regardless of its term.
+    const ownName = { id: 'word:lula', term: 'lula', kind: 'word', count: 30, pmi: 1, testimony: { score: -0.5, n: 5 } }
+    const withOwnName = termStripLayout([golpe, ownName], personTestimony, 860)
+    assert.deepEqual(
+      new Set(withOwnName.dots.map((d: { id: string }) => d.id)),
+      new Set(['word:golpe', 'word:lula']),
+      'termStripLayout draws every eligible node handed to it, with no alias/own-name filtering of its own',
+    )
+    const full = termStripLayout(stripNodes, personTestimony, 860)
+    assert.deepEqual(
+      new Set(full.dots.map((d: { id: string }) => d.id)),
+      new Set(['word:golpe', 'word:reforma', 'word:agenda']),
+      'every eligible node handed in appears; termStripLayout applies no filter beyond termMask',
+    )
+  })
+
+  // issue #149 gap: at count >= 100 with 24 nodes (limit=24, the widest select option), the
+  // strip must still fit STRIP_MAX_HEIGHT by shrinking dots together. All 24 sharing one score
+  // is the worst case for stacking (a spread-out score, like -5+(i%10) across 10 x-slots, never
+  // reaches STRIP_MAX_HEIGHT at all and so never exercises the while loop this pins).
+  it('gap: 24 same-score nodes with count >= 100 force the shrink loop and still fit STRIP_MAX_HEIGHT', () => {
+    const many = Array.from({ length: 24 }, (_, i) => ({
+      id: `word:w${i}`,
+      term: `w${i}`,
+      kind: 'word',
+      count: 100 + i,
+      pmi: 1,
+      testimony: { score: -1, n: 20 },
+    }))
+    const unshrunk = stripRadius(100, 860)
+    const layout = termStripLayout(many, personTestimony, 860)
+    assert.equal(layout.dots.length, 24)
+    assert.ok(layout.height <= STRIP_MAX_HEIGHT, `height ${layout.height} must fit STRIP_MAX_HEIGHT (${STRIP_MAX_HEIGHT})`)
+    assert.ok(
+      (layout.dots[0] as { r: number }).r < unshrunk - 1e-6,
+      `the shrink loop must have run: dot radius ${(layout.dots[0] as { r: number }).r} must be smaller than the unshrunk ${unshrunk}`,
+    )
   })
 })

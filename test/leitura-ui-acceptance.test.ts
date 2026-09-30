@@ -82,7 +82,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       assert.match(text, /S[óo]\s+documentos\s+do\s+Bluesky/i, `${name} must say only Bluesky documents have it`)
     }
     const tamanho = (html: string) => /Tamanho<\/dt><dd>([^<]*)<\/dd>/.exec(html)?.[1]
-    const keyDefault = atlasHtml.match(/<dl class="figure-key" id="keyDefault">[\s\S]*?<\/dl>/)?.[0] ?? ''
+    const keyDefault = atlasHtml.match(/<dl class="figure-key" id="keyDefault"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? ''
     assert.ok(keyDefault, '#keyDefault must exist in atlas.html')
     assert.match(tamanho(keyDefault) ?? '', /alcance/i, "#keyDefault's Tamanho must name alcance")
     assert.match(tamanho(help) ?? '', /alcance/i, "#help-atlas's Tamanho must name alcance")
@@ -184,7 +184,7 @@ describe('the page is a sequence of graphs', () => {
     assert.deepEqual(figures, ['workspace', 'testimony', 'compare', 'rising', 'week', 'lenses', 'attention', 'agenda', 'comention', 'persistence'])
     // Issue #92 moved the stats badge into this heading (<b id="atlasStats">), next to
     // <b id="testimonyLabel"> in figure 2's own heading below.
-    assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"><\/b><\/h2>/)
+    assert.match(html, /<span class="eyebrow">Gráfico 1<\/span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats">[^<]*<\/b><\/h2>/)
     assert.match(html, /<span class="eyebrow">Gráfico 2<\/span><h2 id="testimonyTitle">Avaliação por veículo/)
     assert.match(html, /<span class="eyebrow">Gráfico 3<\/span><h2 id="compareTitle">/)
     assert.match(html, /<span class="eyebrow">Gráfico 4<\/span><h2 id="risingTitle">/)

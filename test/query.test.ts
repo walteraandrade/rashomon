@@ -42,7 +42,7 @@ import {
   mondayOf,
   calendarDay,
 } from '../src/query.js'
-import { ATLAS_KINDS, candidatesQuery, compareParams, docsParams, params } from '../src/ui/api.js'
+import { ATLAS_KINDS, compareParams, docsParams, params } from '../src/ui/api.js'
 import { withEnv } from './env.js'
 
 // Every parser in src/query.ts, with no database: what each field defaults to, what it snaps
@@ -746,9 +746,6 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     const docs = docsParams({ days: '30', source: 'all' })
     assert.ok(LIMITS.includes(Number(docs.get('limit'))), 'the docs request sends a limit in LIMITS')
     assert.equal(docs.has('offset'), false)
-    const candidates = candidatesQuery({ days: '7' })
-    assert.ok(LIMITS.includes(Number(candidates.get('limit'))), 'the candidates request sends a limit in LIMITS')
-    assert.ok(MINS.includes(Number(candidates.get('min'))), 'the candidates request sends a min in MINS')
     const cmp = compareParams({ a: 'lula', b: 'bolsonaro', days: '30', source: 'all', limit: '20' })
     assert.ok(SMALL_LIMITS.includes(Number(cmp.get('limit'))))
   })

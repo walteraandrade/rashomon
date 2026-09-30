@@ -11,6 +11,7 @@ export type FigureTarget = { addEventListener: (type: string, listener: (event?:
 export type FigureOptions<T> = {
   name: string
   scope?: string
+  key?: (params: URLSearchParams) => string
   params: () => URLSearchParams | null
   fetch: (params: URLSearchParams, signal: AbortSignal) => Promise<T>
   ghost: () => void
@@ -25,7 +26,7 @@ export type FigureOptions<T> = {
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 export const createFigure = <T>(opts: FigureOptions<T>) => {
-  const { name, scope = name, params, fetch, ghost, paint, paintError, detail, onRelease } = opts
+  const { name, scope = name, key: keyOf = (q: URLSearchParams) => q.toString(), params, fetch, ghost, paint, paintError, detail, onRelease } = opts
   let data = $state.raw<T | undefined>(undefined)
   let loading = $state(false)
   let error = $state.raw<unknown>(null)
@@ -43,7 +44,7 @@ export const createFigure = <T>(opts: FigureOptions<T>) => {
       loading = false
       return
     }
-    const key = p.toString()
+    const key = keyOf(p)
     if (!readScope(scope, key)) {
       loading = true
       ghost()

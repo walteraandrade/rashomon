@@ -4,13 +4,6 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  STRIP_MAX_HEIGHT,
-  STRIP_MIN_R,
-  drawMap,
-  inspect,
-  paintAtlasLoading,
-  paintCandidates,
-  paintColumns,
   paintDocs,
   paintDocsHead,
   paintDocsLoading,
@@ -21,8 +14,6 @@ import {
   paintRisingLoading,
   paintRisingRuler,
   paintRisingRulerError,
-  paintSelection,
-  paintTermStrip,
   RARE_SHOWN,
   hasShares,
   liftBalance,
@@ -32,16 +23,11 @@ import {
   shareBalance,
   rulerTerms,
   stripLayout,
-  stripRadius,
-  termStripLayout,
-  testimonyLine,
-  wordMarkup,
 } from '../src/ui/render.js'
 import * as renderModule from '../src/ui/render.js'
-import { communityRanking, signed, termMask, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
-import { rulerLayout } from '../src/ui/layout.js'
-import { inlineStyles, withFakeDocument } from './fake-dom.js'
-import { withFiguresDom } from './fake-mount-dom.js'
+import { type CompareTerm, type Lenses, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { STRIP_MAX_HEIGHT, STRIP_MIN_R, rulerLayout, stripRadius } from '../src/ui/layout.js'
+import { withFakeDocument } from './fake-dom.js'
 
 // src/ui/render.ts: the painters, driven against a fake document and asserted on the markup
 // they emit. Nothing here fetches.
@@ -52,145 +38,6 @@ const metrics = (text: string, size: number) => text.length * size * 0.6
 
 const lensesData = (terms: CompareTerm[], a = 'all', b = 'lean:right'): Lenses => ({ days: 30, a: { lens: a, about: 900 }, b: { lens: b, about: 700 }, terms })
 const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
-
-const term = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 12, pmi: 1.4 }
-const graph = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [term], links: [] }
-
-const paint = (selected: string | null) =>
-  withFakeDocument(['inspector'], (els) => {
-    inspect({ graph, nodes: [term], links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {} })
-    return els.inspector.innerHTML
-  })
-
-describe('the inspector sparkline', () => {
-  const paintWithSpark = (sparkline?: Parameters<typeof inspect>[0]['sparkline']) =>
-    withFakeDocument(['inspector'], (els) => {
-      inspect({ graph, nodes: [term], links: [], selected: term.id, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, sparkline })
-      return els.inspector.innerHTML
-    })
-
-  it('a word in focus with no sparkline handed in paints none', () => {
-    assert.doesNotMatch(paintWithSpark(undefined), /sparkline/)
-  })
-
-  it('person-in-focus (no selection) never paints a sparkline, even if one is handed in', () => {
-    const html = withFakeDocument(['inspector'], (els) => {
-      inspect({ graph, nodes: [term], links: [], selected: null, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, sparkline: { state: 'ready', counts: [1, 2, 3, 4, 5, 6, 7] } })
-      return els.inspector.innerHTML
-    })
-    assert.doesNotMatch(html, /sparkline/)
-  })
-
-  it('"loading" paints a ghost of seven bars, never the word Carregando', () => {
-    const html = paintWithSpark({ state: 'loading' })
-    assert.match(html, /class="sparkline ghost-field"/)
-    assert.equal(html.match(/spark-ghost/g)?.length, 7)
-    assert.doesNotMatch(html, /Carregando/)
-  })
-
-  it('"ready" paints seven bars sized from the counts, tallest at the loudest day', () => {
-    const html = paintWithSpark({ state: 'ready', counts: [0, 1, 2, 10, 3, 0, 1] })
-    assert.equal(html.match(/spark-bar/g)?.length, 7)
-    const heights = [...html.matchAll(/--h:(\d+)px/g)].map((m) => Number(m[1]))
-    assert.equal(heights.length, 7)
-    assert.equal(heights[3], Math.max(...heights), 'the loudest day is the tallest bar')
-    assert.match(html, /Últimos 7 dias corridos/, 'the caption states this is a rolling window, not the atlas period')
-  })
-
-  it('"error" leaves the hole empty rather than inventing bars, and paints no note', () => {
-    const html = paintWithSpark({ state: 'error' })
-    assert.doesNotMatch(html, /spark-bar/)
-    assert.doesNotMatch(html, /spark-ghost/)
-    assert.match(html, /<div class="sparkline" aria-hidden="true"><\/div>/)
-    assert.doesNotMatch(html, /Não foi possível carregar/)
-    assert.doesNotMatch(html, /Últimos 7 dias/)
-  })
-
-  it('a failed sparkline never removes the inspector numbers that already painted', () => {
-    const html = paintWithSpark({ state: 'error' })
-    assert.match(html, /documentos/)
-    assert.match(html, /PMI bruto/)
-  })
-})
-
-describe('the inspector carries no documents button', () => {
-  it('neither state emits one, and neither holds a docs container', () => {
-    for (const html of [paint(term.id), paint(null)]) {
-      assert.doesNotMatch(html, /docs-open|id="docsOpen"|Ler documentos/)
-      assert.doesNotMatch(html, /id="docs"/, 'the documents live in the card, not in the inspector')
-      assert.doesNotMatch(html, /<details|id="termDocs"|id="showDocs"/)
-    }
-  })
-
-})
-
-describe('inspect: "no mesmo tema" (issue #217 AC7)', () => {
-  type NodeWithCommunity = { id: string; term: string; kind: string; count: number; pmi: number; community: number | null }
-  const golpe: NodeWithCommunity = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 3 }
-  const stf: NodeWithCommunity = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 3 }
-  const reforma: NodeWithCommunity = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, community: 9 }
-  const graphWith = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf, reforma], links: [] }
-
-  const paintWith = (mask: 'avaliacao' | 'tema' | 'off' | undefined, selected: string | null, nodes: NodeWithCommunity[] = [golpe, stf, reforma]) =>
-    withFakeDocument(['inspector'], (els) => {
-      inspect({ graph: graphWith, nodes, links: [], selected, sort: 'pmi', daysLabel: '30 dias', onChoose: () => {}, mask })
-      return els.inspector.innerHTML
-    })
-
-  it('renders only when mask is tema, the focused term has a community, and another node on the map shares it', () => {
-    assert.match(paintWith('tema', golpe.id), /No mesmo tema/)
-    assert.doesNotMatch(paintWith('avaliacao', golpe.id), /No mesmo tema/, 'avaliação mode never shows the tema list')
-    assert.doesNotMatch(paintWith('off', golpe.id), /No mesmo tema/)
-    assert.doesNotMatch(paintWith(undefined, golpe.id), /No mesmo tema/, 'no mask state handed in: same as off')
-    assert.doesNotMatch(paintWith('tema', reforma.id), /No mesmo tema/, 'no other node shares community 9')
-    assert.doesNotMatch(paintWith('tema', golpe.id, [golpe, reforma]), /No mesmo tema/, 'fewer than two members sharing the community renders nothing')
-  })
-
-  it('the focused term itself having no community renders nothing, never an empty heading (issue #217 AC7)', () => {
-    const solo = { id: 'word:solo', term: 'solo', kind: 'word', count: 15, pmi: 1.1, community: null }
-    assert.doesNotMatch(paintWith('tema', solo.id, [golpe, stf, solo]), /No mesmo tema/, "the focused term's own null community: nothing")
-  })
-
-  it('lists every community mate, never the focused term itself', () => {
-    const html = paintWith('tema', golpe.id)
-    assert.match(html, /data-related="word:stf"/)
-    assert.doesNotMatch(html, /data-related="word:golpe"/, 'the focused term never lists itself')
-    assert.doesNotMatch(html, /data-related="word:reforma"/, 'reforma is a different community')
-  })
-})
-
-describe("the person's own entry points to her documents", () => {
-  const layout = {
-    placed: [{ id: term.id, term: 'reforma', kind: 'word', count: 12, pmi: 1.4, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['reforma'], lineHeight: 22, rank: 0, score: 1.4 }],
-    overflow: [],
-    center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
-  }
-
-  it('the centre of the map is a real button, and painting it fetches nothing', () => {
-    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
-      const calls: string[] = []
-      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'pmi', onChoose: () => {}, onShowPerson: () => calls.push('person') })
-      assert.match(els.viewport.innerHTML, /<g class="center-label" data-person-docs role="button" tabindex="0"/)
-      assert.equal(els.viewport.innerHTML.match(/data-person-docs/g)?.length, 1, 'exactly one centre, and it is the entry point')
-      assert.doesNotMatch(els.viewport.innerHTML, /class="atlas-word"[^>]*data-person-docs/, 'a word is never the person')
-      assert.equal(calls.length, 0, 'painting opens nothing on its own')
-    })
-  })
-
-  it('the list has no centre, so it carries the same entry at its head', () => {
-    withFakeDocument(['columns'], (els) => {
-      const calls: string[] = []
-      paintColumns({
-        nodes: [term], links: [], selected: null, search: '', sort: 'pmi', mode: 'columns',
-        onChoose: () => {}, onShowPerson: () => calls.push('person'), personName: 'Alguém', about: 40,
-      })
-      assert.match(els.columns.innerHTML, /<div class="column-person" data-person-docs role="button" tabindex="0"/)
-      assert.match(els.columns.innerHTML, /<strong>Alguém<\/strong>/)
-      assert.equal(els.columns.innerHTML.match(/data-person-docs/g)?.length, 1)
-      assert.equal(calls.length, 0, 'painting opens nothing on its own')
-    })
-  })
-})
 
 describe('paintDocsHead / paintDocs: the card that holds the documents', () => {
   it('paintDocsHead writes whatever the figure that asked calls its own reading', () => {
@@ -283,413 +130,6 @@ describe('stripLayout: the outlets on the axis', () => {
     assert.ok(grown.dots.every((d) => Math.abs(d.r - STRIP_MIN_R) < 1e-9))
   })
 
-})
-
-// Issue #149: figure 1's third view is a beeswarm strip keyed by each word's own kikori mean,
-// coloured the same way termMask already colours the map and the columns.
-describe('#149 AC2/AC3/AC4: termStripLayout / paintTermStrip, words on the kikori axis', () => {
-  const personTestimony = { method: 'kikori:q8', score: -1, n: 200 }
-  const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }
-  const reforma = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0, n: 6 } }
-  const agenda = { id: 'word:agenda', term: 'agenda', kind: 'word', count: 15, pmi: 1.1, testimony: { score: 2.5, n: 9 } }
-  const rare = { id: 'word:rare', term: 'rara', kind: 'word', count: 3, pmi: 0.5, testimony: { score: 4, n: 2 } } // n < MASK_MIN
-  const unscored = { id: 'word:unscored', term: 'silencio', kind: 'word', count: 7, pmi: 0.8, testimony: null } // testimony: null
-  const missing = { id: 'word:missing', term: 'ausente', kind: 'word', count: 5, pmi: 0.6 } // testimony: undefined
-  const stripNodes = [golpe, reforma, agenda, rare, unscored, missing]
-
-  it('only the nodes termMask accepts are included, and x is monotonic non-decreasing in score', () => {
-    const layout = termStripLayout(stripNodes, personTestimony, 860)
-    const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
-    assert.deepEqual(ids, new Set(['word:golpe', 'word:reforma', 'word:agenda']), 'rare (n<3), unscored (testimony: null) and missing (testimony: undefined) must be excluded')
-    const byScore = [...layout.dots].sort((a: { score: number }, b: { score: number }) => a.score - b.score)
-    for (let i = 1; i < byScore.length; i++) assert.ok(byScore[i].x >= byScore[i - 1].x, 'x must never decrease as score increases')
-  })
-
-  it('excludes every node when the person has no eligible score (stats.testimony absent or its score null/undefined)', () => {
-    assert.equal(termStripLayout(stripNodes, { method: 'kikori', score: null, n: 0 }, 860).dots.length, 0, 'a null person score')
-    assert.equal(termStripLayout(stripNodes, undefined, 860).dots.length, 0, 'an absent stats.testimony')
-  })
-
-  it('the domain widens to at least 2 with exactly one eligible word', () => {
-    const layout = termStripLayout([golpe], personTestimony, 860)
-    assert.equal(layout.dots.length, 1)
-    assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen for a single point: got [${layout.domainMin}, ${layout.domainMax}]`)
-  })
-
-  it('the domain widens when every eligible word ties the person mean', () => {
-    const tied = [
-      { id: 'word:a', term: 'a', kind: 'word', count: 5, pmi: 1, testimony: { score: -1, n: 4 } },
-      { id: 'word:b', term: 'b', kind: 'word', count: 6, pmi: 1, testimony: { score: -1, n: 5 } },
-    ]
-    const layout = termStripLayout(tied, personTestimony, 860)
-    assert.ok(layout.domainMax - layout.domainMin >= 2, `domain must widen when every word ties the mean: got [${layout.domainMin}, ${layout.domainMax}]`)
-  })
-
-  // issue #149 gap: a float personScore (e.g. -3.97) can sit a hair from its floor/ceil edge
-  // (-4) without ever equaling it, so an exact-value guard misses it and the dashed mean line
-  // draws on the last slice of the axis.
-  it('gap: a float person score near its domain edge still gets pushed off the edge', () => {
-    const floatPerson = { method: 'kikori:q8', score: -3.97, n: 200 }
-    const wide = [
-      { id: 'word:a', term: 'a', kind: 'word', count: 20, pmi: 1, testimony: { score: -1, n: 10 } },
-      { id: 'word:b', term: 'b', kind: 'word', count: 20, pmi: 1, testimony: { score: 2, n: 10 } },
-    ]
-    const layout = termStripLayout(wide, floatPerson, 860)
-    assert.ok(layout.domainMin < Math.floor(floatPerson.score), `domainMin must widen past the plain floor(-3.97) = -4: got ${layout.domainMin}`)
-    const overallX = layout.x(floatPerson.score)
-    const innerStart = 28 // STRIP_PAD, mirrored here since it is not exported
-    const span = layout.domainMax - layout.domainMin
-    const fraction = (overallX - innerStart) / (860 - 2 * innerStart)
-    assert.ok(fraction > 0.03, `the mean must sit clear of the left edge, got fraction=${fraction} (domain [${layout.domainMin}, ${layout.domainMax}], span ${span})`)
-  })
-
-  // issue #149 gap: termStripLayout only reads the nodes array it is handed; it filters
-  // eligibility with termMask but never applies any alias/own-name filtering of its own.
-  it('gap: termStripLayout consumes only the nodes array it is handed, never filtering by name', () => {
-    const layout = termStripLayout([golpe], personTestimony, 860)
-    const ids = new Set(layout.dots.map((d: { id: string }) => d.id))
-    assert.deepEqual(ids, new Set(['word:golpe']), 'a node absent from the given array never appears, regardless of what it is named')
-    // A node shaped like a tracked person's own name: real alias filtering happens upstream
-    // in graphFor, so it never reaches here in production, but termStripLayout itself must
-    // apply no such rule — an eligible node it is handed is drawn regardless of its term.
-    const ownName = { id: 'word:lula', term: 'lula', kind: 'word', count: 30, pmi: 1, testimony: { score: -0.5, n: 5 } }
-    const withOwnName = termStripLayout([golpe, ownName], personTestimony, 860)
-    assert.deepEqual(
-      new Set(withOwnName.dots.map((d: { id: string }) => d.id)),
-      new Set(['word:golpe', 'word:lula']),
-      'termStripLayout draws every eligible node handed to it, with no alias/own-name filtering of its own',
-    )
-    const full = termStripLayout(stripNodes, personTestimony, 860)
-    assert.deepEqual(
-      new Set(full.dots.map((d: { id: string }) => d.id)),
-      new Set(['word:golpe', 'word:reforma', 'word:agenda']),
-      'every eligible node handed in appears; termStripLayout applies no filter beyond termMask',
-    )
-  })
-
-  // issue #149 gap: at count >= 100 with 24 nodes (limit=24, the widest select option), the
-  // strip must still fit STRIP_MAX_HEIGHT by shrinking dots together. All 24 sharing one score
-  // is the worst case for stacking (a spread-out score, like -5+(i%10) across 10 x-slots, never
-  // reaches STRIP_MAX_HEIGHT at all and so never exercises the while loop this pins).
-  it('gap: 24 same-score nodes with count >= 100 force the shrink loop and still fit STRIP_MAX_HEIGHT', () => {
-    const many = Array.from({ length: 24 }, (_, i) => ({
-      id: `word:w${i}`,
-      term: `w${i}`,
-      kind: 'word',
-      count: 100 + i,
-      pmi: 1,
-      testimony: { score: -1, n: 20 },
-    }))
-    const unshrunk = stripRadius(100, 860)
-    const layout = termStripLayout(many, personTestimony, 860)
-    assert.equal(layout.dots.length, 24)
-    assert.ok(layout.height <= STRIP_MAX_HEIGHT, `height ${layout.height} must fit STRIP_MAX_HEIGHT (${STRIP_MAX_HEIGHT})`)
-    assert.ok(
-      (layout.dots[0] as { r: number }).r < unshrunk - 1e-6,
-      `the shrink loop must have run: dot radius ${(layout.dots[0] as { r: number }).r} must be smaller than the unshrunk ${unshrunk}`,
-    )
-  })
-
-  it('paintTermStrip draws one circle per eligible node, each with data-node and an inline --tone equal to termMask, none for an excluded node', () => {
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
-      const markup = els.atlasStrip.innerHTML
-      const drawn = [...markup.matchAll(/data-node="([^"]+)"/g)].map((m) => m[1])
-      assert.deepEqual(new Set(drawn), new Set(['word:golpe', 'word:reforma', 'word:agenda']))
-      for (const id of ['word:rare', 'word:unscored', 'word:missing']) assert.ok(!drawn.includes(id), `${id} must not be drawn`)
-      // issue #149 gap: --tone must equal termMask's own return value, not merely be present.
-      const tone = markup.match(/data-node="word:golpe"[^>]*--tone:([^"]+)"/)?.[1]
-      assert.equal(tone, termMask(golpe, personTestimony.score), "the emitted --tone must equal termMask(node, personScore)'s return value")
-      for (const value of inlineStyles(markup)) assert.ok(value.startsWith('--'), `paintTermStrip emitted style="${value}"`)
-    })
-  })
-
-  it('the axis-end labels are signed domainMin/domainMax, not a fixed ±10', () => {
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      const layout = termStripLayout(stripNodes, personTestimony, 860)
-      paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
-      assert.ok(
-        els.atlasStrip.innerHTML.includes(`<div class="strip-axis-labels"><span>${signed(layout.domainMin)} contra</span><span>${signed(layout.domainMax)} a favor</span></div>`),
-        els.atlasStrip.innerHTML,
-      )
-    })
-  })
-
-  it('the dashed mean line and its "média da pessoa" label only appear when the person has a score', () => {
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
-      assert.match(els.atlasStrip.innerHTML, /média da pessoa/)
-      assert.match(els.atlasStrip.innerHTML, /<line class="strip-overall"/, 'a non-null score must also draw the dashed line, not just the label')
-    })
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: stripNodes, personTestimony: { method: 'kikori', score: null, n: 0 }, onChoose: () => {}, width: 860 })
-      assert.doesNotMatch(els.atlasStrip.innerHTML, /média da pessoa/, 'no person score, no mean line')
-      assert.doesNotMatch(els.atlasStrip.innerHTML, /<line class="strip-overall"/, 'no person score, no dashed line either')
-    })
-  })
-
-  it('an empty recorte and a recorte with zero eligible words each get their own empty message', () => {
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [], personTestimony, onChoose: () => {}, width: 860 })
-      assert.match(els.atlasStrip.innerHTML, /Nenhum termo neste recorte\./)
-    })
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [unscored], personTestimony, onChoose: () => {}, width: 860 })
-      assert.match(els.atlasStrip.innerHTML, /Nenhuma palavra com avaliação suficiente neste recorte\./)
-    })
-  })
-
-  it('the hidden-count note reports 0 (hidden), 1 (singular) and N excluded words', () => {
-    const noteText = (els: Record<string, { innerHTML: string; textContent: string }>) => String(els.stripHiddenNote.innerHTML) + String(els.stripHiddenNote.textContent)
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [golpe, reforma, agenda], personTestimony, onChoose: () => {}, width: 860 })
-      assert.equal(els.stripHiddenNote.hidden, true, 'nothing excluded: the note stays hidden')
-    })
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [golpe, reforma, agenda, rare], personTestimony, onChoose: () => {}, width: 860 })
-      assert.equal(els.stripHiddenNote.hidden, false)
-      assert.match(noteText(els), /1 palavra deixada de fora/, 'singular at exactly one excluded word')
-    })
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: stripNodes, personTestimony, onChoose: () => {}, width: 860 })
-      assert.equal(els.stripHiddenNote.hidden, false)
-      assert.match(noteText(els), /3 palavras deixadas de fora/, 'plural at N excluded words')
-    })
-  })
-
-  // issue #149 gap: pins the exact wording of both hidden-note variants, singular and plural,
-  // for the two reasons a word is excluded — no eligible person mean, and too few scored texts.
-  it('gap: hidden-note wording is pinned for both exclusion reasons, singular and plural', () => {
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [golpe], personTestimony: { method: 'kikori', score: null, n: 0 }, onChoose: () => {}, width: 860 })
-      assert.equal(els.stripHiddenNote.textContent, '1 palavra deixada de fora: esta pessoa não tem média de avaliação neste recorte.')
-    })
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [golpe, reforma], personTestimony: { method: 'kikori', score: null, n: 0 }, onChoose: () => {}, width: 860 })
-      assert.equal(els.stripHiddenNote.textContent, '2 palavras deixadas de fora: esta pessoa não tem média de avaliação neste recorte.')
-    })
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [golpe, rare], personTestimony, onChoose: () => {}, width: 860 })
-      assert.equal(els.stripHiddenNote.textContent, '1 palavra deixada de fora por ter menos de 3 textos avaliados.')
-    })
-    withFakeDocument(['atlasStrip', 'stripHiddenNote'], (els) => {
-      paintTermStrip({ nodes: [golpe, rare, unscored], personTestimony, onChoose: () => {}, width: 860 })
-      assert.equal(els.stripHiddenNote.textContent, '2 palavras deixadas de fora por terem menos de 3 textos avaliados.')
-    })
-  })
-})
-
-describe('wordMarkup / paintColumns / paintSelection / testimonyLine: words coloured against the person mean', () => {
-  const person = { method: 'kikori:q8', score: -2.4, n: 500 }
-  const placed = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9, ...over })
-
-  it('wordMarkup carries the --mask colour and the testimony in its title only when it has one', () => {
-    const masked = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 } }), 'count', person.score))
-    assert.match(masked, /style="--size:20px;--mask:rgb\(255,122,138\)"/)
-    assert.match(masked, /· avaliação -4,9 em 12 textos<\/title>/)
-    for (const value of inlineStyles(masked)) assert.ok(value.startsWith('--'))
-    const bare = String(wordMarkup(placed({}), 'count', person.score))
-    assert.doesNotMatch(bare, /--mask/)
-    assert.doesNotMatch(bare, /avaliação/)
-    assert.doesNotMatch(String(wordMarkup(placed({ testimony: { score: -4.9, n: 2 } }), 'count', person.score)), /--mask/, 'under the floor: title yes, colour no')
-  })
-
-  // AC13: wordMarkup's <g class="atlas-word"> carries a data-kind attribute matching the node's
-  // own kind, org included, so atlas.css's dashed-underline rule can target it.
-  it('wordMarkup carries data-kind matching the node kind, for word/hashtag/phrase/org (issue #209 AC13)', () => {
-    for (const kind of ['word', 'hashtag', 'phrase', 'org']) {
-      const markup = String(wordMarkup(placed({ kind }), 'count', person.score))
-      assert.match(markup, new RegExp(`<g class="atlas-word"[^>]*\\sdata-kind="${kind}"`), `expected data-kind="${kind}" for a ${kind} node`)
-    }
-  })
-
-  it('paintColumns colours cards the same way and spells the score out', () => {
-    withFakeDocument(['columns'], (els) => {
-      const nodes = [
-        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: 0.1, n: 20 } },
-        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, testimony: null },
-      ]
-      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, personTestimony: person })
-      assert.match(els.columns.innerHTML, /data-col="word:a" style="--mask:rgb\(116,220,134\)">/, '+2.5 over the person: full green')
-      assert.match(els.columns.innerHTML, /· avaliação \+0,1<\/span>/)
-      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/, 'no testimony, no style attribute')
-    })
-  })
-
-  it('testimonyLine reads the two numbers out for the selected term', () => {
-    const n = { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: -3.1, n: 12 } }
-    assert.match(String(testimonyLine(n, person)), /<strong class="score-highlight">-3,1<\/strong> de avaliação em 12 textos, contra -2,4 da pessoa no recorte\. mais hostis que a média da pessoa\./)
-    assert.match(String(testimonyLine({ ...n, testimony: { score: -2.2, n: 12 } }, person)), /na média da pessoa/)
-    assert.match(String(testimonyLine({ ...n, testimony: { score: 5, n: 2 } }, person)), /poucos textos para comparar/)
-    assert.equal(testimonyLine({ ...n, testimony: null }, person), '')
-    assert.equal(testimonyLine(n, undefined), '')
-    assert.equal(testimonyLine(n, { ...person, score: null }), '')
-  })
-
-  it('paintSelection masks only when the person has a mean to compare against', () => {
-    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, mask: 'avaliacao' as const }
-    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
-      paintSelection({ ...args, personTestimony: { method: 'kikori', score: -2.1, n: 40 } })
-      assert.equal(els.columns.classes['is-masked'], true)
-      paintSelection({ ...args, personTestimony: { method: 'kikori', score: null, n: 0 } })
-      assert.equal(els.columns.classes['is-masked'], false, 'no mean: the words keep their ink instead of all going grey')
-      paintSelection({ ...args, personTestimony: undefined })
-      assert.equal(els.columns.classes['is-masked'], false)
-    })
-  })
-
-  it('paintSelection: MaskState is three-way and mutually exclusive (issue #217 AC4)', () => {
-    const args = { nodes: [], links: [], selected: null, search: '', layout: null, mode: 'map', sort: 'count', onChoose: () => {}, personTestimony: { method: 'kikori', score: -2.1, n: 40 } }
-    withFakeDocument(['viewport', 'columns', 'searchNote', 'edges'], (els) => {
-      paintSelection({ ...args, mask: 'avaliacao' })
-      assert.equal(els.columns.classes['is-masked'], true)
-      assert.equal(els.columns.classes['is-themed'], false)
-      paintSelection({ ...args, mask: 'tema' })
-      assert.equal(els.columns.classes['is-masked'], false)
-      assert.equal(els.columns.classes['is-themed'], true)
-      paintSelection({ ...args, mask: 'off' })
-      assert.equal(els.columns.classes['is-masked'], false)
-      assert.equal(els.columns.classes['is-themed'], false)
-    })
-  })
-
-  it('wordMarkup and paintColumns emit --theme only when the node is inside the ranking, in addition to --mask (issue #217 AC3/AC5)', () => {
-    const ranking = new Map([[3, 1]])
-    const themed = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: 3 }), 'count', person.score, ranking))
-    assert.match(themed, /--mask:rgb\(255,122,138\)/)
-    assert.match(themed, /--theme:var\(--theme-1\)/)
-    const untouchedCommunity = String(wordMarkup(placed({ community: 9 }), 'count', person.score, ranking))
-    assert.doesNotMatch(untouchedCommunity, /--theme/, 'a community outside the ranking paints no --theme, not a muted literal')
-    const nullCommunity = String(wordMarkup(placed({ community: null }), 'count', person.score, ranking))
-    assert.doesNotMatch(nullCommunity, /--theme/)
-
-    withFakeDocument(['columns'], (els) => {
-      const nodes = [
-        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, testimony: { score: 0.1, n: 20 }, community: 3 },
-        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, testimony: null, community: 9 },
-      ]
-      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, personTestimony: person, ranking })
-      assert.match(els.columns.innerHTML, /data-col="word:a" style="--mask:rgb\(116,220,134\);--theme:var\(--theme-1\)">/)
-      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/, 'community outside the ranking and no testimony: no style attribute')
-    })
-  })
-})
-
-describe('drawMap threads ranking into every placed word, and themeLegend names build coverage (issue #217 AC6/AC13)', () => {
-  const layout = {
-    placed: [
-      { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 3, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
-      { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: null, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 },
-    ],
-    overflow: [],
-    center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
-  }
-  const themeLegendSpan = (markup: string) => markup.match(/<span id="themeLegend" hidden>([^<]*)<\/span>/)?.[1] ?? ''
-
-  it('a top-6 community produces at least one --theme style in the painted SVG, and the legend names it', () => {
-    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
-      const ranking = new Map([[3, 1]])
-      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
-      assert.match(els.viewport.innerHTML, /--theme:var\(--theme-1\)/)
-      assert.match(themeLegendSpan(els.legend.innerHTML), /caminharam juntas/)
-    })
-  })
-
-  it('no ranking handed in: no --theme anywhere, and the key states the build has no communities for this recorte', () => {
-    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
-      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {} })
-      assert.doesNotMatch(els.viewport.innerHTML, /--theme/)
-      const span = themeLegendSpan(els.legend.innerHTML)
-      assert.match(span, /não tem temas calculados/)
-      assert.doesNotMatch(span, /textos avaliados/, 'the tema key must never borrow maskLegend\'s MASK_MIN document-count wording')
-    })
-  })
-})
-
-describe('theme mask acceptance: coverage beyond the builder\'s own tests (issue #217)', () => {
-  const person = { method: 'kikori:q8', score: -2.4, n: 500 }
-  const placed = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9, ...over })
-
-  it('wordMarkup emits --theme only in addition to (never instead of) an existing --mask style (issue #217 AC5)', () => {
-    const ranking = new Map([[7, 1]])
-    const both = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: 7 }), 'count', person.score, ranking))
-    assert.match(both, /--mask:rgb\(255,122,138\)/)
-    assert.match(both, /--theme:var\(--theme-1\)/)
-    const maskOnly = String(wordMarkup(placed({ testimony: { score: -4.9, n: 12 }, community: null }), 'count', person.score, ranking))
-    assert.match(maskOnly, /--mask:/)
-    assert.doesNotMatch(maskOnly, /--theme/)
-    const themeOnly = String(wordMarkup(placed({ community: 7 }), 'count', person.score, ranking))
-    assert.doesNotMatch(themeOnly, /--mask/)
-    assert.match(themeOnly, /--theme:var\(--theme-1\)/)
-    const neither = String(wordMarkup(placed({}), 'count', person.score, ranking))
-    assert.doesNotMatch(neither, /--mask/)
-    assert.doesNotMatch(neither, /--theme/)
-  })
-
-  it('paintColumns applies the same --theme rule to .column-card (issue #217 AC5)', () => {
-    withFakeDocument(['columns'], (els) => {
-      const ranking = new Map([[7, 1]])
-      const nodes = [
-        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 7 },
-        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: null },
-      ]
-      paintColumns({ nodes, links: [], selected: null, search: '', sort: 'count', mode: 'columns', onChoose: () => {}, ranking })
-      assert.match(els.columns.innerHTML, /data-col="word:a" style="--theme:var\(--theme-1\)">/)
-      assert.match(els.columns.innerHTML, /data-col="word:b"><span>/)
-    })
-  })
-
-  it('drawMap threads its ranking parameter into every placed word, not just the first (issue #217 AC6)', () => {
-    const layout = {
-      placed: [
-        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: 11, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
-        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, community: 22, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 },
-      ],
-      overflow: [],
-      center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
-    }
-    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
-      const ranking = communityRanking(layout.placed)
-      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
-      const wordBlock = (id: string) => els.viewport.innerHTML.match(new RegExp(`<g class="atlas-word"[^]*?data-node="${id}"[^]*?</g>`))?.[0] ?? ''
-      assert.match(wordBlock('word:a'), /--theme:var\(--theme-1\)/)
-      assert.match(wordBlock('word:b'), /--theme:var\(--theme-2\)/)
-    })
-  })
-
-  it('a community-mate entry is reachable through onChoose by a real click, the same wiring .related buttons use (issue #217 AC8)', async () => {
-    const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, community: 5 }
-    const stf = { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8, community: 5 }
-    const graph = { person: { id: 'p1', name: 'Alguém' }, stats: { about: 40 }, nodes: [golpe, stf], links: [] }
-    await withFiguresDom(async (els) => {
-      const chosen: string[] = []
-      inspect({ graph, nodes: [golpe, stf], links: [], selected: golpe.id, sort: 'pmi', daysLabel: '30 dias', onChoose: (id) => chosen.push(id), mask: 'tema' })
-      const mate = els.inspector.querySelectorAll('[data-related]').find((el: any) => el.dataset.related === stf.id)
-      assert.ok(mate, 'the community mate must be a real, queryable [data-related] node')
-      mate.fire('click')
-      assert.deepEqual(chosen, [stf.id])
-    })
-  })
-
-  it("when every node's community is null or the field is absent entirely, tema state paints no --theme and the key states the build has no communities, distinct from the MASK_MIN wording (issue #217 AC13)", () => {
-    const layout = {
-      placed: [
-        { id: 'word:a', term: 'a', kind: 'word', count: 9, pmi: 1, community: null, x: 0, y: -100, w: 90, h: 30, size: 20, lines: ['a'], lineHeight: 22, rank: 0, score: 9 },
-        { id: 'word:b', term: 'b', kind: 'word', count: 5, pmi: 1, x: 0, y: 100, w: 90, h: 30, size: 20, lines: ['b'], lineHeight: 22, rank: 1, score: 5 }, // field absent entirely
-      ],
-      overflow: [],
-      center: { lines: ['Alguém'], size: 52, lineHeight: 57, w: 240, h: 145, x: 0, y: 0 },
-    }
-    withFakeDocument(['viewport', 'overflow', 'legend'], (els) => {
-      const ranking = communityRanking(layout.placed)
-      assert.equal(ranking.size, 0)
-      drawMap({ layout, personName: 'Alguém', about: 40, mode: 'map', sort: 'count', onChoose: () => {}, ranking })
-      assert.doesNotMatch(els.viewport.innerHTML, /--theme/)
-      const span = els.legend.innerHTML.match(/<span id="themeLegend" hidden>([^<]*)<\/span>/)?.[1] ?? ''
-      assert.match(span, /não tem temas|sem temas|não têm temas/i, 'names build coverage')
-      assert.doesNotMatch(span, /\d+ textos avaliados/, 'never the MASK_MIN document-count floor wording')
-    })
-  })
 })
 
 describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)', () => {
@@ -1036,46 +476,7 @@ describe('rulerTerms: the amended balance formula clamps each side at zero befor
   })
 })
 
-describe('paintCandidates (issue #32 AC7)', () => {
-  it('renders name, docs, sources, trend and the sample docs on click, in pt-BR', () => {
-    const markup = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
-      paintCandidates({
-        candidates: [
-          { name: 'Hugo Motta', count: 5, sources: 1, previous: 0, samples: [{ id: '7', source: 'gnews', text: 'texto de exemplo' }] },
-          { name: 'Davi Alcolumbre', count: 4, sources: 2, previous: 9, samples: [] },
-        ],
-      })
-      return { label: els.candidateLabel.textContent, list: els.candidateList.innerHTML }
-    })
-    assert.equal(markup.label, '2')
-    for (const fragment of ['Hugo Motta', '5 docs', '1 fonte', 'novo', '2 fontes', '↓ era 9', 'data-candidate="0"', 'aria-expanded="false"', 'class="samples"', 'texto de exemplo', 'Sem exemplos neste período.'])
-      assert.ok(markup.list.includes(fragment), fragment)
-  })
-
-  it('says so in pt-BR when no name clears the bar, instead of rendering an empty list', () => {
-    const markup = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
-      paintCandidates({ candidates: [] })
-      return { label: els.candidateLabel.textContent, list: els.candidateList.innerHTML }
-    })
-    assert.equal(markup.label, '')
-    assert.match(markup.list, /Nenhum nome novo com 3 ou mais documentos neste período\./)
-  })
-})
-
 describe('loading ghosts hold each figure\'s silhouette, with no invented words', () => {
-  it('paintAtlasLoading draws the map ring and ghost bars, not a Carregando hole', () => {
-    withFakeDocument(['viewport', 'inspector'], (els) => {
-      paintAtlasLoading()
-      assert.match(els.viewport.innerHTML, /ghost-field/)
-      assert.match(els.viewport.innerHTML, /class="boundary"/)
-      assert.match(els.viewport.innerHTML, /<rect class="ghost"/)
-      assert.doesNotMatch(els.viewport.innerHTML, /Carregando/)
-      assert.match(els.inspector.innerHTML, /ghost-kicker/)
-      assert.equal(els.viewport.getAttribute('aria-busy'), 'true')
-      for (const value of inlineStyles(els.viewport.innerHTML + els.inspector.innerHTML)) assert.ok(value.startsWith('--'), `atlas ghost emitted style="${value}"`)
-    })
-  })
-
   it('paintDocsLoading keeps geometry and stays mute', () => {
     withFakeDocument(['docs'], (els) => {
       paintDocsLoading()
@@ -1273,21 +674,17 @@ describe('paintRisingRuler / paintRisingRulerError / paintRisingLoading', () => 
   })
 })
 
-describe('paintTermStrip keeps its exported shape after the marks.ts extraction', () => {
-  it('render.ts still exports paintTermStrip and termStripLayout as functions, and no week painter', () => {
-    assert.equal(typeof paintTermStrip, 'function')
-    assert.equal(typeof termStripLayout, 'function')
-    for (const name of ['paintWeek', 'paintWeekLoading', 'paintWeekError']) assert.equal((renderModule as Record<string, unknown>)[name], undefined, `${name} moved into Week.svelte`)
+describe('render.ts no longer carries the atlas or week painters', () => {
+  it('exports none of the painters that moved into Atlas.svelte and Week.svelte', () => {
+    for (const name of ['paintTermStrip', 'termStripLayout', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'wordMarkup', 'paintAtlasLoading', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError', 'paintWeek', 'paintWeekLoading', 'paintWeekError']) assert.equal((renderModule as Record<string, unknown>)[name], undefined, `${name} is gone`)
   })
 })
-
 
 // Issue #174.
 describe('one class scheme, one rx source, one text shape for the three word marks', () => {
   const root = dirname(dirname(fileURLToPath(import.meta.url)))
   const renderSrc = readFileSync(join(root, 'src', 'ui', 'render.ts'), 'utf8')
   const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
-  const placedSample: PlacedTerm = { id: 'word:x', term: 'x', kind: 'word', pmi: 1, rank: 0, x: 0, y: 0, w: 60, h: 30, size: 20, lineHeight: 24, lines: ['x'], count: 9, score: 9 }
 
   // The block-body finder for a class selector, tolerant of a rule declared with several
   // comma-separated selectors (".ruler-glow, .week-glow { rx: 8px }" is how the spec's own
@@ -1310,21 +707,11 @@ describe('one class scheme, one rx source, one text shape for the three word mar
       assert.ok(!renderSrc.includes(literal), `render.ts must not contain ${JSON.stringify(literal)}`)
   })
 
-  it('the atlas word markup uses atlas-word/atlas-glow/atlas-hit/atlas-text', () => {
-    const html = String(wordMarkup(placedSample, 'count', null))
-    assert.match(html, /<g class="atlas-word[^"]*"/)
-    assert.match(html, /<rect class="atlas-glow"/)
-    assert.match(html, /<rect class="atlas-hit"/)
-    assert.match(html, /<text class="atlas-text"/)
-  })
-
   it('the map-svg.is-masked mask-and-underline rule still targets the atlas word class', () => {
     assert.match(css, /\.map-svg\.is-masked \.atlas-word/)
   })
 
   it('no glow or hit rect emitted by any of the three builders carries an rx attribute', async () => {
-    const atlasHtml = String(wordMarkup(placedSample, 'count', null))
-    assert.doesNotMatch(atlasHtml, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
   })
 
   it('atlas.css sets rx on the six rules, at the same values the markup used to carry', () => {

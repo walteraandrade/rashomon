@@ -432,3 +432,27 @@ export const sinceLabel = (since: string) => `a série começa em ${dayMonth(sin
 // Mondays from first_week to the current one, both included; null with no series yet.
 export const seriesWeeks = (firstWeek: string | null, now = new Date()) =>
   firstWeek ? Math.max(1, Math.round((Date.parse(mondayOf(todayBrt(now))) - Date.parse(firstWeek)) / (7 * 86_400_000)) + 1) : null
+
+// Figure 7's copy, text only. A '2026-08-03' day string read back as a short pt-BR label, in UTC,
+// never weekDayLabel's BRT.
+export const attentionDayLabel = (day: string) => {
+  const d = new Date(`${day}T00:00:00Z`)
+  const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'short' }).format(d).replace(/\.$/, '')
+  const dom = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: 'numeric' }).format(d)
+  return `${weekday} ${dom}`
+}
+
+const dayWord = (n: number) => (n === 1 ? 'dia' : 'dias')
+
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+
+// lag > 0: views peaked after mentions (press led). lag < 0: views peaked first (public led).
+export const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
+  const lag = daysBetween(mentionsPeak, viewsPeak)
+  if (lag > 0) return `a imprensa veio ${lag} ${dayWord(lag)} antes`
+  if (lag < 0) return `o público buscou ${Math.abs(lag)} ${dayWord(Math.abs(lag))} antes`
+  return 'os dois picos caíram no mesmo dia'
+}
+
+// A peakless row states its own "sem dado", so the shared note stays silent.
+export const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => (mentionsPeak && viewsPeak ? attentionLagSentence(mentionsPeak, viewsPeak) : '')

@@ -6,6 +6,7 @@
   import { onMount } from 'svelte'
   import Agenda from '$lib/Agenda.svelte'
   import Comention from '$lib/Comention.svelte'
+  import Attention from '$lib/Attention.svelte'
   import DocsCard from '$lib/DocsCard.svelte'
   import Persistence from '$lib/Persistence.svelte'
   import HelpDialog from '$lib/HelpDialog.svelte'
@@ -152,20 +153,7 @@
     <p class="note" id="lensesHiddenNote" hidden></p>
   </section>
 
-  <section class="figure attention" id="attention" aria-labelledby="attentionTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="attentionTitle">Atenção e menções</h2></div>
-      <p class="figure-sub">Quanto se buscou o nome na Wikipédia contra quanto se escreveu sobre a pessoa, dia a dia. <a href="/como-ler#atencao">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt>Posição</dt><dd>o dia, o mesmo eixo nas duas linhas</dd></div>
-        <div><dt>Tamanho</dt><dd>altura da barra, numa escala só de cada linha</dd></div>
-        <div><dt>Clique</dt><dd>documentos do dia, em qualquer das duas linhas</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">Curiosidade e menções sobre <span class="pick"><select id="attentionPerson" aria-label="Pessoa (atenção)"></select></span> nos últimos 30 dias, em <span class="keep"><span class="pick"><select id="attentionSource" aria-label="Fonte (atenção)"></select></span>.</span></p></div>
-    </header>
-    <p class="note" id="attentionNote"></p>
-    <figure class="attention-chart" id="attentionChart" aria-label="Pageviews da Wikipédia e menções por dia" hidden></figure>
-  </section>
+  <Attention />
 
   <Agenda />
 

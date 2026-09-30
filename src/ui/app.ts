@@ -24,12 +24,8 @@ import {
   paintWeekLoading,
 } from './render.js'
 import * as api from './api.js'
-
-type Person = { id: string; name: string }
-// A `[key, bareKey | null]` pair names a different bare fallback or none (null).
-type SeedKey = string | [string, string | null]
-
-type Seed = Record<string, string | undefined>
+import { setBoot, type Person } from './boot.svelte.js'
+import { seedFor, type SeedKey } from './seed.js'
 
 type FigureRoot = { classList: { add: (name: string) => void; remove: (name: string) => void } }
 
@@ -66,19 +62,6 @@ const FIGURES: FigureEntry[] = [
   { id: 'persistence', sectionId: 'persistence', keys: ['person', ['weeks', null], 'limit'], noticeId: 'persistenceNote', mount: mountPersistence },
 ]
 
-// A prefixed value (`atlas.days=`) overrides the bare one (`days=`) for that figure only.
-const seedFor = (figureId: string, keys: SeedKey[], search: string): Seed => {
-  const params = new URLSearchParams(search)
-  return Object.fromEntries(
-    keys.map((entry) => {
-      const [key, bareKey] = Array.isArray(entry) ? entry : [entry, entry]
-      const prefixed = params.get(`${figureId}.${key}`)
-      const bare = bareKey ? params.get(bareKey) : null
-      return [key, prefixed ?? bare ?? undefined]
-    }),
-  )
-}
-
 const loadPeople = (): Promise<Person[]> => api.loadPeople()
 
 const paintBootLoading = () => {
@@ -99,6 +82,7 @@ const paintBootLoading = () => {
 
 export const boot = async () => {
   paintBootLoading()
+  setBoot({ search: location.search })
   let people: Person[] = []
   let peopleError: unknown = null
   try {
@@ -106,6 +90,7 @@ export const boot = async () => {
   } catch (e) {
     peopleError = e
   }
+  setBoot({ people, peopleError, ready: true })
   // The documents card and the guide belong to no figure, so the shell wires both once.
   mountDocsCard()
   mountHelp()

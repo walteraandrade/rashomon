@@ -193,6 +193,8 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'help.ts': ['./help.svelte.js'],
       'docs-card.svelte.ts': ['./api.js', './perf.js', './render.js', './state.js'],
       'help.svelte.ts': [],
+      'seed.ts': [],
+      'boot.svelte.ts': [],
       // The shared runtime behind four of the five mount() calls (issue #193): abort/stale/
       // scope/ghost/background-click/Escape/resize, generalized out of compare.ts/rising.ts/
       // week.ts/testimony.ts. It builds no markup and never fetches on its own, so it imports
@@ -225,6 +227,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'figures/persistence.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
+        './boot.svelte.js',
         './docs-card.js',
         './figures/agenda.js',
         './figures/atlas.js',
@@ -238,6 +241,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './figures/week.js',
         './help.js',
         './render.js',
+        './seed.js',
       ],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')

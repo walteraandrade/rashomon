@@ -996,3 +996,117 @@ describe('Lenses (#294)', () => {
     expect(lensesCalls()[0].params.has('measure')).toBe(false)
   })
 })
+
+describe('lenses: lens sides, bridges and releases', () => {
+  it('a touched B skips the deferred domain seed for B', async () => {
+    const gate = held()
+    handlers.sources = () => gate.promise
+    boot({ search: '?lenses.b=domain:folha.uol.com.br' })
+    await start()
+    select('lensesB').value = 'source:rss'
+    select('lensesB').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle()
+    gate.release([folha])
+    await settle(220)
+    expect(select('lensesB').value).toBe('source:rss')
+    expect(lensesCalls().pop()!.params.get('b')).toBe('source:rss')
+  })
+
+  it('a person change drops a B domain the new person lacks', async () => {
+    boot({ search: '?lenses.b=domain:folha.uol.com.br' })
+    await start()
+    expect(select('lensesB').value).toBe('domain:folha.uol.com.br')
+    handlers.sources = () => [g1]
+    await change('lensesPerson', 'bolsonaro')
+    expect(select('lensesB').value).toBe('all')
+    expect(input('lensesBInput').value).toBe('Tudo')
+    expect(lensesCalls().pop()!.params.get('b')).toBe('all')
+  })
+
+  it('the bridges request carries both lenses', async () => {
+    handlers.lenses = (call) => payload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }], call.params.get('a')!, call.params.get('b')!)
+    boot({ search: '?lenses.a=lean:left&lenses.b=source:rss' })
+    await start()
+    const bridge = of('bridges').pop()!
+    expect(bridge.params.get('a')).toBe('lean:left')
+    expect(bridge.params.get('b')).toBe('source:rss')
+  })
+
+  it('the docs card columns are labelled by lensLabel, a first then b', async () => {
+    handlers.lenses = () => payload([reforma], 'domain:folha.uol.com.br', 'lean:right')
+    handlers.docs = () => ({ docs: [], total: 0 })
+    boot()
+    await start()
+    click(words()[0])
+    await settle()
+    expect([...document.querySelectorAll('#docs .docs-side-name')].map((e) => e.textContent)).toEqual(['folha.uol.com.br', 'Direita'])
+  })
+
+  it('a days change closes the lenses card at once, before the new data lands', async () => {
+    boot()
+    await start()
+    click(words()[0])
+    await settle()
+    expect(docsCard.openedBy('lenses')).toBe(true)
+    handlers.lenses = () => new Promise(() => {})
+    select('lensesDays').value = '7'
+    select('lensesDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle()
+    expect(docsCard.isOpen()).toBe(false)
+    expect(words()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('a memoized payload that already carries bridges never asks for them again', async () => {
+    handlers.lenses = (call) => payload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }], call.params.get('a')!, call.params.get('b')!)
+    handlers.bridges = () => ({ bridges: { 'word:stf': 1 } })
+    boot()
+    await start()
+    await change('lensesLimit', '60')
+    await change('lensesLimit', '40')
+    expect(of('bridges')).toHaveLength(2)
+  })
+})
+
+describe('lenses: combobox Escape', () => {
+  it('Escape inside an open lens combobox closes the list but keeps the pick and the card', async () => {
+    boot()
+    await start()
+    click(words()[0])
+    await settle()
+    input('lensesAInput').dispatchEvent(new Event('focus'))
+    flushSync()
+    expect($('lensesAList').hidden).toBe(false)
+    input('lensesAInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    flushSync()
+    await settle()
+    expect($('lensesAList').hidden).toBe(true)
+    expect(docsCard.openedBy('lenses')).toBe(true)
+    expect(words()[0].getAttribute('aria-pressed')).toBe('true')
+  })
+})
+
+describe('lenses: resize', () => {
+  it('watches #lensesRuler with exactly one ResizeObserver', async () => {
+    boot()
+    await start()
+    expect(observers.filter((o) => o.target === $('lensesRuler'))).toHaveLength(1)
+  })
+
+  it('a second click on the same word after a resize still releases', async () => {
+    boot()
+    await start()
+    click(words()[0])
+    await settle()
+    expect(docsCard.openedBy('lenses')).toBe(true)
+    width = 400
+    for (const o of observers) o.cb()
+    flushSync()
+    await settle()
+    click(words()[0])
+    await settle()
+    expect(docsCard.isOpen()).toBe(false)
+    expect(words()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+})

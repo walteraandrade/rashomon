@@ -25,9 +25,8 @@ import { FONT_MONO, RULER_PAD, STRIP_MAX_HEIGHT, STRIP_MIN_R, STRIP_PAD, rulerLa
 export { STRIP_PAD }
 import { axis, frame, overflowList } from './marks.js'
 
-// getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
+// Callers read per-element fields (~100 sites), so this stays `any`.
 const $ = (id: string): any => document.getElementById(id)
-// Typed as HTMLElement so `dataset` and `classList` are visible without casting.
 const queryAll = (selector: string, root: any = document): NodeListOf<HTMLElement> => root.querySelectorAll(selector)
 
 // The only place that touches a <canvas>; layout.ts stays DOM-free and testable without it.
@@ -42,7 +41,6 @@ export const createCanvasMeasure = (): Measure => {
 
 const ghostBar = (cls: string) => html`<span class="ghost ${cls}"></span>`
 
-// Strip geometry at a given width; exported so tests can assert placement without a DOM.
 export const stripLayout = (rows: TestimonyDomainRow[], width: number) => {
   const inner = Math.max(80, width - 2 * STRIP_PAD)
   const x = (score: number) => STRIP_PAD + (testimonyPosition(score) / 100) * inner
@@ -87,7 +85,6 @@ export type DocsSideData = { label: string | null; data: { docs: Doc[]; total: n
 const sideMarkup = ({ label: name, data }: DocsSideData) =>
   html`${name ? html`<p class="eyebrow docs-side-name">${name}</p>` : ''}${data.docs.length ? html`<p class="docs-summary">Mostrando ${data.docs.length} de ${fmt(data.total)} documentos.</p>${data.docs.map(docMarkup)}` : html`<p>Nenhum documento encontrado.</p>`}`
 
-// Two sides for the ruler (one word, both people); one side for every other figure.
 export const paintDocs = (sides: DocsSideData[]) => {
   const box = $('docs')
   if (!box) return
@@ -103,16 +100,13 @@ export const paintDocsError = (onRetry: () => void) => {
   $('retryDocs')?.addEventListener('click', onRetry)
 }
 
-// `null` is structurally absent: a present-but-negative-PMI side still reads as "this word is
-// A's". When both are present, balance uses clamped-positive pulls against the raw combined
-// magnitude, so opposite-signed terms settle short of the ends rather than pinning to them.
+// `null` is structurally absent; when both sides are present, clamped-positive pulls keep opposite-signed terms short of the ends.
 const isPresent = (v: CompareSide | 'name' | null): v is CompareSide => v !== null && v !== 'name'
 
 const docsOf = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count : 0)
 
 export type RulerTerm = CompareTerm & { balance: number; combined: number }
 
-// Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1), combined docs.
 export const rulerTerms = (terms: CompareTerm[], measure: string): { items: RulerTerm[]; hiddenCount: number } => {
   let hiddenCount = 0
   const items: RulerTerm[] = []
@@ -137,7 +131,6 @@ export const rulerTerms = (terms: CompareTerm[], measure: string): { items: Rule
   return { items, hiddenCount }
 }
 
-// The term written on the ruler. Transparent rect is the hit area; `--cmp` carries side colour.
 const rulerWordMarkup = (
   d: { term: string; kind: string; text: string; balance: number; combined: number; bridge?: number; x: number; y: number; size: number; w: number; h: number },
   half: number,
@@ -145,7 +138,6 @@ const rulerWordMarkup = (
 ) =>
   html`<g class="ruler-word ${isSelected ? 'is-selected' : ''} ${isBridge(d) ? 'ruler-bridge' : ''}" transform="translate(${d.x},${half + d.y})" style="--size:${d.size}px;--cmp:${balanceColor(d.balance)}" data-term="${d.term}" data-kind="${d.kind}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.combined)} documentos"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos</title><rect class="ruler-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}"/><rect class="ruler-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}"/><text class="ruler-text" text-anchor="middle" dominant-baseline="central"><tspan x="0" y="0">${d.text}</tspan></text>${isBridge(d) ? html`<line class="ruler-bridge-mark" x1="${-d.w / 2}" x2="${d.w / 2}" y1="${d.h / 2}" y2="${d.h / 2}"/>` : ''}</g>`
 
-// Overflow words: count stated, each still a button with the same data-term/data-kind.
 const rulerOverflowMarkup = (
   overflow: { term: string; kind: string; text: string; balance: number }[],
   selected: { term: string; kind: string } | null,
@@ -160,8 +152,7 @@ const rulerOverflowMarkup = (
     },
   })
 
-// Figure 4 (rising)'s ruler: end labels, axis, words and overflow list, click/keydown on every
-// word. `note` sits between axis and overflow list; `tail` comes after it.
+// Figure 4's ruler; `note` sits between axis and overflow list, `tail` after it.
 const paintRulerBody = ({
   elementId,
   items,
@@ -198,7 +189,6 @@ const paintRulerBody = ({
   for (const el of queryAll('[data-term]', ruler)) {
     const pick = () => onPick(String(el.dataset.term), String(el.dataset.kind))
     el.addEventListener('click', pick)
-    // <g> elements need an explicit key handler; <button>s already handle Enter/Space.
     if (String(el.tagName || '').toLowerCase() !== 'button')
       el.addEventListener('keydown', (event) => {
         const e = event as KeyboardEvent
@@ -217,8 +207,7 @@ export type RisingShares = RisingAbout & { words_recent: number; words_baseline:
 export const hasShares = (data: Rising): data is Rising & { present: RisingTerm[]; about: RisingShares } =>
   Array.isArray(data.present) && Number.isFinite(data.about.words_recent) && Number.isFinite(data.about.words_baseline)
 
-// balance = clamp(log2(share now / share before) / 3, -1, 1), a share being the term's docs over
-// the person's words in that window (about.words_*), so longer texts do not push every word right.
+// balance = clamp(log2(share now / share before) / 3, -1, 1), a share being docs over the window's words, so longer texts do not push every word right.
 export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingShares) => {
   if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
   if (about.words_recent <= 0) return -1
@@ -226,8 +215,7 @@ export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: 
   return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
 }
 
-// Fallback: clamp(log2(word's lift / the person's own lift) / 3, -1, 1); the server's +1
-// smoothing keeps it finite with no baseline docs.
+// Fallback: clamp(log2(word's lift / the person's own lift) / 3, -1, 1), finite thanks to the server's +1 smoothing.
 export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
 
 export const liftBalance = (t: { lift: number }, liftPerson: number) => {
@@ -237,7 +225,6 @@ export const liftBalance = (t: { lift: number }, liftPerson: number) => {
 
 export type RisingItem = RulerItem & { lift: number }
 
-// combined = count_recent_raw + count_baseline_raw: exact counts, so size never compounds rounding.
 export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
   terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
 

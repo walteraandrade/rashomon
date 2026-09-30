@@ -312,7 +312,7 @@
       <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>palavra que liga o vocabulário das duas lentes</dd></div>
       <div><dt>Clique</dt><dd>textos das duas lentes, neste gráfico</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="lensesPerson" aria-label="Pessoa (lentes)" value={person} onchange={onPerson}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> sob <span class="pick"><select id="lensesA" aria-label="Lente A" hidden bind:this={selA} onchange={onLensA}>{@render groups('lensesAOutlets')}</select>{#if selA}<Combobox bind:this={comboA} select={selA} inputId="lensesAInput" listId="lensesAList" label="Lente A" listLabel="Opções da lente A" />{/if}</span> e <span class="keep"><span class="pick"><select id="lensesB" aria-label="Lente B" hidden bind:this={selB} onchange={onLensB}>{@render groups('lensesBOutlets')}</select>{#if selB}<Combobox bind:this={comboB} select={selB} inputId="lensesBInput" listId="lensesBList" label="Lente B" listLabel="Opções da lente B" />{/if}</span>,</span> nos últimos <span class="keep"><span class="pick"><select id="lensesDays" aria-label="Período (lentes)" value={days} onchange={onDays}><option value="7">7 dias</option><option value="30">30 dias</option><option value="60">60 dias</option></select></span>.</span> Mostrar <span class="pick"><select id="lensesLimit" aria-label="Quantidade de palavras (lentes)" value={limit} onchange={onLimit}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras.</p></div>
+    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="lensesPerson" aria-label="Pessoa (lentes)" value={person} onchange={onPerson}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> sob <span class="pick"><select id="lensesA" aria-label="Lente A" hidden bind:this={selA} onchange={onLensA}>{@render groups('lensesAOutlets')}</select><Combobox bind:this={comboA} select={selA} inputId="lensesAInput" listId="lensesAList" label="Lente A" listLabel="Opções da lente A" /></span> e <span class="keep"><span class="pick"><select id="lensesB" aria-label="Lente B" hidden bind:this={selB} onchange={onLensB}>{@render groups('lensesBOutlets')}</select><Combobox bind:this={comboB} select={selB} inputId="lensesBInput" listId="lensesBList" label="Lente B" listLabel="Opções da lente B" /></span>,</span> nos últimos <span class="keep"><span class="pick"><select id="lensesDays" aria-label="Período (lentes)" value={days} onchange={onDays}><option value="7">7 dias</option><option value="30">30 dias</option><option value="60">60 dias</option></select></span>.</span> Mostrar <span class="pick"><select id="lensesLimit" aria-label="Quantidade de palavras (lentes)" value={limit} onchange={onLimit}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras.</p></div>
   </header>
   <p class="status" id="lensesStatus" role="status" hidden={!sameLens}>Os dois lados mostram o mesmo recorte.</p>
   <figure class="ruler" id="lensesRuler" aria-label="Régua comparando duas lentes da mesma pessoa" aria-busy={showGhost ? 'true' : 'false'} hidden={peopleError || noPeople} bind:this={rulerEl}>
@@ -356,8 +356,8 @@
     {:else if term && data}
       <span class="term">{label(term)}</span>
       <dl class="detail-sides">
-        {@render side(lensLabel(data.a.lens), term.a)}
-        {@render side(lensLabel(data.b.lens), term.b)}
+        {@render side(lensLabel(data.a.lens), term.a as CompareSide | null)}
+        {@render side(lensLabel(data.b.lens), term.b as CompareSide | null)}
       </dl>
       {#if isBridge(term)}<p class="detail-bridge">ponte: as duas lentes precisam dela</p>{/if}
     {:else}
@@ -374,10 +374,8 @@
   <optgroup label="Fonte"><option value="source:bluesky">Bluesky</option><option value="source:gdelt">GDELT</option><option value="source:rss">RSS</option><option value="source:gnews">Google News</option><option value="source:gkg">GKG</option><option value="source:camara">Câmara</option><option value="source:senado">Senado</option><option value="source:juridico">Jurídico</option><option value="source:oficial">Oficial</option><option value="source:nicho">Nicho</option></optgroup>
 {/snippet}
 
-{#snippet side(name: string, s: CompareSide | 'name' | null)}
-  {#if s === 'name'}
-    <div><dt>{name}</dt><dd class="empty-hint">nome da pessoa, fora da régua</dd></div>
-  {:else if s}
+{#snippet side(name: string, s: CompareSide | null)}
+  {#if s}
     <div><dt>{name}</dt><dd><b>{fmt(s.count)}</b> documentos · PMI <b>{fmt(s.pmi)}</b></dd></div>
   {:else}
     <div><dt>{name}</dt><dd class="empty-hint">nenhum documento</dd></div>

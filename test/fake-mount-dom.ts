@@ -301,6 +301,7 @@ const attentionIds = () => ({
   attentionNote: new FakeBox('attentionNote'),
 })
 
+export type Elements = ReturnType<typeof docsCardIds> &
   ReturnType<typeof compareIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof attentionIds>
@@ -315,7 +316,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-export type Elements = ReturnType<typeof docsCardIds> &
+  const els = { ...docsCardIds(), ...compareIds(), ...risingIds(), ...attentionIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

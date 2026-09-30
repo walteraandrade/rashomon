@@ -288,7 +288,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     const render = (await import('../src/ui/render.js')) as Record<string, unknown>
     for (const name of ['wordMarkup', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'paintAtlasLoading', 'termStripLayout', 'paintTermStrip', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError'])
       assert.equal(name in render, false, `render.ts must not export ${name}`)
-    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms', 'paintRisingRuler', 'paintLensRuler']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
+    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms', 'paintRisingRuler']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
   })
 
   it('state.js exports what the split promises, no more', async () => {
@@ -430,7 +430,7 @@ describe('markup reaches innerHTML only through the html tag', () => {
         assert.ok(t.tagged, `${file}:${t.line} builds markup in an untagged template literal`)
         tagged++
       }
-    assert.ok(tagged > 30, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
+    assert.ok(tagged > 20, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
   })
 
   it('the html tag escapes what a painter forgets to: a document text with markup stays text', () => {

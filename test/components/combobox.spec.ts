@@ -107,3 +107,70 @@ describe('Combobox', () => {
     expect(input().value).toBe('Tudo')
   })
 })
+
+const key = (k: string) => {
+  const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })
+  input().dispatchEvent(e)
+  flushSync()
+  return e
+}
+const activeText = () => list().querySelector('.is-active')?.textContent
+
+describe('Combobox keyboard, blur and pick', () => {
+  it('focus opens the full list with the current value active', () => {
+    select.value = 'domain:b'
+    instance.sync!()
+    input().dispatchEvent(new Event('focus'))
+    flushSync()
+    expect(list().hidden).toBe(false)
+    expect(activeText()).toBe('Folha')
+  })
+
+  it('ArrowDown/ArrowUp wrap at both ends', () => {
+    type('')
+    expect(activeText()).toBe('Tudo')
+    key('ArrowUp')
+    expect(activeText()).toBe('Correio Braziliense')
+    key('ArrowDown')
+    expect(activeText()).toBe('Tudo')
+    expect(input().getAttribute('aria-activedescendant')).toBe('lensesAList-0')
+  })
+
+  it('Enter picks the active row, dispatches change once and closes', () => {
+    type('folha')
+    const e = key('Enter')
+    expect(e.defaultPrevented).toBe(true)
+    expect(select.value).toBe('domain:b')
+    expect(changes).toBe(1)
+    expect(list().hidden).toBe(true)
+    expect(input().value).toBe('Folha')
+  })
+
+  it('blur closes without picking and restores the label', () => {
+    type('fol')
+    input().dispatchEvent(new Event('blur'))
+    flushSync()
+    expect(list().hidden).toBe(true)
+    expect(input().value).toBe('Tudo')
+    expect(changes).toBe(0)
+  })
+
+  it('picking the current value closes without a change event', () => {
+    type('')
+    list().querySelector('[data-value="all"]')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    flushSync()
+    expect(changes).toBe(0)
+    expect(list().hidden).toBe(true)
+  })
+
+  it('Escape on an open list does not reach document', () => {
+    type('')
+    let reached = 0
+    const spy = () => reached++
+    document.addEventListener('keydown', spy)
+    key('Escape')
+    document.removeEventListener('keydown', spy)
+    expect(reached).toBe(0)
+  })
+
+})

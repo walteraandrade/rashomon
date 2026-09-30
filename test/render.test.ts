@@ -22,7 +22,7 @@ import {
 } from '../src/ui/render.js'
 import * as renderModule from '../src/ui/render.js'
 import { type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
-import { STRIP_MAX_HEIGHT, STRIP_MIN_R, rulerLayout, stripRadius } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripRadius } from '../src/ui/layout.js'
 import { withFakeDocument } from './fake-dom.js'
 
 // src/ui/render.ts: the painters, driven against a fake document and asserted on the markup

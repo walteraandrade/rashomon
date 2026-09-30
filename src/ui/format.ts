@@ -1,5 +1,4 @@
-// Bundled directly (the bundler's JSON loader), never through src/outlets.ts, so src/ui keeps its
-// own import direction and never pulls in a server-only module.
+// Bundled directly, never through src/outlets.ts, so src/ui pulls in no server-only module.
 import outletsJson from '../../outlets.json' with { type: 'json' }
 
 export type TermTestimony = { score: number; n: number }
@@ -38,8 +37,7 @@ export type CompareSide = { count: number; pmi: number; tone: number | null }
 export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null; bridge?: number }
 export type Compare = { days: number; a: { person: PersonRef; about: number }; b: { person: PersonRef; about: number }; terms: CompareTerm[] }
 
-// Mirrors src/query.ts's BRIDGE_NODES and graph.ts's bridgeNodes: the most-documented terms,
-// never an own name, sorted so the bridges URL is one cache key per recorte.
+// Mirrors query.ts's BRIDGE_NODES: most-documented non-name terms, sorted so the URL is one cache key.
 export const BRIDGE_NODES = 60
 
 const sideDocs = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count : 0)
@@ -55,14 +53,12 @@ export const bridgeIds = (terms: readonly CompareTerm[]) =>
 
 export const hasBridges = (terms: readonly CompareTerm[]) => terms.some((t) => t.bridge !== undefined)
 
-// In place on purpose: a figure tells a new dataset from a repaint by object identity, so the
-// scores join the payload already on screen (and in the scope memo) instead of replacing it.
+// In place on purpose: a figure tells a new dataset from a repaint by object identity.
 export const applyBridges = (terms: CompareTerm[], bridges: Record<string, number>) => {
   for (const t of terms) t.bridge = bridges[`${t.kind}:${t.term}`] ?? 0
 }
 export type RisingTerm = { term: string; kind: string; count_recent: number; count_baseline: number; count_recent_raw: number; count_baseline_raw: number; lift: number }
-// `present` and `about.words_*` are optional on the page side only: a payload cached before they
-// existed still has to paint something rather than NaN positions.
+// `present` and `about.words_*` are optional: a payload cached before they existed must not paint NaN.
 export type RisingAbout = { recent: number; baseline: number; words_recent?: number; words_baseline?: number }
 export type Rising = { days: number; baseline: number; terms: RisingTerm[]; present?: RisingTerm[]; outlets: string[]; about: RisingAbout }
 export type WeekTerm = { term: string; kind: string; count: number }
@@ -72,8 +68,7 @@ export type Week = { days: number; tz: string; buckets: WeekBucket[] }
 export type PersistenceWeek = { week: string; count: number | null }
 export type PersistenceTerm = { term: string; kind: string; series: PersistenceWeek[]; streak: number; half_life: number | null }
 export type Persistence = { weeks: number; since: string; first_week: string | null; horizon: number; terms: PersistenceTerm[] }
-// One row per top domain, one cell per (person, domain) pair with a tracked doc. `share` is
-// relative to the domain's own tracked coverage, so a row can sum above 1.
+// `share` is relative to the domain's own tracked coverage, so a row can sum above 1.
 export type AgendaCell = { person_id: string; domain: string; docs: number; share: number }
 export type Agenda = { days: number; persons: PersonRef[]; domains: string[]; cells: AgendaCell[] }
 
@@ -97,8 +92,7 @@ const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '
 
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c])
 
-// Html is safe for innerHTML. Only `html` and `raw` produce one; the tag escapes every
-// interpolation that is not already Html, joins arrays, and drops null/undefined.
+// Html is safe for innerHTML: only `html` and `raw` produce one; the tag escapes non-Html values.
 const HTML_BRAND: unique symbol = Symbol('html')
 export type Html = { readonly [HTML_BRAND]: true; toString(): string }
 
@@ -130,14 +124,12 @@ export const normalize = (s: unknown) =>
     .toLowerCase()
     .trim()
 
-// /week's bucket.start is already a BRT calendar day's own midnight; both helpers read it back
-// through the same timezone rather than trusting the reader's local clock.
+// /week's bucket.start is a BRT midnight; both helpers read it back in BRT, not the reader's clock.
 const WEEK_TZ = 'America/Sao_Paulo'
 
 export const weekDayIso = (startIso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: WEEK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(startIso))
 
-// "seg 8": weekday abbreviation, no trailing period, plus the day of month. Never a year or
-// month, since every bucket is inside the last 7 (or 30/60) days.
+// "seg 8": weekday abbreviation plus day of month, never a year or month.
 export const weekDayLabel = (startIso: string) => {
   const d = new Date(startIso)
   const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: WEEK_TZ, weekday: 'short' }).format(d).replace(/\.$/, '')
@@ -175,8 +167,7 @@ export const SOURCE_SEGMENTS: [string, string][] = [
   ['nicho', 'nicho'],
 ]
 
-// sort='pmi' orders by pmi * ln(1 + count), matching src/graph.ts's sort=pmi so node sizing
-// never drifts from the server's ordering.
+// sort='pmi' orders by pmi * ln(1 + count), as src/graph.ts does.
 export const score = (n: { pmi?: number; count?: number; reach?: number | null }, sort: string) =>
   sort === 'reach' ? Number(n.reach || 0) : sort === 'pmi' ? Number(n.pmi || 0) * Math.log1p(Number(n.count || 0)) : Number(n.count || 0)
 
@@ -207,8 +198,7 @@ export const relatedTo = (nodes: Term[], links: Link[], id: string | null): { no
 
 export const domainSuffix = (domain: string) => (domain === 'all' ? '' : ` · ${domain}`)
 
-// A column is too narrow for a full name: one upper-case letter per word, up to three. The row
-// head and the docs card carry the full name, so identity never depends on this being unique.
+// One upper-case letter per word, up to three; the row head and docs card carry the full name.
 export const personInitials = (name: string) =>
   name
     .split(/\s+/)
@@ -256,10 +246,8 @@ export const testimonyClass = (s: number | null | undefined): 'negativo' | 'neut
   return Number(s) <= -TESTIMONY_CUT ? 'negativo' : Number(s) >= TESTIMONY_CUT ? 'positivo' : 'neutro'
 }
 
-// Colour by distance from person's mean: "texts carrying this word are harsher/kinder than
-// usual for this person". A term seen in fewer than MASK_MIN scored texts gets no colour.
-// MASK_SPAN is tighter than the model's ±2.5 class cut: one person's terms sit within ~1
-// point of her mean, so a ±2.5 ramp painted them all grey.
+// Colour by distance from the person's mean; a term in fewer than MASK_MIN scored texts gets none.
+// MASK_SPAN is tighter than the model's ±2.5 cut: one person's terms sit within ~1 point of her mean.
 export const MASK_MIN = 3
 export const MASK_SPAN = 1.5
 
@@ -322,8 +310,7 @@ export const foldTestimonyDomains = (rows: TestimonyDomainRow[]): { domain: stri
   return [...byDomain.values()].map(({ sum, ...e }) => ({ ...e, score: sum / e.n })).sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
 }
 
-// Joins /sources doc counts and /testimony means into one list. An outlet under the
-// floor keeps its doc count and has no mean.
+// Joins /sources doc counts and /testimony means; an outlet under the floor has no mean.
 export const mergeOutlets = (
   rows: OutletRow[],
   testimonyRows: TestimonyDomainRow[],
@@ -358,8 +345,7 @@ const LEAN_BY_DOMAIN = new Map((outletsJson as OutletEntry[]).map((o) => [o.doma
 
 export const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
 
-// Figure 8's grid shape: domains in the route's own order, cells keyed by person id so a
-// missing pair reads as a blank cell rather than a zero share.
+// Domains in the route's order, cells keyed by person id: a missing pair is a blank, not a zero.
 export const agendaRows = (data: Agenda): { domain: string; lean: string | null; cells: Map<string, AgendaCell> }[] => {
   const byDomain = new Map<string, Map<string, AgendaCell>>()
   for (const c of data.cells) {
@@ -392,8 +378,7 @@ export const safeDocUrl = (d: Doc) => {
   return null
 }
 
-// Figure 10's dates are BRT calendar dates written YYYY-MM-DD; all arithmetic is on the date,
-// never on an instant, so no daylight-saving edge can move a Monday.
+// BRT calendar dates as YYYY-MM-DD; arithmetic is on the date, never an instant, so DST cannot move a Monday.
 export const shiftDate = (date: string, days: number) => {
   const d = new Date(`${date}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() + days)
@@ -430,8 +415,7 @@ export const sinceLabel = (since: string) => `a série começa em ${dayMonth(sin
 export const seriesWeeks = (firstWeek: string | null, now = new Date()) =>
   firstWeek ? Math.max(1, Math.round((Date.parse(mondayOf(todayBrt(now))) - Date.parse(firstWeek)) / (7 * 86_400_000)) + 1) : null
 
-// Figure 7's copy, text only. A '2026-08-03' day string read back as a short pt-BR label, in UTC,
-// never weekDayLabel's BRT.
+// A '2026-08-03' day string as a short pt-BR label, in UTC, never weekDayLabel's BRT.
 export const attentionDayLabel = (day: string) => {
   const d = new Date(`${day}T00:00:00Z`)
   const weekday = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'short' }).format(d).replace(/\.$/, '')

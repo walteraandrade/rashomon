@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { filterItems, itemsOf, listMarkup, revealTop, type ComboItem } from '../src/ui/combobox.js'
+import { filterItems, itemsOf, revealTop } from '../src/ui/combobox.js'
 
 // src/ui/combobox.ts: the searchable face figure 6's two lens selects wear. The <select> stays
 // the value store, so every assertion here reads the select's own value and change event.
@@ -43,8 +43,6 @@ const lensOptions = [
   { value: 'source:bluesky', text: 'Bluesky', group: 'Fonte' },
 ]
 
-const optionValues = (markup: string) => [...markup.matchAll(/data-value="([^"]*)"/g)].map((m) => m[1])
-const groupHeads = (markup: string) => [...markup.matchAll(/class="combo-group eyebrow" role="presentation">([^<]*)</g)].map((m) => m[1])
 
 describe('itemsOf / filterItems (pure)', () => {
   it('reads each option with its optgroup label, ungrouped ones with an empty group', () => {
@@ -60,29 +58,6 @@ describe('itemsOf / filterItems (pure)', () => {
     assert.deepEqual(filterItems(items, 'GLOBO').map((i) => i.value), ['domain:g1.globo.com'])
     assert.equal(filterItems(items, '').length, items.length)
     assert.equal(filterItems(items, '  ').length, items.length)
-  })
-})
-
-describe('listMarkup (pure)', () => {
-  const items: ComboItem[] = itemsOf(fakeSelect(lensOptions))
-
-  it('writes one group head per run of grouped items, none for the ungrouped first option', () => {
-    const markup = String(listMarkup('list', items, 0, 'all'))
-    assert.deepEqual(groupHeads(markup), ['Veículo', 'Viés', 'Fonte'])
-    assert.deepEqual(optionValues(markup), items.map((i) => i.value))
-  })
-
-  it('marks the active row and the select\'s current value, with ids the input can point at', () => {
-    const markup = String(listMarkup('list', items, 2, 'lean:left'))
-    assert.match(markup, /id="list-2"[^>]*data-value="domain:g1.globo.com"/)
-    assert.match(markup, /class="combo-option is-active"[^>]*id="list-2"/)
-    assert.match(markup, /data-value="lean:left" aria-selected="true"/)
-    assert.equal((markup.match(/aria-selected="true"/g) ?? []).length, 1)
-  })
-
-  it('escapes a label and says so when nothing matches', () => {
-    assert.match(String(listMarkup('list', [{ value: 'x', label: '<b>', group: '' }], 0, '')), /&lt;b&gt;/)
-    assert.match(String(listMarkup('list', [], -1, '')), /combo-empty/)
   })
 })
 

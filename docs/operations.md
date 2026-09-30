@@ -440,6 +440,10 @@ prefixed (`persistence.person`, `persistence.limit`), and `weeks`, prefixed only
 `weeks` control, so a bare `?weeks=` never reaches it.
 Figure 10 is a Svelte component too (`src/ui/Persistence.svelte`): it seeds with `seedFor` over
 `bootData.search` once `bootData.ready`, and a seeded `weeks` or `limit` outside its options is ignored.
+Figure 6 is a Svelte component too (`src/ui/Lenses.svelte`): it seeds with `seedFor` (`a` and `b` never fall
+back to a bare key), loads once `bootData.ready`, and mounts `Combobox.svelte` (props `{ select, inputId,
+listId, label, listLabel }`) over each of its two hidden lens selects, calling `sync()` after every
+programmatic write.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

@@ -190,15 +190,11 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
       // app.ts, and reaching into no other figure's DOM.
       'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
-      // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
-      // nothing but app.ts, and reaching into no other figure's DOM.
       'atlas-model.ts': ['./api.js', './format.js'],
-      'figures/lenses.ts': ['./api.js', './combobox.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
         './boot.svelte.js',
         './docs-card.js',
-        './figures/lenses.js',
         './figures/rising.js',
         './help.js',
         './render.js',
@@ -221,6 +217,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Atlas.svelte': ['./api.js', './atlas-model.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './render.js', './seed.js'],
       'Compare.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
+      'Lenses.svelte': ['./Ruler.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Ruler.svelte': ['./format.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
@@ -291,7 +288,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     const render = (await import('../src/ui/render.js')) as Record<string, unknown>
     for (const name of ['wordMarkup', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'paintAtlasLoading', 'termStripLayout', 'paintTermStrip', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError'])
       assert.equal(name in render, false, `render.ts must not export ${name}`)
-    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms', 'paintRisingRuler', 'paintLensRuler']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
+    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms', 'paintRisingRuler']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
   })
 
   it('state.js exports what the split promises, no more', async () => {
@@ -433,7 +430,7 @@ describe('markup reaches innerHTML only through the html tag', () => {
         assert.ok(t.tagged, `${file}:${t.line} builds markup in an untagged template literal`)
         tagged++
       }
-    assert.ok(tagged > 30, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
+    assert.ok(tagged > 20, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
   })
 
   it('the html tag escapes what a painter forgets to: a document text with markup stays text', () => {

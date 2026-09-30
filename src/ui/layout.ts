@@ -1,7 +1,6 @@
 import { balanceColor, fmt, isBridge, kinds, label, score, termMask, type PersonTestimony, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
-// Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
-// font-family strings and cannot read CSS custom properties without the DOM.
+// Literal copies of atlas.css's --sans / --mono / --display: canvas measurement cannot read custom properties.
 export const FONT_SANS = "'IBM Plex Sans', system-ui, sans-serif"
 export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 export const FONT_DISPLAY = "'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif"
@@ -118,8 +117,7 @@ const segmentBlocked = (a: Point, b: Point, rect: Box) => {
   return hi > 0 && lo < 1
 }
 
-// Visibility graph around every placed box; corners and edge midpoints as waypoints so
-// routesFrom can path an edge around obstacles.
+// Visibility graph around every placed box (corners and edge midpoints) for routesFrom.
 export const routeGraph = (layout: Layout): Routing => {
   const obstacles = [layout.center, ...layout.placed].map((p) => ({ ...p, w: p.w + 6, h: p.h + 6 }))
   const points: Point[] = []
@@ -192,9 +190,8 @@ export const routesFrom = (layout: Layout, id: string): Map<string, string> => {
   return routes
 }
 
-// Beeswarm skeleton both strips share. `reach(placed, item)` returns the vertical clearance
-// needed at the horizontal distance between the two items, or null when they never interfere.
-// `fits` rejects placements outside the figure; `escape` is the last resort.
+// Beeswarm skeleton both strips share: `reach` is the vertical clearance two items need (null if
+// they never interfere), `fits` rejects placements outside the figure, `escape` is the last resort.
 
 export type SwarmRules<T> = {
   size: (item: T) => number
@@ -226,8 +223,7 @@ export const swarmBy = <T extends { x: number }>(
   return { placed, overflow }
 }
 
-// Circle swarm: clearance shrinks as items drift apart horizontally. No overflow — the strip
-// shrinks its radii in render.ts instead.
+// Circle swarm; no overflow, the strip shrinks its radii in render.ts instead.
 export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5): (T & { y: number })[] =>
   swarmBy(items, {
     size: (d) => d.r,
@@ -258,8 +254,7 @@ export type RulerLayout<T> = {
   width: number
 }
 
-// Word-on-axis layout: x is balance (-1..+1), type size is sqrt(combined) so one loud word
-// cannot dwarf the rest. Text widths arrive through the injected `measure`.
+// Word-on-axis layout: x is balance (-1..+1), size sqrt(combined) so one loud word cannot dwarf the rest.
 export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], width = 860): RulerLayout<T> => {
   const inner = Math.max(80, width - 2 * RULER_PAD)
   const x = (balance: number) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
@@ -314,8 +309,7 @@ export const rulerModel = (layout: RulerLayout<RulerItem>) => ({
   overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
 })
 
-// Figure 5: one column per calendar day, words stacked around the column's own centre (x = 0),
-// so swarmBy's box clearance alone decides how far a word drifts from the loudest that day.
+// Figure 5: one column per day, words stacked around the column's centre (x = 0) by swarmBy's clearance.
 export const WEEK_SIZE_MIN = 12
 const WEEK_SIZE_MAX = 30
 // The cap only guards a runaway day: the widest limit the sentence offers (12) always fits.
@@ -335,8 +329,7 @@ export type WeekColumnLayout<T> = {
 
 const weekMaxWidth = (width: number) => Math.max(20, width - WEEK_PAD_X)
 
-// A phrase breaks at its spaces or after a hyphen, never inside a word ("vice-" over
-// "presidente"). Greedy, first fit.
+// A phrase breaks at spaces or after a hyphen, never inside a word; greedy, first fit.
 const weekLines = (measure: Measure, text: string, size: number, maxWidth: number): string[] =>
   text.split(/(?<=-)| /).reduce<string[]>((lines, piece) => {
     const last = lines[lines.length - 1]
@@ -387,9 +380,8 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
   return { words: placed, overflow, half: used, height: used * 2 }
 }
 
-// Each column gets its own height, but the size ramp is one for the whole week: a 3-doc word on
-// a quiet day must read smaller than a 300-doc word on a loud one. The loudest words set the
-// ceiling to the largest size at which they fit, so no per-word shrink can invert the ramp.
+// Each column gets its own height but the size ramp is one for the week, its ceiling the largest
+// size at which the loudest words fit, so no per-word shrink can invert the ramp.
 export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T>[] => {
   const all = days.flat()
   const counts = all.map((t) => t.count)
@@ -401,8 +393,7 @@ export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], wi
   return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
 }
 
-// Figure 7: the day with the maximum value in a { day, value } series, oldest day winning a tie,
-// or null on an all-zero series -- a peak of zero is no peak at all.
+// Figure 7: the day of a series' maximum, oldest on a tie, null when all zero.
 export type AttentionSeriesPoint = { day: string; value: number }
 
 export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
@@ -431,8 +422,7 @@ const attentionSizes = (values: number[]): number[] => {
 export type AttentionMark = { day: string; x: number; size: number; barW: number; text: string }
 export type AttentionRows = { width: number; mentions: AttentionMark[]; views: AttentionMark[] }
 
-// A day axis is monotonic, so a fixed column grid replaces a beeswarm. Both series arrive
-// already day-aligned and zero-padded. `measure` is unused but kept for a uniform signature.
+// A monotonic day axis needs a fixed grid, not a beeswarm; series arrive day-aligned and zero-padded.
 export const attentionLayout = (measure: Measure, mentions: { day: string; count: number }[], views: { day: string; views: number }[], width = ATTENTION_ROW_WIDTH): AttentionRows => {
   const n = Math.max(mentions.length, views.length, 1)
   const step = width / n
@@ -455,8 +445,7 @@ export const MATRIX_ROWHEAD = 140
 export type MatrixCell = { a: string; b: string; count: number | null; ink: number }
 export type MatrixLayout = { cellSize: number; cells: MatrixCell[] }
 
-// The matrix's row/column order is `persons` (sorted by name); a pair's a/b order is the id's
-// plain string comparison, an unrelated order, so a lookup always sorts the two ids itself.
+// Rows/columns follow `persons` (by name); a pair's a/b order is id string order, so lookups sort the ids.
 const pairKey = (x: string, y: string) => (x < y ? `${x}\u0000${y}` : `${y}\u0000${x}`)
 
 export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[], width: number): MatrixLayout => {
@@ -474,8 +463,7 @@ export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[],
   return { cellSize, cells }
 }
 
-// Figure 10: a fixed table grid. Level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest
-// count shown; 0 is only a null count, so a positive count never paints as the empty cell.
+// Figure 10: level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest count; 0 is only a null count.
 export const PERSISTENCE_LEVELS = 5
 
 export type PersistenceCell = { week: string; count: number | null; level: number }

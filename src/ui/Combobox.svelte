@@ -1,7 +1,7 @@
 <script lang="ts">
   import { filterItems, itemsOf, revealTop, type ComboItem } from './combobox.js'
 
-  let { select, inputId, listId, label, listLabel }: { select: HTMLSelectElement; inputId: string; listId: string; label: string; listLabel: string } = $props()
+  let { select, inputId, listId, label, listLabel }: { select: HTMLSelectElement | undefined; inputId: string; listId: string; label: string; listLabel: string } = $props()
 
   let input: HTMLInputElement | undefined = $state()
   let list: HTMLElement | undefined = $state()
@@ -10,18 +10,20 @@
   let shown = $state.raw<ComboItem[]>([])
   let active = $state(-1)
 
-  const itemsNow = () => itemsOf(select as unknown as Parameters<typeof itemsOf>[0])
+  const itemsNow = () => (select ? itemsOf(select as unknown as Parameters<typeof itemsOf>[0]) : [])
   const labelOf = (value: string) => itemsNow().find((i) => i.value === value)?.label ?? ''
   export const sync = () => {
-    text = labelOf(select.value)
+    text = select ? labelOf(select.value) : ''
   }
 
   const rows = $derived(shown.map((item, i) => ({ item, i, head: item.group !== '' && item.group !== (shown[i - 1]?.group ?? null) })))
 
   $effect(() => {
+    const el = select
     sync()
-    select.addEventListener('change', sync)
-    return () => select.removeEventListener('change', sync)
+    if (!el) return
+    el.addEventListener('change', sync)
+    return () => el.removeEventListener('change', sync)
   })
 
   $effect(() => {
@@ -31,7 +33,7 @@
 
   const show = (query: string) => {
     shown = filterItems(itemsNow(), query)
-    active = query ? (shown.length ? 0 : -1) : Math.max(0, shown.findIndex((i) => i.value === select.value))
+    active = query ? (shown.length ? 0 : -1) : Math.max(0, shown.findIndex((i) => i.value === select?.value))
     open = true
   }
 
@@ -42,7 +44,7 @@
   }
 
   const pick = (value: string) => {
-    if (value !== select.value) {
+    if (select && value !== select.value) {
       select.value = value
       select.dispatchEvent(new Event('change', { bubbles: true }))
     }
@@ -122,7 +124,7 @@
   {:else}
     {#each rows as { item, i, head } (i)}
       {#if head}<span class="combo-group eyebrow" role="presentation">{item.group}</span>{/if}
-      <span class="combo-option" class:is-active={i === active} role="option" id="{listId}-{i}" data-value={item.value} aria-selected={item.value === select.value}>{item.label}</span>
+      <span class="combo-option" class:is-active={i === active} role="option" id="{listId}-{i}" data-value={item.value} aria-selected={item.value === select?.value}>{item.label}</span>
     {/each}
   {/if}
 </span>

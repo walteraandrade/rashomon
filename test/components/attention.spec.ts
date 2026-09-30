@@ -252,14 +252,15 @@ describe('Attention (issue #295)', () => {
     await settle()
     expect(chart().hidden).toBe(false)
     expect(chart().getAttribute('aria-busy')).toBe('true')
-    expect(chart().classList.contains('is-loading')).toBe(true)
+    expect($('attention').classList.contains('is-loading')).toBe(false)
+    expect(chart().classList.contains('is-loading')).toBe(false)
     expect(chart().querySelector('.ghost, .ghost-field')).not.toBeNull()
     expect(chart().textContent).not.toMatch(/Carregando/)
     respond('/attention', att([{ day: '2026-08-15', views: 10 }]))
     respond('/timeline', [bucket('2026-08-15', 1)])
     await settle()
     expect(chart().getAttribute('aria-busy')).not.toBe('true')
-    expect(chart().classList.contains('is-loading')).toBe(false)
+    expect($('attention').classList.contains('is-loading')).toBe(false)
   })
 
   it('AC8: the views row ghosts on its own while /attention is pending', async () => {
@@ -271,6 +272,163 @@ describe('Attention (issue #295)', () => {
     expect(chart().querySelector('[data-row="mentions"]')).not.toBeNull()
     expect(chart().innerHTML).toMatch(/ghost/)
     expect(chart().textContent).not.toMatch(/sem dado de pageviews/)
+  })
+
+  it('AC8: views-only ghost does not dim the section and a mentions day stays clickable', async () => {
+    render(true)
+    boot()
+    await settle()
+    respond('/timeline', [bucket('2026-08-15', 4)])
+    await settle()
+    expect($('attention').classList.contains('is-loading')).toBe(false)
+    expect(chart().classList.contains('is-loading')).toBe(false)
+    expect(chart().getAttribute('aria-busy')).toBe('true')
+    day('2026-08-15')[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    flushSync()
+    expect(openedBy('attention')).toBe(true)
+  })
+
+  it('AC8: a reload over data on screen dims the section', async () => {
+    auto = both()
+    await startAll()
+    auto = null
+    const sel = $('attentionSource') as HTMLSelectElement
+    sel.value = 'gdelt'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    expect($('attention').classList.contains('is-loading')).toBe(true)
+    await settle(500)
+    respond('/timeline', [bucket('2026-08-15', 2)], (c) => c.qs.get('source') === 'gdelt')
+    await settle()
+    expect($('attention').classList.contains('is-loading')).toBe(false)
+  })
+
+  it('AC11: width tracks the chart when /attention errored', async () => {
+    render()
+    boot()
+    await settle()
+    named('/attention').forEach((c) => c.fail())
+    respond('/timeline', [bucket('2026-08-15', 4)])
+    await settle()
+    const before = calls.length
+    expect(chart().querySelector('[data-row="views"]')?.textContent).toMatch(/Não foi possível/)
+    widths.attentionChart = 400
+    for (const o of observers.filter((o) => o.target === chart())) o.cb()
+    flushSync()
+    await settle()
+    expect(calls.length).toBe(before)
+    expect((chart().querySelector('[data-row="mentions"] svg.attention-svg') as SVGElement).getAttribute('width')).toBe('400')
+  })
+
+  it('AC9: a pick made while a source reload is held is dropped when the new data paints', async () => {
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await startAll({ withCard: true })
+    auto = { '/docs': { docs: [], total: 0 } }
+    const sel = $('attentionSource') as HTMLSelectElement
+    sel.value = 'gdelt'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(500)
+    day('2026-08-15')[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    flushSync()
+    await settle()
+    expect(openedBy('attention')).toBe(true)
+    respond('/timeline', [bucket('2026-08-15', 2)], (c) => c.qs.get('source') === 'gdelt')
+    await settle()
+    expect(openedBy('attention')).toBe(false)
+    expect(chart().querySelector('.is-selected')).toBeNull()
+  })
+
+  it('AC9: a pick is dropped when its row then errors, leaving a card another figure owns alone', async () => {
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await startAll({ withCard: true })
+    auto = null
+    const sel = $('attentionSource') as HTMLSelectElement
+    sel.value = 'gdelt'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(500)
+    open({ owner: 'compare', kicker: 'k', title: 't', sides: [] })
+    flushSync()
+    named('/timeline').filter((c) => c.qs.get('source') === 'gdelt').forEach((c) => c.fail())
+    await settle()
+    expect(openedBy('compare')).toBe(true)
+  })
+
+  const days30 = Array.from({ length: 30 }, (_, i) => `2026-08-${String(i + 1).padStart(2, '0')}`)
+  const heights = (row: string) => [...chart().querySelectorAll(`[data-row="${row}"] .attention-bar`)].map((e) => e.getAttribute('height'))
+  const scenario = async (count: number, views: number) => {
+    clearScopes()
+    setBoot({ ready: false, people: [], peopleError: null, search: '' })
+    auto = {
+      '/attention': att(days30.slice(0, 5).map((d, i) => ({ day: d, views: i === 2 ? views : 2 }))),
+      '/timeline': days30.slice(0, 5).map((d, i) => bucket(d, i === 2 ? count : 3)),
+    }
+    await startAll()
+    const out = { mentions: heights('mentions'), views: heights('views') }
+    for (const i of instances.splice(0)) unmount(i)
+    for (const t of targets.splice(0)) t.remove()
+    return out
+  }
+
+  it('AC4: each row is sized off its own maximum, never distorted by the other row scale', async () => {
+    const a = await scenario(5, 200)
+    const b = await scenario(5, 5_000_000)
+    expect(a.mentions.length).toBeGreaterThan(0)
+    expect(a.mentions).toEqual(b.mentions)
+    const c = await scenario(900_000, 200)
+    expect(a.views).toEqual(c.views)
+  })
+
+  it('30 mentions marks stay in the tab order, the views row drops out of tab order and the accessibility tree', async () => {
+    auto = { '/attention': att(days30.map((d) => ({ day: d, views: 9000 }))), '/timeline': days30.map((d) => bucket(d, 40)) }
+    await startAll()
+    const html = chart().innerHTML
+    expect(chart().querySelectorAll('[data-day]')).toHaveLength(60)
+    expect(chart().querySelectorAll('[data-row="mentions"] [data-day][tabindex="0"]')).toHaveLength(30)
+    expect(chart().querySelectorAll('[data-row="views"] [data-day][tabindex="-1"][aria-hidden="true"]')).toHaveLength(30)
+    expect(chart().querySelectorAll('[data-row="views"] [tabindex="0"]')).toHaveLength(0)
+    expect(html).not.toMatch(/aria-label="2026-08/)
+  })
+
+  it('the mentions mark accessible name is the pt-BR day label plus both values', async () => {
+    auto = both(9000, 40, '2026-08-01')
+    await startAll()
+    const label = chart().querySelector('[data-row="mentions"] [data-day]')!.getAttribute('aria-label')!
+    expect(label).toMatch(/^.*, 40 documentos, 9\.000 visualizações$/)
+    expect(label).not.toMatch(/2026-08-01/)
+  })
+
+  it('the ghost and the data paint share the row/axis shape, and an /attention error clears the ghost', async () => {
+    render()
+    boot()
+    await settle()
+    const shape = () => ['mentions', 'views'].map((r) => [chart().querySelector(`[data-row="${r}"]`) !== null, chart().querySelector(`[data-row="${r}"] .attention-axis`) !== null])
+    expect(shape()).toEqual([[true, true], [true, true]])
+    respond('/attention', att([{ day: '2026-08-15', views: 9000 }]))
+    respond('/timeline', [bucket('2026-08-15', 4)])
+    await settle()
+    expect(shape()).toEqual([[true, true], [true, true]])
+    expect(chart().querySelector('.ghost-field')).toBeNull()
+  })
+
+  it('the lag sentence: peak order sets the wording, no peak leaves a note only', async () => {
+    const run = async (mDay: string, vDay: string, vViews = 9000) => {
+      clearScopes()
+      setBoot({ ready: false, people: [], peopleError: null, search: '' })
+      const ds = days30.slice(0, 7)
+      auto = { '/attention': att(ds.map((d) => ({ day: d, views: vViews === 0 ? 0 : d === vDay ? vViews : 1 }))), '/timeline': ds.map((d) => bucket(d, d === mDay ? 40 : 1)) }
+      await startAll()
+      const text = $('attentionNote').textContent
+      for (const i of instances.splice(0)) unmount(i)
+      for (const t of targets.splice(0)) t.remove()
+      return text
+    }
+    expect(await run('2026-08-03', '2026-08-06')).toMatch(/a imprensa veio 3 dias antes/)
+    expect(await run('2026-08-03', '2026-08-04')).toMatch(/a imprensa veio 1 dia antes$/)
+    expect(await run('2026-08-06', '2026-08-03')).toMatch(/o público buscou 3 dias antes/)
+    expect(await run('2026-08-03', '2026-08-03')).toMatch(/os dois picos caíram no mesmo dia/)
+    expect(await run('2026-08-03', '2026-08-03', 0)).not.toMatch(/dias antes|mesmo dia/)
   })
 
   it('AC8: a memo hit does not ghost', async () => {

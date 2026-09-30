@@ -64,6 +64,11 @@
   const mentionsKey = () => `${person}|${source}`
   const keyOfError = (e: unknown) => (e as { key?: string } | null)?.key
 
+  const dropStalePick = () => {
+    if (docsCard.openedBy(OWNER)) docsCard.close()
+    selected = null
+  }
+
   const canFetch = () => !bootData.peopleError && bootData.people.length > 0
 
   const pick = (day: string) => {
@@ -100,6 +105,7 @@
     ghost: () => {},
     paint: ({ key, data }) => {
       if (key !== person) return
+      if (data.series !== series) dropStalePick()
       series = data.series
       viewsErrored = false
       measure()
@@ -107,6 +113,7 @@
     paintError: (e) => {
       const key = keyOfError(e)
       if (key !== undefined && key !== person) return
+      dropStalePick()
       series = null
       viewsErrored = true
     },
@@ -128,6 +135,7 @@
     ghost: () => {},
     paint: ({ key, data }) => {
       if (key !== mentionsKey()) return
+      if (data !== buckets) dropStalePick()
       buckets = data
       mentionsErrored = false
       measure()
@@ -135,6 +143,7 @@
     paintError: (e) => {
       const key = keyOfError(e)
       if (key !== undefined && key !== mentionsKey()) return
+      dropStalePick()
       buckets = null
       mentionsErrored = true
     },
@@ -162,8 +171,14 @@
     untrack(start)
   })
 
+  // Width follows the chart itself, so a failed /attention (no views paint) still repaints the mentions row.
   $effect(() => {
-    if (chart) untrack(measure)
+    if (!chart) return
+    untrack(measure)
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(chart)
+    return () => observer.disconnect()
   })
 
   // A person change must never paint one series against the other's previous-person data.
@@ -196,7 +211,8 @@
   const fullGhost = $derived(!unavailable && mentions === null && !mentionsErrored)
   const viewsPending = $derived(series === null && !viewsErrored)
   const busy = $derived(!unavailable && (fullGhost || viewsPending))
-  const dim = $derived(busy || views.loading || mentionsFigure.loading)
+  // Only a reload over data already on screen dims: never the first ghost, never the views-only ghost.
+  const dim = $derived((views.loading && series !== null) || (mentionsFigure.loading && buckets !== null))
   const mentionsPeak = $derived(mentions ? peakDay(mentions.map((m) => ({ day: m.day, value: m.count }))) : null)
   const viewsPeak = $derived(viewDays && !viewsErrored ? peakDay(viewDays.map((v) => ({ day: v.day, value: v.views }))) : null)
   const peakOf = (days: { day: string }[] | null, peak: string | null, pick: (d: never) => number) => (peak && days ? pick(days.find((d) => d.day === peak) as never) : 0)
@@ -273,7 +289,7 @@
     </div>
   </header>
   <p class="note" id="attentionNote">{note}</p>
-  <figure class="attention-chart" class:is-loading={dim} id="attentionChart" aria-label="Pageviews da Wikipédia e menções por dia" aria-busy={busy ? 'true' : 'false'} hidden={unavailable} bind:this={chart}>
+  <figure class="attention-chart" id="attentionChart" aria-label="Pageviews da Wikipédia e menções por dia" aria-busy={busy ? 'true' : 'false'} hidden={unavailable} bind:this={chart}>
     {#if fullGhost}
       <div class="ghost-field" aria-hidden="true">
         {@render emptyRow(null, 'Menções', 'mentions')}

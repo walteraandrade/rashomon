@@ -192,7 +192,7 @@ describe('Comention', () => {
     click(matrix().querySelector('.comention-listitem[data-a]')!)
     await settle()
     const urls = docsUrls()
-    expect(urls.length).toBeGreaterThanOrEqual(2)
+    expect(urls).toHaveLength(1)
     expect(new Set(urls).size).toBe(1)
     expect(urls[0]).toMatch(/\/api\/people\/bolsonaro\/docs\?/)
     expect(new URL(urls[0], 'http://localhost').searchParams.get('with')).toBe('dino')

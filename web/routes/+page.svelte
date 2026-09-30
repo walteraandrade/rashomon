@@ -5,6 +5,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import Agenda from '$lib/Agenda.svelte'
+  import Comention from '$lib/Comention.svelte'
   import DocsCard from '$lib/DocsCard.svelte'
   import HelpDialog from '$lib/HelpDialog.svelte'
 
@@ -179,21 +180,7 @@
 
   <Agenda />
 
-  <section class="figure comention" id="comention" aria-labelledby="comentionTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 9</span><h2 id="comentionTitle">Quem aparece junto</h2></div>
-      <p class="figure-sub">Quantos textos citam duas pessoas rastreadas ao mesmo tempo, na mesma janela. <a href="/como-ler#junto">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt>Célula</dt><dd>textos que citam as duas pessoas juntas na janela</dd></div>
-        <div><dt>Cor</dt><dd>mais clara, mais textos; nunca é avaliação</dd></div>
-        <div><dt>Clique</dt><dd>os textos daquele par</dd></div>
-        <div><dt>Nota</dt><dd>aparecer junto não é concordar</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">Pares de pessoas citadas juntas nos <span class="keep"><span class="pick"><select id="comentionDays" aria-label="Período (quem aparece junto)"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="comentionSource" aria-label="Fonte (quem aparece junto)"></select></span>,</span> por <span class="keep"><span class="pick"><select id="comentionLean" aria-label="Viés (quem aparece junto)"><option value="all" selected>todo o viés</option><option value="left">esquerda</option><option value="center">centro</option><option value="right">direita</option></select></span>.</span> Mostrar pares com <span class="pick"><select id="comentionMin" aria-label="Mínimo de textos em comum"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option></select></span> textos em comum ou mais.</p></div>
-    </header>
-    <figure class="comention-body" id="comentionMatrix" aria-label="Matriz de pares de pessoas citadas juntas" hidden></figure>
-    <p class="note" id="comentionAbout"></p>
-  </section>
+  <Comention />
   <section class="figure persistence" id="persistence" aria-labelledby="persistenceTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 10</span><h2 id="persistenceTitle">Persistência</h2></div>

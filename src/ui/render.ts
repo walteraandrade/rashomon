@@ -10,7 +10,6 @@ import {
   matching,
   mergeOutlets,
   normalize,
-  personInitials,
   type Persistence,
   relatedTo,
   safeDocUrl,
@@ -34,7 +33,6 @@ import {
   type AttentionDay,
   type AttentionMentionDay,
   type Candidate,
-  type Comention,
   type Compare,
   type CompareSide,
   type CompareTerm,
@@ -63,7 +61,7 @@ import {
   weekHeadLabel,
   weekSpanLabel,
 } from './format.js'
-import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, matrixLayout, peakDay, persistenceLayout, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
+import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, peakDay, persistenceLayout, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
 import { axis, frame, overflowList } from './marks.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
@@ -1582,100 +1580,6 @@ export const paintAttentionError = () => {
   chart.innerHTML = html`<p class="note">Não foi possível carregar as menções.</p>`
   const note = $('attentionNote')
   if (note) note.textContent = ''
-}
-
-// Comention matrix (figure 9, #207): ink weight only, no --hostile/--favor/--cmp-a/--cmp-b.
-export type ComentionSelection = { a: string; b: string } | null
-
-// The grid's cells key a/b by row/column (name order, matrixLayout) while the ranked list's
-// pairs key a/b by id (comentionFor's own SQL order); the two disagree whenever name order and
-// id order disagree for a pair. Normalize both sides before comparing so a pair selected in one
-// markup still reads as selected in the other.
-const normalizePair = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a])
-const isPairSelected = (selected: ComentionSelection, a: string, b: string) => {
-  if (!selected) return false
-  const [x, y] = normalizePair(a, b)
-  return selected.a === x && selected.b === y
-}
-
-const comentionCellMarkup = (row: { id: string; name: string }, col: { id: string; name: string }, cell: { a: string; b: string; count: number | null; ink: number }, selected: ComentionSelection) => {
-  if (cell.count === null) return html`<span class="comention-cell is-empty" aria-hidden="true"></span>`
-  const isSelected = isPairSelected(selected, cell.a, cell.b)
-  return html`<button type="button" class="comention-cell${isSelected ? ' is-selected' : ''}" style="--w:${cell.ink}" data-a="${cell.a}" data-b="${cell.b}" aria-pressed="${isSelected}" aria-label="${row.name} e ${col.name}: ${fmt(cell.count)} textos juntos">${fmt(cell.count)}</button>`
-}
-
-const comentionAboutText = (data: Comention) =>
-  data.pairs.length ? `${fmt(data.pairs.length)} ${data.pairs.length === 1 ? 'par' : 'pares'} de pessoas citadas juntas nos ${data.days} dias.` : 'Ninguém apareceu junto o suficiente nesta janela.'
-
-export const paintComention = ({ data, width, selected, onPick }: { data: Comention; width: number; selected: ComentionSelection; onPick: (a: string, b: string) => void }) => {
-  const root = $('comentionMatrix')
-  if (!root) return
-  root.hidden = false
-  root.classList.remove('is-loading')
-  root.setAttribute('aria-busy', 'false')
-  const persons = data.persons
-  const { cellSize, cells } = matrixLayout(persons, data.pairs, width)
-  const cellAt = new Map(cells.map((c) => [`${c.a}\u0000${c.b}`, c]))
-  const rows = persons.map(
-    (row, i) => html`<div class="comention-row">
-      <div class="comention-rowhead">${row.name}</div>
-      ${persons.map((col, j) => {
-        if (i >= j) return html`<span class="comention-cell is-blank" aria-hidden="true"></span>`
-        // The cell carries row/column order (ids[i]/ids[j]), not the pair's own a/b (person_id);
-        // a caller needing the pair's a/b must normalize it, as pick() in comention.ts does.
-        return comentionCellMarkup(row, col, cellAt.get(`${row.id}\u0000${col.id}`)!, selected)
-      })}
-    </div>`,
-  )
-  const ranked = [...data.pairs].sort((a, b) => b.count - a.count)
-  root.innerHTML = html`<div class="comention-grid" style="--cell:${cellSize}px">
-      <div class="comention-row comention-headrow">
-        <div class="comention-rowhead" aria-hidden="true"></div>
-        ${persons.map((p) => html`<span class="comention-colhead" title="${p.name}">${personInitials(p.name)}</span>`)}
-      </div>
-      ${rows}
-    </div>
-    <ol class="comention-list">${ranked.map((pair) => {
-      const a = persons.find((p) => p.id === pair.a)
-      const b = persons.find((p) => p.id === pair.b)
-      const isSelected = isPairSelected(selected, pair.a, pair.b)
-      return html`<li><button type="button" class="comention-listitem${isSelected ? ' is-selected' : ''}" data-a="${pair.a}" data-b="${pair.b}" aria-pressed="${isSelected}"><b>${fmt(pair.count)}</b> ${a?.name ?? pair.a} × ${b?.name ?? pair.b}</button></li>`
-    })}</ol>`
-  for (const el of queryAll('[data-a]', root)) el.addEventListener('click', () => onPick(String(el.dataset.a), String(el.dataset.b)))
-  const about = $('comentionAbout')
-  if (about) about.textContent = comentionAboutText(data)
-}
-
-const COMENTION_GHOST_N = 27
-// .comention-list's own ghost -- atlas.css hides the grid below 700px, so it needs one too.
-const COMENTION_LIST_GHOST_N = 6
-
-export const paintComentionLoading = () => {
-  const root = $('comentionMatrix')
-  if (!root) return
-  root.hidden = false
-  root.classList.remove('is-loading')
-  root.setAttribute('aria-busy', 'true')
-  root.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="comention-grid is-ghost">${Array.from(
-    { length: COMENTION_GHOST_N },
-    () => html`<div class="comention-row">${Array.from({ length: COMENTION_GHOST_N }, () => html`<span class="comention-cell ghost"></span>`)}</div>`,
-  )}</div><ol class="comention-list is-ghost">${Array.from(
-    { length: COMENTION_LIST_GHOST_N },
-    () => html`<li><span class="comention-listitem ghost"></span></li>`,
-  )}</ol></div><p class="sr-only">Lendo quem aparece junto.</p>`
-  const about = $('comentionAbout')
-  if (about) about.textContent = ''
-}
-
-export const paintComentionError = () => {
-  const root = $('comentionMatrix')
-  if (!root) return
-  root.hidden = false
-  root.classList.remove('is-loading')
-  root.setAttribute('aria-busy', 'false')
-  root.innerHTML = html`<p class="note">Não foi possível carregar quem aparece junto.</p>`
-  const about = $('comentionAbout')
-  if (about) about.textContent = ''
 }
 
 // ---------- persistence (figure 10, issue #215): one row per word, one cell per week ----------

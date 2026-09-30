@@ -426,6 +426,10 @@ tracked person at once, so it has no `person` key, and it sends no `min`, which 
 route's own default of 5. Figure 9 reads `days` and `source` (bare or prefixed) plus `lean` and
 `min`, prefixed only (`comention.lean`, `comention.min`, no bare fallback, like figure 6's
 `a`/`b`) — it has no `person` key at all, since a shared count is never one person's.
+Figure 9 is a Svelte component (`src/ui/Comention.svelte`), not a `figures/*.ts` mount: it seeds
+from `days`, `source`, `lean` and `min` with `seedFor` over `bootData.search`, starts its first
+load only once `bootData.ready`, and shares the single `/api/people` fetch `app.ts` makes once
+(it never fetches people itself).
 The figure id `persistence` (figure 10, `#persistence`) reads `person` and `limit`, bare or
 prefixed (`persistence.person`, `persistence.limit`), and `weeks`, prefixed only
 (`persistence.weeks`, no bare fallback, like figure 6's `a`/`b`): no other figure has a

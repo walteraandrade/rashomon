@@ -418,3 +418,140 @@ describe('Persistence notes, ghost and error (#290)', () => {
     expect(persistenceUrls()).toHaveLength(0)
   })
 })
+
+describe('Persistence seeding and re-seeding (#290)', () => {
+  it('a bare person seeds; a prefixed key beats the bare one', async () => {
+    await start('?person=bolsonaro')
+    expect(persistenceUrls()[0]).toMatch(/\/people\/bolsonaro\/persistence/)
+    unmount(instances.shift()!)
+    unmount(instances.shift()!)
+    clearScopes()
+    urls = []
+    await start('?persistence.limit=60&limit=20')
+    expect(paramsOf(persistenceUrls()[0]).get('limit')).toBe('60')
+    unmount(instances.shift()!)
+    unmount(instances.shift()!)
+    clearScopes()
+    urls = []
+    await start('?persistence.person=bolsonaro&person=lula')
+    expect(persistenceUrls()[0]).toMatch(/\/people\/bolsonaro\/persistence/)
+  })
+
+  it('a later setBoot never re-seeds the controls', async () => {
+    await start('?persistence.person=lula')
+    change('persistencePerson', 'bolsonaro')
+    await settle(200)
+    setBoot({ search: '' })
+    flushSync()
+    await settle(200)
+    expect($('persistencePerson').value).toBe('bolsonaro')
+    expect(persistenceUrls().at(-1)).toMatch(/\/people\/bolsonaro\/persistence/)
+  })
+
+  it('keeps the last real series start after a failed fetch', async () => {
+    await start('')
+    expect($('persistenceSince').textContent).toBe(sinceLabel('2026-09-09'))
+    respond = async () => ({ ok: false, status: 500, headers: new Headers(), json: async () => ({}) })
+    change('persistenceLimit', '20')
+    await settle(200)
+    expect($('persistenceSince').textContent).toBe(sinceLabel('2026-09-09'))
+  })
+})
+
+const MONTHS = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.']
+const spanLabel = (monday: string) => {
+  const sunday = shiftDate(monday, 6)
+  const [, m1, d1] = monday.split('-').map(Number)
+  const [, m2, d2] = sunday.split('-').map(Number)
+  return m1 === m2 ? `de ${d1} a ${d2} de ${MONTHS[m1 - 1]}` : `de ${d1} de ${MONTHS[m1 - 1]} a ${d2} de ${MONTHS[m2 - 1]}`
+}
+
+describe('Persistence kicker span (#290)', () => {
+  it('names the Monday-to-Sunday span, month shown only where it changes, across 25 consecutive weeks', async () => {
+    const counts = Array.from({ length: 26 }, () => 3)
+    await start('?persistence.person=lula&persistence.weeks=26', payload({ weeks: 26, horizon: 400, first_week: shiftDate(cur, -175), terms: [row({ series: series(counts), streak: 26, half_life: null })] }))
+    let crossings = 0
+    for (let back = 1; back <= 25; back++) {
+      const monday = shiftDate(cur, -7 * back)
+      cell(monday)!.click()
+      flushSync()
+      await settle(0)
+      expect($('docsKicker').textContent).toContain(spanLabel(monday))
+      if ((spanLabel(monday).match(/ de /g) ?? []).length === 2) crossings++
+      cell(monday)!.click()
+      flushSync()
+      await settle(0)
+    }
+    expect(crossings).toBeGreaterThan(0)
+  })
+})
+
+describe('Persistence table markup (#290)', () => {
+  const nulls = (n: number) => Array.from({ length: n }, () => null)
+  const chart = () => $('persistenceChart') as HTMLElement
+  const html = () => chart().innerHTML
+  const twoRows = (over: Record<string, unknown> = {}) =>
+    payload({
+      horizon: 60,
+      first_week: shiftDate(cur, -14),
+      terms: [
+        row({ term: 'anistia', series: series([...nulls(9), 3, 4, 5]), streak: 3, half_life: null }),
+        row({ term: 'golpe', series: series([...nulls(6), 8, 7, 3, 1, 1, null]), streak: 0, half_life: 2 }),
+      ],
+      ...over,
+    })
+
+  it('labels nulls before first_week "sem dados" (is-nodata) and after it "fora das 50 mais fortes", never buttons', async () => {
+    await start('', twoRows())
+    const nodata = chart().querySelectorAll('.persistence-cell.is-nodata')
+    expect(nodata.length).toBeGreaterThan(0)
+    for (const el of nodata) expect(el.getAttribute('aria-label')).toBe('sem dados')
+    const gaps = chart().querySelectorAll('.persistence-cell.is-gap')
+    expect(gaps.length).toBeGreaterThan(0)
+    for (const el of gaps) expect(el.getAttribute('aria-label')).toBe('fora das 50 mais fortes')
+    expect(chart().querySelectorAll('button[data-gap]')).toHaveLength(0)
+    expect(chart().querySelectorAll('[data-gap]')).toHaveLength(9 + 7)
+  })
+
+  it('half-life null reads "sem queda" once; a number reads as a number in its own row; stats belong to their row', async () => {
+    await start('', twoRows())
+    expect((chart().textContent!.match(/sem queda/g) ?? []).length).toBe(1)
+    const rows = [...chart().querySelectorAll('tbody tr')]
+    expect(rows).toHaveLength(2)
+    expect(rows[0].textContent).toContain('sem queda')
+    expect(rows[1].textContent).not.toContain('sem queda')
+    const stats = (r: Element) => [...r.querySelectorAll('.stat dd')].map((d) => d.textContent)
+    expect(stats(rows[0])).toEqual(['3', 'sem queda'])
+    expect(stats(rows[1])).toEqual(['0', '2'])
+    expect(chart().querySelectorAll('.stat').length).toBeGreaterThanOrEqual(4)
+    for (const bad of ['—', 'null', 'NaN', 'undefined']) expect(html()).not.toContain(bad)
+  })
+
+  it('an expired cell is filled, labelled, not a button; buttons and expired partition the filled cells inside the horizon', async () => {
+    await start('', payload({ horizon: 60, terms: [row({ series: series(Array(12).fill(3)) })] }))
+    const expired = chart().querySelectorAll<HTMLElement>('[data-expired]')
+    expect(expired.length).toBeGreaterThanOrEqual(2)
+    for (const el of expired) {
+      expect(el.tagName).not.toBe('BUTTON')
+      expect(el.hasAttribute('data-gap')).toBe(false)
+      expect(el.getAttribute('aria-label')).toBe('documentos fora do período guardado')
+    }
+    const buttons = [...chart().querySelectorAll<HTMLElement>('button[data-week]')]
+    expect(buttons.length).toBeGreaterThanOrEqual(1)
+    expect(buttons.length + expired.length).toBe(12)
+    const oldest = shiftDate(todayBrt(), -60)
+    for (const b of buttons) expect(b.dataset.week! >= oldest).toBe(true)
+  })
+
+  it('no cell is expired when the horizon reaches past the oldest week', async () => {
+    await start('', payload({ horizon: 400, terms: [row({ series: series(Array(12).fill(3)) })] }))
+    expect(html()).not.toContain('data-expired')
+  })
+
+  it('every word is written on its own row and markup in a word stays text', async () => {
+    await start('', payload({ terms: [row({ term: 'anistia' }), row({ term: 'golpe' }), row({ term: 'urna eletrônica', kind: 'phrase' }), row({ term: '<img src=x>' })] }))
+    const heads = [...chart().querySelectorAll('tbody th[scope="row"]')].map((th) => th.textContent)
+    expect(heads).toEqual(['anistia', 'golpe', 'urna eletrônica', '<img src=x>'])
+    expect(chart().querySelector('img')).toBeNull()
+  })
+})

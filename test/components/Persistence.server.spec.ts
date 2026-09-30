@@ -8,6 +8,7 @@ describe('Persistence on the server', () => {
     const { body } = render(Persistence)
     expect(body).toContain('id="persistence"')
     expect(body).toMatch(/<figure[^>]*id="persistenceChart"[^>]*hidden|<figure[^>]*hidden[^>]*id="persistenceChart"/)
+    expect(body).toContain('id="persistenceNote"')
     for (const id of ['persistencePerson', 'persistenceWeeks', 'persistenceLimit']) expect(body).toMatch(new RegExp(`<select[^>]*id="${id}"`))
   })
 })

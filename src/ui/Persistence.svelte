@@ -22,6 +22,8 @@
   let selected: Selection | null = $state(null)
   let mounted = $state(false)
   let shown: Persistence | undefined
+  let started = false
+  let lastSince = $state('ainda sem série')
 
   const failure = $derived(!bootData.ready ? '' : bootData.peopleError ? 'Falha de rede ou base indisponível.' : !bootData.people.length ? 'Nenhuma pessoa cadastrada.' : '')
 
@@ -50,6 +52,7 @@
     paint: (d) => {
       if (d !== shown) dropStalePick()
       shown = d
+      lastSince = sinceLabel(d.since)
     },
     paintError: () => {
       shown = undefined
@@ -64,7 +67,8 @@
   })
 
   $effect(() => {
-    if (!bootData.ready) return
+    if (!bootData.ready || started) return
+    started = true
     untrack(() => {
       const seed = seedFor('persistence', ['person', ['weeks', null], 'limit'], bootData.search)
       const people = bootData.people
@@ -126,7 +130,7 @@
     failure ||
       (ghosting ? '' : showError ? 'Não foi possível carregar a persistência.' : data ? seriesNote || (data.terms.length ? '' : 'Nenhuma palavra ficou nesta janela.') : ''),
   )
-  const since = $derived(data ? sinceLabel(data.since) : 'a série começa em 9 de set. de 2026')
+  const since = $derived(lastSince)
 
   const isSelected = (week: string, row: { term: string; kind: string }) => !!selected && selected.week === week && selected.term === row.term && selected.kind === row.kind
 </script>

@@ -4,7 +4,6 @@ import { close, mountDocsCard } from '../src/ui/docs-card.js'
 import { mount as mountAtlas } from '../src/ui/figures/atlas.js'
 import { mount as mountCompare } from '../src/ui/figures/compare.js'
 import { mount as mountRising } from '../src/ui/figures/rising.js'
-import { mount as mountTestimony } from '../src/ui/figures/testimony.js'
 import { clearScopes } from '../src/ui/state.js'
 import { persons } from './fixture.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
@@ -24,12 +23,6 @@ const [personA, personB] = people
 const term = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 12, pmi: 1.4, score: 1.4 }
 const graph = { person: personA, nodes: [term], links: [], stats: { about: 40, testimony: { method: 'kikori', score: null, n: 0 } } }
 const docs = { docs: [{ source: 'rss', domain: 'g1.globo.com', text: 'um texto', url: 'https://g1.globo.com/a' }], total: 3 }
-const testimony = {
-  method: 'kikori',
-  overall: { score: -2, n: 9 },
-  by_source: [{ source: 'gnews', score: -2, n: 9 }],
-  by_domain: [{ domain: 'g1.globo.com', source: 'gnews', score: -3, n: 9 }],
-}
 const compare = {
   a: { person: personA, docs: 10 },
   b: { person: personB, docs: 8 },
@@ -116,50 +109,6 @@ describe('figure 1: picking a word opens its documents, with no button in betwee
       els.columns.querySelectorAll('[data-person-docs]')[0].fire('click')
       await flush()
       assert.equal(els.docsDialog.open, true)
-    })
-  })
-})
-
-describe('figure 2: focusing an outlet also opens that outlet\'s texts', () => {
-  it('the click carries domain and this figure\'s own recorte, and never a term', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, {
-        '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 9 }],
-        '/testimony': testimony,
-        '/docs': docs,
-      })
-      mountDocsCard()
-      mountTestimony(els.testimony, { people, initial: { person: personA.id } })
-      await flush()
-      assert.equal(docsCalls(calls).length, 0, 'painting the figure asks for no documents')
-
-      els.outletList.querySelectorAll('[data-domain]')[0].fire('click')
-      await flush()
-      const forOutlet = docsCalls(calls)
-      assert.equal(forOutlet.length, 1)
-      assert.match(forOutlet[0], /\/api\/people\/lula\/docs\?/, "figure 2's own person, not figure 1's")
-      assert.match(forOutlet[0], /domain=g1\.globo\.com/)
-      assert.match(forOutlet[0], /term=&|term=$/, 'an outlet is a different question from a word')
-      assert.equal(els.docsDialog.open, true)
-      assert.equal(els.docsKicker.textContent, 'Documentos de')
-      assert.equal(els.docsTitle.textContent, 'g1.globo.com')
-    })
-  })
-
-  it('releasing the outlet closes the card', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, { '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 9 }], '/testimony': testimony, '/docs': docs })
-      mountDocsCard()
-      mountTestimony(els.testimony, { people, initial: { person: personA.id } })
-      await flush()
-      els.outletList.querySelectorAll('[data-domain]')[0].fire('click')
-      await flush()
-      assert.equal(els.docsDialog.open, true)
-      els.outletList.fire('click', { target: { closest: () => null } })
-      await flush()
-      assert.equal(els.docsDialog.open, false, 'a click on empty space in the figure releases both')
     })
   })
 })

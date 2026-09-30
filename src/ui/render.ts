@@ -2,13 +2,11 @@
 
 import {
   balanceColor,
-  domainSuffix,
   fmt,
   html,
   kinds,
   label,
   matching,
-  mergeOutlets,
   normalize,
   relatedTo,
   safeDocUrl,
@@ -17,12 +15,8 @@ import {
   foldTestimonyDomains,
   MASK_MIN,
   signed,
-  sourceLabels,
   termMask,
   themeMask,
-  testimonyClass,
-  testimonyColor,
-  testimonyFocus,
   testimonyPosition,
   trendOf,
   type Candidate,
@@ -36,7 +30,6 @@ import {
   type Link,
   type MaskState,
   type Measure,
-  type OutletRow,
   type PersonRef,
   type PersonTestimony,
   type PlacedTerm,
@@ -45,7 +38,6 @@ import {
   type RisingTerm,
   type Sparkline,
   type Term,
-  type Testimony,
   type TestimonyDomainRow,
 } from './format.js'
 import { FONT_MONO, RULER_PAD, rulerLayout, routesFrom, swarm, type RulerItem } from './layout.js'
@@ -338,79 +330,6 @@ export const inspect = ({
     )
 }
 
-// /sources counts merged with /testimony means (mergeOutlets in format.ts). The two payloads
-// arrive independently; whichever has not landed contributes nothing.
-export const paintOutlets = ({
-  rows,
-  testimony,
-  domain,
-  onPick,
-}: {
-  rows: OutletRow[]
-  testimony: Testimony | null
-  domain: string
-  onPick: (domain: string) => void
-}) => {
-  $('domainLabel').textContent = domainSuffix(domain)
-  const merged = mergeOutlets(rows, testimony?.by_domain ?? [])
-  $('outletList').classList.remove('is-loading')
-  $('outletList').setAttribute('aria-busy', 'false')
-  const outletRow = (r: (typeof merged)[number]) => {
-    const cells = html`<span class="d">${r.domain}</span><span class="n">${fmt(r.docs)}</span><span class="t">${r.score === null ? '' : signed(r.score)}</span>`
-    // A row keyed by a source name folds that source's host-less docs (Bluesky posts, whose
-    // stored domain is an author handle): a count, never an outlet to focus on.
-    const button = r.sources.includes(r.domain)
-      ? html`<span class="outlet is-static" title="Textos sem veículo nesta fonte">${cells}</span>`
-      : html`<button class="outlet ${r.domain === domain ? 'is-active' : ''}" data-domain="${r.domain}" aria-pressed="${String(r.domain === domain)}" style="--tone:${testimonyColor(r.score)}" title="${r.sources.map((x) => sourceLabels[x] ?? x).join(', ')}">${cells}</button>`
-    if (r.domain !== domain) return button
-    const neighborLines = r.neighbors.slice(0, 5)
-    return html`${button}<dl class="metric stat"><div><dt>Vocabulário mais parecido com</dt><dd>${
-      neighborLines.length
-        ? neighborLines.map((nb) => html`<span class="outlet-neighbor">${nb.domain} · <span class="n">${nb.similarity.toFixed(2)}</span></span>`)
-        : 'Nenhum veículo com vocabulário parecido neste recorte'
-    }</dd></div></dl>`
-  }
-  // Groups by field: a numbered group's eyebrow names its top-3 domains (by docs desc), never
-  // the field int itself; field: null rows form their own trailing, unnumbered group.
-  const groups = new Map<number, (typeof merged)[number][]>()
-  const ungrouped: (typeof merged)[number][] = []
-  for (const r of merged) {
-    if (r.field === null || r.field === undefined) ungrouped.push(r)
-    else {
-      const g = groups.get(r.field) ?? []
-      g.push(r)
-      groups.set(r.field, g)
-    }
-  }
-  const groupMarkup = (eyebrow: string, group: (typeof merged)[number][]) =>
-    html`<p class="eyebrow">${eyebrow}</p><div class="outlet-grid">${group.map(outletRow)}</div>`
-  // The field int is a build-local Louvain label, never a rank: groups order by their own docs.
-  const byDocs = (a: (typeof merged)[number], b: (typeof merged)[number]) => b.docs - a.docs || a.domain.localeCompare(b.domain)
-  const docsOf = (g: (typeof merged)[number][]) => g.reduce((n, r) => n + r.docs, 0)
-  const groupSections = [
-    ...[...groups.values()]
-      .map((g) => g.slice().sort(byDocs))
-      .sort((a, b) => docsOf(b) - docsOf(a) || a[0].domain.localeCompare(b[0].domain))
-      .map((g) => groupMarkup(`grupo · ${g.slice(0, 3).map((r) => r.domain).join(', ')}`, g)),
-    ...(ungrouped.length ? [groupMarkup('Sem agrupamento suficiente', ungrouped)] : []),
-  ]
-  $('outletList').innerHTML = merged.length
-    ? html`${groupSections}<p class="note">Documentos no recorte e, quando o veículo tem 3 ou mais textos avaliados, a nota de −10 a +10 que o kikori (${testimony?.method ?? ''}) dá a cada texto sobre a pessoa. Compare veículos falando da mesma pessoa; não compare pessoas entre si. Grupos e vocabulário parecido vêm da construção da janela, não da consulta ao vivo, e podem ficar desatualizados entre construções.</p>`
-    : '<p class="note">Nenhum veículo neste recorte.</p>'
-  queryAll('[data-domain]', $('outletList')).forEach((el) =>
-    el.addEventListener('click', () => {
-      const d = el.dataset.domain
-      onPick(!d || d === domain ? 'all' : d)
-    }),
-  )
-}
-
-export const paintOutletsError = () => {
-  $('outletList').innerHTML = '<p class="note">Não foi possível carregar os veículos.</p>'
-  $('outletList').classList.remove('is-loading')
-  $('outletList').setAttribute('aria-busy', 'false')
-}
-
 const ghostBar = (cls: string) => html`<span class="ghost ${cls}"></span>`
 
 const ATLAS_GHOST_WORDS: [number, number, number, number][] = [
@@ -445,87 +364,7 @@ export const paintAtlasLoading = () => {
   inspector.innerHTML = html`<div class="ghost-field" aria-hidden="true"><p class="eyebrow">${ghostBar('ghost-kicker')}</p>${ghostBar('ghost-title')}<dl class="metric stat"><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div></dl>${ghostBar('ghost-line')}${ghostBar('ghost-line is-short')}</div>`
 }
 
-export const paintOutletsLoading = () => {
-  const list = $('outletList')
-  if (!list) return
-  list.classList.remove('is-loading')
-  list.setAttribute('aria-busy', 'true')
-  const widths = ['', 'is-mid', 'is-short']
-  list.innerHTML = html`<div class="outlet-grid ghost-field" aria-hidden="true">${[0, 1, 2, 3, 4, 5, 6, 7].map(
-    (i) => html`<div class="outlet"><span class="d">${ghostBar(`ghost-outlet-d ${widths[i % 3]}`)}</span><span class="n">${ghostBar('ghost-outlet-n')}</span><span class="t">${ghostBar('ghost-outlet-n')}</span></div>`,
-  )}</div><p class="sr-only">Lendo os veículos.</p>`
-}
-
-// Kikori's −10..+10 score overall, per source and per outlet from one response. The `3` in
-// the empty copy is api.ts's narrowToTestimony `min`.
-export const paintTestimony = ({ data, domain }: { data: Testimony; domain: string }) => {
-  const { overall, by_source, by_domain, method } = data
-  const score = overall.score
-  if (score === null || score === undefined || !overall.n) {
-    $('testimonyLabel').textContent = ''
-    $('testimonyList').classList.remove('is-loading')
-    $('testimonyList').setAttribute('aria-busy', 'false')
-    $('testimonyList').innerHTML = html`<div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método ${method}).<br>Tente um período maior ou outra fonte.</p></div>`
-    return
-  }
-  $('testimonyLabel').textContent = signed(score)
-  $('testimonyList').classList.remove('is-loading')
-  $('testimonyList').setAttribute('aria-busy', 'false')
-  const focus = testimonyFocus(by_domain, domain)
-  const focusLine =
-    domain === 'all'
-      ? ''
-      : focus
-        ? html`<p class="focus"><b>${domain}</b>: <strong style="--tone:${testimonyColor(focus.score)}">${signed(focus.score)}</strong> em ${fmt(focus.n)} ${focus.n === 1 ? 'texto' : 'textos'}. O número acima é o recorte inteiro.</p>`
-        : html`<p class="focus"><b>${domain}</b>: menos de 3 textos avaliados, sem média própria. O número acima é o recorte inteiro.</p>`
-  $('testimonyList').innerHTML = html`<dl class="verdict stat"><div><dt>Média do recorte</dt><dd style="--tone:${testimonyColor(score)}">${signed(score)}</dd></div></dl><p class="verdict-class">${testimonyClass(score)} · média de ${fmt(overall.n)} ${overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>${focusLine}<dl class="source-chips">${by_source.map(
-    (r) =>
-      html`<div class="source-chip"><dt>${sourceLabels[r.source] ?? r.source}</dt><dd><span class="n">${fmt(r.n)}</span><span class="t" style="--tone:${testimonyColor(r.score)}">${r.score === null || r.score === undefined ? '' : signed(r.score)}</span></dd></div>`,
-  )}</dl>`
-}
-
-const STRIP_PAD = 28
-
-const STRIP_GHOST_DOTS: [number, number][] = [
-  [92, 11],
-  [210, 8],
-  [348, 17],
-  [430, 10],
-  [528, 21],
-  [656, 9],
-  [768, 14],
-]
-
-export const paintTestimonyLoading = () => {
-  if ($('testimonyLabel')) $('testimonyLabel').textContent = ''
-  const list = $('testimonyList')
-  if (list) {
-    list.classList.remove('is-loading')
-    list.setAttribute('aria-busy', 'true')
-    list.innerHTML = html`<div class="ghost-field" aria-hidden="true"><dl class="verdict stat"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-stat is-xl')}</dd></div></dl>${ghostBar('ghost-line is-short')}<dl class="source-chips">${[0, 1, 2, 3].map(() => html`<div class="source-chip">${ghostBar('ghost-chip')}</div>`)}</dl></div><p class="sr-only">Lendo a avaliação.</p>`
-  }
-  const strip = $('strip')
-  if (!strip) return
-  strip.hidden = false
-  strip.classList.remove('is-loading')
-  strip.setAttribute('aria-busy', 'true')
-  const width = 860
-  const height = 96
-  const half = 48
-  strip.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="strip-mean-row"></div>${frame(
-    { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}` },
-    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map((s) => STRIP_PAD + ((s + 10) / 20) * (width - 2 * STRIP_PAD)), cls: 'strip' })}${STRIP_GHOST_DOTS.map(([x, r]) => html`<circle class="ghost" cx="${x}" cy="${half}" r="${r}"/>`)}`,
-  )}<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div></div>`
-}
-
-export const paintTestimonyError = () => {
-  $('testimonyList').innerHTML = '<p class="note">Não foi possível carregar a avaliação.</p>'
-  $('testimonyList').classList.remove('is-loading')
-  $('testimonyList').setAttribute('aria-busy', 'false')
-  $('strip').hidden = true
-  $('strip').classList.remove('is-loading')
-  $('strip').setAttribute('aria-busy', 'false')
-}
+export const STRIP_PAD = 28
 
 // Area grows with n; dots shrink on narrow screens (floor 55%) to avoid a tall stack.
 export const stripRadius = (n: number, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
@@ -553,54 +392,6 @@ export const stripLayout = (rows: TestimonyDomainRow[], width: number) => {
     fit = attempt(scale)
   }
   return { dots: fit.dots, x, half: fit.half, height: fit.half * 2, width, scale }
-}
-
-// Outlets on the −10..+10 axis so distance is visible. Text stays in HTML; SVG holds shapes.
-export const paintStrip = ({
-  data,
-  domain,
-  onPick,
-  width = 860,
-}: {
-  data: Testimony
-  domain: string
-  onPick: (domain: string) => void
-  width?: number
-}) => {
-  const strip = $('strip')
-  const { dots, x, half, height } = stripLayout(data.by_domain, width)
-  const overall = data.overall.score
-  if (!dots.length || overall === null || overall === undefined) {
-    strip.hidden = true
-    strip.classList.remove('is-loading')
-    strip.setAttribute('aria-busy', 'false')
-    strip.innerHTML = ''
-    return
-  }
-  strip.hidden = false
-  strip.classList.remove('is-loading')
-  strip.setAttribute('aria-busy', 'false')
-  strip.innerHTML = html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${testimonyPosition(overall)}%">média da pessoa ${signed(overall)}</span></div>${frame(
-    { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel: 'Veículos na régua da avaliação, de −10 a +10' },
-    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: [-10, -5, 0, 5, 10].map(x), cls: 'strip' })}<line class="strip-overall" x1="${x(overall)}" x2="${x(overall)}" y1="4" y2="${height - 4}"/>${dots.map(
-      (d) =>
-        html`<g class="strip-dot ${d.domain === domain ? 'is-active' : ''}" style="--tone:${testimonyColor(d.score)}" data-strip-domain="${d.domain}" role="button" tabindex="0" aria-pressed="${String(d.domain === domain)}" aria-label="${d.domain}, ${signed(d.score)} em ${fmt(d.n)} textos"><title>${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`,
-    )}`,
-  )}<div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui${domain === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>`
-  for (const el of queryAll('[data-strip-domain]', strip)) {
-    const pick = () => {
-      const d = el.dataset.stripDomain
-      onPick(!d || d === domain ? 'all' : d)
-    }
-    el.addEventListener('click', pick)
-    el.addEventListener('keydown', (event) => {
-      const e = event as KeyboardEvent
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault()
-        pick()
-      }
-    })
-  }
 }
 
 // Figure 1's third view (issue #149): each word positioned by its own kikori mean, not by

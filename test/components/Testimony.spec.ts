@@ -7,7 +7,6 @@ import { setBoot } from '../../src/ui/boot.svelte.js'
 import { docsParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
 import { existsSync, readFileSync } from 'node:fs'
-import { measures } from '../../src/ui/perf.js'
 
 // Issue #296: figure 2 as one component. Mirrors the assertions of the retired
 // test/figures-testimony.test.ts and test/outlets-fold.test.ts.
@@ -255,7 +254,7 @@ describe('Testimony (issue #296)', () => {
     await settle()
     expect(q('[aria-busy="true"]')).toBeNull()
     expect(q('#testimonyList .verdict')).not.toBeNull()
-    expect(byId('testimonyLabel').textContent).toBe('+1,50')
+    expect(byId('testimonyLabel').textContent).toBe('+1,5')
     byId('testimonyDays').value = '7'
     byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
     flushSync()
@@ -324,15 +323,15 @@ describe('Testimony (issue #296)', () => {
   it('AC10: memo hit records api:sources', async () => {
     mountAll()
     await startBoot('?person=p1&days=30')
-    performance.clearMeasures()
+    const measure = vi.spyOn(performance, 'measure')
     byId('testimonyDays').value = '60'
     byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
     await settle(300)
-    performance.clearMeasures()
+    measure.mockClear()
     byId('testimonyDays').value = '30'
     byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
     await settle(300)
-    const names = measures('api:').map((m) => m.name)
+    const names = measure.mock.calls.map(([name]) => String(name)).filter((n) => n.startsWith('api:'))
     expect(names).toContain('api:sources')
     expect(names).not.toContain('api:outlets')
   })

@@ -512,22 +512,6 @@ describe('changing a compare control refetches only compare, and vice versa', ()
       assert.ok(!added.some((u) => u.includes('/api/compare')), `figure 3 must not reload: ${JSON.stringify(added)}`)
     })
   })
-
-  it("changing figure 2's own control never triggers a new loadCompare call", async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony, '/compare': compareData([]) })
-      await withLocation('', () => appModule.boot())
-      await flush()
-      const before = calls.length
-      els.testimonyDays.value = '60'
-      els.testimonyDays.fire('change')
-      await flush(220)
-      const added = calls.slice(before)
-      assert.ok(added.some((u) => u.includes('/sources') || u.includes('/testimony')), 'figure 2 must reload')
-      assert.ok(!added.some((u) => u.includes('/api/compare')), `figure 3 must not reload: ${JSON.stringify(added)}`)
-    })
-  })
 })
 
 describe('no word rendered by the ruler ever opens #docsDialog', () => {

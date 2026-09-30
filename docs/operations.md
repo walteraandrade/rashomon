@@ -459,12 +459,12 @@ chart on screen for it to compete with.
 
 | Box | Painter | Sprite | Copy it sits beside |
 |---|---|---|---|
-| an empty recorte in figure 2 | `paintTestimony` (`render.ts`) | `pet-caracara.png`, 106×78 | "Nenhum texto avaliado neste recorte… Tente um período maior ou outra fonte." |
+| an empty recorte in figure 2 | `Testimony.svelte` | `pet-caracara.png`, 106×78 | "Nenhum texto avaliado neste recorte… Tente um período maior ou outra fonte." |
 | the atlas with nothing to draw | `OUTAGE` (`figures/atlas.ts`) | `pet-caracara-perched.png`, 26×37 | "Falha de rede ou base indisponível. Nenhum grafo fictício será exibido." |
 
 Four rules hold it there, and `test/pet-acceptance.test.ts` pins each one:
 
-- **One bird at a time.** `paintOutlets` empties in the same breath as `paintTestimony`, so the
+- **One bird at a time.** `Testimony.svelte`'s outlet list carries no bird beside its testimony list, so the
   outlet list stays plain text; figures 2 and 3 print the `peopleError` outage in words, because
   all three figures fail together and three birds read as decoration rather than as one failure.
 - **It leaves when the data arrives.** A recorte with a score paints no `<img>` at all. Nothing

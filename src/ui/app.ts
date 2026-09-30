@@ -3,15 +3,12 @@ import { mount as mountAtlas } from './figures/atlas.js'
 import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountLenses } from './figures/lenses.js'
 import { mount as mountRising } from './figures/rising.js'
-import { mount as mountTestimony } from './figures/testimony.js'
 import { mountHelp } from './help.js'
 import {
   paintAtlasLoading,
   paintCompareLoading,
   paintLensesLoading,
-  paintOutletsLoading,
   paintRisingLoading,
-  paintTestimonyLoading,
 } from './render.js'
 import * as api from './api.js'
 import { setBoot, type Person } from './boot.svelte.js'
@@ -29,7 +26,6 @@ type FigureEntry = {
 
 const FIGURES: FigureEntry[] = [
   { id: 'atlas', sectionId: 'workspace', keys: ['person', 'days', 'source', 'sort', 'limit'], noticeId: 'status', mount: mountAtlas },
-  { id: 'testimony', sectionId: 'testimony', keys: ['person', 'days', 'source'], noticeId: 'testimonyList', mount: mountTestimony },
   {
     id: 'compare',
     sectionId: 'compare',
@@ -47,8 +43,6 @@ const paintBootLoading = () => {
   const status = document.getElementById('status')
   if (status) status.textContent = 'Lendo as pessoas.'
   paintAtlasLoading()
-  paintTestimonyLoading()
-  paintOutletsLoading()
   paintCompareLoading()
   paintRisingLoading()
   paintLensesLoading()

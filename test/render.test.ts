@@ -41,7 +41,7 @@ import {
   wordMarkup,
 } from '../src/ui/render.js'
 import * as renderModule from '../src/ui/render.js'
-import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -52,22 +52,6 @@ import { withFiguresDom } from './fake-mount-dom.js'
 // The injected text measurer, the same contract layout.ts documents: a real canvas in the
 // browser, a deterministic stand-in here.
 const metrics = (text: string, size: number) => text.length * size * 0.6
-
-const ids = ['testimonyLabel', 'testimonyList', 'strip']
-
-const sample = {
-  method: 'kikori:q8',
-  overall: { score: -2.16, n: 784 },
-  by_source: [
-    { source: 'bluesky', score: -1.89, n: 621 },
-    { source: 'gkg', score: -4.22, n: 39 },
-  ],
-  by_domain: [
-    { domain: 'bbc.com', source: 'gnews', score: -2, n: 6 },
-    { domain: 'g1.globo.com', source: 'gnews', score: -3.62, n: 13 },
-    { domain: 'fdusp.bsky.social', source: 'bluesky', score: 0.76, n: 3 },
-  ],
-}
 
 const lula = { id: 'lula', name: 'Lula' }
 const bolsonaro = { id: 'bolsonaro', name: 'Jair Bolsonaro' }

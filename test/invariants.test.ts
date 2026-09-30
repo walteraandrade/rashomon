@@ -219,8 +219,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 7 (issue #216), attention vs mentions: same shape as figures/lenses.ts, imported
       // by nothing but app.ts, and reaching into no other figure's DOM.
       'figures/attention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
-      // Figure 9 (#207), the comention matrix: same shape again, imported by nothing but app.ts.
-      'figures/comention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'figures/persistence.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
@@ -228,7 +226,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './docs-card.js',
         './figures/atlas.js',
         './figures/attention.js',
-        './figures/comention.js',
         './figures/compare.js',
         './figures/lenses.js',
         './figures/persistence.js',
@@ -249,6 +246,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Combobox.svelte': ['./combobox.js'],
       'Agenda.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
       'Proof.svelte': [],
+      'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
       const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))

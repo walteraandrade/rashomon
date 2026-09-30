@@ -7,7 +7,7 @@ import { parse, type DefaultTreeAdapterMap } from 'parse5'
 import { app } from '../src/server.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { pageMarkup, pageSource, ROUTES } from './pages.js'
-import { paintCandidates, paintDocs, wordMarkup } from '../src/ui/render.js'
+import { paintDocs } from '../src/ui/render.js'
 
 // Repo-wide invariants: shapes the whole codebase must hold, not one issue's acceptance
 // criteria. A block here checks a structural rule (an import graph, a module boundary, a
@@ -101,17 +101,6 @@ describe('the pages under web/ carry no styles and no logic of their own', () =>
     )
     assert.deepEqual(offenders, [], 'inline style= only ever belongs to a --var override for a genuinely dynamic value; everything else lives in atlas.css')
   })
-
-  it('the markup the painters actually emit carries only --var overrides', () => {
-    const word = wordMarkup({ id: 'a', term: 'reforma', kind: 'word', pmi: 1, rank: 0, x: 1, y: 2, w: 90, h: 30, size: 28, lineHeight: 33, lines: ['reforma'], count: 4, score: 4 }, 'count')
-    for (const value of inlineStyles(String(word))) assert.ok(value.startsWith('--'), `wordMarkup emitted style="${value}"`)
-
-    const emitted = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
-      paintCandidates({ candidates: [{ name: 'Hugo Motta', count: 5, sources: 2, previous: 0, samples: [{ id: '1', source: 'gnews', text: 'texto' }] }] })
-      return els.candidateList.innerHTML
-    })
-    for (const value of inlineStyles(emitted)) assert.ok(value.startsWith('--'), `a painter emitted style="${value}"`)
-  })
 })
 
 describe('every page parses the way it is written', () => {
@@ -195,7 +184,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // card its own name opened.
       'figure.ts': ['./docs-card.js', './perf.js', './state.js'],
       'figure.svelte.ts': ['./docs-card.svelte.js', './perf.js', './state.js'],
-      'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
       // testimony.ts, compare.ts and rising.ts adopt figure.ts and drop their own
       // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
       // the shared runtime.
@@ -204,12 +192,12 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
       // nothing but app.ts, and reaching into no other figure's DOM.
+      'atlas-model.ts': ['./api.js', './format.js'],
       'figures/lenses.ts': ['./api.js', './combobox.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
         './boot.svelte.js',
         './docs-card.js',
-        './figures/atlas.js',
         './figures/lenses.js',
         './figures/rising.js',
         './help.js',
@@ -230,6 +218,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Persistence.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
       'Attention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
+      'Atlas.svelte': ['./api.js', './atlas-model.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './render.js', './seed.js'],
       'Compare.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Ruler.svelte': ['./format.js'],
@@ -267,16 +256,45 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     assert.equal(typeof module.boot, 'function')
   })
 
-  it('figures/atlas.js is importable outside a browser too', async () => {
+  it('#297: atlas-model.js is importable outside a browser and exports exactly the pure helpers', async () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
-    const atlas = await import('../src/ui/figures/atlas.js')
-    assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/atlas.js must not touch document at import time')
-    assert.equal(typeof atlas.mount, 'function')
+    const model = await import('../src/ui/atlas-model.js')
+    assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing atlas-model.js must not touch document at import time')
+    assert.deepEqual(Object.keys(model).sort(), ['docsQuery', 'layoutKey', 'scopeKeys'])
   })
 
-  it('figures/atlas.js and state.js export exactly what the split promises, no more', async () => {
-    const atlas = await import('../src/ui/figures/atlas.js')
-    assert.deepEqual(Object.keys(atlas).sort(), ['createHandlers', 'docsQuery', 'layoutKey', 'mount', 'scopeKeys'].sort())
+  it('#297 AC1: figures/atlas.ts is gone, app.ts imports nothing of it, has no atlas FIGURES entry and paints no atlas ghost at boot', () => {
+    assert.equal(existsSync(join(jsDir, 'figures', 'atlas.ts')), false)
+    assert.ok(!jsFiles().includes('figures/atlas.ts'))
+    const app = readFileSync(join(jsDir, 'app.ts'), 'utf8')
+    assert.doesNotMatch(app, /figures\/atlas/)
+    assert.doesNotMatch(app, /mountAtlas/)
+    assert.doesNotMatch(app, /paintAtlasLoading/)
+    assert.doesNotMatch(app, /id:\s*'atlas'/)
+  })
+
+  it('#297 AC1/AC11: Atlas.svelte is the one figure-1 owner', () => {
+    assert.ok(existsSync(join(jsDir, 'Atlas.svelte')))
+    const source = readFileSync(join(jsDir, 'Atlas.svelte'), 'utf8')
+    assert.deepEqual(svelteRules.atHtml(join(jsDir, 'Atlas.svelte'), source), [], 'Atlas.svelte may not use {@html}')
+    assert.equal(svelteRules.innerHTML(source), false, 'Atlas.svelte may not touch innerHTML')
+    assert.equal(svelteRules.style(source), false, 'Atlas.svelte may carry no <style> and no style= (style:--name only)')
+    assert.equal(svelteRules.fontSize(source), false)
+    assert.deepEqual(svelteRules.imports(join(jsDir, 'Atlas.svelte'), source), [])
+    const painters = [...scriptOf(source).matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]\.\/render\.js['"]/g)].flatMap((m) => m[1].split(',').map((n) => n.trim().split(/\s+as\s+/)[0]).filter(Boolean))
+    for (const name of painters) assert.ok(/^paintDocs/.test(name) || name === 'createCanvasMeasure', `Atlas.svelte may import only paintDocs* and createCanvasMeasure from render.js, not ${name}`)
+    assert.ok(!HTML_ALLOWLIST.includes('Atlas.svelte'), 'the {@html} allowlist stays DocsCard.svelte')
+    assert.deepEqual(HTML_ALLOWLIST, ['DocsCard.svelte'])
+  })
+
+  it('#297 AC12: render.ts no longer exports the figure-1 painters', async () => {
+    const render = (await import('../src/ui/render.js')) as Record<string, unknown>
+    for (const name of ['wordMarkup', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'paintAtlasLoading', 'termStripLayout', 'paintTermStrip', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError'])
+      assert.equal(name in render, false, `render.ts must not export ${name}`)
+    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms', 'paintRisingRuler', 'paintLensRuler']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
+  })
+
+  it('state.js exports what the split promises, no more', async () => {
     const state = await import('../src/ui/state.js')
     for (const name of ['fromScope', 'debounce', 'readScope', 'writeScope', 'clearScopes', 'SCOPE_TTL_MS', 'SCOPE_LIMIT']) assert.equal(typeof (state as Record<string, unknown>)[name] !== 'undefined', true, `state.js must still export ${name}`)
     for (const name of ['outlet', 'zoom', 'layoutCache', 'mask', 'getController', 'setController', 'getMask', 'setMask']) assert.equal(name in state, false, `state.js must not export ${name}: it is figure-private now`)
@@ -714,7 +732,7 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     }
   })
 
-  it('the shared pieces are in the import map, acyclic, and reach render.ts only for paintDocs*', () => {
+  it('the shared pieces are in the import map, acyclic, and reach render.ts only for paintDocs* and createCanvasMeasure', () => {
     const importsFrom = (source: string, from: RegExp) =>
       [...source.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)].filter((m) => from.test(m[2])).flatMap((m) => m[1].split(',').map((n) => n.trim().replace(/\s+as\s+.*/, '')).filter(Boolean))
     for (const name of ['docs-card.svelte.ts', 'help.svelte.ts', 'figure.svelte.ts']) assert.ok(existsSync(join(jsDir, name)), `${name} must exist`)
@@ -785,5 +803,24 @@ describe('figure 9 lives only in Comention.svelte', () => {
     assert.doesNotMatch(readFileSync(join(ui, 'app.ts'), 'utf8'), /comention/i)
     const tsFiles = [ui, join(ui, 'figures')].flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)))
     for (const file of tsFiles) assert.doesNotMatch(readFileSync(file, 'utf8'), /Comention\.svelte/, file)
+  })
+})
+
+describe('#297 AC2: web/routes/+page.svelte mounts <Atlas /> and holds none of its markup', () => {
+  const source = () => pageSource('/')
+  const IDS = ['workspace', 'atlasTitle', 'atlasStats', 'keyDefault', 'keyTheme', 'keyStrip', 'person', 'days', 'source', 'sort', 'limit', 'status', 'search', 'searchNote', 'modeMap', 'modeColumns', 'modeStrip', 'mask', 'zoomGroup', 'viewport', 'overflow', 'columns', 'atlasStrip', 'stripHiddenNote', 'legend', 'inspector', 'selectionNote']
+
+  it('the page carries <Atlas /> and none of the figure ids as static markup', () => {
+    assert.match(source(), /<Atlas \/>/)
+    assert.match(source(), /import Atlas from ['"][^'"]*Atlas\.svelte['"]/)
+    for (const id of IDS) assert.doesNotMatch(source(), new RegExp(`id="${id}"`), `#${id} now belongs to Atlas.svelte`)
+  })
+
+  it('the expanded page still finds the workspace section, the selection note and the skip link target once each', () => {
+    const html = pageMarkup('/')
+    assert.equal(html.match(/id="workspace"/g)?.length, 1)
+    assert.equal(html.match(/id="selectionNote"/g)?.length, 1)
+    assert.match(html, /href="#workspace"/)
+    for (const id of IDS) assert.equal(html.match(new RegExp(`id="${id}"`, 'g'))?.length, 1, `#${id} exactly once`)
   })
 })

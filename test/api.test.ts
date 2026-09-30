@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { ATLAS_KINDS, attentionParams, bridgeParams, candidatesQuery, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadPersistence, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, persistenceParams, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams, bridgeParams, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadPersistence, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, persistenceParams, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -192,10 +192,6 @@ describe('the narrowed querystrings: each route is asked only what it reads', ()
       ['testimony', testimonyParams(opts)],
     ] as const)
       assert.equal(q.has('domain'), false, `${name} must answer for the whole recorte`)
-  })
-
-  it('the candidate queue keeps its own querystring: the period select, min=3 and limit=30', () => {
-    assert.equal(candidatesQuery({ days: '7' }).toString(), new URLSearchParams({ days: '7', min: '3', limit: '30' }).toString())
   })
 
   it('compareParams always sends kind=word,hashtag,phrase and never domain or lean', () => {

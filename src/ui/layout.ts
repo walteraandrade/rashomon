@@ -1,4 +1,4 @@
-import { balanceColor, fmt, isBridge, kinds, label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { balanceColor, fmt, isBridge, kinds, label, score, termMask, type PersonTestimony, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
@@ -195,7 +195,7 @@ export const routesFrom = (layout: Layout, id: string): Map<string, string> => {
 // Beeswarm skeleton both strips share. `reach(placed, item)` returns the vertical clearance
 // needed at the horizontal distance between the two items, or null when they never interfere.
 // `fits` rejects placements outside the figure; `escape` is the last resort.
-// Deterministic: same input, same picture.
+
 export type SwarmRules<T> = {
   size: (item: T) => number
   reach: (placed: T & { y: number }, item: T) => number | null
@@ -314,16 +314,11 @@ export const rulerModel = (layout: RulerLayout<RulerItem>) => ({
   overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
 })
 
-// Figure 5 (issue #147): one column per calendar day, words stacked around a shared vertical
-// axis (x fixed at the column's own centre, 0) instead of spread along a balance axis, so
-// swarmBy's box clearance alone decides how far a word drifts from the loudest word that day.
-// No second packer -- same swarmBy rulerLayout already builds on.
+// Figure 5: one column per calendar day, words stacked around the column's own centre (x = 0),
+// so swarmBy's box clearance alone decides how far a word drifts from the loudest that day.
 export const WEEK_SIZE_MIN = 12
 const WEEK_SIZE_MAX = 30
-// Columns are independent (align-items: start), so the cap only guards a runaway day: the
-// widest limit the sentence offers (12) always fits, one-line words at the ramp ceiling
-// (12 * (30 * 1.24 + 3) is about 480) or wrapped phrases, whose lines weekColumn counts into
-// the cap, so a word is listed for height only past the 12th of its day.
+// The cap only guards a runaway day: the widest limit the sentence offers (12) always fits.
 export const WEEK_MAX_HEIGHT = 480
 export const WEEK_MAX_TERMS = 12
 export const WEEK_COLUMN_WIDTH = 120
@@ -340,10 +335,8 @@ export type WeekColumnLayout<T> = {
 
 const weekMaxWidth = (width: number) => Math.max(20, width - WEEK_PAD_X)
 
-// A phrase breaks at its spaces or after a hyphen, never inside a word: "supremo tribunal
-// federal" is three lines in a 145px column at a size that keeps "pronunciamento" out, and
-// "vice-presidente" is "vice-" over "presidente", the same breaks wrapLines prefers.
-// Greedy, first fit: a line takes pieces until the next one would not fit.
+// A phrase breaks at its spaces or after a hyphen, never inside a word ("vice-" over
+// "presidente"). Greedy, first fit.
 const weekLines = (measure: Measure, text: string, size: number, maxWidth: number): string[] =>
   text.split(/(?<=-)| /).reduce<string[]>((lines, piece) => {
     const last = lines[lines.length - 1]
@@ -375,10 +368,8 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
     const w = weekLineWidth(measure, lines, size)
     return { ...t, text, lines, x: 0, size, w, h: Math.round(size * 1.24) * lines.length }
   })
-  // A word wider than the column at its nominal size, even wrapped, is listed under the column,
-  // never drawn across the neighbouring day (#148 review, 1). The ceiling is the loudest
-  // words', so a long one-word term below them can land here at 145px ("presidente" next to
-  // "supremo tribunal federal"); lowering the ceiling for it would flatten the whole week.
+  // A word wider than the column even wrapped is listed under it, never drawn across the next
+  // day; lowering the shared ceiling for it would flatten the whole week.
   const tooWide = sized.filter((d) => d.w > maxWidth)
   const fitting = sized.filter((d) => d.w <= maxWidth)
   // The stack alternates sides, so one side may carry up to one box more than the other.
@@ -396,15 +387,9 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
   return { words: placed, overflow, half: used, height: used * 2 }
 }
 
-// A day's own column is independent of its neighbours (align-items: start in atlas.css), so
-// each gets its own height rather than one shared across the week. The size ramp, though, is
-// one for the whole week: "tamanho = documentos naquele dia" must let a 3-doc word on a quiet
-// day read smaller than a 300-doc word on a loud one.
-//
-// The ceiling is the week's, not a word's: the loudest words (count === hi) set it to the
-// largest size at which they fit the column, so the largest value is never the one the column
-// hides (validator round 2, 2), and no per-word shrink can invert the ramp (round 1, 1). Same
-// move rulerLayout makes with its width-scaled `top`.
+// Each column gets its own height, but the size ramp is one for the whole week: a 3-doc word on
+// a quiet day must read smaller than a 300-doc word on a loud one. The loudest words set the
+// ceiling to the largest size at which they fit, so no per-word shrink can invert the ramp.
 export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T>[] => {
   const all = days.flat()
   const counts = all.map((t) => t.count)
@@ -416,10 +401,8 @@ export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], wi
   return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
 }
 
-// Figure 7 (issue #216): the day with the maximum value in a { day, value } series, oldest day
-// winning a tie, or null on an all-zero series -- a peak of zero is no peak at all. Shared by
-// both the mentions series (its own count) and the Wikipedia pageviews series (its own views),
-// each already reduced to the one number it scores by.
+// Figure 7: the day with the maximum value in a { day, value } series, oldest day winning a tie,
+// or null on an all-zero series -- a peak of zero is no peak at all.
 export type AttentionSeriesPoint = { day: string; value: number }
 
 export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
@@ -464,8 +447,7 @@ export const attentionLayout = (measure: Measure, mentions: { day: string; count
   }
 }
 
-// The comention matrix (figure 9, #207): a half-matrix, upper triangle only. Genuinely new
-// geometry, not a reuse of swarmBy/pack/rulerLayout/weekLayout — a two-axis grid, no packing.
+// The comention matrix (figure 9): a half-matrix, upper triangle only; a two-axis grid, no packing.
 export const MATRIX_CELL_MIN = 26
 export const MATRIX_CELL_MAX = 42
 export const MATRIX_ROWHEAD = 140
@@ -492,9 +474,8 @@ export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[],
   return { cellSize, cells }
 }
 
-// Figure 10 (issue #215): a fixed table grid, not a beeswarm. Level 1..PERSISTENCE_LEVELS on one
-// ramp for the whole figure, keyed to the largest count shown; 0 is only a null count, so a
-// positive count is never painted as the empty cell.
+// Figure 10: a fixed table grid. Level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest
+// count shown; 0 is only a null count, so a positive count never paints as the empty cell.
 export const PERSISTENCE_LEVELS = 5
 
 export type PersistenceCell = { week: string; count: number | null; level: number }
@@ -504,4 +485,67 @@ export const persistenceLayout = (data: Persistence): { rows: PersistenceRow[] }
   const top = Math.max(1, ...data.terms.flatMap((t) => t.series.map((s) => s.count ?? 0)))
   const level = (count: number | null) => (count === null ? 0 : Math.min(PERSISTENCE_LEVELS, Math.max(1, Math.ceil((count / top) * PERSISTENCE_LEVELS))))
   return { rows: data.terms.map((t) => ({ term: t.term, kind: t.kind, cells: t.series.map((s) => ({ week: s.week, count: s.count, level: level(s.count) })) })) }
+}
+
+export const STRIP_PAD = 28
+
+// Area grows with n; dots shrink on narrow screens (floor 55%) to avoid a tall stack.
+export const stripRadius = (n: number, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
+
+// Past this cap dots shrink until the swarm fits; STRIP_MIN_R is where shrinking stops.
+export const STRIP_MAX_HEIGHT = 320
+export const STRIP_MIN_R = 3
+
+export type StripDot = { id: string; term: string; kind: string; score: number; count: number; tone: string; x: number; r: number }
+
+// termMask decides eligibility and colour; the domain always includes the person's own score, so the mean line stays inside the strip.
+export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony | undefined, width = 860) => {
+  const personScore = personTestimony?.score ?? null
+  const inner = Math.max(80, width - 2 * STRIP_PAD)
+  const eligible = nodes
+    .map((n) => ({ n, tone: termMask(n, personScore) }))
+    .filter((e): e is { n: Term; tone: string } => e.tone !== null)
+  if (!eligible.length)
+    return { dots: [] as (StripDot & { y: number })[], domainMin: -1, domainMax: 1, ticks: [-1, 0, 1], x: (s: number) => STRIP_PAD + inner / 2, half: 44, height: 88 }
+  const scores = eligible.map((e) => e.n.testimony!.score)
+  let domainMin = Math.floor(Math.min(...scores, personScore as number))
+  let domainMax = Math.ceil(Math.max(...scores, personScore as number))
+  if (domainMax - domainMin < 2) {
+    domainMin -= 1
+    domainMax += 1
+  }
+  // A float mean a hair from a floor/ceil edge (-3.97 next to -4) never equals it, so the gap
+  // is compared to a share of the span.
+  const edgeGap = (domainMax - domainMin) * 0.03
+  if ((personScore as number) - domainMin < edgeGap) domainMin -= 1
+  if (domainMax - (personScore as number) < edgeGap) domainMax += 1
+  const span = domainMax - domainMin
+  const x = (s: number) => STRIP_PAD + ((Math.max(domainMin, Math.min(domainMax, s)) - domainMin) / span) * inner
+  const placed: StripDot[] = eligible.map((e) => ({
+    id: e.n.id,
+    term: e.n.term,
+    kind: e.n.kind,
+    score: e.n.testimony!.score,
+    count: e.n.count,
+    tone: e.tone,
+    x: x(e.n.testimony!.score),
+    r: stripRadius(e.n.count, width),
+  }))
+  // A tall swarm shrinks its dots (never below STRIP_MIN_R) until it fits STRIP_MAX_HEIGHT.
+  const smallest = placed.reduce((m, d) => Math.min(m, d.r), Infinity)
+  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
+  let scale = 1
+  const attempt = (k: number) => {
+    const dots = swarm(placed.map((d) => ({ ...d, r: d.r * k })))
+    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
+    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
+  }
+  let fit = attempt(scale)
+  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
+    scale = Math.max(floor, scale * 0.92)
+    fit = attempt(scale)
+  }
+  const ticks: number[] = []
+  for (let t = domainMin; t <= domainMax; t++) ticks.push(t)
+  return { dots: fit.dots, domainMin, domainMax, ticks, x, half: fit.half, height: fit.half * 2 }
 }

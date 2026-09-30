@@ -5,6 +5,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import Agenda from '$lib/Agenda.svelte'
+  import Atlas from '$lib/Atlas.svelte'
   import Compare from '$lib/Compare.svelte'
   import Comention from '$lib/Comention.svelte'
   import Attention from '$lib/Attention.svelte'
@@ -28,47 +29,7 @@
     <h1>A mesma pessoa, muitas versões</h1>
     <p class="lede">Posts, notícias e discursos que citam um nome. Que palavras grudam nele, quem diz, com que tom, contra quem, e como isso muda de uma semana para a outra.</p>
   </header>
-  <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 1</span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"></b></h2></div>
-      <p class="figure-sub">Palavras nos textos que citam a pessoa. A posição só evita colisão. <a href="/como-ler#atlas">Como ler</a>.</p>
-      <dl class="figure-key" id="keyDefault">
-        <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>frequência, PMI ou alcance, o que a frase escolhe</dd></div>
-        <div id="keyDefaultColor"><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
-        <div><dt>Posição</dt><dd>só evita colisão</dd></div>
-        <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
-        <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
-      </dl>
-      <dl class="figure-key" id="keyTheme" hidden>
-        <div><dt><span class="theme-scale" aria-hidden="true"></span>Cor</dt><dd id="keyThemeText">tema: palavras que caminharam juntas nesta construção</dd></div>
-      </dl>
-      <dl class="figure-key" id="keyStrip" hidden>
-        <div><dt>Posição</dt><dd>média da avaliação dos textos com a palavra</dd></div>
-        <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>quantos textos</dd></div>
-        <div><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>distância da média da pessoa</dd></div>
-        <div><dt>Clique</dt><dd>textos da palavra</dd></div>
-      </dl>
-      <div class="sentence">
-        <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa"></select></span> nos <span class="keep"><span class="pick"><select id="days" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="source" aria-label="Fonte"></select></span>,</span> por <span class="keep"><span class="pick"><select id="sort" aria-label="Tamanho por"><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option><option value="reach">alcance</option></select></span>.</span> Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras"><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
-        <p class="status-row"><span class="status" id="status" role="status"></span></p>
-      </div>
-    </header>
-    <div class="map-tools"><label class="search"><input id="search" type="search" placeholder="Encontrar uma palavra no recorte…" aria-label="Encontrar uma palavra no recorte"></label><div class="segment" role="group" aria-label="Modo de leitura"><button id="modeMap" aria-pressed="true">Mapa</button><button id="modeColumns" aria-pressed="false">Lista</button><button id="modeStrip" aria-pressed="false">Avaliação</button></div><button id="mask" class="quiet-button toggle" aria-pressed="true">Colorir por avaliação</button><div class="zoom" id="zoomGroup" aria-label="Zoom do mapa"><button id="zoomOut" class="quiet-button" aria-label="Diminuir zoom">−</button><button id="zoomReset" class="quiet-button" aria-label="Restaurar zoom">100%</button><button id="zoomIn" class="quiet-button" aria-label="Aumentar zoom">+</button></div><button id="clear" class="quiet-button">Limpar seleção</button></div>
-    <div class="figure-body">
-      <div class="canvas">
-        <p class="mobile-hint">Arraste o mapa para os lados para ver o círculo inteiro.</p>
-        <div id="searchNote" class="search-note" role="status"></div>
-        <div class="viewport" id="viewport" role="region" aria-label="Mapa circular interativo. Use Tab para navegar pelas palavras; em telas pequenas, role horizontalmente." tabindex="0"></div>
-        <div class="overflow" id="overflow" hidden></div>
-        <div id="columns" class="columns" hidden></div>
-        <figure class="strip" id="atlasStrip" aria-label="Palavras na régua da avaliação" hidden></figure>
-        <p class="note" id="stripHiddenNote" hidden></p>
-        <div class="legend" id="legend"></div>
-      </div>
-      <aside class="inspector" id="inspector" aria-label="Detalhes da pessoa ou da palavra"></aside>
-    </div>
-  </section>
-  <div id="selectionNote" class="sr-only" role="status"></div>
+  <Atlas />
 
   <Testimony />
 

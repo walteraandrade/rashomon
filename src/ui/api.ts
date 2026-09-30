@@ -82,12 +82,6 @@ export const loadDocs = (personId: string, queryParams: URLSearchParams, signal?
 export const loadTestimony = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
   json(endpoint(personId) + '/testimony?' + queryParams, signal)
 
-// /api/candidates is not nested under /people/:id.
-export const candidatesQuery = ({ days, min = '3', limit = '30' }: { days: string; min?: string; limit?: string }) =>
-  new URLSearchParams({ days, min, limit })
-
-export const loadCandidates = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/candidates?' + queryParams, signal)
-
 // /api/compare is not nested under /people/:id; both person ids travel as query params.
 export const compareParams = ({ a, b, days, source, limit }: { a: string; b: string; days: string; source: string; limit: string }) =>
   new URLSearchParams({ a, b, days, source, limit, kind: FIXED_KINDS })
@@ -128,9 +122,7 @@ export const sparklineParams = (term: string, kind: string, source = 'all') => n
 
 export const loadTimeline = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/timeline?' + queryParams, signal)
 
-// /api/people/:id/lenses (figure 6, issue #206): one person, two independently-scoped lenses.
-// `a`/`b` travel as raw tokens (domain:<host>, lean:<value>, source:<name>, or all); the server
-// parses and echoes back the normalized one, never the malformed input.
+// One person, two lenses: `a`/`b` travel as raw tokens; the server echoes back the normalized one.
 export const lensesParams = ({ a, b, days, limit }: { a: string; b: string; days: string; limit: string }) =>
   new URLSearchParams({ a, b, days, limit, kind: FIXED_KINDS })
 
@@ -139,22 +131,19 @@ export const loadLenses = (personId: string, queryParams: URLSearchParams, signa
 export const loadLensBridges = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
   json(endpoint(personId) + '/lenses/bridges?' + queryParams, signal)
 
-// Figure 7 (issue #216): /attention has no parameter but days, and the figure never exposes it
-// (fixed at 30, weekParams' fixed-days=7 precedent) -- any other field passed in is ignored.
+// /attention has no parameter but days, fixed at 30 here; any other field passed in is ignored.
 export const attentionParams = (_opts: Record<string, unknown> = {}) => new URLSearchParams({ days: '30' })
 
 export const loadAttention = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/attention?' + queryParams, signal)
 
-// /api/agenda is not nested under /people/:id: one call ranks every tracked person's share of
-// the top domains at once. `min` stays at the route's own default (5); no UI control.
+// /api/agenda ranks every tracked person's share of the top domains at once; `min` stays at the default (5).
 export const AGENDA_MIN = 5
 
 export const agendaParams = ({ days, source }: { days: string; source: string }) => new URLSearchParams({ days, source })
 
 export const loadAgenda = (queryParams: URLSearchParams, signal?: AbortSignal) => json('/api/agenda?' + queryParams, signal)
 
-// /api/comention (figure 9, issue #207): not nested under /people/:id, spans every tracked
-// person at once, like /api/compare and /api/tone. No `kind`, no `domain`, no `sort`.
+// /api/comention spans every tracked person at once. No `kind`, no `domain`, no `sort`.
 export const comentionParams = ({ days, source, lean, min }: { days: string; source: string; lean: string; min: string }) =>
   new URLSearchParams({ days, source, lean, min })
 

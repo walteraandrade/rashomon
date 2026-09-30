@@ -393,7 +393,7 @@ own sentence of `<select>`s and its own fetches. `src/ui/app.ts` reads the query
 at mount, to seed them. Nothing is ever written back to `location` or `history`: the controls
 change what a figure shows, never the URL.
 
-A figure ported to Svelte (`src/ui/Agenda.svelte` first) reads its own seeds: once
+A figure ported to Svelte (`src/ui/Agenda.svelte` first, then `Comention.svelte` and `Atlas.svelte`) reads its own seeds: once
 `bootData.ready`, it calls `seedFor('<figure>', <keys>, bootData.search)` from `src/ui/seed.ts`,
 and the prefixed key wins over the bare one there too. `app.ts` seeds only the figures still
 mounted through `FIGURES`.
@@ -426,6 +426,10 @@ tracked person at once, so it has no `person` key, and it sends no `min`, which 
 route's own default of 5. Figure 9 reads `days` and `source` (bare or prefixed) plus `lean` and
 `min`, prefixed only (`comention.lean`, `comention.min`, no bare fallback, like figure 6's
 `a`/`b`) — it has no `person` key at all, since a shared count is never one person's.
+Figure 1 is a Svelte component (`src/ui/Atlas.svelte`) too, reading boot data (`bootData`) and
+seeding through `seedFor('atlas', ['person', 'days', 'source', 'sort', 'limit'], bootData.search)`
+once `bootData.ready`; its graph load is `createFigure`, while the inspector sparkline (`GET
+/timeline?days=7&bucket=day`) is the atlas's own fetch outside `createFigure`.
 Figure 9 is a Svelte component (`src/ui/Comention.svelte`), not a `figures/*.ts` mount: it seeds
 from `days`, `source`, `lean` and `min` with `seedFor` over `bootData.search`, starts its first
 load only once `bootData.ready`, and shares the single `/api/people` fetch `app.ts` makes once
@@ -460,7 +464,7 @@ chart on screen for it to compete with.
 | Box | Painter | Sprite | Copy it sits beside |
 |---|---|---|---|
 | an empty recorte in figure 2 | `Testimony.svelte` | `pet-caracara.png`, 106×78 | "Nenhum texto avaliado neste recorte… Tente um período maior ou outra fonte." |
-| the atlas with nothing to draw | `OUTAGE` (`figures/atlas.ts`) | `pet-caracara-perched.png`, 26×37 | "Falha de rede ou base indisponível. Nenhum grafo fictício será exibido." |
+| the atlas with nothing to draw | the outage note (`src/ui/Atlas.svelte`) | `pet-caracara-perched.png`, 26×37 | "Falha de rede ou base indisponível. Nenhum grafo fictício será exibido." |
 
 Four rules hold it there, and `test/pet-acceptance.test.ts` pins each one:
 

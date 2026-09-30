@@ -1,6 +1,5 @@
-// Figure 6 (issue #206). Side-effect free outside a browser. Never imports or is imported by
-// the other five figures. Opens the shared docs card with two sides — one per lens, both the
-// same person — because a lens word is never one side's alone, just like figure 3's ruler.
+// Figure 6. Opens the shared docs card with two sides, one per lens of the same person: a lens
+// word is never one side's alone.
 
 import * as api from '../api.js'
 import { applyBridges, bridgeIds, hasBridges, html, kinds, lensLabel, type Lenses, type Measure, type OutletRow } from '../format.js'
@@ -26,9 +25,7 @@ const applySeed = (select: any, value: string | undefined) => {
 const resolvePerson = (people: Person[], seeded: string | undefined) =>
   seeded && people.some((p) => p.id === seeded) ? seeded : (people[0]?.id ?? '')
 
-// Turns a normalized lens token (domain:<host>, lean:<value>, source:<name>, all) into the
-// /docs query that lens implies, on the given term/kind. `source` stays 'all' for a domain or
-// lean lens, since domain/lean and source are independent filters on /docs already.
+// A normalized lens token as the /docs query it implies; `source` stays 'all' for a domain or lean.
 const lensDocsQuery = (lens: string, days: string, term: string, kind: string) => {
   if (lens.startsWith('domain:')) return api.docsParams({ days, source: 'all', domain: lens.slice('domain:'.length), term, kind })
   if (lens.startsWith('lean:')) return api.docsParams({ days, source: 'all', lean: lens.slice('lean:'.length), term, kind })
@@ -113,10 +110,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     })
   }
 
-  // Top-80 domains for this person (same /sources call figure 2 already makes), used only to
-  // fill the two lens selects' own "Veículo" optgroup; a transient failure never blocks the
-  // figure's own load(). The generation counter plus the captured person/days guard against a
-  // stale response writing another person's or window's hosts in; `false` means nothing wrote.
+  // Top-80 domains fill the lens selects' "Veículo" optgroup; a failure never blocks load(). A
+  // generation counter guards against a stale response; `false` means nothing wrote.
   let outletsGen = 0
   const loadOutlets = async (): Promise<boolean> => {
     if (peopleError || !people.length) return false
@@ -190,10 +185,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   }
 
   const paint = (result: Lenses) => {
-    // A resize repaint calls this with the same object again (figure.ts's own repaint());
-    // only a genuinely new dataset clears the pick. A pick made between a control change and
-    // this new data landing opened its own card against the old lens labels; that card must
-    // close here too, or it survives showing rows from a recorte no control asks for any more.
+    // A resize repaint calls this with the same object again; only a new dataset clears the
+    // pick, and its card closes too, or it would show rows from a recorte no control asks for.
     const isNewData = result !== data
     data = result
     if (isNewData) {
@@ -234,15 +227,12 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     onRelease: releaseSelection,
   })
 
-  // Set per select, only by an actual change to that select (or to the person, which can
-  // invalidate a domain on either side), so the initial seed's own deferred continuation never
-  // overwrites whichever one the reader touched -- but a lensesLimit/lensesDays change, neither
-  // of which says anything about which domain either side should show, discards neither.
+  // Set per select, only by a real change to it (or to the person), so the seed's deferred
+  // continuation never overwrites what the reader touched; limit/days changes discard neither.
   let touchedA = false
   let touchedB = false
 
-  // figure.release() (week.ts's own pattern), not just `selected = null`: a control here must
-  // not shut a card the atlas or the compare ruler is showing, or leave one open with stale rows.
+  // figure.release(), not just `selected = null`: a control must not shut another figure's card.
   const onLensAChange = () => {
     touchedA = true
     figure.release()
@@ -262,10 +252,8 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const hasOption = (select: any, value: string) => [...select.options].some((o: any) => o.value === value)
 
-  // The domain optgroup is rebuilt by loadOutlets whenever the person or the window changes; a
-  // currently-selected domain that survives the refill is kept, else the select falls back to
-  // 'all' explicitly. Exits early, leaving both selects untouched, when loadOutlets wrote
-  // nothing (a stale response).
+  // loadOutlets rebuilds the domain optgroup when the person or window changes; a selected domain
+  // that survives is kept, else the select falls back to 'all'. A stale response changes nothing.
   const refreshOutletsPreserving = async () => {
     const prevA = $('lensesA').value
     const prevB = $('lensesB').value
@@ -293,8 +281,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
 
   const isDomainSeed = (v: string | undefined): v is string => typeof v === 'string' && v.startsWith('domain:')
 
-  // The two lens selects hold up to 80 outlets each, so they get a searchable face; attached
-  // after the synchronous seeds below so the input opens showing the seeded label.
+  // The selects hold up to 80 outlets, so they get a searchable face, attached after the seeds.
   const combos: Combobox[] = []
 
   $('lensesPerson').innerHTML = ''
@@ -302,8 +289,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
   $('lensesPerson').value = resolvePerson(people, initial.person)
   applySeed($('lensesDays'), initial.days)
   applySeed($('lensesLimit'), initial.limit)
-  // A domain seed's own <option> does not exist until loadOutlets fills it in; only that kind
-  // is deferred below, so lean:/source:/all seeds apply now, before the reader can touch a control.
+  // A domain seed's <option> exists only once loadOutlets fills it in; other seeds apply now.
   if (!isDomainSeed(initial.a)) applySeed($('lensesA'), initial.a)
   if (!isDomainSeed(initial.b)) applySeed($('lensesB'), initial.b)
   for (const side of ['A', 'B']) {

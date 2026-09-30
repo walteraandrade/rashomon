@@ -6,40 +6,24 @@ import {
   html,
   kinds,
   label,
-  matching,
-  normalize,
-  relatedTo,
   safeDocUrl,
   score,
-  scoreName,
   foldTestimonyDomains,
-  MASK_MIN,
-  signed,
-  termMask,
-  themeMask,
   testimonyPosition,
-  trendOf,
   isBridge,
-  type Candidate,
   type CompareSide,
   type CompareTerm,
   type Doc,
-  type Graph,
-  type Layout,
   type Lenses,
-  type Link,
-  type MaskState,
   type Measure,
-  type PersonTestimony,
-  type PlacedTerm,
   type Rising,
   type RisingAbout,
   type RisingTerm,
-  type Sparkline,
-  type Term,
   type TestimonyDomainRow,
 } from './format.js'
-import { FONT_MONO, RULER_PAD, rulerLayout, routesFrom, swarm, type RulerItem } from './layout.js'
+import { FONT_MONO, RULER_PAD, STRIP_MAX_HEIGHT, STRIP_MIN_R, STRIP_PAD, rulerLayout, stripRadius, swarm, type RulerItem } from './layout.js'
+
+export { STRIP_PAD }
 import { axis, frame, overflowList } from './marks.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
@@ -57,315 +41,7 @@ export const createCanvasMeasure = (): Measure => {
   }
 }
 
-export const wordMarkup = (p: PlacedTerm, sort: string, personScore: number | null = null, ranking: Map<number, number> = new Map()) => {
-  const mask = termMask(p, personScore)
-  const theme = themeMask(p, ranking)
-  const t = p.testimony
-  const testimonyNote = t ? ` · avaliação ${signed(t.score)} em ${fmt(t.n)} textos` : ''
-  return html`<g class="atlas-word" data-kind="${p.kind}" transform="translate(${p.x},${p.y})" style="--size:${p.size}px${mask ? `;--mask:${mask}` : ''}${theme ? `;--theme:${theme}` : ''}" data-node="${p.id}" role="button" tabindex="0" aria-pressed="false" aria-label="${label(p)}, ${fmt(p.count)} documentos; ${scoreName(sort)}: ${fmt(p.score)}"><title>${label(p)} · ${kinds[p.kind] || p.kind || 'Tipo desconhecido'} · ${fmt(p.count)} documentos · ${scoreName(sort)}: ${fmt(p.score)}${testimonyNote}</title><rect class="atlas-glow" x="${-p.w / 2 - 4}" y="${-p.h / 2 - 3}" width="${p.w + 8}" height="${p.h + 6}"/><rect class="atlas-hit" x="${-p.w / 2}" y="${-p.h / 2}" width="${p.w}" height="${p.h}"/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">${p.lines.map((line, i) => html`<tspan x="0" y="${(i - (p.lines.length - 1) / 2) * p.lineHeight}">${line}</tspan>`)}</text><line class="underline" x1="${-Math.min(p.w * 0.35, 40)}" x2="${Math.min(p.w * 0.35, 40)}" y1="${p.h / 2 - 2}" y2="${p.h / 2 - 2}"/></g>`
-}
-
-// The legend entry for the mask, hidden until the mask is on (paintSelection flips it).
-const maskLegend = (person: PersonTestimony | undefined) =>
-  person && person.score !== null
-    ? html`<span id="maskLegend" hidden><span class="mask-scale" aria-hidden="true"></span>Cor = avaliação dos textos com a palavra contra a média da pessoa (${signed(person.score)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de ${MASK_MIN} textos avaliados</span>`
-    : html`<span id="maskLegend" hidden>Sem avaliação neste recorte para colorir as palavras.</span>`
-
-// Names build coverage, never a document-count floor, so it reads nothing like maskLegend's MASK_MIN copy.
-const themeLegend = (ranking: Map<number, number>, builtAt?: string) =>
-  ranking.size > 0
-    ? html`<span id="themeLegend" hidden>Cor = tema: palavras que caminharam juntas nesta construção do grafo. Os números não têm nome e não são comparáveis entre construções${builtAt ? ` (construída em ${builtAt})` : ''}.</span>`
-    : html`<span id="themeLegend" hidden>Esta construção não tem temas calculados para este recorte.</span>`
-
-// Plain elements need explicit keyboard handling that <button> would have provided automatically.
-const wirePersonDocs = (el: Element, onShowPerson: () => void) => {
-  el.addEventListener('click', () => onShowPerson())
-  el.addEventListener('keydown', (event) => {
-    const e = event as KeyboardEvent
-    if (e.key !== 'Enter' && e.key !== ' ') return
-    e.preventDefault()
-    onShowPerson()
-  })
-}
-
-// Draws the SVG map, overflow list and legend; wires click/keydown. Does not resize or paint
-// selection state — the caller sequences those immediately after.
-export const drawMap = ({
-  layout,
-  personName,
-  about,
-  mode,
-  sort,
-  onChoose,
-  onShowPerson = () => {},
-  personTestimony,
-  ranking = new Map(),
-}: {
-  layout: Layout
-  personName: string
-  about: number | undefined
-  mode: string
-  sort: string
-  onChoose: (id: string) => void
-  onShowPerson?: () => void
-  personTestimony?: PersonTestimony
-  ranking?: Map<number, number>
-}) => {
-  const { placed, overflow, center: c } = layout
-  const textY = -((c.lines.length - 1) * c.lineHeight) / 2
-  const mapBody = html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges"></g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><rect class="center-hit" x="${-c.w / 2}" y="${-c.h / 2}" width="${c.w}" height="${c.h}" rx="10"/><text class="micro" text-anchor="middle" y="${-c.h / 2 + 23}">NO CENTRO DA CONVERSA</text><text class="person-name" style="--size:${c.size}px" text-anchor="middle" dominant-baseline="central">${c.lines.map((line, i) => html`<tspan x="0" y="${textY + i * c.lineHeight}">${line}</tspan>`)}</text><path d="M-18,${c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y="${c.h / 2 - 10}">${fmt(about)} documentos</text></g><g id="words">${placed.map((p) => wordMarkup(p, sort, personTestimony?.score ?? null, ranking))}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text>`
-  $('viewport').innerHTML = html`<div class="map-stage">${frame({ cls: 'map-svg', viewBox: '-430 -402 860 804', ariaLabel: `Mapa de palavras associadas a ${personName}` }, mapBody)}</div>`
-  $('overflow').hidden = mode !== 'map' || !overflow.length
-  $('overflow').innerHTML = overflow.length
-    ? html`<p>${overflow.length} ${overflow.length === 1 ? 'termo não coube' : 'termos não couberam'} sem reduzir a legibilidade. Todos continuam selecionáveis aqui:</p>${overflow.map((n) => html`<button class="quiet-button" data-node="${n.id}">${label(n)}</button>`)}`
-    : ''
-  for (const el of queryAll('#viewport [data-person-docs]')) wirePersonDocs(el, onShowPerson)
-  for (const el of queryAll('#viewport [data-node], #overflow [data-node]')) {
-    el.addEventListener('click', () => onChoose(String(el.dataset.node)))
-    if (el.tagName.toLowerCase() === 'g')
-      el.addEventListener('keydown', (event) => {
-        const e = event as KeyboardEvent
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onChoose(String(el.dataset.node))
-        }
-      })
-  }
-  const noReach = sort === 'reach' && [...placed, ...overflow].every((n) => score(n, 'reach') === 0)
-  $('legend').innerHTML = html`<span><span class="type-scale"><span>Aa</span><span>Aa</span></span>Tamanho = ${scoreName(sort)}</span>${noReach ? html`<span>Nenhum documento do Bluesky neste recorte tem alcance registrado: as palavras ficam do mesmo tamanho.</span>` : ''}<span><i></i>Linha = documentos em comum; só aparece ao selecionar</span><span>Tab + Enter para selecionar · zoom e rolagem para ampliar</span><span id="routeNote"></span>${maskLegend(personTestimony)}${themeLegend(ranking)}`
-}
-
-// Repaints selection classes, search note, edge routes and the columns view.
-export const paintSelection = ({
-  nodes,
-  links,
-  selected,
-  search,
-  layout,
-  mode,
-  sort,
-  onChoose,
-  onShowPerson,
-  personName,
-  about,
-  mask = 'avaliacao',
-  personTestimony,
-  ranking = new Map(),
-}: {
-  nodes: Term[]
-  links: Link[]
-  selected: string | null
-  search: string
-  layout: Layout | null
-  mode: string
-  sort: string
-  onChoose: (id: string) => void
-  onShowPerson?: () => void
-  personName?: string
-  about?: number
-  mask?: MaskState
-  personTestimony?: PersonTestimony
-  ranking?: Map<number, number>
-}) => {
-  const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
-  const normalizedSearch = normalize(search)
-  const masked = mask === 'avaliacao' && personTestimony?.score !== null && personTestimony?.score !== undefined
-  const themed = mask === 'tema'
-  $('viewport').querySelector('svg')?.classList.toggle('is-masked', masked)
-  $('viewport').querySelector('svg')?.classList.toggle('is-themed', themed)
-  $('columns').classList.toggle('is-masked', masked)
-  $('columns').classList.toggle('is-themed', themed)
-  if ($('maskLegend')) $('maskLegend').hidden = mask !== 'avaliacao'
-  if ($('themeLegend')) $('themeLegend').hidden = mask !== 'tema'
-  for (const el of queryAll('[data-node]')) {
-    const n = nodes.find((n) => n.id === el.dataset.node)
-    if (!n) continue
-    const isSelected = n.id === selected
-    const isMatch = !!normalizedSearch && matching(n, search)
-    el.classList.toggle('is-selected', isSelected)
-    el.classList.toggle('is-neighbor', !normalizedSearch && !!selected && related.has(n.id))
-    el.classList.toggle('is-dim', normalizedSearch ? !isMatch : !!selected && !isSelected && !related.has(n.id))
-    el.classList.toggle('is-match', isMatch)
-    el.setAttribute('aria-pressed', String(isSelected))
-  }
-  const matches = nodes.filter((n) => matching(n, search)).length
-  $('searchNote').textContent = normalizedSearch ? `${matches} ${matches === 1 ? 'termo encontrado' : 'termos encontrados'} no recorte. A busca não muda as posições.` : ''
-  const edges = $('edges')
-  if (edges) {
-    edges.innerHTML = ''
-    if ($('routeNote')) $('routeNote').textContent = ''
-    if (selected && layout) {
-      const routes = routesFrom(layout, selected)
-      const maxCount = Math.max(1, ...links.map((l) => l.count))
-      edges.innerHTML = html`${links
-        .filter((l) => l.source === selected || l.target === selected)
-        .map((l) => {
-          const path = routes.get(l.source === selected ? l.target : l.source)
-          return path ? html`<path class="edge" d="${path}" stroke-linejoin="round" stroke-width="${0.8 + (1.8 * l.count) / maxCount}"/>` : ''
-        })}`
-      if ($('routeNote') && edges.childElementCount < related.size)
-        $('routeNote').textContent = `${edges.childElementCount} de ${related.size} relações no mapa; lista completa no painel.`
-    }
-  }
-  // The list is repainted whole, so the person's own row must travel with it.
-  paintColumns({ nodes, links, selected, search, sort, mode, onChoose, onShowPerson, personName, about, personTestimony, ranking })
-}
-
-export const paintColumns = ({
-  nodes,
-  links,
-  selected,
-  search,
-  sort,
-  mode,
-  onChoose,
-  onShowPerson = () => {},
-  personName = '',
-  about,
-  personTestimony,
-  ranking = new Map(),
-}: {
-  nodes: Term[]
-  links: Link[]
-  selected: string | null
-  search: string
-  sort: string
-  mode: string
-  onChoose: (id: string) => void
-  onShowPerson?: () => void
-  personName?: string
-  about?: number
-  personTestimony?: PersonTestimony
-  ranking?: Map<number, number>
-}) => {
-  if (mode !== 'columns' || !nodes.length) return
-  const related = new Set(selected ? relatedTo(nodes, links, selected).map((r) => r.node.id) : [])
-  const normalizedSearch = normalize(search)
-  const personRow = html`<div class="column-person" data-person-docs role="button" tabindex="0" aria-label="Ler os ${fmt(about)} documentos sobre ${personName}"><span>No centro da conversa · ${fmt(about)} documentos</span><strong>${personName}</strong></div>`
-  $('columns').innerHTML = html`${personRow}${nodes.map((n, i) => {
-    const dim = normalizedSearch ? !matching(n, search) : selected && n.id !== selected && !related.has(n.id)
-    const mask = termMask(n, personTestimony?.score ?? null)
-    const theme = themeMask(n, ranking)
-    const t = n.testimony
-    return html`<button class="column-card ${selected === n.id ? 'is-selected' : ''} ${dim ? 'is-dim' : ''}" data-col="${n.id}"${
-      mask && theme ? html` style="--mask:${mask};--theme:${theme}"` : mask ? html` style="--mask:${mask}"` : theme ? html` style="--theme:${theme}"` : ''
-    }><span>${String(i + 1).padStart(2, '0')} · ${kinds[n.kind] || n.kind || 'Tipo desconhecido'} · ${fmt(n.count)} docs · ${scoreName(sort)}: ${fmt(score(n, sort))}${t ? ` · avaliação ${signed(t.score)}` : ''}</span><strong>${label(n)}</strong></button>`
-  })}`
-  queryAll('[data-col]', $('columns')).forEach((el) => el.addEventListener('click', () => onChoose(String(el.dataset.col))))
-  queryAll('[data-person-docs]', $('columns')).forEach((el) => wirePersonDocs(el, onShowPerson))
-}
-
-// The selected term's testimony next to the person's own mean, whether or not the mask is on.
-export const testimonyLine = (n: Term, person: PersonTestimony | undefined) => {
-  const t = n.testimony
-  if (!t || !person || person.score === null) return ''
-  const delta = t.score - person.score
-  const reading = t.n < MASK_MIN ? 'poucos textos para comparar' : delta <= -0.5 ? 'mais hostis que a média da pessoa' : delta >= 0.5 ? 'mais favoráveis que a média da pessoa' : 'na média da pessoa'
-  return html`<p>Textos com este termo: <strong class="score-highlight">${signed(t.score)}</strong> de avaliação em ${fmt(t.n)} ${t.n === 1 ? 'texto' : 'textos'}, contra ${signed(person.score)} da pessoa no recorte. ${reading}.</p>`
-}
-
-const relatedButtons = (items: { node: Term; count?: number }[], sort: string, counts = true) =>
-  items.map(({ node: n, count }) => html`<button data-related="${n.id}"><span>${label(n)}</span><b>${fmt(counts ? count : score(n, sort))}</b></button>`)
-
-const SPARK_BARS = 7
-const SPARK_HEIGHT = 34
-
-// Word-in-focus only: seven rolling days, independent of the atlas's own days chip; 'error' leaves the hole empty.
-const sparklineMarkup = (spark?: Sparkline) => {
-  if (!spark) return ''
-  if (spark.state === 'error') return html`<div class="sparkline" aria-hidden="true"></div>`
-  const loading = spark.state === 'loading'
-  const counts = loading ? [] : (spark.counts ?? [])
-  const max = Math.max(1, ...counts)
-  const bars = Array.from({ length: SPARK_BARS }, (_, i) =>
-    loading
-      ? ghostBar('spark-ghost')
-      : html`<div class="spark-bar" style="--h:${Math.max(2, Math.round(((counts[i] ?? 0) / max) * SPARK_HEIGHT))}px"></div>`,
-  )
-  return html`<div class="sparkline${loading ? ' ghost-field' : ''}" role="img" aria-label="Documentos com esta palavra nos últimos 7 dias">${bars}</div><p class="note">Últimos 7 dias corridos, não o período escolhido acima.</p>`
-}
-
-export const inspect = ({
-  graph,
-  nodes,
-  links,
-  selected,
-  sort,
-  daysLabel,
-  onChoose,
-  sparkline,
-  mask,
-}: {
-  graph: Graph | null
-  nodes: Term[]
-  links: Link[]
-  selected: string | null
-  sort: string
-  daysLabel: string
-  onChoose: (id: string) => void
-  sparkline?: Sparkline
-  mask?: MaskState
-}) => {
-  const n = nodes.find((n) => n.id === selected)
-  if (!n) {
-    $('inspector').innerHTML = html`<p class="eyebrow">A pessoa no centro</p><h3>${graph?.person?.name || ''}</h3><dl class="metric stat"><div><dt>documentos sobre a pessoa</dt><dd>${fmt(graph?.stats?.about)}</dd></div><div><dt>termos no recorte</dt><dd>${nodes.length}</dd></div></dl><p>Sem seleção, o atlas mostra um campo limpo: nenhuma ligação termo-termo fica visível.</p><p class="eyebrow">Comece por · ${scoreName(sort)}</p><div class="related">${relatedButtons(nodes.slice(0, 5).map((node) => ({ node })), sort, false)}</div>`
-  } else {
-    const related = relatedTo(nodes, links, n.id)
-    // Only in tema mode, and only when another node on the map shares the community — never an empty heading.
-    const communityMates =
-      mask === 'tema' && n.community !== null && n.community !== undefined ? nodes.filter((o) => o.id !== n.id && o.community === n.community) : []
-    $('inspector').innerHTML = html`<p class="eyebrow">${kinds[n.kind] || n.kind || 'Tipo desconhecido'} em foco</p><h3 tabindex="-1" id="termHeading">${label(n)}</h3><dl class="metric stat"><div><dt>documentos</dt><dd>${fmt(n.count)}</dd></div><div><dt>PMI bruto</dt><dd>${fmt(n.pmi)}</dd></div></dl><p><strong class="score-highlight">${fmt(score(n, sort))}</strong> ${scoreName(sort)} · score usado no tamanho.</p>${testimonyLine(n, graph?.stats?.testimony)}${sparklineMarkup(sparkline)}<p>${graph?.person.name ?? ''} · ${daysLabel}.</p><p class="eyebrow">Aparece junto com · docs</p><div class="related">${related.length ? relatedButtons(related, sort) : html`<p class="empty-note">Nenhuma relação retornada neste recorte.</p>`}</div>${communityMates.length ? html`<p class="eyebrow">No mesmo tema</p><div class="related">${relatedButtons(communityMates.map((node) => ({ node })), sort, false)}</div>` : ''}`
-  }
-  queryAll('[data-related]', $('inspector')).forEach((el) =>
-      el.addEventListener('click', () => {
-        onChoose(String(el.dataset.related))
-        $('termHeading')?.focus({ preventScroll: true })
-      }),
-    )
-}
-
 const ghostBar = (cls: string) => html`<span class="ghost ${cls}"></span>`
-
-const ATLAS_GHOST_WORDS: [number, number, number, number][] = [
-  [-118, -92, 96, 22],
-  [88, -128, 72, 18],
-  [168, -28, 110, 24],
-  [124, 86, 68, 18],
-  [18, 156, 90, 20],
-  [-96, 138, 58, 16],
-  [-176, 36, 100, 22],
-  [-158, -156, 52, 14],
-  [36, -188, 80, 18],
-  [196, 64, 60, 16],
-  [-36, 48, 44, 14],
-  [8, -48, 76, 20],
-  [-210, -70, 64, 16],
-  [150, 150, 54, 16],
-]
-
-export const paintAtlasLoading = () => {
-  const viewport = $('viewport')
-  if (!viewport) return
-  viewport.setAttribute('aria-busy', 'true')
-  viewport.innerHTML = html`<div class="map-stage" aria-hidden="true">${frame(
-    { cls: 'map-svg', viewBox: '-430 -402 860 804' },
-    html`<defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g class="ghost-field">${ATLAS_GHOST_WORDS.map(
-      ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="6"/>`,
-    )}<rect class="ghost" x="-72" y="-26" width="144" height="52" rx="10"/></g>`,
-  )}</div>`
-  const inspector = $('inspector')
-  if (!inspector) return
-  inspector.innerHTML = html`<div class="ghost-field" aria-hidden="true"><p class="eyebrow">${ghostBar('ghost-kicker')}</p>${ghostBar('ghost-title')}<dl class="metric stat"><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div><div><dt>${ghostBar('ghost-stat')}</dt><dd>${ghostBar('ghost-stat')}</dd></div></dl>${ghostBar('ghost-line')}${ghostBar('ghost-line is-short')}</div>`
-}
-
-export const STRIP_PAD = 28
-
-// Area grows with n; dots shrink on narrow screens (floor 55%) to avoid a tall stack.
-export const stripRadius = (n: number, width = 860) => Math.min(1, Math.max(0.55, width / 860)) * Math.min(30, 4 + 2.8 * Math.sqrt(n))
-
-// Past this cap dots shrink until the swarm fits; STRIP_MIN_R is where shrinking stops.
-export const STRIP_MAX_HEIGHT = 320
-export const STRIP_MIN_R = 3
 
 // Strip geometry at a given width; exported so tests can assert placement without a DOM.
 export const stripLayout = (rows: TestimonyDomainRow[], width: number) => {
@@ -386,121 +62,6 @@ export const stripLayout = (rows: TestimonyDomainRow[], width: number) => {
     fit = attempt(scale)
   }
   return { dots: fit.dots, x, half: fit.half, height: fit.half * 2, width, scale }
-}
-
-// Figure 1's third view: each word positioned by its own kikori mean; termMask decides eligibility and colour (null hides the word, counted in the note).
-type StripDot = { id: string; term: string; kind: string; score: number; count: number; tone: string; x: number; r: number }
-
-export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony | undefined, width = 860) => {
-  const personScore = personTestimony?.score ?? null
-  const inner = Math.max(80, width - 2 * STRIP_PAD)
-  const eligible = nodes
-    .map((n) => ({ n, tone: termMask(n, personScore) }))
-    .filter((e): e is { n: Term; tone: string } => e.tone !== null)
-  if (!eligible.length)
-    return { dots: [] as (StripDot & { y: number })[], domainMin: -1, domainMax: 1, ticks: [-1, 0, 1], x: (s: number) => STRIP_PAD + inner / 2, half: 44, height: 88 }
-  const scores = eligible.map((e) => e.n.testimony!.score)
-  let domainMin = Math.floor(Math.min(...scores, personScore as number))
-  let domainMax = Math.ceil(Math.max(...scores, personScore as number))
-  if (domainMax - domainMin < 2) {
-    domainMin -= 1
-    domainMax += 1
-  }
-  // A float mean can sit a hair from a floor/ceil edge without equalling it; compare the gap to a share of the span.
-  const edgeGap = (domainMax - domainMin) * 0.03
-  if ((personScore as number) - domainMin < edgeGap) domainMin -= 1
-  if (domainMax - (personScore as number) < edgeGap) domainMax += 1
-  const span = domainMax - domainMin
-  const x = (s: number) => STRIP_PAD + ((Math.max(domainMin, Math.min(domainMax, s)) - domainMin) / span) * inner
-  const placed: StripDot[] = eligible.map((e) => ({
-    id: e.n.id,
-    term: e.n.term,
-    kind: e.n.kind,
-    score: e.n.testimony!.score,
-    count: e.n.count,
-    tone: e.tone,
-    x: x(e.n.testimony!.score),
-    r: stripRadius(e.n.count, width),
-  }))
-  // Shrink the dots (never below STRIP_MIN_R) until the figure fits STRIP_MAX_HEIGHT.
-  const smallest = placed.reduce((m, d) => Math.min(m, d.r), Infinity)
-  const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
-  let scale = 1
-  const attempt = (k: number) => {
-    const dots = swarm(placed.map((d) => ({ ...d, r: d.r * k })))
-    const reach = dots.reduce((m, d) => Math.max(m, Math.abs(d.y) + d.r), 0)
-    return { dots, half: Math.max(44, Math.ceil(reach) + 6) }
-  }
-  let fit = attempt(scale)
-  while (fit.half * 2 > STRIP_MAX_HEIGHT && scale > floor) {
-    scale = Math.max(floor, scale * 0.92)
-    fit = attempt(scale)
-  }
-  const ticks: number[] = []
-  for (let t = domainMin; t <= domainMax; t++) ticks.push(t)
-  return { dots: fit.dots, domainMin, domainMax, ticks, x, half: fit.half, height: fit.half * 2 }
-}
-
-// Strip mode names size and colour in #legend; colour reuses maskLegend since termMask colours the dots.
-export const stripLegend = (personTestimony?: PersonTestimony) =>
-  html`<span><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho = quantos textos</span><span>Tab + Enter para selecionar</span>${maskLegend(personTestimony)}`
-
-// Draws into #atlasStrip and #stripHiddenNote: size by document count, colour is termMask's, not the tone-only ramp.
-export const paintTermStrip = ({
-  nodes,
-  personTestimony,
-  onChoose,
-  search = '',
-  width = 860,
-}: {
-  nodes: Term[]
-  personTestimony?: PersonTestimony
-  onChoose: (id: string) => void
-  search?: string
-  width?: number
-}) => {
-  const strip = $('atlasStrip')
-  const note = $('stripHiddenNote')
-  if (!nodes.length) {
-    strip.innerHTML = '<div class="empty">Nenhum termo neste recorte.</div>'
-    if (note) note.hidden = true
-    return
-  }
-  const { dots, domainMin, domainMax, ticks, x, half, height } = termStripLayout(nodes, personTestimony, width)
-  const hiddenCount = nodes.length - dots.length
-  const overall = personTestimony?.score
-  const hasMean = overall !== null && overall !== undefined
-  if (note) {
-    note.hidden = hiddenCount === 0
-    note.textContent = hiddenCount
-      ? hasMean
-        ? `${hiddenCount} ${hiddenCount === 1 ? 'palavra deixada' : 'palavras deixadas'} de fora por ${hiddenCount === 1 ? 'ter' : 'terem'} menos de 3 textos avaliados.`
-        : `${hiddenCount} ${hiddenCount === 1 ? 'palavra deixada' : 'palavras deixadas'} de fora: esta pessoa não tem média de avaliação neste recorte.`
-      : ''
-  }
-  if (!dots.length) {
-    strip.innerHTML = '<div class="empty">Nenhuma palavra com avaliação suficiente neste recorte.</div>'
-    return
-  }
-  const normalizedSearch = normalize(search)
-  strip.innerHTML = html`${hasMean ? html`<div class="strip-mean-row"><span class="strip-mean" style="--pos:${((x(overall as number) - STRIP_PAD) / Math.max(1, width - 2 * STRIP_PAD)) * 100}%">média da pessoa ${signed(overall)}</span></div>` : ''}${frame(
-    { cls: 'strip-svg', width, height, viewBox: `0 0 ${width} ${height}`, role: 'group', ariaLabel: 'Palavras na régua da avaliação' },
-    html`${axis({ x0: STRIP_PAD, x1: width - STRIP_PAD, y: half, ticks: ticks.map(x), cls: 'strip' })}${hasMean ? html`<line class="strip-overall" x1="${x(overall as number)}" x2="${x(overall as number)}" y1="4" y2="${height - 4}"/>` : ''}${dots.map((d) => {
-      const dim = normalizedSearch ? !matching({ term: d.term, kind: d.kind }, search) : false
-      return html`<g class="strip-dot ${dim ? 'is-dim' : ''}" data-node="${d.id}" style="--tone:${d.tone}" role="button" tabindex="0" aria-label="${d.term}, avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}"><title>${d.term} · avaliação ${signed(d.score)} em ${fmt(d.count)} ${d.count === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx="${d.x}" cy="${half + d.y}" r="${d.r + 5}"/><circle class="dot-face" cx="${d.x}" cy="${half + d.y}" r="${d.r}"/></g>`
-    })}`,
-  )}<div class="strip-axis-labels"><span>${signed(domainMin)} contra</span><span>${signed(domainMax)} a favor</span></div>`
-  for (const el of queryAll('[data-node]', strip)) {
-    const pick = () => onChoose(String(el.dataset.node))
-    el.addEventListener('click', pick)
-    el.addEventListener('keydown', (event) => {
-      const e = event as KeyboardEvent
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault()
-        pick()
-      }
-    })
-  }
 }
 
 export const paintDocsLoading = () => {
@@ -543,37 +104,6 @@ export const paintDocsError = (onRetry: () => void) => {
   $('retryDocs')?.addEventListener('click', onRetry)
 }
 
-export const paintCandidates = (data: { candidates: Candidate[] }) => {
-  const list = data.candidates
-  $('candidateLabel').textContent = list.length ? String(list.length) : ''
-  if (!list.length) {
-    $('candidateList').innerHTML = '<p class="note">Nenhum nome novo com 3 ou mais documentos neste período.</p>'
-    return
-  }
-  $('candidateList').innerHTML = html`${list.map((c, i) => {
-    const t = trendOf(c)
-    return html`<div class="candidate"><button class="outlet" data-candidate="${i}" aria-expanded="false" aria-controls="candidateSamples${i}" title="Ver documentos de exemplo"><span class="d">${c.name}</span><span class="n">${fmt(c.count)} docs</span><span class="s">${fmt(c.sources)} ${c.sources === 1 ? 'fonte' : 'fontes'}</span><span class="t ${t.cls}">${t.text}</span></button><div class="samples" id="candidateSamples${i}" hidden>${c.samples.length ? c.samples.map((d) => html`<article class="doc"><p class="eyebrow">${d.source} · doc ${d.id}</p><p>${d.text}</p></article>`) : html`<p class="note">Sem exemplos neste período.</p>`}</div></div>`
-  })}<p class="note">Nomes que ainda não estão em seed.json, comparados com o período anterior de mesmo tamanho. Para acompanhar um nome, adicione-o ao arquivo e rode o índice.</p>`
-  queryAll('[data-candidate]', $('candidateList')).forEach((el) =>
-      el.addEventListener('click', () => {
-        const samples = el.nextElementSibling as HTMLElement
-        samples.hidden = !samples.hidden
-        el.setAttribute('aria-expanded', String(!samples.hidden))
-      }),
-    )
-}
-
-export const paintCandidatesLoading = () => {
-  const list = $('candidateList')
-  if (!list) return
-  list.innerHTML = html`<div class="ghost-field" aria-hidden="true">${[0, 1, 2].map(() => html`<div class="candidate">${ghostBar('ghost-line')}</div>`)}</div><p class="sr-only">Lendo os candidatos.</p>`
-}
-
-export const paintCandidatesError = (onRetry: () => void) => {
-  $('candidateList').innerHTML = '<p class="note">Não foi possível carregar os candidatos. <button class="quiet-button" id="retryCandidates">Tentar novamente</button></p>'
-  $('retryCandidates').addEventListener('click', onRetry)
-}
-
 // `null` is structurally absent: a present-but-negative-PMI side still reads as "this word is
 // A's". When both are present, balance uses clamped-positive pulls against the raw combined
 // magnitude, so opposite-signed terms settle short of the ends rather than pinning to them.
@@ -583,8 +113,7 @@ const docsOf = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count 
 
 export type RulerTerm = CompareTerm & { balance: number; combined: number }
 
-// Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1) and
-// combined (docs summed, measure-independent). hiddenCount feeds #compareHiddenNote.
+// Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1), combined docs.
 export const rulerTerms = (terms: CompareTerm[], measure: string): { items: RulerTerm[]; hiddenCount: number } => {
   let hiddenCount = 0
   const items: RulerTerm[] = []
@@ -632,8 +161,8 @@ const rulerOverflowMarkup = (
     },
   })
 
-// Shared by figure 4 (rising) and figure 6 (lenses): a ruler's end labels, axis, words, axis labels and overflow list,
-// with click/keydown on every word. `note` sits between axis and overflow list; `tail` comes after it.
+// Figures 4 and 6: a ruler's end labels, axis, words and overflow list, click/keydown on every
+// word. `note` sits between axis and overflow list; `tail` comes after it.
 const paintRulerBody = ({
   elementId,
   items,
@@ -685,14 +214,12 @@ const paintRulerBody = ({
 
 export type RisingShares = RisingAbout & { words_recent: number; words_baseline: number }
 
-// A payload cached before `present`/`about.words_*` existed must not paint NaN positions, so
-// the share rule applies only when both totals arrived; otherwise the ruler falls back to the
-// older person-lift rule below, with that rule's own axis prose.
+// A payload cached before `present`/`about.words_*` existed falls back to the person-lift rule below.
 export const hasShares = (data: Rising): data is Rising & { present: RisingTerm[]; about: RisingShares } =>
   Array.isArray(data.present) && Number.isFinite(data.about.words_recent) && Number.isFinite(data.about.words_baseline)
 
-// balance = clamp(log2(share now / share before) / 3, -1, 1), a share being the term's doc count over every doc_terms row
-// about the person in that window (about.words_*): shares, not doc counts, so longer texts do not push every word right.
+// balance = clamp(log2(share now / share before) / 3, -1, 1), a share being the term's docs over
+// the person's words in that window (about.words_*), so longer texts do not push every word right.
 export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingShares) => {
   if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
   if (about.words_recent <= 0) return -1
@@ -700,8 +227,8 @@ export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: 
   return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
 }
 
-// The fallback rule: clamp(log2(word's lift / the person's own lift) / 3, -1, 1). About.baseline's
-// +1 smoothing (the server's own, per term) keeps this finite with no baseline docs at all.
+// Fallback: clamp(log2(word's lift / the person's own lift) / 3, -1, 1); the server's +1
+// smoothing keeps it finite with no baseline docs.
 export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
 
 export const liftBalance = (t: { lift: number }, liftPerson: number) => {
@@ -711,13 +238,11 @@ export const liftBalance = (t: { lift: number }, liftPerson: number) => {
 
 export type RisingItem = RulerItem & { lift: number }
 
-// combined = count_recent_raw + count_baseline_raw, the exact doc counts behind the rounded
-// rates, so a word's size on the ruler never compounds the server's own rounding.
+// combined = count_recent_raw + count_baseline_raw: exact counts, so size never compounds rounding.
 export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
   terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
 
-// The risers off the ruler: `terms` minus what `present` already rules, only those with lift > 1, in the route's lift order,
-// listed as buttons that pick like any word; the page shows the first RARE_SHOWN and says how many it left out.
+// Risers off the ruler: `terms` minus `present`, lift > 1, in lift order; the page shows RARE_SHOWN.
 export const RARE_SHOWN = 12
 
 export const rareRisers = (terms: RisingTerm[], present: RisingTerm[]) => {
@@ -788,9 +313,7 @@ export const paintRisingRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar os termos em alta.</p>'
 }
 
-// Figure 6 (issue #206): one person, two independently-scoped lenses on the shared ruler body.
-// Position is always pmi * ln(1 + count) — there is no measure select on
-// this figure — and the two ends are lens labels (lensLabel), not people.
+// Figure 6: one person, two lenses. Position is always pmi * ln(1 + count); the ends are lens labels.
 export const paintLensRuler = ({
   data,
   endA,
@@ -846,8 +369,7 @@ export const paintLensRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar as lentes.</p>'
 }
 
-// Selected word's numbers on both lenses; a null side reads "nenhum documento" (measured zero),
-// keyed by lens label prose instead of a PersonRef.
+// Selected word's numbers on both lenses; a null side reads "nenhum documento" (measured zero).
 export const paintLensDetail = ({ term, endA, endB }: { term: CompareTerm | null; endA: string; endB: string }) => {
   const el = $('lensesDetail')
   if (!el) return

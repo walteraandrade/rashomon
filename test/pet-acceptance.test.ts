@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as appModule from '../src/ui/app.js'
 import { clearScopes } from '../src/ui/state.js'
-import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
+import { flush, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import { pageSource, siteFile } from './pages.js'
 
@@ -44,26 +44,9 @@ describe('the pet: the files it ships as', () => {
   })
 })
 
-describe('the pet: the outage in figure 1', () => {
-  it('a failed GET /api/people paints the perched bird into the atlas, and keeps every honesty line', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      globalThis.fetch = (async (input: unknown) => {
-        calls.push(String(input))
-        throw new Error('network down')
-      }) as typeof fetch
-      await withLocation(async () => {
-        await appModule.boot()
-        await flush()
-        const html = els.viewport.innerHTML
-        assert.match(html, new RegExp(`src="/${PERCHED}"`), 'the outage box is the other place a picture is allowed')
-        assert.match(html, /Falha de rede ou base indispon[ií]vel/, 'the outage still reads as an outage')
-        assert.match(html, /fict[ií]cio ser[aá] exibido/, 'the no-fictional-data caveat must survive the decoration')
-        assert.match(html, /id="retry"/, 'the retry button must still be emitted')
-      })
-    })
-  })
-
+// Figure 1's outage (the perched bird, the retry button, the no-fiction caveat) is Atlas.svelte's own
+// and is pinned in test/components/atlas.spec.ts.
+describe('the pet: the outage in figure 3', () => {
   it('figure 3 prints the outage in words only: a bird beyond the two boxes would read as decoration', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
@@ -75,18 +58,6 @@ describe('the pet: the outage in figure 1', () => {
         await appModule.boot()
         await flush()
         assert.doesNotMatch(els.compareDetail.innerHTML, /<img/, 'figure 3 states the outage in words')
-      })
-    })
-  })
-
-  it('an empty seed stays an empty seed: no bird, and no outage copy', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, { '/api/people': [] })
-      await withLocation(async () => {
-        await appModule.boot()
-        await flush()
-        assert.doesNotMatch(els.viewport.innerHTML, new RegExp(PERCHED), 'nobody tracked is not the same fact as nothing answering')
       })
     })
   })
@@ -112,7 +83,7 @@ describe('the pet: the rules atlas.css holds it to', () => {
   it('the sprite markup carries its intrinsic size, so the box never grows under the reader', () => {
     const emitted: [keyof typeof GRID, string][] = [
       [FLYING, readModule('Testimony.svelte')],
-      [PERCHED, readModule('figures/atlas.ts')],
+      [PERCHED, readModule('Atlas.svelte')],
     ]
     for (const [file, source] of emitted) {
       const tag = source.match(new RegExp(`<img[^>]*src="/${file}"[^>]*>`))

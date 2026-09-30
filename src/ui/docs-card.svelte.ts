@@ -1,7 +1,6 @@
-// #docsDialog, shared by every figure. Knows nothing about any figure; takes kicker, title
-// and one or two sides in each request, plus the opener's name so a figure can tell its own card
-// from another's. The only path to GET /docs; opens on deliberate click only. State lives here;
-// DocsCard.svelte owns the dialog element and every listener, and registers itself with attach().
+// #docsDialog, shared by every figure: takes kicker, title, one or two sides and the opener's
+// name per request. The only path to GET /docs; opens on deliberate click only. State lives
+// here; DocsCard.svelte owns the dialog element and every listener.
 
 import { createSubscriber } from 'svelte/reactivity'
 import * as api from './api.js'
@@ -22,9 +21,8 @@ type Store = {
   spot: Spot | null
 }
 
-// The single source of truth the component renders from. `spot` persists across closes so the
-// card reopens where the reader left it. Reactivity comes from createSubscriber, not a rune, so
-// the plain node:test suites that import the figures (and so this module) still load it.
+// What the component renders from. `spot` persists across closes so the card reopens where it
+// was. createSubscriber, not a rune, so plain node:test suites still load this module.
 const store: Store = { request: null, sides: [], isOpen: false, isFloating: false, spot: null }
 let bump = () => {}
 const subscribe = createSubscriber((update) => {
@@ -79,8 +77,7 @@ export const attach = (el: HTMLDialogElement | null) => {
 
 export const isOpen = () => store.isOpen
 
-// True while the open card is the one `owner` asked for: a figure's own pick may still be set
-// after another figure opened the card over it, so `selected` alone never says whose card it is.
+// True while the open card is the one `owner` asked for; `selected` alone never says whose it is.
 export const openedBy = (owner: string) => store.isOpen && store.request?.owner === owner
 
 // Bumps requestId so responses from prior opens are dropped.
@@ -98,8 +95,7 @@ export const close = () => {
   if (dialog?.open) dialog.close()
 }
 
-// The native close event (Escape, backdrop). A close followed by an immediate reopen (the resize
-// mode switch) reaches here after the dialog is open again, and must not cancel the new request.
+// The native close event (Escape, backdrop); a resize-driven reopen must not cancel the new request.
 export const onNativeClose = () => {
   const dialog = find()
   if (dialog?.open) return

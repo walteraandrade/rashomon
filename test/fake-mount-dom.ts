@@ -260,15 +260,6 @@ class FakeOutletGroup extends FakeBox {
   }
 }
 
-class FakeInput extends Listenable {
-  id: string
-  value = ''
-  constructor(id: string) {
-    super()
-    this.id = id
-  }
-}
-
 // Mirrors atlas.html's #days / #testimonyDays exactly: the same three values, and the same
 // `selected` default. A harness that offered a value the page does not have (or defaulted to the
 // first option instead of the marked one) would green-light a seed bug the real page would hit.
@@ -278,48 +269,7 @@ const DAYS_OPTIONS = [
   { value: '60', text: 'últimos 60 dias' },
 ]
 
-const atlasIds = () => ({
-  workspace: new FakeBox('workspace'),
-  source: new FakeSelect('source'),
-  person: new FakeSelect('person'),
-  days: new FakeSelect('days', DAYS_OPTIONS),
-  sort: new FakeSelect('sort', [
-    { value: 'count', text: 'frequência' },
-    { value: 'pmi', text: 'PMI ponderado', selected: true },
-    { value: 'reach', text: 'alcance' },
-  ]),
-  limit: new FakeSelect('limit', [
-    { value: '12', text: '12' },
-    { value: '18', text: '18', selected: true },
-    { value: '24', text: '24' },
-  ]),
-  search: new FakeInput('search'),
-  searchNote: new FakeBox('searchNote'),
-  selectionNote: new FakeBox('selectionNote'),
-  status: new FakeBox('status'),
-  viewport: new FakeBox('viewport'),
-  columns: new FakeBox('columns'),
-  legend: new FakeBox('legend'),
-  overflow: new FakeBox('overflow'),
-  modeMap: new FakeBox('modeMap'),
-  modeColumns: new FakeBox('modeColumns'),
-  // Issue #149: figure 1's third view, the kikori beeswarm strip, its own hidden-count note,
-  // the zoom control group (toggled off in strip mode) and the two figure-key blocks that
-  // swap with the mode.
-  modeStrip: new FakeBox('modeStrip'),
-  atlasStrip: new FakeBox('atlasStrip'),
-  stripHiddenNote: new FakeBox('stripHiddenNote'),
-  zoomGroup: new FakeBox('zoomGroup'),
-  keyDefault: new FakeBox('keyDefault'),
-  keyStrip: new FakeBox('keyStrip'),
-  keyTheme: new FakeBox('keyTheme'),
-  keyThemeText: new FakeBox('keyThemeText'),
-  keyDefaultColor: new FakeBox('keyDefaultColor'),
-  mask: new FakeBox('mask'),
-  zoomIn: new FakeBox('zoomIn'),
-  zoomOut: new FakeBox('zoomOut'),
-  zoomReset: new FakeBox('zoomReset'),
-  clear: new FakeBox('clear'),
+const docsCardIds = () => ({
   docsClose: new FakeBox('docsClose'),
   docsGrip: new FakeBox('docsGrip'),
   docsDialog: new FakeBox('docsDialog'),
@@ -331,13 +281,6 @@ const atlasIds = () => ({
   docs: new FakeBox('docs'),
   docsKicker: new FakeBox('docsKicker'),
   docsTitle: new FakeBox('docsTitle'),
-  atlasStats: new FakeBox('atlasStats'),
-  inspector: new FakeBox('inspector'),
-  // The real page creates #retry inside #viewport's innerHTML, so it only exists once an
-  // error or empty branch has painted. The harness ships it preexisting because getElementById
-  // here is a flat lookup, not a parse; the tests that use it assert the button's markup was
-  // emitted too, so a branch that stopped emitting it would still fail.
-  retry: new FakeBox('retry'),
 })
 
 // Figure 3 (issue #91): its own person selects, sentence controls, ruler host, detail/status/
@@ -450,7 +393,7 @@ const lensesIds = () => {
   }
 }
 
-export type Elements = ReturnType<typeof atlasIds> &
+export type Elements = ReturnType<typeof docsCardIds> &
   ReturnType<typeof compareIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof lensesIds> &
@@ -466,7 +409,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...compareIds(), ...risingIds(), ...lensesIds(), ...attentionIds() } as Elements
+  const els = { ...docsCardIds(), ...compareIds(), ...risingIds(), ...lensesIds(), ...attentionIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })
@@ -478,15 +421,7 @@ export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[]
     },
     removeEventListener: () => {},
     querySelector: () => null,
-    // render.ts's paintSelection calls queryAll('[data-node]') with no root (defaulting to
-    // document) to toggle is-selected across every painted word, map/overflow/strip alike. A
-    // real document finds every match across the tree; drawMap's own two document-rooted
-    // wiring loops stay unsupported here (they need element.tagName, which these stubs never
-    // carry) since no criterion in this suite clicks a map word through that path.
-    querySelectorAll: (selector: string) => {
-      if (selector === '[data-node]') return [...els.viewport.querySelectorAll('[data-node]'), ...els.overflow.querySelectorAll('[data-node]'), ...els.atlasStrip.querySelectorAll('[data-node]')]
-      return []
-    },
+    querySelectorAll: () => [],
     // render.js's createCanvasMeasure builds the injected `measure` layout.js's packers need;
     // figures/compare.js calls it on the first paint of the ruler (issue #99, words instead of
     // dots). It writes ctx.font, then reads measureText, so the stub has to remember the font

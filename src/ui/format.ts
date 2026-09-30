@@ -68,34 +68,27 @@ export type Rising = { days: number; baseline: number; terms: RisingTerm[]; pres
 export type WeekTerm = { term: string; kind: string; count: number }
 export type WeekBucket = { start: string; about: number; terms: WeekTerm[] }
 export type Week = { days: number; tz: string; buckets: WeekBucket[] }
-// /api/people/:id/persistence (issue #215): a null count is a week outside that week's top 50 (or
-// before first_week), never zero.
+// A null count is a week outside that week's top 50 (or before first_week), never zero.
 export type PersistenceWeek = { week: string; count: number | null }
 export type PersistenceTerm = { term: string; kind: string; series: PersistenceWeek[]; streak: number; half_life: number | null }
 export type Persistence = { weeks: number; since: string; first_week: string | null; horizon: number; terms: PersistenceTerm[] }
-// /api/agenda (issue #208): one row per top domain, one cell per (person, domain) pair that
-// has at least one tracked doc there. `share` is relative to the domain's own tracked
-// coverage, so a domain with docs naming two tracked people can sum above 1 across its cells.
+// One row per top domain, one cell per (person, domain) pair with a tracked doc. `share` is
+// relative to the domain's own tracked coverage, so a row can sum above 1.
 export type AgendaCell = { person_id: string; domain: string; docs: number; share: number }
 export type Agenda = { days: number; persons: PersonRef[]; domains: string[]; cells: AgendaCell[] }
 
-// /api/comention (issue #207): spans every tracked person, no single `person`. A pair below
-// `min`, or with zero shared docs, is simply absent from `pairs`, never a zero-count row.
+// A pair below `min`, or with zero shared docs, is absent from `pairs`, never a zero-count row.
 export type ComentionPerson = { id: string; name: string }
 export type ComentionPair = { a: string; b: string; count: number }
 export type Comention = { days: number; persons: ComentionPerson[]; pairs: ComentionPair[] }
-// The raw token /api/people/:id/lenses echoes back, normalized: domain:<host>, lean:<value>,
-// source:<name>, or the fallback 'all'. CompareTerm is reused as-is for `terms`: the API's
-// per-term { term, kind, a, b } shape is identical to /compare's.
+// The normalized token /lenses echoes back: domain:<host>, lean:<value>, source:<name> or 'all'.
 export type Lens = string
 export type LensSide = { lens: Lens; about: number }
 export type Lenses = { days: number; a: LensSide; b: LensSide; terms: CompareTerm[] }
-// The inspector's own 7-bar sparkline (issue #147): 'loading' paints a ghost, 'ready' the
-// counts /timeline returned, 'error' leaves the hole empty rather than inventing bars.
+// 'loading' paints a ghost, 'ready' the counts /timeline returned, 'error' leaves the hole empty.
 export type SparklineState = 'loading' | 'ready' | 'error'
 export type Sparkline = { state: SparklineState; counts?: number[] }
-// Figure 7 (issue #216): two independently-scaled series sharing one day axis. Field names
-// never overlap (views vs count) so neither reads as sharing the other's scale.
+// Two independently-scaled series on one day axis; field names never overlap (views vs count).
 export type AttentionDay = { day: string; views: number }
 export type Attention = { days: number; series: AttentionDay[] }
 export type AttentionMentionDay = { day: string; count: number }
@@ -191,9 +184,7 @@ export const scoreName = (sort: string) => (sort === 'reach' ? 'alcance (reposts
 
 export const LEAN_LABELS: Record<string, string> = { left: 'Esquerda', center: 'Centro', right: 'Direita' }
 
-// Turns a lens token (echoed back by /api/people/:id/lenses, always normalized) into the prose
-// the ruler's own end labels and #lensesStatus need: a domain's bare host, a lean's pt-BR name,
-// a source's own label, or "Tudo" for the 'all' fallback.
+// A lens token as prose: a domain's bare host, a lean's pt-BR name, a source's label, or "Tudo".
 export const lensLabel = (lens: Lens): string => {
   if (lens === 'all') return 'Tudo'
   const [prefix, value] = [lens.slice(0, lens.indexOf(':')), lens.slice(lens.indexOf(':') + 1)]
@@ -216,9 +207,8 @@ export const relatedTo = (nodes: Term[], links: Link[], id: string | null): { no
 
 export const domainSuffix = (domain: string) => (domain === 'all' ? '' : ` · ${domain}`)
 
-// The comention matrix's column head, since a column is too narrow for a full name: one letter
-// per word of the name, up to three, upper case. The row head and the docs card still carry the
-// full name, so identity never depends on this abbreviation being unique.
+// A column is too narrow for a full name: one upper-case letter per word, up to three. The row
+// head and the docs card carry the full name, so identity never depends on this being unique.
 export const personInitials = (name: string) =>
   name
     .split(/\s+/)

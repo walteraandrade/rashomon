@@ -47,6 +47,9 @@ describe('Proof', () => {
   it('click goes through delegation', () => {
     const { button, p } = setup()
     expect(button.onclick).toBeNull()
+    button.dispatchEvent(new MouseEvent('click', { bubbles: false }))
+    flushSync()
+    expect(p.textContent).toBe('Cliques: 0')
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     flushSync()
     expect(p.textContent).toBe('Cliques: 1')

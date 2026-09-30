@@ -595,7 +595,7 @@ describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
 })
 
 // .svelte files: kept apart from jsFiles() so the import-graph map above still lists .ts modules
-// only. A component sits above render.ts and below app.ts; nothing in .ts imports one yet.
+// only. A component sits above render.ts and below app.ts; no module under src/ imports a .svelte.
 const webDir = join(root, 'web')
 const svelteFiles = (dir: string): string[] =>
   existsSync(dir)
@@ -606,13 +606,22 @@ const svelteFiles = (dir: string): string[] =>
 const allSvelte = () => [...svelteFiles(jsDir), ...svelteFiles(webDir)]
 const scriptOf = (source: string) => [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n')
 
+const scriptSpecs = (source: string): string[] => {
+  const script = scriptOf(source)
+  const statics = [...script.matchAll(/^\s*(?:import|export)\b[^;]*?\bfrom\s+['"]([^'"]+)['"]/gm)].map((m) => m[1])
+  const bare = [...script.matchAll(/^\s*import\s+['"]([^'"]+)['"]/gm)].map((m) => m[1])
+  const dynamic = [...script.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1])
+  return [...statics, ...bare, ...dynamic]
+}
+
 const svelteRules = {
+  specs: scriptSpecs,
   imports: (file: string, source: string): string[] =>
-    importsOf(scriptOf(source)).filter((spec) => {
+    scriptSpecs(source).filter((spec) => {
       if (/graphology/.test(spec)) return true
-      if (!spec.startsWith('.')) return false
-      const target = join(dirname(file), spec)
-      return target !== jsDir && !target.startsWith(jsDir + '/')
+      const resolved = spec.startsWith('$lib') ? join(jsDir, spec.slice('$lib'.length)) : spec.startsWith('.') ? join(dirname(file), spec) : null
+      if (resolved === null) return false
+      return resolved !== jsDir && !resolved.startsWith(jsDir + '/')
     }),
   innerHTML: (source: string) => /innerHTML|insertAdjacentHTML/.test(scriptOf(source)) || /`\s*<[a-zA-Z]/.test(scriptOf(source)),
   atHtml: (source: string) => /\{@html\b/.test(source),
@@ -629,15 +638,30 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.ok(allSvelte().some((f) => f.includes(join('web', 'routes'))))
   })
 
+  it('the scan sees indented and dynamic imports of the real components', () => {
+    const page = allSvelte().find((f) => f.endsWith(join('routes', '+page.svelte')))
+    assert.ok(page)
+    const specs = svelteRules.specs(readFileSync(page, 'utf8'))
+    assert.ok(specs.includes('svelte'))
+    assert.ok(specs.includes('$lib/app.js'))
+  })
+
+  it('no module under src imports a .svelte', () => {
+    for (const file of jsFiles()) assert.doesNotMatch(importsOf(moduleSource(file)).join(' '), /\.svelte/, `${file} must not import a .svelte`)
+  })
+
   it('svelte files import only from src/ui', () => {
     for (const file of allSvelte()) assert.deepEqual(svelteRules.imports(file, readFileSync(file, 'utf8')), [], `${file} must import only from src/ui`)
-    assert.deepEqual(svelteRules.imports(fakeFile, script(`import { x } from '../db.js'`)), ['../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import { x } from '../db.js'`)), ['../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import { x } from '$lib/../../db.js'`)), ['$lib/../../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  const m = await import('../db.js')`)), ['../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import { x } from '$lib/format.js'`)), [])
     assert.deepEqual(svelteRules.imports(fakeFile, script(`import { x } from './format.js'`)), [])
   })
 
   it('svelte files never import graphology', () => {
-    for (const file of allSvelte()) assert.ok(!/graphology/.test(importsOf(scriptOf(readFileSync(file, 'utf8'))).join(' ')), `${file} must not import graphology`)
-    assert.deepEqual(svelteRules.imports(fakeFile, script(`import Graph from 'graphology'`)), ['graphology'])
+    for (const file of allSvelte()) assert.ok(!/graphology/.test(scriptSpecs(readFileSync(file, 'utf8')).join(' ')), `${file} must not import graphology`)
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import Graph from 'graphology'`)), ['graphology'])
   })
 
   it('svelte files have no innerHTML', () => {

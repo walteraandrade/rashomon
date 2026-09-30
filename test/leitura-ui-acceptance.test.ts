@@ -54,7 +54,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
   })
 
   // AC11: como-ler.html carries a paragraph, in pt-BR, describing the org term kind. #helpDialog
-  // in atlas.html is its own copy of the guide (help.ts only opens it and scrolls to a section),
+  // in atlas.html is its own copy of the guide (help.svelte.ts only opens it and scrolls to a section),
   // so the same paragraph must also exist inside #help-atlas there, or a reader who opens the
   // in-page dialog never sees it.
   it("como-ler.html and atlas.html's #helpDialog both describe the org term kind in pt-BR (issue #209 AC11)", () => {

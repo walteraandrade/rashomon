@@ -2,7 +2,6 @@ import { routeOf, span } from './perf.js'
 
 export const endpoint = (personId: string) => '/api/people/' + encodeURIComponent(personId)
 
-// word,hashtag,phrase,org — the full set the atlas (figure 1) requests. GDELT themes are no longer collected or served.
 export const ATLAS_KINDS = 'word,hashtag,phrase,org'
 
 // The fixed set figures 3, 4, 5 and 6 send, unaffected by ATLAS_KINDS gaining org.
@@ -116,8 +115,7 @@ export const persistenceParams = ({ weeks, limit }: { weeks: string; limit: stri
 
 export const loadPersistence = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/persistence?' + queryParams, signal)
 
-// Figure 1's inspector sparkline: the last 7 rolling days for one word, independent of the
-// atlas's own days chip (issue #147 AC20).
+// The inspector sparkline: the last 7 rolling days for one word, independent of the atlas's days chip.
 export const sparklineParams = (term: string, kind: string, source = 'all') => new URLSearchParams({ term, kind, days: '7', bucket: 'day', source })
 
 export const loadTimeline = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/timeline?' + queryParams, signal)

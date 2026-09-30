@@ -8,7 +8,6 @@ export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
 export type Doc = { source?: string; uri?: unknown; domain?: string | null; text?: string }
-// field/neighbors (issue #218): from the window's own aggregate build, not the live query.
 export type OutletNeighbor = { domain: string; similarity: number }
 export type OutletRow = {
   domain?: string | null
@@ -202,13 +201,6 @@ export const personInitials = (name: string) =>
     .slice(0, 3)
     .toUpperCase()
 
-export const trendOf = (c: { count: number; previous: number }) => {
-  if (c.previous === 0) return { cls: 'up', text: 'novo' }
-  if (c.count > c.previous) return { cls: 'up', text: '↑ era ' + fmt(c.previous) }
-  if (c.count < c.previous) return { cls: '', text: '↓ era ' + fmt(c.previous) }
-  return { cls: '', text: '= ' + fmt(c.previous) }
-}
-
 const hex = (c: string) => [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16))
 
 type Ramp = [number[], number[], number]
@@ -225,8 +217,6 @@ const scaleColor = (value: number | null | undefined, span: number, fade = false
   const strength = Math.abs(x) / span
   return fade && strength < 1 ? `rgba(${rgb},${(0.5 + 0.5 * strength).toFixed(2)})` : `rgb(${rgb})`
 }
-
-export const toneColor = (t: number | null | undefined) => scaleColor(t, 3)
 
 const TESTIMONY_CUT = 2.5
 

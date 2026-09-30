@@ -997,9 +997,7 @@ describe('Atlas (issue #297)', () => {
   })
 })
 
-// Ported from the painter suites in test/render.test.ts that went with wordMarkup, drawMap,
-// paintSelection, paintColumns, inspect, paintTermStrip and paintAtlasLoading (issue #297).
-describe('Atlas: what the deleted painter tests pinned, now through the component', () => {
+describe('Atlas: word marks, map, selection, columns, inspector, strip and loading ghost', () => {
   const person = { method: 'kikori:q8', score: -2.4, n: 500 }
   const withPerson = (nodes: unknown[], over: Record<string, unknown> = {}) => graphOf(nodes, { stats: stats({ testimony: person }), ...over })
   const at = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', count: 9, pmi: 1, ...over })

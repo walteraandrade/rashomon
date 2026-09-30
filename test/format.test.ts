@@ -34,8 +34,6 @@ import {
   testimonyFocus,
   testimonyPosition,
   themeMask,
-  toneColor,
-  trendOf,
 } from '../src/ui/format.js'
 
 // src/ui/format.ts: pure formatting, labels, colour ramps and the outlet merge. No DOM.
@@ -188,19 +186,6 @@ describe('domainSuffix', () => {
   })
 })
 
-describe('toneColor', () => {
-  it('is transparent for null/undefined/NaN', () => {
-    assert.equal(toneColor(null), 'transparent')
-    assert.equal(toneColor(undefined), 'transparent')
-    assert.equal(toneColor(Number.NaN), 'transparent')
-  })
-
-  it('returns an rgb() string for a real tone value', () => {
-    assert.match(toneColor(2), /^rgb\(\d+,\d+,\d+\)$/)
-    assert.match(toneColor(-2), /^rgb\(\d+,\d+,\d+\)$/)
-  })
-})
-
 describe('safeDocUrl', () => {
   it('prefers the bsky.app URL for a bluesky doc', () => {
     const d = { source: 'bluesky', domain: 'ana.bsky.social', uri: 'at://did:plc:x/app.bsky.feed.post/abc123' }
@@ -278,15 +263,11 @@ describe('testimony helpers: testimonyClass, testimonyColor, testimonyPosition, 
     assert.equal(testimonyClass(undefined), null)
   })
 
-  it('testimonyColor is transparent without a score and saturates at ±5; toneColor keeps its ±3 range', () => {
+  it('testimonyColor is transparent without a score and saturates at ±5', () => {
     assert.equal(testimonyColor(null), 'transparent')
     assert.equal(testimonyColor(-5), testimonyColor(-10), 'below -5 nothing gets redder')
     assert.equal(testimonyColor(5), testimonyColor(10))
     assert.notEqual(testimonyColor(-2), testimonyColor(2))
-    assert.equal(toneColor(-3), 'rgb(255,122,138)', 'the tone ramp ends on atlas.css --hostile')
-    assert.equal(toneColor(3), 'rgb(116,220,134)')
-    assert.equal(toneColor(0), 'rgb(139,144,156)')
-    assert.equal(toneColor(null), 'transparent')
   })
 
   it('testimonyPosition maps -10..+10 onto 0..100% and signed() shows the sign', () => {
@@ -308,7 +289,6 @@ describe('the mask colours: maskColor and termMask', () => {
     assert.equal(maskColor(9), 'rgb(116,220,134)')
     assert.equal(SCALE_MID, '#8b909c')
     assert.equal(testimonyColor(0), 'rgb(139,144,156)', 'a chip with dark text needs a solid background')
-    assert.equal(toneColor(0), testimonyColor(0))
   })
 
   it('termMask centres on the person, is null under MASK_MIN texts or without a person mean', () => {
@@ -316,7 +296,7 @@ describe('the mask colours: maskColor and termMask', () => {
     assert.equal(termMask({ testimony: { score: -2.4, n: 10 } }, -2.4), maskColor(0), 'on the mean: the neutral middle')
     assert.equal(termMask({ testimony: { score: -3.9, n: 10 } }, -2.4), maskColor(-1.5), 'MASK_SPAN below the person: full red')
     assert.equal(termMask({ testimony: { score: -3.9, n: 10 } }, -2.4), termMask({ testimony: { score: -9, n: 10 } }, -2.4), 'clamped past the span')
-    assert.equal(termMask({ testimony: { score: -4.9, n: 10 } }, -2.4), toneColor(-3), 'the red end is the same red as tone')
+    assert.equal(termMask({ testimony: { score: -4.9, n: 10 } }, -2.4), 'rgb(255,122,138)', 'the red end is atlas.css --hostile')
     assert.equal(termMask({ testimony: { score: 3, n: 2 } }, -2.4), null, 'two texts is noise')
     assert.equal(termMask({ testimony: null }, -2.4), null)
     assert.equal(termMask({ testimony: { score: 3, n: 9 } }, null), null)
@@ -480,15 +460,6 @@ describe('balanceColor: a red/grey-analogue two-hue ramp (issue #91 AC4)', () =>
     for (let i = 1; i < positives.length; i++) assert.ok(positives[i] >= positives[i - 1], `distance from SCALE_MID must not decrease walking toward +1: ${positives}`)
     assert.ok(negatives[negatives.length - 1] > negatives[0], 'the -1 end must be strictly further from SCALE_MID than the centre')
     assert.ok(positives[positives.length - 1] > positives[0], 'the +1 end must be strictly further from SCALE_MID than the centre')
-  })
-})
-
-describe('trendOf', () => {
-  it('trendOf reads the previous window without ever dividing by it', () => {
-    assert.deepEqual(trendOf({ count: 5, previous: 0 }), { cls: 'up', text: 'novo' })
-    assert.deepEqual(trendOf({ count: 5, previous: 2 }), { cls: 'up', text: '↑ era 2' })
-    assert.deepEqual(trendOf({ count: 1, previous: 2 }), { cls: '', text: '↓ era 2' })
-    assert.deepEqual(trendOf({ count: 2, previous: 2 }), { cls: '', text: '= 2' })
   })
 })
 

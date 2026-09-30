@@ -708,7 +708,7 @@ describe('rulerModel maps a ruler layout to what Ruler.svelte draws', () => {
   })
 })
 
-describe('#149 AC2/AC3/AC4: termStripLayout, words on the kikori axis (moved from render.ts by #297)', () => {
+describe('#149 AC2/AC3/AC4: termStripLayout, words on the kikori axis', () => {
   const personTestimony = { method: 'kikori:q8', score: -1, n: 200 }
   const golpe = { id: 'word:golpe', term: 'golpe', kind: 'word', count: 41, pmi: 2.1, testimony: { score: -3.97, n: 12 } }
   const reforma = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 20, pmi: 1.4, testimony: { score: 0, n: 6 } }

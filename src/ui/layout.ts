@@ -410,7 +410,6 @@ const ATTENTION_BAR_MAX = 44
 const ATTENTION_BAR_GAP = 3
 const ATTENTION_BAR_MIN_WIDTH = 2
 
-// One ramp per row, off its own maximum only (issue #216 AC4).
 const attentionSizes = (values: number[]): number[] => {
   const max = Math.max(0, ...values)
   if (max <= 0) return values.map(() => ATTENTION_BAR_MIN)

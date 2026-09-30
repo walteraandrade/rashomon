@@ -55,6 +55,7 @@ export const card: Readonly<Pick<Store, 'sides' | 'isOpen' | 'isFloating' | 'spo
   },
 }
 
+// Below FLOATING_MIN the card falls back to showModal() instead of floating.
 const FLOATING_MIN = 760
 const floating = () => typeof window !== 'undefined' && (window.innerWidth ?? 0) >= FLOATING_MIN
 
@@ -65,6 +66,7 @@ const find = (): any => mounted ?? (typeof document === 'undefined' ? null : doc
 let requestId = 0
 let controller: AbortController | null = null
 
+// Guarded: everything after an await runs when the page may have moved on.
 const body = () => (typeof document === 'undefined' ? null : document.getElementById('docs'))
 
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
@@ -78,6 +80,7 @@ export const isOpen = () => store.isOpen
 // True while the open card is the one `owner` asked for; `selected` alone never says whose it is.
 export const openedBy = (owner: string) => store.isOpen && store.request?.owner === owner
 
+// Bumps requestId so responses from prior opens are dropped.
 const cancel = () => {
   ++requestId
   controller?.abort()

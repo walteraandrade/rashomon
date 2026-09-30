@@ -1,12 +1,10 @@
 import { mountDocsCard } from './docs-card.js'
 import { mount as mountAtlas } from './figures/atlas.js'
-import { mount as mountCompare } from './figures/compare.js'
 import { mount as mountLenses } from './figures/lenses.js'
 import { mount as mountRising } from './figures/rising.js'
 import { mountHelp } from './help.js'
 import {
   paintAtlasLoading,
-  paintCompareLoading,
   paintLensesLoading,
   paintRisingLoading,
 } from './render.js'
@@ -26,13 +24,6 @@ type FigureEntry = {
 
 const FIGURES: FigureEntry[] = [
   { id: 'atlas', sectionId: 'workspace', keys: ['person', 'days', 'source', 'sort', 'limit'], noticeId: 'status', mount: mountAtlas },
-  {
-    id: 'compare',
-    sectionId: 'compare',
-    keys: [['a', 'person'], ['b', null], 'days', 'source', 'limit', ['measure', null]],
-    noticeId: 'compareDetail',
-    mount: mountCompare,
-  },
   { id: 'rising', sectionId: 'rising', keys: ['person', 'source'], noticeId: 'risingAbout', mount: mountRising },
   { id: 'lenses', sectionId: 'lenses', keys: ['person', ['a', null], ['b', null], 'days', 'limit'], noticeId: 'lensesDetail', mount: mountLenses },
 ]
@@ -43,7 +34,6 @@ const paintBootLoading = () => {
   const status = document.getElementById('status')
   if (status) status.textContent = 'Lendo as pessoas.'
   paintAtlasLoading()
-  paintCompareLoading()
   paintRisingLoading()
   paintLensesLoading()
 }

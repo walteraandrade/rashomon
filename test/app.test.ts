@@ -174,17 +174,12 @@ describe('a failed GET /api/people is an outage, never an empty seed', () => {
         assert.doesNotMatch(els.viewport.innerHTML, /seed\.json/, 'an outage must never claim the seed is empty')
         assert.notEqual(els.status.textContent, 'Nenhuma pessoa cadastrada.')
 
-        assert.match(els.compareDetail.innerHTML, /Falha de rede ou base indispon[ií]vel/)
-        assert.match(els.compareDetail.innerHTML, /id="compareRetry"/)
-        assert.equal(els.compareRuler.hidden, true)
-
         // Figure 4 has no retry of its own: same outage copy in #risingAbout, ruler hidden.
         assert.equal(els.risingAbout.textContent, 'Falha de rede ou base indisponível.')
         assert.equal(els.risingRuler.hidden, true)
 
         els.retry.fire('click')
-        els.compareRetry.fire('click')
-        assert.equal(reloads.length, 2, 'every retry button must be wired to a real re-fetch')
+        assert.equal(reloads.length, 1, 'every retry button must be wired to a real re-fetch')
       })
     })
   })
@@ -215,7 +210,6 @@ describe('the loading ghost shows before /api/people resolves', () => {
         assert.equal(els.status.textContent, 'Lendo as pessoas.', 'a cold start must not show bare static markup')
         assert.match(els.viewport.innerHTML, /ghost-field/)
         assert.match(els.viewport.innerHTML, /class="ghost"/)
-        assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
         assert.equal(els.risingRuler.hidden, false, 'issue #151: figure 4 gets its own boot ghost too')
         assert.match(els.risingRuler.innerHTML, /ruler-axis/)
         void booting

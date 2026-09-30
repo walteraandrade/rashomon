@@ -119,6 +119,13 @@ const piece = (value: unknown): string =>
 export const html = (strings: TemplateStringsArray, ...values: unknown[]): Html =>
   raw(strings.reduce((out, s, i) => out + s + (i < values.length ? piece(values[i]) : ''), ''))
 
+// Mirrors query.ts's SMALL_LIMITS (client code cannot import the server module); compare.spec pins the two together.
+export const SMALL_LIMITS = [1, 5, 8, 12, 18, 20, 24, 30, 40, 50, 60, 100]
+
+export const BRIDGE_THRESHOLD = 0.5
+
+export const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_THRESHOLD
+
 export const fmt = (value: unknown) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
 export const label = (n: { kind?: string; term: string }) => (n.kind === 'hashtag' ? '#' : '') + n.term

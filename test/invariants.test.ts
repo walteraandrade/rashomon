@@ -199,7 +199,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // testimony.ts, compare.ts and rising.ts adopt figure.ts and drop their own
       // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
       // the shared runtime.
-      'figures/compare.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
       // app.ts, and reaching into no other figure's DOM.
       'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
@@ -211,7 +210,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './boot.svelte.js',
         './docs-card.js',
         './figures/atlas.js',
-        './figures/compare.js',
         './figures/lenses.js',
         './figures/rising.js',
         './help.js',
@@ -233,6 +231,8 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Attention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
       'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './render.js', './seed.js'],
+      'Compare.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
+      'Ruler.svelte': ['./format.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
       const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))
@@ -724,7 +724,7 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.match(readFileSync(join(jsDir, 'figure.svelte.ts'), 'utf8'), /docs-card\.svelte\.js/, 'figure.svelte.ts imports docs-card.svelte.js')
     for (const file of [...allSvelte(), ...svelteTs()]) {
       const names = importsFrom(readFileSync(file, 'utf8'), /(^|\/)render\.js$/)
-      for (const n of names) assert.match(n, /^(paintDocs|createCanvasMeasure$|stripLayout$|STRIP_PAD$)/, `${file} imports render.ts's ${n}; only paintDocs* and the injected createCanvasMeasure and the pure strip geometry are allowed`)
+      for (const n of names) assert.match(n, /^(paintDocs|createCanvasMeasure$|rulerTerms$|stripLayout$|STRIP_PAD$)/, `${file} imports render.ts's ${n}; only paintDocs* and the injected createCanvasMeasure, rulerTerms and the pure strip geometry are allowed`)
     }
   })
 

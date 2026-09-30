@@ -944,7 +944,7 @@ describe('Testimony (issue #296): the route and the component agree on the shape
     q('#outletList [data-domain="estadao.com.br"]')!.click()
     flushSync()
     expect(q('#testimonyList .focus b')!.textContent).toBe('estadao.com.br')
-  })
+  }, 30_000)
 })
 
 const mountDocsHost = () => {

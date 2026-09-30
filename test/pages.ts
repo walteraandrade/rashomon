@@ -35,7 +35,7 @@ const stripScript = (source: string) => source.replace(/<script\b[^>]*>[\s\S]*?<
 const expandComponents = (markup: string) =>
   markup.replace(/<([A-Z]\w*) \/>/g, (tag, name: string) => {
     const file = join(root, 'src', 'ui', `${name}.svelte`)
-    return existsSync(file) ? stripScript(readFileSync(file, 'utf8')).replace(/<!--[\s\S]*?-->\s*/g, '').trim() : tag
+    return existsSync(file) ? stripScript(readFileSync(file, 'utf8')).replace(/<!--[\s\S]*?-->\s*/g, '').replace(/ class:[\w-]+=\{[^}]*\}/g, '').trim() : tag
   })
 
 export const pageMarkup = (page: string) => expandComponents(stripScript(pageSource(page)))

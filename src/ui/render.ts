@@ -49,12 +49,8 @@ import {
   type Term,
   type Testimony,
   type TestimonyDomainRow,
-  type Week,
-  type WeekBucket,
-  weekDayIso,
-  weekDayLabel,
 } from './format.js'
-import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, WEEK_COLUMN_WIDTH, attentionLayout, peakDay, rulerLayout, routesFrom, swarm, weekLayout, type AttentionMark, type RulerItem, type WeekColumnLayout } from './layout.js'
+import { ATTENTION_ROW_WIDTH, FONT_MONO, RULER_PAD, attentionLayout, peakDay, rulerLayout, routesFrom, swarm, type AttentionMark, type RulerItem } from './layout.js'
 import { axis, frame, overflowList } from './marks.js'
 
 // getElementById is HTMLElement | null; callers read per-element fields (~100 sites), so this stays `any`.
@@ -1266,142 +1262,6 @@ export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTe
       ? html`<div><dt>${person.name}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
       : html`<div><dt>${person.name}</dt><dd class="empty-hint">nenhum documento</dd></div>`
   el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>${isBridge(term) ? html`<p class="detail-bridge">ponte: liga os dois vocabulários</p>` : ''}`
-}
-
-// Figure 5 (issue #147): one word mark per day, no colour hue (--wc stays --ink in atlas.css),
-// a data-day alongside data-term/data-kind since a rising-style word belongs to one day only.
-// A wrapped phrase is one tspan per line, centred on the box: the box is d.h tall, so line i
-// of n sits at (i - (n - 1) / 2) line heights from the middle.
-const weekWordMarkup = (
-  d: { term: string; kind: string; count: number; text: string; lines: string[]; x: number; y: number; size: number; w: number; h: number },
-  centerX: number,
-  half: number,
-  day: string,
-  isSelected: boolean,
-) => {
-  const lineHeight = d.h / d.lines.length
-  const text = d.lines.map((line, i) => html`<tspan x="0" y="${(i - (d.lines.length - 1) / 2) * lineHeight}">${line}</tspan>`)
-  return html`<g class="week-word ${isSelected ? 'is-selected' : ''}" transform="translate(${centerX + d.x},${half + d.y})" style="--size:${d.size}px" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" role="button" tabindex="0" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia"><title>${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.count)} documentos</title><rect class="week-glow" x="${-d.w / 2 - 4}" y="${-d.h / 2 - 3}" width="${d.w + 8}" height="${d.h + 6}"/><rect class="week-hit" x="${-d.w / 2}" y="${-d.h / 2}" width="${d.w}" height="${d.h}"/><text class="week-text" text-anchor="middle" dominant-baseline="central">${text}</text></g>`
-}
-
-// Size is the week's only encoding and a listed word has none, so the button carries the count.
-// An eyebrow names the list: a 145px column turns a sentence into three lines, taller than
-// the words it explains, and the guide (#help-semana, /como-ler#semana) says why they are
-// here. Under about 120px even "// Não couberam" wraps onto a second line.
-const weekOverflowMarkup = (
-  overflow: { term: string; kind: string; count: number; text: string }[],
-  day: string,
-  selected: { day: string; term: string; kind: string } | null,
-) =>
-  overflowList({
-    items: overflow,
-    cls: 'week',
-    intro: html`<p class="eyebrow">${overflow.length === 1 ? 'Não coube' : 'Não couberam'}</p>`,
-    renderItem: (d) => {
-      const isSelected = !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
-      return html`<button class="quiet-button ${isSelected ? 'is-selected' : ''}" data-term="${d.term}" data-kind="${d.kind}" data-day="${day}" aria-pressed="${String(isSelected)}" aria-label="${d.text}, ${fmt(d.count)} documentos neste dia">${d.text}<b>${fmt(d.count)}</b></button>`
-    },
-  })
-
-const weekColumnMarkup = (
-  bucket: WeekBucket,
-  layout: WeekColumnLayout<{ term: string; kind: string; count: number }>,
-  width: number,
-  selected: { day: string; term: string; kind: string } | null,
-) => {
-  const day = weekDayIso(bucket.start)
-  const dayLabel = weekDayLabel(bucket.start)
-  const isSelected = (d: { term: string; kind: string }) => !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
-  // A day with no words keeps only its number: the spec allows one sentence for the whole
-  // week (#weekNote), never a line per empty column.
-  const body = layout.words.length
-    ? frame(
-        { cls: 'week-svg', width, height: layout.height, viewBox: `0 0 ${width} ${layout.height}`, role: 'group', ariaLabel: `Palavras de ${dayLabel}` },
-        html`${layout.words.map((d) => weekWordMarkup(d, width / 2, layout.half, day, isSelected(d)))}`,
-      )
-    : ''
-  return html`<div class="week-day"><dl class="stat"><div><dt>${dayLabel}</dt><dd>${fmt(bucket.about)}</dd></div></dl>${body}${weekOverflowMarkup(layout.overflow, day, selected)}</div>`
-}
-
-// Draws #weekChart and wires every word's click/keydown, in the svg and in each column's own
-// overflow list alike. #weekNote states the one empty-week sentence; an empty day shows its
-// number and nothing under it, never an invented mark.
-export const paintWeek = ({
-  data,
-  metrics,
-  selected,
-  onPick,
-  width = WEEK_COLUMN_WIDTH,
-}: {
-  data: Week
-  metrics: Measure
-  selected: { day: string; term: string; kind: string } | null
-  onPick: (day: string, term: string, kind: string) => void
-  width?: number
-}) => {
-  const chart = $('weekChart')
-  if (!chart) return
-  chart.hidden = false
-  chart.classList.remove('is-loading')
-  chart.setAttribute('aria-busy', 'false')
-  const layouts = weekLayout(metrics, data.buckets.map((b) => b.terms), width)
-  chart.innerHTML = html`<div class="week-columns">${data.buckets.map((bucket, i) => weekColumnMarkup(bucket, layouts[i], width, selected))}</div>`
-  for (const el of queryAll('[data-term]', chart)) {
-    const pick = () => onPick(String(el.dataset.day), String(el.dataset.term), String(el.dataset.kind))
-    el.addEventListener('click', pick)
-    // <g> elements need an explicit key handler; <button>s already handle Enter/Space.
-    if (String(el.tagName || '').toLowerCase() !== 'button')
-      el.addEventListener('keydown', (event) => {
-        const e = event as KeyboardEvent
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          pick()
-        }
-      })
-  }
-  const note = $('weekNote')
-  if (note) note.textContent = data.buckets.every((b) => !b.terms.length) ? 'Não há palavras suficientes nesta semana.' : ''
-}
-
-const WEEK_GHOST_WORDS: [number, number][] = [
-  [-30, 44],
-  [18, 78],
-  [-14, 112],
-]
-
-// A ghost of seven columns, one .stat placeholder and a few ghost marks each — never the word
-// "Carregando" (CLAUDE.md's rule for every figure's loading state).
-export const paintWeekLoading = () => {
-  const chart = $('weekChart')
-  if (!chart) return
-  chart.hidden = false
-  chart.classList.remove('is-loading')
-  chart.setAttribute('aria-busy', 'true')
-  const width = WEEK_COLUMN_WIDTH
-  const height = 150
-  chart.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="week-columns">${Array.from(
-    { length: 7 },
-    () =>
-      html`<div class="week-day">${ghostBar('ghost-line is-short')}${frame(
-        { cls: 'week-svg', width, height, viewBox: `0 0 ${width} ${height}` },
-        html`${WEEK_GHOST_WORDS.map(
-          ([y, w]) => html`<rect class="ghost" x="${width / 2 - w / 2}" y="${height / 2 + y - 8}" width="${w}" height="16" rx="5"/>`,
-        )}`,
-      )}</div>`,
-  )}</div></div><p class="sr-only">Lendo a semana.</p>`
-  const note = $('weekNote')
-  if (note) note.textContent = ''
-}
-
-export const paintWeekError = () => {
-  const chart = $('weekChart')
-  if (!chart) return
-  chart.hidden = false
-  chart.classList.remove('is-loading')
-  chart.setAttribute('aria-busy', 'false')
-  chart.innerHTML = html`<p class="note">Não foi possível carregar a semana.</p>`
-  const note = $('weekNote')
-  if (note) note.textContent = ''
 }
 
 // Figure 7 (issue #216): Wikipedia pageviews against press mentions, a bar-chart row each on a

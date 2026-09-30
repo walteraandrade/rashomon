@@ -197,13 +197,13 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'boot.svelte.ts': [],
       // The shared runtime behind four of the five mount() calls (issue #193): abort/stale/
       // scope/ghost/background-click/Escape/resize, generalized out of compare.ts/rising.ts/
-      // week.ts/testimony.ts. It builds no markup and never fetches on its own, so it imports
+      // testimony.ts. It builds no markup and never fetches on its own, so it imports
       // neither format.js nor render.js; docs-card.js is what lets release() close only the
       // card its own name opened.
       'figure.ts': ['./docs-card.js', './perf.js', './state.js'],
       'figure.svelte.ts': ['./docs-card.svelte.js', './perf.js', './state.js'],
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
-      // testimony.ts, compare.ts, rising.ts and week.ts adopt figure.ts and drop their own
+      // testimony.ts, compare.ts and rising.ts adopt figure.ts and drop their own
       // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
       // the shared runtime.
       'figures/testimony.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
@@ -211,8 +211,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
       // app.ts, and reaching into no other figure's DOM.
       'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
-      // Figure 5, the week: same shape again, imported by nothing but app.ts.
-      'figures/week.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './layout.js', './render.js'],
       // Figure 6 (issue #206), the lenses ruler: same shape as figures/compare.ts, imported by
       // nothing but app.ts, and reaching into no other figure's DOM.
       'figures/lenses.ts': ['./api.js', './combobox.js', './docs-card.js', './figure.js', './format.js', './render.js'],
@@ -229,7 +227,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './figures/lenses.js',
         './figures/rising.js',
         './figures/testimony.js',
-        './figures/week.js',
         './help.js',
         './render.js',
         './seed.js',
@@ -243,6 +240,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'HelpDialog.svelte': ['./help.svelte.js'],
       'Combobox.svelte': ['./combobox.js'],
       'Agenda.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
+      'Week.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Proof.svelte': [],
       'Persistence.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
       'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
@@ -742,7 +740,7 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.match(readFileSync(join(jsDir, 'figure.svelte.ts'), 'utf8'), /docs-card\.svelte\.js/, 'figure.svelte.ts imports docs-card.svelte.js')
     for (const file of [...allSvelte(), ...svelteTs()]) {
       const names = importsFrom(readFileSync(file, 'utf8'), /(^|\/)render\.js$/)
-      for (const n of names) assert.match(n, /^paintDocs/, `${file} imports render.ts's ${n}; only paintDocs* is allowed`)
+      for (const n of names) assert.match(n, /^(paintDocs|createCanvasMeasure$)/, `${file} imports render.ts's ${n}; only paintDocs* and the injected createCanvasMeasure are allowed`)
     }
   })
 

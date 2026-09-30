@@ -223,7 +223,7 @@ export const mount = (root: FigureRoot, { people, initial, peopleError = null }:
     $('zoomIn').disabled = getZoom() >= 2
   }
 
-  // Own ResizeObserver, same as figures/testimony.ts's #strip: width is measured on mode
+  // Own ResizeObserver, same as Testimony.svelte's #strip: width is measured on mode
   // switch, but a viewport resize while already in strip mode must repaint too, or the SVG's
   // viewBox goes stale against `.strip-svg { width: 100% }` and radii/aspect drift.
   const resizeStrip = () => {

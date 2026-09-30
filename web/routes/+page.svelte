@@ -11,6 +11,7 @@
   import Persistence from '$lib/Persistence.svelte'
   import HelpDialog from '$lib/HelpDialog.svelte'
   import Week from '$lib/Week.svelte'
+  import Testimony from '$lib/Testimony.svelte'
 
   onMount(async () => {
     const { boot } = await import('$lib/app.js')
@@ -68,21 +69,7 @@
   </section>
   <div id="selectionNote" class="sr-only" role="status"></div>
 
-  <section class="figure testimony" id="testimony" aria-labelledby="testimonyTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 2</span><h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"></b></h2></div>
-      <p class="figure-sub">Compare veículos falando da mesma pessoa. Nunca compare pessoas. <a href="/como-ler#avaliacao">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt>Posição</dt><dd>nota do kikori, um modelo treinado para ler se o texto é contra (−10) ou a favor (+10)</dd></div>
-        <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
-        <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)"></select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)"></select></span>.</span></p></div>
-    </header>
-    <figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden></figure>
-    <div class="testimony-lists" id="testimonyList">Aguardando dados.</div>
-    <div class="outlets" id="outlets"><p class="eyebrow">Veículos do recorte <b id="domainLabel"></b></p><div id="outletList">Aguardando dados.</div></div>
-  </section>
+  <Testimony />
 
   <section class="figure compare" id="compare" aria-labelledby="compareTitle">
     <header class="figure-head">

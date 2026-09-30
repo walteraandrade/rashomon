@@ -20,18 +20,12 @@ import {
   paintLensRuler,
   paintLensRulerError,
   paintLensesLoading,
-  paintOutlets,
-  paintOutletsLoading,
   paintRisingLoading,
   paintRisingRuler,
   paintRisingRulerError,
   paintRuler,
   paintSelection,
-  paintStrip,
   paintTermStrip,
-  paintTestimony,
-  paintTestimonyError,
-  paintTestimonyLoading,
   RARE_SHOWN,
   hasShares,
   liftBalance,
@@ -47,7 +41,7 @@ import {
   wordMarkup,
 } from '../src/ui/render.js'
 import * as renderModule from '../src/ui/render.js'
-import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -58,22 +52,6 @@ import { withFiguresDom } from './fake-mount-dom.js'
 // The injected text measurer, the same contract layout.ts documents: a real canvas in the
 // browser, a deterministic stand-in here.
 const metrics = (text: string, size: number) => text.length * size * 0.6
-
-const ids = ['testimonyLabel', 'testimonyList', 'strip']
-
-const sample = {
-  method: 'kikori:q8',
-  overall: { score: -2.16, n: 784 },
-  by_source: [
-    { source: 'bluesky', score: -1.89, n: 621 },
-    { source: 'gkg', score: -4.22, n: 39 },
-  ],
-  by_domain: [
-    { domain: 'bbc.com', source: 'gnews', score: -2, n: 6 },
-    { domain: 'g1.globo.com', source: 'gnews', score: -3.62, n: 13 },
-    { domain: 'fdusp.bsky.social', source: 'bluesky', score: 0.76, n: 3 },
-  ],
-}
 
 const lula = { id: 'lula', name: 'Lula' }
 const bolsonaro = { id: 'bolsonaro', name: 'Jair Bolsonaro' }
@@ -257,121 +235,7 @@ describe('paintDocsHead / paintDocs: the card that holds the documents', () => {
   })
 })
 
-describe('paintTestimony', () => {
-  it('paints the overall score and the per-source means as chips, and leaves the outlet ranking to the merged list', () => {
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'all' })
-      assert.equal(els.testimonyLabel.textContent, '-2,16')
-      const html = els.testimonyList.innerHTML
-      // Label and measurement, so <dt> names it and <dd> carries it; the reading in words drops
-      // to its own caption line instead of sharing the number's line.
-      assert.match(html, /<dt>Média do recorte<\/dt><dd[^>]*>-2,16<\/dd>/)
-      assert.match(html, /<p class="verdict-class">neutro · média de 784 textos avaliados<\/p>/)
-      assert.match(html, /<div class="source-chip"><dt>Bluesky<\/dt><dd><span class="n">621<\/span>/, 'sources are labelled in pt-BR')
-      assert.match(html, /<dt>GKG<\/dt>/)
-      // The outlet ranking lives in paintOutlets now: the strip above is already the ruler, and
-      // a second ranking here was the same outlets read twice.
-      assert.doesNotMatch(html, /data-testimony-domain/)
-      assert.doesNotMatch(html, /class="scale"/, 'the strip above is the only −10..+10 ruler')
-      for (const value of inlineStyles(html)) assert.ok(value.startsWith('--'), `paintTestimony emitted style="${value}"`)
-    })
-  })
-
-  it('says the focused outlet\'s own score next to the overall one', () => {
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'bbc.com' })
-      assert.match(els.testimonyList.innerHTML, /<p class="focus"><b>bbc\.com<\/b>: <strong[^>]*>-2<\/strong> em 6 textos\. O número acima é o recorte inteiro\.<\/p>/)
-      assert.equal(els.testimonyLabel.textContent, '-2,16', 'the summary keeps the whole recorte')
-    })
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'tiny.example' })
-      assert.match(els.testimonyList.innerHTML, /<b>tiny\.example<\/b>: menos de 3 textos avaliados/)
-    })
-    withFakeDocument(ids, (els) => {
-      paintTestimony({ data: sample, domain: 'all' })
-      assert.doesNotMatch(els.testimonyList.innerHTML, /class="focus"/)
-    })
-  })
-
-  it('says when nothing was scored instead of showing a zero', () => {
-    withFakeDocument(ids, (els) => {
-      els.testimonyLabel.textContent = 'stale'
-      paintTestimony({ data: { method: 'kikori:q8:abc', overall: { score: null, n: 0 }, by_source: [], by_domain: [] }, domain: 'all' })
-      assert.equal(els.testimonyLabel.textContent, '')
-      assert.match(els.testimonyList.innerHTML, /Nenhum texto avaliado neste recorte \(método kikori:q8:abc\)/)
-      assert.doesNotMatch(els.testimonyList.innerHTML, /<strong/)
-    })
-  })
-
-  it('has loading and error states', () => {
-    withFakeDocument(ids, (els) => {
-      paintTestimonyLoading()
-      assert.match(els.testimonyList.innerHTML, /ghost-field/)
-      assert.match(els.testimonyList.innerHTML, /Lendo a avaliação/)
-      assert.equal(els.testimonyLabel.textContent, '')
-      assert.equal(els.strip.hidden, false, 'the strip keeps its silhouette while the recorte is in flight')
-      assert.match(els.strip.innerHTML, /strip-axis/)
-      paintTestimonyError()
-      assert.match(els.testimonyList.innerHTML, /Não foi possível carregar a avaliação/)
-    })
-  })
-})
-
-describe('paintOutlets groups by field and lists a focused outlet\'s neighbours (issue #218)', () => {
-  type FieldedRow = OutletRow & { field?: number | null; neighbors?: { domain: string; similarity: number }[] }
-
-  const rows: FieldedRow[] = [
-    { domain: 'a.example', source: 'gnews', docs: 5, tone: null, field: 1, neighbors: [{ domain: 'b.example', similarity: 0.5 }] },
-    { domain: 'b.example', source: 'gnews', docs: 3, tone: null, field: 1, neighbors: [{ domain: 'a.example', similarity: 0.5 }] },
-    { domain: 'c.example', source: 'gnews', docs: 2, tone: null, field: 2, neighbors: [] },
-    { domain: 'd.example', source: 'gnews', docs: 1, tone: null, field: null, neighbors: [] },
-  ]
-
-  it('groups rows by field, with field: null rows in their own trailing group, and no field number in any visible text (AC12)', () => {
-    const markup = withFakeDocument(['domainLabel', 'outletList'], (els) => {
-      paintOutlets({ rows, testimony: null, domain: 'all', onPick: () => {} })
-      return els.outletList.innerHTML
-    })
-    const grids = markup.match(/<div class="outlet-grid">/g) ?? []
-    assert.ok(grids.length >= 2, 'field 1, field 2 and the ungrouped rows must each get their own outlet-grid')
-    // The eyebrow names domains, never the raw field number.
-    assert.doesNotMatch(markup.replace(/<span class="n">\d+<\/span>/g, ''), /\bfield\b|\bgrupo\s*\d/i)
-    assert.match(markup, /a\.example,\s*b\.example/, 'eyebrow names the field\'s domains by docs desc')
-    assert.match(markup, /Sem agrupamento suficiente/, 'the field: null rows get a fixed trailing eyebrow')
-    // The ungrouped group must come after every numbered field's group.
-    assert.ok(markup.indexOf('a.example') < markup.indexOf('Sem agrupamento suficiente'))
-  })
-
-  it('field groups order by their summed docs, never by the Louvain id', () => {
-    const swapped: FieldedRow[] = [
-      { domain: 'small.example', source: 'gnews', docs: 2, tone: null, field: 0, neighbors: [] },
-      { domain: 'big.example', source: 'gnews', docs: 9, tone: null, field: 7, neighbors: [] },
-    ]
-    const markup = withFakeDocument(['domainLabel', 'outletList'], (els) => {
-      paintOutlets({ rows: swapped, testimony: null, domain: 'all', onPick: () => {} })
-      return els.outletList.innerHTML
-    })
-    assert.ok(markup.indexOf('grupo · big.example') < markup.indexOf('grupo · small.example'))
-  })
-
-  it('the focused outlet\'s own row lists its neighbours as domain and similarity, or the empty-neighbours line (AC13)', () => {
-    const focused = withFakeDocument(['domainLabel', 'outletList'], (els) => {
-      paintOutlets({ rows, testimony: null, domain: 'a.example', onPick: () => {} })
-      return els.outletList.innerHTML
-    })
-    assert.match(focused, /Vocabulário mais parecido com/)
-    assert.match(focused, /b\.example[\s\S]{0,20}0[.,]50/)
-    assert.doesNotMatch(focused, /—/)
-
-    const empty = withFakeDocument(['domainLabel', 'outletList'], (els) => {
-      paintOutlets({ rows, testimony: null, domain: 'c.example', onPick: () => {} })
-      return els.outletList.innerHTML
-    })
-    assert.match(empty, /Nenhum veículo com vocabulário parecido neste recorte/)
-  })
-})
-
-describe('stripLayout / paintStrip: the outlets on the axis', () => {
+describe('stripLayout: the outlets on the axis', () => {
   it('stripLayout puts -10 at the left pad, +10 at the right pad and sizes dots by texts', () => {
     const layout = stripLayout(
       [
@@ -425,37 +289,6 @@ describe('stripLayout / paintStrip: the outlets on the axis', () => {
     assert.ok(grown.dots.every((d) => Math.abs(d.r - STRIP_MIN_R) < 1e-9))
   })
 
-  it('paintStrip draws one dot per outlet, marks the active one, and hides itself with nothing to draw', () => {
-    withFakeDocument(['strip'], (els) => {
-      paintStrip({ data: sample, domain: 'bbc.com', onPick: () => {} })
-      assert.equal(els.strip.hidden, false)
-      const html = els.strip.innerHTML
-      const dots = [...html.matchAll(/data-strip-domain="([^"]+)"/g)].map((m) => m[1])
-      assert.deepEqual(dots, ['g1.globo.com', 'bbc.com', 'fdusp.bsky.social'])
-      assert.match(html, /class="strip-dot is-active" style="--tone:rgb\(\d+,\d+,\d+\)" data-strip-domain="bbc\.com" role="button" tabindex="0" aria-pressed="true"/)
-      assert.match(html, /<title>g1\.globo\.com · Google News · -3,62 em 13 textos<\/title>/)
-      assert.match(html, /class="strip-mean" style="--pos:39\.2%">média da pessoa -2,16/)
-      assert.match(html, /<line class="strip-overall"/)
-      assert.match(html, /−10 contra<\/span><span>0<\/span><span>\+10 a favor/)
-      assert.match(html, /toque de novo, ou fora das bolinhas, para soltar/)
-      assert.match(html, /O atlas acima não muda\./)
-      for (const value of inlineStyles(html)) assert.ok(value.startsWith('--'), `paintStrip emitted style="${value}"`)
-      const g1 = Number(html.match(/data-strip-domain="g1\.globo\.com".*?<circle class="dot-face" cx="([\d.]+)"/)?.[1])
-      const fdusp = Number(html.match(/data-strip-domain="fdusp\.bsky\.social".*?<circle class="dot-face" cx="([\d.]+)"/)?.[1])
-      assert.ok(g1 < fdusp, 'a more hostile outlet sits further left')
-    })
-    withFakeDocument(['strip'], (els) => {
-      paintStrip({ data: { ...sample, by_domain: [] }, domain: 'all', onPick: () => {} })
-      assert.equal(els.strip.hidden, true)
-      assert.equal(els.strip.innerHTML, '')
-    })
-    withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      els.strip.hidden = true
-      paintTestimonyLoading()
-      assert.equal(els.strip.hidden, false, 'a load in flight keeps the strip visible as a ghost')
-      assert.match(els.strip.innerHTML, /ghost-field/)
-    })
-  })
 })
 
 // Issue #149: figure 1's third view is a beeswarm strip keyed by each word's own kikori mean,
@@ -1384,21 +1217,18 @@ describe('loading ghosts hold each figure\'s silhouette, with no invented words'
     })
   })
 
-  it('paintOutletsLoading, paintCompareLoading and paintDocsLoading keep geometry and stay mute', () => {
-    withFakeDocument(['outletList', 'compareRuler', 'compareDetail', 'docs'], (els) => {
+  it('paintCompareLoading and paintDocsLoading keep geometry and stay mute', () => {
+    withFakeDocument(['compareRuler', 'compareDetail', 'docs'], (els) => {
       els.compareRuler.hidden = true
-      paintOutletsLoading()
       paintCompareLoading()
       paintDocsLoading()
-      assert.match(els.outletList.innerHTML, /outlet-grid/)
-      assert.match(els.outletList.innerHTML, /Lendo os veículos/)
       assert.equal(els.compareRuler.hidden, false)
       assert.match(els.compareRuler.innerHTML, /ruler-axis/)
       assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
       assert.match(els.compareDetail.innerHTML, /detail-sides/)
       assert.match(els.docs.innerHTML, /Lendo os documentos/)
       assert.equal(els.docs.getAttribute('aria-busy'), 'true')
-      assert.doesNotMatch(els.outletList.innerHTML + els.compareRuler.innerHTML + els.docs.innerHTML, /Carregando/)
+      assert.doesNotMatch(els.compareRuler.innerHTML + els.docs.innerHTML, /Carregando/)
     })
   })
 })

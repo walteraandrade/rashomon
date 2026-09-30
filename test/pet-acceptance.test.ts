@@ -4,12 +4,10 @@ import { readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as appModule from '../src/ui/app.js'
-import { paintOutlets, paintTestimony } from '../src/ui/render.js'
 import { clearScopes } from '../src/ui/state.js'
-import { withFakeDocument } from './fake-dom.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
-import { siteFile } from './pages.js'
+import { pageSource, siteFile } from './pages.js'
 
 // The pet: one pixel sprite, allowed in exactly two boxes and nowhere else. The site draws every
 // other limit with type, so the rule this file pins is not "the bird looks nice" but "the bird is
@@ -25,14 +23,6 @@ const PERCHED = 'pet-caracara-perched.png'
 
 // The sprites' own pixel grids. Every width the CSS may use is an integer multiple of these.
 const GRID = { [FLYING]: { w: 106, h: 78 }, [PERCHED]: { w: 26, h: 37 } }
-
-const withData = {
-  method: 'kikori:q8',
-  overall: { score: -2.16, n: 784 },
-  by_source: [{ source: 'bluesky', score: -1.89, n: 621 }],
-  by_domain: [{ domain: 'g1.globo.com', source: 'gnews', score: -3.62, n: 13 }],
-}
-const empty = { method: 'kikori:q8', overall: { score: null, n: 0 }, by_source: [], by_domain: [] }
 
 const withLocation = async <T>(fn: () => Promise<T> | T): Promise<T> => {
   const previous = (globalThis as { location?: unknown }).location
@@ -51,34 +41,6 @@ describe('the pet: the files it ships as', () => {
       assert.ok(size > 0, `${name} must exist under public/`)
       assert.ok(size < 20_000, `${name} is ${size} bytes; a pixel sprite that big means it was not quantised`)
     }
-  })
-})
-
-describe('the pet: the empty recorte in figure 2', () => {
-  it('paintTestimony puts the flying bird up when the recorte scored nothing, and says what to do next', () => {
-    withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      paintTestimony({ data: empty, domain: 'all' })
-      const html = els.testimonyList.innerHTML
-      assert.match(html, new RegExp(`src="/${FLYING}"`), 'the empty recorte is the one box a picture is allowed in')
-      assert.match(html, /alt=""/, 'the sprite is decorative: the sentence beside it carries the meaning')
-      assert.match(html, /Nenhum texto avaliado neste recorte/, 'the honest copy stays; the bird does not replace it')
-      assert.match(html, /Tente um per[ií]odo maior ou outra fonte/, 'an empty state that says nothing to do is still a dead end')
-    })
-  })
-
-  it('the bird leaves as soon as the recorte has data', () => {
-    withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      paintTestimony({ data: withData, domain: 'all' })
-      assert.doesNotMatch(els.testimonyList.innerHTML, /<img/, 'nothing on this page may sit next to a number a reader is reading')
-    })
-  })
-
-  it('the outlet list under it stays wordless, so one empty recorte can never put two birds up', () => {
-    withFakeDocument(['domainLabel', 'outletList'], (els) => {
-      paintOutlets({ rows: [], testimony: null, domain: 'all', onPick: () => {} })
-      assert.match(els.outletList.innerHTML, /Nenhum ve[ií]culo neste recorte/)
-      assert.doesNotMatch(els.outletList.innerHTML, /<img/, 'the bird belongs to #testimonyList only')
-    })
   })
 })
 
@@ -102,7 +64,7 @@ describe('the pet: the outage in figure 1', () => {
     })
   })
 
-  it('figures 2 and 3 print the same outage in words only: three birds would read as decoration', async () => {
+  it('figure 3 prints the outage in words only: a bird beyond the two boxes would read as decoration', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       globalThis.fetch = (async (input: unknown) => {
@@ -112,7 +74,6 @@ describe('the pet: the outage in figure 1', () => {
       await withLocation(async () => {
         await appModule.boot()
         await flush()
-        assert.doesNotMatch(els.testimonyList.innerHTML, /<img/, 'figure 2 states the outage in words')
         assert.doesNotMatch(els.compareDetail.innerHTML, /<img/, 'figure 3 states the outage in words')
       })
     })
@@ -150,7 +111,7 @@ describe('the pet: the rules atlas.css holds it to', () => {
 
   it('the sprite markup carries its intrinsic size, so the box never grows under the reader', () => {
     const emitted: [keyof typeof GRID, string][] = [
-      [FLYING, readModule('render.ts')],
+      [FLYING, readModule('Testimony.svelte')],
       [PERCHED, readModule('figures/atlas.ts')],
     ]
     for (const [file, source] of emitted) {
@@ -163,7 +124,7 @@ describe('the pet: the rules atlas.css holds it to', () => {
 
   it('no landing page hard-codes the pet: it appears only where a painter decides it should', () => {
     for (const page of ['atlas.html', 'como-ler.html']) {
-      assert.doesNotMatch(readPublic(page), /pet-caracara/, `${page} is markup only; the pet is a state, not furniture`)
+      assert.doesNotMatch(pageSource(page), /pet-caracara/, `${page} is markup only; the pet is a state, not furniture`)
     }
   })
 })

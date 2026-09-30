@@ -1,144 +1,22 @@
 import assert from 'node:assert/strict'
-import { before, describe, it } from 'node:test'
-import { app } from '../src/server.js'
-import { testimonyParams } from '../src/ui/api.js'
-import { mount } from '../src/ui/figures/testimony.js'
-import { signed } from '../src/ui/format.js'
-import { paintTestimony } from '../src/ui/render.js'
-import { clearScopes } from '../src/ui/state.js'
-import { withFakeDocument } from './fake-dom.js'
-import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
-import { persons, seed } from './fixture.js'
+import { describe, it } from 'node:test'
+import { pageMarkup, siteFile } from './pages.js'
 import './close.js'
-import { siteFile } from './pages.js'
 
-// src/ui/figures/testimony.ts, figure 2: the outlet in focus, its own controls, its own
-// ResizeObserver, and the markup of its card. The painters are in test/render.test.ts.
+// Figure 2 is a component now (test/components/Testimony.spec.ts owns behaviour); this file keeps
+// what the page and the reading guide say about it.
 
 const read = (name: string) => siteFile(name)
-const people = persons.map(({ id, name }) => ({ id, name }))
-const [personA] = people
-const oneOutlet = {
-  '/sources': [{ domain: 'g1.globo.com', source: 'gnews', docs: 5 }],
-  '/testimony': { method: 'kikori', overall: { score: null, n: 0 }, by_source: [], by_domain: [] },
-}
-
-describe('the outlet in focus is local to this figure', () => {
-  it('a click on an outlet dot or row leaves the focus alone, and a click on empty space in the figure releases it', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, oneOutlet)
-      mount(els.testimony, { people, initial: { person: personA.id } })
-      await flush()
-      const [button] = els.outletList.querySelectorAll('[data-domain]')
-      assert.ok(button, 'the mocked /sources row must render one clickable outlet')
-      button.fire('click')
-      assert.equal(els.domainLabel.textContent, ' · g1.globo.com')
-      els.outletList.fire('click', { target: { closest: (s: string) => (s.includes('data-domain') ? {} : null) } })
-      assert.equal(els.domainLabel.textContent, ' · g1.globo.com', 'a click that lands on a selectable outlet must not release the focus')
-      els.outletList.fire('click', { target: { closest: () => null } })
-      assert.equal(els.domainLabel.textContent, '', 'a click on empty space inside the figure releases it')
-    })
-  })
-
-  it("changing this figure's own person, days or source control releases its focused outlet (issue #92 AC6)", async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, oneOutlet)
-      mount(els.testimony, { people, initial: { person: personA.id } })
-      await flush()
-      const [button] = els.outletList.querySelectorAll('[data-domain]')
-      assert.ok(button, 'the mocked /sources row must render one clickable outlet')
-      button.fire('click')
-      assert.equal(els.domainLabel.textContent, ' · g1.globo.com', 'picking an outlet focuses it locally, inside this figure')
-      els.testimonyDays.value = '60'
-      els.testimonyDays.fire('change')
-      await flush(200)
-      assert.equal(els.domainLabel.textContent, '', "changing this figure's own period control released the outlet")
-    })
-  })
-
-  it("the source control releases it too", async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, oneOutlet)
-      mount(els.testimony, { people, initial: { person: personA.id } })
-      await flush()
-      const [button] = els.outletList.querySelectorAll('[data-domain]')
-      assert.ok(button, 'the mocked /sources row must render one clickable outlet')
-      button.fire('click')
-      assert.notEqual(els.domainLabel.textContent, '', 'picking an outlet focuses it')
-      els.testimonySource.value = 'gnews'
-      els.testimonySource.fire('change')
-      await flush(200)
-      assert.equal(els.domainLabel.textContent, '', "changing this figure's own source control released the outlet")
-    })
-  })
-})
-
-describe('the strip repaints off its own ResizeObserver, not figure 1\'s resizeMap (issue #92 AC13)', () => {
-  it('resizing #strip through the real ResizeObserver callback repaints the strip with the new width', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      // Capture the callback figures/testimony.js registers on #strip so the test can invoke a
-      // resize directly, rather than trusting a claim that a ResizeObserver was constructed.
-      const captured: { target: unknown; cb: () => void }[] = []
-      class CapturingResizeObserver {
-        cb: () => void
-        constructor(cb: () => void) {
-          this.cb = cb
-        }
-        observe(target: unknown) {
-          captured.push({ target, cb: this.cb })
-        }
-        disconnect() {}
-      }
-      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = CapturingResizeObserver
-      routeFetch(calls, {
-        '/sources': [],
-        '/testimony': { method: 'kikori', overall: { score: 1.5, n: 8 }, by_source: [], by_domain: [{ domain: 'g1.globo.com', source: 'gnews', score: 1.5, n: 8 }] },
-      })
-      els.strip.clientWidth = 800
-      mount(els.testimony, { people, initial: { person: personA.id } })
-      await flush()
-      const firstMarkup = els.strip.innerHTML
-      assert.match(firstMarkup, /viewBox="0 0 800/, 'the strip must first paint at its own clientWidth')
-      const stripObservers = captured.filter((c) => c.target === els.strip)
-      assert.equal(stripObservers.length, 1, 'exactly one ResizeObserver must observe #strip, the runtime\'s own')
-      const stripObserver = stripObservers[0]
-      els.strip.clientWidth = 400
-      stripObserver!.cb()
-      const secondMarkup = els.strip.innerHTML
-      assert.notEqual(secondMarkup, firstMarkup, 'firing the ResizeObserver callback must repaint the strip')
-      assert.match(secondMarkup, /viewBox="0 0 400/, 'the repaint must use the new width')
-    })
-  })
-})
-
-describe('the route and the painter agree on the shape', () => {
-  before(() => seed())
-
-  it('what GET /api/people/:id/testimony returns paints without adaptation', async () => {
-    const res = await app.request('/api/people/tarcisio/testimony?' + testimonyParams({ days: '30', sort: 'count', limit: '18', source: 'all' }) + '&method=stub')
-    assert.equal(res.status, 200)
-    const data = await res.json()
-    assert.ok(data.overall.n > 0, 'the fixture must have scored rows in the window, or this proves nothing')
-    withFakeDocument(['testimonyLabel', 'testimonyList', 'strip'], (els) => {
-      paintTestimony({ data, domain: 'estadao.com.br' })
-      assert.equal(els.testimonyLabel.textContent, signed(data.overall.score))
-      assert.match(els.testimonyList.innerHTML, /<p class="focus"><b>estadao\.com\.br<\/b>/)
-    })
-  })
-})
+const figureOf = (html: string) => html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
 
 describe('the page holds the figure and explains it', () => {
-  it('atlas.html gives the avaliação its own figure: title with the score, the strip, then the lists', () => {
-    const html = read('atlas.html')
-    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
+  it('the atlas page gives the avaliação its own figure: title with the score, the strip, then the lists', () => {
+    const html = pageMarkup('/')
+    const figure = figureOf(html)
     assert.ok(figure, 'the second figure must exist')
-    assert.match(figure, /<h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"><\/b><\/h2>/)
-    assert.match(figure, /<figure class="strip" id="strip"[^>]*hidden><\/figure>/)
-    assert.match(figure, /<div class="testimony-lists" id="testimonyList">/)
+    assert.match(figure, /<h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel">/)
+    assert.match(figure, /<figure class="strip"[^>]* id="strip"[^>]*>/)
+    assert.match(figure, /<div class="testimony-lists"[^>]* id="testimonyList"[^>]*>/)
     assert.ok(figure.indexOf('id="strip"') < figure.indexOf('id="testimonyList"'), 'the chart comes before its lists')
     assert.ok(figure.indexOf('id="testimonyList"') < figure.indexOf('id="outlets"'), 'the outlet list closes the figure')
     assert.ok(html.indexOf('id="workspace"') < html.indexOf('id="testimony"'), 'after the atlas figure')
@@ -147,6 +25,7 @@ describe('the page holds the figure and explains it', () => {
   it('the "Como ler" page defines the scale, the cut and the name bias', () => {
     const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     const help = read('atlas.html').match(/id="help-avaliacao"[\s\S]*?(?=<div id="help-comparar")/)?.[0] ?? ''
+    assert.ok(help, 'the in-page guide must carry the avaliação section')
     assert.match(chapter, /<h2>Gráfico 2 · Avaliação por veículo<\/h2>/)
     assert.match(chapter, /A nota não é de um jornalista nem do GDELT/)
     assert.match(chapter, /modelo treinado só para isso, o <a href="https:\/\/huggingface\.co\/drifting-walter\/kikori" target="_blank" rel="noopener">kikori<\/a>/)
@@ -158,7 +37,7 @@ describe('the page holds the figure and explains it', () => {
     assert.match(chapter, /Vale para todas as fontes, ao contrário do tom/)
   })
 
-  it('como-ler.html\'s testimony/#avaliacao section states both outlet-grouping caveats (AC14)', () => {
+  it("como-ler's #avaliacao section states both outlet-grouping caveats (AC14)", () => {
     const section = read('como-ler.html').match(/<div id="avaliacao">[\s\S]*?(?=\n\s*<div id="pmi">)/)?.[0] ?? ''
     assert.ok(section, 'the #avaliacao section must exist')
     assert.match(section, /vocabulário parecido[\s\S]{0,120}(não é a mesma coisa que|não é) linha editorial/i, 'shared vocabulary is not editorial lean')
@@ -175,18 +54,16 @@ describe('the page holds the figure and explains it', () => {
     assert.deepEqual(sizes.filter((s) => s === '--t-micro'), [], 'the 11px floor is for SVG labels only')
   })
 
-  it('atlas.html makes the strip the chart of the second figure, and the como-ler page explains it', () => {
-    const html = read('atlas.html')
-    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
-    assert.match(figure, /<\/header>\s*<figure class="strip" id="strip" aria-label="Veículos na régua da avaliação" hidden><\/figure>/)
+  it('the strip is the chart of the second figure, and the como-ler page explains it', () => {
+    const figure = figureOf(pageMarkup('/'))
+    assert.match(figure, /<\/header>\s*<figure class="strip"[^>]* id="strip" aria-label="Veículos na régua da avaliação"/)
     const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.match(chapter, /<b>A régua<\/b>/)
     assert.match(chapter, /a linha vertical é a média da pessoa/)
   })
 
   it('the figure is one column, with no second ruler and no second outlet ranking', () => {
-    const html = read('atlas.html')
-    const figure = html.match(/<section class="figure testimony" id="testimony"([\s\S]*?)<\/section>/)?.[1] ?? ''
+    const figure = figureOf(pageMarkup('/'))
     assert.ok(figure, 'the second figure must exist')
     assert.doesNotMatch(figure, /figure-lists/, 'the two-column grid left half the width empty')
     assert.doesNotMatch(figure, /<details/, 'the one outlet list is the figure, not a disclosure beside it')

@@ -7,7 +7,7 @@ import { parse, type DefaultTreeAdapterMap } from 'parse5'
 import { app } from '../src/server.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { pageMarkup, pageSource, ROUTES } from './pages.js'
-import { paintCandidates, paintDocs, paintOutlets, wordMarkup } from '../src/ui/render.js'
+import { paintCandidates, paintDocs, wordMarkup } from '../src/ui/render.js'
 
 // Repo-wide invariants: shapes the whole codebase must hold, not one issue's acceptance
 // criteria. A block here checks a structural rule (an import graph, a module boundary, a
@@ -106,18 +106,11 @@ describe('the pages under web/ carry no styles and no logic of their own', () =>
     const word = wordMarkup({ id: 'a', term: 'reforma', kind: 'word', pmi: 1, rank: 0, x: 1, y: 2, w: 90, h: 30, size: 28, lineHeight: 33, lines: ['reforma'], count: 4, score: 4 }, 'count')
     for (const value of inlineStyles(String(word))) assert.ok(value.startsWith('--'), `wordMarkup emitted style="${value}"`)
 
-    const emitted = withFakeDocument(['domainLabel', 'outletList', 'candidateLabel', 'candidateList'], (els) => {
-      paintOutlets({
-        rows: [{ domain: 'g1.globo.com', source: 'gnews', label: 'g1', docs: 4, tone: 1.5 }],
-        testimony: { method: 'stub', overall: { score: -1, n: 4 }, by_source: [], by_domain: [{ domain: 'g1.globo.com', source: 'gnews', score: -1.5, n: 4 }] },
-        domain: 'all',
-        onPick: () => {},
-      })
+    const emitted = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
       paintCandidates({ candidates: [{ name: 'Hugo Motta', count: 5, sources: 2, previous: 0, samples: [{ id: '1', source: 'gnews', text: 'texto' }] }] })
-      return els.outletList.innerHTML + els.candidateList.innerHTML
+      return els.candidateList.innerHTML
     })
     for (const value of inlineStyles(emitted)) assert.ok(value.startsWith('--'), `a painter emitted style="${value}"`)
-    assert.match(emitted, /style="--tone:/, 'tone is the one genuinely dynamic value and stays a --var override')
   })
 })
 
@@ -206,7 +199,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // testimony.ts, compare.ts and rising.ts adopt figure.ts and drop their own
       // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
       // the shared runtime.
-      'figures/testimony.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'figures/compare.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
       // app.ts, and reaching into no other figure's DOM.
@@ -222,7 +214,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './figures/compare.js',
         './figures/lenses.js',
         './figures/rising.js',
-        './figures/testimony.js',
         './help.js',
         './render.js',
         './seed.js',
@@ -241,6 +232,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Persistence.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
       'Attention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
+      'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './render.js', './seed.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
       const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))
@@ -275,14 +267,11 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     assert.equal(typeof module.boot, 'function')
   })
 
-  it('figures/atlas.js and figures/testimony.js are importable outside a browser too', async () => {
+  it('figures/atlas.js is importable outside a browser too', async () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
     const atlas = await import('../src/ui/figures/atlas.js')
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/atlas.js must not touch document at import time')
     assert.equal(typeof atlas.mount, 'function')
-    const testimony = await import('../src/ui/figures/testimony.js')
-    assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing figures/testimony.js must not touch document at import time')
-    assert.equal(typeof testimony.mount, 'function')
   })
 
   it('figures/atlas.js and state.js export exactly what the split promises, no more', async () => {
@@ -291,8 +280,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     const state = await import('../src/ui/state.js')
     for (const name of ['fromScope', 'debounce', 'readScope', 'writeScope', 'clearScopes', 'SCOPE_TTL_MS', 'SCOPE_LIMIT']) assert.equal(typeof (state as Record<string, unknown>)[name] !== 'undefined', true, `state.js must still export ${name}`)
     for (const name of ['outlet', 'zoom', 'layoutCache', 'mask', 'getController', 'setController', 'getMask', 'setMask']) assert.equal(name in state, false, `state.js must not export ${name}: it is figure-private now`)
-    const testimony = await import('../src/ui/figures/testimony.js')
-    assert.deepEqual(Object.keys(testimony), ['mount'], 'figures/testimony.js exposes only mount; outlet/zoom/layoutCache/mask/request-id bookkeeping stay local')
   })
 })
 
@@ -737,7 +724,7 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.match(readFileSync(join(jsDir, 'figure.svelte.ts'), 'utf8'), /docs-card\.svelte\.js/, 'figure.svelte.ts imports docs-card.svelte.js')
     for (const file of [...allSvelte(), ...svelteTs()]) {
       const names = importsFrom(readFileSync(file, 'utf8'), /(^|\/)render\.js$/)
-      for (const n of names) assert.match(n, /^(paintDocs|createCanvasMeasure$)/, `${file} imports render.ts's ${n}; only paintDocs* and the injected createCanvasMeasure are allowed`)
+      for (const n of names) assert.match(n, /^(paintDocs|createCanvasMeasure$|stripLayout$|STRIP_PAD$)/, `${file} imports render.ts's ${n}; only paintDocs* and the injected createCanvasMeasure and the pure strip geometry are allowed`)
     }
   })
 

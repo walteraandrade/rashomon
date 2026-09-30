@@ -340,20 +340,6 @@ const atlasIds = () => ({
   retry: new FakeBox('retry'),
 })
 
-const testimonyIds = () => ({
-  testimony: new FakeBox('testimony'),
-  testimonySource: new FakeSelect('testimonySource'),
-  testimonyPerson: new FakeSelect('testimonyPerson'),
-  testimonyDays: new FakeSelect('testimonyDays', DAYS_OPTIONS),
-  testimonyLabel: new FakeBox('testimonyLabel'),
-  testimonyList: new FakeBox('testimonyList'),
-  outletList: new FakeBox('outletList'),
-  domainLabel: new FakeBox('domainLabel'),
-  strip: new FakeBox('strip'),
-  // Same reasoning as #retry above: painted into #testimonyList's innerHTML by the error branch.
-  testimonyRetry: new FakeBox('testimonyRetry'),
-})
-
 // Figure 3 (issue #91): its own person selects, sentence controls, ruler host, detail/status/
 // note lines, and the retry button the error branch paints into #compareDetail's innerHTML.
 const compareIds = () => ({
@@ -465,7 +451,6 @@ const lensesIds = () => {
 }
 
 export type Elements = ReturnType<typeof atlasIds> &
-  ReturnType<typeof testimonyIds> &
   ReturnType<typeof compareIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof lensesIds> &
@@ -481,7 +466,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...lensesIds(), ...attentionIds() } as Elements
+  const els = { ...atlasIds(), ...compareIds(), ...risingIds(), ...lensesIds(), ...attentionIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

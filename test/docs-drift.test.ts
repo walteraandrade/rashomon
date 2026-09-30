@@ -533,3 +533,10 @@ describe('svelte shared pieces (issue #287)', () => {
     assert.match(docsText, /\{@html\}[\s\S]{0,300}Html|Html[\s\S]{0,300}\{@html\}/)
   })
 })
+
+describe('ported figures read their own seeds (#288)', () => {
+  it('documents that a component seeds through seedFor and a prefixed key wins over the bare one', () => {
+    assert.ok(docsText.includes('seedFor'), 'docs never mention seedFor')
+    assert.match(docsText, /prefixed[\s\S]{0,200}wins over the bare|wins over the bare[\s\S]{0,200}prefixed/i)
+  })
+})

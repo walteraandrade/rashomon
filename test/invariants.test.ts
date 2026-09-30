@@ -219,9 +219,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 7 (issue #216), attention vs mentions: same shape as figures/lenses.ts, imported
       // by nothing but app.ts, and reaching into no other figure's DOM.
       'figures/attention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
-      // Figure 8 (issue #208), the agenda grid: same shape again, imported by nothing but
-      // app.ts, and reaching into no other figure's DOM.
-      'figures/agenda.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       // Figure 9 (#207), the comention matrix: same shape again, imported by nothing but app.ts.
       'figures/comention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'figures/persistence.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
@@ -229,7 +226,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './api.js',
         './boot.svelte.js',
         './docs-card.js',
-        './figures/agenda.js',
         './figures/atlas.js',
         './figures/attention.js',
         './figures/comention.js',
@@ -251,6 +247,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'DocsCard.svelte': ['./docs-card.svelte.js'],
       'HelpDialog.svelte': ['./help.svelte.js'],
       'Combobox.svelte': ['./combobox.js'],
+      'Agenda.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
       'Proof.svelte': [],
     }
     for (const [file, allowed] of Object.entries(components)) {

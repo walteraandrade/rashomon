@@ -790,3 +790,14 @@ describe('component test harness', () => {
     for (const name of ['vitest', 'happy-dom', 'svelte-check']) assert.match(pkg.devDependencies[name], /^\d/, `${name} must be pinned exact`)
   })
 })
+
+describe('figure 9 lives only in Comention.svelte', () => {
+  const ui = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'ui')
+  it('AC12: figures/comention.ts is gone, render.ts has no paintComention*, app.ts and no .ts module reference figure 9 wiring', () => {
+    assert.equal(existsSync(join(ui, 'figures', 'comention.ts')), false)
+    assert.doesNotMatch(readFileSync(join(ui, 'render.ts'), 'utf8'), /paintComention/)
+    assert.doesNotMatch(readFileSync(join(ui, 'app.ts'), 'utf8'), /comention/i)
+    const tsFiles = [ui, join(ui, 'figures')].flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)))
+    for (const file of tsFiles) assert.doesNotMatch(readFileSync(file, 'utf8'), /Comention\.svelte/, file)
+  })
+})

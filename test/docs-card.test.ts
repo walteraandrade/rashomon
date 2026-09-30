@@ -4,10 +4,10 @@ import { siteFile } from './pages.js'
 
 const read = (name: string) => siteFile(name)
 
-// The documents card, driven through the real mount()s. The button in the inspector is gone, so
+// The documents card, driven through the real component mounts. The button in the inspector is gone, so
 // every figure asks for texts with its own click: the atlas by picking a word or the person at
 // the centre, the testimony strip by focusing an outlet, the ruler by picking a word — and the
-// ruler asks BOTH people at once. The card belongs to none of them (public/js/docs-card.js), so
+// ruler asks BOTH people at once. The card belongs to none of them (docs-card.svelte.ts), so
 // each request carries its own recorte and its own title.
 
 describe('the card that holds the documents: markup and stylesheet', () => {

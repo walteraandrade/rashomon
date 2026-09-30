@@ -3,7 +3,7 @@ import { flushSync, mount, unmount } from 'svelte'
 import Persistence from '../../src/ui/Persistence.svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
 import { setBoot } from '../../src/ui/boot.svelte.js'
-import { close, isOpen, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
+import { close, isOpen, open, openedBy } from '../../src/ui/docs-card.svelte.js'
 import { clearScopes } from '../../src/ui/state.js'
 import { kinds, shiftDate, sinceLabel, todayBrt, weekSpanLabel } from '../../src/ui/format.js'
 
@@ -61,7 +61,6 @@ const start = async (search = '', data: unknown = payload()) => {
   setBoot({ people, peopleError: null, ready: true, search })
   instances.push(mount(Persistence, { target }))
   instances.push(mount(DocsCard, { target: cardTarget }))
-  mountDocsCard()
   flushSync()
   await settle(0)
   await settle(200)

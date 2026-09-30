@@ -65,7 +65,6 @@ const boot = (patch: Partial<{ ready: boolean; people: typeof people; peopleErro
 const start = async () => {
   instances.push(mount(Lenses, { target }))
   instances.push(mount(DocsCard, { target }))
-  docsCard.mountDocsCard()
   flushSync()
   await settle(220)
 }

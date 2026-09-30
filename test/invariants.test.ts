@@ -5,9 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse, type DefaultTreeAdapterMap } from 'parse5'
 import { app } from '../src/server.js'
-import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { pageMarkup, pageSource, ROUTES } from './pages.js'
-import { paintDocs } from '../src/ui/render.js'
 
 // Repo-wide invariants: shapes the whole codebase must hold, not one issue's acceptance
 // criteria. A block here checks a structural rule (an import graph, a module boundary, a
@@ -15,11 +13,10 @@ import { paintDocs } from '../src/ui/render.js'
 // text for a repo-wide pattern -- never by asserting that one function calls another by name.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const inlineStyles = (markup: unknown) => [...String(markup).matchAll(/style="([^"]*)"/g)].map((m) => m[1])
 const testDir = join(root, 'test')
 const jsDir = join(root, 'src', 'ui')
-// src/ui/figures/*.ts sits one level deeper: the walk must see that subdirectory too, so a new
-// figure module is never invisible to the import-graph test or the "every module is served"
-// check below.
+// The walk recurses, so a module in a subdirectory is never invisible to the import-graph test.
 const jsFiles = (dir = jsDir, prefix = ''): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? jsFiles(join(dir, entry.name), `${prefix}${entry.name}/`) : entry.name.endsWith('.ts') ? [`${prefix}${entry.name}`] : [],
@@ -39,8 +36,8 @@ const srcFiles = (dir = srcDir, prefix = ''): string[] =>
   )
 const srcSource = (name: string) => readFileSync(join(srcDir, name), 'utf8')
 
-// Both quote styles and both shapes: a cycle written as `from "./render.js"`, or as a
-// multi-line `import {\n ... \n} from './render.js'`, must not slip through and pass vacuously.
+// Both quote styles and both shapes: a cycle written as `from "./layout.js"`, or as a
+// multi-line `import {\n ... \n} from './layout.js'`, must not slip through and pass vacuously.
 const importsOf = (source: string) => [...source.matchAll(/(?:^|\n)(?:import\b|export\s*\{)[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 
 describe('hono no longer serves the site', () => {
@@ -141,17 +138,17 @@ describe('every page parses the way it is written', () => {
 })
 
 describe('the module boundaries CLAUDE.md declares actually hold', () => {
-  it('layout.js, format.js, state.js, perf.js, api.js and marks.js never touch the document', () => {
-    for (const file of ['layout.ts', 'format.ts', 'state.ts', 'perf.ts', 'api.ts', 'marks.ts'])
+  it('layout.js, format.js, state.js, perf.js and api.js never touch the document', () => {
+    for (const file of ['layout.ts', 'format.ts', 'state.ts', 'perf.ts', 'api.ts'])
       assert.ok(!/\bdocument\b/.test(moduleSource(file)), `${file} must stay DOM-free so it is importable under node:test`)
   })
 
-  it('render.js never fetches and api.js never renders', () => {
-    assert.ok(!/\bfetch\s*\(/.test(moduleSource('render.ts')), 'render.js paints; it must not fetch')
+  it('docs-paint.js never fetches and api.js never renders', () => {
+    assert.ok(!/\bfetch\s*\(/.test(moduleSource('docs-paint.ts')), 'docs-paint.js paints; it must not fetch')
     assert.ok(!/\bdocument\b/.test(moduleSource('api.ts')), 'api.js fetches; it must not render')
   })
 
-  it('the import graph is acyclic and matches the documented direction, including src/ui/figures/', () => {
+  it('the import graph is acyclic and matches the documented direction', () => {
     const expected: Record<string, string[]> = {
       // Issue #208: figure 8's grid needs a domain's lean for its badge, and the route itself
       // carries no lean field (out of scope for that issue), so agendaRows reads outlets.json
@@ -162,55 +159,39 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'perf.ts': [],
       'api.ts': ['./perf.js'],
       'layout.ts': ['./format.js'],
-      // The SVG frame/axis/overflow-list builders render.ts once hand-wrote per figure live in
-      // their own DOM-free module, imported only by render.ts.
-      'marks.ts': ['./format.js'],
-      // The searchable face over a <select> (figure 6's two lens controls): DOM-level, but
-      // builds its list with format.ts's tag only and never fetches or paints a figure.
+      // The searchable face over a <select> (figure 6's two lens controls): its pure halves,
+      // built with format.ts's tag only.
       'combobox.ts': ['./format.js'],
-      'render.ts': ['./format.js', './layout.js'],
-      // The documents card and the in-page guide belong to no figure; both sit next to the
-      // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
-      'docs-card.ts': ['./docs-card.svelte.js'],
-      'help.ts': ['./help.svelte.js'],
-      'docs-card.svelte.ts': ['./api.js', './perf.js', './render.js', './state.js'],
+      'measure.ts': ['./layout.js', './format.js'],
+      'ruler-model.ts': ['./format.js'],
+      'strip-model.ts': ['./format.js', './layout.js'],
+      'docs-paint.ts': ['./format.js'],
+      'docs-card.svelte.ts': ['./api.js', './docs-paint.js', './perf.js', './state.js'],
       'help.svelte.ts': [],
       'seed.ts': [],
       'boot.svelte.ts': [],
-      // The shared runtime behind four of the five mount() calls (issue #193): abort/stale/
-      // scope/ghost/background-click/Escape/resize, generalized out of compare.ts/rising.ts/
-      // testimony.ts. It builds no markup and never fetches on its own, so it imports
-      // neither format.js nor render.js; docs-card.js is what lets release() close only the
-      // card its own name opened.
-      'figure.ts': ['./docs-card.js', './perf.js', './state.js'],
+      // The shared runtime behind the figure components: abort/stale/scope/ghost/background-click/
+      // Escape/resize. It builds no markup and never fetches on its own.
       'figure.svelte.ts': ['./docs-card.svelte.js', './perf.js', './state.js'],
       'atlas-model.ts': ['./api.js', './format.js'],
-      'app.ts': [
-        './api.js',
-        './boot.svelte.js',
-        './docs-card.js',
-        './help.js',
-      ],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
-    // The docs card and the guide are .svelte.ts now; a caller may name either specifier form.
-    const canon = (spec: string) => spec.replace(/^(\.\/(?:docs-card|help))\.svelte\.js$/, '$1.js')
     const components: Record<string, string[]> = {
       'DocsCard.svelte': ['./docs-card.svelte.js'],
       'HelpDialog.svelte': ['./help.svelte.js'],
       'Combobox.svelte': ['./combobox.js'],
       'Agenda.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
-      'Week.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
+      'Week.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './seed.js'],
       'Proof.svelte': [],
       'Persistence.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
-      'Attention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
+      'Attention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './seed.js'],
       'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
-      'Atlas.svelte': ['./api.js', './atlas-model.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
-      'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './render.js', './seed.js'],
-      'Compare.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
-      'Lenses.svelte': ['./Ruler.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
+      'Atlas.svelte': ['./api.js', './atlas-model.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './seed.js'],
+      'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './strip-model.js', './seed.js'],
+      'Compare.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './ruler-model.js', './seed.js'],
+      'Lenses.svelte': ['./Ruler.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './ruler-model.js', './seed.js'],
       'Ruler.svelte': ['./format.js'],
-      'Rising.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
+      'Rising.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './seed.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
       const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))
@@ -224,25 +205,13 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         assert.deepEqual(own.filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/')).sort(), [...allowed].sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
         continue
       }
-      // A module under figures/ imports its siblings (../api.js, not ./api.js); importsOf
-      // returns the literal specifier, so this resolves each one relative to its own file
-      // before comparing, the same way the loader would.
-      const resolved = importsOf(moduleSource(file)).map((spec) => canon(file.includes('/') && spec.startsWith('../') ? `.${spec.slice(2)}` : spec))
-      assert.deepEqual(resolved.sort(), allowed.map(canon).sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
+      assert.deepEqual(importsOf(moduleSource(file)).sort(), [...allowed].sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
     }
   })
 
   it('the import scan really does see double-quoted and multi-line imports', () => {
-    assert.deepEqual(importsOf(`import { a } from "./render.js"\nimport { b } from './layout.js'`), ['./render.js', './layout.js'])
+    assert.deepEqual(importsOf(`import { a } from "./format.js"\nimport { b } from './layout.js'`), ['./format.js', './layout.js'])
     assert.deepEqual(importsOf(`import {\n  a,\n  b,\n} from "./state.js"`), ['./state.js'])
-  })
-
-  it('app.js is importable outside a browser and exposes exactly one export, boot', async () => {
-    const previous = (globalThis as { document?: unknown }).document
-    assert.equal(previous, undefined, 'this suite must run with no document, or the import guard proves nothing')
-    const module = await import('../src/ui/app.js')
-    assert.deepEqual(Object.keys(module), ['boot'], 'app.js is a shell now: every other export moved into the figure that owns it')
-    assert.equal(typeof module.boot, 'function')
   })
 
   it('#297: atlas-model.js is importable outside a browser and exports exactly the pure helpers', async () => {
@@ -252,14 +221,9 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     assert.deepEqual(Object.keys(model).sort(), ['docsQuery', 'layoutKey', 'scopeKeys'])
   })
 
-  it('#297 AC1: figures/atlas.ts is gone, app.ts imports nothing of it, has no atlas FIGURES entry and paints no atlas ghost at boot', () => {
+  it('#297 AC1: figures/atlas.ts is gone', () => {
     assert.equal(existsSync(join(jsDir, 'figures', 'atlas.ts')), false)
     assert.ok(!jsFiles().includes('figures/atlas.ts'))
-    const app = readFileSync(join(jsDir, 'app.ts'), 'utf8')
-    assert.doesNotMatch(app, /figures\/atlas/)
-    assert.doesNotMatch(app, /mountAtlas/)
-    assert.doesNotMatch(app, /paintAtlasLoading/)
-    assert.doesNotMatch(app, /id:\s*'atlas'/)
   })
 
   it('#297 AC1/AC11: Atlas.svelte is the one figure-1 owner', () => {
@@ -270,17 +234,8 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     assert.equal(svelteRules.style(source), false, 'Atlas.svelte may carry no <style> and no style= (style:--name only)')
     assert.equal(svelteRules.fontSize(source), false)
     assert.deepEqual(svelteRules.imports(join(jsDir, 'Atlas.svelte'), source), [])
-    const painters = [...scriptOf(source).matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]\.\/render\.js['"]/g)].flatMap((m) => m[1].split(',').map((n) => n.trim().split(/\s+as\s+/)[0]).filter(Boolean))
-    for (const name of painters) assert.ok(/^paintDocs/.test(name) || name === 'createCanvasMeasure', `Atlas.svelte may import only paintDocs* and createCanvasMeasure from render.js, not ${name}`)
     assert.ok(!HTML_ALLOWLIST.includes('Atlas.svelte'), 'the {@html} allowlist stays DocsCard.svelte')
     assert.deepEqual(HTML_ALLOWLIST, ['DocsCard.svelte'])
-  })
-
-  it('#297 AC12: render.ts no longer exports the figure-1 painters', async () => {
-    const render = (await import('../src/ui/render.js')) as Record<string, unknown>
-    for (const name of ['wordMarkup', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'paintAtlasLoading', 'termStripLayout', 'paintTermStrip', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError'])
-      assert.equal(name in render, false, `render.ts must not export ${name}`)
-    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
   })
 
   it('state.js exports what the split promises, no more', async () => {
@@ -422,15 +377,7 @@ describe('markup reaches innerHTML only through the html tag', () => {
         assert.ok(t.tagged, `${file}:${t.line} builds markup in an untagged template literal`)
         tagged++
       }
-    assert.ok(tagged > 10, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
-  })
-
-  it('the html tag escapes what a painter forgets to: a document text with markup stays text', () => {
-    withFakeDocument(['docs'], (els) => {
-      paintDocs([{ label: null, data: { total: 1, docs: [{ source: 'rss', domain: 'x.com', text: '<img src=x onerror=alert(1)>', uri: 'https://x.com/a' }] } }])
-      assert.doesNotMatch(els.docs.innerHTML, /<img/)
-      assert.match(els.docs.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/)
-    })
+    assert.ok(tagged > 5, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
   })
 })
 
@@ -609,7 +556,7 @@ describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
 })
 
 // .svelte files: kept apart from jsFiles() so the import-graph map above still lists .ts modules
-// only. A component sits above render.ts and below app.ts; no module under src/ imports a .svelte.
+// only. No module under src/ imports a .svelte.
 const webDir = join(root, 'web')
 const svelteFiles = (dir: string): string[] =>
   existsSync(dir)
@@ -670,7 +617,7 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.ok(page)
     const specs = svelteRules.specs(readFileSync(page, 'utf8'))
     assert.ok(specs.includes('svelte'))
-    assert.ok(specs.includes('$lib/app.js'))
+    assert.ok(specs.includes('$lib/api.js'))
   })
 
   it('no module under src imports a .svelte', () => {
@@ -721,18 +668,12 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     }
   })
 
-  it('the shared pieces are in the import map, acyclic, and reach render.ts only for paintDocs* and createCanvasMeasure', () => {
-    const importsFrom = (source: string, from: RegExp) =>
-      [...source.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)].filter((m) => from.test(m[2])).flatMap((m) => m[1].split(',').map((n) => n.trim().replace(/\s+as\s+.*/, '')).filter(Boolean))
+  it('the shared pieces exist, and docs-card.svelte.ts never imports a figure runtime', () => {
     for (const name of ['docs-card.svelte.ts', 'help.svelte.ts', 'figure.svelte.ts']) assert.ok(existsSync(join(jsDir, name)), `${name} must exist`)
     for (const name of ['DocsCard.svelte', 'HelpDialog.svelte', 'Combobox.svelte']) assert.ok(existsSync(join(jsDir, name)), `${name} must exist`)
     const docsCardSrc = readFileSync(join(jsDir, 'docs-card.svelte.ts'), 'utf8')
     assert.doesNotMatch(docsCardSrc, /figure(\.svelte)?\.js/, 'docs-card.svelte.ts must never import a figure runtime')
     assert.match(readFileSync(join(jsDir, 'figure.svelte.ts'), 'utf8'), /docs-card\.svelte\.js/, 'figure.svelte.ts imports docs-card.svelte.js')
-    for (const file of [...allSvelte(), ...svelteTs()]) {
-      const names = importsFrom(readFileSync(file, 'utf8'), /(^|\/)render\.js$/)
-      for (const n of names) assert.match(n, /^(paintDocs|createCanvasMeasure$|rulerTerms$|stripLayout$|STRIP_PAD$)/, `${file} imports render.ts's ${n}; only paintDocs* and the injected createCanvasMeasure, rulerTerms and the pure strip geometry are allowed`)
-    }
   })
 
   it('svelte files have no style block or style attribute', () => {
@@ -788,10 +729,8 @@ describe('figure 9 lives only in Comention.svelte', () => {
   const ui = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'ui')
   it('figures/comention.ts is gone and no .ts module wires figure 9 any more (AC12)', () => {
     assert.equal(existsSync(join(ui, 'figures', 'comention.ts')), false)
-    assert.doesNotMatch(readFileSync(join(ui, 'render.ts'), 'utf8'), /paintComention/)
-    assert.doesNotMatch(readFileSync(join(ui, 'app.ts'), 'utf8'), /comention/i)
-    const tsFiles = [ui, join(ui, 'figures')].filter((dir) => existsSync(dir)).flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)))
-    for (const file of tsFiles) assert.doesNotMatch(readFileSync(file, 'utf8'), /Comention\.svelte/, file)
+    const tsFiles = readdirSync(ui).filter((f) => f.endsWith('.ts')).map((f) => join(ui, f))
+    for (const file of tsFiles) assert.doesNotMatch(readFileSync(file, 'utf8'), /Comention\.svelte|paintComention/, file)
   })
 })
 
@@ -811,5 +750,44 @@ describe('#297 AC2: web/routes/+page.svelte mounts <Atlas /> and holds none of i
     assert.equal(html.match(/id="selectionNote"/g)?.length, 1)
     assert.match(html, /href="#workspace"/)
     for (const id of IDS) assert.equal(html.match(new RegExp(`id="${id}"`, 'g'))?.length, 1, `#${id} exactly once`)
+  })
+})
+
+describe('#298 imperative front-end leftovers are gone', () => {
+  const gone = ['figure.ts', 'render.ts', join('figures', 'rising.ts'), 'docs-card.ts', 'help.ts']
+  const svelteFiles = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : svelteFiles(join(dir, e.name))) : /\.svelte(\.ts)?$/.test(e.name) ? [join(dir, e.name)] : []))
+
+  it('#298 AC3: none of the deleted modules or fake DOMs exists', () => {
+    for (const f of gone) assert.equal(existsSync(join(jsDir, f)), false, `src/ui/${f} must be deleted`)
+    for (const f of ['fake-dom.ts', 'fake-mount-dom.ts']) assert.equal(existsSync(join(testDir, f)), false, `test/${f} must be deleted`)
+  })
+
+  it('#298 AC3: invariants.test.ts no longer imports the fake DOM', () => {
+    assert.doesNotMatch(testFileSource('invariants.test.ts'), new RegExp(`from '\\./fake-${'dom'}`))
+  })
+
+  it('#298 AC5: the mount no-ops and the combobox attach helper are not defined or called anywhere', () => {
+    const names = new RegExp(['mount' + 'DocsCard', 'mount' + 'Help', 'attach' + 'Combobox'].join('|'))
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : walk(join(dir, e.name))) : /\.(ts|svelte|js)$/.test(e.name) ? [join(dir, e.name)] : []))
+    for (const dir of ['src', 'web', 'test']) for (const f of walk(join(root, dir))) assert.doesNotMatch(readFileSync(f, 'utf8'), names, `${f} names a removed function`)
+  })
+
+  it('#298 AC7: the import-direction map has no entry for a deleted module', () => {
+    const source = testFileSource('invariants.test.ts')
+    assert.doesNotMatch(source, new RegExp(`'(figure|render|docs-card|help)\\.ts':`))
+    assert.doesNotMatch(source, /'figures\/[a-z]+\.ts':/)
+  })
+
+  it('#298 AC8: no svelte file imports a render module', () => {
+    for (const dir of ['src/ui', 'web'])
+      for (const f of svelteFiles(join(root, dir)))
+        for (const spec of importsOf(readFileSync(f, 'utf8')).concat([...readFileSync(f, 'utf8').matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])))
+          assert.doesNotMatch(spec, /(^|\/)render(\.js|\.ts)?$/, `${f} imports ${spec}`)
+  })
+
+  it('#298 AC7: ALLOWED_PACKAGES is still empty', () => {
+    assert.match(testFileSource('invariants.test.ts'), /ALLOWED_PACKAGES[^=\n]*=\s*\[\s*\]/)
   })
 })

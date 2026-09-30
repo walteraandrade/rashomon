@@ -3,7 +3,7 @@ import { flushSync, mount, unmount } from 'svelte'
 // @ts-ignore -- the component is what issue #289 adds
 import Comention from '../../src/ui/Comention.svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
-import { close, isOpen, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
+import { close, isOpen, open, openedBy } from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { clearScopes } from '../../src/ui/state.js'
 
@@ -60,7 +60,6 @@ beforeEach(() => {
   cardTarget = document.createElement('div')
   document.body.append(target, cardTarget)
   instances.push(mount(DocsCard, { target: cardTarget }))
-  mountDocsCard()
 })
 
 afterEach(() => {

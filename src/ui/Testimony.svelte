@@ -18,7 +18,7 @@
     type OutletRow,
     type Testimony,
   } from './format.js'
-  import { STRIP_PAD, stripLayout } from './render.js'
+  import { STRIP_PAD, stripLayout } from './strip-model.js'
   import { seedFor } from './seed.js'
 
   type Merged = ReturnType<typeof mergeOutlets>[number]

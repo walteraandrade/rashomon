@@ -4,7 +4,7 @@
 
 import { createSubscriber } from 'svelte/reactivity'
 import * as api from './api.js'
-import { paintDocs, paintDocsError, paintDocsHead, paintDocsLoading } from './render.js'
+import { paintDocs, paintDocsError, paintDocsHead, paintDocsLoading } from './docs-paint.js'
 import { span } from './perf.js'
 import { fromScope, readScope } from './state.js'
 
@@ -56,7 +56,7 @@ export const card: Readonly<Pick<Store, 'sides' | 'isOpen' | 'isFloating' | 'spo
 }
 
 // Below FLOATING_MIN the card falls back to showModal() instead of floating.
-export const FLOATING_MIN = 760
+const FLOATING_MIN = 760
 const floating = () => typeof window !== 'undefined' && (window.innerWidth ?? 0) >= FLOATING_MIN
 
 let mounted: HTMLDialogElement | null = null
@@ -206,6 +206,3 @@ export const open = async (req: DocsRequest) => {
     }
   }
 }
-
-// Kept for app.ts: the component owns every listener, so there is nothing to attach.
-export const mountDocsCard = () => {}

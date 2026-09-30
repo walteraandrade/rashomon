@@ -58,7 +58,7 @@ Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `s
 
 **The site is a prerendered SvelteKit build.** `pnpm build` is `vite build` and writes `build/` (`index.html`, `como-ler.html`, `sobre.html`, `atlas.css`, the assets from `public/`, `_app/`); Vercel serves it as `outputDirectory`. The three pages are `/`, `/como-ler` and `/sobre`; `/atlas.html`, `/como-ler.html` and `/sobre.html` redirect 308 to them. Hono never serves `public/` or any HTML any more: every non-`/api` path answers 404 there. `pnpm dev` is Vite on 5173 and its dev server proxies `/api` to `PORT` (default 3210), and `pnpm dev:api` is the Hono process, the only one that opens `DATA_DIR`.
 
-**CSP split.** `vercel.json` serves security headers on `/`, `/como-ler` and `/sobre`, never on `/api/*` or a static asset; the same set lives in `src/headers.ts`. The header CSP carries only `frame-ancestors 'none'`, which a `<meta>` cannot; the prerendered `<meta http-equiv="content-security-policy">` (SvelteKit `kit.csp`, `mode: 'hash'`) carries `script-src 'self'` plus the `sha256-` hash of the bootstrap script, which changes on every build and so cannot live in `vercel.json`. `style-src` keeps `'unsafe-inline'` because `src/ui/render.ts` writes inline styles for per-value `--size`/`--tone` overrides; `script-src 'self'` forbids inline scripts and `eval`. `test/security-headers-acceptance.test.ts` fails when `vercel.json` and `vercelHeaders()` differ.
+**CSP split.** `vercel.json` serves security headers on `/`, `/como-ler` and `/sobre`, never on `/api/*` or a static asset; the same set lives in `src/headers.ts`. The header CSP carries only `frame-ancestors 'none'`, which a `<meta>` cannot; the prerendered `<meta http-equiv="content-security-policy">` (SvelteKit `kit.csp`, `mode: 'hash'`) carries `script-src 'self'` plus the `sha256-` hash of the bootstrap script, which changes on every build and so cannot live in `vercel.json`. `style-src` keeps `'unsafe-inline'` because the figure components write inline styles for per-value `--size`/`--tone` overrides; `script-src 'self'` forbids inline scripts and `eval`. `test/security-headers-acceptance.test.ts` fails when `vercel.json` and `vercelHeaders()` differ.
 
 `@huggingface/transformers` is required only by `pnpm score`. Its label logic lives in `src/scorers/method.ts`, which has no imports at all, and `src/query.ts` (the route path `api/index.ts` → `src/server.ts` serves) imports the method labels from there, never from `src/scorers/onnx.ts` — so the deployed `/api` function's import graph never reaches the model loader or the Hub client it dynamic-imports. That import-graph split is what keeps the package out of the deployment: the function bundler only traces what the graph reaches. Measured with `vercel build` on this repo: before this split, `.vercel/output/functions/api/index.func` was 94,327,622 bytes (~90 MB) and carried `onnxruntime-node`, `@huggingface/transformers` and `sharp`; after, it is 18,666,128 bytes (~18 MB) and carries none of them.
 
@@ -340,7 +340,7 @@ Three separate things. Two are local only: opt-in instrumentation on the running
 
 Vercel does not set `PERF`, so a deployment answers with no `server-timing` and the page's `detail.server` reads `null` there: production gets each call's duration and `x-vercel-cache`, nothing about the database. To see the split in production, set `PERF=1` and `PERF_LOG=0` on the Vercel project (headers only, no stdout line, at the cost of the query proxy on every request). Either way the headers are cached with the body, so on an `x-vercel-cache: HIT` the `server-timing` you read is the origin's cost when the entry was filled, not this request's.
 
-**Page marks.** `src/ui/perf.ts` records User Timing measures in every browser, with no flag: one `api:<route>` per finished API call (`api:graph`, `api:sources`, `api:testimony`, `api:compare`, `api:rising`, `api:week`, `api:timeline`, `api:docs`, `api:people`), whose `detail` carries the URL, the status and the `x-vercel-cache` and `server-timing` headers, and one `figure:<name>` per figure from the request to the paint (`figure:atlas`, `figure:outlets`, `figure:testimony`, `figure:compare`, `figure:rising`, `figure:week`, `figure:docs`). A failed call is recorded with its status (a slow 500 is a wait worth seeing); only an aborted or superseded request leaves no entry. A hit on the page's own 20 s memo (`fromScope`) records the `api:<route>` pair too, with `cache: "memory"` and a duration near zero, so a figure's measure always has the call it followed. Since `src/ui/figure.ts`'s `runFigure` runtime, the `figure:*` span's `query` detail and the memo key it is read against both come from that figure's own `params()`, which for outlets/testimony/rising/week includes `person=<id>` alongside the figure's own controls — so two people never share a memo entry or a `query` string, even at the same days/source/limit. This repo never posts the entries anywhere; they live in the tab. Vercel Web Analytics is a script on the same page and can read the same timeline. Read them in DevTools > Performance (the Timings track) or from the console:
+**Page marks.** `src/ui/perf.ts` records User Timing measures in every browser, with no flag: one `api:<route>` per finished API call (`api:graph`, `api:sources`, `api:testimony`, `api:compare`, `api:rising`, `api:week`, `api:timeline`, `api:docs`, `api:people`), whose `detail` carries the URL, the status and the `x-vercel-cache` and `server-timing` headers, and one `figure:<name>` per figure from the request to the paint (`figure:atlas`, `figure:outlets`, `figure:testimony`, `figure:compare`, `figure:rising`, `figure:week`, `figure:docs`). A failed call is recorded with its status (a slow 500 is a wait worth seeing); only an aborted or superseded request leaves no entry. A hit on the page's own 20 s memo (`fromScope`) records the `api:<route>` pair too, with `cache: "memory"` and a duration near zero, so a figure's measure always has the call it followed. Since `src/ui/figure.svelte.ts`'s `createFigure` runtime, the `figure:*` span's `query` detail and the memo key it is read against both come from that figure's own `params()`, which for outlets/testimony/rising/week includes `person=<id>` alongside the figure's own controls — so two people never share a memo entry or a `query` string, even at the same days/source/limit. This repo never posts the entries anywhere; they live in the tab. Vercel Web Analytics is a script on the same page and can read the same timeline. Read them in DevTools > Performance (the Timings track) or from the console:
 
 ```js
 performance.getEntriesByType('measure').map((e) => [e.name, Math.round(e.duration), e.detail.cache, e.detail.server])
@@ -389,12 +389,12 @@ It is read-only: each explain runs inside `begin transaction read only` ... `rol
 ## Front-end bootstrapping
 
 The page at `/` is a sequence of independent figures (Svelte components under `src/ui`), each with its
-own sentence of `<select>`s and its own fetches. `src/ui/app.ts` publishes the querystring through `bootData` once, and each figure seeds itself from it. Nothing is ever written back to `location` or `history`: the controls
+own sentence of `<select>`s and its own fetches. `web/routes/+page.svelte` publishes the querystring through `bootData` once, and each figure seeds itself from it. Nothing is ever written back to `location` or `history`: the controls
 change what a figure shows, never the URL.
 
 A figure reads its own seeds: once
 `bootData.ready`, it calls `seedFor('<figure>', <keys>, bootData.search)` from `src/ui/seed.ts`,
-and the prefixed key wins over the bare one there too. `app.ts` seeds and mounts none of them.
+and the prefixed key wins over the bare one there too. The page seeds and mounts none of them.
 
 Two key forms, read in this order:
 
@@ -428,9 +428,9 @@ Figure 1 is a Svelte component (`src/ui/Atlas.svelte`) too, reading boot data (`
 seeding through `seedFor('atlas', ['person', 'days', 'source', 'sort', 'limit'], bootData.search)`
 once `bootData.ready`; its graph load is `createFigure`, while the inspector sparkline (`GET
 /timeline?days=7&bucket=day`) is the atlas's own fetch outside `createFigure`.
-Figure 9 is a Svelte component (`src/ui/Comention.svelte`), not a `figures/*.ts` mount: it seeds
+Figure 9 is a Svelte component (`src/ui/Comention.svelte`): it seeds
 from `days`, `source`, `lean` and `min` with `seedFor` over `bootData.search`, starts its first
-load only once `bootData.ready`, and shares the single `/api/people` fetch `app.ts` makes once
+load only once `bootData.ready`, and shares the single `/api/people` fetch the page makes once
 (it never fetches people itself).
 Figure 4 (`rising`) is a Svelte component (`src/ui/Rising.svelte`), prop-less like the others: it seeds
 `person` and `source` with `seedFor('rising', ['person', 'source'], bootData.search)`, applies a

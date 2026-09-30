@@ -566,3 +566,11 @@ describe('#294 figure 6 (lenses) is a Svelte component', () => {
     assert.doesNotMatch(docsText, /figures\/lenses\.ts/, 'docs still describe the deleted figures/lenses.ts')
   })
 })
+
+describe('#298 docs describe only live front-end code', () => {
+  it('#298 AC11: docs name none of the deleted imperative modules or helpers', async () => {
+    const { docsText } = await import('./docs.js')
+    for (const name of ['runFigure', 'render.ts', 'render.js', 'figures/', 'mount' + 'DocsCard', 'mount' + 'Help', 'attach' + 'Combobox', 'figure.ts'])
+      assert.ok(!docsText.includes(name), `docs still mention ${name}`)
+  })
+})

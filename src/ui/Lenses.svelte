@@ -8,7 +8,8 @@
   import { createFigure } from './figure.svelte.js'
   import { applyBridges, bridgeIds, fmt, hasBridges, isBridge, kinds, label, lensLabel, type CompareSide, type CompareTerm, type Lenses, type Measure, type OutletRow } from './format.js'
   import { rulerLayout, rulerModel } from './layout.js'
-  import { createCanvasMeasure, rulerTerms } from './render.js'
+  import { createCanvasMeasure } from './measure.js'
+  import { rulerTerms } from './ruler-model.js'
   import { seedFor, type SeedKey } from './seed.js'
 
   const KEYS: SeedKey[] = ['person', ['a', null], ['b', null], 'days', 'limit']

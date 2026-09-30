@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import HelpDialog from '../../src/ui/HelpDialog.svelte'
-import { closeHelp, mountHelp, openHelp } from '../../src/ui/help.svelte.js'
+import { closeHelp, openHelp } from '../../src/ui/help.svelte.js'
 
 let target: HTMLElement
 let links: HTMLElement
@@ -31,7 +31,6 @@ beforeEach(() => {
     <a id="sobre" href="/sobre">k</a>`
   document.body.append(target, links)
   instance = mount(HelpDialog, { target })
-  mountHelp()
   flushSync()
 })
 
@@ -118,9 +117,7 @@ describe('HelpDialog', () => {
     expect(dialog().open).toBe(true)
   })
 
-  it('fires once when mountHelp is also called', () => {
-    mountHelp()
-    mountHelp()
+  it('fires once per click', () => {
     const modal = vi.spyOn(HTMLDialogElement.prototype, 'showModal')
     click('abs')
     expect(modal).toHaveBeenCalledTimes(1)
@@ -150,7 +147,6 @@ describe('HelpDialog', () => {
     unmount(instance!)
     instance = undefined
     const other = mount(HelpDialog, { target })
-    mountHelp()
     unmount(other)
     for (const [type, fn] of adds) expect(removes.some(([t, f]) => t === type && f === fn), `${type} listener left behind`).toBe(true)
     expect(document.getElementById('helpDialog')).toBeNull()

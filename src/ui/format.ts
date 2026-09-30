@@ -8,7 +8,6 @@ export type Link = { source: string; target: string; count: number }
 export type PersonTestimony = { method: string; score: number | null; n: number }
 export type Graph = { person: { id: string; name: string }; stats?: { about?: number; testimony?: PersonTestimony }; nodes: Term[]; links: Link[] }
 export type Doc = { source?: string; uri?: unknown; domain?: string | null; text?: string }
-// field/neighbors (issue #218): from the window's own aggregate build, not the live query.
 export type OutletNeighbor = { domain: string; similarity: number }
 export type OutletRow = {
   domain?: string | null
@@ -91,7 +90,7 @@ const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (c) => HTML_ES
 const HTML_BRAND: unique symbol = Symbol('html')
 export type Html = { readonly [HTML_BRAND]: true; toString(): string }
 
-export const isHtml = (value: unknown): value is Html => typeof value === 'object' && value !== null && HTML_BRAND in value
+const isHtml = (value: unknown): value is Html => typeof value === 'object' && value !== null && HTML_BRAND in value
 
 export const raw = (markup: string): Html => ({ [HTML_BRAND]: true, toString: () => markup })
 
@@ -104,7 +103,7 @@ export const html = (strings: TemplateStringsArray, ...values: unknown[]): Html 
 // Mirrors query.ts's SMALL_LIMITS (client code cannot import the server module); compare.spec pins the two together.
 export const SMALL_LIMITS = [1, 5, 8, 12, 18, 20, 24, 30, 40, 50, 60, 100]
 
-export const BRIDGE_THRESHOLD = 0.5
+const BRIDGE_THRESHOLD = 0.5
 
 export const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_THRESHOLD
 
@@ -202,13 +201,6 @@ export const personInitials = (name: string) =>
     .slice(0, 3)
     .toUpperCase()
 
-export const trendOf = (c: { count: number; previous: number }) => {
-  if (c.previous === 0) return { cls: 'up', text: 'novo' }
-  if (c.count > c.previous) return { cls: 'up', text: '↑ era ' + fmt(c.previous) }
-  if (c.count < c.previous) return { cls: '', text: '↓ era ' + fmt(c.previous) }
-  return { cls: '', text: '= ' + fmt(c.previous) }
-}
-
 const hex = (c: string) => [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16))
 
 type Ramp = [number[], number[], number]
@@ -225,8 +217,6 @@ const scaleColor = (value: number | null | undefined, span: number, fade = false
   const strength = Math.abs(x) / span
   return fade && strength < 1 ? `rgba(${rgb},${(0.5 + 0.5 * strength).toFixed(2)})` : `rgb(${rgb})`
 }
-
-export const toneColor = (t: number | null | undefined) => scaleColor(t, 3)
 
 const TESTIMONY_CUT = 2.5
 
@@ -329,7 +319,7 @@ export const testimonyFocus = (rows: TestimonyDomainRow[], domain: string): { sc
 type OutletEntry = { domain: string; lean: keyof typeof LEAN_LABELS }
 const LEAN_BY_DOMAIN = new Map((outletsJson as OutletEntry[]).map((o) => [o.domain, o.lean]))
 
-export const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
+const leanFor = (domain: string): string | null => LEAN_BY_DOMAIN.get(domain) ?? null
 
 // Domains in the route's order, cells keyed by person id: a missing pair is a blank, not a zero.
 export const agendaRows = (data: Agenda): { domain: string; lean: string | null; cells: Map<string, AgendaCell> }[] => {
@@ -411,7 +401,7 @@ const dayWord = (n: number) => (n === 1 ? 'dia' : 'dias')
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
 
-export const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
+const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) => {
   const lag = daysBetween(mentionsPeak, viewsPeak)
   if (lag > 0) return `a imprensa veio ${lag} ${dayWord(lag)} antes`
   if (lag < 0) return `o público buscou ${Math.abs(lag)} ${dayWord(Math.abs(lag))} antes`

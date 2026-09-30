@@ -8,7 +8,6 @@ import { seed } from './fixture.js'
 import { compareParams } from '../src/ui/api.js'
 import './close.js'
 import { pageMarkup } from './pages.js'
-import * as render from '../src/ui/render.js'
 
 // Figure 3 (issues #91, #93, #99, #293): its behaviour is test/components/compare.spec.ts. What
 // stays here needs no component: the route the figure calls and the markup and CSS the page ships.
@@ -106,12 +105,6 @@ describe('atlas.css styles words, not dots (issue #99 AC7)', () => {
 })
 
 describe('figure 3 as a Svelte component (#293)', () => {
-  it('figures/compare.ts and the compare painters no longer exist; the shared ruler pieces stay', () => {
-    assert.ok(!existsSync(join(root, 'src', 'ui', 'figures', 'compare.ts')))
-    for (const name of ['paintRuler', 'paintRulerError', 'paintCompareLoading', 'paintCompareDetail']) assert.equal(name in render, false, `${name} must be gone from render.ts`)
-    for (const name of ['rulerTerms', 'createCanvasMeasure']) assert.equal(typeof (render as Record<string, unknown>)[name], 'function', `${name} stays for figures 4 and 6`)
-  })
-
   it('the page renders Compare.svelte and still ships every id and hook figure 3 had', () => {
     const html = design5()
     for (const id of ['compareTitle', 'compareA', 'compareB', 'compareDays', 'compareSource', 'compareMeasure', 'compareLimit', 'compareStatus', 'compareRuler', 'compareDetail', 'compareHiddenNote'])

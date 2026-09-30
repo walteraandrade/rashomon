@@ -16,10 +16,19 @@
   import HelpDialog from '$lib/HelpDialog.svelte'
   import Week from '$lib/Week.svelte'
   import Testimony from '$lib/Testimony.svelte'
+  import { loadPeople } from '$lib/api.js'
+  import { setBoot, type Person } from '$lib/boot.svelte.js'
 
   onMount(async () => {
-    const { boot } = await import('$lib/app.js')
-    boot()
+    setBoot({ search: location.search })
+    let people: Person[] = []
+    let peopleError: unknown = null
+    try {
+      people = await loadPeople()
+    } catch (e) {
+      peopleError = e
+    }
+    setBoot({ people, peopleError, ready: true })
   })
 </script>
 

@@ -7,7 +7,7 @@
   import { createFigure } from './figure.svelte.js'
   import { RARE_SHOWN, SOURCE_SEGMENTS, balanceColor, fmt, hasShares, kinds, label, liftBalance, liftOfPerson, rareRisers, risingRulerItems, shareBalance, sourceLabels, type Measure, type Rising, type RisingAbout, type RisingTerm } from './format.js'
   import { rulerLayout, rulerModel } from './layout.js'
-  import { createCanvasMeasure } from './render.js'
+  import { createCanvasMeasure } from './measure.js'
   import { seedFor } from './seed.js'
 
   let { measure }: { measure?: Measure } = $props()

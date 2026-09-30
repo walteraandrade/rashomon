@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import Testimony from '../../src/ui/Testimony.svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
-import { card, close, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
+import { card, close, open, openedBy } from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { docsParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 
 // Issue #296: figure 2 as one component. Mirrors the assertions of the retired
 // test/figures-testimony.test.ts and test/outlets-fold.test.ts.
@@ -110,9 +110,8 @@ afterEach(() => {
 })
 
 describe('Testimony (issue #296)', () => {
-  it('AC1: figures/testimony.ts is gone and app.ts neither imports nor mounts it', () => {
+  it('AC1: figures/testimony.ts is gone', () => {
     expect(existsSync('src/ui/figures/testimony.ts')).toBe(false)
-    expect(readFileSync('src/ui/app.ts', 'utf8')).not.toMatch(/figures\/testimony|mountTestimony/)
   })
 
   it('AC2: seeds person, days and source from the querystring', async () => {
@@ -952,7 +951,6 @@ const mountDocsHost = () => {
   document.body.appendChild(host)
   const docs = mount(DocsCard, { target: host })
   docsHosts.push(docs)
-  mountDocsCard()
   flushSync()
   return docs
 }

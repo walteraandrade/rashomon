@@ -738,8 +738,8 @@ describe('parameter enumeration acceptance criteria (issue #127)', () => {
     const offered = numbers(atlas)
     assert.ok(offered.length >= 3)
     for (const v of offered) assert.ok(LIMITS.includes(v), `atlas offers limit=${v}`)
-    // The compareLimit select is built by figures/compare.ts at mount, so its half of this
-    // check is a mount test in test/figures-compare.test.ts.
+    // The compareLimit select is built by Compare.svelte at mount, so its half of this
+    // check is a component spec in test/components/compare.spec.ts.
 
     const graph = params({ days: '30', sort: 'count', limit: '18', source: 'all' })
     assert.ok(MINS.includes(Number(graph.get('min'))), 'the graph request sends a min in MINS')

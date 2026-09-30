@@ -30,7 +30,7 @@
   } from './format.js'
   import { centerLabel, pack, routesFrom, STRIP_PAD, termStripLayout } from './layout.js'
   import { seedFor } from './seed.js'
-  import { createCanvasMeasure } from './render.js'
+  import { createCanvasMeasure } from './measure.js'
 
   const OWNER = 'atlas'
   const DAYS = ['7', '30', '60']
@@ -104,7 +104,7 @@
 
   const failed = $derived(Boolean(bootData.peopleError))
   const noPeople = $derived(bootData.ready && !failed && !bootData.people.length)
-  // /api/people is fetched once by app.ts, so only a page reload can retry a people outage.
+  // /api/people is fetched once by the page's onMount, so only a page reload can retry a people outage.
   const retry = () => (failed ? location.reload() : void figure.load())
   const unusable = $derived(failed || noPeople || view === 'error')
   const ghosting = $derived(!unusable && view !== 'data')

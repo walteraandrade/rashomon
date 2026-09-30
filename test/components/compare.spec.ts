@@ -68,7 +68,6 @@ const boot = (patch: Partial<{ ready: boolean; people: typeof people; peopleErro
 const start = async () => {
   instances.push(mount(Compare, { target }))
   instances.push(mount(DocsCard, { target }))
-  docsCard.mountDocsCard()
   flushSync()
   await settle()
 }
@@ -715,6 +714,8 @@ describe('Compare (#293)', () => {
     }
     await change('compareDays', '7')
     expect($('compareRuler').textContent).toContain('Não foi possível carregar a comparação.')
+    expect($('compareRuler').querySelector('img'), 'the outage is words only, no pet').toBeNull()
+    expect($('compareDetail').querySelector('img')).toBeNull()
     expect($('compareDetail').textContent).toContain('Clique numa palavra para ver os números dos dois lados.')
     expect(words()).toHaveLength(0)
     width = 350
@@ -773,5 +774,20 @@ describe('Compare (#293)', () => {
     expect(style).toMatch(/--size/)
     expect(style).toMatch(/--cmp/)
     expect(style).not.toMatch(/font-size/)
+  })
+})
+
+describe('figure 3 states a people outage in words only (ported from pet-acceptance)', () => {
+  it('no <img> anywhere in #compare when /api/people failed', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
+    vi.stubGlobal('fetch', async () => { throw new Error('network down') })
+    setBoot({ ready: true, people: [], peopleError: new Error('down'), search: '' })
+    const target = document.createElement('div')
+    document.body.append(target)
+    const instance = mount(Compare, { target })
+    flushSync()
+    expect(document.getElementById('compareRetry')).not.toBeNull()
+    expect(target.querySelector('img')).toBeNull()
+    unmount(instance); target.remove(); vi.unstubAllGlobals()
   })
 })

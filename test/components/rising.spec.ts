@@ -79,7 +79,6 @@ const boot = (patch: Partial<{ ready: boolean; people: typeof people; peopleErro
 const start = async (props: Record<string, unknown> = {}) => {
   instances.push(mount(Rising, { target, props }))
   instances.push(mount(DocsCard, { target }))
-  docsCard.mountDocsCard()
   flushSync()
   await settle()
 }

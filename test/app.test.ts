@@ -3,7 +3,6 @@ import { describe, it } from 'node:test'
 import { persons } from './fixture.js'
 import { docsText } from './docs.js'
 import { clearScopes } from '../src/ui/state.js'
-import { pageMarkup } from './pages.js'
 import { bootData } from '../src/ui/boot.svelte.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 

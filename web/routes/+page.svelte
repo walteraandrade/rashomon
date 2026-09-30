@@ -7,6 +7,7 @@
   import Agenda from '$lib/Agenda.svelte'
   import Comention from '$lib/Comention.svelte'
   import DocsCard from '$lib/DocsCard.svelte'
+  import Persistence from '$lib/Persistence.svelte'
   import HelpDialog from '$lib/HelpDialog.svelte'
 
   onMount(async () => {
@@ -181,24 +182,7 @@
   <Agenda />
 
   <Comention />
-  <section class="figure persistence" id="persistence" aria-labelledby="persistenceTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 10</span><h2 id="persistenceTitle">Persistência</h2></div>
-      <p class="figure-sub">Quais palavras grudaram na pessoa semana após semana, e quais sumiram. <a href="/como-ler#persistencia">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt>Palavra</dt><dd>uma linha por palavra, das que ficaram mais tempo às que ficaram menos</dd></div>
-        <div><dt><span class="ink-scale" aria-hidden="true"></span>Célula</dt><dd>uma semana; a tinta é o número de documentos</dd></div>
-        <div><dt><span class="persistence-gap-swatch" aria-hidden="true"></span>Vazia</dt><dd>fora das 50 palavras mais fortes da semana; não é zero</dd></div>
-        <div><dt>Sequência</dt><dd>semanas seguidas com a palavra, até agora</dd></div>
-        <div><dt>Meia-vida</dt><dd>semanas do pico até cair à metade; &ldquo;sem queda&rdquo; se ainda não caiu</dd></div>
-        <div><dt>Clique</dt><dd>os textos daquela semana</dd></div>
-        <div><dt>Início</dt><dd id="persistenceSince">a série começa em 9 de set. de 2026</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">As palavras que ficaram com <span class="keep"><span class="pick"><select id="persistencePerson" aria-label="Pessoa (persistência)"></select></span>,</span> nas últimas <span class="keep"><span class="pick"><select id="persistenceWeeks" aria-label="Semanas (persistência)"><option value="4">4 semanas</option><option value="12" selected>12 semanas</option><option value="26">26 semanas</option></select></span>.</span> Mostrar <span class="pick"><select id="persistenceLimit" aria-label="Quantidade de palavras (persistência)"><option value="20">20</option><option value="40" selected>40</option><option value="60">60</option></select></span> palavras.</p></div>
-    </header>
-    <figure class="persistence-chart" id="persistenceChart" aria-label="Palavras por semana, com sequência e meia-vida" hidden></figure>
-    <p class="note" id="persistenceNote"></p>
-  </section>
+  <Persistence />
 </main>
 <DocsCard />
 <HelpDialog />

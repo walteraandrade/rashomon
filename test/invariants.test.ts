@@ -168,7 +168,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // The searchable face over a <select> (figure 6's two lens controls): DOM-level, but
       // builds its list with format.ts's tag only and never fetches or paints a figure.
       'combobox.ts': ['./format.js'],
-      'render.ts': ['./format.js', './layout.js', './marks.js'],
+      'render.ts': ['./format.js', './layout.js'],
       // The documents card and the in-page guide belong to no figure; both sit next to the
       // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
       'docs-card.ts': ['./docs-card.svelte.js'],
@@ -184,21 +184,12 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // card its own name opened.
       'figure.ts': ['./docs-card.js', './perf.js', './state.js'],
       'figure.svelte.ts': ['./docs-card.svelte.js', './perf.js', './state.js'],
-      // testimony.ts, compare.ts and rising.ts adopt figure.ts and drop their own
-      // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
-      // the shared runtime.
-      // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
-      // app.ts, and reaching into no other figure's DOM.
-      'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'atlas-model.ts': ['./api.js', './format.js'],
       'app.ts': [
         './api.js',
         './boot.svelte.js',
         './docs-card.js',
-        './figures/rising.js',
         './help.js',
-        './render.js',
-        './seed.js',
       ],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
@@ -219,6 +210,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Compare.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Lenses.svelte': ['./Ruler.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
       'Ruler.svelte': ['./format.js'],
+      'Rising.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './render.js', './seed.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
       const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))
@@ -288,7 +280,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     const render = (await import('../src/ui/render.js')) as Record<string, unknown>
     for (const name of ['wordMarkup', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'paintAtlasLoading', 'termStripLayout', 'paintTermStrip', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError'])
       assert.equal(name in render, false, `render.ts must not export ${name}`)
-    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms', 'paintRisingRuler']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
+    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
   })
 
   it('state.js exports what the split promises, no more', async () => {
@@ -430,7 +422,7 @@ describe('markup reaches innerHTML only through the html tag', () => {
         assert.ok(t.tagged, `${file}:${t.line} builds markup in an untagged template literal`)
         tagged++
       }
-    assert.ok(tagged > 20, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
+    assert.ok(tagged > 10, `the scan found only ${tagged} html-tagged templates; it is not seeing the painters`)
   })
 
   it('the html tag escapes what a painter forgets to: a document text with markup stays text', () => {
@@ -798,7 +790,7 @@ describe('figure 9 lives only in Comention.svelte', () => {
     assert.equal(existsSync(join(ui, 'figures', 'comention.ts')), false)
     assert.doesNotMatch(readFileSync(join(ui, 'render.ts'), 'utf8'), /paintComention/)
     assert.doesNotMatch(readFileSync(join(ui, 'app.ts'), 'utf8'), /comention/i)
-    const tsFiles = [ui, join(ui, 'figures')].flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)))
+    const tsFiles = [ui, join(ui, 'figures')].filter((dir) => existsSync(dir)).flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)))
     for (const file of tsFiles) assert.doesNotMatch(readFileSync(file, 'utf8'), /Comention\.svelte/, file)
   })
 })

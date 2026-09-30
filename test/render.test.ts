@@ -7,30 +7,16 @@ import {
   paintDocs,
   paintDocsHead,
   paintDocsLoading,
-  paintRisingLoading,
-  paintRisingRuler,
-  paintRisingRulerError,
-  RARE_SHOWN,
-  hasShares,
-  liftBalance,
-  liftOfPerson,
-  rareRisers,
-  risingRulerItems,
-  shareBalance,
   rulerTerms,
   stripLayout,
 } from '../src/ui/render.js'
 import * as renderModule from '../src/ui/render.js'
-import { type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { hasShares, liftBalance, liftOfPerson, rareRisers, risingRulerItems, shareBalance, type CompareTerm, type RisingTerm } from '../src/ui/format.js'
 import { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripRadius } from '../src/ui/layout.js'
 import { withFakeDocument } from './fake-dom.js'
 
 // src/ui/render.ts: the painters, driven against a fake document and asserted on the markup
 // they emit. Nothing here fetches.
-
-// The injected text measurer, the same contract layout.ts documents: a real canvas in the
-// browser, a deterministic stand-in here.
-const metrics = (text: string, size: number) => text.length * size * 0.6
 
 const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
 
@@ -393,6 +379,10 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
     assert.equal(shareBalance({ count_recent_raw: 0, count_baseline_raw: 0 }, { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 }), 0)
   })
 
+  it('no words in the recent window reads -1, whatever the counts', () => {
+    assert.equal(shareBalance({ count_recent_raw: 4, count_baseline_raw: 2 }, { recent: 0, baseline: 5, words_recent: 0, words_baseline: 9 }), -1)
+  })
+
   it('combined is the raw recent+baseline doc count, independent of balance', () => {
     const items = risingRulerItems([risingTerm({ term: 'soma', count_recent_raw: 12, count_baseline_raw: 3 })], byShare(about))
     assert.equal(items[0].combined, 15)
@@ -406,6 +396,8 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
     assert.equal(liftBalance({ lift: lp / 8 }, lp), -1)
     const zero = liftOfPerson({ recent: 5, baseline: 0 }, 7, 30)
     assert.ok(Number.isFinite(zero) && zero > 0)
+    assert.equal(liftBalance({ lift: 3 }, 0), 1, 'a person with no pace at all: any lift reads +1')
+    assert.equal(liftBalance({ lift: 0 }, 0), 0, 'and no lift against no pace reads the middle')
   })
 
   it('hasShares is true only when present and both word totals arrived', () => {
@@ -424,115 +416,9 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
   })
 })
 
-describe('paintRisingRuler / paintRisingRulerError / paintRisingLoading', () => {
-  const risingData = (present: RisingTerm[], about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }, terms: RisingTerm[] = present): Rising => ({ days: 7, baseline: 30, terms, present, outlets: [], about })
-
-  it('an empty terms array paints "Nenhuma palavra neste recorte." inside #risingRuler', () => {
-    withFakeDocument(['risingRuler'], (els) => {
-      const { shown, overflowCount } = paintRisingRuler({ data: risingData([]), metrics, selected: null, onPick: () => {} })
-      assert.equal(shown, 0)
-      assert.equal(overflowCount, 0)
-      assert.match(els.risingRuler.innerHTML, /Nenhuma palavra neste recorte\./)
-      assert.equal(els.risingRuler.hidden, false, 'the empty note is shown, not hidden behind the loading flag')
-    })
-  })
-
-  it('paints one word per term, with the same data-term/data-kind pair the click handler reads', () => {
-    withFakeDocument(['risingRuler'], (els) => {
-      const terms = [risingTerm({ term: 'diretor', kind: 'word', lift: 40, count_recent_raw: 12, count_baseline_raw: 1 })]
-      const { shown } = paintRisingRuler({ data: risingData(terms), metrics, selected: null, onPick: () => {} })
-      assert.equal(shown, 1)
-      assert.match(els.risingRuler.innerHTML, /data-term="diretor" data-kind="word"/)
-      assert.match(els.risingRuler.innerHTML, /antes \(30 dias\)/)
-      assert.match(els.risingRuler.innerHTML, /agora \(7 dias\)/)
-      assert.match(els.risingRuler.innerHTML, /Fatia menor que antes[\s\S]*mesma fatia[\s\S]*Fatia maior que antes/, 'the axis speaks of shares, not of the person\'s own pace')
-    })
-  })
-
-  it('the risers off the ruler (terms minus present, lift > 1) are listed after the overflow as clickable buttons, and alone they still paint', () => {
-    withFakeDocument(['risingRuler'], (els) => {
-      const present = [risingTerm({ term: 'diretor', kind: 'word', count_recent_raw: 12, count_baseline_raw: 1, lift: 2 })]
-      const terms = [
-        risingTerm({ term: 'sigilo', kind: 'word', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 }),
-        risingTerm({ term: 'vorcaro', kind: 'hashtag', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 }),
-        ...present,
-        risingTerm({ term: 'caiu', kind: 'word', count_recent_raw: 3, count_baseline_raw: 9, lift: 0.5 }),
-      ]
-      const { shown } = paintRisingRuler({ data: risingData(present, undefined, terms), metrics, selected: { term: 'sigilo', kind: 'word' }, onPick: () => {} })
-      assert.equal(shown, 1, 'only present words take a place on the ruler itself')
-      const html = els.risingRuler.innerHTML
-      assert.match(html, /ruler-rare/)
-      assert.match(html, /Fora da régua, 2 palavras com poucos textos na semana, mas mais que antes/)
-      assert.match(html, /<button class="quiet-button is-selected" data-term="sigilo" data-kind="word"/)
-      assert.match(html, /data-term="vorcaro" data-kind="hashtag"[^>]*>#vorcaro</)
-      assert.doesNotMatch(html, /data-term="caiu"/, 'a word whose lift is 1 or below did not rise and never makes the list')
-      assert.equal(html.match(/data-term="diretor"/g)?.length, 1, 'a ruled word is never listed again below')
-      assert.ok(html.indexOf('ruler-axis-labels') < html.indexOf('ruler-rare'), 'the list comes after the axis')
-      assert.doesNotMatch(html, /Nenhuma palavra neste recorte/)
-      paintRisingRuler({ data: risingData([], undefined, terms), metrics, selected: null, onPick: () => {} })
-      assert.match(els.risingRuler.innerHTML, /ruler-rare/, 'no present words but risers still paints the list')
-    })
-  })
-
-  it('shows only the first RARE_SHOWN (12) risers, in lift order, and says how many it left out', () => {
-    withFakeDocument(['risingRuler'], (els) => {
-      const present = [risingTerm({ term: 'comum', count_recent_raw: 20, lift: 1.2 })]
-      const risers = Array.from({ length: 30 }, (_, i) => risingTerm({ term: `rara${i}`, count_recent_raw: 3, count_baseline_raw: 0, lift: 40 - i }))
-      paintRisingRuler({ data: risingData(present, undefined, [...risers, ...present]), metrics, selected: null, onPick: () => {} })
-      const html = els.risingRuler.innerHTML
-      assert.equal(RARE_SHOWN, 12)
-      assert.equal(html.match(/data-term="rara\d+"/g)?.length, 12)
-      assert.match(html, /Fora da régua, 12 de 30 palavras/)
-      assert.match(html, /data-term="rara11"/)
-      assert.doesNotMatch(html, /data-term="rara12"/)
-      paintRisingRuler({ data: risingData(present, undefined, [...risers.slice(0, 3), ...present]), metrics, selected: null, onPick: () => {} })
-      assert.match(els.risingRuler.innerHTML, /Fora da régua, 3 palavras com/, 'no "de N" when nothing was left out')
-    })
-  })
-
-  // A /rising payload cached before `present`/`about.words_*` existed: the ruler must not paint
-  // NaN positions from `undefined` totals, so it falls back to the person-lift rule, with that
-  // rule's own axis prose and no list below.
-  it('a pre-present payload paints every word by the person-lift rule, finite positions, old axis, no risers list', () => {
-    withFakeDocument(['risingRuler'], (els) => {
-      const about = { recent: 10, baseline: 5 }
-      const lp = liftOfPerson(about, 7, 30)
-      const terms = [risingTerm({ term: 'igual', lift: lp }), risingTerm({ term: 'oito', lift: lp * 8 })]
-      const stale: Rising = { days: 7, baseline: 30, terms, outlets: [], about }
-      const { shown } = paintRisingRuler({ data: stale, metrics, selected: null, onPick: () => {} })
-      assert.equal(shown, 2)
-      const html = els.risingRuler.innerHTML
-      assert.doesNotMatch(html, /NaN/)
-      assert.match(html, /Mais devagar que a pessoa[\s\S]*no mesmo ritmo[\s\S]*Mais rápido que a pessoa/)
-      assert.doesNotMatch(html, /Fatia/)
-      assert.doesNotMatch(html, /ruler-rare/)
-    })
-  })
-
-  it('paintRisingRulerError paints the "could not load" note', () => {
-    withFakeDocument(['risingRuler'], (els) => {
-      els.risingRuler.hidden = true
-      paintRisingRulerError()
-      assert.equal(els.risingRuler.hidden, false)
-      assert.match(els.risingRuler.innerHTML, /Não foi possível carregar os termos em alta/)
-    })
-  })
-
-  it('paintRisingLoading paints a ruler ghost, not the word Carregando, and stays mute on #risingAbout', () => {
-    withFakeDocument(['risingRuler', 'risingAbout'], (els) => {
-      els.risingAbout.textContent = 'A pessoa: 8 textos nos últimos 7 dias, 3 nos 30 dias antes.'
-      paintRisingLoading()
-      assert.match(els.risingRuler.innerHTML, /ruler-axis/)
-      assert.doesNotMatch(els.risingRuler.innerHTML, /Carregando/)
-      assert.equal(els.risingRuler.getAttribute('aria-busy'), 'true')
-      assert.equal(els.risingAbout.textContent, '', 'the ghost clears the previous two-number sentence rather than leaving it stale')
-    })
-  })
-})
-
 describe('render.ts no longer carries the atlas or week painters', () => {
   it('exports none of the painters that moved into Atlas.svelte and Week.svelte', () => {
-    for (const name of ['paintTermStrip', 'termStripLayout', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'wordMarkup', 'paintAtlasLoading', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError', 'paintWeek', 'paintWeekLoading', 'paintWeekError']) assert.equal((renderModule as Record<string, unknown>)[name], undefined, `${name} is gone`)
+    for (const name of ['paintTermStrip', 'termStripLayout', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'wordMarkup', 'paintAtlasLoading', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError', 'paintWeek', 'paintWeekLoading', 'paintWeekError', 'paintRisingRuler', 'paintRisingRulerError', 'paintRisingLoading']) assert.equal((renderModule as Record<string, unknown>)[name], undefined, `${name} is gone`)
   })
 })
 

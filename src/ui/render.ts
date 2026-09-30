@@ -289,8 +289,6 @@ const sparklineMarkup = (spark?: Sparkline) => {
   return html`<div class="sparkline${loading ? ' ghost-field' : ''}" role="img" aria-label="Documentos com esta palavra nos últimos 7 dias">${bars}</div><p class="note">Últimos 7 dias corridos, não o período escolhido acima.</p>`
 }
 
-// Paints the inspector. No fetch: documents (and the sparkline's own data) arrive already
-// resolved; a word in focus without `sparkline` simply omits it (the figure has not asked yet).
 export const inspect = ({
   graph,
   nodes,
@@ -826,9 +824,6 @@ const rareMarkup = (all: RisingItem[], selected: { term: string; kind: string } 
   })}</div>`
 }
 
-// Figure 4's own wrapper around the shared ruler body: "antes (30 dias)" / "agora (7 dias)" reuse
-// the compare ruler's --cmp-a/--cmp-b pair, and a word belongs to one person, so there is no
-// hiddenCount to report back.
 export const paintRisingRuler = ({
   data,
   metrics,
@@ -990,9 +985,6 @@ export const paintCompareLoading = () => {
   detail.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostBar('ghost-title')}<dl class="detail-sides"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div></dl></div>`
 }
 
-// Figure 4's own boot/reload ghost: the same ruler geometry paintCompareLoading paints, inside
-// #risingRuler, no #risingAbout ghost — that line is cleared instead, since a two-number sentence
-// has no shape worth a ghost of its own.
 export const paintRisingLoading = () => {
   const ruler = $('risingRuler')
   if (!ruler) return
@@ -1013,9 +1005,6 @@ export const paintRisingLoading = () => {
   if (about) about.textContent = ''
 }
 
-// Figure 6's own boot/reload ghost: the same ruler geometry, inside #lensesRuler, plus
-// #lensesDetail's own ghost (two sides, same shape paintCompareLoading's #compareDetail ghost
-// paints).
 export const paintLensesLoading = () => {
   const ruler = $('lensesRuler')
   if (ruler) {
@@ -1038,7 +1027,6 @@ export const paintLensesLoading = () => {
   detail.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostBar('ghost-title')}<dl class="detail-sides"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div></dl></div>`
 }
 
-// Selected word's numbers on both sides; a null side reads "nenhum documento" (measured zero).
 export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTerm | null; personA: PersonRef; personB: PersonRef }) => {
   const el = $('compareDetail')
   if (!el) return

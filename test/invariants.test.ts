@@ -593,3 +593,131 @@ describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
     for (const file of reached) assert.doesNotMatch(srcSource(file), /@vercel\/blob/, `${file} must not reach @vercel/blob`)
   })
 })
+
+// .svelte files: kept apart from jsFiles() so the import-graph map above still lists .ts modules
+// only. A component sits above render.ts and below app.ts; no module under src/ imports a .svelte.
+const webDir = join(root, 'web')
+const svelteFiles = (dir: string): string[] =>
+  existsSync(dir)
+    ? readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory() ? svelteFiles(join(dir, entry.name)) : entry.name.endsWith('.svelte') ? [join(dir, entry.name)] : [],
+      )
+    : []
+const allSvelte = () => [...svelteFiles(jsDir), ...svelteFiles(webDir)]
+const scriptOf = (source: string) => [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n')
+
+const scriptSpecs = (source: string): string[] => {
+  const script = scriptOf(source)
+  const statics = [...script.matchAll(/^\s*(?:import|export)\b[^;]*?\bfrom\s+['"]([^'"]+)['"]/gm)].map((m) => m[1])
+  const bare = [...script.matchAll(/^\s*import\s+['"]([^'"]+)['"]/gm)].map((m) => m[1])
+  const dynamic = [...script.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1])
+  return [...statics, ...bare, ...dynamic]
+}
+
+const svelteRules = {
+  specs: scriptSpecs,
+  imports: (file: string, source: string): string[] =>
+    scriptSpecs(source).filter((spec) => {
+      if (/graphology/.test(spec)) return true
+      const resolved = spec.startsWith('$lib') ? join(jsDir, spec.slice('$lib'.length)) : spec.startsWith('.') ? join(dirname(file), spec) : null
+      if (resolved === null) return false
+      return resolved !== jsDir && !resolved.startsWith(jsDir + '/')
+    }),
+  innerHTML: (source: string) => /innerHTML|insertAdjacentHTML/.test(scriptOf(source)) || /`\s*<[a-zA-Z]/.test(scriptOf(source)),
+  atHtml: (source: string) => /\{@html\b/.test(source),
+  style: (source: string) => /<style[\s>]/.test(source) || /\sstyle\s*=\s*["'{]/.test(source),
+  fontSize: (source: string) => /font-size\s*:\s*[\d.]+px/.test(source),
+}
+
+describe('svelte files follow the same rules as the .ts modules', () => {
+  const fakeFile = join(jsDir, 'Fake.svelte')
+  const script = (body: string) => `<script lang="ts">\n${body}\n</script>\n<p>x</p>`
+
+  it('the scan really finds the proof component', () => {
+    assert.ok(allSvelte().some((f) => f.endsWith('Proof.svelte')))
+    assert.ok(allSvelte().some((f) => f.includes(join('web', 'routes'))))
+  })
+
+  it('the scan sees indented and dynamic imports of the real components', () => {
+    const page = allSvelte().find((f) => f.endsWith(join('routes', '+page.svelte')))
+    assert.ok(page)
+    const specs = svelteRules.specs(readFileSync(page, 'utf8'))
+    assert.ok(specs.includes('svelte'))
+    assert.ok(specs.includes('$lib/app.js'))
+  })
+
+  it('no module under src imports a .svelte', () => {
+    for (const file of jsFiles()) assert.doesNotMatch(importsOf(moduleSource(file)).join(' '), /\.svelte/, `${file} must not import a .svelte`)
+  })
+
+  it('svelte files import only from src/ui', () => {
+    for (const file of allSvelte()) assert.deepEqual(svelteRules.imports(file, readFileSync(file, 'utf8')), [], `${file} must import only from src/ui`)
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import { x } from '../db.js'`)), ['../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import { x } from '$lib/../../db.js'`)), ['$lib/../../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  const m = await import('../db.js')`)), ['../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import { x } from '$lib/format.js'`)), [])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`import { x } from './format.js'`)), [])
+  })
+
+  it('svelte files never import graphology', () => {
+    for (const file of allSvelte()) assert.ok(!/graphology/.test(scriptSpecs(readFileSync(file, 'utf8')).join(' ')), `${file} must not import graphology`)
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import Graph from 'graphology'`)), ['graphology'])
+  })
+
+  it('svelte files have no innerHTML', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.innerHTML(readFileSync(file, 'utf8')), false, `${file} must not write innerHTML`)
+    assert.equal(svelteRules.innerHTML(script(`el.innerHTML = 'x'`)), true)
+    assert.equal(svelteRules.innerHTML(script('const m = `<b>x</b>`')), true)
+  })
+
+  it('svelte files have no {@html}', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.atHtml(readFileSync(file, 'utf8')), false, `${file} must not use {@html}`)
+    assert.equal(svelteRules.atHtml('<div>{@html x}</div>'), true)
+  })
+
+  it('svelte files have no style block or style attribute', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.style(readFileSync(file, 'utf8')), false, `${file} must not carry a style block or attribute`)
+    assert.equal(svelteRules.style('<p>x</p>\n<style>p { color: red }</style>'), true)
+    assert.equal(svelteRules.style('<p style="color: red">x</p>'), true)
+    assert.equal(svelteRules.style('<p style:--w={w}>x</p>'), false)
+  })
+
+  it('svelte files use no px font-size', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.fontSize(readFileSync(file, 'utf8')), false, `${file} must use the --t-* ramp`)
+    assert.equal(svelteRules.fontSize('<p>font-size: 12px</p>'), true)
+  })
+})
+
+describe('component test harness', () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string>; devDependencies: Record<string, string> }
+  const vitestConfig = readFileSync(join(root, 'vitest.config.ts'), 'utf8')
+
+  it('pnpm test runs node --test then vitest, joined with &&', () => {
+    assert.match(pkg.scripts.test, /^DATA_DIR=memory:\/\/ node .*--test test\/\*\.test\.ts && vitest run$/)
+  })
+
+  it('the two runners select disjoint files', () => {
+    assert.doesNotMatch(pkg.scripts.test, /test\/components/)
+    assert.match(vitestConfig, /test\/components\/\*\*\/\*\.spec\.ts/)
+    assert.doesNotMatch(vitestConfig, /\.test\.ts/)
+  })
+
+  it('typecheck is one script that syncs, runs tsc and svelte-check on the svelte tsconfig', () => {
+    assert.match(pkg.scripts.typecheck, /^svelte-kit sync && tsc -p tsconfig\.json && svelte-check .*--tsconfig \.\/tsconfig\.svelte\.json$/)
+  })
+
+  it('svelte-check reads a tsconfig that extends the generated one and covers web/', () => {
+    const cfg = JSON.parse(readFileSync(join(root, 'tsconfig.svelte.json'), 'utf8')) as { extends: string; include: string[] }
+    assert.equal(cfg.extends, './.svelte-kit/tsconfig.json')
+    assert.ok(cfg.include.some((i) => i.startsWith('web/')))
+    assert.ok(cfg.include.some((i) => i.startsWith('test/components')))
+  })
+
+  it('no document leaks into the node:test process', () => {
+    assert.equal((globalThis as { document?: unknown }).document, undefined)
+  })
+
+  it('devDependencies vitest, happy-dom, svelte-check are exact-pinned', () => {
+    for (const name of ['vitest', 'happy-dom', 'svelte-check']) assert.match(pkg.devDependencies[name], /^\d/, `${name} must be pinned exact`)
+  })
+})

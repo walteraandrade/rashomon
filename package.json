@@ -19,8 +19,8 @@
     "export-docs": "tsx src/export-docs.ts",
     "bench": "tsx src/bench.ts",
     "bench:writes": "tsx src/bench-writes.ts",
-    "typecheck": "tsc -p tsconfig.json",
-    "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts",
+    "typecheck": "svelte-kit sync && tsc -p tsconfig.json && svelte-check --tsgo --tsconfig ./tsconfig.svelte.json",
+    "test": "DATA_DIR=memory:// node --import tsx --test test/*.test.ts && vitest run",
     "migrate": "tsx src/migrate.ts",
     "push": "tsx src/push.ts"
   },
@@ -49,9 +49,13 @@
   "devDependencies": {
     "@types/node": "^26.4.1",
     "@types/pg": "^8.23.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "happy-dom": "20.14.5",
     "parse5": "8.0.1",
+    "svelte-check": "4.7.6",
     "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
   },
   "packageManager": "pnpm@11.17.0"
 }

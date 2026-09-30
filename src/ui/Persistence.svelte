@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import * as api from './api.js'
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
@@ -20,7 +20,8 @@
   let weeks = $state('12')
   let limit = $state('40')
   let selected: Selection | null = $state(null)
-  let lastData: Persistence | undefined
+  let mounted = $state(false)
+  let shown: Persistence | undefined
 
   const failure = $derived(!bootData.ready ? '' : bootData.peopleError ? 'Falha de rede ou base indisponível.' : !bootData.people.length ? 'Nenhuma pessoa cadastrada.' : '')
 
@@ -31,18 +32,28 @@
     return qp
   }
 
+  // A pick made while the next fetch was pending belongs to data that is no longer on screen.
+  const dropStalePick = () => {
+    if (docsCard.openedBy(OWNER)) docsCard.close()
+    selected = null
+  }
+
+  onMount(() => {
+    mounted = true
+  })
+
   const figure = createFigure<Persistence>({
     name: 'persistence',
     params,
     fetch: (qp, signal) => api.loadPersistence(qp.get('person')!, api.persistenceParams({ weeks: qp.get('weeks')!, limit: qp.get('limit')! }), signal),
     ghost: () => {},
-    paint: (result) => {
-      if (result !== lastData) selected = null
-      lastData = result
+    paint: (d) => {
+      if (d !== shown) dropStalePick()
+      shown = d
     },
     paintError: () => {
-      lastData = undefined
-      selected = null
+      shown = undefined
+      dropStalePick()
     },
     detail: (_data, qp) => ({ person: qp.get('person') }),
     el: () => chart,
@@ -97,12 +108,12 @@
   }
 
   const data = $derived(figure.data)
-  const ghosting = $derived(figure.loading && !data)
+  const ghosting = $derived(!failure && (!bootData.ready || (!data && (figure.loading || !figure.error))))
   const dimmed = $derived(figure.loading && !!data)
-  const showError = $derived(!failure && !ghosting && !!figure.error)
+  const showError = $derived(!failure && !ghosting && !data && !!figure.error)
   const rows = $derived(data ? persistenceLayout(data).rows : [])
   const oldestPickable = $derived(data ? shiftDate(todayBrt(), -data.horizon) : '')
-  const hidden = $derived(!ghosting && !(data && data.terms.length))
+  const hidden = $derived(!mounted || !!failure || (!ghosting && !(data && data.terms.length)))
 
   const seriesNote = $derived.by(() => {
     if (!data) return ''
@@ -120,7 +131,7 @@
   const isSelected = (week: string, row: { term: string; kind: string }) => !!selected && selected.week === week && selected.term === row.term && selected.kind === row.kind
 </script>
 
-<section class="figure persistence" id="persistence" class:is-loading={dimmed} aria-labelledby="persistenceTitle" aria-busy={dimmed ? 'true' : undefined}>
+<section class="figure persistence" id="persistence" class:is-loading={dimmed} aria-labelledby="persistenceTitle">
   <header class="figure-head">
     <div class="figure-title"><span class="eyebrow">Gráfico 10</span><h2 id="persistenceTitle">Persistência</h2></div>
     <p class="figure-sub">Quais palavras grudaram na pessoa semana após semana, e quais sumiram. <a href="/como-ler#persistencia">Como ler</a>.</p>
@@ -141,7 +152,7 @@
       </p>
     </div>
   </header>
-  <figure class="persistence-chart" id="persistenceChart" aria-label="Palavras por semana, com sequência e meia-vida" aria-busy={ghosting ? 'true' : 'false'} {hidden} bind:this={chart}>
+  <figure class="persistence-chart" id="persistenceChart" aria-label="Palavras por semana, com sequência e meia-vida" aria-busy={ghosting} {hidden} bind:this={chart}>
     {#if ghosting}
       <div class="persistence-ghost ghost-field" aria-hidden="true">
         {#each [0, 1, 2, 3, 4, 5] as i (i)}

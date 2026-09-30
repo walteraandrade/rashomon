@@ -262,6 +262,56 @@ describe('Persistence docs card (#290)', () => {
     expect(cell(prev)!.getAttribute('aria-pressed')).toBe('false')
   })
 
+  it('a click on the subtitle, its link or a select keeps the pick and the card', async () => {
+    await start('')
+    cell(prev)!.click()
+    flushSync()
+    await settle(0)
+    const click = (el: Element) => el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    click(document.querySelector('#persistence .figure-sub')!)
+    click(document.querySelector('#persistence .figure-sub a')!)
+    click($('persistenceWeeks'))
+    flushSync()
+    await settle(0)
+    expect(isOpen()).toBe(true)
+    expect(cell(prev)!.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('a pick made during a pending fetch is dropped when new data arrives', async () => {
+    await start('')
+    let resolve!: (body: unknown) => void
+    respond = (url) => (url.includes('/docs') ? Promise.resolve(ok({ docs: [], total: 0 })) : new Promise((r) => (resolve = (b) => r(ok(b)))))
+    change('persistenceLimit', '20')
+    await settle(200)
+    cell(prev)!.click()
+    flushSync()
+    await settle(0)
+    expect(isOpen()).toBe(true)
+    resolve(payload())
+    await settle(0)
+    expect(isOpen()).toBe(false)
+    expect(cell(prev)!.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('a pick is dropped when the next load fails', async () => {
+    await start('')
+    cell(prev)!.click()
+    flushSync()
+    await settle(0)
+    expect(isOpen()).toBe(true)
+    let resolve!: (body: unknown) => void
+    respond = (url) => (url.includes('/docs') ? Promise.resolve(ok({ docs: [], total: 0 })) : new Promise((r) => (resolve = r)))
+    change('persistenceLimit', '20')
+    await settle(200)
+    cell(prev)!.click()
+    flushSync()
+    await settle(0)
+    resolve({ ok: false, status: 500, headers: new Headers(), json: async () => ({}) })
+    await settle(0)
+    expect(isOpen()).toBe(false)
+    expect(cell(prev)).toBeUndefined()
+  })
+
   it('AC7: a control change closes its own card but never one another figure owns', async () => {
     await start('')
     cell(prev)!.click()
@@ -316,6 +366,17 @@ describe('Persistence notes, ghost and error (#290)', () => {
     expect(document.body.textContent).not.toContain('Carregando')
   })
 
+  it('mounted before boot is ready: ghost rows, aria-busy, no fetch', async () => {
+    setBoot({ people: [], peopleError: null, ready: false, search: '' })
+    instances.push(mount(Persistence, { target }))
+    flushSync()
+    await settle(500)
+    expect($('persistenceChart').hidden).toBe(false)
+    expect($('persistenceChart').getAttribute('aria-busy')).toBe('true')
+    expect(document.querySelectorAll('#persistenceChart .persistence-ghost-row')).toHaveLength(6)
+    expect(persistenceUrls()).toHaveLength(0)
+  })
+
   it('AC10: a reload with data on screen dims and keeps the table', async () => {
     await start('')
     respond = () => new Promise(() => {})
@@ -323,7 +384,7 @@ describe('Persistence notes, ghost and error (#290)', () => {
     flushSync()
     await vi.advanceTimersByTimeAsync(0)
     flushSync()
-    expect(document.querySelector('#persistence')!.classList.contains('is-loading') || $('persistenceChart').classList.contains('is-loading')).toBe(true)
+    expect(document.querySelector('#persistence')!.classList.contains('is-loading')).toBe(true)
     expect(document.querySelector('#persistenceChart table')).not.toBeNull()
   })
 

@@ -434,6 +434,8 @@ The figure id `persistence` (figure 10, `#persistence`) reads `person` and `limi
 prefixed (`persistence.person`, `persistence.limit`), and `weeks`, prefixed only
 (`persistence.weeks`, no bare fallback, like figure 6's `a`/`b`): no other figure has a
 `weeks` control, so a bare `?weeks=` never reaches it.
+Figure 10 is a Svelte component too (`src/ui/Persistence.svelte`): it seeds with `seedFor` over
+`bootData.search` once `bootData.ready`, and a seeded `weeks` or `limit` outside its options is ignored.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

@@ -578,9 +578,9 @@ describe('CLAUDE.md documents the persistence figure', () => {
     }
   })
 
-  it('says figures/persistence.ts is gone and that createFigure has a user (#290)', () => {
+  it('says figures/persistence.ts is gone and that Persistence.svelte uses createFigure (#290)', () => {
     assert.doesNotMatch(md(), /figures\/persistence\.ts/, 'CLAUDE.md must no longer name figures/persistence.ts')
-    assert.match(md(), /createFigure[^\n]*(user|used by|adopted by)|(user|used by|adopted by)[^\n]*createFigure/i, 'CLAUDE.md must say createFigure has a user')
+    assert.match(md(), /`Persistence\.svelte` use it/, 'CLAUDE.md must say Persistence.svelte uses createFigure')
   })
 
   it('counts ten figures on the page, the tenth being the persistence card (AC23)', () => {

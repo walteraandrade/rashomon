@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
+  import { onMount } from 'svelte'
   import * as api from './api.js'
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
@@ -10,22 +10,34 @@
   const DAY_CHOICES = ['7', '30', '60']
   const WIDTHS = ['', 'is-mid', 'is-short']
 
-  let sectionEl: HTMLElement | undefined = $state()
+  let gridEl: HTMLElement | undefined = $state()
   let mounted = $state(false)
   let days = $state('30')
   let source = $state('all')
   let selected = $state<{ person: string; domain: string } | null>(null)
   let started = false
+  let shown: Agenda | undefined
+
+  const dropStalePick = () => {
+    if (docsCard.openedBy('agenda')) docsCard.close()
+    selected = null
+  }
 
   const figure = createFigure<Agenda>({
     name: 'agenda',
     params: () => api.agendaParams({ days, source }),
     fetch: (p, signal) => api.loadAgenda(p, signal),
     ghost: () => {},
-    paint: () => {},
-    paintError: () => {},
+    paint: (d) => {
+      if (d !== shown) dropStalePick()
+      shown = d
+    },
+    paintError: () => {
+      shown = undefined
+      dropStalePick()
+    },
     detail: (d) => ({ domains: d.domains.length }),
-    el: () => sectionEl,
+    el: () => gridEl,
     markSelector: '[data-person]',
     onRelease: () => {
       selected = null
@@ -45,20 +57,15 @@
     void figure.load()
   })
 
-  let previous: Agenda | undefined
-  $effect(() => {
-    const current = figure.data
-    if (current === previous) return
-    previous = current
-    untrack(() => {
-      if (docsCard.openedBy('agenda')) docsCard.close()
-      selected = null
-    })
-  })
-
   const status = $derived(bootData.peopleError ? 'error' : bootData.ready ? 'ok' : 'pending')
   const ghosting = $derived(status === 'pending' || (status === 'ok' && figure.loading && figure.data === undefined))
-  const view = $derived(status === 'error' ? 'unavailable' : ghosting ? 'ghost' : figure.error ? 'error' : figure.data === undefined ? 'ghost' : figure.data.domains.length === 0 ? 'empty' : 'grid')
+  const viewOf = (): 'unavailable' | 'ghost' | 'error' | 'empty' | 'grid' => {
+    if (status === 'error') return 'unavailable'
+    if (ghosting || figure.data === undefined && !figure.error) return 'ghost'
+    if (figure.error) return 'error'
+    return figure.data!.domains.length === 0 ? 'empty' : 'grid'
+  }
+  const view = $derived(viewOf())
   const rows = $derived(figure.data ? agendaRows(figure.data) : [])
 
   const onControl = () => {
@@ -83,7 +90,7 @@
   }
 </script>
 
-<section class="figure agenda" id="agenda" aria-labelledby="agendaTitle" class:is-loading={figure.loading && figure.data !== undefined} bind:this={sectionEl}>
+<section class="figure agenda" id="agenda" aria-labelledby="agendaTitle" class:is-loading={figure.loading && figure.data !== undefined}>
   <header class="figure-head">
     <div class="figure-title"><span class="eyebrow">Gráfico 8</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
     <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="/como-ler#agenda">Como ler</a>.</p>
@@ -92,9 +99,9 @@
       <div><dt>Posição</dt><dd>veículo na linha, pessoa na coluna</dd></div>
       <div><dt>Clique</dt><dd>documentos daquela pessoa naquele veículo</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Qual fatia da cobertura de cada veículo é sobre cada pessoa, nos <span class="keep"><span class="pick"><select id="agendaDays" aria-label="Período (agenda)" value={days} onchange={(e) => { days = e.currentTarget.value; onControl() }}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="agendaSource" aria-label="Fonte (agenda)" value={source} onchange={(e) => { source = e.currentTarget.value; onControl() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
+    <div class="sentence"><p class="sentence-line">Qual fatia da cobertura de cada veículo é sobre cada pessoa, nos <span class="keep"><span class="pick"><select id="agendaDays" aria-label="Período (agenda)" value={days} onchange={(e) => { days = e.currentTarget.value; onControl() }}><option value="7">últimos 7 dias</option><option value="30">últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="agendaSource" aria-label="Fonte (agenda)" value={source} onchange={(e) => { source = e.currentTarget.value; onControl() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
   </header>
-  <figure class="agenda-grid" id="agendaGrid" aria-label="Fatia de cobertura por veículo e por pessoa" hidden={!mounted} aria-busy={view === 'ghost' ? 'true' : 'false'}>
+  <figure class="agenda-grid" id="agendaGrid" bind:this={gridEl} aria-label="Fatia de cobertura por veículo e por pessoa" hidden={!mounted} aria-busy={view === 'ghost' ? 'true' : 'false'}>
     {#if view === 'unavailable'}
       <p class="note">Falha de rede ou base indisponível.<br><br><button class="quiet-button" id="agendaRetry" onclick={() => location.reload()}>Tentar novamente</button></p>
     {:else if view === 'ghost'}

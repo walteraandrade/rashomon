@@ -124,6 +124,7 @@ describe('Agenda (issue #288)', () => {
   it('agenda AC5: under 1% reads <1%, never 0%', async () => {
     await start()
     expect(picks()[0].textContent!.trim()).toBe('<1%')
+    expect(picks()[0].style.getPropertyValue('--share')).toBe('1%')
     expect(grid().textContent).not.toMatch(/(^|[^\d])0%/)
   })
 
@@ -138,7 +139,7 @@ describe('Agenda (issue #288)', () => {
     expect(req.sides[0].personId).toBe('lula')
     expect(req.sides[0].query.get('domain')).toBe('g1.globo.com')
     expect(req.sides[0].query.get('source')).toBe('gnews')
-    expect(req.sides[0].query.get('term') ?? '').toBe('')
+    expect(req.sides[0].query.get('term')).toBe('')
   })
 
   it('agenda AC7: another pick replaces, same pick releases and closes', async () => {
@@ -162,6 +163,7 @@ describe('Agenda (issue #288)', () => {
     expect(docsCard.open).toHaveBeenCalledTimes(2)
     expect(docsCard.close).toHaveBeenCalledTimes(1)
     expect(picks()[1].getAttribute('aria-pressed')).toBe('false')
+    expect(picks()[1].classList.contains('is-active')).toBe(false)
   })
 
   it('agenda AC8/AC9: background click and Escape release, only when openedBy agenda', async () => {
@@ -190,37 +192,56 @@ describe('Agenda (issue #288)', () => {
     expect(picks()[0].getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('agenda AC10: same-data repaint keeps the pick, new data clears it', async () => {
-    let width = 500
-    const observers: (() => void)[] = []
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        constructor(cb: () => void) {
-          observers.push(cb)
-        }
-        observe() {}
-        disconnect() {}
-      },
-    )
-    unmount(instance!)
-    instance = undefined
-    target.innerHTML = ''
+  it('agenda AC10: a click outside the grid (header, subtitle, controls) keeps the pick', async () => {
     await start()
-    Object.defineProperty(document.getElementById('agenda')!, 'clientWidth', { get: () => width, configurable: true })
-    Object.defineProperty(grid(), 'clientWidth', { get: () => width, configurable: true })
     picks()[0].click()
     flushSync()
-    width = 700
-    observers.forEach((cb) => cb())
+    docsCard.openedBy.mockReturnValue(true)
+    document.querySelector<HTMLElement>('#agenda .figure-sub')!.click()
+    document.getElementById('agendaDays')!.click()
     flushSync()
+    expect(docsCard.close).not.toHaveBeenCalled()
     expect(picks()[0].getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('agenda AC10: new data clears the pick and closes the card', async () => {
+    await start()
+    picks()[0].click()
+    flushSync()
+    docsCard.openedBy.mockReturnValue(true)
     const days = document.getElementById('agendaDays') as HTMLSelectElement
     days.value = '7'
     days.dispatchEvent(new Event('change', { bubbles: true }))
     flushSync()
+    docsCard.close.mockClear()
+    picks()[0].click()
+    flushSync()
+    expect(picks()[0].getAttribute('aria-pressed')).toBe('true')
+    body = data({ days: 7 })
     await settle()
+    expect(docsCard.close).toHaveBeenCalled()
     expect(picks()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('agenda: section is-loading during a control change with data, gone after settle', async () => {
+    await start()
+    const section = document.getElementById('agenda')!
+    expect(section.classList.contains('is-loading')).toBe(false)
+    const days = document.getElementById('agendaDays') as HTMLSelectElement
+    days.value = '7'
+    days.dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    expect(section.classList.contains('is-loading')).toBe(true)
+    await settle()
+    expect(section.classList.contains('is-loading')).toBe(false)
+  })
+
+  it('agenda: docs card days come from the payload, not the control', async () => {
+    body = data({ days: 30 })
+    await start('?days=7')
+    picks()[0].click()
+    flushSync()
+    expect((docsCard.open.mock.calls[0][0] as any).sides[0].query.get('days')).toBe('30')
   })
 
   it('agenda AC11: empty state names the minimum of 5', async () => {

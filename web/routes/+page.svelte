@@ -4,6 +4,7 @@
 
 <script lang="ts">
   import { onMount } from 'svelte'
+  import Agenda from '$lib/Agenda.svelte'
   import DocsCard from '$lib/DocsCard.svelte'
   import HelpDialog from '$lib/HelpDialog.svelte'
 
@@ -176,19 +177,7 @@
     <figure class="attention-chart" id="attentionChart" aria-label="Pageviews da Wikipédia e menções por dia" hidden></figure>
   </section>
 
-  <section class="figure agenda" id="agenda" aria-labelledby="agendaTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 8</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
-      <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="/como-ler#agenda">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo</dd></div>
-        <div><dt>Posição</dt><dd>veículo na linha, pessoa na coluna</dd></div>
-        <div><dt>Clique</dt><dd>documentos daquela pessoa naquele veículo</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">Qual fatia da cobertura de cada veículo é sobre cada pessoa, nos <span class="keep"><span class="pick"><select id="agendaDays" aria-label="Período (agenda)"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="agendaSource" aria-label="Fonte (agenda)"></select></span>.</span></p></div>
-    </header>
-    <figure class="agenda-grid" id="agendaGrid" aria-label="Fatia de cobertura por veículo e por pessoa" hidden></figure>
-  </section>
+  <Agenda />
 
   <section class="figure comention" id="comention" aria-labelledby="comentionTitle">
     <header class="figure-head">

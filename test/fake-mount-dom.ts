@@ -490,15 +490,6 @@ const lensesIds = () => {
   }
 }
 
-// Figure 8 (issue #208), the agenda grid: no person select -- it spans every tracked person at
-// once, only its own days/source and the grid host.
-const agendaIds = () => ({
-  agenda: new FakeBox('agenda'),
-  agendaDays: new FakeSelect('agendaDays', DAYS_OPTIONS),
-  agendaSource: new FakeSelect('agendaSource'),
-  agendaGrid: new FakeBox('agendaGrid'),
-})
-
 // Figure 9 (issue #207): its own source/lean/min selects (days reuses the shared DAYS_OPTIONS
 // convention), the matrix host and its about caption. No person control -- a shared count is
 // never one person's.
@@ -548,7 +539,6 @@ export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof weekIds> &
   ReturnType<typeof lensesIds> &
   ReturnType<typeof attentionIds> &
-  ReturnType<typeof agendaIds> &
   ReturnType<typeof comentionIds> &
   ReturnType<typeof persistenceIds>
 
@@ -562,7 +552,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds(), ...agendaIds(), ...comentionIds(), ...persistenceIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds(), ...comentionIds(), ...persistenceIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

@@ -643,7 +643,8 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
       assert.ok(select, `atlas.html has no #${id}`)
       const options = walk(select).filter((n) => n.tagName === 'option')
       assert.deepEqual(options.map((o) => Number(attr(o, 'value'))), DAYS, id)
-      assert.deepEqual(options.filter((o) => attr(o, 'selected') !== undefined).map((o) => attr(o, 'value')), ['30'], id)
+      const bound = attr(select, 'value') !== undefined
+      if (!bound) assert.deepEqual(options.filter((o) => attr(o, 'selected') !== undefined).map((o) => attr(o, 'value')), ['30'], id)
       assert.equal(text(options[2]), id === 'lensesDays' ? '60 dias' : 'últimos 60 dias', id)
     }
   })

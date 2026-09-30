@@ -20,3 +20,16 @@ describe('seedFor', () => {
     assert.deepEqual(seedFor('atlas', ['days'], ''), { days: undefined })
   })
 })
+
+describe('agenda seeds (#288)', () => {
+  const keys = ['days', 'source']
+  it('agenda AC15: agenda.days=7&days=60 seeds 7', () => {
+    assert.equal(seedFor('agenda', keys, '?agenda.days=7&days=60').days, '7')
+  })
+  it('agenda AC15: days=60 alone seeds 60', () => {
+    assert.equal(seedFor('agenda', keys, '?days=60').days, '60')
+  })
+  it('agenda AC15: an absent value seeds undefined', () => {
+    assert.equal(seedFor('agenda', keys, '?other=1').source, undefined)
+  })
+})

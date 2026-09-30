@@ -112,6 +112,11 @@
     }
   }
 
+  const dropStalePick = () => {
+    if (docsCard.openedBy('testimony')) docsCard.close()
+    outlet = 'all'
+  }
+
   const outletsFigure = createFigure<OutletRow[]>({
     name: 'outlets',
     // The memo bucket is the route this hits (/sources), not the figure name, or a hit would
@@ -145,6 +150,7 @@
       else testimonyPhase = 'ghost'
     },
     paint: (data) => {
+      if (data !== testimony) dropStalePick()
       // Read at paint time, never memoised, so a resize repaints at the current width.
       stripWidth = stripEl?.clientWidth || 860
       testimony = data
@@ -152,6 +158,7 @@
       testimonyDim = false
     },
     paintError: () => {
+      dropStalePick()
       testimony = null
       testimonyPhase = 'error'
       testimonyDim = false
@@ -222,7 +229,7 @@
       <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
       <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)" value={person} onchange={(e) => { person = e.currentTarget.value; onControlChange() }}>{#each people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)" value={days} onchange={(e) => { days = e.currentTarget.value; onControlChange() }}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)" value={source} onchange={(e) => { source = e.currentTarget.value; onControlChange() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
+    <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)" value={person} onchange={(e) => { person = e.currentTarget.value; onControlChange() }}>{#each people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)" value={days} onchange={(e) => { days = e.currentTarget.value; onControlChange() }}><option value="7">últimos 7 dias</option><option value="30">últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)" value={source} onchange={(e) => { source = e.currentTarget.value; onControlChange() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
   </header>
   <figure class="strip" class:is-loading={testimonyDim} id="strip" aria-label="Veículos na régua da avaliação" aria-busy={busy(testimonyPhase)} hidden={!stripShown} bind:this={stripEl}>
     {#if testimonyPhase === 'ghost' && !unavailable}

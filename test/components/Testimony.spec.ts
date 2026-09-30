@@ -374,6 +374,181 @@ describe('Testimony (issue #296)', () => {
   })
 })
 
+describe('Testimony (issue #296, review gaps)', () => {
+  const fielded = [
+    { domain: 'a.example', source: 'gnews', docs: 5, tone: null, field: 1, neighbors: [{ domain: 'b.example', similarity: 0.5 }] },
+    { domain: 'b.example', source: 'gnews', docs: 3, tone: null, field: 1, neighbors: [{ domain: 'a.example', similarity: 0.5 }] },
+    { domain: 'c.example', source: 'gnews', docs: 2, tone: null, field: 2, neighbors: [] },
+    { domain: 'd.example', source: 'gnews', docs: 1, tone: null, field: null, neighbors: [] },
+  ]
+
+  it('groups rows by field, field null trailing, no field number in the text (#218)', async () => {
+    routes.sources = fielded
+    mountAll()
+    await startBoot('?person=p1')
+    const grids = all('#outletList .outlet-grid')
+    expect(grids).toHaveLength(3)
+    const eyebrows = all('#outletList > p.eyebrow').map((e) => e.textContent)
+    expect(eyebrows).toEqual(['grupo · a.example, b.example', 'grupo · c.example', 'Sem agrupamento suficiente'])
+    expect(byId('outletList').textContent!.replace(/\d+/g, '')).not.toMatch(/\bfield\b|grupo\s*\d/i)
+    const text = byId('outletList').textContent!
+    expect(text.indexOf('a.example')).toBeLessThan(text.indexOf('Sem agrupamento suficiente'))
+  })
+
+  it('field groups order by summed docs, never by the Louvain id (#218)', async () => {
+    routes.sources = [
+      { domain: 'small.example', source: 'gnews', docs: 2, tone: null, field: 0, neighbors: [] },
+      { domain: 'big.example', source: 'gnews', docs: 9, tone: null, field: 7, neighbors: [] },
+    ]
+    mountAll()
+    await startBoot('?person=p1')
+    const text = byId('outletList').textContent!
+    expect(text.indexOf('grupo · big.example')).toBeGreaterThanOrEqual(0)
+    expect(text.indexOf('grupo · big.example')).toBeLessThan(text.indexOf('grupo · small.example'))
+  })
+
+  it("the focused outlet's row is followed by its neighbours or the empty line (#218)", async () => {
+    routes.sources = fielded
+    mountAll()
+    await startBoot('?person=p1')
+    q('#outletList [data-domain="a.example"]')!.click()
+    flushSync()
+    const dl = q('#outletList [data-domain="a.example"]')!.nextElementSibling!
+    expect(dl.matches('dl.metric.stat')).toBe(true)
+    expect(dl.textContent).toContain('Vocabulário mais parecido com')
+    const items = [...dl.querySelectorAll('.outlet-neighbor')]
+    expect(items.length).toBeLessThanOrEqual(5)
+    expect(items.map((i) => i.textContent)).toEqual(['b.example · 0.50'])
+    q('#outletList [data-domain="c.example"]')!.click()
+    flushSync()
+    const none = q('#outletList [data-domain="c.example"]')!.nextElementSibling!
+    expect(none.textContent).toContain('Nenhum veículo com vocabulário parecido neste recorte')
+    expect(none.querySelectorAll('.outlet-neighbor')).toHaveLength(0)
+  })
+
+  it('carries tone only as a --tone custom property on rows and strip dots', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    for (const el of [q('#outletList button.outlet')!, q('#strip .strip-dot')!]) {
+      const style = el.getAttribute('style') ?? ''
+      expect(style).toMatch(/^--tone:/)
+      expect(style.split(';').filter((d) => d.trim()).every((d) => d.trim().startsWith('--tone:'))).toBe(true)
+    }
+  })
+
+  it('a scored payload paints no img in the list; the empty recorte suggests a wider one', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('testimonyList').querySelector('img')).toBeNull()
+    unmount(instance!)
+    target.innerHTML = ''
+    clearScopes()
+    routes.testimony = empty
+    setBoot({ ready: false })
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('testimonyList').textContent).toContain('Tente um período maior ou outra fonte')
+  })
+
+  it('a resize during a reload keeps the old drawing and is-loading until it resolves', async () => {
+    mountAll()
+    const strip = byId('strip')
+    Object.defineProperty(strip, 'clientWidth', { value: 800, configurable: true })
+    await startBoot('?person=p1')
+    const watcher = observers.find((o) => o.target === strip)!
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    const base = globalThis.fetch as unknown as (u: string) => Promise<unknown>
+    vi.stubGlobal('fetch', vi.fn(async (u: string) => {
+      if (u.includes('/testimony?')) await gate
+      return base(u)
+    }))
+    byId('testimonyDays').value = '7'
+    byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(300)
+    expect(strip.classList.contains('is-loading')).toBe(true)
+    Object.defineProperty(strip, 'clientWidth', { value: 400, configurable: true })
+    watcher.cb()
+    flushSync()
+    expect(q('#strip svg')!.getAttribute('viewBox')).toMatch(/^0 0 800/)
+    expect(strip.classList.contains('is-loading')).toBe(true)
+    release()
+    await settle(0)
+    expect(strip.classList.contains('is-loading')).toBe(false)
+  })
+
+  it('a figure-2 control change requests only /sources and /testimony', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    const before = urls.length
+    byId('testimonySource').value = 'bluesky'
+    byId('testimonySource').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(300)
+    const fresh = urls.slice(before)
+    expect(fresh.length).toBeGreaterThan(0)
+    expect(fresh.every((u) => u.includes('/sources?') || u.includes('/testimony?'))).toBe(true)
+    expect(fresh.some((u) => u.includes('/graph'))).toBe(false)
+  })
+
+  it('header, subtitle and select clicks keep the pick', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    q('#outletList [data-domain="g1.globo.com"]')!.click()
+    flushSync()
+    for (const el of [q('h2')!, q('.figure-sub')!, byId('testimonyDays'), q('.figure-key')!]) {
+      el.click()
+      flushSync()
+      expect(byId('domainLabel').textContent).toBe(' · g1.globo.com')
+      expect(openedBy('testimony')).toBe(true)
+    }
+  })
+
+  it('a pick made while a reload is held is dropped when the new data paints', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    const base = globalThis.fetch as unknown as (u: string) => Promise<unknown>
+    vi.stubGlobal('fetch', vi.fn(async (u: string) => {
+      if (!u.includes('/testimony?')) return base(u)
+      await gate
+      return { ok: true, status: 200, headers: new Headers(), json: async () => structuredClone(scored) }
+    }))
+    byId('testimonyDays').value = '7'
+    byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(300)
+    q('#outletList [data-domain="g1.globo.com"]')!.click()
+    flushSync()
+    await settle(0)
+    expect(openedBy('testimony')).toBe(true)
+    release()
+    await settle(100)
+    expect(byId('domainLabel').textContent).toBe('')
+    expect(openedBy('testimony')).toBe(false)
+  })
+
+  it('a stale pick is dropped on error but another owner card survives', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    void open({ kicker: 'k', title: 't', owner: 'atlas', sides: [{ personId: 'p1', personName: 'Ana', query: new URLSearchParams('term=x') }] })
+    await settle(0)
+    failing.add('testimony')
+    byId('testimonyDays').value = '7'
+    byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(300)
+    expect(byId('domainLabel').textContent).toBe('')
+    expect(openedBy('atlas')).toBe(true)
+  })
+})
+
 const mountDocsHost = () => {
   const host = document.createElement('div')
   document.body.appendChild(host)

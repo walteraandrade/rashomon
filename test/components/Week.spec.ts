@@ -4,6 +4,7 @@ import DocsCard from '../../src/ui/DocsCard.svelte'
 import Week from '../../src/ui/Week.svelte'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { close, isOpen, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
+import { weekLayout } from '../../src/ui/layout.js'
 import { clearScopes } from '../../src/ui/state.js'
 
 vi.mock('../../src/ui/render.js', async (importOriginal) => ({
@@ -491,7 +492,7 @@ describe('Week.svelte (#291)', () => {
     await mountWeek()
     const marks = all('#weekChart [data-term="supremo tribunal federal"]')
     expect(marks).toHaveLength(1)
-    expect(marks[0].querySelectorAll('.week-text tspan').length).toBeGreaterThan(1)
+    expect([...marks[0].querySelectorAll('.week-text tspan')].map((t) => t.textContent)).toEqual(['supremo', 'tribunal', 'federal'])
     expect($('#weekChart .week-overflow')).toBeNull()
   })
 
@@ -526,6 +527,83 @@ describe('Week.svelte (#291)', () => {
     }
     expect($('#weekChart').textContent).not.toMatch(/Carregando/)
     expect(all('#weekChart .week-day')).toHaveLength(7)
+  })
+
+  it('seeds through the prefix: bare person, week.source and week.limit win; bare days is ignored and days=7 is sent', async () => {
+    boot({ search: '?person=bolsonaro&days=60&week.source=gdelt&week.limit=5' })
+    await mountWeek()
+    expect(($('#weekPerson') as HTMLSelectElement).value).toBe('bolsonaro')
+    expect(($('#weekSource') as HTMLSelectElement).value).toBe('gdelt')
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('5')
+    expect(weekCalls()[0]).toMatch(/\/people\/bolsonaro\/week/)
+    const q = qs(weekCalls()[0])
+    expect(q.get('source')).toBe('gdelt')
+    expect(q.get('limit')).toBe('5')
+    expect(q.get('days')).toBe('7')
+  })
+
+  it('a later setBoot never re-seeds: the user\'s own choice survives', async () => {
+    boot({ search: '?person=bolsonaro' })
+    await mountWeek()
+    select('#weekLimit', '5')
+    await settle(200)
+    const before = weekCalls().length
+    boot({ search: '?person=lula&week.limit=8&week.source=gdelt' })
+    await settle(200)
+    expect(($('#weekPerson') as HTMLSelectElement).value).toBe('bolsonaro')
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('5')
+    expect(($('#weekSource') as HTMLSelectElement).value).toBe('all')
+    expect(weekCalls()).toHaveLength(before)
+  })
+
+  it('word marks and hit areas carry no rx: the glow and the hit box are square', async () => {
+    boot()
+    await mountWeek()
+    const shapes = all('#weekChart .week-glow, #weekChart .week-hit')
+    expect(shapes.length).toBeGreaterThan(0)
+    for (const r of shapes) expect(r.hasAttribute('rx')).toBe(false)
+  })
+
+  it('a11y hooks: per-day svg group label, title with kind and count, overflow aria-pressed, Enter and Space preventDefault', async () => {
+    boot()
+    await mountWeek()
+    expect($('#weekChart .week-svg').getAttribute('role')).toBe('group')
+    expect($('#weekChart .week-svg').getAttribute('aria-label')).toMatch(/^Palavras de /)
+    expect(word().getAttribute('aria-label')).toBe('reforma, 4 documentos neste dia')
+    expect(word().querySelector('title')!.textContent).toBe('reforma · Palavra · 4 documentos')
+    for (const k of ['Enter', ' ']) {
+      const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })
+      word().dispatchEvent(ev)
+      expect(ev.defaultPrevented).toBe(true)
+      flushSync()
+      click(word())
+      await settle()
+    }
+    const other = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })
+    word().dispatchEvent(other)
+    expect(other.defaultPrevented).toBe(false)
+  })
+
+  it('an overflow button carries aria-pressed and follows the pick', async () => {
+    colWidth = 84
+    weekBody = () => week([{ term: 'pronunciamento', kind: 'word', count: 55 }])
+    boot()
+    await mountWeek()
+    const btn = () => $('#weekChart .week-overflow button')
+    expect(btn().getAttribute('aria-pressed')).toBe('false')
+    click(btn())
+    await settle()
+    expect(btn().getAttribute('aria-pressed')).toBe('true')
+    expect(btn().className).toContain('is-selected')
+  })
+
+  it('places a word at the column centre plus its layout x, and the layout half plus its y', async () => {
+    boot()
+    await mountWeek()
+    const measure = (text: string, size: number) => text.length * size * 0.6
+    const layouts = weekLayout(measure as never, week().buckets.map((b) => b.terms), 300)
+    const d = layouts[1].words.find((w) => w.term === 'reforma')!
+    expect(word().getAttribute('transform')).toBe(`translate(${300 / 2 + d.x},${layouts[1].half + d.y})`)
   })
 
   it('AC16: the mounted section keeps every hook of the prerendered week section', async () => {

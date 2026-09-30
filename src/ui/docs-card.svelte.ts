@@ -136,6 +136,7 @@ const show = () => {
   if (!dialog) return
   const float = floating()
   set({ isFloating: float, ...(float ? {} : { spot: null }) })
+  dialog.classList?.toggle('is-floating', float)
   if (!dialog.open) {
     if (float) {
       // Floating card returns focus to prevent stealing keyboard from the map on every click.
@@ -201,7 +202,9 @@ const fetchSide = async (side: DocsSide, signal: AbortSignal) => ({
 export const open = async (req: DocsRequest) => {
   const id = cancel()
   set({ request: req, sides: req.sides, isOpen: true, error: false })
-  if (!find()) return
+  const found = find()
+  if (!found) return
+  found.classList?.toggle('is-wide', req.sides.length === 2)
   paintDocsHead({ kicker: req.kicker, title: req.title })
   const current = new AbortController()
   controller = current

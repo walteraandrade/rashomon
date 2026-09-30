@@ -543,7 +543,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* Three shadows rather than one: a tight contact shadow so the card sits on the page, a mid one
    for its body, and a wide soft one for the room it takes up. One 44px blur did all three jobs
    badly and read like a sticker. */
-.docs-dialog.is-floating { position: fixed; right: 24px; top: 96px; left: auto; margin: 0; width: min(380px, calc(100vw - 32px)); max-height: min(62vh, 560px); box-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 22px -8px rgba(0, 0, 0, .55), 0 36px 64px -20px rgba(0, 0, 0, .7); }
+.docs-dialog.is-floating { position: fixed; right: var(--docs-right, 24px); top: var(--docs-y, 96px); left: var(--docs-x, auto); margin: 0; width: min(380px, calc(100vw - 32px)); max-height: min(62vh, 560px); box-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 22px -8px rgba(0, 0, 0, .55), 0 36px 64px -20px rgba(0, 0, 0, .7); }
 .docs-dialog.is-floating .docs-dialog-head { padding: var(--space-4) 18px var(--space-3) 22px; cursor: grab; touch-action: none; }
 .docs-dialog.is-floating .docs-dialog-head h2 { font-size: var(--t-md); }
 .docs-dialog.is-dragging { user-select: none; }

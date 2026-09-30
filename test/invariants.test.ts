@@ -647,7 +647,8 @@ const svelteRules = {
     if (!HTML_ALLOWLIST.some((name) => file.endsWith(name))) return uses
     return uses.filter((expr) => !HTML_IDENTIFIER.test(expr))
   },
-  style: (source: string) => /<style[\s>]/.test(source) || /\sstyle\s*=\s*["'{]/.test(source),
+  style: (source: string) =>
+    /<style[\s>]/.test(source) || /\sstyle\s*=\s*["'{]/.test(source) || /\sstyle:(?!--)[\w-]+/.test(source),
   fontSize: (source: string) => /font-size\s*:\s*[\d.]+px/.test(source),
 }
 
@@ -735,6 +736,8 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.equal(svelteRules.style('<p>x</p>\n<style>p { color: red }</style>'), true)
     assert.equal(svelteRules.style('<p style="color: red">x</p>'), true)
     assert.equal(svelteRules.style('<p style:--w={w}>x</p>'), false)
+    assert.equal(svelteRules.style('<div style:left={x}>x</div>'), true)
+    assert.equal(svelteRules.style('<div style:--x={x}>x</div>'), false)
   })
 
   it('svelte files use no px font-size', () => {

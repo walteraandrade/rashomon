@@ -77,6 +77,25 @@ describe('DocsCard', () => {
     expect(openedBy('atlas')).toBe(false)
   })
 
+  it('closes on the close button and on a backdrop click', async () => {
+    mountCard()
+    for (const closer of [
+      () => document.getElementById('docsClose')!.click(),
+      () => dialog().dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    ]) {
+      const p = open(req())
+      calls[calls.length - 1].resolve(doc('um texto'))
+      await p
+      await settle()
+      expect(dialog().open).toBe(true)
+      closer()
+      flushSync()
+      expect(dialog().open).toBe(false)
+      expect(isOpen()).toBe(false)
+      expect(openedBy('atlas')).toBe(false)
+    }
+  })
+
   it('ignores a stale response', async () => {
     mountCard()
     const first = open(req([side('term=a')]))
@@ -149,14 +168,14 @@ describe('DocsCard', () => {
     pointer('pointerdown', 10, 10)
     pointer('pointermove', 99999, 99999)
     flushSync()
-    const left = parseFloat(dialog().style.left)
-    const top = parseFloat(dialog().style.top)
+    const left = parseFloat(dialog().style.getPropertyValue('--docs-x'))
+    const top = parseFloat(dialog().style.getPropertyValue('--docs-y'))
     expect(left).toBeLessThanOrEqual(window.innerWidth)
     expect(top).toBeLessThanOrEqual(window.innerHeight)
     pointer('pointermove', -5000, -5000)
     flushSync()
-    expect(parseFloat(dialog().style.left)).toBeGreaterThanOrEqual(0)
-    expect(parseFloat(dialog().style.top)).toBeGreaterThanOrEqual(0)
+    expect(parseFloat(dialog().style.getPropertyValue('--docs-x'))).toBeGreaterThanOrEqual(0)
+    expect(parseFloat(dialog().style.getPropertyValue('--docs-y'))).toBeGreaterThanOrEqual(0)
     pointer('pointerup', 0, 0)
   })
 

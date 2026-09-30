@@ -28,8 +28,9 @@
   id="docsDialog"
   aria-labelledby="docsTitle"
   bind:this={dialog}
-  style:left={card.spot ? `${card.spot.x}px` : null}
-  style:top={card.spot ? `${card.spot.y}px` : null}
+  style:--docs-x={card.spot ? `${card.spot.x}px` : null}
+  style:--docs-y={card.spot ? `${card.spot.y}px` : null}
+  style:--docs-right={card.spot ? 'auto' : null}
   onclick={(event) => event.target === dialog && close()}
   onclose={onNativeClose}
 >

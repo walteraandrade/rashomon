@@ -24,7 +24,11 @@ beforeEach(() => {
     <a id="blank" href="/como-ler#pmi" target="_blank">d</a>
     <a id="leave" href="/como-ler#pmi" data-leave>e</a>
     <a id="unknown" href="/como-ler#nao-existe">f</a>
-    <a id="other" href="/outra#pmi">g</a>`
+    <a id="other" href="/outra#pmi">g</a>
+    <a id="bare" href="/como-ler">h</a>
+    <a id="altaLink" href="como-ler.html#em-alta">i</a>
+    <a id="semanaLink" href="como-ler.html#semana">j</a>
+    <a id="sobre" href="/sobre">k</a>`
   document.body.append(target, links)
   instance = mount(HelpDialog, { target })
   mountHelp()
@@ -61,6 +65,28 @@ describe('HelpDialog', () => {
     scrolled.length = 0
     click('abs')
     expect(scrolled).toEqual(['help-pmi'])
+  })
+
+  it('intercepts a bare /como-ler with no section', () => {
+    const event = click('bare')
+    expect(event.defaultPrevented).toBe(true)
+    expect(dialog().open).toBe(true)
+    expect(scrolled).toEqual([])
+  })
+
+  it('resolves como-ler.html#em-alta and #semana', () => {
+    expect(click('altaLink').defaultPrevented).toBe(true)
+    expect(scrolled).toEqual(['help-em-alta'])
+    closeHelp()
+    scrolled.length = 0
+    expect(click('semanaLink').defaultPrevented).toBe(true)
+    expect(dialog().open).toBe(true)
+    expect(scrolled).toEqual(['help-semana'])
+  })
+
+  it('other pages are not the guide', () => {
+    expect(click('sobre').defaultPrevented).toBe(false)
+    expect(dialog().open).toBe(false)
   })
 
   it('leaves modifier click, target blank and data-leave alone', () => {

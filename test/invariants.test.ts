@@ -813,3 +813,42 @@ describe('#297 AC2: web/routes/+page.svelte mounts <Atlas /> and holds none of i
     for (const id of IDS) assert.equal(html.match(new RegExp(`id="${id}"`, 'g'))?.length, 1, `#${id} exactly once`)
   })
 })
+
+describe('#298 imperative front-end leftovers are gone', () => {
+  const gone = ['figure.ts', 'render.ts', join('figures', 'rising.ts'), 'docs-card.ts', 'help.ts']
+  const svelteFiles = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : svelteFiles(join(dir, e.name))) : /\.svelte(\.ts)?$/.test(e.name) ? [join(dir, e.name)] : []))
+
+  it('#298 AC3: none of the deleted modules or fake DOMs exists', () => {
+    for (const f of gone) assert.equal(existsSync(join(jsDir, f)), false, `src/ui/${f} must be deleted`)
+    for (const f of ['fake-dom.ts', 'fake-mount-dom.ts']) assert.equal(existsSync(join(testDir, f)), false, `test/${f} must be deleted`)
+  })
+
+  it('#298 AC3: invariants.test.ts no longer imports the fake DOM', () => {
+    assert.doesNotMatch(testFileSource('invariants.test.ts'), new RegExp(`from '\\./fake-${'dom'}`))
+  })
+
+  it('#298 AC5: the mount no-ops and attachCombobox are not defined or called anywhere', () => {
+    const names = new RegExp(['mount' + 'DocsCard', 'mount' + 'Help', 'attach' + 'Combobox'].join('|'))
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : walk(join(dir, e.name))) : /\.(ts|svelte|js)$/.test(e.name) ? [join(dir, e.name)] : []))
+    for (const dir of ['src', 'web', 'test']) for (const f of walk(join(root, dir))) assert.doesNotMatch(readFileSync(f, 'utf8'), names, `${f} names a removed function`)
+  })
+
+  it('#298 AC7: the import-direction map has no entry for a deleted module', () => {
+    const source = testFileSource('invariants.test.ts')
+    assert.doesNotMatch(source, new RegExp(`'(figure|render|docs-card|help)\\.ts':`))
+    assert.doesNotMatch(source, /'figures\/[a-z]+\.ts':/)
+  })
+
+  it('#298 AC8: no svelte file imports a render module', () => {
+    for (const dir of ['src/ui', 'web'])
+      for (const f of svelteFiles(join(root, dir)))
+        for (const spec of importsOf(readFileSync(f, 'utf8')).concat([...readFileSync(f, 'utf8').matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)].map((m) => m[1])))
+          assert.doesNotMatch(spec, /(^|\/)render(\.js|\.ts)?$/, `${f} imports ${spec}`)
+  })
+
+  it('#298 AC7: ALLOWED_PACKAGES is still empty', () => {
+    assert.match(testFileSource('invariants.test.ts'), /ALLOWED_PACKAGES[^=\n]*=\s*\[\s*\]/)
+  })
+})

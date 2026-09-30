@@ -150,6 +150,17 @@ describe('Comention', () => {
     expect(isOpen()).toBe(false)
   })
 
+  it('a click on the subtitle or a select outside the matrix keeps the pick and the card', async () => {
+    await start(filled)
+    await pick('lula', 'tarcisio')
+    click(target.querySelector('.figure-sub')!)
+    click(select('comentionDays'))
+    click(target.querySelector('.figure-sub a')!)
+    await settle()
+    expect(isOpen()).toBe(true)
+    expect(cell('lula', 'tarcisio')!.getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('release never closes a card another figure opened (AC3)', async () => {
     await start(filled)
     void open({ kicker: 'k', title: 't', owner: 'atlas', sides: [{ personId: 'lula', personName: 'Lula', query: new URLSearchParams('term=a') }] })

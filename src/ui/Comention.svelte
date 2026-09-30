@@ -83,6 +83,11 @@
     showDocs(x, y)
   }
 
+  const dropStalePick = () => {
+    if (docsCard.openedBy(OWNER)) docsCard.close()
+    selected = null
+  }
+
   const figure = createFigure<Comention>({
     name: 'comention',
     params: () => (failed ? null : api.comentionParams({ days, source, lean, min })),
@@ -92,7 +97,7 @@
       else view = 'ghost'
     },
     paint: (result) => {
-      if (result !== shown) selected = null
+      if (result !== shown) dropStalePick()
       shown = result
       dim = false
       view = 'data'
@@ -100,6 +105,7 @@
     },
     paintError: () => {
       shown = null
+      dropStalePick()
       dim = false
       view = 'error'
     },

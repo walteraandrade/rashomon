@@ -479,33 +479,13 @@ const lensesIds = () => {
   }
 }
 
-// Figure 10 (issue #215): its own person/weeks/limit selects, the chart host and its note (the
-// short-series and empty-series notes). No source/kind control.
-const persistenceIds = () => ({
-  persistence: new FakeBox('persistence'),
-  persistencePerson: new FakeSelect('persistencePerson'),
-  persistenceWeeks: new FakeSelect('persistenceWeeks', [
-    { value: '4', text: '4' },
-    { value: '12', text: '12', selected: true },
-    { value: '26', text: '26' },
-  ]),
-  persistenceLimit: new FakeSelect('persistenceLimit', [
-    { value: '20', text: '20' },
-    { value: '40', text: '40', selected: true },
-    { value: '60', text: '60' },
-  ]),
-  persistenceChart: new FakeBox('persistenceChart'),
-  persistenceNote: new FakeBox('persistenceNote'),
-})
-
 export type Elements = ReturnType<typeof atlasIds> &
   ReturnType<typeof testimonyIds> &
   ReturnType<typeof compareIds> &
   ReturnType<typeof risingIds> &
   ReturnType<typeof weekIds> &
   ReturnType<typeof lensesIds> &
-  ReturnType<typeof attentionIds> &
-  ReturnType<typeof persistenceIds>
+  ReturnType<typeof attentionIds>
 
 /** @returns a jsonResponse-like object `fetch` can resolve to */
 export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: async () => data })
@@ -517,7 +497,7 @@ export const jsonResponse = (data: unknown) => ({ ok: true, status: 200, json: a
 // (week.ts today, and every figure.ts-based figure once issue #193 lands), the only document-
 // level event a figure's own mount() ever wires.
 export const withFiguresDom = async <T>(fn: (els: Elements, fetchCalls: string[], fireDocumentKeydown: (key: string) => void) => Promise<T> | T): Promise<T> => {
-  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds(), ...persistenceIds() } as Elements
+  const els = { ...atlasIds(), ...testimonyIds(), ...compareIds(), ...risingIds(), ...weekIds(), ...lensesIds(), ...attentionIds() } as Elements
   const docListeners: Record<string, ((e?: unknown) => void)[]> = {}
   const fireDocumentKeydown = (key: string) => {
     for (const fn of docListeners.keydown ?? []) fn({ key, preventDefault: () => {} })

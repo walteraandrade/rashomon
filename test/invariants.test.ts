@@ -219,7 +219,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // Figure 7 (issue #216), attention vs mentions: same shape as figures/lenses.ts, imported
       // by nothing but app.ts, and reaching into no other figure's DOM.
       'figures/attention.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
-      'figures/persistence.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'app.ts': [
         './api.js',
         './boot.svelte.js',
@@ -228,7 +227,6 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
         './figures/attention.js',
         './figures/compare.js',
         './figures/lenses.js',
-        './figures/persistence.js',
         './figures/rising.js',
         './figures/testimony.js',
         './figures/week.js',
@@ -246,6 +244,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Combobox.svelte': ['./combobox.js'],
       'Agenda.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
       'Proof.svelte': [],
+      'Persistence.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
       'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
@@ -574,9 +573,14 @@ describe('CLAUDE.md documents the persistence figure', () => {
   const md = () => srcSource('../CLAUDE.md')
 
   it('names the term_weeks table, its build, the route builders, the figure module and its layout function (AC23)', () => {
-    for (const name of ['term_weeks', 'buildTermWeeks', 'persistenceFirstWeek', 'persistenceFor', 'persistenceStats', 'figures/persistence.ts', 'persistenceLayout', '`#persistence`']) {
+    for (const name of ['term_weeks', 'buildTermWeeks', 'persistenceFirstWeek', 'persistenceFor', 'persistenceStats', 'Persistence.svelte', 'persistenceLayout', '`#persistence`']) {
       assert.ok(md().includes(name), `CLAUDE.md must name ${name}`)
     }
+  })
+
+  it('says figures/persistence.ts is gone and that createFigure has a user (#290)', () => {
+    assert.doesNotMatch(md(), /figures\/persistence\.ts/, 'CLAUDE.md must no longer name figures/persistence.ts')
+    assert.match(md(), /createFigure[^\n]*(user|used by|adopted by)|(user|used by|adopted by)[^\n]*createFigure/i, 'CLAUDE.md must say createFigure has a user')
   })
 
   it('counts ten figures on the page, the tenth being the persistence card (AC23)', () => {

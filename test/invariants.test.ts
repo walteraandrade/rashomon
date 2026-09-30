@@ -663,3 +663,37 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.equal(svelteRules.fontSize('<p>font-size: 12px</p>'), true)
   })
 })
+
+describe('component test harness', () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string>; devDependencies: Record<string, string> }
+  const vitestConfig = readFileSync(join(root, 'vitest.config.ts'), 'utf8')
+
+  it('pnpm test runs node --test then vitest, joined with &&', () => {
+    assert.match(pkg.scripts.test, /^DATA_DIR=memory:\/\/ node .*--test test\/\*\.test\.ts && vitest run$/)
+  })
+
+  it('the two runners select disjoint files', () => {
+    assert.doesNotMatch(pkg.scripts.test, /test\/components/)
+    assert.match(vitestConfig, /test\/components\/\*\*\/\*\.spec\.ts/)
+    assert.doesNotMatch(vitestConfig, /\.test\.ts/)
+  })
+
+  it('typecheck is one script that syncs, runs tsc and svelte-check on the svelte tsconfig', () => {
+    assert.match(pkg.scripts.typecheck, /^svelte-kit sync && tsc -p tsconfig\.json && svelte-check .*--tsconfig \.\/tsconfig\.svelte\.json$/)
+  })
+
+  it('svelte-check reads a tsconfig that extends the generated one and covers web/', () => {
+    const cfg = JSON.parse(readFileSync(join(root, 'tsconfig.svelte.json'), 'utf8')) as { extends: string; include: string[] }
+    assert.equal(cfg.extends, './.svelte-kit/tsconfig.json')
+    assert.ok(cfg.include.some((i) => i.startsWith('web/')))
+    assert.ok(cfg.include.some((i) => i.startsWith('test/components')))
+  })
+
+  it('no document leaks into the node:test process', () => {
+    assert.equal((globalThis as { document?: unknown }).document, undefined)
+  })
+
+  it('devDependencies vitest, happy-dom, svelte-check are exact-pinned', () => {
+    for (const name of ['vitest', 'happy-dom', 'svelte-check']) assert.match(pkg.devDependencies[name], /^\d/, `${name} must be pinned exact`)
+  })
+})

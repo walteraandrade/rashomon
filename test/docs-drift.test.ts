@@ -511,3 +511,15 @@ describe('SvelteKit shell (issue #283)', () => {
     assert.match(docsText, /<meta[\s\S]{0,300}hash|hash[\s\S]{0,300}meta/i)
   })
 })
+
+describe('component test harness', () => {
+  it('docs say component specs run under vitest with a DOM as part of pnpm test', () => {
+    assert.match(docsText, /vitest/)
+    assert.match(docsText, /happy-dom|with a DOM/)
+    assert.match(docsText, /component specs[\s\S]{0,200}pnpm test/i)
+  })
+
+  it('docs say pnpm typecheck covers .svelte', () => {
+    assert.match(docsText, /pnpm typecheck[\s\S]{0,200}\.svelte|\.svelte[\s\S]{0,200}pnpm typecheck/)
+  })
+})

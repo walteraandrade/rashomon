@@ -5,14 +5,15 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { SMALL_LIMITS, SOURCE_SEGMENTS, applyBridges, balanceColor, bridgeIds, fmt, hasBridges, isBridge, kinds, label, scoreName, sourceLabels, type Compare, type CompareSide, type CompareTerm, type Measure } from './format.js'
-  import { RULER_PAD, rulerLayout } from './layout.js'
+  import { SOURCE_SEGMENTS, applyBridges, bridgeIds, fmt, hasBridges, isBridge, kinds, label, scoreName, sourceLabels, type Compare, type CompareSide, type CompareTerm, type Measure } from './format.js'
+  import { rulerLayout, rulerModel } from './layout.js'
   import { createCanvasMeasure, rulerTerms } from './render.js'
   import { seedFor, type SeedKey } from './seed.js'
 
   const KEYS: SeedKey[] = [['a', 'person'], ['b', null], 'days', 'source', 'limit', ['measure', null]]
   const DAYS = ['7', '30', '60']
   const MEASURES = ['count', 'pmi']
+  const LIMITS = ['20', '40', '60', '100']
   const GHOST_WORDS: [number, number, number, number][] = [
     [110, -14, 86, 20],
     [210, 12, 64, 16],
@@ -46,7 +47,7 @@
   const peopleError = $derived(bootData.ready && !!bootData.peopleError)
   const noPeople = $derived(bootData.ready && !bootData.peopleError && bootData.people.length === 0)
   const showGhost = $derived(!bootData.ready || (!peopleError && !noPeople && waiting && !errored))
-  const sameSelf = $derived(!!a && a === b && !errored && !peopleError && !noPeople)
+  const sameSelf = $derived(!showGhost && !!a && a === b && !errored && !peopleError && !noPeople)
 
   const model = $derived.by(() => {
     void version
@@ -55,34 +56,11 @@
     if (!items.length) return { hiddenCount, layout: null }
     const nameA = data.a.person.name
     const nameB = data.b.person.name
-    const layout = rulerLayout(measured(), items, width || 860)
-    const words = layout.words.map((d) => ({
-      term: d.term,
-      kind: d.kind,
-      text: d.text,
-      x: d.x,
-      y: d.y,
-      size: d.size,
-      w: d.w,
-      h: d.h,
-      cmp: balanceColor(d.balance),
-      bridge: isBridge(d),
-      aria: `${d.text}, ${fmt(d.combined)} documentos`,
-      title: `${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos`,
-    }))
-    const overflow = layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) }))
+    const laid = rulerModel(rulerLayout(measured(), items, width || 860))
     return {
       hiddenCount,
       layout: {
-        width: layout.width,
-        height: layout.height,
-        half: layout.half,
-        x0: RULER_PAD,
-        x1: layout.width - RULER_PAD,
-        ticks: [-1, -0.5, 0, 0.5, 1].map(layout.x),
-        words,
-        overflow,
-        overflowIntro: `${fmt(overflow.length)} ${overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:`,
+        ...laid,
         endA: nameA,
         endB: nameB,
         axisLabels: [`Só de ${nameA}`, 'dividida', `Só de ${nameB}`] as [string, string, string],
@@ -210,7 +188,7 @@
       b = resolveOther(initial.b, a)
       days = seeded(initial.days, DAYS, days)
       source = seeded(initial.source, SOURCE_SEGMENTS.map(([value]) => value), source)
-      limit = seeded(initial.limit, SMALL_LIMITS.map(String), limit)
+      limit = seeded(initial.limit, LIMITS, limit)
       measure = seeded(initial.measure, MEASURES, measure)
       void figure.load()
     })
@@ -230,7 +208,7 @@
       <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>liga os dois vocabulários</dd></div>
       <div><dt>Clique</dt><dd>textos das duas pessoas, neste gráfico</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A" value={a} onchange={(e) => change(e, (v) => (a = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B" value={b} onchange={(e) => change(e, (v) => (b = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="compareDays" aria-label="Período" value={days} onchange={(e) => change(e, (v) => (days = v))}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="compareSource" aria-label="Fonte" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="compareMeasure" aria-label="Medida" value={measure} onchange={(e) => (measure = e.currentTarget.value)}><option value="count">documentos</option><option value="pmi">{scoreName('pmi')}</option></select></span>.</span> Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras" value={limit} onchange={(e) => change(e, (v) => (limit = v))}>{#each SMALL_LIMITS as n (n)}<option value={String(n)}>{n}</option>{/each}</select></span> palavras por pessoa.</p></div>
+    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A" value={a} onchange={(e) => change(e, (v) => (a = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B" value={b} onchange={(e) => change(e, (v) => (b = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="compareDays" aria-label="Período" value={days} onchange={(e) => change(e, (v) => (days = v))}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="compareSource" aria-label="Fonte" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="compareMeasure" aria-label="Medida" value={measure} onchange={(e) => (measure = e.currentTarget.value)}><option value="count">documentos</option><option value="pmi">{scoreName('pmi')}</option></select></span>.</span> Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras" value={limit} onchange={(e) => change(e, (v) => (limit = v))}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras por pessoa.</p></div>
   </header>
   <p class="status" id="compareStatus" role="status" hidden={!sameSelf}>Os dois lados mostram a mesma pessoa.</p>
   <figure class="ruler" id="compareRuler" aria-label="Régua comparando as duas pessoas" aria-busy={showGhost ? 'true' : 'false'} hidden={peopleError || noPeople} bind:this={rulerEl}>

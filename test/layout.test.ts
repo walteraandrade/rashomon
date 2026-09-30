@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/render.js'
 import type { CompareTerm } from '../src/ui/format.js'
+import { balanceColor } from '../src/ui/format.js'
 
 // src/ui/layout.ts: pure geometry. rulerTerms (render.ts) is imported only to build the items
 // rulerLayout packs, the same way the browser hands them over.
@@ -665,5 +666,44 @@ describe('persistenceLayout (figure 10, issue #215)', () => {
 
   it('no terms lays out no rows', () => {
     assert.deepEqual(cellsOf(persistenceLayout({ weeks: 12, since: '2026-09-09', first_week: null, horizon: 60, terms: [] } as never)), [])
+  })
+})
+
+describe('rulerModel maps a ruler layout to what Ruler.svelte draws', () => {
+  const measure = (text: string, size: number) => text.length * size * 0.6
+  const items = [
+    { term: 'reforma', kind: 'word', balance: -1, combined: 20 },
+    { term: 'stf', kind: 'hashtag', balance: 0.5, combined: 8, bridge: 0.9 },
+    { term: 'pix', kind: 'word', balance: 0, combined: 4, bridge: 0.1 },
+  ]
+
+  it('carries the frame, the axis ends and five ticks at -1, -0.5, 0, 0.5, 1', () => {
+    const layout = rulerLayout(measure, items, 600)
+    const model = rulerModel(layout)
+    assert.equal(model.width, 600)
+    assert.equal(model.height, layout.height)
+    assert.equal(model.half, layout.half)
+    assert.equal(model.x0, 28)
+    assert.equal(model.x1, 572)
+    assert.deepEqual(model.ticks, [-1, -0.5, 0, 0.5, 1].map(layout.x))
+  })
+
+  it('gives each word its label, title, side colour and bridge flag', () => {
+    const model = rulerModel(rulerLayout(measure, items, 600))
+    const stf = model.words.find((w) => w.term === 'stf')!
+    assert.equal(stf.aria, '#stf, 8 documentos')
+    assert.equal(stf.title, '#stf · Hashtag · 8 documentos')
+    assert.equal(stf.cmp, balanceColor(0.5))
+    assert.equal(stf.bridge, true)
+    assert.equal(model.words.find((w) => w.term === 'pix')!.bridge, false)
+    assert.equal(model.words.find((w) => w.term === 'reforma')!.cmp, balanceColor(-1))
+  })
+
+  it('lists spilled words with text and side colour only', () => {
+    const many = Array.from({ length: 150 }, (_, i) => ({ term: `palavralonga${i}`, kind: 'word', balance: 0, combined: 30 }))
+    const model = rulerModel(rulerLayout(measure, many, 600))
+    assert.ok(model.overflow.length > 0)
+    assert.deepEqual(Object.keys(model.overflow[0]).sort(), ['cmp', 'kind', 'term', 'text'])
+    assert.equal(model.overflow[0].cmp, balanceColor(0))
   })
 })

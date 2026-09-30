@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushSync, mount, unmount } from 'svelte'
+import { createRawSnippet, flushSync, mount, unmount } from 'svelte'
 import Ruler from '../../src/ui/Ruler.svelte'
 
 const word = (term: string, kind = 'word') => ({ term, kind, text: term, x: 100, y: 0, size: 14, w: 60, h: 17, cmp: 'var(--cmp-a)', bridge: false, aria: `${term}, 5 documentos`, title: `${term} · 5 documentos` })
@@ -28,7 +28,6 @@ const render = (props: Record<string, unknown> = {}) => {
       note: 'nota',
       words: [word('reforma'), word('golpe', 'hashtag')],
       overflow: [spilled('pix')],
-      overflowIntro: '1 palavra não coube',
       selected: null,
       onpick,
       ...props,
@@ -63,7 +62,7 @@ describe('Ruler', () => {
     expect(buttons).toHaveLength(1)
     expect(buttons[0].getAttribute('data-term')).toBe('pix')
     expect(buttons[0].getAttribute('data-kind')).toBe('word')
-    expect(target.querySelector('.ruler-overflow p')?.textContent).toBe('1 palavra não coube')
+    expect(target.querySelector('.ruler-overflow p')?.textContent).toMatch(/^1 palavra não coube/)
   })
 
   it('carries size and side colour as style custom properties, never a font-size', () => {
@@ -106,5 +105,25 @@ describe('Ruler', () => {
     render({ words: [{ ...word('stf'), bridge: true }] })
     expect(target.querySelector('.ruler-bridge')?.getAttribute('data-term')).toBe('stf')
     expect(target.querySelector('.ruler-bridge-mark')).not.toBeNull()
+  })
+
+  it('words the overflow sentence itself, singular and plural', () => {
+    render()
+    expect(target.querySelector('.ruler-overflow p')?.textContent).toBe('1 palavra não coube na régua sem cobrir as outras. Todas continuam clicáveis aqui:')
+    unmount(instance!)
+    target.remove()
+    render({ overflow: [spilled('pix'), spilled('stf')] })
+    expect(target.querySelector('.ruler-overflow p')?.textContent).toMatch(/^2 palavras não couberam na régua/)
+  })
+
+  it('renders a tail snippet after the overflow list, and nothing without one', () => {
+    render()
+    expect(target.querySelector('.ruler-tail')).toBeNull()
+    unmount(instance!)
+    target.remove()
+    render({ tail: createRawSnippet(() => ({ render: () => '<div class="ruler-tail">raros</div>' })) })
+    const tail = target.querySelector('.ruler-tail')!
+    expect(tail.textContent).toBe('raros')
+    expect(tail.previousElementSibling?.classList.contains('ruler-overflow')).toBe(true)
   })
 })

@@ -270,10 +270,7 @@ const relatedButtons = (items: { node: Term; count?: number }[], sort: string, c
 const SPARK_BARS = 7
 const SPARK_HEIGHT = 34
 
-// Word-in-focus only (issue #147 AC20): seven rolling days, independent of the atlas's own
-// days chip, so the caption is explicit about what window it reads. 'error' leaves the hole
-// empty, no bars and no note (the spec's "hole stays empty"); 'loading' is a ghost of the same
-// seven bars.
+// Word-in-focus only: seven rolling days, independent of the atlas's own days chip; 'error' leaves the hole empty.
 const sparklineMarkup = (spark?: Sparkline) => {
   if (!spark) return ''
   if (spark.state === 'error') return html`<div class="sparkline" aria-hidden="true"></div>`
@@ -391,11 +388,7 @@ export const stripLayout = (rows: TestimonyDomainRow[], width: number) => {
   return { dots: fit.dots, x, half: fit.half, height: fit.half * 2, width, scale }
 }
 
-// Figure 1's third view (issue #149): each word positioned by its own kikori mean, not by
-// outlet. termMask is the single source of both eligibility and colour; a null return means
-// "too few scored texts, or no person mean to compare against" and the word is hidden, counted
-// only in the note. The domain is derived per recorte (unlike the fixed ±10 axis above) and
-// always includes the person's own score, so the dashed mean line never falls outside it.
+// Figure 1's third view: each word positioned by its own kikori mean; termMask decides eligibility and colour (null hides the word, counted in the note).
 type StripDot = { id: string; term: string; kind: string; score: number; count: number; tone: string; x: number; r: number }
 
 export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony | undefined, width = 860) => {
@@ -413,9 +406,7 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
     domainMin -= 1
     domainMax += 1
   }
-  // A float mean can sit a fraction of a unit from a floor/ceil edge (e.g. -3.97 next to a
-  // domainMin of -4) without ever equaling it; comparing the gap to a share of the span catches
-  // that near-miss the same way an exact match already caught the integer case.
+  // A float mean can sit a hair from a floor/ceil edge without equalling it; compare the gap to a share of the span.
   const edgeGap = (domainMax - domainMin) * 0.03
   if ((personScore as number) - domainMin < edgeGap) domainMin -= 1
   if (domainMax - (personScore as number) < edgeGap) domainMax += 1
@@ -431,9 +422,7 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
     x: x(e.n.testimony!.score),
     r: stripRadius(e.n.count, width),
   }))
-  // At a high word count the swarm can stack many rows; shrink the dots (never below
-  // STRIP_MIN_R) until the figure fits STRIP_MAX_HEIGHT, the same trade-off stripLayout
-  // already makes for figure 2's outlet strip.
+  // Shrink the dots (never below STRIP_MIN_R) until the figure fits STRIP_MAX_HEIGHT.
   const smallest = placed.reduce((m, d) => Math.min(m, d.r), Infinity)
   const floor = smallest === Infinity ? 1 : Math.min(1, STRIP_MIN_R / smallest)
   let scale = 1
@@ -452,15 +441,11 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
   return { dots: fit.dots, domainMin, domainMax, ticks, x, half: fit.half, height: fit.half * 2 }
 }
 
-// Strip mode draws no links and has nothing to zoom, so its #legend names size and colour
-// instead of the map's copy about lines and zooming; colour reuses maskLegend because the
-// strip's dots are coloured by the same termMask the map and columns already use.
+// Strip mode names size and colour in #legend; colour reuses maskLegend since termMask colours the dots.
 export const stripLegend = (personTestimony?: PersonTestimony) =>
   html`<span><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho = quantos textos</span><span>Tab + Enter para selecionar</span>${maskLegend(personTestimony)}`
 
-// Draws into #atlasStrip and #stripHiddenNote. Unlike figure 2's strip (Testimony.svelte), size is by document count
-// (the same number the map and the columns already size by) and colour is termMask's mask
-// colour, not the tone-only ramp #testimony uses.
+// Draws into #atlasStrip and #stripHiddenNote: size by document count, colour is termMask's, not the tone-only ramp.
 export const paintTermStrip = ({
   nodes,
   personTestimony,
@@ -647,13 +632,9 @@ const rulerOverflowMarkup = (
     },
   })
 
-// Shared by figure 3 (compare) and figure 4 (rising): draws a ruler's end labels, SVG axis and
-// words, axis labels and overflow list, and wires click/keydown on every word. The two figures
-// differ only in which items they hand it and how they word the ends/axis/note — the packing
-// (`rulerLayout`) and the per-word markup are the same for both. `note` is figure-specific prose
-// between the axis and the overflow list; `tail` comes after that list. Rising says its own
-// numbers in `#risingAbout` and uses `tail` for its rare risers.
-export const paintRulerBody = ({
+// Shared by figure 4 (rising) and figure 6 (lenses): a ruler's end labels, axis, words, axis labels and overflow list,
+// with click/keydown on every word. `note` sits between axis and overflow list; `tail` comes after it.
+const paintRulerBody = ({
   elementId,
   items,
   metrics,
@@ -710,12 +691,8 @@ export type RisingShares = RisingAbout & { words_recent: number; words_baseline:
 export const hasShares = (data: Rising): data is Rising & { present: RisingTerm[]; about: RisingShares } =>
   Array.isArray(data.present) && Number.isFinite(data.about.words_recent) && Number.isFinite(data.about.words_baseline)
 
-// balance = clamp(log2(share now / share before) / 3, -1, 1), where a share is the term's doc
-// count over every doc_terms row about the person in that window (about.words_*): a word right
-// of centre takes a bigger slice of what is written about her this week than it did before,
-// left a smaller one. Shares, not doc counts, so a corpus whose texts grew longer (more words
-// per doc) does not push every word right at once; the baseline's +1 is the server's own
-// smoothing, which keeps this finite. No baseline words at all means every word is new.
+// balance = clamp(log2(share now / share before) / 3, -1, 1), a share being the term's doc count over every doc_terms row
+// about the person in that window (about.words_*): shares, not doc counts, so longer texts do not push every word right.
 export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingShares) => {
   if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
   if (about.words_recent <= 0) return -1
@@ -739,11 +716,8 @@ export type RisingItem = RulerItem & { lift: number }
 export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
   terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
 
-// The risers off the ruler: the route's `terms` (the highest lifts) minus what `present` already
-// rules, and only those that actually rose (lift > 1, recent rate above the smoothed baseline
-// rate), in the route's own lift order. Listed under the ruler as buttons that pick like any
-// other word, coloured by the same share balance. The page shows the first RARE_SHOWN so the
-// list stays a line or two, and says how many it left out.
+// The risers off the ruler: `terms` minus what `present` already rules, only those with lift > 1, in the route's lift order,
+// listed as buttons that pick like any word; the page shows the first RARE_SHOWN and says how many it left out.
 export const RARE_SHOWN = 12
 
 export const rareRisers = (terms: RisingTerm[], present: RisingTerm[]) => {
@@ -814,8 +788,8 @@ export const paintRisingRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar os termos em alta.</p>'
 }
 
-// Figure 6 (issue #206): one person, two independently-scoped lenses on the compare ruler's own
-// body. Unlike paintRuler, position is always pmi * ln(1 + count) — there is no measure select on
+// Figure 6 (issue #206): one person, two independently-scoped lenses on the shared ruler body.
+// Position is always pmi * ln(1 + count) — there is no measure select on
 // this figure — and the two ends are lens labels (lensLabel), not people.
 export const paintLensRuler = ({
   data,

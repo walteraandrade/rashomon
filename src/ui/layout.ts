@@ -1,4 +1,4 @@
-import { fmt, label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { balanceColor, fmt, isBridge, kinds, label, score, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Must stay in sync with atlas.css's --sans / --mono / --display: canvas measurement needs literal
 // font-family strings and cannot read CSS custom properties without the DOM.
@@ -288,6 +288,31 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
   const used = Math.max(40, Math.ceil(reach) + 6)
   return { words: placed, overflow, x, half: used, height: used * 2, width }
 }
+
+// What Ruler.svelte draws, from rulerLayout's output.
+export const rulerModel = (layout: RulerLayout<RulerItem>) => ({
+  width: layout.width,
+  height: layout.height,
+  half: layout.half,
+  x0: RULER_PAD,
+  x1: layout.width - RULER_PAD,
+  ticks: [-1, -0.5, 0, 0.5, 1].map(layout.x),
+  words: layout.words.map((d) => ({
+    term: d.term,
+    kind: d.kind,
+    text: d.text,
+    x: d.x,
+    y: d.y,
+    size: d.size,
+    w: d.w,
+    h: d.h,
+    cmp: balanceColor(d.balance),
+    bridge: isBridge(d),
+    aria: `${d.text}, ${fmt(d.combined)} documentos`,
+    title: `${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos`,
+  })),
+  overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
+})
 
 // Figure 5 (issue #147): one column per calendar day, words stacked around a shared vertical
 // axis (x fixed at the column's own centre, 0) instead of spread along a balance axis, so

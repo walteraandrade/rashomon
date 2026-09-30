@@ -1,4 +1,7 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
+  import { fmt } from './format.js'
+
   type Word = { term: string; kind: string; text: string; x: number; y: number; size: number; w: number; h: number; cmp: string; bridge: boolean; aria: string; title: string }
   type Spilled = { term: string; kind: string; text: string; cmp: string }
   type Pick = { term: string; kind: string }
@@ -17,9 +20,9 @@
     note,
     words,
     overflow,
-    overflowIntro,
     selected,
     onpick,
+    tail,
   }: {
     width: number
     height: number
@@ -34,9 +37,9 @@
     note: string
     words: Word[]
     overflow: Spilled[]
-    overflowIntro: string
     selected: Pick | null
     onpick: (term: string, kind: string) => void
+    tail?: Snippet
   } = $props()
 
   const isPicked = (d: Pick) => !!selected && selected.term === d.term && selected.kind === d.kind
@@ -84,9 +87,10 @@
 {#if note}<p class="note">{note}</p>{/if}
 {#if overflow.length}
   <div class="ruler-overflow">
-    <p>{overflowIntro}</p>
+    <p>{fmt(overflow.length)} {overflow.length === 1 ? 'palavra não coube' : 'palavras não couberam'} na régua sem cobrir as outras. Todas continuam clicáveis aqui:</p>
     {#each overflow as d (d.kind + ':' + d.term)}
       <button class="quiet-button" class:is-selected={isPicked(d)} data-term={d.term} data-kind={d.kind} aria-pressed={isPicked(d)} style:--cmp={d.cmp} onclick={() => onpick(d.term, d.kind)}>{d.text}</button>
     {/each}
   </div>
 {/if}
+{@render tail?.()}

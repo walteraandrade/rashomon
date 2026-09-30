@@ -6,7 +6,7 @@ import * as docsCard from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { compareParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
-import { SMALL_LIMITS } from '../../src/query.js'
+import { balanceColor } from '../../src/ui/format.js'
 import type { Compare as CompareData, CompareTerm } from '../../src/ui/format.js'
 
 const lula = { id: 'lula', name: 'Lula' }
@@ -276,11 +276,11 @@ describe('Compare (#293)', () => {
     })
   }
 
-  it('AC6: limit options equal SMALL_LIMITS in order, default 20, and a ?limit= seed selects it', async () => {
+  it('AC6: limit options are exactly 20/40/60/100 (as figures/compare.ts offered), default 20, and a ?limit= seed selects it', async () => {
     boot()
     await start()
     const options = [...select('compareLimit').options].map((o) => Number(o.value))
-    expect(options).toEqual(SMALL_LIMITS)
+    expect(options).toEqual([20, 40, 60, 100])
     expect(select('compareLimit').value).toBe('20')
     for (const i of instances) unmount(i)
     instances = []
@@ -514,6 +514,159 @@ describe('Compare (#293)', () => {
     select('compareDays').dispatchEvent(new Event('change', { bubbles: true }))
     flushSync()
     expect(first!.signal?.aborted).toBe(true)
+  })
+
+  it('review K1: peopleError hides the ruler and the retry keeps its id', async () => {
+    boot({ people: [], peopleError: new Error('down') })
+    await start()
+    expect($('compareRuler').hidden).toBe(true)
+    expect($('compareDetail').querySelector('#compareRetry')).not.toBeNull()
+  })
+  it('review K2: no people hides the ruler', async () => {
+    boot({ people: [] })
+    await start()
+    expect($('compareRuler').hidden).toBe(true)
+  })
+  it('review K3: ghost: axis, five ticks, sr-only prose, detail sides', async () => {
+    await start()
+    expect($('compareRuler').textContent).toContain('Lendo a régua.')
+    expect($('compareRuler').querySelectorAll('.ruler-axis')).toHaveLength(1)
+    expect($('compareRuler').querySelectorAll('.ruler-tick')).toHaveLength(5)
+    expect($('compareDetail').querySelector('.detail-sides')).not.toBeNull()
+  })
+  it('review K4: note says how many words the recorte carries', async () => {
+    handlers['/api/compare'] = () => payload([reforma, { term: 'pix', kind: 'word', a: null, b: side(2) }, { term: 'stf', kind: 'word', a: side(3), b: side(3) }])
+    boot()
+    await start()
+    expect($('compareRuler').querySelector('p.note')?.textContent).toMatch(/: 3 palavras neste recorte\.$/)
+  })
+  it('review K5: word label, title, hooks and text shape', async () => {
+    boot()
+    await start()
+    const w = words()[0]
+    expect(w.getAttribute('aria-label')).toBe('reforma, 5 documentos')
+    expect(w.querySelector('title')?.textContent).toBe('reforma · Palavra · 5 documentos')
+    expect(w.getAttribute('tabindex')).toBe('0')
+    expect(w.querySelector('.ruler-hit')).not.toBeNull()
+    expect(w.querySelector('.ruler-glow')).not.toBeNull()
+    expect(w.querySelector('text.ruler-text > tspan[x="0"][y="0"]')?.textContent).toBe('reforma')
+    expect(w.getAttribute('style')).toContain(`--cmp: ${balanceColor(-1)}`)
+    const svg = $('compareRuler').querySelector('svg')!
+    const half = Number(svg.getAttribute('height')) / 2
+    expect(w.getAttribute('transform')).toMatch(new RegExp(`,${half}\\)$`))
+  })
+  it('review K6: axis: RULER_PAD ends, five ticks 10px tall', async () => {
+    boot()
+    await start()
+    const axis = $('compareRuler').querySelector('.ruler-axis')!
+    expect(axis.getAttribute('x1')).toBe('28')
+    const ticks = [...$('compareRuler').querySelectorAll('.ruler-tick')]
+    expect(ticks).toHaveLength(5)
+    expect(Number(ticks[0].getAttribute('y2')) - Number(ticks[0].getAttribute('y1'))).toBe(10)
+  })
+  it('review K7: ends, axis prose and svg label name both people', async () => {
+    boot()
+    await start()
+    expect([...$('compareRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['Lula', 'Bolsonaro'])
+    expect([...$('compareRuler').querySelectorAll('.ruler-axis-labels span')].map((e) => e.textContent)).toEqual(['Só de Lula', 'dividida', 'Só de Bolsonaro'])
+    const svg = $('compareRuler').querySelector('svg')!
+    expect(svg.getAttribute('aria-label')).toBe('Régua comparando Lula e Bolsonaro')
+    expect(svg.getAttribute('role')).toBe('group')
+  })
+  it('review K8: overflow intro states the count in the plural; a picked button is is-selected', async () => {
+    const terms: CompareTerm[] = Array.from({ length: 70 }, (_, i) => ({ term: `palavralongademais${i}`, kind: 'word', a: side(3), b: side(2) }))
+    handlers['/api/compare'] = () => payload(terms)
+    boot()
+    await start()
+    const n = overflow().length
+    expect(n).toBeGreaterThan(1)
+    expect($('compareRuler').querySelector('.ruler-overflow p')?.textContent).toMatch(new RegExp(`^${n} palavras não couberam`))
+    click(overflow()[0])
+    await settle()
+    expect(overflow()[0].classList.contains('is-selected')).toBe(true)
+  })
+  it('review K9: the card names the word and both people, on the figure recorte', async () => {
+    boot({ search: '?source=gdelt&days=7' })
+    await start()
+    click(words()[0])
+    await settle()
+    expect($('docsTitle').textContent).toBe('reforma')
+    expect($('docsKicker').textContent).toBe('Documentos com palavra')
+    const docs = calls.filter((c) => c.path.endsWith('/docs'))
+    expect(docs).toHaveLength(2)
+    for (const c of docs) {
+      expect(c.params.get('source')).toBe('gdelt')
+      expect(c.params.get('days')).toBe('7')
+      expect(c.params.get('kind')).toBe('word')
+    }
+    expect(document.body.textContent).toContain('Lula')
+    expect([...document.querySelectorAll('#docsDialog h3, #docsDialog .docs-column-head, #docsDialog [class*=side]')].map((e) => e.textContent).join('|')).toMatch(/Lula[\s\S]*Bolsonaro/)
+  })
+  it('review K10: detail prints counts and the bridge line', async () => {
+    handlers['/api/compare'] = () => payload([{ term: 'stf', kind: 'word', a: side(7, 1.5), b: side(3, 0.5) }])
+    handlers['/api/compare/bridges'] = () => ({ bridges: { 'word:stf': 1 } })
+    boot()
+    await start()
+    click(words()[0])
+    await settle()
+    expect($('compareDetail').textContent).toContain('7 documentos · PMI 1,5')
+    expect($('compareDetail').querySelector('.detail-bridge')?.textContent).toBe('ponte: liga os dois vocabulários')
+  })
+  it('review K11: a recorte revisited from the memo does not ask for bridges again', async () => {
+    handlers['/api/compare'] = () => payload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
+    handlers['/api/compare/bridges'] = () => ({ bridges: { 'word:stf': 1 } })
+    boot()
+    await start()
+    await change('compareDays', '7')
+    await change('compareDays', '30')
+    expect(calls.filter((c) => c.path === '/api/compare/bridges')).toHaveLength(2)
+  })
+
+  it('unmounting aborts the in-flight bridge request', async () => {
+    let first: Call | undefined
+    handlers['/api/compare'] = () => payload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
+    handlers['/api/compare/bridges'] = (call) => {
+      first ??= call
+      return new Promise(() => {})
+    }
+    boot()
+    await start()
+    expect(first?.signal?.aborted).toBe(false)
+    for (const i of instances) unmount(i)
+    instances = []
+    flushSync()
+    expect(first!.signal?.aborted).toBe(true)
+  })
+
+  it('#compareStatus stays hidden while the ghost shows, even when A and B are the same person', async () => {
+    let release: (v: unknown) => void = () => {}
+    handlers['/api/compare'] = () => new Promise((resolve) => (release = resolve))
+    boot({ people: [lula] })
+    await start()
+    expect($('compareRuler').textContent).toContain('Lendo a régua.')
+    expect($('compareStatus').hidden).toBe(true)
+    release(payload([reforma], lula, lula))
+    await settle()
+    expect($('compareStatus').hidden).toBe(false)
+  })
+
+  it('a bridge result that lands after the recorte changed is not applied to the old payload', async () => {
+    let releaseFirst: (v: unknown) => void = () => {}
+    let n = 0
+    handlers['/api/compare'] = (call) => payload([{ term: 'stf', kind: 'word', a: side(5), b: side(call.params.get('days') === '7' ? 4 : 5) }])
+    handlers['/api/compare/bridges'] = () => {
+      n++
+      if (n === 1) return new Promise((resolve) => (releaseFirst = resolve))
+      return { bridges: {} }
+    }
+    boot()
+    await start()
+    await change('compareDays', '7')
+    releaseFirst({ bridges: { 'word:stf': 1 } })
+    await settle()
+    await change('compareDays', '30')
+    expect(calls.filter((c) => c.path === '/api/compare/bridges').length).toBeGreaterThanOrEqual(3)
+    expect($('compareRuler').querySelectorAll('.ruler-bridge')).toHaveLength(0)
   })
 
   it('AC11: a width change repaints without a fetch and keeps the pick and the card', async () => {

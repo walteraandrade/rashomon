@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { close, mountDocsCard } from '../src/ui/docs-card.js'
 import { mount as mountAtlas } from '../src/ui/figures/atlas.js'
-import { mount as mountCompare } from '../src/ui/figures/compare.js'
 import { mount as mountRising } from '../src/ui/figures/rising.js'
 import { clearScopes } from '../src/ui/state.js'
 import { persons } from './fixture.js'
@@ -18,17 +17,11 @@ const read = (name: string) => siteFile(name)
 // each request carries its own recorte and its own title.
 
 const people = persons.map(({ id, name }) => ({ id, name }))
-const [personA, personB] = people
+const [personA] = people
 
 const term = { id: 'word:reforma', term: 'reforma', kind: 'word', count: 12, pmi: 1.4, score: 1.4 }
 const graph = { person: personA, nodes: [term], links: [], stats: { about: 40, testimony: { method: 'kikori', score: null, n: 0 } } }
 const docs = { docs: [{ source: 'rss', domain: 'g1.globo.com', text: 'um texto', url: 'https://g1.globo.com/a' }], total: 3 }
-const compare = {
-  a: { person: personA, docs: 10 },
-  b: { person: personB, docs: 8 },
-  measure: 'count',
-  terms: [{ term: 'reforma', kind: 'word', a: { count: 6, pmi: 1.2, score: 6 }, b: { count: 2, pmi: 0.4, score: 2 } }],
-}
 const rising = {
   days: 7,
   baseline: 30,
@@ -109,48 +102,6 @@ describe('figure 1: picking a word opens its documents, with no button in betwee
       els.columns.querySelectorAll('[data-person-docs]')[0].fire('click')
       await flush()
       assert.equal(els.docsDialog.open, true)
-    })
-  })
-})
-
-describe('figure 3: a word on the ruler opens both people at once', () => {
-  it('two requests, one per person, same word and same recorte', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, { '/api/compare': compare, '/docs': docs })
-      mountDocsCard()
-      mountCompare(els.compare, { people, initial: { a: personA.id, b: personB.id } })
-      await flush()
-      assert.equal(docsCalls(calls).length, 0)
-
-      els.compareRuler.querySelectorAll('[data-term]')[0].fire('click')
-      await flush()
-      const both = docsCalls(calls)
-      assert.equal(both.length, 2, 'a word here belongs to neither person alone')
-      assert.ok(
-        both.some((u) => u.includes(`/people/${personA.id}/docs`)) && both.some((u) => u.includes(`/people/${personB.id}/docs`)),
-        'one side each',
-      )
-      for (const url of both) assert.match(url, /term=reforma/)
-      assert.equal(els.docsDialog.open, true)
-      assert.equal(els.docsTitle.textContent, 'reforma')
-    })
-  })
-
-  it('picking the same word again closes the card', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, { '/api/compare': compare, '/docs': docs })
-      mountDocsCard()
-      mountCompare(els.compare, { people, initial: { a: personA.id, b: personB.id } })
-      await flush()
-      const mark = () => els.compareRuler.querySelectorAll('[data-term]')[0]
-      mark().fire('click')
-      await flush()
-      assert.equal(els.docsDialog.open, true)
-      mark().fire('click')
-      await flush()
-      assert.equal(els.docsDialog.open, false)
     })
   })
 })

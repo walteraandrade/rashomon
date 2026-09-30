@@ -5,6 +5,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import Agenda from '$lib/Agenda.svelte'
+  import Compare from '$lib/Compare.svelte'
   import Comention from '$lib/Comention.svelte'
   import Attention from '$lib/Attention.svelte'
   import DocsCard from '$lib/DocsCard.svelte'
@@ -71,24 +72,7 @@
 
   <Testimony />
 
-  <section class="figure compare" id="compare" aria-labelledby="compareTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 3</span><h2 id="compareTitle">Régua entre duas pessoas</h2></div>
-      <p class="figure-sub">A palavra escrita na régua nunca é de uma pessoa só. <a href="/como-ler#comparar">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt>Posição</dt><dd>de quem a palavra é mais</dd></div>
-        <div><dt>Tamanho</dt><dd>documentos dos dois, somados</dd></div>
-        <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>de que lado ela pende</dd></div>
-        <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>liga os dois vocabulários</dd></div>
-        <div><dt>Clique</dt><dd>textos das duas pessoas, neste gráfico</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A"></select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B"></select></span> nos <span class="keep"><span class="pick"><select id="compareDays" aria-label="Período"><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="compareSource" aria-label="Fonte"></select></span>,</span> por <span class="keep"><span class="pick"><select id="compareMeasure" aria-label="Medida"></select></span>.</span> Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras"></select></span> palavras por pessoa.</p></div>
-    </header>
-    <p class="status" id="compareStatus" role="status" hidden>Os dois lados mostram a mesma pessoa.</p>
-    <figure class="ruler" id="compareRuler" aria-label="Régua comparando as duas pessoas" hidden></figure>
-    <div class="detail" id="compareDetail"><span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span></div>
-    <p class="note" id="compareHiddenNote" hidden></p>
-  </section>
+  <Compare />
 
   <section class="figure rising" id="rising" aria-labelledby="risingTitle">
     <header class="figure-head">

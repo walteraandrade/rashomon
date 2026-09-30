@@ -11,8 +11,6 @@ import {
   paintAtlasLoading,
   paintCandidates,
   paintColumns,
-  paintCompareDetail,
-  paintCompareLoading,
   paintDocs,
   paintDocsHead,
   paintDocsLoading,
@@ -23,7 +21,6 @@ import {
   paintRisingLoading,
   paintRisingRuler,
   paintRisingRulerError,
-  paintRuler,
   paintSelection,
   paintTermStrip,
   RARE_SHOWN,
@@ -41,7 +38,7 @@ import {
   wordMarkup,
 } from '../src/ui/render.js'
 import * as renderModule from '../src/ui/render.js'
-import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type CompareTerm, type Lenses, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -53,9 +50,6 @@ import { withFiguresDom } from './fake-mount-dom.js'
 // browser, a deterministic stand-in here.
 const metrics = (text: string, size: number) => text.length * size * 0.6
 
-const lula = { id: 'lula', name: 'Lula' }
-const bolsonaro = { id: 'bolsonaro', name: 'Jair Bolsonaro' }
-const compareData = (terms: CompareTerm[]): Compare => ({ days: 60, a: { person: lula, about: 900 }, b: { person: bolsonaro, about: 700 }, terms })
 const lensesData = (terms: CompareTerm[], a = 'all', b = 'lean:right'): Lenses => ({ days: 30, a: { lens: a, about: 900 }, b: { lens: b, about: 700 }, terms })
 const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
 
@@ -791,86 +785,6 @@ describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)',
   })
 })
 
-const corpus = (): CompareTerm[] => {
-  const terms: CompareTerm[] = []
-  for (let i = 0; i < 22; i++) terms.push({ term: `esquerda${i}`, kind: 'word', a: side(20 + i, 1.4), b: null })
-  for (let i = 0; i < 18; i++) terms.push({ term: `direita${i}`, kind: 'word', a: null, b: side(15 + i, 1.2) })
-  for (let i = 0; i < 24; i++) terms.push({ term: `partilhada${i}`, kind: 'word', a: side(10 + i * 3, 1.1), b: side(60 - i * 2, 0.9) })
-  return terms
-}
-
-describe('paintRuler: the word itself is the mark (issue #99)', () => {
-  it('paintRuler emits no <circle> and one <text> carrying the term for every drawn word', async () => {
-    await withFiguresDom(async (els) => {
-      const terms: CompareTerm[] = [
-        { term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) },
-        { term: 'rachadinha', kind: 'word', a: null, b: side(30, 2.1) },
-        { term: 'bolsa', kind: 'hashtag', a: side(40, 1.2), b: null },
-      ]
-      const { shown, overflowCount } = paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      const html = els.compareRuler.innerHTML
-      assert.equal(shown, 3)
-      assert.equal(overflowCount, 0)
-      assert.doesNotMatch(html, /<circle/, 'no dot survives: the mark is the word')
-      assert.equal([...html.matchAll(/<text class="ruler-text"/g)].length, 3)
-      for (const word of ['alckmin', 'rachadinha', '#bolsa']) assert.ok(html.includes(`>${word}</tspan>`), `${word} must be written on the ruler`)
-    })
-  })
-
-  it('every drawn word keeps the data-term/data-kind pair the click handler reads', async () => {
-    await withFiguresDom(async (els) => {
-      const terms: CompareTerm[] = [{ term: 'bolsa', kind: 'hashtag', a: side(40, 1.2), b: side(4, 0.2) }]
-      paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.match(els.compareRuler.innerHTML, /data-term="bolsa" data-kind="hashtag"/)
-    })
-  })
-
-  // Enough words at one balance to exhaust the height cap whatever the packer does.
-  const crowded = (): CompareTerm[] => Array.from({ length: 120 }, (_, i) => ({ term: `exclusivadolula${i}`, kind: 'word', a: side(50, 1), b: null }))
-
-  it('paintRuler writes the count and one button per listed word, with the same data attributes', async () => {
-    await withFiguresDom(async (els) => {
-      const { overflowCount, shown } = paintRuler({ data: compareData(crowded()), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      const html = els.compareRuler.innerHTML
-      assert.ok(overflowCount > 0)
-      assert.match(html, new RegExp(`${overflowCount} palavras não couberam`))
-      assert.equal([...html.matchAll(/<button class="quiet-button[^"]*" data-term=/g)].length, overflowCount)
-      assert.equal(shown + overflowCount, 120)
-    })
-  })
-
-  it('clicking a listed word picks it exactly like clicking a drawn one', async () => {
-    await withFiguresDom(async (els) => {
-      const picked: string[] = []
-      paintRuler({ data: compareData(crowded()), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: (term) => picked.push(term) })
-      const buttons = [...els.compareRuler.innerHTML.matchAll(/<button class="quiet-button[^"]*" data-term="([^"]+)"/g)].map((m) => m[1])
-      assert.ok(buttons.length > 0)
-      // The harness wires every [data-term] the painter emitted; firing the last one is enough
-      // to prove the listed words go through the same onPick as the drawn ones.
-      const stubs = els.compareRuler.querySelectorAll('[data-term]') as unknown as { dataset: { term: string }; fire: (t: string) => void }[]
-      const stub = [...stubs].find((s) => s.dataset.term === buttons[0])!
-      stub.fire('click')
-      assert.deepEqual(picked, [buttons[0]])
-    })
-  })
-
-  it('says how many words the recorte actually carries, since each person contributes two lists', async () => {
-    await withFiguresDom(async (els) => {
-      const terms = corpus()
-      paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.match(els.compareRuler.innerHTML, new RegExp(`${terms.length} palavras neste recorte`))
-    })
-  })
-
-  it('the side colour still travels as the --cmp custom property, the one inline style allowed', async () => {
-    await withFiguresDom(async (els) => {
-      const terms: CompareTerm[] = [{ term: 'urgentes', kind: 'word', a: side(20, 1.1), b: null }]
-      paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.match(els.compareRuler.innerHTML, /style="--size:\d+px;--cmp:rgb\(\d+,\d+,\d+\)"/)
-    })
-  })
-})
-
 describe('rulerTerms: balance is -1/+1 for a one-sided term and 0 for an identical-both-sides term (issue #91 AC5)', () => {
   it('an a-only term is -1, a b-only term is +1, an identical-both-sides term is 0, under count', () => {
     const terms = [
@@ -932,28 +846,9 @@ describe('rulerTerms copies bridge, and the ruler-bridge mark (issue #219 AC7)',
     assert.equal(items.find((i) => i.term === 'ponte')?.bridge, 0.9)
     assert.equal(items.find((i) => i.term === 'sembridge')?.bridge, undefined)
   })
-
-  it('a term at or above the bridge threshold paints with class="ruler-bridge"; a term below it does not', () => {
-    const terms = [
-      { term: 'ponteforte', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.6 },
-      { term: 'pontefraca', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.1 },
-    ] as (CompareTerm & { bridge: number })[]
-    withFakeDocument(['compareRuler'], (els) => {
-      paintRuler({ data: compareData(terms as CompareTerm[]), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      const html = els.compareRuler.innerHTML
-      const tagFor = (term: string) => {
-        const idx = html.indexOf(`data-term="${term}"`)
-        const start = html.lastIndexOf('<g', idx)
-        const end = html.indexOf('>', idx)
-        return html.slice(start, end + 1)
-      }
-      assert.match(tagFor('ponteforte'), /ruler-bridge/, 'a term with bridge >= 0.5 must carry the ruler-bridge mark')
-      assert.doesNotMatch(tagFor('pontefraca'), /ruler-bridge/, 'a term below the bridge threshold must not carry the mark')
-    })
-  })
 })
 
-describe('rulerTerms / paintRuler: a term where either side is the string "name" is absent from the rendered set (issue #91 AC7)', () => {
+describe('rulerTerms: a term where either side is the string "name" is absent from the rendered set (issue #91 AC7)', () => {
   it('rulerTerms drops it and counts it as hidden, for either side', () => {
     const terms: CompareTerm[] = [
       { term: 'lula', kind: 'word', a: 'name', b: { count: 3, pmi: 1, tone: null } },
@@ -963,22 +858,6 @@ describe('rulerTerms / paintRuler: a term where either side is the string "name"
     const { items, hiddenCount } = rulerTerms(terms, 'count')
     assert.deepEqual(items.map((t) => t.term), ['reforma'])
     assert.equal(hiddenCount, 2, 'a name on the b side hides the term just as one on the a side does')
-  })
-
-  it('paintRuler produces no dot for the name term and reports the same hiddenCount', () => {
-    withFakeDocument(['compareRuler'], (els) => {
-      const terms: CompareTerm[] = [
-        { term: 'lula', kind: 'word', a: 'name', b: { count: 3, pmi: 1, tone: null } },
-        { term: 'bolsonaro', kind: 'word', a: { count: 4, pmi: 1, tone: null }, b: 'name' },
-        { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
-      ]
-      const data = compareData(terms)
-      const { hiddenCount } = paintRuler({ data, personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.equal(hiddenCount, 2)
-      assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="lula"/)
-      assert.doesNotMatch(els.compareRuler.innerHTML, /data-term="bolsonaro"/)
-      assert.match(els.compareRuler.innerHTML, /data-term="reforma"/)
-    })
   })
 })
 
@@ -993,7 +872,7 @@ describe('paintLensRuler (figure 6, issue #206): empty-state markup and own-name
     })
   })
 
-  it('drops a term that is "name" on either side and reports it in hiddenCount, same as paintRuler', () => {
+  it('drops a term that is "name" on either side and reports it in hiddenCount', () => {
     withFakeDocument(['lensesRuler'], (els) => {
       const terms: CompareTerm[] = [
         { term: 'lula', kind: 'word', a: 'name', b: 'name' },
@@ -1157,26 +1036,6 @@ describe('rulerTerms: the amended balance formula clamps each side at zero befor
   })
 })
 
-describe('paintRuler / paintCompareDetail never reference #docsDialog (issue #91 AC12)', () => {
-  it('a rendered dot carries no data-docs-open-style attribute and no reference to the dialog', () => {
-    withFakeDocument(['compareRuler'], (els) => {
-      const data = compareData([{ term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }])
-      paintRuler({ data, personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.doesNotMatch(els.compareRuler.innerHTML, /data-docs-open/)
-      assert.doesNotMatch(els.compareRuler.innerHTML, /docsDialog/)
-    })
-  })
-
-  it('paintCompareDetail never emits a link or button referencing the dialog', () => {
-    withFakeDocument(['compareDetail'], (els) => {
-      paintCompareDetail({ term: { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null }, personA: lula, personB: bolsonaro })
-      assert.doesNotMatch(els.compareDetail.innerHTML, /docsDialog/)
-      assert.doesNotMatch(els.compareDetail.innerHTML, /<a\b/)
-      assert.doesNotMatch(els.compareDetail.innerHTML, /<button\b/)
-    })
-  })
-})
-
 describe('paintCandidates (issue #32 AC7)', () => {
   it('renders name, docs, sources, trend and the sample docs on click, in pt-BR', () => {
     const markup = withFakeDocument(['candidateLabel', 'candidateList'], (els) => {
@@ -1217,18 +1076,12 @@ describe('loading ghosts hold each figure\'s silhouette, with no invented words'
     })
   })
 
-  it('paintCompareLoading and paintDocsLoading keep geometry and stay mute', () => {
-    withFakeDocument(['compareRuler', 'compareDetail', 'docs'], (els) => {
-      els.compareRuler.hidden = true
-      paintCompareLoading()
+  it('paintDocsLoading keeps geometry and stays mute', () => {
+    withFakeDocument(['docs'], (els) => {
       paintDocsLoading()
-      assert.equal(els.compareRuler.hidden, false)
-      assert.match(els.compareRuler.innerHTML, /ruler-axis/)
-      assert.match(els.compareRuler.innerHTML, /Lendo a régua/)
-      assert.match(els.compareDetail.innerHTML, /detail-sides/)
       assert.match(els.docs.innerHTML, /Lendo os documentos/)
       assert.equal(els.docs.getAttribute('aria-busy'), 'true')
-      assert.doesNotMatch(els.compareRuler.innerHTML + els.docs.innerHTML, /Carregando/)
+      assert.doesNotMatch(els.docs.innerHTML, /Carregando/)
     })
   })
 })
@@ -1420,19 +1273,6 @@ describe('paintRisingRuler / paintRisingRulerError / paintRisingLoading', () => 
   })
 })
 
-describe('paintRuler (compare, figure 3) keeps its own exported shape after the shared paintRulerBody extraction', () => {
-  it('still returns hiddenCount/shown/overflowCount and paints #compareRuler exactly as before', () => {
-    withFakeDocument(['compareRuler'], (els) => {
-      const terms: CompareTerm[] = [{ term: 'reforma', kind: 'word', a: side(5, 1), b: null }]
-      const result = paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.deepEqual(Object.keys(result).sort(), ['hiddenCount', 'overflowCount', 'shown'].sort())
-      assert.match(els.compareRuler.innerHTML, /Só de Lula/)
-      assert.match(els.compareRuler.innerHTML, /Só de Jair Bolsonaro/)
-      assert.doesNotMatch(els.compareRuler.innerHTML, /antes \(30 dias\)|agora \(7 dias\)/, 'compare keeps its own end labels, not the rising ruler\'s')
-    })
-  })
-})
-
 describe('paintTermStrip keeps its exported shape after the marks.ts extraction', () => {
   it('render.ts still exports paintTermStrip and termStripLayout as functions, and no week painter', () => {
     assert.equal(typeof paintTermStrip, 'function')
@@ -1485,11 +1325,6 @@ describe('one class scheme, one rx source, one text shape for the three word mar
   it('no glow or hit rect emitted by any of the three builders carries an rx attribute', async () => {
     const atlasHtml = String(wordMarkup(placedSample, 'count', null))
     assert.doesNotMatch(atlasHtml, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
-    await withFiguresDom(async (els) => {
-      const terms: CompareTerm[] = [{ term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) }]
-      paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.doesNotMatch(els.compareRuler.innerHTML, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
-    })
   })
 
   it('atlas.css sets rx on the six rules, at the same values the markup used to carry', () => {
@@ -1499,14 +1334,6 @@ describe('one class scheme, one rx source, one text shape for the three word mar
     assert.equal(rxOf('.ruler-hit'), 5)
     assert.equal(rxOf('.week-glow'), 8)
     assert.equal(rxOf('.week-hit'), 5)
-  })
-
-  it('the ruler wraps its word text in a single <tspan x="0" y="0">, like the atlas and the week', async () => {
-    await withFiguresDom(async (els) => {
-      const terms: CompareTerm[] = [{ term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) }]
-      paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
-      assert.match(els.compareRuler.innerHTML, /<text class="ruler-text"[^>]*><tspan x="0" y="0">alckmin<\/tspan><\/text>/)
-    })
   })
 
   it('marks.ts still exports only frame, axis and overflowList — no wordMark', async () => {

@@ -19,8 +19,8 @@ import {
   themeMask,
   testimonyPosition,
   trendOf,
+  isBridge,
   type Candidate,
-  type Compare,
   type CompareSide,
   type CompareTerm,
   type Doc,
@@ -30,7 +30,6 @@ import {
   type Link,
   type MaskState,
   type Measure,
-  type PersonRef,
   type PersonTestimony,
   type PlacedTerm,
   type Rising,
@@ -599,10 +598,6 @@ const docsOf = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count 
 
 export type RulerTerm = CompareTerm & { balance: number; combined: number }
 
-export const BRIDGE_THRESHOLD = 0.5
-
-const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_THRESHOLD
-
 // Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1) and
 // combined (docs summed, measure-independent). hiddenCount feeds #compareHiddenNote.
 export const rulerTerms = (terms: CompareTerm[], measure: string): { items: RulerTerm[]; hiddenCount: number } => {
@@ -658,7 +653,7 @@ const rulerOverflowMarkup = (
 // (`rulerLayout`) and the per-word markup are the same for both. `note` is figure-specific prose
 // between the axis and the overflow list; `tail` comes after that list. Rising says its own
 // numbers in `#risingAbout` and uses `tail` for its rare risers.
-const paintRulerBody = ({
+export const paintRulerBody = ({
   elementId,
   items,
   metrics,
@@ -705,64 +700,6 @@ const paintRulerBody = ({
       })
   }
   return { shown: words.length, overflowCount: overflow.length }
-}
-
-// One word per term written where it leans. `metrics` is the injected text measurer;
-// `measure` (documentos or PMI) only repositions words. Returns counts for the caller's notes.
-export const paintRuler = ({
-  data,
-  personA,
-  personB,
-  measure,
-  metrics,
-  selected,
-  onPick,
-  width = 860,
-}: {
-  data: Compare
-  personA: PersonRef
-  personB: PersonRef
-  measure: string
-  metrics: Measure
-  selected: { term: string; kind: string } | null
-  onPick: (term: string, kind: string) => void
-  width?: number
-}) => {
-  const ruler = $('compareRuler')
-  const { items, hiddenCount } = rulerTerms(data.terms, measure)
-  if (!items.length) {
-    ruler.hidden = false
-    ruler.classList.remove('is-loading')
-    ruler.setAttribute('aria-busy', 'false')
-    ruler.innerHTML = '<p class="note">Nenhuma palavra neste recorte.</p>'
-    return { hiddenCount, shown: 0, overflowCount: 0 }
-  }
-  ruler.hidden = false
-  ruler.classList.remove('is-loading')
-  ruler.setAttribute('aria-busy', 'false')
-  const note = html`<p class="note">Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.</p>`
-  const { shown, overflowCount } = paintRulerBody({
-    elementId: 'compareRuler',
-    items,
-    metrics,
-    selected,
-    onPick,
-    width,
-    endA: personA.name,
-    endB: personB.name,
-    axisLabels: [`Só de ${personA.name}`, 'dividida', `Só de ${personB.name}`],
-    ariaLabel: `Régua comparando ${personA.name} e ${personB.name}`,
-    note,
-  })
-  return { hiddenCount, shown, overflowCount }
-}
-
-export const paintRulerError = () => {
-  const ruler = $('compareRuler')
-  ruler.hidden = false
-  ruler.classList.remove('is-loading')
-  ruler.setAttribute('aria-busy', 'false')
-  ruler.innerHTML = '<p class="note">Não foi possível carregar a comparação.</p>'
 }
 
 export type RisingShares = RisingAbout & { words_recent: number; words_baseline: number }
@@ -963,28 +900,6 @@ const RULER_GHOST_WORDS: [number, number, number, number][] = [
   [740, 8, 80, 18],
 ]
 
-export const paintCompareLoading = () => {
-  const ruler = $('compareRuler')
-  if (ruler) {
-    ruler.hidden = false
-    ruler.classList.remove('is-loading')
-    ruler.setAttribute('aria-busy', 'true')
-    const width = 860
-    const height = 88
-    const half = 44
-    const pad = 28
-    ruler.innerHTML = html`<div class="ghost-field" aria-hidden="true"><div class="ruler-end-row">${ghostBar('ghost-name')}${ghostBar('ghost-name')}</div>${frame(
-      { cls: 'ruler-svg', width, height, viewBox: `0 0 ${width} ${height}` },
-      html`${axis({ x0: pad, x1: width - pad, y: half, ticks: [-1, -0.5, 0, 0.5, 1].map((b) => pad + ((b + 1) / 2) * (width - 2 * pad)), cls: 'ruler' })}${RULER_GHOST_WORDS.map(
-        ([x, y, w, h]) => html`<rect class="ghost" x="${x - w / 2}" y="${half + y - h / 2}" width="${w}" height="${h}" rx="5"/>`,
-      )}`,
-    )}</div><p class="sr-only">Lendo a régua.</p>`
-  }
-  const detail = $('compareDetail')
-  if (!detail) return
-  detail.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostBar('ghost-title')}<dl class="detail-sides"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div></dl></div>`
-}
-
 export const paintRisingLoading = () => {
   const ruler = $('risingRuler')
   if (!ruler) return
@@ -1025,19 +940,5 @@ export const paintLensesLoading = () => {
   const detail = $('lensesDetail')
   if (!detail) return
   detail.innerHTML = html`<div class="ghost-field" aria-hidden="true">${ghostBar('ghost-title')}<dl class="detail-sides"><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div><div><dt>${ghostBar('ghost-kicker')}</dt><dd>${ghostBar('ghost-line is-short')}</dd></div></dl></div>`
-}
-
-export const paintCompareDetail = ({ term, personA, personB }: { term: CompareTerm | null; personA: PersonRef; personB: PersonRef }) => {
-  const el = $('compareDetail')
-  if (!el) return
-  if (!term) {
-    el.innerHTML = '<span class="empty-hint">Clique numa palavra para ver os números dos dois lados.</span>'
-    return
-  }
-  const sideHtml = (person: PersonRef, v: CompareSide | 'name' | null) =>
-    v && v !== 'name'
-      ? html`<div><dt>${person.name}</dt><dd><b>${fmt(v.count)}</b> documentos · PMI <b>${fmt(v.pmi)}</b></dd></div>`
-      : html`<div><dt>${person.name}</dt><dd class="empty-hint">nenhum documento</dd></div>`
-  el.innerHTML = html`<span class="term">${label(term)}</span><dl class="detail-sides">${sideHtml(personA, term.a)}${sideHtml(personB, term.b)}</dl>${isBridge(term) ? html`<p class="detail-bridge">ponte: liga os dois vocabulários</p>` : ''}`
 }
 

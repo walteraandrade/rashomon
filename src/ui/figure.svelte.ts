@@ -123,6 +123,8 @@ export const createFigure = <T>(opts: FigureOptions<T>) => {
       ++requestId
       controller?.abort()
       controller = null
+      // The aborted load() returns early, so nothing else would clear a loading it started.
+      loading = false
     }
   })
 

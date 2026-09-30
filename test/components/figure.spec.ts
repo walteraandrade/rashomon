@@ -52,6 +52,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+let swap: () => void = () => {}
 const setup = (over: Record<string, unknown> = {}, bound = false) => {
   const calls = { ghost: 0, paint: [] as unknown[], paintError: 0, release: 0, fetches: [] as Deferred[] }
   let current = 'a=1'
@@ -72,7 +73,7 @@ const setup = (over: Record<string, unknown> = {}, bound = false) => {
     ...over,
   }
   let handle: any
-  instance = mount(FigureProbe, { target, props: { opts, bound, onHandle: (f: any) => (handle = f) } })
+  instance = mount(FigureProbe, { target, props: { opts, bound, onSwap: (f: () => void) => (swap = f), onHandle: (f: any) => (handle = f) } })
   flushSync()
   return { calls, handle: handle as any, opts, set: (q: string) => (current = q) }
 }
@@ -80,6 +81,18 @@ const setup = (over: Record<string, unknown> = {}, bound = false) => {
 const text = (id: string) => target.querySelector(`#${id}`)?.textContent
 
 describe('createFigure', () => {
+  it('an element swap mid-request aborts the load and leaves loading false', async () => {
+    const { calls, handle } = setup({}, true)
+    void handle.load()
+    flushSync()
+    expect(handle.loading).toBe(true)
+    swap()
+    flushSync()
+    expect(calls.fetches[0].signal.aborted).toBe(true)
+    expect(handle.loading).toBe(false)
+    expect(text('probe-loading')).toBe('false')
+  })
+
   it('wires a bind:this element handed over as a getter', async () => {
     const { calls, handle } = setup({}, true)
     const chart = target.querySelector('#probe-chart') as HTMLElement

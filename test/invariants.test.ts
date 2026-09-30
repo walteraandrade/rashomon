@@ -197,13 +197,13 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'boot.svelte.ts': [],
       // The shared runtime behind four of the five mount() calls (issue #193): abort/stale/
       // scope/ghost/background-click/Escape/resize, generalized out of compare.ts/rising.ts/
-      // week.ts/testimony.ts. It builds no markup and never fetches on its own, so it imports
+      // testimony.ts. It builds no markup and never fetches on its own, so it imports
       // neither format.js nor render.js; docs-card.js is what lets release() close only the
       // card its own name opened.
       'figure.ts': ['./docs-card.js', './perf.js', './state.js'],
       'figure.svelte.ts': ['./docs-card.svelte.js', './perf.js', './state.js'],
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
-      // testimony.ts, compare.ts, rising.ts and week.ts adopt figure.ts and drop their own
+      // testimony.ts, compare.ts and rising.ts adopt figure.ts and drop their own
       // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
       // the shared runtime.
       'figures/testimony.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],

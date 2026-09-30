@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte'
   import * as api from './api.js'
   import { bootData } from './boot.svelte.js'
-  import { open } from './docs-card.svelte.js'
+  import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
   import { fmt, kinds, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
   import { WEEK_COLUMN_WIDTH, weekLayout } from './layout.js'
@@ -49,7 +49,7 @@
     const found = people.find((p) => p.id === person)
     const bucket = figure.data?.buckets.find((b) => weekDayIso(b.start) === word.day)
     const day = bucket ? weekDayLabel(bucket.start) : word.day
-    void open({
+    void docsCard.open({
       owner: 'week',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'} · ${day}`,
       title: word.term,
@@ -73,19 +73,24 @@
     showDocs(selected)
   }
 
+  const dropStalePick = () => {
+    if (docsCard.openedBy('week')) docsCard.close()
+    selected = null
+  }
+
   const figure = createFigure<Week>({
     name: 'week',
     params,
     fetch: (qp, signal) => api.loadWeek(qp.get('person')!, api.weekParams({ source: qp.get('source')!, limit: qp.get('limit')! }), signal),
     ghost: () => {},
     paint: (result) => {
-      if (result !== lastData) selected = null
+      if (result !== lastData) dropStalePick()
       lastData = result
       tick++
     },
     paintError: () => {
       lastData = undefined
-      selected = null
+      dropStalePick()
     },
     detail: (_data, qp) => ({ person: qp.get('person') }),
     el: () => chartEl,

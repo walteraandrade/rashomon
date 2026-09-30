@@ -50,6 +50,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
+import * as renderModule from '../src/ui/render.js'
 import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'

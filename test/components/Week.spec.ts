@@ -324,6 +324,62 @@ describe('Week.svelte (#291)', () => {
     expect(word().getAttribute('aria-pressed')).toBe('false')
   })
 
+  it('a click on .figure-sub or a select change keeps the card and the pick only until the data changes (chart-scoped release)', async () => {
+    boot()
+    await mountWeek()
+    click(word())
+    await settle()
+    click($('#week .figure-sub'))
+    await settle()
+    expect(word().getAttribute('aria-pressed')).toBe('true')
+    expect(openedBy('week')).toBe(true)
+  })
+
+  it('a pick made while a control change is still fetching is dropped, with its card, when new data lands', async () => {
+    boot()
+    await mountWeek()
+    hold = true
+    weekBody = () => week([{ term: 'reforma', kind: 'word', count: 9 }])
+    select('#weekLimit', '12')
+    await settle(200)
+    click(word())
+    await settle()
+    expect(word().getAttribute('aria-pressed')).toBe('true')
+    expect(openedBy('week')).toBe(true)
+    hold = false
+    pending.splice(0).forEach((f) => f())
+    await settle()
+    expect(word().getAttribute('aria-pressed')).toBe('false')
+    expect(openedBy('week')).toBe(false)
+  })
+
+  it('a pick made while a control change is still fetching is dropped, with its card, when that fetch fails', async () => {
+    boot()
+    await mountWeek()
+    hold = true
+    select('#weekLimit', '12')
+    await settle(200)
+    click(word())
+    await settle()
+    expect(openedBy('week')).toBe(true)
+    failWeek = true
+    hold = false
+    pending.splice(0).forEach((f) => f())
+    await settle()
+    expect(openedBy('week')).toBe(false)
+    expect(isOpen()).toBe(false)
+  })
+
+  it('a failed fetch leaves a card another figure opened alone', async () => {
+    boot()
+    await mountWeek()
+    open({ owner: 'atlas', kicker: 'k', title: 't', sides: [{ personId: 'lula', personName: 'Lula', query: new URLSearchParams() }] })
+    failWeek = true
+    select('#weekLimit', '12')
+    await settle(200)
+    expect(openedBy('atlas')).toBe(true)
+  })
+
   it('AC11: a week without terms shows the seven about numbers and the note', async () => {
     weekBody = () => ({ days: 7, tz: 'America/Sao_Paulo', buckets: Array.from({ length: 7 }, (_, i) => bucketAt(i)) })
     boot()
@@ -365,6 +421,7 @@ describe('Week.svelte (#291)', () => {
   it('AC14: before bootData.ready the ghost shows and nothing is fetched; after ready it loads', async () => {
     await mountWeek()
     expect($('#weekChart .ghost-field')).not.toBeNull()
+    expect($('#weekChart').getAttribute('aria-busy')).toBe('true')
     expect($('#weekNote').textContent).toBe('')
     expect(calls).toHaveLength(0)
     boot()
@@ -411,6 +468,64 @@ describe('Week.svelte (#291)', () => {
     await settle()
     expect(openedBy('week')).toBe(true)
     expect(qs(docsCalls()[0]).get('day')).toBe('2026-09-03')
+  })
+
+  it('one overflowing word is named in the singular; several in the plural, with no "nesta coluna" prose', async () => {
+    colWidth = 84
+    weekBody = () => week([{ term: 'pronunciamento', kind: 'word', count: 55 }])
+    boot()
+    await mountWeek()
+    expect($('#weekChart .week-overflow .eyebrow').textContent).toBe('Não coube')
+    expect($('#weekChart .week-overflow').textContent).not.toMatch(/nesta coluna|clicáveis/)
+    weekBody = () => week([{ term: 'pronunciamento', kind: 'word', count: 55 }, { term: 'constitucionalidade', kind: 'word', count: 40 }])
+    select('#weekLimit', '12')
+    await settle(200)
+    expect($('#weekChart .week-overflow .eyebrow').textContent).toBe('Não couberam')
+    expect($('#weekChart .week-overflow').textContent).not.toMatch(/nesta coluna|clicáveis/)
+  })
+
+  it('a wrapped phrase is one mark with one tspan per line, still one data-term, drawn not listed', async () => {
+    colWidth = 145
+    weekBody = () => week([{ term: 'supremo tribunal federal', kind: 'phrase', count: 55 }])
+    boot()
+    await mountWeek()
+    const marks = all('#weekChart [data-term="supremo tribunal federal"]')
+    expect(marks).toHaveLength(1)
+    expect(marks[0].querySelectorAll('.week-text tspan').length).toBeGreaterThan(1)
+    expect($('#weekChart .week-overflow')).toBeNull()
+  })
+
+  it('a bucket with no terms paints only its about number: no svg, no paragraph', async () => {
+    weekBody = () => ({ days: 7, tz: 'America/Sao_Paulo', buckets: [bucketAt(0, { about: 4 })] })
+    boot()
+    await mountWeek()
+    const day = $('#weekChart .week-day')
+    expect(day.querySelector('dd')!.textContent).toBe('4')
+    expect(day.querySelector('.week-svg')).toBeNull()
+    expect(day.querySelector('p')).toBeNull()
+  })
+
+  it('every style attribute a mark emits is a --var override, never a hardcoded declaration', async () => {
+    boot()
+    await mountWeek()
+    const styles = all('#weekChart [style]').map((e) => e.getAttribute('style')!)
+    expect(styles.length).toBeGreaterThan(0)
+    for (const value of styles) expect(value.trim().startsWith('--')).toBe(true)
+  })
+
+  it('every ghost mark sits inside its svg and the ghost never says Carregando', async () => {
+    await mountWeek()
+    const svg = $('#weekChart .week-svg')
+    const height = Number(svg.getAttribute('height'))
+    const rects = [...svg.querySelectorAll('rect.ghost')]
+    expect(rects.length).toBeGreaterThanOrEqual(3)
+    for (const r of rects) {
+      const y = Number(r.getAttribute('y'))
+      expect(y).toBeGreaterThanOrEqual(0)
+      expect(y + Number(r.getAttribute('height'))).toBeLessThanOrEqual(height)
+    }
+    expect($('#weekChart').textContent).not.toMatch(/Carregando/)
+    expect(all('#weekChart .week-day')).toHaveLength(7)
   })
 
   it('AC16: the mounted section keeps every hook of the prerendered week section', async () => {

@@ -9,6 +9,7 @@
   import DocsCard from '$lib/DocsCard.svelte'
   import Persistence from '$lib/Persistence.svelte'
   import HelpDialog from '$lib/HelpDialog.svelte'
+  import Week from '$lib/Week.svelte'
 
   onMount(async () => {
     const { boot } = await import('$lib/app.js')
@@ -118,20 +119,7 @@
     <p class="note" id="risingAbout"></p>
   </section>
 
-  <section class="figure week" id="week" aria-labelledby="weekTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 5</span><h2 id="weekTitle">A semana</h2></div>
-      <p class="figure-sub">Quais palavras ocuparam cada dia dos últimos sete. <a href="/como-ler#semana">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>documentos naquele dia</dd></div>
-        <div><dt>Posição</dt><dd>só o dia; a altura na coluna não mede nada</dd></div>
-        <div><dt>Clique</dt><dd>os textos daquele dia</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">Na semana de <span class="keep"><span class="pick"><select id="weekPerson" aria-label="Pessoa (semana)"></select></span>,</span> em <span class="keep"><span class="pick"><select id="weekSource" aria-label="Fonte (semana)"></select></span>,</span> as palavras que mais ocuparam cada dia. Mostrar <span class="pick"><select id="weekLimit" aria-label="Quantidade de palavras por dia"><option>5</option><option selected>8</option><option>12</option></select></span> palavras por dia.</p></div>
-    </header>
-    <figure class="week-chart" id="weekChart" aria-label="Palavras da semana, uma coluna por dia" hidden></figure>
-    <p class="note" id="weekNote"></p>
-  </section>
+  <Week />
 
   <section class="figure lenses" id="lenses" aria-labelledby="lensesTitle">
     <header class="figure-head">

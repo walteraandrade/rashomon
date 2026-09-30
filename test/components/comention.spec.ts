@@ -209,6 +209,16 @@ describe('Comention', () => {
     expect(new URL(urls[0], 'http://localhost').searchParams.get('with')).toBe('dino')
   })
 
+  it('a pick reads as selected in both the grid cell and the list item, whatever the id order', async () => {
+    await start(payload(inverted, [{ a: 'bolsonaro', b: 'dino', count: 4 }]))
+    click(matrix().querySelector('.comention-cell[data-a]')!)
+    await settle()
+    for (const el of [matrix().querySelector('.comention-cell[data-a]')!, matrix().querySelector('.comention-listitem[data-a="bolsonaro"]')!]) {
+      expect(el.getAttribute('aria-pressed')).toBe('true')
+      expect(el.classList.contains('is-selected')).toBe(true)
+    }
+  })
+
   it('peopleError skips the fetch and writes the failure note (AC7)', async () => {
     await start(filled, three, '', new Error('down'))
     expect(comentionUrls()).toHaveLength(0)
@@ -229,8 +239,73 @@ describe('Comention', () => {
     expect(select('comentionDays').value).toBe('30')
     expect(select('comentionLean').value).toBe('all')
     expect(select('comentionMin').value).toBe('3')
+    unmount(instances.pop()!)
+    target.innerHTML = ''
+    clearScopes()
+    await start(filled, three, '?lean=left&min=5')
+    expect(select('comentionLean').value).toBe('all')
+    expect(select('comentionMin').value).toBe('3')
     expect([...select('comentionSource').options].some((o) => o.value === select('comentionSource').value)).toBe(true)
     expect(select('comentionSource').value).not.toBe('nope')
+  })
+
+  it('paints the 27x27 ghost while /api/people is still pending', async () => {
+    setBoot({ people: [], peopleError: null, search: '', ready: false })
+    instances.push(mount(Comention, { target }))
+    flushSync()
+    expect(matrix().hidden).toBe(false)
+    expect(matrix().getAttribute('aria-busy')).toBe('true')
+    expect(matrix().querySelectorAll('.comention-grid .comention-row')).toHaveLength(27)
+    expect(comentionUrls()).toHaveLength(0)
+  })
+
+  it('a failed fetch shows the note and an empty about line', async () => {
+    vi.mocked(fetch).mockImplementation((url: any) => {
+      fetches.push(String(url))
+      return Promise.resolve({ ok: false, status: 500, headers: new Headers(), json: async () => ({}) } as Response)
+    })
+    await start(filled)
+    expect(matrix().hidden).toBe(false)
+    expect(matrix().querySelector('.note')!.textContent).toBe('Não foi possível carregar quem aparece junto.')
+    expect(about()).toBe('')
+  })
+
+  it('an empty pairs list still draws the full matrix', async () => {
+    await start(payload(three, []))
+    expect(matrix().querySelectorAll('.comention-grid .comention-row:not(.comention-headrow)')).toHaveLength(3)
+    expect(matrix().querySelector('[data-a]')).toBeNull()
+    expect(about()).toContain('Ninguém apareceu junto o suficiente nesta janela.')
+  })
+
+  it('a pick made during a pending fetch is dropped when new data arrives', async () => {
+    await start(filled)
+    hold = true
+    const sel = select('comentionMin')
+    sel.value = '5'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await vi.advanceTimersByTimeAsync(300)
+    flushSync()
+    click(cell('lula', 'tarcisio')!)
+    await settle()
+    expect(isOpen()).toBe(true)
+    pending.at(-1)!.resolve(payload(three, [{ a: 'lula', b: 'tarcisio', count: 5 }]))
+    await settle()
+    expect(isOpen()).toBe(false)
+    expect(cell('lula', 'tarcisio')!.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('a pick is dropped when the next load fails', async () => {
+    await start(filled)
+    await pick('lula', 'tarcisio')
+    expect(isOpen()).toBe(true)
+    vi.mocked(fetch).mockImplementation((url: any) => {
+      fetches.push(String(url))
+      return Promise.resolve({ ok: false, status: 500, headers: new Headers(), json: async () => ({}) } as Response)
+    })
+    await change('comentionMin', '5')
+    expect(isOpen()).toBe(false)
+    expect(cell('lula', 'tarcisio')).toBeNull()
   })
 
   it('ghost on first load, dim on reload, aria-busy toggles (AC9)', async () => {

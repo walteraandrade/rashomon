@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import * as api from './api.js'
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
@@ -17,7 +17,7 @@
   const MINS = ['1', '2', '3', '5']
   const SOURCES = SOURCE_SEGMENTS.map(([value]) => value)
 
-  let sectionEl: HTMLElement | undefined = $state()
+  let mounted = $state(false)
   let matrixEl: HTMLElement | undefined = $state()
   let daysEl: HTMLSelectElement | undefined = $state()
   let sourceEl: HTMLSelectElement | undefined = $state()
@@ -36,6 +36,7 @@
   let started = false
 
   const failed = $derived(Boolean(bootData.peopleError))
+  const ghosting = $derived(!failed && (!bootData.ready || view === 'ghost'))
   const layout = $derived(shown ? matrixLayout(shown.persons, shown.pairs, width) : null)
   const cellAt = $derived(new Map((layout?.cells ?? []).map((c) => [`${c.a}\u0000${c.b}`, c])))
   const ranked = $derived(shown ? [...shown.pairs].sort((a, b) => b.count - a.count) : [])
@@ -123,8 +124,8 @@
     return value
   }
 
-  $effect(() => {
-    sectionEl?.classList.toggle('is-loading', dim)
+  onMount(() => {
+    mounted = true
   })
 
   $effect(() => {
@@ -148,7 +149,7 @@
   }
 </script>
 
-<section class="figure comention" id="comention" aria-labelledby="comentionTitle" bind:this={sectionEl}>
+<section class="figure comention" id="comention" aria-labelledby="comentionTitle" class:is-loading={dim}>
   <header class="figure-head">
     <div class="figure-title"><span class="eyebrow">Gráfico 9</span><h2 id="comentionTitle">Quem aparece junto</h2></div>
     <p class="figure-sub">Quantos textos citam duas pessoas rastreadas ao mesmo tempo, na mesma janela. <a href="/como-ler#junto">Como ler</a>.</p>
@@ -160,10 +161,10 @@
     </dl>
     <div class="sentence"><p class="sentence-line">Pares de pessoas citadas juntas nos <span class="keep"><span class="pick"><select id="comentionDays" aria-label="Período (quem aparece junto)" bind:this={daysEl} onchange={onChange((v) => (days = v))}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="comentionSource" aria-label="Fonte (quem aparece junto)" bind:this={sourceEl} onchange={onChange((v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="comentionLean" aria-label="Viés (quem aparece junto)" bind:this={leanEl} onchange={onChange((v) => (lean = v))}><option value="all" selected>todo o viés</option><option value="left">esquerda</option><option value="center">centro</option><option value="right">direita</option></select></span>.</span> Mostrar pares com <span class="pick"><select id="comentionMin" aria-label="Mínimo de textos em comum" bind:this={minEl} onchange={onChange((v) => (min = v))}><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option></select></span> textos em comum ou mais.</p></div>
   </header>
-  <figure class="comention-body" id="comentionMatrix" aria-label="Matriz de pares de pessoas citadas juntas" aria-busy={view === 'ghost'} hidden={failed || view === 'idle'} bind:this={matrixEl}>
+  <figure class="comention-body" id="comentionMatrix" aria-label="Matriz de pares de pessoas citadas juntas" aria-busy={ghosting} hidden={failed || !mounted} bind:this={matrixEl}>
     {#if failed}
       <!-- matrix stays empty -->
-    {:else if view === 'ghost'}
+    {:else if ghosting}
       <div class="ghost-field" aria-hidden="true">
         <div class="comention-grid is-ghost">
           {#each { length: GHOST_N } as _row}

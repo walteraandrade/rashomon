@@ -9,13 +9,14 @@ import { clearScopes } from '../src/ui/state.js'
 import { withFakeDocument } from './fake-dom.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
+import { siteFile } from './pages.js'
 
 // The pet: one pixel sprite, allowed in exactly two boxes and nowhere else. The site draws every
 // other limit with type, so the rule this file pins is not "the bird looks nice" but "the bird is
 // only ever where a graph is absent, and only one of it at a time".
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const readPublic = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
+const readPublic = (name: string) => siteFile(name)
 // The front-end modules are TypeScript under src/ui; only the built bundle lives in public/.
 const readModule = (name: string) => readFileSync(join(root, 'src', 'ui', name), 'utf8')
 

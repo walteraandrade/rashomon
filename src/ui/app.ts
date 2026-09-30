@@ -122,5 +122,3 @@ export const boot = async () => {
     }
   }
 }
-
-if (typeof document !== 'undefined') boot()

@@ -12,13 +12,14 @@ import { clearScopes, fromScope } from '../src/ui/state.js'
 import { persons, seed } from './fixture.js'
 import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
+import { siteFile } from './pages.js'
 
 // src/ui/figures/atlas.ts, figure 1: its handler table (createHandlers), its request keys
 // (scopeKeys, docsQuery) and its mount(). The painters it calls are in test/render.test.ts, the
 // memo in test/state.test.ts and the page markup in test/leitura-ui-acceptance.test.ts.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
+const read = (name: string) => siteFile(name)
 
 const controls = (over: Partial<Parameters<typeof params>[0]> = {}) => params({ days: '30', sort: 'count', limit: '18', source: 'all', ...over })
 

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { HTML_PATHS, SECURITY_HEADERS, vercelHeaders } from '../src/headers.js'
 import { app } from '../src/server.js'
-import { VERCEL_INSIGHTS } from './pages.js'
+import { ROUTES, VERCEL_INSIGHTS } from './pages.js'
 import { docsText } from './docs.js'
 import { seed } from './fixture.js'
 import './close.js'
@@ -16,12 +16,11 @@ const vercelConfig = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8'))
 type HeaderEntry = { key: string; value: string }
 type HeadersRule = { source: string; headers: HeaderEntry[] }
 
-const REQUIRED_PATHS = ['/', '/atlas.html', '/como-ler.html', '/sobre.html']
 
-/**
- * Vercel's `headers.source` may be an exact path or a regex-flavoured pattern. Either way it
- * must resolve to the request path, not to the JSON shape used to express it (spec section 2).
- */
+type Redirect = { source: string; destination: string; permanent: boolean }
+type Rewrite = { source: string; destination: string }
+
+/** A vercel.json source is a path or a path-to-regexp pattern; only a literal or a regex form is tried. */
 const sourceMatches = (source: string, path: string): boolean => {
   if (source === path) return true
   try {
@@ -31,141 +30,79 @@ const sourceMatches = (source: string, path: string): boolean => {
   }
 }
 
-/** Every header entry whose `source` resolves to `path`, merged key-first-wins. */
-const resolveHeaders = (rules: HeadersRule[], path: string): Record<string, string> => {
-  const merged: Record<string, string> = {}
-  for (const rule of rules) {
-    if (!sourceMatches(rule.source, path)) continue
-    for (const { key, value } of rule.headers) {
-      if (!(key in merged)) merged[key] = value
-    }
-  }
-  return merged
-}
-
-/** CSP directive name to its space-separated token list. */
 const parseCsp = (csp: string): Map<string, string[]> => {
   const directives = new Map<string, string[]>()
   for (const chunk of csp.split(';')) {
-    const trimmed = chunk.trim()
-    if (!trimmed) continue
-    const [name, ...tokens] = trimmed.split(/\s+/)
-    directives.set(name, tokens)
+    const [name, ...tokens] = chunk.trim().split(/\s+/)
+    if (name) directives.set(name, tokens)
   }
   return directives
 }
 
 describe('security headers (vercel.json)', () => {
-  it('vercel.json has no top-level routes key', () => {
-    assert.equal('routes' in vercelConfig, false)
+  it('header CSP carries only frame-ancestors', () => {
+    const csp = SECURITY_HEADERS['Content-Security-Policy']
+    assert.match(csp, /frame-ancestors 'none'/)
+    assert.doesNotMatch(csp, /script-src/)
+    assert.doesNotMatch(csp, /default-src/)
+    assert.deepEqual([...parseCsp(csp).keys()], ['frame-ancestors'])
+    assert.equal(SECURITY_HEADERS['X-Content-Type-Options'], 'nosniff')
+    assert.equal(SECURITY_HEADERS['Referrer-Policy'], 'strict-origin-when-cross-origin')
+    assert.match(SECURITY_HEADERS['Permissions-Policy'], /camera=\(\)/)
   })
 
-  it('rewrites replaces routes with the same two src/dest pairs, renamed, and no explicit filesystem handle', () => {
-    assert.ok(Array.isArray(vercelConfig.rewrites), 'rewrites must be a top-level array')
-    assert.equal(vercelConfig.rewrites.length, 2)
+  it('vercel.json headers equal vercelHeaders', () => {
+    assert.deepEqual(vercelConfig.headers, vercelHeaders())
+  })
 
-    const pairs = vercelConfig.rewrites.map((r: any) => [r.source, r.destination])
+  it('every HTML path has exactly one headers block, and only the three pages', () => {
+    assert.deepEqual([...HTML_PATHS].sort(), ['/', '/como-ler', '/sobre'])
+    for (const path of HTML_PATHS) {
+      const blocks = (vercelConfig.headers as HeadersRule[]).filter((r) => sourceMatches(r.source, path))
+      assert.equal(blocks.length, 1, `${path} must resolve to exactly one headers block`)
+    }
+    for (const path of ['/api/people', '/atlas.css', '/atlas.html'])
+      assert.equal((vercelConfig.headers as HeadersRule[]).filter((r) => sourceMatches(r.source, path)).length, 0, `${path} must not carry the page headers`)
+  })
+
+  it('vercel.json build, rewrites and redirects', () => {
+    assert.equal(vercelConfig.framework, null)
+    assert.equal(vercelConfig.buildCommand, 'pnpm build')
+    assert.equal(vercelConfig.outputDirectory, 'build')
+    assert.equal('routes' in vercelConfig, false)
+
+    const rewrites: Rewrite[] = vercelConfig.rewrites
     assert.deepEqual(
-      new Set(pairs.map((p: string[]) => p.join(' -> '))),
-      new Set(['/api/(.*) -> /api/index', '/ -> /atlas.html']),
+      rewrites.map((r) => `${r.source} -> ${r.destination}`).sort(),
+      ['/api/(.*) -> /api/index', '/como-ler -> /como-ler.html', '/sobre -> /sobre.html'],
     )
 
-    // no explicit `{ handle: "filesystem" }` entry anywhere in the config; Vercel's implicit
-    // fallback under `rewrites` is what serves public/ statics. (Actually enforcing that the
-    // fallback still serves statics is a manual preview-deploy check, per the spec.)
-    const json = JSON.stringify(vercelConfig)
-    assert.doesNotMatch(json, /"handle"\s*:\s*"filesystem"/)
+    const redirects: Redirect[] = vercelConfig.redirects
+    assert.deepEqual(
+      redirects.map((r) => `${r.source} -> ${r.destination} ${r.permanent}`).sort(),
+      ['/atlas.html -> / true', '/como-ler.html -> /como-ler true', '/design-5.html -> / true', '/sobre.html -> /sobre true'],
+    )
+
+    for (const { source } of [...rewrites, ...redirects]) assert.equal(sourceMatches(source, '/'), false, `${source} must not match /`)
   })
 
-  // Under `rewrites` Vercel serves a file from public/ before it consults the list, so a file
-  // named like a literal `source` swallows the rewrite in silence: public/index.html did exactly
-  // that to `/` until #123 deleted it. The other direction matters too: a static `destination`
-  // that no file backs is a rewrite to a 404.
-  it('no file under public/ shadows a literal rewrite source, and every static destination is backed by one', () => {
-    const rewrites: { source: string; destination: string }[] = vercelConfig.rewrites
-    const isLiteral = (path: string) => !/[()*+?[\]{}|\\]/.test(path)
-    const shadowsOf = (path: string) => (path.endsWith('/') ? [`${path}index.html`] : [path, `${path}.html`, `${path}/index.html`])
-
+  it('every route has a page', () => {
+    const rewrites: Rewrite[] = vercelConfig.rewrites
+    const routeDir = (path: string) => join(root, 'web', 'routes', path === '/' ? '' : path)
+    const hasPage = (path: string) => existsSync(join(routeDir(path), '+page.svelte'))
     for (const { source, destination } of rewrites) {
-      if (isLiteral(source)) {
-        for (const shadow of shadowsOf(source)) {
-          assert.ok(!existsSync(join(root, 'public', shadow)), `public${shadow} would be served in place of the rewrite ${source} -> ${destination}`)
-        }
-      }
-      if (!destination.startsWith('/api/')) {
-        assert.ok(existsSync(join(root, 'public', destination)), `rewrite ${source} -> ${destination} points at no file under public/`)
-      }
+      if (destination.startsWith('/api/')) continue
+      const route = destination.replace(/\.html$/, '')
+      assert.ok(hasPage(route), `rewrite ${source} -> ${destination} has no web/routes page for ${route}`)
     }
+    for (const path of HTML_PATHS) assert.ok(hasPage(path), `${path} has no +page.svelte under web/routes/`)
+    assert.deepEqual(ROUTES.map((r) => r.path).sort(), [...HTML_PATHS].sort())
   })
 
-  it('$schema, framework, buildCommand and outputDirectory are unchanged', () => {
-    assert.equal(vercelConfig.$schema, 'https://openapi.vercel.sh/vercel.json')
-    assert.equal(vercelConfig.framework, null)
-    assert.equal(vercelConfig.buildCommand, null)
-    assert.equal(vercelConfig.outputDirectory, null)
-  })
-
-  it('headers[] resolves to exactly the three HTML entry points', () => {
-    assert.ok(Array.isArray(vercelConfig.headers), 'headers must be a top-level array')
-    const rules: HeadersRule[] = vercelConfig.headers
-    for (const path of REQUIRED_PATHS) {
-      const matched = rules.filter((r) => sourceMatches(r.source, path))
-      assert.ok(matched.length > 0, `no headers entry resolves to ${path}`)
-    }
-
-    // the CSP is scoped to exactly the three HTML sources, never the whole site (spec section 3)
-    for (const path of ['/api/people', '/api/people/1/graph', '/atlas.css', '/bundle.js']) {
-      const matched = rules.filter((r) => sourceMatches(r.source, path))
-      assert.equal(matched.length, 0, `${path} must not pick up the CSP`)
-    }
-  })
-
-  it('CSP, nosniff, referrer-policy and permissions-policy apply to every HTML entry point', () => {
-    const rules: HeadersRule[] = vercelConfig.headers
-    for (const path of REQUIRED_PATHS) {
-      const headers = resolveHeaders(rules, path)
-
-      const csp = headers['Content-Security-Policy']
-      assert.ok(csp, `${path}: missing Content-Security-Policy`)
-      const directives = parseCsp(csp)
-      assert.deepEqual(directives.get('script-src'), ["'self'"], `${path}: script-src must be exactly 'self'`)
-
-      const styleSrc = directives.get('style-src') ?? []
-      assert.ok(styleSrc.includes("'self'"), `${path}: style-src must include 'self'`)
-      assert.ok(styleSrc.includes("'unsafe-inline'"), `${path}: style-src must include 'unsafe-inline'`)
-
-      assert.equal(headers['X-Content-Type-Options'], 'nosniff', `${path}: X-Content-Type-Options must be nosniff`)
-      assert.equal(
-        headers['Referrer-Policy'],
-        'strict-origin-when-cross-origin',
-        `${path}: Referrer-Policy must be strict-origin-when-cross-origin`,
-      )
-
-      const permissions = headers['Permissions-Policy']
-      assert.ok(permissions, `${path}: missing Permissions-Policy`)
-      const tokens = permissions.split(',').map((t) => t.trim())
-      for (const denied of ['camera=()', 'microphone=()', 'geolocation=()']) {
-        assert.ok(tokens.includes(denied), `${path}: Permissions-Policy must deny ${denied}`)
-      }
-    }
-  })
-
-  it('script-src and style-src token sets, isolated from directive order', () => {
-    const rules: HeadersRule[] = vercelConfig.headers
-    for (const path of REQUIRED_PATHS) {
-      const headers = resolveHeaders(rules, path)
-      const directives = parseCsp(headers['Content-Security-Policy'])
-
-      const scriptSrc = new Set(directives.get('script-src'))
-      assert.equal(scriptSrc.size, 1)
-      assert.ok(scriptSrc.has("'self'"))
-      assert.ok(!scriptSrc.has("'unsafe-inline'"))
-      assert.ok(!scriptSrc.has("'unsafe-eval'"))
-
-      const styleSrc = new Set(directives.get('style-src'))
-      assert.ok(styleSrc.has("'self'"))
-      assert.ok(styleSrc.has("'unsafe-inline'"))
-    }
+  it('no static file under public/ shadows a rewrite source or the root page', () => {
+    for (const { source } of vercelConfig.rewrites as Rewrite[])
+      for (const shadow of [source, `${source}.html`]) assert.ok(!existsSync(join(root, 'public', shadow)), `public${shadow} would shadow ${source}`)
+    assert.ok(!existsSync(join(root, 'public', 'index.html')))
   })
 
   it('the analytics tag Vercel serves is same-origin and therefore CSP-covered', () => {
@@ -174,44 +111,78 @@ describe('security headers (vercel.json)', () => {
   })
 
   it('the docs state the CSP forbids inline/eval scripts and allows inline styles for the per-value overrides', () => {
-    // the two facts: no inline/eval scripts, and inline styles are allowed for --size/--tone
-    assert.match(
-      docsText,
-      /script-src[\s\S]{0,200}'self'|no inline[\s\S]{0,80}script|forbids inline[\s\S]{0,80}script/i,
-    )
-    assert.match(
-      docsText,
-      /inline styles?[\s\S]{0,80}(--size|--tone)|(--size|--tone)[\s\S]{0,80}inline styles?/i,
-    )
+    assert.match(docsText, /script-src[\s\S]{0,200}'self'|no inline[\s\S]{0,80}script|forbids inline[\s\S]{0,80}script/i)
+    assert.match(docsText, /inline styles?[\s\S]{0,80}(--size|--tone)|(--size|--tone)[\s\S]{0,80}inline styles?/i)
   })
 })
-
-// Issue #129: the headers live twice, once in vercel.json for the CDN and once in
-// src/headers.ts for this process. One test holds the copies together and reads a real
-// response, not the JSON shape, for what Hono sends.
 
 describe('security headers drift', () => {
   before(seed)
 
-  it('vercel.json headers equal src/headers.ts byte for byte', () => {
-    assert.deepEqual(vercelConfig.headers, vercelHeaders())
+  it('hono no longer serves html', async () => {
+    for (const path of ['/', '/como-ler', '/sobre', '/atlas.html', '/bundle.js']) {
+      const res = await app.request(path)
+      assert.equal(res.status, 404, path)
+      for (const key of Object.keys(SECURITY_HEADERS)) assert.equal(res.headers.get(key), null, `${path} carries ${key}`)
+    }
   })
 
-  for (const path of HTML_PATHS)
-    it(`Hono sends every header on ${path}`, async () => {
-      const res = await app.request(path)
-      assert.equal(res.status, 200)
-      for (const [key, value] of Object.entries(SECURITY_HEADERS)) assert.equal(res.headers.get(key), value, key)
-    })
-
-  for (const path of ['/api/people', '/api/nope', '/atlas.css', '/bundle.js'])
-    it(`Hono sends none of them on ${path}`, async () => {
-      const res = await app.request(path)
-      for (const key of Object.keys(SECURITY_HEADERS)) assert.equal(res.headers.get(key), null, `${path} carries ${key}`)
-    })
+  it('hono sends none of the page headers on the API', async () => {
+    const res = await app.request('/api/people')
+    assert.equal(res.status, 200)
+    for (const key of Object.keys(SECURITY_HEADERS)) assert.equal(res.headers.get(key), null, `/api/people carries ${key}`)
+  })
 
   it('the docs say both copies exist and which test binds them', () => {
     assert.match(docsText, /src\/headers\.ts/)
     assert.match(docsText, /security-headers-acceptance\.test\.ts/)
+  })
+})
+
+describe('the prerendered pages carry the script-src policy in a meta tag', () => {
+  const built = ROUTES.map((r) => ({ path: r.path, file: join(root, 'build', r.path === '/' ? 'index.html' : `${r.path.slice(1)}.html`) }))
+  const skip = built.every((b) => existsSync(b.file)) ? false : 'run pnpm build first'
+
+  it('each page has one CSP meta: script-src is self plus hashes, style-src keeps unsafe-inline and no hash', { skip }, () => {
+    for (const { path, file } of built) {
+      const html = readFileSync(file, 'utf8')
+      const metas = [...html.matchAll(/<meta\s+http-equiv="content-security-policy"\s+content="([^"]*)"/gi)]
+      assert.equal(metas.length, 1, `${path} must carry exactly one CSP meta`)
+      const directives = parseCsp(metas[0][1].replace(/&#39;/g, "'").replace(/&quot;/g, '"'))
+      const script = directives.get('script-src') ?? []
+      assert.ok(script.includes("'self'"), `${path}: script-src needs 'self'`)
+      assert.ok(!script.includes("'unsafe-inline'"), `${path}: script-src must not allow unsafe-inline`)
+      for (const token of script.filter((t) => t !== "'self'")) assert.match(token, /^'sha256-/, `${path}: unexpected script-src token ${token}`)
+      const style = directives.get('style-src') ?? []
+      assert.ok(style.includes("'unsafe-inline'"), `${path}: style-src needs unsafe-inline`)
+      assert.ok(!style.some((t) => /sha256-|nonce-/.test(t)), `${path}: style-src must carry no hash or nonce`)
+    }
+  })
+})
+
+describe('the client bundle', () => {
+  const appDir = join(root, 'build', '_app')
+  const files = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)]))
+
+  it('never ships graphology, which is server-only', { skip: existsSync(appDir) ? false : 'run pnpm build first' }, () => {
+    for (const file of files(appDir)) assert.ok(!readFileSync(file, 'utf8').includes('graphology'), `${file} contains graphology`)
+  })
+})
+
+describe('the CSP meta directives in svelte.config.js', () => {
+  it('match the pinned list', async () => {
+    // @ts-expect-error plain JS config, no declaration file
+    const { default: config } = await import('../svelte.config.js')
+    assert.deepEqual(config.kit.csp.directives, {
+      'default-src': ['self'],
+      'script-src': ['self'],
+      'style-src': ['self', 'https://fonts.googleapis.com', 'unsafe-inline'],
+      'font-src': ['https://fonts.gstatic.com'],
+      'img-src': ['self', 'data:'],
+      'connect-src': ['self'],
+      'base-uri': ['self'],
+      'object-src': ['none'],
+    })
   })
 })

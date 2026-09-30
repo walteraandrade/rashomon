@@ -1,11 +1,9 @@
 import { Hono, type Context } from 'hono'
 import { serve } from '@hono/node-server'
-import { serveStatic } from '@hono/node-server/serve-static'
 import personsSeed from '../seed.json' with { type: 'json' }
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
 import { agendaFor, attentionFor, candidatesFor, comentionFor, compareBridgesFor, compareFor, docsFor, graphFor, lensBridgesFor, lensesFor, persistenceFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
-import { HTML_PATHS, SECURITY_HEADERS } from './headers.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
 import { eligibleKey, lookup, warmStoreFromEnv, type WarmReader, type WarmRoute } from './warmstore.js'
@@ -64,14 +62,6 @@ app.use('/api/*', async (c, next) => {
   c.header('cache-control', control)
   if (control !== NO_STORE) c.header('vercel-cache-tag', CACHE_TAG)
 })
-
-// Security headers for HTML pages served by this process (set after next() so serveStatic's
-// own Response is already built).
-for (const path of HTML_PATHS)
-  app.use(path, async (c, next) => {
-    await next()
-    for (const [key, value] of Object.entries(SECURITY_HEADERS)) c.res.headers.set(key, value)
-  })
 
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
@@ -156,9 +146,6 @@ app.get('/api/tone', async (c) => c.json(await toneFor(parseToneQuery(c.req.quer
 app.get('/api/agenda', async (c) => c.json(await agendaFor(parseAgendaQuery(c.req.query()))))
 app.get('/api/candidates', async (c) => c.json(await candidatesFor(parseCandidatesQuery(c.req.query()))))
 app.get('/api/comention', async (c) => c.json(await comentionFor(parseComentionQuery(c.req.query())))) // spans every tracked person, like /api/tone
-
-app.get('/', serveStatic({ path: './public/atlas.html' }))
-app.use('/*', serveStatic({ root: './public' }))
 
 // Importing `app` in tests never binds a port or migrates; only the entrypoint does.
 if (import.meta.url === `file://${process.argv[1]}`) {

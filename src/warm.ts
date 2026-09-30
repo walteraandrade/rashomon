@@ -5,7 +5,7 @@ import type { Person } from './types.js'
 
 // The recortes the page asks for on its own, one per person and window, built with the same
 // functions the figures use so the querystring (and so the CDN cache key) is byte-identical.
-// atlas.html's defaults: sort pmi, 18 words, all sources; 7 and 30 days are the windows a
+// the atlas page's (web/routes/+page.svelte) defaults: sort pmi, 18 words, all sources; 7 and 30 days are the windows a
 // reader picks without thinking, 60 is deliberate and stays cold.
 export const WARM_DAYS = ['7', '30'] as const
 

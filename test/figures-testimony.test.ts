@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { app } from '../src/server.js'
 import { testimonyParams } from '../src/ui/api.js'
 import { mount } from '../src/ui/figures/testimony.js'
@@ -13,12 +10,12 @@ import { withFakeDocument } from './fake-dom.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import { persons, seed } from './fixture.js'
 import './close.js'
+import { siteFile } from './pages.js'
 
 // src/ui/figures/testimony.ts, figure 2: the outlet in focus, its own controls, its own
 // ResizeObserver, and the markup of its card. The painters are in test/render.test.ts.
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
+const read = (name: string) => siteFile(name)
 const people = persons.map(({ id, name }) => ({ id, name }))
 const [personA] = people
 const oneOutlet = {

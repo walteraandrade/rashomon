@@ -1,20 +1,17 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { clearScopes } from '../src/ui/state.js'
 import { SOURCES } from '../src/query.js'
 import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
 import type { CompareTerm, Lenses } from '../src/ui/format.js'
+import { pageMarkup } from './pages.js'
 
 // src/ui/figures/lenses.ts, figure 6 (issue #206): its own mount(), the two independently-
 // scoped lens selects, the ruler paints (paintLensRuler/paintLensDetail/paintLensesLoading are
 // exercised directly in test/render.test.ts), and the two-sided docs-card wiring.
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const design5 = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
+const design5 = () => pageMarkup('/')
 
 const personA = { id: 'lula', name: 'Lula' }
 const personB = { id: 'bolsonaro', name: 'Bolsonaro' }

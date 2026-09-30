@@ -1,4 +1,4 @@
-// Bundled directly (esbuild's JSON loader), never through src/outlets.ts, so src/ui keeps its
+// Bundled directly (the bundler's JSON loader), never through src/outlets.ts, so src/ui keeps its
 // own import direction and never pulls in a server-only module.
 import outletsJson from '../../outlets.json' with { type: 'json' }
 

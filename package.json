@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "ingest": "tsx src/ingest.ts",
-    "dev": "tsx src/server.ts",
-    "build": "esbuild src/ui/app.ts --bundle --minify --format=esm --target=es2022 --outfile=public/bundle.js --log-level=warning",
+    "dev": "vite",
+    "dev:api": "tsx src/server.ts",
+    "build": "vite build",
     "reindex": "tsx src/reindex.ts",
     "aggregate": "tsx src/aggregate.ts",
     "materialize": "tsx src/materialize.ts",
@@ -28,6 +29,8 @@
     "@effect/sql-pglite": "4.0.0-rc.117",
     "@electric-sql/pglite": "^0.5.8",
     "@hono/node-server": "^2.1.1",
+    "@sveltejs/adapter-static": "3.0.10",
+    "@sveltejs/kit": "2.70.3",
     "@vercel/blob": "2.8.0",
     "effect": "4.0.0-rc.117",
     "fast-xml-parser": "^5.11.1",
@@ -36,7 +39,9 @@
     "graphology-communities-louvain": "2.0.2",
     "graphology-metrics": "2.4.2",
     "hono": "^4.13.7",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "svelte": "5.57.1",
+    "vite": "8.3.1"
   },
   "optionalDependencies": {
     "@huggingface/transformers": "^4.2.0"
@@ -44,7 +49,6 @@
   "devDependencies": {
     "@types/node": "^26.4.1",
     "@types/pg": "^8.23.1",
-    "esbuild": "^0.28.2",
     "parse5": "8.0.1",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"

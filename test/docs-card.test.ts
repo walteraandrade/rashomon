@@ -8,12 +8,9 @@ import { mount as mountTestimony } from '../src/ui/figures/testimony.js'
 import { clearScopes } from '../src/ui/state.js'
 import { persons } from './fixture.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { siteFile } from './pages.js'
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const read = (name: string) => readFileSync(join(root, 'public', name), 'utf8')
+const read = (name: string) => siteFile(name)
 
 // The documents card, driven through the real mount()s. The button in the inspector is gone, so
 // every figure asks for texts with its own click: the atlas by picking a word or the person at

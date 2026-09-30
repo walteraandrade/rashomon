@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { ATLAS_KINDS, attentionParams } from '../src/ui/api.js'
 import { clearScopes } from '../src/ui/state.js'
 import { flush, jsonResponse, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 import './close.js'
+import { pageMarkup } from './pages.js'
 
 // src/ui/figures/attention.ts, figure 7 (issue #216): its own mount(), wired twice through
 // figure.ts's runFigure ('attention' for GET /attention, 'mentions' for the term-less
@@ -15,8 +13,7 @@ import './close.js'
 // test/render.test.ts; peakDay and the independent-scale sizing in test/layout.test.ts and
 // test/render.test.ts.
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const atlasPage = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
+const atlasPage = () => pageMarkup('/')
 
 const personA = { id: 'lula', name: 'Lula' }
 const personB = { id: 'bolsonaro', name: 'Bolsonaro' }
@@ -479,6 +476,6 @@ describe('atlas.html carries the seventh figure card', () => {
     assert.match(html, /<span class="eyebrow">Gráfico 7<\/span>/)
     const attention = html.match(/id="attention"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.match(attention, /<dl class="figure-key"[^>]*>/, '#attention carries its own figure-key')
-    assert.match(attention, /href="como-ler\.html#atencao"/)
+    assert.match(attention, /href="\/como-ler#atencao"/)
   })
 })

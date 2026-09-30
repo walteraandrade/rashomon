@@ -56,7 +56,9 @@ set -a && source .env.production && set +a && DATABASE_URL="$POSTGRES_URL_NON_PO
 
 Collectors and scoring do not run on Vercel: run `pnpm ingest`, `reindex` and `score` from a machine with `DATABASE_URL` and `PG_SSL_CA` set, or keep collecting locally and `pnpm push` again (inserts skip rows that already exist). `pnpm push` never revises an existing `person_attention` row; only `pnpm ingest` run directly against the target heals a day Wikimedia later corrects. `.github/workflows/ingest.yml` does the collecting on a schedule: every 6 hours GitHub Actions runs `pnpm ingest` against the `DATABASE_URL` repository secret (use `POSTGRES_URL_NON_POOLING`), a `PG_SSL_CA` repository secret (the same PEM CA text `poolConfig` requires), with `BSKY_HANDLE`/`BSKY_APP_PASSWORD` secrets for authenticated Bluesky and `VERCEL_TOKEN` for the cache delete before the warm (see [Warming the CDN](#warming-the-cdn)); the workflow stops before running `pnpm ingest` if either `DATABASE_URL` or `PG_SSL_CA` is missing. Trigger it by hand with `gh workflow run ingest.yml`. `TESTIMONY_DTYPE` and `TESTIMONY_REVISION` have to match between that machine and the deployed environment, or `/testimony` answers empty — see [label drift](testimony.md#label-drift). `PG_POOL_MAX` caps connections per function instance (default 3, clamped to 1..20: Fluid Compute reuses instances, so pool size times concurrent instances must stay under the pooler's limit).
 
-`vercel.json` also serves security headers on `/`, `/atlas.html` and `/como-ler.html` — never on `/api/*` or a static asset. The same set lives in `src/headers.ts`, which `src/server.ts` sends on those three paths, so `pnpm dev` and any non-Vercel host are not bare; the JSON copy stays because the CDN serves `public/` without calling the function. `test/security-headers-acceptance.test.ts` fails when the two copies differ by a byte or when Hono stops sending them. `script-src 'self'` forbids inline `<script>` tags and `eval`, so `bundle.js` (a same-origin module script) and the same-origin Vercel Insights tag load, and nothing else can inject script. `style-src` keeps `'self' 'unsafe-inline'` on purpose: `src/ui/render.ts` writes per-value `--size`/`--tone` inline style overrides, and hashing or nonce-ing every one of those is not worth the cost this issue accepted.
+**The site is a prerendered SvelteKit build.** `pnpm build` is `vite build` and writes `build/` (`index.html`, `como-ler.html`, `sobre.html`, `atlas.css`, the assets from `public/`, `_app/`); Vercel serves it as `outputDirectory`. The three pages are `/`, `/como-ler` and `/sobre`; `/atlas.html`, `/como-ler.html` and `/sobre.html` redirect 308 to them. Hono never serves `public/` or any HTML any more: every non-`/api` path answers 404 there. `pnpm dev` is Vite on 5173 and its dev server proxies `/api` to `PORT` (default 3210), and `pnpm dev:api` is the Hono process, the only one that opens `DATA_DIR`.
+
+**CSP split.** `vercel.json` serves security headers on `/`, `/como-ler` and `/sobre`, never on `/api/*` or a static asset; the same set lives in `src/headers.ts`. The header CSP carries only `frame-ancestors 'none'`, which a `<meta>` cannot; the prerendered `<meta http-equiv="content-security-policy">` (SvelteKit `kit.csp`, `mode: 'hash'`) carries `script-src 'self'` plus the `sha256-` hash of the bootstrap script, which changes on every build and so cannot live in `vercel.json`. `style-src` keeps `'unsafe-inline'` because `src/ui/render.ts` writes inline styles for per-value `--size`/`--tone` overrides; `script-src 'self'` forbids inline scripts and `eval`. `test/security-headers-acceptance.test.ts` fails when `vercel.json` and `vercelHeaders()` differ.
 
 `@huggingface/transformers` is required only by `pnpm score`. Its label logic lives in `src/scorers/method.ts`, which has no imports at all, and `src/query.ts` (the route path `api/index.ts` → `src/server.ts` serves) imports the method labels from there, never from `src/scorers/onnx.ts` — so the deployed `/api` function's import graph never reaches the model loader or the Hub client it dynamic-imports. That import-graph split is what keeps the package out of the deployment: the function bundler only traces what the graph reaches. Measured with `vercel build` on this repo: before this split, `.vercel/output/functions/api/index.func` was 94,327,622 bytes (~90 MB) and carried `onnxruntime-node`, `@huggingface/transformers` and `sharp`; after, it is 18,666,128 bytes (~18 MB) and carries none of them.
 
@@ -328,7 +330,7 @@ The benchmark builds the graph aggregates after generating its corpus, so `graph
 
 Three separate things. Two are local only: opt-in instrumentation on the running API (`PERF=1`) and a benchmark that builds its own database (`pnpm bench`). One runs in every browser, production included: the User Timing marks the page records, which exist to be read next to Vercel's `x-vercel-cache` header.
 
-**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms`, `x-perf-sql-count` and `server-timing` (`db;dur=446.2;desc="5 sql", total;dur=227.6`, the same two numbers in the shape DevTools draws on a request's Timing tab), plus one JSON line on stdout:
+**Instrumentation.** Off by default: with `PERF` unset, `db` is the bare PGlite instance and no middleware is registered, so nothing wraps a query and no response changes. `PERF=1 pnpm dev:api` turns it on and adds, per `/api/*` request, the response headers `x-perf-total-ms`, `x-perf-db-ms`, `x-perf-sql-count` and `server-timing` (`db;dur=446.2;desc="5 sql", total;dur=227.6`, the same two numbers in the shape DevTools draws on a request's Timing tab), plus one JSON line on stdout:
 
 ```json
 {"perf":"request","method":"GET","path":"/api/people/lula/graph","query":"days=30","status":200,"ms":227.6,"db_ms":446.2,"sql":5}
@@ -351,7 +353,7 @@ Placing a wait is a decision keyed on the `api:*` entry's `detail.cache`, never 
 | `memory` | the page's own memo, ~0 | `figure − api` is layout and paint; nothing else to place |
 | `HIT` | the CDN answering | short is the CDN working; ignore `server` (it is the origin fill, not this request) |
 | `MISS` / `STALE` | the origin: cold start, connection, SQL, transfer | with `server`: `db` is SQL, `api − total` is network, cold start and connection; without it, only the total is known |
-| `null` | no CDN in front (local `pnpm dev`) | with `PERF=1`: same split as `MISS` |
+| `null` | no CDN in front (local `pnpm dev:api`, or through `pnpm dev`'s `/api` proxy) | with `PERF=1`: same split as `MISS` |
 
 `figure − api` is layout and paint on every row. The one exception is `figure:docs` with two sides (the ruler): two `api:docs` run in `Promise.all`, so the figure is `max(api, api) + paint`, and `detail.urls` names both.
 
@@ -460,7 +462,7 @@ Four rules hold it there, and `test/pet-acceptance.test.ts` pins each one:
   own grid (106×78 and 52×74), the `<img>` carries that same size so the box cannot grow under
   the reader, and `.pet` sets `image-rendering: pixelated`. A pixel sprite at a fractional scale,
   or smoothed, is a blurred sprite.
-- **It is a state, never furniture.** Neither `atlas.html` nor `como-ler.html` may mention
+- **It is a state, never furniture.** Neither `web/routes/+page.svelte` nor `web/routes/como-ler/+page.svelte` may mention
   `pet-caracara`: the sprite exists only where a painter decides it should.
 
 `OUTAGE` covers both of figure 1's ways into that box — a failed `GET /api/people` and a failed
@@ -468,7 +470,7 @@ graph fetch. They carry identical copy, so painting only one of them would show 
 sometimes and not others for what a reader sees as the same box. An empty `seed.json` still
 paints no bird: nobody tracked is a different fact from nothing answering.
 
-Both files sit under `public/` and are served by the static handler like any other asset. They
+Both files sit under `public/` and `pnpm build` copies them into `build/` at the same path. They
 are quantised to the site's own palette tokens — seven colours in the flying sprite, six in the
 perched one, no hue outside `--cmp-b` — which is why they weigh 3 KB and 533 bytes.
 

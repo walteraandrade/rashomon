@@ -138,7 +138,7 @@ One border: `1px solid --line`, square corners (2px), on every figure, chip, seg
 
 - **Sentence chips.** `<select>` in `.pick`: mono, filled `--soft`, 1px `--line`, text `--accent`, chevron in accent. The only control surface on the page.
 - **Figure key.** A `dl.figure-key` of tamanho / cor / posição / clique. Always visible. The encoding, not the essay.
-- **Help dialog.** `#helpDialog`, modal, same card language as `#docsDialog`. Opened by any in-page `como-ler.html` link; modifier-click and `data-leave` still go to the page.
+- **Help dialog.** `#helpDialog`, modal, same card language as `#docsDialog`. Opened by any in-page `/como-ler` link; modifier-click and `data-leave` still go to the page.
 - **Docs dialog.** Floating above 760px, modal below. The only path to `GET /docs`.
 - **Loading.** Ghost of the figure's own geometry (`--soft` wash of `--ink`), pulse until the recorte lands. A refetch dims what is already on screen. No spinner, no "Carregando…", no invented words.
 - **Quiet button / segment.** `--soft` chrome; pressed segment floods `--accent`.

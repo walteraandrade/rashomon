@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { pageMarkup } from './pages.js'
 import { closeHelp, mountHelp, openHelp } from '../src/ui/help.js'
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const atlasPage = () => readFileSync(join(root, 'public', 'atlas.html'), 'utf8')
+const atlasPage = () => pageMarkup('/')
 
 type Link = {
   getAttribute: (name: string) => string | null
@@ -97,7 +94,49 @@ const fire = (
   return event
 }
 
-describe('help.ts: como-ler.html clicks stay on the atlas', () => {
+describe('help.ts: guide links to /como-ler open the dialog at the section', () => {
+  it('guide links to /como-ler open the dialog at the section', () => {
+    withHelpDom(({ dialog, listeners, scrolled }) => {
+      mountHelp()
+      const click = listeners.find((l) => l.type === 'click')!
+      const event = fire(click.fn, '/como-ler#atlas')
+      assert.equal(event.defaultPrevented, true)
+      assert.equal(dialog.open, true)
+      assert.deepEqual(scrolled, ['help-atlas'])
+    })
+  })
+
+  it('a bare /como-ler link opens the dialog with no section', () => {
+    withHelpDom(({ dialog, listeners }) => {
+      mountHelp()
+      const click = listeners.find((l) => l.type === 'click')!
+      assert.equal(fire(click.fn, '/como-ler').defaultPrevented, true)
+      assert.equal(dialog.open, true)
+    })
+  })
+
+  it('modifier-click, target=_blank and data-leave on /como-ler still go to the page', () => {
+    withHelpDom(({ dialog, listeners }) => {
+      mountHelp()
+      const click = listeners.find((l) => l.type === 'click')!
+      assert.equal(fire(click.fn, '/como-ler#atlas', { metaKey: true }).defaultPrevented, false)
+      assert.equal(fire(click.fn, '/como-ler#atlas', { target: '_blank' }).defaultPrevented, false)
+      assert.equal(fire(click.fn, '/como-ler#atlas', { dataLeave: true }).defaultPrevented, false)
+      assert.equal(dialog.open, false)
+    })
+  })
+
+  it('other pages are not the guide', () => {
+    withHelpDom(({ dialog, listeners }) => {
+      mountHelp()
+      const click = listeners.find((l) => l.type === 'click')!
+      assert.equal(fire(click.fn, '/sobre').defaultPrevented, false)
+      assert.equal(dialog.open, false)
+    })
+  })
+})
+
+describe('help.ts: legacy como-ler.html links still open it', () => {
   it('a plain click on como-ler.html#atlas opens the dialog at that section', () => {
     withHelpDom(({ dialog, listeners, scrolled }) => {
       mountHelp()
@@ -186,12 +225,12 @@ describe('help.ts: como-ler.html clicks stay on the atlas', () => {
     })
   })
 
-  it('every como-ler.html#<x> link in public/atlas.html resolves through openHelp and has a matching id="help-<x>"', () => {
+  it('every como-ler.html#<x> link in the atlas page resolves through openHelp and has a matching id="help-<x>"', () => {
     const html = atlasPage()
-    const hashes = [...html.matchAll(/como-ler\.html#([\w-]+)/g)].map((m) => m[1])
-    assert.ok(hashes.length > 0, 'atlas.html must link to como-ler.html at least once')
+    const hashes = [...html.matchAll(/como-ler#([\w-]+)/g)].map((m) => m[1])
+    assert.ok(hashes.length > 0, 'atlas.html must link to /como-ler at least once')
     for (const hash of hashes) {
-      assert.match(html, new RegExp(`id="help-${hash}"`), `atlas.html has no id="help-${hash}" for the como-ler.html#${hash} link`)
+      assert.match(html, new RegExp(`id="help-${hash}"`), `atlas.html has no id="help-${hash}" for the /como-ler#${hash} link`)
       withHelpDom(({ scrolled }) => {
         mountHelp()
         openHelp(`#${hash}`)

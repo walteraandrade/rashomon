@@ -1,18 +1,8 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<svelte:head>
 <title>rashomon · sobre</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
-<link rel="stylesheet" href="atlas.css">
-</head>
-<body>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="28" height="28">rashomon<span>.</span></a><nav><a class="help-link" href="/">atlas</a><a class="help-link" href="como-ler.html">como ler</a><a class="help-link" href="sobre.html">sobre</a></nav></header>
+</svelte:head>
+
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="28" height="28">rashomon<span>.</span></a><nav><a class="help-link" href="/">atlas</a><a class="help-link" href="/como-ler">como ler</a><a class="help-link" href="/sobre">sobre</a></nav></header>
 <main class="reading about">
   <header class="masthead">
     <p class="eyebrow">Rashomon · sobre</p>
@@ -177,7 +167,7 @@
 
       <h3>Uma régua, não um juiz</h3>
       <p>Toda nota guarda a versão do modelo que a deu. Quando o kikori é treinado de novo, o site dá nota a tudo outra vez, em vez de misturar notas de dois modelos. Uma régua trocada no meio da medição estragaria a comparação entre veículos, que é o único uso honesto dela.</p>
-      <p class="about-links"><a href="como-ler.html#avaliacao">Como ler o gráfico da avaliação</a><a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">O modelo no Hugging Face</a><a href="https://github.com/walteraandrade/kikori" target="_blank" rel="noopener">O treino no GitHub</a></p>
+      <p class="about-links"><a href="/como-ler#avaliacao">Como ler o gráfico da avaliação</a><a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">O modelo no Hugging Face</a><a href="https://github.com/walteraandrade/kikori" target="_blank" rel="noopener">O treino no GitHub</a></p>
     </div>
 
     <div class="about-block" id="cuidados">
@@ -198,6 +188,3 @@
     <p class="chapter-foot"><span>Sem dados fictícios em produção.</span><span>Nenhuma cópia de artigo guardada.</span></p>
   </section>
 </main>
-<script defer src="/_vercel/insights/script.js"></script>
-</body>
-</html>

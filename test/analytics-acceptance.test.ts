@@ -3,24 +3,25 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { ANALYTICS_PAGES, VERCEL_INSIGHTS_TAG } from './pages.js'
+import { ANALYTICS_PAGES, VERCEL_INSIGHTS_TAG, appTemplate } from './pages.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const read = (page: string) => readFileSync(join(root, 'public', page), 'utf8')
 
 describe('Vercel Web Analytics', () => {
-  it('every landing page carries the tag exactly once, deferred, right before </body>', () => {
-    for (const page of ANALYTICS_PAGES) {
-      const html = read(page)
-      const hits = html.split(VERCEL_INSIGHTS_TAG).length - 1
-      assert.equal(hits, 1, `${page} must carry the analytics tag exactly once`)
-      assert.match(html, new RegExp(`${VERCEL_INSIGHTS_TAG}\\s*</body>`), `${page} must load it last, after the page markup`)
+  it('analytics tag is in app.html once, deferred, right before </body>', () => {
+    const html = appTemplate()
+    assert.equal(html.split(VERCEL_INSIGHTS_TAG).length - 1, 1, 'app.html must carry the analytics tag exactly once')
+    assert.match(html, new RegExp(`${VERCEL_INSIGHTS_TAG}\\s*</body>`), 'app.html must load it last, after the page markup')
+  })
+
+  it('no route repeats the tag, so every page has it exactly once', () => {
+    for (const file of ANALYTICS_PAGES) {
+      const source = readFileSync(join(root, file), 'utf8')
+      assert.equal(source.includes('/_vercel/insights'), false, `${file} must not carry the analytics tag`)
     }
   })
 
   it('the tag is host-served and absolute: no bundling, no third-party origin', () => {
-    // /_vercel/* is Vercel's own path. A relative src would 404, and an external origin would
-    // put a third party in the page's critical path for nothing.
     assert.match(VERCEL_INSIGHTS_TAG, /src="\/_vercel\//)
     assert.doesNotMatch(VERCEL_INSIGHTS_TAG, /https?:/)
   })

@@ -491,3 +491,23 @@ describe('the warm store is documented', () => {
     assert.match(docsText, /links run live off the warm set/)
   })
 })
+
+describe('SvelteKit shell (issue #283)', () => {
+  it('docs describe the SvelteKit build and dev commands', () => {
+    assert.match(docsText, /vite build/)
+    assert.match(docsText, /\bbuild\//)
+    assert.match(docsText, /dev:api/)
+    assert.match(docsText, /\/api[\s\S]{0,120}proxy|prox[\s\S]{0,120}\/api/i, 'pnpm dev proxies /api to the Hono process')
+    assert.match(docsText, /Hono[\s\S]{0,200}(no longer|does not|never) serv[\s\S]{0,80}(public|HTML|html)/i, 'Hono no longer serves public/ or HTML')
+  })
+
+  it('docs name the three pages and the redirects from the old paths', () => {
+    for (const path of ['/como-ler', '/sobre']) assert.ok(docsText.includes(path), `${path} is not documented`)
+    for (const legacy of ['atlas.html', 'como-ler.html', 'sobre.html']) assert.ok(docsText.includes(legacy), `${legacy} redirect is not documented`)
+  })
+
+  it('docs describe the CSP split: the header carries frame-ancestors, the prerendered meta carries the script hashes', () => {
+    assert.match(docsText, /frame-ancestors/)
+    assert.match(docsText, /<meta[\s\S]{0,300}hash|hash[\s\S]{0,300}meta/i)
+  })
+})

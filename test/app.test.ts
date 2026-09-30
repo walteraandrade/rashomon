@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { persons } from './fixture.js'
 import { docsText } from './docs.js'
 import { clearScopes } from '../src/ui/state.js'
+import { pageMarkup } from './pages.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 
 // src/ui/app.ts, the shell: boot() fetches /api/people once, seeds each figure from the
@@ -32,12 +30,23 @@ const routeDefault = (calls: string[]) =>
     '/testimony': emptyTestimony,
   })
 
-// app.js's own self-boot ("if (typeof document !== 'undefined') boot()") only ever fires once
-// per process, the first time this module is imported — and only when a document already
-// exists. Importing it statically, before any test installs a fake document, keeps that guard
-// false for the whole file, so every test below drives boot() itself, exactly once, on its own
-// terms (criterion 12 depends on this: a stray auto-boot would double the /api/people count).
+// Importing app.ts never boots: web/routes/+page.svelte calls boot() from onMount, and every
+// test below drives boot() itself, exactly once, on its own terms (a stray boot would double
+// the /api/people count).
 const appModule = await import('../src/ui/app.js')
+
+describe('importing app does not boot', () => {
+  it('a fresh import with a document present requests nothing and mounts no figure', async () => {
+    await withFiguresDom(async (_els, calls) => {
+      clearScopes()
+      routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony })
+      const fresh = await import(`../src/ui/app.js?fresh=${Date.now()}`)
+      await flush()
+      assert.equal(typeof fresh.boot, 'function')
+      assert.deepEqual(calls, [], 'importing app.ts must not fetch: boot() is called explicitly')
+    })
+  })
+})
 
 const withLocation = async <T>(search: string, fn: () => Promise<T> | T): Promise<T> => {
   const previous = (globalThis as { location?: unknown }).location
@@ -402,8 +411,7 @@ describe('figure 10 (persistence) seeds weeks from the prefixed key only', () =>
   })
 
   it('a failed GET /api/people paints the outage in the figure notice, #persistenceNote, which exists in the page', async () => {
-    const root = dirname(dirname(fileURLToPath(import.meta.url)))
-    assert.match(readFileSync(join(root, 'public', 'atlas.html'), 'utf8'), /id="persistenceNote"/)
+    assert.match(pageMarkup('/'), /id="persistenceNote"/)
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       globalThis.fetch = (async (input: unknown) => {

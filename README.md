@@ -2,7 +2,7 @@
 
 Rashomon collects what Bluesky, Google News, GDELT, the press and the two houses of Congress say about a tracked politician, then draws the words that keep landing next to that name — how often, how surprising, from which outlet, in what tone.
 
-Live at [rashomon-five.vercel.app](https://rashomon-five.vercel.app). Node + TypeScript, Hono, PGlite, and a front-end of plain ES modules with no build step.
+Live at [rashomon-five.vercel.app](https://rashomon-five.vercel.app). Node + TypeScript, Hono, PGlite, and a SvelteKit-prerendered front end (`vite build`).
 
 ![the atlas](docs/screenshots/atlas-hero.png)
 
@@ -11,7 +11,8 @@ Live at [rashomon-five.vercel.app](https://rashomon-five.vercel.app). Node + Typ
 ```bash
 pnpm install
 pnpm ingest    # collect from the default sources
-pnpm dev       # http://localhost:3210
+pnpm dev:api   # API on http://localhost:3210
+pnpm dev       # site on http://localhost:5173
 ```
 
 `pnpm ingest` writes into a local PGlite database at `./data/pg`. PGlite allows one process per directory, so stop the server before ingesting again.
@@ -21,7 +22,9 @@ pnpm dev       # http://localhost:3210
 | Command | What it does |
 | --- | --- |
 | `pnpm ingest [source...]` | collect; no argument runs every default source, see [sources](docs/sources.md) |
-| `pnpm dev` | serve the API and `public/` on `PORT` (default 3210) |
+| `pnpm dev` | Vite on 5173, `/api` proxied to `PORT` (default 3210) |
+| `pnpm dev:api` | the Hono API on `PORT` (default 3210) |
+| `pnpm build` | `vite build` into `build/` |
 | `pnpm reindex` | recompute terms, phrases, person matches and candidates from stored docs |
 | `pnpm score` | score every unscored `(doc, person)` pair, see [testimony](docs/testimony.md) |
 | `pnpm purge <source>` | delete one source's docs for a clean re-fetch |
@@ -38,7 +41,7 @@ Run `pnpm reindex` after editing `seed.json` or `src/extract.ts`. Both `pnpm typ
 1. **Collect.** One collector per source in `src/collectors/*`, same signature, each storing `{ text, uri, domain, published_at, source, tone }`.
 2. **Extract.** `src/extract.ts` normalizes the text and pulls hashtags, words and phrases, then tags the docs whose text names a person in `seed.json`. Terms are stored only for docs that name someone tracked.
 3. **Score.** `src/graph.ts` counts terms per person and computes PMI against the docs in the window that mention any tracked person. `pnpm score` adds kikori's testimony on top, per `(doc, person)`.
-4. **Serve.** `src/server.ts` is a Hono app; `public/` is the radial atlas, one page of markup plus ES modules.
+4. **Serve.** `src/server.ts` is the Hono API and the site is prerendered by SvelteKit from `web/routes` + `src/ui` into `build/`.
 
 Two numbers, two different questions. **Frequência** is how many documents carry the word. **PMI** is how much more often it lands near this person than chance would give, so it favours the word that is specific rather than merely common. The map's default sort multiplies PMI by `ln(1 + count)` on purpose, so a term seen twice does not outrank one seen two hundred times.
 
@@ -72,10 +75,11 @@ src/store.ts      doc and person inserts, shared by ingest and reindex
 src/graph.ts      the scoring SQL: counts, PMI, term-term links, testimony
 src/query.ts      query parsers; every parameter is snapped or clamped here
 src/scorers/*     one scorer per method, same signature
-src/server.ts     the Hono API and the static files
+src/server.ts     the Hono API (/api/* only)
 src/perf.ts       opt-in request instrumentation; src/bench*.ts the baselines
-public/           atlas.html (the atlas), como-ler.html, atlas.css, js/ (format, api,
-                  layout, render, state, app — imported one way, acyclic)
+web/              app.html (shared head), routes/ (+page.svelte, como-ler, sobre)
+src/ui/           front-end modules (format, api, layout, render, figures, app)
+public/           atlas.css and image assets
 test/             node:test suites; fixture.ts seeds the in-memory database
 seed.json         tracked people and aliases
 outlets.json      researched editorial lean per domain

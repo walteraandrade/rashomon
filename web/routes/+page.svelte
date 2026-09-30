@@ -1,19 +1,18 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<svelte:head>
 <title>rashomon · atlas</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
-<link rel="stylesheet" href="atlas.css">
-</head>
-<body>
+</svelte:head>
+
+<script lang="ts">
+  import { onMount } from 'svelte'
+
+  onMount(async () => {
+    const { boot } = await import('$lib/app.js')
+    boot()
+  })
+</script>
+
 <a class="skip" href="#workspace">Ir ao atlas</a>
-<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="28" height="28">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="help-link" href="como-ler.html">como ler</a><a class="help-link" href="sobre.html">sobre</a></nav></header>
+<header class="top"><a class="brand" href="/"><img src="/rashomon-mark.svg" alt="" width="28" height="28">rashomon<span>.</span></a><div class="person-pick"></div><nav><a class="help-link" href="/como-ler">como ler</a><a class="help-link" href="/sobre">sobre</a></nav></header>
 <main>
   <header class="masthead">
     <p class="eyebrow">Rashomon · atlas</p>
@@ -23,7 +22,7 @@
   <section class="figure workspace" id="workspace" aria-labelledby="atlasTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 1</span><h2 id="atlasTitle">Atlas de palavras <b id="atlasStats"></b></h2></div>
-      <p class="figure-sub">Palavras nos textos que citam a pessoa. A posição só evita colisão. <a href="como-ler.html#atlas">Como ler</a>.</p>
+      <p class="figure-sub">Palavras nos textos que citam a pessoa. A posição só evita colisão. <a href="/como-ler#atlas">Como ler</a>.</p>
       <dl class="figure-key" id="keyDefault">
         <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>frequência, PMI ou alcance, o que a frase escolhe</dd></div>
         <div id="keyDefaultColor"><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
@@ -65,7 +64,7 @@
   <section class="figure testimony" id="testimony" aria-labelledby="testimonyTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 2</span><h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel"></b></h2></div>
-      <p class="figure-sub">Compare veículos falando da mesma pessoa. Nunca compare pessoas. <a href="como-ler.html#avaliacao">Como ler</a>.</p>
+      <p class="figure-sub">Compare veículos falando da mesma pessoa. Nunca compare pessoas. <a href="/como-ler#avaliacao">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt>Posição</dt><dd>nota do kikori, um modelo treinado para ler se o texto é contra (−10) ou a favor (+10)</dd></div>
         <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
@@ -81,7 +80,7 @@
   <section class="figure compare" id="compare" aria-labelledby="compareTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 3</span><h2 id="compareTitle">Régua entre duas pessoas</h2></div>
-      <p class="figure-sub">A palavra escrita na régua nunca é de uma pessoa só. <a href="como-ler.html#comparar">Como ler</a>.</p>
+      <p class="figure-sub">A palavra escrita na régua nunca é de uma pessoa só. <a href="/como-ler#comparar">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt>Posição</dt><dd>de quem a palavra é mais</dd></div>
         <div><dt>Tamanho</dt><dd>documentos dos dois, somados</dd></div>
@@ -100,7 +99,7 @@
   <section class="figure rising" id="rising" aria-labelledby="risingTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 4</span><h2 id="risingTitle">Em alta</h2></div>
-      <p class="figure-sub">As palavras mais presentes na semana, e se cada uma ocupa fatia maior ou menor do que se escreve sobre a pessoa. <a href="como-ler.html#em-alta">Como ler</a>.</p>
+      <p class="figure-sub">As palavras mais presentes na semana, e se cada uma ocupa fatia maior ou menor do que se escreve sobre a pessoa. <a href="/como-ler#em-alta">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt>Posição</dt><dd>fatia da palavra em tudo o que se escreve sobre a pessoa, agora contra antes; no meio, a mesma fatia</dd></div>
         <div><dt>Tamanho</dt><dd>textos nos 37 dias</dd></div>
@@ -117,7 +116,7 @@
   <section class="figure week" id="week" aria-labelledby="weekTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 5</span><h2 id="weekTitle">A semana</h2></div>
-      <p class="figure-sub">Quais palavras ocuparam cada dia dos últimos sete. <a href="como-ler.html#semana">Como ler</a>.</p>
+      <p class="figure-sub">Quais palavras ocuparam cada dia dos últimos sete. <a href="/como-ler#semana">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>documentos naquele dia</dd></div>
         <div><dt>Posição</dt><dd>só o dia; a altura na coluna não mede nada</dd></div>
@@ -132,7 +131,7 @@
   <section class="figure lenses" id="lenses" aria-labelledby="lensesTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 6</span><h2 id="lensesTitle">Uma pessoa, duas lentes</h2></div>
-      <p class="figure-sub">A mesma pessoa lida por dois recortes ao mesmo tempo: um veículo, um viés ou uma fonte contra outro. <a href="como-ler.html#lentes">Como ler</a>.</p>
+      <p class="figure-sub">A mesma pessoa lida por dois recortes ao mesmo tempo: um veículo, um viés ou uma fonte contra outro. <a href="/como-ler#lentes">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt>Posição</dt><dd>de qual lente a palavra é mais</dd></div>
         <div><dt>Tamanho</dt><dd>documentos das duas lentes, somados</dd></div>
@@ -163,7 +162,7 @@
   <section class="figure attention" id="attention" aria-labelledby="attentionTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="attentionTitle">Atenção e menções</h2></div>
-      <p class="figure-sub">Quanto se buscou o nome na Wikipédia contra quanto se escreveu sobre a pessoa, dia a dia. <a href="como-ler.html#atencao">Como ler</a>.</p>
+      <p class="figure-sub">Quanto se buscou o nome na Wikipédia contra quanto se escreveu sobre a pessoa, dia a dia. <a href="/como-ler#atencao">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt>Posição</dt><dd>o dia, o mesmo eixo nas duas linhas</dd></div>
         <div><dt>Tamanho</dt><dd>altura da barra, numa escala só de cada linha</dd></div>
@@ -178,7 +177,7 @@
   <section class="figure agenda" id="agenda" aria-labelledby="agendaTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 8</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
-      <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="como-ler.html#agenda">Como ler</a>.</p>
+      <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="/como-ler#agenda">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo</dd></div>
         <div><dt>Posição</dt><dd>veículo na linha, pessoa na coluna</dd></div>
@@ -192,7 +191,7 @@
   <section class="figure comention" id="comention" aria-labelledby="comentionTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 9</span><h2 id="comentionTitle">Quem aparece junto</h2></div>
-      <p class="figure-sub">Quantos textos citam duas pessoas rastreadas ao mesmo tempo, na mesma janela. <a href="como-ler.html#junto">Como ler</a>.</p>
+      <p class="figure-sub">Quantos textos citam duas pessoas rastreadas ao mesmo tempo, na mesma janela. <a href="/como-ler#junto">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt>Célula</dt><dd>textos que citam as duas pessoas juntas na janela</dd></div>
         <div><dt>Cor</dt><dd>mais clara, mais textos; nunca é avaliação</dd></div>
@@ -207,7 +206,7 @@
   <section class="figure persistence" id="persistence" aria-labelledby="persistenceTitle">
     <header class="figure-head">
       <div class="figure-title"><span class="eyebrow">Gráfico 10</span><h2 id="persistenceTitle">Persistência</h2></div>
-      <p class="figure-sub">Quais palavras grudaram na pessoa semana após semana, e quais sumiram. <a href="como-ler.html#persistencia">Como ler</a>.</p>
+      <p class="figure-sub">Quais palavras grudaram na pessoa semana após semana, e quais sumiram. <a href="/como-ler#persistencia">Como ler</a>.</p>
       <dl class="figure-key">
         <div><dt>Palavra</dt><dd>uma linha por palavra, das que ficaram mais tempo às que ficaram menos</dd></div>
         <div><dt><span class="ink-scale" aria-hidden="true"></span>Célula</dt><dd>uma semana; a tinta é o número de documentos</dd></div>
@@ -320,10 +319,6 @@
       <p>Clicar numa célula abre os textos daquela semana com a palavra. Semanas mais antigas que o período de documentos guardado mostram o número, mas não abrem textos.</p>
     </div>
     <p>Tom só existe nos textos do GDELT. O site não inventa tom para o resto.</p>
-    <p class="help-foot"><a href="como-ler.html" data-leave>Página do guia</a>, se quiser mandar o link.</p>
+    <p class="help-foot"><a href="/como-ler" data-leave>Página do guia</a>, se quiser mandar o link.</p>
   </div>
 </dialog>
-<script type="module" src="./bundle.js"></script>
-<script defer src="/_vercel/insights/script.js"></script>
-</body>
-</html>

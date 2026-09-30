@@ -245,6 +245,13 @@ describe('buildQuestions / buildRequest', () => {
     }
   })
 
+  it('the scoring-docs convention names the svelte reading page, not the deleted html', () => {
+    const q = questions.find((x) => x.id === 'conv-scoring-docs')!
+    const text = [q.question, ...q.criteria.true, ...q.criteria.false].join(' ')
+    assert.match(text, /web\/routes\/como-ler\/\+page\.svelte/)
+    assert.doesNotMatch(text, /como-ler\.html/)
+  })
+
   it('conventions only without a spec', () => {
     assert.deepEqual(buildQuestions([]).map((q) => q.id), CONVENTION_IDS)
   })
@@ -376,7 +383,8 @@ describe('main', () => {
     const { git, seen } = gitStub()
     await main(ENV, w.fetchFn, git, out.write)
     assert.deepEqual(seen[0].slice(0, 2), ['diff', 'origin/master...abc123'])
-    assert.ok(seen[0].includes(':!pnpm-lock.yaml') && seen[0].includes(':!public/bundle.js'))
+    assert.ok(seen[0].includes(':!pnpm-lock.yaml'))
+    assert.ok(!seen[0].some((a) => a.includes('bundle')), 'the diff no longer excludes a bundle')
     assert.deepEqual(seen[1], ['log', '--format=%s', 'origin/master..abc123'])
     assert.equal(w.decisionsCalls().length, 1)
     const sent = JSON.parse(w.decisionsCalls()[0].body)

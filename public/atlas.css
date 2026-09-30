@@ -661,7 +661,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .pmi-scale dd { font-family: var(--mono); font-size: var(--t-2xs); line-height: 1.35; }
 .chapter-foot { margin-top: var(--space-6); padding-top: var(--space-4); color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-5); max-width: none; }
 
-/* ---------- the about page (sobre.html) ---------- */
+/* ---------- the about page (/sobre) ---------- */
 /* Same reading rules as como-ler, one column wide: this page tells a story in order, and the
    kikori block is its centre, so it alone gets a figure card. */
 .about .about-block { margin-top: var(--space-8); scroll-margin-top: var(--space-5); max-width: 980px; }
@@ -1014,3 +1014,5 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
   .comention-grid { display: none; }
   .comention-list { display: block; }
 }
+
+.app-root { display: contents; }

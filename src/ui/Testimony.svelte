@@ -42,6 +42,8 @@
   let source = $state('all')
   let outlet = $state('all')
   let started = false
+  // A pick made while either fetch is dimmed points at data about to be replaced; only that pick is dropped when new data lands.
+  let stalePick = false
 
   let testimony = $state.raw<Testimony | null>(null)
   let rows = $state.raw<OutletRow[] | null>(null)
@@ -88,6 +90,7 @@
       return
     }
     outlet = d
+    stalePick = testimonyDim || outletsDim
     if (!person) return
     void docsCard.open({
       owner: 'testimony',
@@ -113,6 +116,8 @@
   }
 
   const dropStalePick = () => {
+    if (!stalePick) return
+    stalePick = false
     if (docsCard.openedBy('testimony')) docsCard.close()
     outlet = 'all'
   }
@@ -129,11 +134,13 @@
       else outletsPhase = 'ghost'
     },
     paint: (data) => {
+      dropStalePick()
       rows = data
       outletsPhase = 'data'
       outletsDim = false
     },
     paintError: () => {
+      dropStalePick()
       rows = null
       outletsPhase = 'error'
       outletsDim = false
@@ -150,7 +157,7 @@
       else testimonyPhase = 'ghost'
     },
     paint: (data) => {
-      if (data !== testimony) dropStalePick()
+      dropStalePick()
       // Read at paint time, never memoised, so a resize repaints at the current width.
       stripWidth = stripEl?.clientWidth || 860
       testimony = data
@@ -167,6 +174,7 @@
     el: () => (stripEl && listEl && outletListEl ? [stripEl, listEl, outletListEl] : undefined),
     markSelector: '[data-domain], [data-testimony-domain], [data-strip-domain]',
     onRelease: () => {
+      stalePick = false
       outlet = 'all'
     },
   })
@@ -237,7 +245,7 @@
     {:else if stripShown && layout && overall !== null}
       {@const { dots, x, half, height } = layout}
       <div class="strip-mean-row"><span class="strip-mean" style:--pos="{testimonyPosition(overall)}%">média da pessoa {signed(overall)}</span></div>
-      <svg class="strip-svg" viewBox="0 0 {stripWidth} {height}" width={stripWidth} {height} role="group" aria-label="Veículos na régua da avaliação, de −10 a +10"><line class="strip-axis" x1={STRIP_PAD} x2={stripWidth - STRIP_PAD} y1={half} y2={half}/>{#each TICKS as s (s)}<line class="strip-tick" x1={x(s)} x2={x(s)} y1={half - 5} y2={half + 5}/>{/each}<line class="strip-overall" x1={x(overall)} x2={x(overall)} y1="4" y2={height - 4}/>{#each dots as d (d.domain)}<g class="strip-dot {d.domain === outlet ? 'is-active' : ''}" style:--tone={testimonyColor(d.score)} data-strip-domain={d.domain} role="button" tabindex="0" aria-pressed={d.domain === outlet} aria-label="{d.domain}, {signed(d.score)} em {fmt(d.n)} textos" onclick={() => toggle(d.domain)} onkeydown={(e) => onStripKey(e, d.domain)}><title>{d.domain} · {d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · {signed(d.score)} em {fmt(d.n)} {d.n === 1 ? 'texto' : 'textos'}</title><circle class="dot-halo" cx={d.x} cy={half + d.y} r={d.r + 5}/><circle class="dot-face" cx={d.x} cy={half + d.y} r={d.r}/></g>{/each}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui{outlet === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>
+      <svg class="strip-svg" viewBox="0 0 {stripWidth} {height}" width={stripWidth} {height} role="group" aria-label="Veículos na régua da avaliação, de −10 a +10"><line class="strip-axis" x1={STRIP_PAD} x2={stripWidth - STRIP_PAD} y1={half} y2={half}/>{#each TICKS as s (s)}<line class="strip-tick" x1={x(s)} x2={x(s)} y1={half - 5} y2={half + 5}/>{/each}<line class="strip-overall" x1={x(overall)} x2={x(overall)} y1="4" y2={height - 4}/>{#each dots as d (d.domain)}<g class="strip-dot {d.domain === outlet ? 'is-active' : ''}" style:--tone={testimonyColor(d.score)} data-strip-domain={d.domain} role="button" tabindex="0" aria-pressed={d.domain === outlet} aria-label="{d.domain}, {signed(d.score)} em {fmt(d.n)} textos" onclick={() => toggle(d.domain)} onkeydown={(e) => onStripKey(e, d.domain)}><title>{`${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}`}</title><circle class="dot-halo" cx={d.x} cy={half + d.y} r={d.r + 5}/><circle class="dot-face" cx={d.x} cy={half + d.y} r={d.r}/></g>{/each}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui{outlet === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>
     {/if}
   </figure>
   <div class="testimony-lists" class:is-loading={testimonyDim} id="testimonyList" aria-busy={busy(unavailable ? 'data' : testimonyPhase)} bind:this={listEl}>

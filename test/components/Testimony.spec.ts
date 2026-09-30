@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import Testimony from '../../src/ui/Testimony.svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
-import { close, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
+import { card, close, mountDocsCard, open, openedBy } from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { docsParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
@@ -32,6 +32,7 @@ let instance: ReturnType<typeof mount> | undefined
 let urls: string[]
 let routes: { sources: unknown; testimony: unknown; docs: unknown }
 let failing: Set<string>
+let docsHosts: ReturnType<typeof mount>[] = []
 let observers: { target: unknown; cb: () => void }[]
 
 const q = (sel: string) => target.querySelector(sel) as HTMLElement | null
@@ -97,6 +98,8 @@ beforeEach(() => {
 
 afterEach(() => {
   close()
+  for (const d of docsHosts) unmount(d)
+  docsHosts = []
   if (instance) unmount(instance)
   instance = undefined
   target.remove()
@@ -304,6 +307,7 @@ describe('Testimony (issue #296)', () => {
     await startBoot('', { people: [], peopleError: new Error('down') })
     expect(byId('testimonyList').textContent).toContain('Falha de rede ou base indisponível.')
     expect(byId('testimonyList').textContent).not.toContain('Nenhuma pessoa cadastrada.')
+    expect(byId('testimonyList').textContent).toContain('Nenhuma avaliação fictícia será exibida.')
     expect(all('#testimonyRetry')).toHaveLength(1)
     expect(byId('strip').hidden).toBe(true)
     byId('testimonyRetry').click()
@@ -549,10 +553,405 @@ describe('Testimony (issue #296, review gaps)', () => {
   })
 })
 
+const sample = {
+  method: 'kikori:q8',
+  overall: { score: -2.16, n: 784 },
+  by_source: [
+    { source: 'bluesky', score: -1.89, n: 621 },
+    { source: 'gkg', score: -4.22, n: 39 },
+  ],
+  by_domain: [
+    { domain: 'bbc.com', source: 'gnews', score: -2, n: 6 },
+    { domain: 'g1.globo.com', source: 'gnews', score: -3.62, n: 13 },
+    { domain: 'fdusp.bsky.social', source: 'bluesky', score: 0.76, n: 3 },
+  ],
+}
+const sampleRows = [
+  { domain: 'bbc.com', source: 'gnews', docs: 6 },
+  { domain: 'g1.globo.com', source: 'gnews', docs: 13 },
+  { domain: 'tiny.example', source: 'gnews', docs: 2 },
+]
+const pickRow = (d: string) => {
+  q(`#outletList [data-domain="${d}"]`)!.click()
+  flushSync()
+}
+
+describe('Testimony (issue #296, ported paintTestimony/paintStrip/docs-card assertions)', () => {
+  beforeEach(() => {
+    routes.testimony = sample
+    routes.sources = sampleRows
+  })
+
+  it('paints the overall score, chips and dt copy; no ranking, no scale, tone only as a custom property', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('testimonyLabel').textContent).toBe('-2,16')
+    const list = byId('testimonyList')
+    expect(list.querySelector('.verdict dt')!.textContent).toBe('Média do recorte')
+    expect(list.querySelector('.verdict dd')!.textContent).toBe('-2,16')
+    expect(list.querySelector('.verdict-class')!.textContent).toBe('neutro · média de 784 textos avaliados')
+    const chips = [...list.querySelectorAll('.source-chip')]
+    expect(chips.map((c) => c.querySelector('dt')!.textContent)).toEqual(['Bluesky', 'GKG'])
+    expect(chips[0].querySelector('.n')!.textContent).toBe('621')
+    expect(list.querySelector('[data-testimony-domain]')).toBeNull()
+    expect(list.querySelector('.scale')).toBeNull()
+    for (const el of target.querySelectorAll('[style]')) {
+      for (const decl of (el.getAttribute('style') ?? '').split(';').filter((d) => d.trim())) expect(decl.trim().startsWith('--')).toBe(true)
+    }
+  })
+
+  it("says the focused outlet's own score, or that it has under 3 scored texts", async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    expect(q('#testimonyList .focus')).toBeNull()
+    pickRow('bbc.com')
+    const focus = q('#testimonyList .focus')!
+    expect(focus.querySelector('b')!.textContent).toBe('bbc.com')
+    expect(focus.querySelector('strong')!.textContent).toBe('-2')
+    expect(focus.textContent).toBe('bbc.com: -2 em 6 textos. O número acima é o recorte inteiro.')
+    expect(byId('testimonyLabel').textContent).toBe('-2,16')
+    pickRow('tiny.example')
+    expect(q('#testimonyList .focus')!.textContent).toMatch(/^tiny\.example: menos de 3 textos avaliados/)
+  })
+
+  it('says when nothing was scored, with the method, and clears the label', async () => {
+    routes.testimony = { method: 'kikori:q8:abc', overall: { score: null, n: 0 }, by_source: [], by_domain: [] }
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('testimonyLabel').textContent).toBe('')
+    expect(byId('testimonyList').textContent).toContain('Nenhum texto avaliado neste recorte (método kikori:q8:abc)')
+    expect(byId('testimonyList').querySelector('strong')).toBeNull()
+    expect(byId('outletList').textContent).not.toContain('Nenhum veículo neste recorte.')
+  })
+
+  it('an empty /sources says so and paints no bird', async () => {
+    routes.sources = []
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('outletList').textContent).toContain('Nenhum veículo neste recorte.')
+    expect(byId('outletList').querySelector('img')).toBeNull()
+  })
+
+  it('the strip draws one dot per outlet, marks the active one and states its axis, mean and note', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    const strip = byId('strip')
+    expect(strip.hidden).toBe(false)
+    const domains = all('#strip [data-strip-domain]').map((e) => e.getAttribute('data-strip-domain'))
+    expect(domains).toEqual(['g1.globo.com', 'bbc.com', 'fdusp.bsky.social'])
+    expect(strip.querySelector('.strip-mean')!.getAttribute('style')).toMatch(/^--pos:\s*39\.2%;?$/)
+    expect(strip.querySelector('.strip-mean')!.textContent).toBe('média da pessoa -2,16')
+    expect(strip.querySelector('.strip-overall')).not.toBeNull()
+    const g1 = q('#strip [data-strip-domain="g1.globo.com"] title')!.textContent
+    expect(g1).toBe('g1.globo.com · Google News · -3,62 em 13 textos')
+    expect([...strip.querySelectorAll('.strip-axis-labels span')].map((e) => e.textContent)).toEqual(['−10 contra', '0', '+10 a favor'])
+    expect(strip.querySelector('.note')!.textContent).toContain('O atlas acima não muda.')
+    expect(strip.querySelector('.note')!.textContent).not.toContain('toque de novo, ou fora das bolinhas, para soltar')
+    const cx = (d: string) => Number(q(`#strip [data-strip-domain="${d}"] .dot-face`)!.getAttribute('cx'))
+    expect(cx('g1.globo.com')).toBeLessThan(cx('fdusp.bsky.social'))
+    pickRow('bbc.com')
+    const active = q('#strip [data-strip-domain="bbc.com"]')!
+    expect(active.getAttribute('class')).toBe('strip-dot is-active')
+    expect(active.getAttribute('aria-pressed')).toBe('true')
+    expect(q('#strip [data-strip-domain="g1.globo.com"]')!.getAttribute('aria-pressed')).toBe('false')
+    expect(strip.querySelector('.note')!.textContent).toContain('toque de novo, ou fora das bolinhas, para soltar')
+  })
+
+  it('the strip is hidden and empty with no dots', async () => {
+    routes.testimony = { ...sample, by_domain: [] }
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('strip').hidden).toBe(true)
+    expect(byId('strip').textContent!.trim()).toBe('')
+    expect(byId('strip').querySelector('svg')).toBeNull()
+  })
+
+  it('the ghost paints both figures with their copy and aria-busy while loading', async () => {
+    mountAll()
+    setBoot({ ready: true, people, peopleError: null, search: '?person=p1' })
+    flushSync()
+    expect(byId('strip').getAttribute('aria-busy')).toBe('true')
+    expect(byId('strip').hidden).toBe(false)
+    expect(byId('strip').querySelector('.ghost-field .strip-axis')).not.toBeNull()
+    expect(byId('outletList').getAttribute('aria-busy')).toBe('true')
+    expect(byId('outletList').querySelector('.ghost-field')).not.toBeNull()
+    expect(byId('outletList').textContent).toContain('Lendo os veículos.')
+    expect(byId('testimonyList').querySelector('.ghost-field')).not.toBeNull()
+    expect(byId('testimonyList').textContent).toContain('Lendo a avaliação.')
+    expect(byId('testimonyLabel').textContent).toBe('')
+    await settle()
+    expect(byId('strip').getAttribute('aria-busy')).toBe('false')
+    expect(byId('outletList').getAttribute('aria-busy')).toBe('false')
+  })
+
+  it("an outlet pick opens the card: kicker 'Documentos de', title the domain, this figure's person, no term", async () => {
+    mountDocsHost()
+    mountAll()
+    await startBoot('?person=p2')
+    expect(urls.filter((u) => u.includes('/docs'))).toHaveLength(0)
+    pickRow('g1.globo.com')
+    await settle(0)
+    const docs = urls.filter((u) => u.includes('/docs'))
+    expect(docs).toHaveLength(1)
+    expect(docs[0]).toContain('/people/p2/docs?')
+    expect(docs[0]).toContain('domain=g1.globo.com')
+    expect(docs[0]).toMatch(/term=(&|$)/)
+    expect(byId('docsKicker').textContent).toBe('Documentos de')
+    expect(byId('docsTitle').textContent).toBe('g1.globo.com')
+    pickRow('g1.globo.com')
+    await settle(0)
+    expect((byId('docsTitle').closest('dialog') as HTMLDialogElement).open).toBe(false)
+  })
+
+  it('a bubbling click on a strip dot keeps the pick; Space is default-prevented', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    pickRow('bbc.com')
+    q('#strip [data-strip-domain="g1.globo.com"] .dot-face')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    flushSync()
+    expect(byId('domainLabel').textContent).toBe(' · g1.globo.com')
+    expect(openedBy('testimony')).toBe(true)
+    const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    q('#strip [data-strip-domain="g1.globo.com"]')!.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+  })
+
+  it('a later boot does not re-seed or refetch once started', async () => {
+    mountAll()
+    await startBoot('?person=p2&days=60')
+    const before = urls.length
+    byId('testimonyDays').value = '7'
+    byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
+    await settle(300)
+    const after = urls.length
+    setBoot({ ready: true, people, peopleError: null, search: '?person=p1&days=30' })
+    flushSync()
+    await settle(300)
+    expect(urls.length).toBe(after)
+    expect(after).toBeGreaterThan(before)
+    expect(byId('testimonyPerson').value).toBe('p2')
+    expect(byId('testimonyDays').value).toBe('7')
+  })
+
+  it('exactly one observer watches #strip', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    expect(observers.filter((o) => o.target === byId('strip'))).toHaveLength(1)
+  })
+
+  it('caps the neighbour list at five', async () => {
+    routes.sources = [
+      {
+        domain: 'a.example',
+        source: 'gnews',
+        docs: 5,
+        tone: null,
+        field: 1,
+        neighbors: Array.from({ length: 6 }, (_, i) => ({ domain: `n${i}.example`, similarity: 0.9 - i / 10 })),
+      },
+    ]
+    mountAll()
+    await startBoot('?person=p1')
+    pickRow('a.example')
+    const items = all('#outletList .outlet-neighbor')
+    expect(items).toHaveLength(5)
+    expect(items.map((i) => i.textContent)).not.toContain('n5.example · 0.40')
+  })
+})
+
+describe('Testimony (issue #296, mutation survivors)', () => {
+  it('chips carry the per-source score, the active row is pressed, static rows and the note carry their copy', async () => {
+    routes.testimony = sample
+    routes.sources = [...sampleRows, { domain: null, source: 'bluesky', docs: 9 }]
+    mountAll()
+    await startBoot('?person=p1')
+    expect(all('#testimonyList .source-chip .t').map((e) => e.textContent)).toEqual(['-1,89', '-4,22'])
+    expect(q('#outletList .is-static')!.getAttribute('title')).toBe('Textos sem veículo nesta fonte')
+    expect(byId('outletList').textContent).toContain('Grupos e vocabulário parecido vêm da construção da janela')
+    pickRow('bbc.com')
+    const row = q('#outletList button[data-domain="bbc.com"]')!
+    expect(row.getAttribute('class')).toBe('outlet is-active')
+    expect(row.getAttribute('aria-pressed')).toBe('true')
+    expect(row.getAttribute('title')).toBe('Google News')
+  })
+
+  it('a click on the active strip dot releases it, the figure listener sparing marks', async () => {
+    mountDocsHost()
+    routes.testimony = sample
+    routes.sources = sampleRows
+    mountAll()
+    await startBoot('?person=p1')
+    pickRow('bbc.com')
+    q('#strip [data-strip-domain="bbc.com"] .dot-face')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    flushSync()
+    expect(byId('domainLabel').textContent).toBe('')
+    expect(openedBy('testimony')).toBe(false)
+  })
+
+  it("the docs card side is named after the figure's person", async () => {
+    mountDocsHost()
+    routes.sources = sampleRows
+    mountAll()
+    await startBoot('?person=p2')
+    pickRow('g1.globo.com')
+    await settle(0)
+    expect(card.sides.map((x) => [x.personId, x.personName])).toEqual([['p2', 'Beto']])
+  })
+
+  it('a pick on the dimmed outlet list is dropped when /sources fails', async () => {
+    mountDocsHost()
+    mountAll()
+    await startBoot('?person=p1')
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    const base = globalThis.fetch as unknown as (u: string) => Promise<unknown>
+    vi.stubGlobal('fetch', vi.fn(async (u: string) => {
+      if (!u.includes('/sources?')) return base(u)
+      await gate
+      return { ok: false, status: 500, headers: new Headers(), json: async () => ({}) }
+    }))
+    byId('testimonyDays').value = '7'
+    byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(300)
+    pickRow('g1.globo.com')
+    await settle(0)
+    expect(openedBy('testimony')).toBe(true)
+    release()
+    await settle(100)
+    expect(byId('outletList').textContent).toContain('Não foi possível carregar os veículos.')
+    expect(byId('domainLabel').textContent).toBe('')
+    expect(openedBy('testimony')).toBe(false)
+  })
+})
+
+describe('Testimony (issue #296, stale pick versus a live one)', () => {
+  const held = () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    return { gate, release }
+  }
+  const hold = (route: 'testimony' | 'sources', gate: Promise<void>, answer: () => unknown) => {
+    const base = globalThis.fetch as unknown as (u: string) => Promise<unknown>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (u: string) => {
+        if (!u.includes(`/${route}?`)) return base(u)
+        await gate
+        const body = answer()
+        return body === 'fail'
+          ? { ok: false, status: 500, headers: new Headers(), json: async () => ({}) }
+          : { ok: true, status: 200, headers: new Headers(), json: async () => body }
+      }),
+    )
+  }
+  const change = (id: string, value: string) => {
+    byId(id).value = value
+    byId(id).dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+  }
+
+  it('a pick on the live outlet list survives /testimony landing', async () => {
+    const { gate, release } = held()
+    hold('testimony', gate, () => structuredClone(scored))
+    mountDocsHost()
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('testimonyList').getAttribute('aria-busy')).toBe('true')
+    pickRow('g1.globo.com')
+    await settle(0)
+    release()
+    await settle(100)
+    expect(byId('domainLabel').textContent).toBe(' · g1.globo.com')
+    expect(openedBy('testimony')).toBe(true)
+  })
+
+  it('a pick on the live outlet list survives /testimony failing', async () => {
+    const { gate, release } = held()
+    hold('testimony', gate, () => 'fail')
+    mountDocsHost()
+    mountAll()
+    await startBoot('?person=p1')
+    pickRow('g1.globo.com')
+    await settle(0)
+    release()
+    await settle(100)
+    expect(byId('testimonyList').textContent).toContain('Não foi possível carregar a avaliação.')
+    expect(byId('domainLabel').textContent).toBe(' · g1.globo.com')
+    expect(openedBy('testimony')).toBe(true)
+  })
+
+  it('a pick on the dimmed outlet list is dropped when the new /sources lands', async () => {
+    mountDocsHost()
+    mountAll()
+    await startBoot('?person=p1')
+    const { gate, release } = held()
+    hold('sources', gate, () => [{ domain: 'other.example', source: 'gnews', docs: 4 }])
+    change('testimonyDays', '7')
+    await settle(300)
+    expect(byId('outletList').classList.contains('is-loading')).toBe(true)
+    pickRow('g1.globo.com')
+    await settle(0)
+    expect(openedBy('testimony')).toBe(true)
+    release()
+    await settle(100)
+    expect(byId('domainLabel').textContent).toBe('')
+    expect(openedBy('testimony')).toBe(false)
+    expect(byId('outletList').textContent).toContain('other.example')
+  })
+
+  it('a pick on dimmed data is dropped when the reload fails, sparing another owner', async () => {
+    mountDocsHost()
+    mountAll()
+    await startBoot('?person=p1')
+    const { gate, release } = held()
+    hold('testimony', gate, () => 'fail')
+    change('testimonyDays', '7')
+    await settle(300)
+    expect(byId('testimonyList').classList.contains('is-loading')).toBe(true)
+    pickRow('g1.globo.com')
+    await settle(0)
+    expect(openedBy('testimony')).toBe(true)
+    release()
+    await settle(100)
+    expect(byId('testimonyList').textContent).toContain('Não foi possível carregar a avaliação.')
+    expect(byId('domainLabel').textContent).toBe('')
+    expect(openedBy('testimony')).toBe(false)
+  })
+})
+
+describe('Testimony (issue #296): the route and the component agree on the shape', () => {
+  it('what GET /api/people/:id/testimony returns paints without adaptation', async () => {
+    process.env.DATA_DIR = 'memory://'
+    const { app } = await import('../../src/server.js')
+    const { seed } = await import('../fixture.js')
+    const { testimonyParams } = await import('../../src/ui/api.js')
+    const { signed } = await import('../../src/ui/format.js')
+    await seed()
+    const res = await app.request('/api/people/tarcisio/testimony?' + testimonyParams({ days: '30', sort: 'count', limit: '18', source: 'all' }) + '&method=stub')
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.overall.n).toBeGreaterThan(0)
+    routes.testimony = data
+    routes.sources = data.by_domain.map((d: { domain: string; source: string; n: number }) => ({ domain: d.domain, source: d.source, docs: d.n }))
+    mountAll()
+    await startBoot('?person=p1')
+    expect(byId('testimonyLabel').textContent).toBe(signed(data.overall.score))
+    q('#outletList [data-domain="estadao.com.br"]')!.click()
+    flushSync()
+    expect(q('#testimonyList .focus b')!.textContent).toBe('estadao.com.br')
+  })
+})
+
 const mountDocsHost = () => {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const docs = mount(DocsCard, { target: host })
+  docsHosts.push(docs)
   mountDocsCard()
   flushSync()
   return docs

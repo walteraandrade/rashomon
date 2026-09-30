@@ -461,7 +461,7 @@ export const termStripLayout = (nodes: Term[], personTestimony: PersonTestimony 
 export const stripLegend = (personTestimony?: PersonTestimony) =>
   html`<span><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho = quantos textos</span><span>Tab + Enter para selecionar</span>${maskLegend(personTestimony)}`
 
-// Draws into #atlasStrip and #stripHiddenNote. Unlike paintStrip, size is by document count
+// Draws into #atlasStrip and #stripHiddenNote. Unlike figure 2's strip (Testimony.svelte), size is by document count
 // (the same number the map and the columns already size by) and colour is termMask's mask
 // colour, not the tone-only ramp #testimony uses.
 export const paintTermStrip = ({

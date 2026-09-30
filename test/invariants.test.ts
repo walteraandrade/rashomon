@@ -793,7 +793,7 @@ describe('component test harness', () => {
 
 describe('figure 9 lives only in Comention.svelte', () => {
   const ui = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'ui')
-  it('AC12: figures/comention.ts is gone, render.ts has no paintComention*, app.ts and no .ts module reference figure 9 wiring', () => {
+  it('figures/comention.ts is gone and no .ts module wires figure 9 any more (AC12)', () => {
     assert.equal(existsSync(join(ui, 'figures', 'comention.ts')), false)
     assert.doesNotMatch(readFileSync(join(ui, 'render.ts'), 'utf8'), /paintComention/)
     assert.doesNotMatch(readFileSync(join(ui, 'app.ts'), 'utf8'), /comention/i)

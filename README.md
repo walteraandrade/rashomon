@@ -32,7 +32,7 @@ pnpm dev       # site on http://localhost:5173
 | `pnpm migrate` / `pnpm push` | create the schema on a managed Postgres, then copy a local PGlite into it |
 | `pnpm export-docs` | dump every doc as one JSON line, with the per-person text the scorer sees, for kikori's training set |
 | `pnpm bench` / `pnpm bench:writes` | read and write baselines against their own synthetic database |
-| `pnpm typecheck` / `pnpm test` | `tsc`, and `node --test` against an in-memory database |
+| `pnpm typecheck` / `pnpm test` | `tsc` plus `svelte-check` for `.svelte`, and `node --test` (in-memory database) plus `vitest` for component specs |
 
 Run `pnpm reindex` after editing `seed.json` or `src/extract.ts`. Both `pnpm typecheck` and `pnpm test` must pass before a PR.
 

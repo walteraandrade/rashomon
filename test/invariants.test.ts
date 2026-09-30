@@ -593,3 +593,73 @@ describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
     for (const file of reached) assert.doesNotMatch(srcSource(file), /@vercel\/blob/, `${file} must not reach @vercel/blob`)
   })
 })
+
+// .svelte files: kept apart from jsFiles() so the import-graph map above still lists .ts modules
+// only. A component sits above render.ts and below app.ts; nothing in .ts imports one yet.
+const webDir = join(root, 'web')
+const svelteFiles = (dir: string): string[] =>
+  existsSync(dir)
+    ? readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory() ? svelteFiles(join(dir, entry.name)) : entry.name.endsWith('.svelte') ? [join(dir, entry.name)] : [],
+      )
+    : []
+const allSvelte = () => [...svelteFiles(jsDir), ...svelteFiles(webDir)]
+const scriptOf = (source: string) => [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n')
+
+const svelteRules = {
+  imports: (file: string, source: string): string[] =>
+    importsOf(scriptOf(source)).filter((spec) => {
+      if (/graphology/.test(spec)) return true
+      if (!spec.startsWith('.')) return false
+      const target = join(dirname(file), spec)
+      return target !== jsDir && !target.startsWith(jsDir + '/')
+    }),
+  innerHTML: (source: string) => /innerHTML|insertAdjacentHTML/.test(scriptOf(source)) || /`\s*<[a-zA-Z]/.test(scriptOf(source)),
+  atHtml: (source: string) => /\{@html\b/.test(source),
+  style: (source: string) => /<style[\s>]/.test(source) || /\sstyle\s*=\s*["'{]/.test(source),
+  fontSize: (source: string) => /font-size\s*:\s*[\d.]+px/.test(source),
+}
+
+describe('svelte files follow the same rules as the .ts modules', () => {
+  const fakeFile = join(jsDir, 'Fake.svelte')
+  const script = (body: string) => `<script lang="ts">\n${body}\n</script>\n<p>x</p>`
+
+  it('the scan really finds the proof component', () => {
+    assert.ok(allSvelte().some((f) => f.endsWith('Proof.svelte')))
+    assert.ok(allSvelte().some((f) => f.includes(join('web', 'routes'))))
+  })
+
+  it('svelte files import only from src/ui', () => {
+    for (const file of allSvelte()) assert.deepEqual(svelteRules.imports(file, readFileSync(file, 'utf8')), [], `${file} must import only from src/ui`)
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`import { x } from '../db.js'`)), ['../db.js'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`import { x } from './format.js'`)), [])
+  })
+
+  it('svelte files never import graphology', () => {
+    for (const file of allSvelte()) assert.ok(!/graphology/.test(importsOf(scriptOf(readFileSync(file, 'utf8'))).join(' ')), `${file} must not import graphology`)
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`import Graph from 'graphology'`)), ['graphology'])
+  })
+
+  it('svelte files have no innerHTML', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.innerHTML(readFileSync(file, 'utf8')), false, `${file} must not write innerHTML`)
+    assert.equal(svelteRules.innerHTML(script(`el.innerHTML = 'x'`)), true)
+    assert.equal(svelteRules.innerHTML(script('const m = `<b>x</b>`')), true)
+  })
+
+  it('svelte files have no {@html}', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.atHtml(readFileSync(file, 'utf8')), false, `${file} must not use {@html}`)
+    assert.equal(svelteRules.atHtml('<div>{@html x}</div>'), true)
+  })
+
+  it('svelte files have no style block or style attribute', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.style(readFileSync(file, 'utf8')), false, `${file} must not carry a style block or attribute`)
+    assert.equal(svelteRules.style('<p>x</p>\n<style>p { color: red }</style>'), true)
+    assert.equal(svelteRules.style('<p style="color: red">x</p>'), true)
+    assert.equal(svelteRules.style('<p style:--w={w}>x</p>'), false)
+  })
+
+  it('svelte files use no px font-size', () => {
+    for (const file of allSvelte()) assert.equal(svelteRules.fontSize(readFileSync(file, 'utf8')), false, `${file} must use the --t-* ramp`)
+    assert.equal(svelteRules.fontSize('<p>font-size: 12px</p>'), true)
+  })
+})

@@ -1,6 +1,6 @@
 // The security headers as data. `vercel.json` is the only live copy (Vercel's CDN serves the
-// static build without calling the function); this module is its source of truth, and
-// test/security-headers-acceptance.test.ts holds the two together byte for byte.
+// static build without calling the function); this module is the source of truth for the header values only
+// (the CSP meta directives live in `svelte.config.js`), and test/security-headers-acceptance.test.ts holds the two together byte for byte.
 
 // A <meta> cannot carry frame-ancestors; the prerendered meta carries the script hashes.
 export const CSP = "frame-ancestors 'none'"

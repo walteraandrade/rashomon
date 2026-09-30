@@ -169,3 +169,20 @@ describe('the client bundle', () => {
     for (const file of files(appDir)) assert.ok(!readFileSync(file, 'utf8').includes('graphology'), `${file} contains graphology`)
   })
 })
+
+describe('the CSP meta directives in svelte.config.js', () => {
+  it('match the pinned list', async () => {
+    // @ts-expect-error plain JS config, no declaration file
+    const { default: config } = await import('../svelte.config.js')
+    assert.deepEqual(config.kit.csp.directives, {
+      'default-src': ['self'],
+      'script-src': ['self'],
+      'style-src': ['self', 'https://fonts.googleapis.com', 'unsafe-inline'],
+      'font-src': ['https://fonts.gstatic.com'],
+      'img-src': ['self', 'data:'],
+      'connect-src': ['self'],
+      'base-uri': ['self'],
+      'object-src': ['none'],
+    })
+  })
+})

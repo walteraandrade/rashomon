@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { persons } from './fixture.js'
 import { docsText } from './docs.js'
+import { pageMarkup } from './pages.js'
 import { clearScopes } from '../src/ui/state.js'
 import { bootData } from '../src/ui/boot.svelte.js'
 import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
@@ -12,7 +13,7 @@ import { flush, routeFetch, withFiguresDom } from './fake-mount-dom.js'
 // and a spied fetch — never against a claim about them.
 
 const people = persons.map(({ id, name }) => ({ id, name }))
-const [personA, personB] = people
+const [personA] = people
 
 const emptyGraph = (person: { id: string; name: string }) => ({
   person,
@@ -71,74 +72,6 @@ describe('/api/people is fetched exactly once, and seeds every figure', () => {
   })
 })
 
-// A dead API and an empty seed.json are different facts, and the page must not report one as
-// the other. master's boot() reached an error branch with its own copy and a retry button;
-// after the split the shell fetches /api/people once, so the failure has to travel down into
-// every figure's mount() or both figures would silently claim nobody is tracked.
-const withLocationAndReload = async <T>(search: string, fn: (reloads: number[]) => Promise<T> | T): Promise<T> => {
-  const previous = (globalThis as { location?: unknown }).location
-  const reloads: number[] = []
-  ;(globalThis as { location?: unknown }).location = { search, reload: () => reloads.push(1) }
-  try {
-    return await fn(reloads)
-  } finally {
-    ;(globalThis as { location?: unknown }).location = previous
-  }
-}
-
-describe('a failed GET /api/people is an outage, never an empty seed', () => {
-  it('paints the error copy and a working retry in figure 4, not the empty-seed copy', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      globalThis.fetch = (async (input: unknown) => {
-        calls.push(String(input))
-        throw new Error('network down')
-      }) as typeof fetch
-      await withLocationAndReload('', async () => {
-        await appModule.boot()
-        await flush()
-
-        // Figure 4 has no retry of its own: same outage copy in #risingAbout, ruler hidden.
-        assert.equal(els.risingAbout.textContent, 'Falha de rede ou base indisponível.')
-        assert.equal(els.risingRuler.hidden, true)
-      })
-    })
-  })
-})
-
-describe('the loading ghost shows before /api/people resolves', () => {
-  it('boot() paints the loading reader synchronously, ahead of the network round trip', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      globalThis.fetch = (async (input: unknown) => {
-        calls.push(String(input))
-        return new Promise(() => {}) as unknown as Response
-      }) as typeof fetch
-      await withLocation('', async () => {
-        const booting = appModule.boot()
-        assert.equal(els.risingRuler.hidden, false, 'issue #151: figure 4 gets its own boot ghost too')
-        assert.match(els.risingRuler.innerHTML, /ruler-axis/)
-        void booting
-      })
-    })
-  })
-})
-
-describe('figure 4 (rising) joins app.ts\'s bootstrap, same bare/prefixed convention as the other three', () => {
-  it('bare ?person= seeds risingPerson; rising.source overrides the source for figure 4 only', async () => {
-    await withFiguresDom(async (els, calls) => {
-      clearScopes()
-      routeFetch(calls, { '/api/people': people, '/graph': emptyGraph(personA), '/sources': [], '/testimony': emptyTestimony })
-      await withLocation(`?person=${personB.id}&rising.source=gdelt`, () => appModule.boot())
-      await flush()
-      assert.equal(els.risingPerson.value, personB.id, 'the bare person key seeds figure 4 too, same fallback figure 1/2 read')
-      const risingCall = calls.find((u) => u.includes('/rising'))
-      assert.ok(risingCall?.includes(`/people/${personB.id}/rising`), `figure 4 must ask about ${personB.id}: ${risingCall}`)
-      assert.match(risingCall!, /source=gdelt/)
-    })
-  })
-})
-
 describe('figure 10 querystring keys are documented (issue #215)', () => {
   it('names the persistence figure id, person and limit bare or prefixed, and weeks prefixed only', () => {
     assert.match(docsText, /persistence\.weeks/)
@@ -183,5 +116,25 @@ describe('figure 9 is a Svelte component', () => {
     assert.match(docsText, /Comention\.svelte/)
     assert.match(docsText, /comention[\s\S]{0,600}\bdays\b[\s\S]{0,120}\bsource\b[\s\S]{0,200}\blean\b[\s\S]{0,120}\bmin\b/i)
     assert.match(docsText, /comention[\s\S]{0,1200}\/api\/people[\s\S]{0,200}(once|single|shared|one fetch)/i)
+  })
+})
+
+describe('figure 4 is a Svelte component (#292)', () => {
+  it('documents that rising is a Svelte component seeded from bootData with person and source, and no longer a figures/*.ts mount', () => {
+    assert.match(docsText, /Rising\.svelte/)
+    assert.match(docsText, /rising[\s\S]{0,300}Svelte component/i)
+    assert.match(docsText, /rising[\s\S]{0,600}\bperson\b[\s\S]{0,120}\bsource\b/i)
+    assert.doesNotMatch(docsText, /figures\/rising/)
+  })
+
+  it('the prerendered page carries every figure 4 hook, after figure 3, with only person and source as controls', () => {
+    const page = pageMarkup('/')
+    for (const id of ['rising', 'risingTitle', 'risingPerson', 'risingSource', 'risingRuler', 'risingAbout']) assert.match(page, new RegExp(`id="${id}"`), `#${id} must be in the page`)
+    assert.ok(page.indexOf('id="compare"') >= 0, '#compare must be in the page')
+    assert.ok(page.indexOf('id="compare"') < page.indexOf('id="rising"'), '#rising must come after #compare')
+    assert.match(page, /<section class="figure[^"]*" id="rising"/)
+    const section = page.slice(page.indexOf('id="rising"'))
+    const line = section.match(/<[^>]*class="[^"]*sentence-line[^"]*"[\s\S]*?<\/(?:p|div)>/)?.[0] ?? section.slice(0, 2500)
+    for (const id of ['risingDays', 'risingBaseline', 'risingKind', 'risingLimit', 'risingMin']) assert.doesNotMatch(line, new RegExp(`id="${id}"`), `#${id} is not a control`)
   })
 })

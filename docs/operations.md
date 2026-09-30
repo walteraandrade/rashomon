@@ -388,15 +388,13 @@ It is read-only: each explain runs inside `begin transaction read only` ... `rol
 
 ## Front-end bootstrapping
 
-The page at `/` is a sequence of independent figures (`src/ui/figures/*.ts`), each with its
-own sentence of `<select>`s and its own fetches. `src/ui/app.ts` reads the querystring once,
-at mount, to seed them. Nothing is ever written back to `location` or `history`: the controls
+The page at `/` is a sequence of independent figures (Svelte components under `src/ui`), each with its
+own sentence of `<select>`s and its own fetches. `src/ui/app.ts` publishes the querystring through `bootData` once, and each figure seeds itself from it. Nothing is ever written back to `location` or `history`: the controls
 change what a figure shows, never the URL.
 
-A figure ported to Svelte (`src/ui/Agenda.svelte` first, then `Comention.svelte` and `Atlas.svelte`) reads its own seeds: once
+A figure reads its own seeds: once
 `bootData.ready`, it calls `seedFor('<figure>', <keys>, bootData.search)` from `src/ui/seed.ts`,
-and the prefixed key wins over the bare one there too. `app.ts` seeds only the figures still
-mounted through `FIGURES`.
+and the prefixed key wins over the bare one there too. `app.ts` seeds and mounts none of them.
 
 Two key forms, read in this order:
 
@@ -434,6 +432,9 @@ Figure 9 is a Svelte component (`src/ui/Comention.svelte`), not a `figures/*.ts`
 from `days`, `source`, `lean` and `min` with `seedFor` over `bootData.search`, starts its first
 load only once `bootData.ready`, and shares the single `/api/people` fetch `app.ts` makes once
 (it never fetches people itself).
+Figure 4 (`rising`) is a Svelte component (`src/ui/Rising.svelte`), prop-less like the others: it seeds
+`person` and `source` with `seedFor('rising', ['person', 'source'], bootData.search)`, applies a
+source only if it is one of its options, and loads only once `bootData.ready`.
 The figure id `persistence` (figure 10, `#persistence`) reads `person` and `limit`, bare or
 prefixed (`persistence.person`, `persistence.limit`), and `weeks`, prefixed only
 (`persistence.weeks`, no bare fallback, like figure 6's `a`/`b`): no other figure has a
@@ -455,8 +456,8 @@ are client-side only — each figure still narrows its own request through `src/
 nothing here reaches the server verbatim.
 
 `GET /api/people` is fetched exactly once, by the shell, however many figures mount. If it
-fails, the failure travels down into every `mount()` as `peopleError` and each figure paints
-its own network-failure copy with a retry button. An outage is never reported as an empty
+fails, the failure travels down through `bootData.peopleError` and each figure paints
+its own network-failure copy. An outage is never reported as an empty
 `seed.json`.
 
 ## Empty states and the pet

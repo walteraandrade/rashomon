@@ -184,21 +184,12 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       // card its own name opened.
       'figure.ts': ['./docs-card.js', './perf.js', './state.js'],
       'figure.svelte.ts': ['./docs-card.svelte.js', './perf.js', './state.js'],
-      // testimony.ts, compare.ts and rising.ts adopt figure.ts and drop their own
-      // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
-      // the shared runtime.
-      // Figure 4, the rising ruler: same shape as figures/compare.ts, imported by nothing but
-      // app.ts, and reaching into no other figure's DOM.
-      'figures/rising.ts': ['./api.js', './docs-card.js', './figure.js', './format.js', './render.js'],
       'atlas-model.ts': ['./api.js', './format.js'],
       'app.ts': [
         './api.js',
         './boot.svelte.js',
         './docs-card.js',
-        './figures/rising.js',
         './help.js',
-        './render.js',
-        './seed.js',
       ],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
@@ -288,7 +279,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     const render = (await import('../src/ui/render.js')) as Record<string, unknown>
     for (const name of ['wordMarkup', 'drawMap', 'paintSelection', 'paintColumns', 'inspect', 'paintAtlasLoading', 'termStripLayout', 'paintTermStrip', 'paintCandidates', 'paintCandidatesLoading', 'paintCandidatesError'])
       assert.equal(name in render, false, `render.ts must not export ${name}`)
-    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms', 'paintRisingRuler']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
+    for (const name of ['stripLayout', 'createCanvasMeasure', 'paintDocs', 'rulerTerms']) assert.equal(typeof render[name], 'function', `render.ts must keep ${name}`)
   })
 
   it('state.js exports what the split promises, no more', async () => {

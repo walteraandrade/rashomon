@@ -437,3 +437,35 @@ export const attentionLagSentence = (mentionsPeak: string, viewsPeak: string) =>
 
 // A peakless row states its own "sem dado", so the shared note stays silent.
 export const attentionNoteText = (mentionsPeak: string | null, viewsPeak: string | null) => (mentionsPeak && viewsPeak ? attentionLagSentence(mentionsPeak, viewsPeak) : '')
+
+export type RisingShares = RisingAbout & { words_recent: number; words_baseline: number }
+
+// A payload cached before `present`/`about.words_*` existed falls back to the person-lift rule, never NaN.
+export const hasShares = (data: Rising): data is Rising & { present: RisingTerm[]; about: RisingShares } =>
+  Array.isArray(data.present) && Number.isFinite(data.about.words_recent) && Number.isFinite(data.about.words_baseline)
+
+export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingShares) => {
+  if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
+  if (about.words_recent <= 0) return -1
+  const ratio = (t.count_recent_raw / about.words_recent) / ((t.count_baseline_raw + 1) / about.words_baseline)
+  return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
+}
+
+export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
+
+export const liftBalance = (t: { lift: number }, liftPerson: number) => {
+  const ratio = liftPerson > 0 ? t.lift / liftPerson : t.lift > 0 ? Infinity : 1
+  return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
+}
+
+export type RisingItem = { term: string; kind: string; balance: number; combined: number; lift: number }
+
+export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
+  terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
+
+export const RARE_SHOWN = 12
+
+export const rareRisers = (terms: RisingTerm[], present: RisingTerm[]) => {
+  const ruled = new Set(present.map((t) => `${t.kind}:${t.term}`))
+  return terms.filter((t) => t.lift > 1 && !ruled.has(`${t.kind}:${t.term}`))
+}

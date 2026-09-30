@@ -8,6 +8,7 @@
   import Atlas from '$lib/Atlas.svelte'
   import Lenses from '$lib/Lenses.svelte'
   import Compare from '$lib/Compare.svelte'
+  import Rising from '$lib/Rising.svelte'
   import Comention from '$lib/Comention.svelte'
   import Attention from '$lib/Attention.svelte'
   import DocsCard from '$lib/DocsCard.svelte'
@@ -36,22 +37,7 @@
 
   <Compare />
 
-  <section class="figure rising" id="rising" aria-labelledby="risingTitle">
-    <header class="figure-head">
-      <div class="figure-title"><span class="eyebrow">Gráfico 4</span><h2 id="risingTitle">Em alta</h2></div>
-      <p class="figure-sub">As palavras mais presentes na semana, e se cada uma ocupa fatia maior ou menor do que se escreve sobre a pessoa. <a href="/como-ler#em-alta">Como ler</a>.</p>
-      <dl class="figure-key">
-        <div><dt>Posição</dt><dd>fatia da palavra em tudo o que se escreve sobre a pessoa, agora contra antes; no meio, a mesma fatia</dd></div>
-        <div><dt>Tamanho</dt><dd>textos nos 37 dias</dd></div>
-        <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>para que lado pende</dd></div>
-        <div><dt>Clique</dt><dd>textos da semana</dd></div>
-        <div><dt>Lista</dt><dd>fora da régua, as que subiram de fato, da maior subida para a menor</dd></div>
-      </dl>
-      <div class="sentence"><p class="sentence-line">O que se escreve sobre <span class="pick"><select id="risingPerson" aria-label="Pessoa (em alta)"></select></span> nos últimos 7 dias, contra os 30 dias antes, em <span class="keep"><span class="pick"><select id="risingSource" aria-label="Fonte (em alta)"></select></span>.</span></p></div>
-    </header>
-    <figure class="ruler" id="risingRuler" aria-label="Régua de termos em alta" hidden></figure>
-    <p class="note" id="risingAbout"></p>
-  </section>
+  <Rising />
 
   <Week />
 

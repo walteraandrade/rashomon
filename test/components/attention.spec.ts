@@ -6,7 +6,9 @@ import DocsCard from '../../src/ui/DocsCard.svelte'
 import { close, mountDocsCard, openedBy, open } from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { ATLAS_KINDS, attentionParams } from '../../src/ui/api.js'
+import { SOURCE_SEGMENTS } from '../../src/ui/format.js'
 import { clearScopes } from '../../src/ui/state.js'
+import { card } from '../../src/ui/docs-card.svelte.js'
 
 type Call = { url: string; path: string; qs: URLSearchParams; signal?: AbortSignal; resolve: (b: unknown) => void; fail: () => void }
 
@@ -333,6 +335,7 @@ describe('Attention (issue #295)', () => {
     flushSync()
     await settle()
     expect(openedBy('attention')).toBe(true)
+    expect(chart().querySelector('.is-selected')).not.toBeNull()
     respond('/timeline', [bucket('2026-08-15', 2)], (c) => c.qs.get('source') === 'gdelt')
     await settle()
     expect(openedBy('attention')).toBe(false)
@@ -429,6 +432,277 @@ describe('Attention (issue #295)', () => {
     expect(await run('2026-08-06', '2026-08-03')).toMatch(/o público buscou 3 dias antes/)
     expect(await run('2026-08-03', '2026-08-03')).toMatch(/os dois picos caíram no mesmo dia/)
     expect(await run('2026-08-03', '2026-08-03', 0)).not.toMatch(/dias antes|mesmo dia/)
+  })
+
+  const changeTo = (id: string, value: string) => {
+    const sel = $(id) as HTMLSelectElement
+    sel.value = value
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    return sel
+  }
+  const clickDay = (d: string, row = 'mentions') => {
+    chart().querySelector(`[data-row="${row}"] [data-day="${d}"]`)!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    flushSync()
+  }
+  const oldPerson = (c: Call) => c.path.includes('/lula/')
+  const newPerson = (c: Call) => c.path.includes('/bolsonaro/')
+
+  it('AC7: a stale old-person /attention success inside the debounce paints nothing', async () => {
+    render()
+    boot()
+    await settle()
+    changeTo('attentionPerson', 'bolsonaro')
+    respond('/timeline', [bucket('2026-08-15', 9)], oldPerson)
+    respond('/attention', att([{ day: '2026-08-15', views: 12345 }]), oldPerson)
+    await settle(10)
+    expect(chart().innerHTML).not.toMatch(/12\.345/)
+    await settle(500)
+    respond('/timeline', [bucket('2026-08-15', 7)], newPerson)
+    await settle()
+    expect(chart().innerHTML).not.toMatch(/12\.345/)
+  })
+
+  it('AC7: a stale old-person /timeline success inside the debounce paints nothing', async () => {
+    render()
+    boot()
+    await settle()
+    changeTo('attentionPerson', 'bolsonaro')
+    respond('/timeline', [bucket('2026-08-15', 4321)], oldPerson)
+    await settle(10)
+    expect(chart().innerHTML).not.toMatch(/4\.321/)
+  })
+
+  it('AC7: a stale old-person /timeline failure inside the debounce paints no error copy', async () => {
+    render()
+    boot()
+    await settle()
+    changeTo('attentionPerson', 'bolsonaro')
+    named('/timeline').filter(oldPerson).forEach((c) => c.fail())
+    await settle(10)
+    expect(chart().textContent).not.toMatch(/Não foi possível carregar as menções/)
+  })
+
+  it('AC7: a stale old-person /attention failure inside the debounce paints no error copy', async () => {
+    render()
+    boot()
+    await settle()
+    respond('/timeline', [bucket('2026-08-15', 4)], oldPerson)
+    await settle()
+    changeTo('attentionPerson', 'bolsonaro')
+    named('/attention').filter(oldPerson).forEach((c) => c.fail())
+    await settle(500)
+    respond('/timeline', [bucket('2026-08-15', 7)], newPerson)
+    await settle()
+    expect(chart().textContent).not.toMatch(/Não foi possível carregar os pageviews/)
+  })
+
+  it('AC7: a person change never paints the old views against the new mentions', async () => {
+    auto = both(12345, 4)
+    await startAll()
+    expect(chart().innerHTML).toMatch(/12\.345/)
+    auto = null
+    changeTo('attentionPerson', 'bolsonaro')
+    await settle(500)
+    respond('/timeline', [bucket('2026-08-15', 7)], newPerson)
+    await settle()
+    expect(chart().innerHTML).not.toMatch(/12\.345/)
+  })
+
+  it('AC3: a later setBoot never re-seeds or refetches and keeps the selected person', async () => {
+    auto = both()
+    await startAll()
+    const sel = changeTo('attentionPerson', 'bolsonaro')
+    await settle(500)
+    const before = calls.length
+    setBoot({ ready: true, search: '' })
+    flushSync()
+    await settle(500)
+    expect(calls.length).toBe(before)
+    expect(sel.value).toBe('bolsonaro')
+  })
+
+  it('AC3: an unknown seeded person or source falls back to the first person and the default source', async () => {
+    auto = both()
+    await startAll({ search: '?person=nobody&source=nope' })
+    expect(($('attentionPerson') as HTMLSelectElement).value).toBe('lula')
+    expect(($('attentionSource') as HTMLSelectElement).value).toBe(SOURCE_SEGMENTS[0][0])
+    expect(named('/timeline')[0].path).toContain('/lula/')
+    expect(named('/timeline')[0].qs.get('source')).toBe(SOURCE_SEGMENTS[0][0])
+  })
+
+  it('AC8: the views-only ghost carries its own sr-only note', async () => {
+    render()
+    boot()
+    await settle()
+    respond('/timeline', [bucket('2026-08-15', 4)])
+    await settle()
+    expect(chart().querySelector('.sr-only')?.textContent).toBe('Lendo os pageviews.')
+  })
+
+  it('AC6: the views row carries one mark per mentions day, padding the missing ones', async () => {
+    auto = { '/attention': att([{ day: '2026-08-16', views: 500 }]), '/timeline': [bucket('2026-08-14', 40), bucket('2026-08-15', 2), bucket('2026-08-16', 2)] }
+    await startAll()
+    expect(chart().querySelectorAll('[data-row="views"] [data-day]')).toHaveLength(3)
+  })
+
+  it('AC9: aria-pressed and is-selected follow the pick and its release', async () => {
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await startAll({ withCard: true })
+    const mark = () => chart().querySelector('[data-row="mentions"] [data-day]')!
+    expect(mark().getAttribute('aria-pressed')).toBe('false')
+    expect(mark().classList.contains('is-selected')).toBe(false)
+    clickDay('2026-08-15')
+    await settle()
+    expect(mark().getAttribute('aria-pressed')).toBe('true')
+    expect(mark().classList.contains('is-selected')).toBe(true)
+    chart().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    flushSync()
+    expect(mark().getAttribute('aria-pressed')).toBe('false')
+    expect(mark().classList.contains('is-selected')).toBe(false)
+  })
+
+  it('AC9: Enter and Space pick a day', async () => {
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await startAll({ withCard: true })
+    const key = (k: string) => {
+      chart().querySelector('[data-row="mentions"] [data-day]')!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+      flushSync()
+    }
+    key(' ')
+    await settle()
+    expect(openedBy('attention')).toBe(true)
+    key('Enter')
+    await settle()
+    expect(openedBy('attention')).toBe(false)
+    key('Enter')
+    await settle()
+    expect(openedBy('attention')).toBe(true)
+    key('a')
+    await settle()
+    expect(openedBy('attention')).toBe(true)
+  })
+
+  it('AC9: the card kicker names the day and its side names the person', async () => {
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await startAll({ withCard: true })
+    changeTo('attentionPerson', 'bolsonaro')
+    await settle(500)
+    respond('/timeline', [bucket('2026-08-15', 4)], newPerson)
+    respond('/attention', att([{ day: '2026-08-15', views: 100 }]), newPerson)
+    await settle()
+    clickDay('2026-08-15')
+    await settle()
+    expect(document.getElementById('docsKicker')!.textContent).toMatch(/^Documentos de .*15/)
+    expect(card.sides[0].personName).toBe('Bolsonaro')
+    expect(card.sides[0].personId).toBe('bolsonaro')
+  })
+
+  it('AC9: a person or source change closes the open card at once', async () => {
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await startAll({ withCard: true })
+    clickDay('2026-08-15')
+    await settle()
+    expect(openedBy('attention')).toBe(true)
+    auto = null
+    changeTo('attentionSource', 'gdelt')
+    expect(openedBy('attention')).toBe(false)
+    expect(chart().querySelector('.is-selected')).toBeNull()
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await settle(500)
+    clickDay('2026-08-15')
+    await settle()
+    expect(openedBy('attention')).toBe(true)
+    changeTo('attentionPerson', 'bolsonaro')
+    expect(openedBy('attention')).toBe(false)
+  })
+
+  it('AC7: a mentions error, then a source change and a success, clears the error row', async () => {
+    render()
+    boot()
+    await settle()
+    respond('/attention', att([{ day: '2026-08-15', views: 7 }]))
+    named('/timeline')[0].fail()
+    await settle()
+    expect(chart().textContent).toMatch(/Não foi possível carregar as menções/)
+    changeTo('attentionSource', 'gdelt')
+    await settle(500)
+    respond('/timeline', [bucket('2026-08-15', 3)], (c) => c.qs.get('source') === 'gdelt')
+    await settle()
+    expect(chart().textContent).not.toMatch(/Não foi possível carregar as menções/)
+    expect(chart().querySelector('[data-row="mentions"] [data-day]')).not.toBeNull()
+  })
+
+  it('AC7: no mentions in the window says so in the row head, and each row head states its own peak', async () => {
+    auto = { '/attention': att([]), '/timeline': [] }
+    await startAll()
+    expect(chart().querySelector('[data-row="mentions"] .attention-row-head')!.textContent).toMatch(/sem dado de menções para esta pessoa nesta janela/)
+    clearScopes()
+    for (const i of instances.splice(0)) unmount(i)
+    for (const t of targets.splice(0)) t.remove()
+    setBoot({ ready: false, people: [], peopleError: null, search: '' })
+    auto = { '/attention': att([{ day: '2026-08-15', views: 12345 }]), '/timeline': [bucket('2026-08-15', 4)] }
+    await startAll()
+    expect(chart().querySelector('[data-row="mentions"] .attention-row-head')!.textContent).toMatch(/pico: 4 documentos em/)
+    expect(chart().querySelector('[data-row="views"] .attention-row-head')!.textContent).toMatch(/pico: 12\.345 visualizações em/)
+  })
+
+  it('AC7: a views mark title reads the day, its mentions count and its own views', async () => {
+    auto = both(12345, 4)
+    await startAll()
+    const title = chart().querySelector('[data-row="views"] [data-day] title')!.textContent!
+    expect(title).toMatch(/, 4 documentos, 12\.345 visualizações$/)
+  })
+
+  it('AC8: the first ghost draws both rows with ghost bars, ticks, axis and its sr-only note', async () => {
+    render()
+    boot()
+    await settle()
+    expect(chart().querySelectorAll('[data-row] svg .ghost')).toHaveLength(12)
+    expect(chart().querySelectorAll('[data-row] .attention-tick')).toHaveLength(12)
+    expect(chart().querySelector('.sr-only')?.textContent).toBe('Lendo a atenção.')
+  })
+
+  it('AC5: data rows carry a labelled group svg and one tick per mark', async () => {
+    auto = both(100, 4)
+    await startAll()
+    const views = chart().querySelector('[data-row="views"] svg')!
+    expect(views.getAttribute('role')).toBe('group')
+    expect(views.getAttribute('aria-label')).toBe('Pageviews (Wikipédia)')
+    expect(chart().querySelectorAll('[data-row="mentions"] .attention-tick')).toHaveLength(1)
+  })
+
+  it('AC7: a person change ghosts both rows at once, dropping the old mentions and the old views error', async () => {
+    render()
+    boot()
+    await settle()
+    named('/attention').forEach((c) => c.fail())
+    respond('/timeline', [bucket('2026-08-15', 4)])
+    await settle()
+    expect(chart().textContent).toMatch(/Não foi possível carregar os pageviews/)
+    changeTo('attentionPerson', 'bolsonaro')
+    expect(chart().querySelector('[data-row="mentions"] [data-day]')).toBeNull()
+    expect(chart().textContent).not.toMatch(/Não foi possível carregar os pageviews/)
+    expect(chart().querySelector('.ghost-field')).not.toBeNull()
+    await settle(500)
+    respond('/timeline', [bucket('2026-08-15', 7)], newPerson)
+    await settle()
+    expect(chart().textContent).not.toMatch(/Não foi possível carregar os pageviews/)
+    expect(chart().querySelector('[data-row="views"] .ghost')).not.toBeNull()
+  })
+
+  it('AC9: a pick is dropped, and its card closed, when the held mentions reload then fails', async () => {
+    auto = { ...both(), '/docs': { docs: [], total: 0 } }
+    await startAll({ withCard: true })
+    auto = { '/docs': { docs: [], total: 0 } }
+    changeTo('attentionSource', 'gdelt')
+    await settle(500)
+    clickDay('2026-08-15')
+    await settle()
+    expect(openedBy('attention')).toBe(true)
+    named('/timeline').filter((c) => c.qs.get('source') === 'gdelt').forEach((c) => c.fail())
+    await settle()
+    expect(openedBy('attention')).toBe(false)
   })
 
   it('AC8: a memo hit does not ghost', async () => {

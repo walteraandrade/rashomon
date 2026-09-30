@@ -212,7 +212,8 @@
   const viewsPending = $derived(series === null && !viewsErrored)
   const busy = $derived(!unavailable && (fullGhost || viewsPending))
   // Only a reload over data already on screen dims: never the first ghost, never the views-only ghost.
-  const dim = $derived((views.loading && series !== null) || (mentionsFigure.loading && buckets !== null))
+  // The views instance reloads only with a person change, which clears series first, so it never dims alone.
+  const dim = $derived(mentionsFigure.loading && buckets !== null)
   const mentionsPeak = $derived(mentions ? peakDay(mentions.map((m) => ({ day: m.day, value: m.count }))) : null)
   const viewsPeak = $derived(viewDays && !viewsErrored ? peakDay(viewDays.map((v) => ({ day: v.day, value: v.views }))) : null)
   const peakOf = (days: { day: string }[] | null, peak: string | null, pick: (d: never) => number) => (peak && days ? pick(days.find((d) => d.day === peak) as never) : 0)

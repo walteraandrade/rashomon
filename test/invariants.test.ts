@@ -189,14 +189,15 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'render.ts': ['./format.js', './layout.js', './marks.js'],
       // The documents card and the in-page guide belong to no figure; both sit next to the
       // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
-      'docs-card.ts': ['./api.js', './perf.js', './render.js', './state.js'],
-      'help.ts': [],
+      'docs-card.svelte.ts': ['./api.js', './perf.js', './render.js', './state.js'],
+      'help.svelte.ts': [],
       // The shared runtime behind four of the five mount() calls (issue #193): abort/stale/
       // scope/ghost/background-click/Escape/resize, generalized out of compare.ts/rising.ts/
       // week.ts/testimony.ts. It builds no markup and never fetches on its own, so it imports
       // neither format.js nor render.js; docs-card.js is what lets release() close only the
       // card its own name opened.
       'figure.ts': ['./docs-card.js', './perf.js', './state.js'],
+      'figure.svelte.ts': ['./docs-card.svelte.js', './perf.js', './state.js'],
       'figures/atlas.ts': ['./api.js', './docs-card.js', './format.js', './layout.js', './perf.js', './render.js', './state.js'],
       // testimony.ts, compare.ts, rising.ts and week.ts adopt figure.ts and drop their own
       // direct perf.js/state.js imports: the span and the scope/debounce calls now live inside
@@ -238,12 +239,19 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       ],
     }
     assert.deepEqual(jsFiles().sort(), Object.keys(expected).sort(), 'every module in src/ui must have a declared place in the import graph')
+    // The docs card and the guide are .svelte.ts now; a caller may name either specifier form.
+    const canon = (spec: string) => spec.replace(/^(\.\/(?:docs-card|help))\.svelte\.js$/, '$1.js')
     for (const [file, allowed] of Object.entries(expected)) {
+      if (file.endsWith('.svelte.ts')) {
+        const own = importsOf(moduleSource(file))
+        for (const spec of own) assert.ok(allowed.includes(spec), `${file} may only import ${allowed.join(', ') || 'nothing'}, not ${spec}`)
+        continue
+      }
       // A module under figures/ imports its siblings (../api.js, not ./api.js); importsOf
       // returns the literal specifier, so this resolves each one relative to its own file
       // before comparing, the same way the loader would.
-      const resolved = importsOf(moduleSource(file)).map((spec) => (file.includes('/') && spec.startsWith('../') ? `.${spec.slice(2)}` : spec))
-      assert.deepEqual(resolved.sort(), [...allowed].sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
+      const resolved = importsOf(moduleSource(file)).map((spec) => canon(file.includes('/') && spec.startsWith('../') ? `.${spec.slice(2)}` : spec))
+      assert.deepEqual(resolved.sort(), allowed.map(canon).sort(), `${file} may only import ${allowed.join(', ') || 'nothing'}`)
     }
   })
 
@@ -603,6 +611,7 @@ const svelteFiles = (dir: string): string[] =>
         entry.isDirectory() ? svelteFiles(join(dir, entry.name)) : entry.name.endsWith('.svelte') ? [join(dir, entry.name)] : [],
       )
     : []
+const svelteTs = () => jsFiles().filter((f) => f.endsWith('.svelte.ts')).map((f) => join(jsDir, f))
 const allSvelte = () => [...svelteFiles(jsDir), ...svelteFiles(webDir)]
 const scriptOf = (source: string) => [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n')
 
@@ -614,17 +623,28 @@ const scriptSpecs = (source: string): string[] => {
   return [...statics, ...bare, ...dynamic]
 }
 
+const ALLOWED_PACKAGES: string[] = []
+const HTML_ALLOWLIST = ['DocsCard.svelte']
+const atHtmlUses = (source: string) => [...source.matchAll(/\{@html\b([^}]*)\}/g)].map((m) => m[1].trim())
+const HTML_IDENTIFIER = /^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*$/
+
 const svelteRules = {
   specs: scriptSpecs,
   imports: (file: string, source: string): string[] =>
     scriptSpecs(source).filter((spec) => {
       if (/graphology/.test(spec)) return true
+      if (spec === 'svelte' || spec.startsWith('svelte/')) return false
+      if (!spec.startsWith('.') && !spec.startsWith('$lib')) return !ALLOWED_PACKAGES.includes(spec)
       const resolved = spec.startsWith('$lib') ? join(jsDir, spec.slice('$lib'.length)) : spec.startsWith('.') ? join(dirname(file), spec) : null
       if (resolved === null) return false
       return resolved !== jsDir && !resolved.startsWith(jsDir + '/')
     }),
   innerHTML: (source: string) => /innerHTML|insertAdjacentHTML/.test(scriptOf(source)) || /`\s*<[a-zA-Z]/.test(scriptOf(source)),
-  atHtml: (source: string) => /\{@html\b/.test(source),
+  atHtml: (file: string, source: string): string[] => {
+    const uses = atHtmlUses(source)
+    if (!HTML_ALLOWLIST.some((name) => file.endsWith(name))) return uses
+    return uses.filter((expr) => !HTML_IDENTIFIER.test(expr))
+  },
   style: (source: string) => /<style[\s>]/.test(source) || /\sstyle\s*=\s*["'{]/.test(source),
   fontSize: (source: string) => /font-size\s*:\s*[\d.]+px/.test(source),
 }
@@ -647,7 +667,7 @@ describe('svelte files follow the same rules as the .ts modules', () => {
   })
 
   it('no module under src imports a .svelte', () => {
-    for (const file of jsFiles()) assert.doesNotMatch(importsOf(moduleSource(file)).join(' '), /\.svelte/, `${file} must not import a .svelte`)
+    for (const file of jsFiles()) assert.ok(!importsOf(moduleSource(file)).some((spec) => spec.endsWith('.svelte')), `${file} must not import a .svelte`)
   })
 
   it('svelte files import only from src/ui', () => {
@@ -670,9 +690,42 @@ describe('svelte files follow the same rules as the .ts modules', () => {
     assert.equal(svelteRules.innerHTML(script('const m = `<b>x</b>`')), true)
   })
 
-  it('svelte files have no {@html}', () => {
-    for (const file of allSvelte()) assert.equal(svelteRules.atHtml(readFileSync(file, 'utf8')), false, `${file} must not use {@html}`)
-    assert.equal(svelteRules.atHtml('<div>{@html x}</div>'), true)
+  it('svelte imports allow only src/ui, $lib, svelte and the allowlist', () => {
+    assert.deepEqual(ALLOWED_PACKAGES, [], 'the allowlist is empty in this slice')
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import _ from 'lodash'`)), ['lodash'])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import { SvelteMap } from 'svelte/reactivity'`)), [])
+    assert.deepEqual(svelteRules.imports(fakeFile, script(`  import Graph from 'graphology'`)), ['graphology'])
+    for (const file of [...allSvelte(), ...svelteTs()]) assert.deepEqual(svelteRules.imports(file, file.endsWith('.ts') ? `<script lang="ts">\n${readFileSync(file, 'utf8')}\n</script>` : readFileSync(file, 'utf8')), [], `${file} imports a bare package outside the allowlist`)
+  })
+
+  it('at-html only in the allowlisted file with an Html identifier', () => {
+    const docsCard = join(jsDir, 'DocsCard.svelte')
+    assert.deepEqual(svelteRules.atHtml(docsCard, '<div>{@html body}</div>'), [])
+    assert.deepEqual(svelteRules.atHtml(docsCard, '<div>{@html side.markup}</div>'), [])
+    assert.deepEqual(svelteRules.atHtml(docsCard, '<div>{@html "<b>"}</div>'), ['"<b>"'])
+    assert.deepEqual(svelteRules.atHtml(docsCard, '<div>{@html `<b>`}</div>'), ['`<b>`'])
+    assert.deepEqual(svelteRules.atHtml(docsCard, '<div>{@html paintDocs(x)}</div>'), ['paintDocs(x)'])
+    assert.deepEqual(svelteRules.atHtml(fakeFile, '<div>{@html x}</div>'), ['x'])
+    for (const file of allSvelte()) assert.deepEqual(svelteRules.atHtml(file, readFileSync(file, 'utf8')), [], `${file} has a disallowed {@html}`)
+    for (const name of ['HelpDialog.svelte', 'Combobox.svelte']) {
+      const file = join(jsDir, name)
+      assert.ok(existsSync(file), `${name} must exist`)
+      assert.deepEqual(atHtmlUses(readFileSync(file, 'utf8')), [], `${name} must have no {@html}`)
+    }
+  })
+
+  it('the shared pieces are in the import map, acyclic, and reach render.ts only for paintDocs*', () => {
+    const importsFrom = (source: string, from: RegExp) =>
+      [...source.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)].filter((m) => from.test(m[2])).flatMap((m) => m[1].split(',').map((n) => n.trim().replace(/\s+as\s+.*/, '')).filter(Boolean))
+    for (const name of ['docs-card.svelte.ts', 'help.svelte.ts', 'figure.svelte.ts']) assert.ok(existsSync(join(jsDir, name)), `${name} must exist`)
+    for (const name of ['DocsCard.svelte', 'HelpDialog.svelte', 'Combobox.svelte']) assert.ok(existsSync(join(jsDir, name)), `${name} must exist`)
+    const docsCardSrc = readFileSync(join(jsDir, 'docs-card.svelte.ts'), 'utf8')
+    assert.doesNotMatch(docsCardSrc, /figure(\.svelte)?\.js/, 'docs-card.svelte.ts must never import a figure runtime')
+    assert.match(readFileSync(join(jsDir, 'figure.svelte.ts'), 'utf8'), /docs-card\.svelte\.js/, 'figure.svelte.ts imports docs-card.svelte.js')
+    for (const file of [...allSvelte(), ...svelteTs()]) {
+      const names = importsFrom(readFileSync(file, 'utf8'), /(^|\/)render\.js$/)
+      for (const n of names) assert.match(n, /^paintDocs/, `${file} imports render.ts's ${n}; only paintDocs* is allowed`)
+    }
   })
 
   it('svelte files have no style block or style attribute', () => {

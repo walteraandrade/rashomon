@@ -523,3 +523,13 @@ describe('component test harness', () => {
     assert.match(docsText, /pnpm typecheck[\s\S]{0,200}\.svelte|\.svelte[\s\S]{0,200}pnpm typecheck/)
   })
 })
+
+describe('svelte shared pieces (issue #287)', () => {
+  it('documents the svelte shared pieces and the html allowlist', () => {
+    assert.match(docsText, /docs card[\s\S]{0,300}help dialog[\s\S]{0,300}combobox[\s\S]{0,300}Svelte|Svelte[\s\S]{0,300}docs card[\s\S]{0,300}combobox/i)
+    for (const fn of ['openedBy', 'openHelp', 'closeHelp', 'isOpen']) assert.ok(docsText.includes(fn), `docs never mention ${fn}`)
+    assert.ok(docsText.includes('ALLOWED_PACKAGES'), 'docs never state the .svelte import allowlist')
+    assert.ok(docsText.includes('{@html}'), 'docs never state the {@html} rule')
+    assert.match(docsText, /\{@html\}[\s\S]{0,300}Html|Html[\s\S]{0,300}\{@html\}/)
+  })
+})

@@ -81,16 +81,21 @@ const setup = (over: Record<string, unknown> = {}, bound = false) => {
 const text = (id: string) => target.querySelector(`#${id}`)?.textContent
 
 describe('createFigure', () => {
-  it('an element swap mid-request aborts the load and leaves loading false', async () => {
+  it('an element swap keeps the request alive', async () => {
     const { calls, handle } = setup({}, true)
-    void handle.load()
+    const pending = handle.load()
     flushSync()
     expect(handle.loading).toBe(true)
     swap()
     flushSync()
-    expect(calls.fetches[0].signal.aborted).toBe(true)
+    expect(calls.fetches[0].signal.aborted).toBe(false)
+    calls.fetches[0].resolve({ v: 'kept' })
+    await pending
+    flushSync()
+    expect(handle.data).toEqual({ v: 'kept' })
     expect(handle.loading).toBe(false)
-    expect(text('probe-loading')).toBe('false')
+    expect(calls.paint).toEqual([{ v: 'kept' }])
+    expect(calls.fetches).toHaveLength(1)
   })
 
   it('wires a bind:this element handed over as a getter', async () => {
@@ -213,6 +218,7 @@ describe('createFigure', () => {
     expect(observers.every((o) => o.disconnected)).toBe(true)
     expect(calls.fetches[0].signal.aborted).toBe(true)
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    el.querySelector('.bg')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     expect(calls.release).toBe(0)
   })
 })

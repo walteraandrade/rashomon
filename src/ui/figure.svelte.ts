@@ -86,8 +86,8 @@ export const createFigure = <T>(opts: FigureOptions<T>) => {
     if (docsCard.openedBy(name)) docsCard.close()
   }
 
+  // Keyed on el only: a swapped element rewires listeners and never touches the request.
   $effect(() => {
-    alive = true
     const stop = new AbortController()
     // Read here, after mount: a bind:this element is undefined at createFigure() time.
     const el = typeof opts.el === 'function' ? opts.el() : opts.el
@@ -117,13 +117,19 @@ export const createFigure = <T>(opts: FigureOptions<T>) => {
       observer.observe(targets[0] as unknown as Element)
     }
     return () => {
-      alive = false
       stop.abort()
       observer?.disconnect()
+    }
+  })
+
+  // No dependencies: runs once, and its teardown is the component's real destruction.
+  $effect(() => {
+    alive = true
+    return () => {
+      alive = false
       ++requestId
       controller?.abort()
       controller = null
-      // The aborted load() returns early, so nothing else would clear a loading it started.
       loading = false
     }
   })

@@ -20,14 +20,12 @@ type Store = {
   isOpen: boolean
   isFloating: boolean
   spot: Spot | null
-  loading: boolean
-  error: boolean
 }
 
 // The single source of truth the component renders from. `spot` persists across closes so the
 // card reopens where the reader left it. Reactivity comes from createSubscriber, not a rune, so
 // the plain node:test suites that import the figures (and so this module) still load it.
-const store: Store = { request: null, sides: [], isOpen: false, isFloating: false, spot: null, loading: false, error: false }
+const store: Store = { request: null, sides: [], isOpen: false, isFloating: false, spot: null }
 let bump = () => {}
 const subscribe = createSubscriber((update) => {
   bump = update
@@ -40,11 +38,7 @@ const set = (patch: Partial<Store>) => {
   bump()
 }
 
-export const card: Readonly<Store> = {
-  get request() {
-    subscribe()
-    return store.request
-  },
+export const card: Readonly<Pick<Store, 'sides' | 'isOpen' | 'isFloating' | 'spot'>> = {
   get sides() {
     subscribe()
     return store.sides
@@ -60,14 +54,6 @@ export const card: Readonly<Store> = {
   get spot() {
     subscribe()
     return store.spot
-  },
-  get loading() {
-    subscribe()
-    return store.loading
-  },
-  get error() {
-    subscribe()
-    return store.error
   },
 }
 
@@ -108,7 +94,7 @@ const cancel = () => {
 export const close = () => {
   const dialog = find()
   cancel()
-  set({ isOpen: false, loading: false })
+  set({ isOpen: false })
   if (dialog?.open) dialog.close()
 }
 
@@ -118,7 +104,7 @@ export const onNativeClose = () => {
   const dialog = find()
   if (dialog?.open) return
   cancel()
-  set({ isOpen: false, loading: false })
+  set({ isOpen: false })
 }
 
 const clamp = () => {
@@ -201,7 +187,7 @@ const fetchSide = async (side: DocsSide, signal: AbortSignal) => ({
 // req.sides is one entry for a word/person/outlet, two for the ruler (both people at once).
 export const open = async (req: DocsRequest) => {
   const id = cancel()
-  set({ request: req, sides: req.sides, isOpen: true, error: false })
+  set({ request: req, sides: req.sides, isOpen: true })
   const found = find()
   if (!found) return
   found.classList?.toggle('is-wide', req.sides.length === 2)
@@ -210,19 +196,16 @@ export const open = async (req: DocsRequest) => {
   controller = current
   show()
   const cached = req.sides.every((side) => readScope('docs', side.personId + '?' + side.query))
-  set({ loading: !cached })
   if (!cached) paintDocsLoading()
   const painted = span('figure:docs')
   try {
     const sides = await Promise.all(req.sides.map((side) => fetchSide(side, current.signal)))
     if (id !== requestId || !body()) return
-    set({ loading: false })
     paintDocs(sides)
     // Two sides are two api:docs in Promise.all: this is max(api, api) + paint, not one subtraction.
     painted({ sides: sides.length, urls: req.sides.map((side) => api.endpoint(side.personId) + '/docs?' + side.query).join(' ') })
   } catch (e) {
     if (id === requestId && !aborted(e) && body()) {
-      set({ loading: false, error: true })
       paintDocsError(() => open(req))
     }
   }

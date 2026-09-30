@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { attachHelp, closeHelp, onGuideClick, onNativeHelpClose } from './help.svelte.js'
+  import { attachHelp, closeHelp, onGuideClick } from './help.svelte.js'
 
   let dialog: HTMLDialogElement | undefined = $state()
 
@@ -15,7 +15,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-<dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle" bind:this={dialog} onclick={(event) => event.target === dialog && closeHelp()} onclose={onNativeHelpClose}>
+<dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle" bind:this={dialog} onclick={(event) => event.target === dialog && closeHelp()}>
   <div class="help-dialog-head"><div><span class="eyebrow">Guia</span><h2 id="helpTitle">Como ler</h2></div><button id="helpClose" class="quiet-button" aria-label="Fechar o guia" onclick={closeHelp}>Fechar</button></div>
   <div class="help-body">
     <p>Tudo vale só para o recorte da frase: pessoa, período, fonte.</p>

@@ -17,7 +17,7 @@ beforeEach(() => {
   changes = 0
   select.addEventListener('change', () => changes++)
   document.body.append(select, host)
-  instance = mount(Combobox, { target: host, props: { select, id: 'lensesA' } }) as any
+  instance = mount(Combobox, { target: host, props: { select, inputId: 'lensesAInput', listId: 'lensesAList', label: 'Lente A', listLabel: 'Opções da lente A' } }) as any
   flushSync()
 })
 
@@ -38,6 +38,15 @@ const type = (value: string) => {
 }
 
 describe('Combobox', () => {
+  it('carries the ids and labels figure 6 uses', () => {
+    expect(input().id).toBe('lensesAInput')
+    expect(input().getAttribute('aria-label')).toBe('Lente A')
+    expect(input().getAttribute('aria-controls')).toBe('lensesAList')
+    expect(input().hasAttribute('aria-activedescendant')).toBe(false)
+    expect(list().id).toBe('lensesAList')
+    expect(list().getAttribute('aria-label')).toBe('Opções da lente A')
+  })
+
   it('renders a text input and a listbox', () => {
     expect(input()).not.toBeNull()
     expect(list().getAttribute('role')).toBe('listbox')
@@ -94,7 +103,7 @@ describe('Combobox', () => {
     expect(list().hidden).toBe(false)
     input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
     flushSync()
-    expect(list().hidden || list().querySelectorAll('[role="option"]').length === 0).toBe(true)
+    expect(list().hidden).toBe(true)
     expect(input().value).toBe('Tudo')
   })
 })

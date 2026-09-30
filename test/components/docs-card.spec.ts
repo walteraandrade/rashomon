@@ -6,6 +6,7 @@ import { clearScopes } from '../../src/ui/state.js'
 
 let target: HTMLElement
 let instance: ReturnType<typeof mount> | undefined
+let ignoreSignal = false
 let calls: { url: string; signal?: AbortSignal; resolve: (body: unknown) => void; fail: () => void }[]
 
 const setWidth = (w: number) => Object.defineProperty(window, 'innerWidth', { value: w, configurable: true, writable: true })
@@ -31,6 +32,7 @@ beforeEach(() => {
   clearScopes()
   setWidth(1024)
   calls = []
+  ignoreSignal = false
   target = document.createElement('div')
   document.body.appendChild(target)
   vi.stubGlobal(
@@ -43,7 +45,7 @@ beforeEach(() => {
           resolve: (b: unknown) => resolve({ ok: true, status: 200, headers: new Headers(), json: async () => b }),
           fail: () => reject(new Error('boom')),
         }
-        init?.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
+        if (!ignoreSignal) init?.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
         calls.push(entry)
       }),
     ),
@@ -97,6 +99,7 @@ describe('DocsCard', () => {
   })
 
   it('ignores a stale response', async () => {
+    ignoreSignal = true
     mountCard()
     const first = open(req([side('term=a')]))
     const second = open(req([side('term=b')]))

@@ -1,30 +1,7 @@
-import { createSubscriber } from 'svelte/reactivity'
-
 // The in-page guide's imperative surface (#helpDialog). The component (HelpDialog.svelte) owns
 // the dialog element and the document click listener; these functions stay plain and importable.
 
 export const HELP_SECTIONS = new Set(['analise', 'atlas', 'avaliacao', 'pmi', 'comparar', 'em-alta', 'semana', 'lentes', 'atencao', 'agenda', 'junto', 'persistencia'])
-
-let isOpen = false
-let bump = () => {}
-const subscribe = createSubscriber((update) => {
-  bump = update
-  return () => {
-    bump = () => {}
-  }
-})
-const setOpen = (open: boolean) => {
-  isOpen = open
-  bump()
-}
-
-// Reactive through createSubscriber, not a rune, so plain node:test suites can import this module.
-export const help = {
-  get open() {
-    subscribe()
-    return isOpen
-  },
-}
 
 let mounted: HTMLDialogElement | null = null
 // The mounted component's element, or the page's own #helpDialog when none is mounted; guarded
@@ -35,19 +12,15 @@ export const attachHelp = (el: HTMLDialogElement | null) => {
   mounted = el
 }
 
-export const onNativeHelpClose = () => setOpen(false)
-
 export const closeHelp = () => {
   const dialog = find()
   if (dialog?.open) dialog.close()
-  setOpen(false)
 }
 
 export const openHelp = (hash = '') => {
   const dialog = find()
   if (!dialog) return
   if (!dialog.open) dialog.showModal?.()
-  setOpen(true)
   const section = hash.replace(/^#/, '')
   const target = section && HELP_SECTIONS.has(section) ? document.getElementById(`help-${section}`) : null
   target?.scrollIntoView?.({ block: 'start' })

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { filterItems, itemsOf, revealTop, type ComboItem } from './combobox.js'
 
-  let { select, id }: { select: HTMLSelectElement; id: string } = $props()
+  let { select, inputId, listId, label, listLabel }: { select: HTMLSelectElement; inputId: string; listId: string; label: string; listLabel: string } = $props()
 
   let input: HTMLInputElement | undefined = $state()
   let list: HTMLElement | undefined = $state()
@@ -85,7 +85,7 @@
 </script>
 
 <input
-  {id}
+  id={inputId}
   class="combo-input"
   type="text"
   autocomplete="off"
@@ -94,8 +94,9 @@
   placeholder="Buscar…"
   aria-autocomplete="list"
   aria-expanded={open}
-  aria-controls="{id}List"
-  aria-activedescendant={active >= 0 ? `${id}List-${active}` : ''}
+  aria-label={label}
+  aria-controls={listId}
+  aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
   bind:this={input}
   value={text}
   onfocus={() => {
@@ -115,13 +116,13 @@
   {onkeydown}
 />
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_interactive_supports_focus -->
-<span id="{id}List" class="combo-list" role="listbox" hidden={!open} bind:this={list} {onmousedown}>
+<span id={listId} class="combo-list" role="listbox" aria-label={listLabel} hidden={!open} bind:this={list} {onmousedown}>
   {#if !shown.length}
     <span class="combo-empty">Nada com esse nome</span>
   {:else}
     {#each rows as { item, i, head } (i)}
       {#if head}<span class="combo-group eyebrow" role="presentation">{item.group}</span>{/if}
-      <span class="combo-option" class:is-active={i === active} role="option" id="{id}List-{i}" data-value={item.value} aria-selected={item.value === select.value}>{item.label}</span>
+      <span class="combo-option" class:is-active={i === active} role="option" id="{listId}-{i}" data-value={item.value} aria-selected={item.value === select.value}>{item.label}</span>
     {/each}
   {/if}
 </span>

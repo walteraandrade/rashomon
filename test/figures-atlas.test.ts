@@ -607,7 +607,7 @@ describe('figure 1 gains a beeswarm strip mode (Avaliação)', () => {
       assert.equal(docsRequests.length, 1, 'a strip pick asks for that word\'s documents, the same as a map/column pick')
       assert.match(docsRequests[0], /term=golpe/)
       assert.equal(els.docsDialog.open, true)
-      assert.equal(els.docsDialog.classes['is-wide'], false, 'a single word never opens the ruler\'s two-column layout')
+      assert.notEqual(els.docsDialog.classes['is-wide'], true, 'a single word never opens the ruler\'s two-column layout')
       assert.equal(els.docsTitle.textContent, 'golpe')
     })
   })

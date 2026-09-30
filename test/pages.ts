@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -29,7 +29,16 @@ export const pageSource = (page: string) => {
 }
 
 /** The page's markup: its source without the component `<script>` block, which never reaches the DOM as written. */
-export const pageMarkup = (page: string) => pageSource(page).replace(/<script\b[^>]*>[\s\S]*?<\/script>\s*/g, '')
+const stripScript = (source: string) => source.replace(/<script\b[^>]*>[\s\S]*?<\/script>\s*/g, '')
+
+/** A component the page mounts contributes its own markup, so a rule about the page reads what the browser gets. */
+const expandComponents = (markup: string) =>
+  markup.replace(/<([A-Z]\w*) \/>/g, (tag, name: string) => {
+    const file = join(root, 'src', 'ui', `${name}.svelte`)
+    return existsSync(file) ? stripScript(readFileSync(file, 'utf8')).replace(/<!--[\s\S]*?-->\s*/g, '').trim() : tag
+  })
+
+export const pageMarkup = (page: string) => expandComponents(stripScript(pageSource(page)))
 
 /** Every `.svelte` file under web/. */
 export const svelteFiles = (dir = join(root, 'web')): string[] =>

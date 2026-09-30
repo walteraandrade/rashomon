@@ -130,10 +130,11 @@ describe('createFigure', () => {
   })
 
   it('a caught error clears data before setting error', async () => {
-    const { calls, handle } = setup()
+    const { calls, handle, set } = setup()
     const ok = handle.load()
     calls.fetches[0].resolve({ v: 1 })
     await ok
+    set('a=2')
     handle.reload()
     await vi.advanceTimersByTimeAsync(300)
     calls.fetches[1].reject(new Error('boom'))

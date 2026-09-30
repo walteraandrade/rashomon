@@ -189,6 +189,8 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'render.ts': ['./format.js', './layout.js', './marks.js'],
       // The documents card and the in-page guide belong to no figure; both sit next to the
       // figures and are mounted by app.ts. help.ts has no imports: it only opens #helpDialog.
+      'docs-card.ts': ['./docs-card.svelte.js'],
+      'help.ts': ['./help.svelte.js'],
       'docs-card.svelte.ts': ['./api.js', './perf.js', './render.js', './state.js'],
       'help.svelte.ts': [],
       // The shared runtime behind four of the five mount() calls (issue #193): abort/stale/
@@ -244,7 +246,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     for (const [file, allowed] of Object.entries(expected)) {
       if (file.endsWith('.svelte.ts')) {
         const own = importsOf(moduleSource(file))
-        for (const spec of own) assert.ok(allowed.includes(spec), `${file} may only import ${allowed.join(', ') || 'nothing'}, not ${spec}`)
+        for (const spec of own.filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))) assert.ok(allowed.includes(spec), `${file} may only import ${allowed.join(', ') || 'nothing'}, not ${spec}`)
         continue
       }
       // A module under figures/ imports its siblings (../api.js, not ./api.js); importsOf

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { mountDocsCard } from '../src/ui/docs-card.js'
+import { close, mountDocsCard } from '../src/ui/docs-card.js'
 import { mount as mountAtlas } from '../src/ui/figures/atlas.js'
 import { mount as mountCompare } from '../src/ui/figures/compare.js'
 import { mount as mountRising } from '../src/ui/figures/rising.js'
@@ -98,7 +98,7 @@ describe('figure 1: picking a word opens its documents, with no button in betwee
     })
   })
 
-  it('the close button puts the card away and the next click brings it back', async () => {
+  it('close() puts the card away and the next click brings it back (the close button itself is the component\'s, see test/components/docs-card.spec.ts)', async () => {
     await withFiguresDom(async (els, calls) => {
       clearScopes()
       routeFetch(calls, { '/api/people': people, '/graph': graph, '/docs': docs })
@@ -110,7 +110,7 @@ describe('figure 1: picking a word opens its documents, with no button in betwee
 
       els.columns.querySelectorAll('[data-person-docs]')[0].fire('click')
       await flush()
-      els.docsClose.fire('click')
+      close()
       assert.equal(els.docsDialog.open, false)
 
       els.columns.querySelectorAll('[data-person-docs]')[0].fire('click')
@@ -268,7 +268,7 @@ describe('figure 4 (rising) opens one side, scoped to the last 7 days, and relea
 describe('the card that holds the documents: markup and stylesheet', () => {
   it('atlas.html holds one dialog with the docs container, its title, its grip and a close button', () => {
     const html = read('atlas.html')
-    const dialog = html.match(/<dialog class="docs-dialog" id="docsDialog"[^>]*>([\s\S]*?)<\/dialog>/)?.[1] ?? ''
+    const dialog = html.match(/<dialog\b[^>]*\bid="docsDialog"[^>]*>([\s\S]*?)<\/dialog>/)?.[1] ?? ''
     assert.ok(dialog, 'the dialog must exist')
     assert.match(dialog, /<h2 id="docsTitle"><\/h2>/)
     assert.match(dialog, /<button id="docsClose"/)

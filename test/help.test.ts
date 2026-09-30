@@ -5,10 +5,7 @@ import { closeHelp, mountHelp, openHelp } from '../src/ui/help.js'
 
 const atlasPage = () => pageMarkup('/')
 
-type Link = {
-  getAttribute: (name: string) => string | null
-  hasAttribute: (name: string) => boolean
-}
+type Link = unknown
 
 type ClickEvent = {
   defaultPrevented: boolean
@@ -65,124 +62,7 @@ const withHelpDom = <T>(
   }
 }
 
-const fire = (
-  fn: (e: ClickEvent) => void,
-  href: string,
-  opts: { metaKey?: boolean; target?: string | null; dataLeave?: boolean } = {},
-) => {
-  const link: Link = {
-    getAttribute: (name) => {
-      if (name === 'href') return href
-      if (name === 'target') return opts.target ?? null
-      return null
-    },
-    hasAttribute: (name) => name === 'data-leave' && !!opts.dataLeave,
-  }
-  const event: ClickEvent = {
-    defaultPrevented: false,
-    button: 0,
-    metaKey: !!opts.metaKey,
-    ctrlKey: false,
-    shiftKey: false,
-    altKey: false,
-    target: { closest: (selector) => (selector === 'a[href]' ? link : null) },
-    preventDefault() {
-      event.defaultPrevented = true
-    },
-  }
-  fn(event)
-  return event
-}
-
-describe('help.ts: guide links to /como-ler open the dialog at the section', () => {
-  it('guide links to /como-ler open the dialog at the section', () => {
-    withHelpDom(({ dialog, listeners, scrolled }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')!
-      const event = fire(click.fn, '/como-ler#atlas')
-      assert.equal(event.defaultPrevented, true)
-      assert.equal(dialog.open, true)
-      assert.deepEqual(scrolled, ['help-atlas'])
-    })
-  })
-
-  it('a bare /como-ler link opens the dialog with no section', () => {
-    withHelpDom(({ dialog, listeners }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')!
-      assert.equal(fire(click.fn, '/como-ler').defaultPrevented, true)
-      assert.equal(dialog.open, true)
-    })
-  })
-
-  it('modifier-click, target=_blank and data-leave on /como-ler still go to the page', () => {
-    withHelpDom(({ dialog, listeners }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')!
-      assert.equal(fire(click.fn, '/como-ler#atlas', { metaKey: true }).defaultPrevented, false)
-      assert.equal(fire(click.fn, '/como-ler#atlas', { target: '_blank' }).defaultPrevented, false)
-      assert.equal(fire(click.fn, '/como-ler#atlas', { dataLeave: true }).defaultPrevented, false)
-      assert.equal(dialog.open, false)
-    })
-  })
-
-  it('other pages are not the guide', () => {
-    withHelpDom(({ dialog, listeners }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')!
-      assert.equal(fire(click.fn, '/sobre').defaultPrevented, false)
-      assert.equal(dialog.open, false)
-    })
-  })
-})
-
-describe('help.ts: legacy como-ler.html links still open it', () => {
-  it('a plain click on como-ler.html#atlas opens the dialog at that section', () => {
-    withHelpDom(({ dialog, listeners, scrolled }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')
-      assert.ok(click, 'mountHelp listens on document')
-      const event = fire(click.fn, 'como-ler.html#atlas')
-      assert.equal(event.defaultPrevented, true)
-      assert.equal(dialog.open, true)
-      assert.deepEqual(scrolled, ['help-atlas'])
-    })
-  })
-
-  it('a plain click on como-ler.html#em-alta opens the dialog at figure 4\'s section', () => {
-    withHelpDom(({ dialog, listeners, scrolled }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')
-      assert.ok(click, 'mountHelp listens on document')
-      const event = fire(click.fn, 'como-ler.html#em-alta')
-      assert.equal(event.defaultPrevented, true)
-      assert.equal(dialog.open, true)
-      assert.deepEqual(scrolled, ['help-em-alta'])
-    })
-  })
-
-  it('a plain click on como-ler.html#semana opens the dialog at figure 5\'s section', () => {
-    withHelpDom(({ dialog, listeners, scrolled }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')
-      assert.ok(click, 'mountHelp listens on document')
-      const event = fire(click.fn, 'como-ler.html#semana')
-      assert.equal(event.defaultPrevented, true)
-      assert.equal(dialog.open, true)
-      assert.deepEqual(scrolled, ['help-semana'], 'semana must resolve, not fall through to the top of the dialog')
-    })
-  })
-
-  it('modifier-click, target=_blank and data-leave still go to the page', () => {
-    withHelpDom(({ dialog, listeners }) => {
-      mountHelp()
-      const click = listeners.find((l) => l.type === 'click')!
-      assert.equal(fire(click.fn, 'como-ler.html', { metaKey: true }).defaultPrevented, false)
-      assert.equal(fire(click.fn, 'como-ler.html', { target: '_blank' }).defaultPrevented, false)
-      assert.equal(fire(click.fn, 'como-ler.html', { dataLeave: true }).defaultPrevented, false)
-      assert.equal(dialog.open, false)
-    })
-  })
+describe('help.ts: openHelp and closeHelp (link interception lives in test/components/help.spec.ts)', () => {
 
   it('openHelp/closeHelp are a no-op without a dialog, and close a mounted one', () => {
     const previous = (globalThis as { document?: unknown }).document

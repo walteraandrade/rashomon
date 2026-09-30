@@ -41,9 +41,6 @@ import {
   paintAttention,
   paintAttentionError,
   paintAttentionLoading,
-  paintWeek,
-  paintWeekError,
-  paintWeekLoading,
   risingRulerItems,
   shareBalance,
   rulerTerms,
@@ -53,7 +50,7 @@ import {
   testimonyLine,
   wordMarkup,
 } from '../src/ui/render.js'
-import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm, type Week, type WeekBucket } from '../src/ui/format.js'
+import { communityRanking, signed, termMask, type Compare, type CompareTerm, type Lenses, type OutletRow, type PlacedTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { rulerLayout } from '../src/ui/layout.js'
 import { inlineStyles, withFakeDocument } from './fake-dom.js'
 import { withFiguresDom } from './fake-mount-dom.js'
@@ -1609,121 +1606,11 @@ describe('paintRuler (compare, figure 3) keeps its own exported shape after the 
   })
 })
 
-describe('paintWeek / paintWeekLoading / paintWeekError, figure 5', () => {
-  const weekBucket = (over: Partial<WeekBucket> = {}): WeekBucket => ({ start: '2026-09-08T03:00:00.000Z', about: 5, terms: [], ...over })
-  const weekData = (buckets: WeekBucket[]): Week => ({ days: 7, tz: 'America/Sao_Paulo', buckets })
-
-  it('paints one .week-day per bucket, oldest first, each with its own weekday label and about number', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      const buckets = Array.from({ length: 7 }, (_, i) => weekBucket({ start: `2026-09-0${i + 2}T03:00:00.000Z`, about: i, terms: i === 6 ? [{ term: 'reforma', kind: 'word', count: 3 }] : [] }))
-      paintWeek({ data: weekData(buckets), metrics, selected: null, onPick: () => {} })
-      assert.equal(els.weekChart.innerHTML.match(/class="week-day"/g)?.length, 7)
-      assert.match(els.weekChart.innerHTML, /class="stat"/)
-      assert.match(els.weekChart.innerHTML, /data-term="reforma" data-kind="word" data-day="2026-09-08"/)
-      assert.equal(els.weekChart.hidden, false)
-    })
-  })
-
-  it('an empty week (every terms array empty) keeps the seven about numbers and no marks, plus one note', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      const buckets = Array.from({ length: 7 }, (_, i) => weekBucket({ about: i + 1, terms: [] }))
-      paintWeek({ data: weekData(buckets), metrics, selected: null, onPick: () => {} })
-      assert.doesNotMatch(els.weekChart.innerHTML, /data-term=/)
-      for (let i = 1; i <= 7; i++) assert.match(els.weekChart.innerHTML, new RegExp(`<dd>${i}</dd>`))
-      assert.match(els.weekNote.textContent, /Não há palavras suficientes nesta semana\./)
-    })
-  })
-
-  it('a day with no surviving terms keeps its number and paints nothing under it: no mark, no per-day sentence', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeek({ data: weekData([weekBucket({ about: 4, terms: [] })]), metrics, selected: null, onPick: () => {} })
-      assert.match(els.weekChart.innerHTML, /<dd>4<\/dd>/)
-      assert.doesNotMatch(els.weekChart.innerHTML, /data-term=/)
-      assert.doesNotMatch(els.weekChart.innerHTML, /week-svg/)
-      assert.doesNotMatch(els.weekChart.innerHTML, /<p/)
-    })
-  })
-
-  it('an overflow button carries the day count, since size is the only encoding and a listed word has none', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'pronunciamento', kind: 'word', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 84 })
-      assert.match(els.weekChart.innerHTML, /<button class="quiet-button[^"]*" data-term="pronunciamento"[^>]*>pronunciamento<b>55<\/b><\/button>/)
-    })
-  })
-
-  it('the overflow list is named by one eyebrow line, never a sentence taller than the words it lists', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'pronunciamento', kind: 'word', count: 55 }, { term: 'constitucionalidade', kind: 'word', count: 40 }] })]), metrics, selected: null, onPick: () => {}, width: 84 })
-      assert.match(els.weekChart.innerHTML, /<div class="week-overflow"><p class="eyebrow">Não couberam<\/p><button/)
-      assert.doesNotMatch(els.weekChart.innerHTML, /nesta coluna|clicáveis/)
-    })
-  })
-
-  it('one listed word is named in the singular', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'pronunciamento', kind: 'word', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 84 })
-      assert.match(els.weekChart.innerHTML, /<div class="week-overflow"><p class="eyebrow">Não coube<\/p><button/)
-    })
-  })
-
-  it('a wrapped phrase is one tspan per line inside one mark, still one data-term', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'supremo tribunal federal', kind: 'phrase', count: 55 }] })]), metrics, selected: null, onPick: () => {}, width: 145 })
-      const marks = els.weekChart.innerHTML.match(/data-term="supremo tribunal federal"/g) ?? []
-      assert.equal(marks.length, 1, 'drawn, not listed')
-      assert.match(els.weekChart.innerHTML, /<text class="week-text"[^>]*><tspan x="0" y="[^"]+">supremo<\/tspan><tspan x="0" y="[^"]+">tribunal<\/tspan><tspan x="0" y="[^"]+">federal<\/tspan><\/text>/)
-      assert.doesNotMatch(els.weekChart.innerHTML, /week-overflow/)
-    })
-  })
-
-  it('every style="..." emitted is a --var override, never a hardcoded declaration', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeek({ data: weekData([weekBucket({ terms: [{ term: 'reforma', kind: 'word', count: 3 }] })]), metrics, selected: null, onPick: () => {} })
-      for (const value of inlineStyles(els.weekChart.innerHTML)) assert.ok(value.startsWith('--'), `paintWeek emitted style="${value}"`)
-    })
-  })
-
-  it('paintWeekLoading paints a ghost of seven columns, never the word Carregando', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeekLoading()
-      assert.match(els.weekChart.innerHTML, /ghost-field/)
-      assert.equal(els.weekChart.innerHTML.match(/class="week-day"/g)?.length, 7)
-      assert.doesNotMatch(els.weekChart.innerHTML, /Carregando/)
-      assert.equal(els.weekChart.getAttribute('aria-busy'), 'true')
-    })
-  })
-
-  it('every ghost mark sits inside its svg: y within [0, height], never above the label ghost (validator round 1, 3)', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeekLoading()
-      const height = Number(els.weekChart.innerHTML.match(/viewBox="0 0 \d+ (\d+)"/)?.[1])
-      assert.ok(height > 0)
-      const ys = [...els.weekChart.innerHTML.matchAll(/<rect class="ghost"[^>]*\sy="(-?[\d.]+)"[^>]*height="(\d+)"/g)].map((m) => [Number(m[1]), Number(m[2])])
-      assert.ok(ys.length >= 3, 'the ghost draws marks')
-      for (const [y, h] of ys) assert.ok(y >= 0 && y + h <= height, `ghost rect at y=${y} leaves the 0..${height} svg`)
-    })
-  })
-
-  it('paintWeekError paints the "could not load" note and clears the loading ghost', () => {
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      paintWeekError()
-      assert.match(els.weekChart.innerHTML, /Não foi possível carregar a semana/)
-      assert.doesNotMatch(els.weekChart.innerHTML, /ghost-field/)
-    })
-  })
-})
-
-// Issue #170 AC5: paintRuler's exported shape is already pinned by issue #151's block above.
-// paintWeek and paintTermStrip need the same guarantee after the marks.ts extraction: still
-// exported under their pre-refactor names, still painting the markup issue #147/#149's suites
-// in this file pin.
-describe('paintWeek and paintTermStrip keep their exported shape after the marks.ts extraction', () => {
-  it('render.ts still exports paintWeek, paintWeekLoading, paintWeekError, paintTermStrip and termStripLayout as functions', () => {
-    assert.equal(typeof paintWeek, 'function')
-    assert.equal(typeof paintWeekLoading, 'function')
-    assert.equal(typeof paintWeekError, 'function')
+describe('paintTermStrip keeps its exported shape after the marks.ts extraction', () => {
+  it('render.ts still exports paintTermStrip and termStripLayout as functions, and no week painter', () => {
     assert.equal(typeof paintTermStrip, 'function')
     assert.equal(typeof termStripLayout, 'function')
+    for (const name of ['paintWeek', 'paintWeekLoading', 'paintWeekError']) assert.equal((renderModule as Record<string, unknown>)[name], undefined, `${name} moved into Week.svelte`)
   })
 })
 
@@ -1775,11 +1662,6 @@ describe('one class scheme, one rx source, one text shape for the three word mar
       const terms: CompareTerm[] = [{ term: 'alckmin', kind: 'word', a: side(192, 0.87), b: side(14, -1.58) }]
       paintRuler({ data: compareData(terms), personA: lula, personB: bolsonaro, measure: 'count', metrics, selected: null, onPick: () => {} })
       assert.doesNotMatch(els.compareRuler.innerHTML, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
-    })
-    withFakeDocument(['weekChart', 'weekNote'], (els) => {
-      const buckets = [{ start: '2026-09-08T03:00:00.000Z', about: 5, terms: [{ term: 'reforma', kind: 'word', count: 3 }] }]
-      paintWeek({ data: { days: 7, tz: 'America/Sao_Paulo', buckets } as Week, metrics, selected: null, onPick: () => {} })
-      assert.doesNotMatch(els.weekChart.innerHTML, /class="(atlas|ruler|week)-(glow|hit)"[^>]*rx=/)
     })
   })
 

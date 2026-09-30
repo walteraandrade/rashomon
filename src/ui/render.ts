@@ -113,8 +113,7 @@ const docsOf = (v: CompareSide | 'name' | null) => (v && v !== 'name' ? v.count 
 
 export type RulerTerm = CompareTerm & { balance: number; combined: number }
 
-// Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1) and
-// combined (docs summed, measure-independent). hiddenCount feeds #compareHiddenNote.
+// Drops own-name terms (counted in hiddenCount) and scores the rest: balance (−1..+1), combined docs.
 export const rulerTerms = (terms: CompareTerm[], measure: string): { items: RulerTerm[]; hiddenCount: number } => {
   let hiddenCount = 0
   const items: RulerTerm[] = []
@@ -162,8 +161,8 @@ const rulerOverflowMarkup = (
     },
   })
 
-// Shared by figure 4 (rising) and figure 6 (lenses): a ruler's end labels, axis, words, axis labels and overflow list,
-// with click/keydown on every word. `note` sits between axis and overflow list; `tail` comes after it.
+// Figures 4 and 6: a ruler's end labels, axis, words and overflow list, click/keydown on every
+// word. `note` sits between axis and overflow list; `tail` comes after it.
 const paintRulerBody = ({
   elementId,
   items,
@@ -215,14 +214,12 @@ const paintRulerBody = ({
 
 export type RisingShares = RisingAbout & { words_recent: number; words_baseline: number }
 
-// A payload cached before `present`/`about.words_*` existed must not paint NaN positions, so
-// the share rule applies only when both totals arrived; otherwise the ruler falls back to the
-// older person-lift rule below, with that rule's own axis prose.
+// A payload cached before `present`/`about.words_*` existed falls back to the person-lift rule below.
 export const hasShares = (data: Rising): data is Rising & { present: RisingTerm[]; about: RisingShares } =>
   Array.isArray(data.present) && Number.isFinite(data.about.words_recent) && Number.isFinite(data.about.words_baseline)
 
-// balance = clamp(log2(share now / share before) / 3, -1, 1), a share being the term's doc count over every doc_terms row
-// about the person in that window (about.words_*): shares, not doc counts, so longer texts do not push every word right.
+// balance = clamp(log2(share now / share before) / 3, -1, 1), a share being the term's docs over
+// the person's words in that window (about.words_*), so longer texts do not push every word right.
 export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: number }, about: RisingShares) => {
   if (about.words_baseline <= 0) return t.count_recent_raw > 0 ? 1 : 0
   if (about.words_recent <= 0) return -1
@@ -230,8 +227,8 @@ export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: 
   return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
 }
 
-// The fallback rule: clamp(log2(word's lift / the person's own lift) / 3, -1, 1). About.baseline's
-// +1 smoothing (the server's own, per term) keeps this finite with no baseline docs at all.
+// Fallback: clamp(log2(word's lift / the person's own lift) / 3, -1, 1); the server's +1
+// smoothing keeps it finite with no baseline docs.
 export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
 
 export const liftBalance = (t: { lift: number }, liftPerson: number) => {
@@ -241,13 +238,11 @@ export const liftBalance = (t: { lift: number }, liftPerson: number) => {
 
 export type RisingItem = RulerItem & { lift: number }
 
-// combined = count_recent_raw + count_baseline_raw, the exact doc counts behind the rounded
-// rates, so a word's size on the ruler never compounds the server's own rounding.
+// combined = count_recent_raw + count_baseline_raw: exact counts, so size never compounds rounding.
 export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
   terms.map((t) => ({ term: t.term, kind: t.kind, lift: t.lift, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
 
-// The risers off the ruler: `terms` minus what `present` already rules, only those with lift > 1, in the route's lift order,
-// listed as buttons that pick like any word; the page shows the first RARE_SHOWN and says how many it left out.
+// Risers off the ruler: `terms` minus `present`, lift > 1, in lift order; the page shows RARE_SHOWN.
 export const RARE_SHOWN = 12
 
 export const rareRisers = (terms: RisingTerm[], present: RisingTerm[]) => {
@@ -318,9 +313,7 @@ export const paintRisingRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar os termos em alta.</p>'
 }
 
-// Figure 6 (issue #206): one person, two independently-scoped lenses on the shared ruler body.
-// Position is always pmi * ln(1 + count) — there is no measure select on
-// this figure — and the two ends are lens labels (lensLabel), not people.
+// Figure 6: one person, two lenses. Position is always pmi * ln(1 + count); the ends are lens labels.
 export const paintLensRuler = ({
   data,
   endA,
@@ -376,8 +369,7 @@ export const paintLensRulerError = () => {
   ruler.innerHTML = '<p class="note">Não foi possível carregar as lentes.</p>'
 }
 
-// Selected word's numbers on both lenses; a null side reads "nenhum documento" (measured zero),
-// keyed by lens label prose instead of a PersonRef.
+// Selected word's numbers on both lenses; a null side reads "nenhum documento" (measured zero).
 export const paintLensDetail = ({ term, endA, endB }: { term: CompareTerm | null; endA: string; endB: string }) => {
   const el = $('lensesDetail')
   if (!el) return

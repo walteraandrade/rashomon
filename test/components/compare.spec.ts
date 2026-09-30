@@ -435,6 +435,87 @@ describe('Compare (#293)', () => {
     expect($('compareRuler').querySelectorAll('.ruler-bridge')).toHaveLength(0)
   })
 
+  it('a click on the header, the subtitle or a select keeps the pick and the card', async () => {
+    boot()
+    await start()
+    click(words()[0])
+    await settle()
+    for (const el of [document.querySelector('#compare .figure-head')!, document.querySelector('#compare .figure-sub')!, select('compareA'), select('compareMeasure'), $('compareDetail')]) {
+      click(el)
+      await settle()
+      expect(docsCard.openedBy('compare')).toBe(true)
+      expect(words()[0].getAttribute('aria-pressed')).toBe('true')
+    }
+  })
+
+  it('a pick made on dimmed data is dropped when the new data lands', async () => {
+    boot()
+    await start()
+    let release: (v: unknown) => void = () => {}
+    handlers['/api/compare'] = () => new Promise((resolve) => (release = resolve))
+    select('compareDays').value = '7'
+    select('compareDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(220)
+    expect($('compare').classList.contains('is-loading')).toBe(true)
+    click(words()[0])
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(true)
+    release(payload([{ term: 'reforma', kind: 'word', a: side(9), b: null }]))
+    await settle()
+    expect($('compare').classList.contains('is-loading')).toBe(false)
+    expect(docsCard.isOpen()).toBe(false)
+    expect(words()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('a pick made on dimmed data is dropped when that reload fails', async () => {
+    boot()
+    await start()
+    let fail: (e: unknown) => void = () => {}
+    handlers['/api/compare'] = () => new Promise((_, reject) => (fail = reject))
+    select('compareDays').value = '7'
+    select('compareDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await settle(220)
+    click(words()[0])
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(true)
+    fail(new Error('boom'))
+    await settle()
+    expect(docsCard.isOpen()).toBe(false)
+    expect($('compareRuler').textContent).toMatch(/Não foi possível carregar a comparação/)
+  })
+
+  it('a later setBoot never re-seeds nor refetches', async () => {
+    boot({ search: '?compare.days=7' })
+    await start()
+    expect(compareCalls()).toHaveLength(1)
+    expect(select('compareDays').value).toBe('7')
+    await change('compareDays', '60')
+    const before = calls.length
+    boot({ search: '?compare.days=7', people: [...people, ciro] })
+    flushSync()
+    await settle(500)
+    expect(select('compareDays').value).toBe('60')
+    expect(calls.length).toBe(before)
+  })
+
+  it('a control change aborts the bridge load before the new data lands', async () => {
+    let first: Call | undefined
+    handlers['/api/compare'] = () => payload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
+    handlers['/api/compare/bridges'] = (call) => {
+      first ??= call
+      return new Promise(() => {})
+    }
+    boot()
+    await start()
+    handlers['/api/compare'] = () => new Promise(() => {})
+    select('compareDays').value = '7'
+    select('compareDays').dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    expect(first!.signal?.aborted).toBe(true)
+  })
+
   it('AC11: a width change repaints without a fetch and keeps the pick and the card', async () => {
     boot()
     await start()

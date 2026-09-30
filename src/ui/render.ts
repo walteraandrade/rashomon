@@ -873,7 +873,7 @@ export const paintLensRulerError = () => {
 }
 
 // Selected word's numbers on both lenses; a null side reads "nenhum documento" (measured zero),
-// mirroring paintCompareDetail but keyed by lens label prose instead of a PersonRef.
+// keyed by lens label prose instead of a PersonRef.
 export const paintLensDetail = ({ term, endA, endB }: { term: CompareTerm | null; endA: string; endB: string }) => {
   const el = $('lensesDetail')
   if (!el) return

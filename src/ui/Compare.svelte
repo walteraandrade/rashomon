@@ -196,6 +196,7 @@
 
   const change = (e: Event, set: (value: string) => void) => {
     set((e.currentTarget as HTMLSelectElement).value)
+    bridgesAbort?.abort()
     figure.release()
     figure.reload()
   }

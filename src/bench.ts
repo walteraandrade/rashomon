@@ -51,10 +51,13 @@ const generate = async () => {
   // PGlite creates the leaf directory but not its parents.
   await mkdir(resolve(DATA_DIR), { recursive: true })
   const { db, migrateP } = await import('./db.js')
-  const { insertDocP, upsertPersonsP } = await import('./store.js')
+  const { insertDocP, truncateText, upsertPersonsP } = await import('./store.js')
+  const { personsMentioned } = await import('./extract.js')
   await migrateP()
+  const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: Date.now() })
+  const tracked = new Set(docs.filter((d) => personsMentioned(truncateText(d.text), persons).length).map((d) => d.uri)).size
   const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
-  if (rows[0].n === DOCS && process.env.BENCH_RESET !== '1') {
+  if (rows[0].n === tracked && process.env.BENCH_RESET !== '1') {
     console.log(`dataset: reusing ${rows[0].n} docs in ${DATA_DIR}`)
     // A corpus generated before the aggregates existed still needs them; the build is idempotent.
     // Dynamic like db.js below: aggregate.js imports db.js, which reads DATA_DIR at import time.
@@ -68,7 +71,6 @@ const generate = async () => {
   // One statement per db.exec call: the extended query protocol parses one at a time.
   for (const table of ['doc_testimony', 'doc_candidates', 'doc_terms', 'terms', 'doc_persons', 'docs', 'persons']) await db.exec(`delete from ${table}`)
   await upsertPersonsP(persons)
-  const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: Date.now() })
   for (const doc of docs) await insertDocP(doc, persons)
   // One testimony row per (doc, person) pair, deterministic, so the testimony route has
   // something to aggregate. `stub` is the hermetic scorer's label.

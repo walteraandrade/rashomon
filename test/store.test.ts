@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import { SqlClient } from 'effect/unstable/sql'
 import assert from 'node:assert/strict'
 import { after, describe, it, before } from 'node:test'
 import { db, runSql } from '../src/db.js'
@@ -9,6 +10,7 @@ import {
   derive,
   insertDoc,
   insertDocP,
+  insertDocs,
   insertDocsP,
   inTransaction,
   pruneRemovedP,
@@ -23,7 +25,8 @@ import {
   type Derived,
 } from '../src/store.js'
 import type { RawDoc } from '../src/types.js'
-import { collidingUri, derivedCounts, derivedRows, docs, enrichmentDocs, orphanTermCount, persons, reseed, rowVersion, seed, seedCandidates, termsOf, untrackedPerson } from './fixture.js'
+import { candidateDocs, collidingUri, derivedCounts, derivedRows, docs, enrichmentDocs, orphanDocCount, orphanTermCount, persons, reseed, rowVersion, seed, seedCandidates, termsOf, untrackedDocs, untrackedPerson } from './fixture.js'
+import { recordingSql } from './effect.js'
 import './close.js'
 
 // The write path in src/store.ts. Every suite here layers its own docs on the shared fixture;
@@ -37,6 +40,9 @@ const now = () => new Date().toISOString()
 const stored = async (uri: string) =>
   (await db.query<{ source: string; tone: number | null }>(`select source, tone from docs where uri = $1`, [uri])).rows[0]
 const textOf = async (uri: string) => (await db.query<{ text: string }>(`select text from docs where uri = $1`, [uri])).rows[0]?.text ?? null
+const TABLES = ['docs', 'doc_persons', 'doc_terms', 'doc_candidates', 'doc_tone', 'doc_testimony'] as const
+const tableCounts = async () =>
+  Object.fromEntries(await Promise.all(TABLES.map(async (t) => [t, (await db.query<{ n: number }>(`select count(*)::int as n from ${t}`)).rows[0].n] as const)))
 
 // issue #204
 describe('insertDoc country', () => {
@@ -101,7 +107,6 @@ describe('insertDoc term storage (issue #52)', () => {
 
   it('stores no doc_terms row for any fixture doc naming nobody tracked', async () => {
     assert.equal(await orphanTermCount(), 0)
-    // doc /4 is the fixture's untagged doc: it has a docs row but no terms
     assert.deepEqual(await termsOf('https://example.org/4'), [])
   })
 
@@ -109,18 +114,12 @@ describe('insertDoc term storage (issue #52)', () => {
     assert.ok((await termsOf('https://g1.globo.com/1')).includes('reforma'))
   })
 
-  it('stores docs and doc_candidates for an untagged doc while skipping its terms', async () => {
+  it('stores nothing for a doc naming no tracked person', async () => {
     const uri = 'https://example.org/untagged'
-    await insertDocP({ source: 'rss', uri, text: 'Reunião ouve Hugo Motta sobre a pauta', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
-    const { rows } = await db.query<{ persons: number; terms: number; candidates: number }>(
-      `select
-         (select count(*) from doc_persons p where p.doc_id = d.id)::int as persons,
-         (select count(*) from doc_terms t where t.doc_id = d.id)::int as terms,
-         (select count(*) from doc_candidates c where c.doc_id = d.id)::int as candidates
-       from docs d where d.uri = $1`,
-      [uri],
-    )
-    assert.deepEqual(rows[0], { persons: 0, terms: 0, candidates: 1 })
+    const before = await tableCounts()
+    assert.equal(await insertDocP({ source: 'rss', uri, text: 'Reunião ouve Hugo Motta sobre a pauta', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons), false)
+    assert.equal(await derivedCounts(uri), null)
+    assert.deepEqual(await tableCounts(), before)
   })
 })
 
@@ -159,7 +158,7 @@ describe('insertDoc for the untoned collectors (issues #22, #24, #25)', () => {
   for (const source of ['camara', 'juridico', 'oficial', 'nicho'] as const) {
     it(`a ${source} doc lands with tone = null even if a buggy RawDoc sets a numeric tone`, async () => {
       const uri = `https://example.org/press-tone-${source}`
-      await insertDocP({ source, uri, text: `Fulano: teste de tone indevido em ${source}`, publishedAt: now(), tone: 42 }, persons)
+      await insertDocP({ source, uri, text: `Lula: teste de tone indevido em ${source}`, publishedAt: now(), tone: 42 }, persons)
       assert.deepEqual(await stored(uri), { source, tone: null })
     })
   }
@@ -265,7 +264,7 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
 
   it('keeps every writable document of a failing group and charges only the bad one', async () => {
     const family = [...persons, untrackedPerson('ainda-nao-cadastrado')]
-    assert.deepEqual(await insertDocsP(group, family, 3), { written: 2, enriched: 0, failed: 1 })
+    assert.deepEqual(await insertDocsP(group, family, 3), { written: 2, enriched: 0, dropped: 0, failed: 1 })
     assert.equal((await derivedCounts(uris[0]))?.persons, 1)
     assert.equal(await derivedCounts(uris[1]), null)
     assert.equal((await derivedCounts(uris[2]))?.persons, 1)
@@ -273,7 +272,7 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
 
   it('counts a replayed group as nothing new and duplicates no derived row', async () => {
     const counts = await derivedCounts(uris[0])
-    assert.deepEqual(await insertDocsP([group[0], group[2]], persons, 2), { written: 0, enriched: 0, failed: 0 })
+    assert.deepEqual(await insertDocsP([group[0], group[2]], persons, 2), { written: 0, enriched: 0, dropped: 0, failed: 0 })
     assert.deepEqual(await derivedCounts(uris[0]), counts)
   })
 
@@ -286,7 +285,7 @@ describe('insertDocs groups documents into bounded transactions (issue #50)', ()
       { source: 'rss' as const, uri: 'https://example.org/surrogate/a', text: 'lula fala \ud800 sobre a pauta', publishedAt: now(), domain: 'example.org' },
       { source: 'rss' as const, uri: 'https://example.org/surrogate/b', text: 'lula fala sobre a pauta normal', publishedAt: now(), domain: 'example.org' },
     ]
-    assert.deepEqual(await insertDocsP(surrogateGroup, persons, 2), { written: 1, enriched: 0, failed: 1 })
+    assert.deepEqual(await insertDocsP(surrogateGroup, persons, 2), { written: 1, enriched: 0, dropped: 0, failed: 1 })
     assert.equal(await derivedCounts(surrogateGroup[0].uri), null)
     assert.equal((await derivedCounts(surrogateGroup[1].uri))?.persons, 1)
   })
@@ -329,7 +328,7 @@ describe('insertDocs replays a duplicate uri within one batch like sequential up
 
   it('counts the first occurrence as written and the later, longer one as enriched', async () => {
     const totals = await insertDocsP([short, sibling, long], persons, 10)
-    assert.deepEqual(totals, { written: 2, enriched: 1, failed: 0 })
+    assert.deepEqual(totals, { written: 2, enriched: 1, dropped: 0, failed: 0 })
     assert.equal(await textOf(uri), long.text)
     assert.ok((await termsOf(uri)).includes('tributaria'))
   })
@@ -350,7 +349,7 @@ describe('insertDocs replays a duplicate uri within one batch like sequential up
     const batchA = { ...seqA, uri: batchUri }
     const batchB = { ...seqB, uri: batchUri }
     const totals = await insertDocsP([batchA, batchB], persons, 10)
-    assert.deepEqual(totals, { written: wA ? 1 : 0, enriched: wB ? 0 : 1, failed: 0 })
+    assert.deepEqual(totals, { written: wA ? 1 : 0, enriched: wB ? 0 : 1, dropped: 0, failed: 0 })
     assert.equal(await textOf(batchUri), await textOf(uriB))
   })
 })
@@ -421,9 +420,9 @@ describe('a document carrying non-BMP characters is still recognised as enriched
   })
 
   it('replaces the text and rewrites the derived terms', async () => {
-    assert.deepEqual(await insertDocsP([headline], persons), { written: 1, enriched: 0, failed: 0 })
+    assert.deepEqual(await insertDocsP([headline], persons), { written: 1, enriched: 0, dropped: 0, failed: 0 })
     assert.ok(!(await termsOf(uri)).includes('desoneracao'))
-    assert.deepEqual(await insertDocsP([article], persons), { written: 0, enriched: 1, failed: 0 })
+    assert.deepEqual(await insertDocsP([article], persons), { written: 0, enriched: 1, dropped: 0, failed: 0 })
     assert.equal(await textOf(uri), article.text)
     assert.ok((await termsOf(uri)).includes('desoneracao'), 'the article terms must reach doc_terms without a reindex')
   })
@@ -480,12 +479,12 @@ describe('insertDocs counts enrichment apart from new documents', () => {
   const other = { source: 'rss' as const, uri: 'https://example.org/syndicated-3', text: 'Tarcísio anuncia investimento em Santos', publishedAt: now(), domain: 'example.org' }
 
   it('reports written for the new one and enriched for the replaced one', async () => {
-    assert.deepEqual(await insertDocsP([short], persons), { written: 1, enriched: 0, failed: 0 })
-    assert.deepEqual(await insertDocsP([long, other], persons), { written: 1, enriched: 1, failed: 0 })
+    assert.deepEqual(await insertDocsP([short], persons), { written: 1, enriched: 0, dropped: 0, failed: 0 })
+    assert.deepEqual(await insertDocsP([long, other], persons), { written: 1, enriched: 1, dropped: 0, failed: 0 })
   })
 
   it('counts a replay as neither: the same documents change nothing', async () => {
-    assert.deepEqual(await insertDocsP([long, other], persons), { written: 0, enriched: 0, failed: 0 })
+    assert.deepEqual(await insertDocsP([long, other], persons), { written: 0, enriched: 0, dropped: 0, failed: 0 })
   })
 })
 
@@ -759,8 +758,9 @@ describe('the fixture through the term dictionary (issue #252)', () => {
 
   it('seeding the fixture yields the (doc_id, kind, term) set the extractor derives (AC5)', async () => {
     const { rows } = await db.query<{ id: number; uri: string }>(`select id, uri from docs`)
-    const fixtureIds = new Set(docs.map((d) => rows.find((r) => r.uri === d.uri)!.id))
-    const expected = docs.flatMap((d) => {
+    const stored = docs.filter((d) => rows.some((r) => r.uri === d.uri))
+    const fixtureIds = new Set(stored.map((d) => rows.find((r) => r.uri === d.uri)!.id))
+    const expected = stored.flatMap((d) => {
       const id = rows.find((r) => r.uri === d.uri)!.id
       return derive(id, d, persons).terms.map((t) => `${id}:${t.kind}:${t.term}`)
     })
@@ -902,10 +902,10 @@ describe('insertDoc reach (issue #210)', () => {
 
   it('re-collecting a post with larger reposts updates reach without enriching or touching doc_terms', async () => {
     const uri = 'at://did:plc:x/post/reach-3'
-    assert.deepEqual(await insertDocsP([post(uri, { reposts: 1 })], persons), { written: 1, enriched: 0, failed: 0 })
+    assert.deepEqual(await insertDocsP([post(uri, { reposts: 1 })], persons), { written: 1, enriched: 0, dropped: 0, failed: 0 })
     const before = await termsOf(uri)
     assert.ok(before.length > 0)
-    assert.deepEqual(await insertDocsP([post(uri, { reposts: 50 })], persons), { written: 0, enriched: 0, failed: 0 })
+    assert.deepEqual(await insertDocsP([post(uri, { reposts: 50 })], persons), { written: 0, enriched: 0, dropped: 0, failed: 0 })
     assert.equal((await reachOf(uri)).reach_reposts, 50)
     assert.deepEqual(await termsOf(uri), before)
   })
@@ -927,7 +927,7 @@ describe('insertDoc reach (issue #210)', () => {
     const uri = 'at://did:plc:x/post/reach-4'
     const neighbour = 'at://did:plc:x/post/reach-5'
     const totals = await insertDocsP([post(uri, { likes: 2.5, reposts: -1, replies: 3, quotes: 2 ** 31 }), post(neighbour, { reposts: 8 })], persons)
-    assert.deepEqual(totals, { written: 2, enriched: 0, failed: 0 })
+    assert.deepEqual(totals, { written: 2, enriched: 0, dropped: 0, failed: 0 })
     assert.deepEqual(await reachOf(uri), { reach_likes: null, reach_reposts: null, reach_replies: 3, reach_quotes: null })
     assert.equal((await reachOf(neighbour)).reach_reposts, 8)
   })
@@ -936,5 +936,130 @@ describe('insertDoc reach (issue #210)', () => {
     const uri = 'at://did:plc:x/post/reach-6'
     await insertDocP(post(uri, undefined), persons)
     assert.deepEqual(await reachOf(uri), { reach_likes: null, reach_reposts: null, reach_replies: null, reach_quotes: null })
+  })
+})
+
+describe('the writer keeps only docs naming a tracked person (issue #313)', () => {
+  before(seed)
+  after(reseed)
+  const untracked = (name: string) => untrackedDocs.find((d) => d.uri.endsWith(`/${name}`))!
+  const tracked = (n: number, text = `Lula fala sobre a pauta ${n}`): RawDoc => ({ source: 'rss', uri: `https://example.org/tracked-${text.slice(0, 4)}-${n}`, text, publishedAt: now(), domain: 'example.org' })
+
+  it('stores no row for a seeded fixture doc naming nobody, and none lacks a doc_persons row', async () => {
+    assert.equal(await textOf('https://example.org/4'), null)
+    assert.equal(await textOf('https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999'), null)
+    assert.equal(await orphanDocCount(), 0)
+  })
+
+  it('returns false from insertDoc for a dropped doc and leaves every table as it was', async () => {
+    const before = await tableCounts()
+    for (const doc of untrackedDocs) assert.equal(await insertDocP(doc, persons), false, doc.uri)
+    assert.deepEqual(await tableCounts(), before)
+    assert.equal(await derivedCounts(untrackedDocs[0].uri), null)
+  })
+
+  it('counts dropped docs apart from written', async () => {
+    const batch = [tracked(1), untracked('plain'), tracked(2), untracked('hugo'), tracked(3)]
+    assert.deepEqual(await insertDocsP(batch, persons), { written: 3, enriched: 0, dropped: 2, failed: 0 })
+    assert.equal(await textOf(untracked('plain').uri), null)
+  })
+
+  it('reports a batch of only untracked docs as dropped, with no table touched', async () => {
+    const before = await tableCounts()
+    assert.deepEqual(await insertDocsP(untrackedDocs, persons), { written: 0, enriched: 0, dropped: untrackedDocs.length, failed: 0 })
+    assert.deepEqual(await tableCounts(), before)
+  })
+
+  it('judges a doc on its truncated text', async () => {
+    const doc = untracked('past-cap')
+    assert.ok(doc.text.includes('Lula') && doc.text.length > MAX_DOC_CHARS)
+    assert.ok(!truncateText(doc.text).includes('Lula'))
+    assert.equal(await insertDocP(doc, persons), false)
+    assert.equal(await textOf(doc.uri), null)
+  })
+
+  it('judges empty and whitespace text as naming nobody', async () => {
+    assert.deepEqual(await insertDocsP([untracked('blank'), { ...untracked('blank'), uri: 'https://untracked.example/empty', text: '' }], persons), { written: 0, enriched: 0, dropped: 2, failed: 0 })
+  })
+
+  it('ignores extraNames and extraTerms: only the text makes a doc tracked', async () => {
+    const gkg = untracked('gkg-names')
+    assert.deepEqual(gkg.extraNames, ['Luiz Inacio'])
+    const org = untracked('org')
+    assert.ok(org.extraTerms?.length)
+    assert.deepEqual(await insertDocsP([gkg, org], persons), { written: 0, enriched: 0, dropped: 2, failed: 0 })
+  })
+
+  it('leaves a stored doc untouched when a re-fetch names nobody', async () => {
+    const uri = 'https://example.org/refetch-names-nobody'
+    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
+    const before = { version: await rowVersion(uri), text: await textOf(uri), row: await stored(uri), counts: await derivedCounts(uri) }
+    const refetch: RawDoc = { source: 'gkg', uri, text: 'Governo anuncia pacote de obras no litoral e novas medidas para o setor', publishedAt: now(), domain: 'novo.example', tone: 3 }
+    assert.deepEqual(await insertDocsP([refetch], persons), { written: 0, enriched: 0, dropped: 1, failed: 0 })
+    assert.equal(await rowVersion(uri), before.version)
+    assert.equal(await textOf(uri), before.text)
+    assert.deepEqual(await stored(uri), before.row)
+    assert.deepEqual(await derivedCounts(uri), before.counts)
+    const { rows } = await db.query<{ domain: string | null }>(`select domain from docs where uri = $1`, [uri])
+    assert.equal(rows[0].domain, null)
+  })
+
+  it('judges each occurrence of a repeated uri alone', async () => {
+    const uri = 'https://example.org/repeated-uri'
+    const nobody: RawDoc = { source: 'rss', uri, text: 'Congresso discute a pauta da semana', publishedAt: now() }
+    const somebody: RawDoc = { source: 'rss', uri, text: 'Lula discute a pauta da semana', publishedAt: now() }
+    assert.deepEqual(await insertDocsP([nobody, somebody], persons), { written: 1, enriched: 0, dropped: 1, failed: 0 })
+    assert.equal(await textOf(uri), somebody.text)
+    assert.deepEqual(await insertDocsP([{ ...somebody, uri: `${uri}-b` }, { ...nobody, uri: `${uri}-b` }], persons), { written: 1, enriched: 0, dropped: 1, failed: 0 })
+  })
+
+  it('counts a dropped doc once when its group is replayed, and the failing doc as failed', async () => {
+    const family = [...persons, untrackedPerson('replay-dropped-count')]
+    const group: RawDoc[] = [
+      { source: 'rss', uri: 'https://example.org/replay-a', text: 'Congresso discute a pauta da semana', publishedAt: now() },
+      { source: 'rss', uri: 'https://example.org/replay-b', text: 'Ciro Gomes fala sobre a reforma', publishedAt: now() },
+      { source: 'rss', uri: 'https://example.org/replay-c', text: 'Lula fala sobre a reforma', publishedAt: now() },
+    ]
+    assert.deepEqual(await insertDocsP(group, family, 3), { written: 1, enriched: 0, dropped: 1, failed: 1 })
+  })
+
+  it('sends no document statement for a batch of only untracked docs', async () => {
+    const real = await runSql(SqlClient.SqlClient)
+    const only = recordingSql(real)
+    const totals = await Effect.runPromise(insertDocs(untrackedDocs, persons).pipe(Effect.provideService(SqlClient.SqlClient, only.client)))
+    assert.equal(totals.dropped, untrackedDocs.length)
+    assert.deepEqual(only.statements, [])
+
+    const mixed = recordingSql(real)
+    await Effect.runPromise(insertDocs([untracked('plain'), tracked(9, 'Lula fala sobre o orçamento')], persons).pipe(Effect.provideService(SqlClient.SqlClient, mixed.client)))
+    assert.ok(mixed.statements.some((text) => /insert into docs/.test(text)))
+  })
+
+  it('judges a Bluesky post with reach on its text, so a dropped post leaves no reach behind', async () => {
+    const doc = untrackedDocs.find((d) => d.source === 'bluesky')!
+    assert.ok(doc.reach)
+    const real = await runSql(SqlClient.SqlClient)
+    const only = recordingSql(real)
+    await Effect.runPromise(insertDocs([doc], persons).pipe(Effect.provideService(SqlClient.SqlClient, only.client)))
+    assert.deepEqual(only.statements, [])
+    assert.equal(await textOf(doc.uri), null)
+  })
+
+  it('tags a stored tracked doc exactly as derive does, from one match', async () => {
+    const doc = tracked(7, 'Lula e Tarcísio disputam a eleição')
+    assert.equal(await insertDocP(doc, persons), true)
+    const { rows } = await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [doc.uri])
+    assert.deepEqual(rows.map((r) => r.person_id), ['lula', 'tarcisio'])
+  })
+})
+
+describe('the candidate fixture stores whole (issue #313)', () => {
+  before(seedCandidates)
+  after(reseed)
+
+  it('keeps every candidate doc, since each names a tracked person', async () => {
+    assert.equal(await orphanDocCount(), 0)
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = any($1::text[])`, [candidateDocs.map((d) => d.uri)])
+    assert.equal(rows[0].n, candidateDocs.length)
   })
 })

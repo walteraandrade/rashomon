@@ -5,7 +5,7 @@ import { nameTokens } from '../src/extract.js'
 import { graphFor, type GraphQuery } from '../src/graph.js'
 import { reindexAll } from '../src/reindex.js'
 import { MAX_DOC_CHARS, insertDocP, truncateText } from '../src/store.js'
-import { derivedRows, insertDocTerm, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, reseed, seed } from './fixture.js'
+import { derivedRows, insertDocTerm, insertOrphanDoc, lastAnalyzed, orphanDocCount, orphanTermCount, planRowEstimate, termsOf, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
@@ -18,6 +18,7 @@ const termsOfKind = (nodes: { term: string; kind: string }[], kind: string) => n
 describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => {
   const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
   before(seed)
+  after(reseed)
 
   it('leaves no doc_terms row for a doc without a doc_persons row', async () => {
     const { docs } = await reindexAll(persons)
@@ -31,13 +32,39 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
     assert.deepEqual(await termsOf('https://example.org/4'), [])
   })
 
-  it('indexes the terms of a doc that only matches after a person is added', async () => {
-    const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999'
-    await reindexAll(persons)
-    assert.deepEqual(await termsOf(uri), [])
+  const senado = { source: 'senado' as const, uri: 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999', text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: new Date().toISOString(), domain: 'senado.leg.br' }
+  const orphan = { ...senado, uri: 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/orphan-313' }
+  const taggedOf = async (uri: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
+  const stored = async (uri: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uri])).rows[0].n
+
+  it('does not recover a doc the writer dropped: reindex reads stored docs only (issue #313)', async () => {
+    assert.equal(await stored(senado.uri), 0, 'seed() drops the Alcolumbre-only doc')
     await reindexAll([...persons, alcolumbre])
-    assert.ok((await termsOf(uri)).includes('soberania'))
+    assert.equal(await stored(senado.uri), 0)
+    assert.deepEqual(await termsOf(senado.uri), [])
+  })
+
+  it('tags a stored orphan that starts matching after a person is added', async () => {
+    await insertOrphanDoc(orphan)
+    await reindexAll(persons)
+    assert.deepEqual(await taggedOf(orphan.uri), [])
+    assert.deepEqual(await termsOf(orphan.uri), [])
+    await reindexAll([...persons, alcolumbre])
+    assert.deepEqual(await taggedOf(orphan.uri), ['alcolumbre'])
+    assert.ok((await termsOf(orphan.uri)).includes('soberania'))
     assert.equal(await orphanTermCount(), 0)
+  })
+
+  it('keeps a stored doc that stopped matching anyone, with zero doc_persons rows (reindex deletes nothing)', async () => {
+    await reindexAll([...persons, alcolumbre])
+    assert.deepEqual(await taggedOf(orphan.uri), ['alcolumbre'])
+    const before = await orphanDocCount()
+    await reindexAll(persons)
+    assert.equal(await stored(orphan.uri), 1)
+    assert.deepEqual(await taggedOf(orphan.uri), [])
+    assert.deepEqual(await termsOf(orphan.uri), [])
+    assert.equal(await orphanDocCount(), before + 1)
   })
 
   it('leaves no unreferenced terms row after reindex (issue #252) (AC8)', async () => {
@@ -52,7 +79,8 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
 
   it('purge orphan-terms deletes exactly the rows reindex would not write', async () => {
     await reindexAll(persons)
-    const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, ['https://example.org/4'])
+    await insertOrphanDoc({ source: 'rss', uri: 'https://example.org/orphan-terms', text: 'Congresso discute a pauta', publishedAt: new Date().toISOString() })
+    const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, ['https://example.org/orphan-terms'])
     await insertDocTerm(rows[0].id, 'congresso', 'word')
     assert.equal(await orphanTermCount(), 1)
     await db.query(`delete from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id)`)

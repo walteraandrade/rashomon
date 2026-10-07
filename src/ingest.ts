@@ -12,7 +12,7 @@ import { DAYS } from './query.js'
 import { insertDocs, pruneRemoved, trimOlderThan, upsertAttention, upsertPersons } from './store.js'
 import type { Collector, Person, Phrases, RawDoc, Source } from './types.js'
 
-export type SourceResult = { name: string; fetched: number; written: number; enriched: number; failed: number; error?: string }
+export type SourceResult = { name: string; fetched: number; written: number; enriched: number; dropped: number; failed: number; error?: string }
 export type IngestReport = {
   removed: string[]
   sources: SourceResult[]
@@ -47,12 +47,12 @@ const runSource = (
     const docs: RawDoc[] = Exit.isSuccess(outcome) ? outcome.value : []
     const failureMessage = Exit.isFailure(outcome) ? errorMessage(Cause.squash(outcome.cause)) : undefined
     if (failureMessage) yield* Console.error(`[${name}] ${failureMessage}`)
-    const { written, enriched, failed } = yield* Effect.orDie(insertDocs(docs, ps, undefined, lexicon))
+    const { written, enriched, dropped, failed } = yield* Effect.orDie(insertDocs(docs, ps, undefined, lexicon))
     // `enriched` is the early warning this project has no other source for: it counts documents
     // whose stored text a feed just replaced with a longer one. A feed that quietly stops filling
     // `content:encoded` shows up here as a number falling to zero, before the atlas gets duller.
-    yield* Console.log(`[${name}] fetched ${docs.length}, new ${written}${enriched ? `, enriched ${enriched}` : ''}${failed ? `, failed ${failed}` : ''}`)
-    return { name, fetched: docs.length, written, enriched, failed, ...(failureMessage ? { error: failureMessage } : {}) } satisfies SourceResult
+    yield* Console.log(`[${name}] fetched ${docs.length}, new ${written}, dropped ${dropped}${enriched ? `, enriched ${enriched}` : ''}${failed ? `, failed ${failed}` : ''}`)
+    return { name, fetched: docs.length, written, enriched, dropped, failed, ...(failureMessage ? { error: failureMessage } : {}) } satisfies SourceResult
   })
 
 export const ingest = (

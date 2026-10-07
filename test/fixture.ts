@@ -1,5 +1,6 @@
 import { db, migrateP } from '../src/db.js'
 import { INSERT_DOC_TERMS_SQL, insertDocP, upsertPersonsP } from '../src/store.js'
+import { countryOf } from '../src/extract.js'
 import type { Person, RawDoc } from '../src/types.js'
 
 export const persons: Person[] = [
@@ -28,7 +29,7 @@ export const docs: RawDoc[] = [
   { source: 'gnews', uri: 'https://g1.globo.com/5', text: 'Lula viaja para a Bahia', publishedAt: daysAgo(100), domain: 'g1.globo.com' },
   { source: 'rss', uri: 'https://example.org/7', text: 'Lula fala muito sobre reforma', publishedAt: daysAgo(1), domain: 'example.org' },
   // docs 8-13: two extra terms ("inflacao", "desemprego") that each hit 3 mentions,
-  // dated past the 60-day ceiling (the widest window, `DAYS`' largest) so they only surface in wide-window signature tests.
+  // dated past the 21-day ceiling (the widest window, `DAYS`' largest) so they only surface in wide-window signature tests.
   { source: 'rss', uri: 'https://example.org/8', text: 'Lula fala sobre a inflação persistente', publishedAt: daysAgo(400), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/9', text: 'Lula cita novamente a inflação alta', publishedAt: daysAgo(401), domain: 'example.org' },
   { source: 'rss', uri: 'https://example.org/10', text: 'Lula reafirma compromisso com a inflação', publishedAt: daysAgo(402), domain: 'example.org' },
@@ -336,19 +337,19 @@ export const futureDoc: RawDoc = {
 // an alias of the tracked lula, and whose text names Renan Calheiros, which must NOT be
 // discovered from a gkg doc (gkg uses the column, not the heuristic).
 export const candidateDocs: RawDoc[] = [
-  { source: 'rss', uri: 'https://example.org/c1', text: 'O Senado ouve Hugo Motta sobre a reforma', publishedAt: daysAgo(1), domain: 'example.org' },
-  { source: 'gnews', uri: 'https://g1.globo.com/c2', text: 'Deputados apoiam Hugo Motta na votação', publishedAt: daysAgo(2), domain: 'g1.globo.com' },
-  { source: 'bluesky', uri: 'at://did:plc:x/post/c3', text: 'Encontro reúne Hugo Motta e Renan Calheiros', publishedAt: daysAgo(3), domain: 'ana.bsky.social' },
-  { source: 'gkg', uri: 'https://folha.uol.com.br/c4', text: 'Presidente da Câmara recebe Renan Calheiros', publishedAt: daysAgo(2.5), domain: 'folha.uol.com.br', tone: 0.2, extraNames: ['Hugo Motta', 'Luiz Inacio'] },
-  { source: 'rss', uri: 'https://example.org/c5', text: 'Análise cita Renan Calheiros e a reforma', publishedAt: daysAgo(4), domain: 'example.org' },
-  { source: 'rss', uri: 'https://example.org/c6', text: 'Bastidores mostram Renan Calheiros na articulação', publishedAt: daysAgo(10), domain: 'example.org' },
-  { source: 'rss', uri: 'https://example.org/c7', text: 'Entrevista com Renan Calheiros sobre o Senado', publishedAt: daysAgo(12), domain: 'example.org' },
-  { source: 'rss', uri: 'https://example.org/c10', text: 'Registro antigo cita Renan Calheiros antes da janela', publishedAt: daysAgo(18), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/c1', text: 'O Senado ouve Hugo Motta sobre a reforma segundo Lula', publishedAt: daysAgo(1), domain: 'example.org' },
+  { source: 'gnews', uri: 'https://g1.globo.com/c2', text: 'Deputados apoiam Hugo Motta na votação diz Lula', publishedAt: daysAgo(2), domain: 'g1.globo.com' },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/c3', text: 'Encontro reúne Hugo Motta e Renan Calheiros segundo Lula', publishedAt: daysAgo(3), domain: 'ana.bsky.social' },
+  { source: 'gkg', uri: 'https://folha.uol.com.br/c4', text: 'Presidente da Câmara recebe Renan Calheiros diz Lula', publishedAt: daysAgo(2.5), domain: 'folha.uol.com.br', tone: 0.2, extraNames: ['Hugo Motta', 'Luiz Inacio'] },
+  { source: 'rss', uri: 'https://example.org/c5', text: 'Análise cita Renan Calheiros e a reforma de Lula', publishedAt: daysAgo(4), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/c6', text: 'Bastidores mostram Renan Calheiros na articulação segundo Lula', publishedAt: daysAgo(10), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/c7', text: 'Entrevista com Renan Calheiros sobre o Senado diz Lula', publishedAt: daysAgo(12), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/c10', text: 'Registro antigo cita Renan Calheiros antes da janela segundo Lula', publishedAt: daysAgo(18), domain: 'example.org' },
   // alias overlay: "Luiz Inácio" is lula's alias, so only Michelle surfaces (count 1).
   { source: 'rss', uri: 'https://example.org/c8', text: 'Sessão com Luiz Inácio e Michelle Bolsonaro', publishedAt: daysAgo(1), domain: 'example.org' },
   // "Davi Alcolumbre" opens the sentence (dropped); "Rodrigo Pacheco" is found once, from the
   // first sentence only, since it opens the second one.
-  { source: 'rss', uri: 'https://example.org/c9', text: 'Davi Alcolumbre fala com Rodrigo Pacheco. Rodrigo Pacheco responde', publishedAt: daysAgo(1), domain: 'example.org' },
+  { source: 'rss', uri: 'https://example.org/c9', text: 'Davi Alcolumbre fala com Rodrigo Pacheco. Rodrigo Pacheco responde a Lula', publishedAt: daysAgo(1), domain: 'example.org' },
 ]
 
 // Issue #210: four Bluesky docs about Lula on top of the shared fixture, seeded only by the tests that need them (adding to `docs` would shift every pinned total). "eleição" is doc 2's word: recent-window reach 6 + 10 + null = 16, 116 with (d), which sits in the baseline window.
@@ -359,9 +360,34 @@ export const reachDocs: RawDoc[] = [
   { source: 'bluesky', uri: 'at://did:plc:x/post/r4', text: 'Lula critica a eleição', publishedAt: daysAgo(20), domain: 'ana.bsky.social', reach: { reposts: 100 } },
 ]
 
+// Docs the writer must drop: none names a tracked person in its (truncated) text. Kept out of `docs`/`seed()` because nothing here may ever be stored. Each carries what a careless filter would mistake for a tracked mention: a GKG persons column holding an alias, an org extraTerm, an alias past the cap, reach on a Bluesky post, a candidate name.
+export const untrackedDocs: RawDoc[] = [
+  { source: 'rss', uri: 'https://untracked.example/plain', text: 'Congresso discute a pauta econômica da semana', publishedAt: daysAgo(1), domain: 'untracked.example' },
+  { source: 'gkg', uri: 'https://untracked.example/gkg-names', text: 'Governo anuncia pacote de obras no litoral', publishedAt: daysAgo(1), domain: 'untracked.example', tone: -0.5, extraNames: ['Luiz Inacio'] },
+  { source: 'rss', uri: 'https://untracked.example/hugo', text: 'O Senado ouve Hugo Motta sobre a reforma administrativa', publishedAt: daysAgo(1), domain: 'untracked.example' },
+  { source: 'bluesky', uri: 'at://did:plc:x/post/untracked', text: 'Debate sobre a reforma administrativa segue aberto', publishedAt: daysAgo(1), domain: 'ana.bsky.social', reach: { likes: 3, reposts: 9, replies: 0, quotes: 1 } },
+  { source: 'gkg', uri: 'https://untracked.example/org', text: 'Estatal anuncia investimento em refinarias', publishedAt: daysAgo(1), domain: 'untracked.example', tone: 0.1, extraTerms: [{ term: 'petrobras', kind: 'org' }] },
+  { source: 'rss', uri: 'https://untracked.example/past-cap', text: `${filler(4000)} Lula`, publishedAt: daysAgo(1), domain: 'untracked.example' },
+  { source: 'rss', uri: 'https://untracked.example/blank', text: '   ', publishedAt: daysAgo(1), domain: 'untracked.example' },
+]
+
+// Issue #313: the rising route's two windows (7 days, then the 14 before them) and what lies beyond. Words appear nowhere else in the fixture. "somentebase" only 10 and 15 days ago (baseline alone); "duasjanelas" 3 and 12 days ago (both windows); "alemdoprazo" 25 days ago, past 7 + 14.
+export const risingDocs: RawDoc[] = [
+  { source: 'rss', uri: 'https://rising.example/b1', text: 'Lula cita somentebase no discurso', publishedAt: daysAgo(10), domain: 'rising.example' },
+  { source: 'rss', uri: 'https://rising.example/b2', text: 'Lula repete somentebase na entrevista', publishedAt: daysAgo(15), domain: 'rising.example' },
+  { source: 'rss', uri: 'https://rising.example/w1', text: 'Lula comenta duasjanelas no evento', publishedAt: daysAgo(3), domain: 'rising.example' },
+  { source: 'rss', uri: 'https://rising.example/w2', text: 'Lula retoma duasjanelas na reunião', publishedAt: daysAgo(12), domain: 'rising.example' },
+  { source: 'rss', uri: 'https://rising.example/f1', text: 'Lula lembra alemdoprazo no plenário', publishedAt: daysAgo(25), domain: 'rising.example' },
+]
+
 export const seedReach = async () => {
   await seed()
   for (const d of reachDocs) await insertDocP(d, persons)
+}
+
+export const seedRising = async () => {
+  await seed()
+  for (const d of risingDocs) await insertDocP(d, persons)
 }
 
 export const seedCandidates = async () => {
@@ -455,6 +481,18 @@ export const derivedRows = async () => ({
   terms: (await db.query<{ k: string }>(`select t.doc_id || ':' || v.kind || ':' || v.term as k from doc_terms t join terms v on v.id = t.term_id order by 1`)).rows.map((r) => r.k),
   candidates: (await db.query<{ k: string }>(`select doc_id || ':' || name as k from doc_candidates order by 1`)).rows.map((r) => r.k),
 })
+
+// A stored doc with no derived row at all: the state an alias edit leaves behind and the writer can no longer make, which reindex, export-docs, score, retention and purge still have to handle.
+export const insertOrphanDoc = async (doc: RawDoc) => {
+  await db.query(
+    `insert into docs (source, uri, text, published_at, extra_terms, domain, country, tone, extra_names) values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb)
+     on conflict (uri) do nothing`,
+    [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, countryOf(doc.domain) ?? null, doc.tone ?? null, JSON.stringify(doc.extraNames ?? [])],
+  )
+}
+
+export const orphanDocCount = async () =>
+  (await db.query<{ n: number }>(`select count(*)::int as n from docs d where not exists (select 1 from doc_persons p where p.doc_id = d.id)`)).rows[0].n
 
 // doc_terms exists only for docs naming at least one tracked person (issue #52); these two
 // are shared by the store and reindex suites, which assert that invariant from both sides.

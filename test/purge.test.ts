@@ -37,7 +37,7 @@ const themeElementCount = async () =>
 // can hold both a leftover theme row and a genuine org row on the same doc until purge themes
 // (which must strip only the theme one) runs.
 const seedLegacyThemeState = async () => {
-  const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[3].uri])
+  const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[0].uri])
   const docId = rows[0].id
   await db.query(`update docs set extra_terms = '[{"term":"tax_econ","kind":"theme"},{"term":"petrobras","kind":"org"}]'::jsonb where id = $1`, [docId])
   await insertDocTerm(docId, 'tax_econ', 'theme')
@@ -52,7 +52,7 @@ describe('purge themes (issue #108)', () => {
 
   it('clears theme-kind extra_terms and doc_terms, keeps a live org element and its doc_terms row intact, deletes only the pre-revision kikori row (issue #209 AC7)', async () => {
     await seedLegacyThemeState()
-    const { rows: docRow } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[3].uri])
+    const { rows: docRow } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[0].uri])
     const docId = docRow[0].id
 
     await purgeThemes()
@@ -140,7 +140,7 @@ describe('purge themes removes theme vocabulary (issue #252)', () => {
   it('purge themes removes theme vocabulary (issue #252) (AC14)', async () => {
     await seedLegacyThemeState()
     await db.query(`insert into terms (term, kind) values ('wb_unreferenced', 'theme')`)
-    const { rows: docRow } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[3].uri])
+    const { rows: docRow } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [docs[0].uri])
 
     await purgeThemes()
 

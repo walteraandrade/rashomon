@@ -3,7 +3,7 @@ import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
 import { exportLines } from '../src/export-docs.js'
 import { fitsApprox } from '../src/scorers/window.js'
-import { collidingUri, longText, persons, seed } from './fixture.js'
+import { insertOrphanDoc, longText, persons, seed } from './fixture.js'
 import './close.js'
 
 describe('exportLines', () => {
@@ -58,12 +58,18 @@ describe('exportLines', () => {
   })
 
   it('emits an empty persons array for a doc with zero doc_persons rows, not a missing field', async () => {
-    // the older colliding-uri rss row (day 3000) mentions tarcisio, so it is not a good
-    // "no persons" fixture; instead assert the invariant holds for any doc with zero matches
-    const rows = await exportLines(persons)
-    const withNoMatch = rows.find((r) => r.uri !== collidingUri && r.persons.length === 0)
-    assert.ok(withNoMatch, 'expected at least one doc with no tracked person mentioned')
-    assert.deepEqual(withNoMatch!.persons, [])
+    // The writer no longer stores a doc naming nobody, so this is the state an alias edit leaves behind.
+    const orphan = { source: 'rss' as const, uri: 'https://example.org/export-orphan', text: 'Congresso discute a pauta econômica', publishedAt: new Date().toISOString(), domain: 'example.org' }
+    await insertOrphanDoc(orphan)
+    try {
+      const rows = await exportLines(persons)
+      const found = rows.find((r) => r.uri === orphan.uri)
+      assert.ok(found, 'the orphan doc is exported')
+      assert.deepEqual(found!.persons, [])
+      assert.deepEqual(found!.windows, {})
+    } finally {
+      await db.query(`delete from docs where uri = $1`, [orphan.uri])
+    }
   })
 
   it('keeps tone as whatever docs.tone holds, null for non-GDELT docs', async () => {

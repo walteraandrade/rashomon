@@ -164,7 +164,7 @@ describe('Rising (#292)', () => {
     expect($('rising').innerHTML).not.toMatch(/NaN/)
   })
 
-  it('requests /rising with the fixed recorte plus the selected person and source, and paints the fixture word', async () => {
+  it('AC26: requests /rising with days=7 and baseline=14 in the fixed recorte plus the selected person and source, and paints the fixture word', async () => {
     boot({ search: '?person=bolsonaro&source=gdelt' })
     await start()
     expect(risingCalls()).toHaveLength(1)
@@ -1075,14 +1075,6 @@ describe('Rising (#292)', () => {
 })
 
 describe('Rising over the 7 and 14 day windows (issue #313 acceptance)', () => {
-  it('AC26: the request carries days=7 and baseline=14', async () => {
-    boot()
-    await start()
-    expect(risingCalls()).toHaveLength(1)
-    expect(risingCalls()[0].params.get('days')).toBe('7')
-    expect(risingCalls()[0].params.get('baseline')).toBe('14')
-  })
-
   it('AC26: a payload that lacks present and words_* still paints by the older rule, saying 14 dias antes, with no NaN and no 30-day claim', async () => {
     handlers['/rising'] = () => stale([term({ term: 'antigo', lift: 6 }), term({ term: 'recente', lift: 1 })], { recent: 6, baseline: 9 })
     boot()

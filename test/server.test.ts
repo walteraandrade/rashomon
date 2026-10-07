@@ -8,7 +8,7 @@ import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
 import { insertDocP, trimOlderThanP, upsertPersonsP } from '../src/store.js'
 import { withEnv } from './env.js'
-import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates, seedRising, untrackedDocs } from './fixture.js'
+import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates, untrackedDocs } from './fixture.js'
 import './close.js'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -818,95 +818,6 @@ describe('GET /api/people/:id/graph?kind=org (issue #209)', () => {
   })
 })
 
-describe('days beyond the widest window (issues #270, #313)', () => {
-  before(seed)
-
-  it('days=30, 60 and 365 answer exactly as days=21 on every windowed route', async () => {
-    const paths = (days: string) => [
-      `/api/people/lula/graph?days=${days}`,
-      `/api/people/lula/sources?days=${days}`,
-      `/api/people/lula/testimony?days=${days}`,
-      `/api/people/lula/lenses?days=${days}`,
-      `/api/people/lula/attention?days=${days}`,
-      `/api/compare?a=lula&b=tarcisio&days=${days}`,
-    ]
-    const edge = paths('21')
-    for (const retired of ['30', '60', '365']) {
-      for (const [i, path] of paths(retired).entries()) {
-        const [a, b] = [await app.request(path), await app.request(edge[i])]
-        assert.equal(a.status, 200, path)
-        assert.equal(await a.text(), await b.text(), path)
-      }
-    }
-  })
-
-  it('a missing days answers the 21-day body on every route whose default moved', async () => {
-    for (const route of ['graph', 'sources', 'testimony', 'lenses', 'attention']) {
-      const [bare, explicit] = [await app.request(`/api/people/lula/${route}`), await app.request(`/api/people/lula/${route}?days=21`)]
-      assert.equal(await bare.text(), await explicit.text(), route)
-    }
-  })
-
-  it('/rising at days=21 answers 200 with an empty baseline on a retained database, since [21, 35) lies beyond retention', async () => {
-    await trimOlderThanP(Math.max(...DAYS))
-    try {
-      const res = await app.request('/api/people/lula/rising?days=21&min=1')
-      assert.equal(res.status, 200)
-      const body = (await res.json()) as Awaited<ReturnType<typeof risingFor>>
-      assert.equal(body.days, 21)
-      assert.equal(body.baseline, 14)
-      assert.equal(body.about.baseline, 0)
-      assert.equal(body.about.words_baseline, 0)
-      assert.ok(body.terms.every((t) => t.count_baseline_raw === 0))
-    } finally {
-      await reseed()
-    }
-  })
-})
-
-describe('/rising baselines the 14 days before the recent 7 (issue #313)', () => {
-  before(seedRising)
-  after(reseed)
-
-  const rising = async (qs = '?min=1') => {
-    const res = await app.request(`/api/people/lula/rising${qs}`)
-    assert.equal(res.status, 200)
-    return (await res.json()) as Awaited<ReturnType<typeof risingFor>>
-  }
-  const termOf = <T extends { term: string }>(rows: T[], term: string) => rows.find((t) => t.term === term)
-
-  it('reports baseline 14 by default and for baseline=30', async () => {
-    assert.equal((await rising()).baseline, 14)
-    assert.equal((await rising('?baseline=30&min=1')).baseline, 14)
-    assert.equal((await rising('?baseline=365&min=1')).baseline, 14)
-  })
-
-  it('counts a word seen in the last 7 days and 12 days ago in both windows', async () => {
-    const body = await rising()
-    const both = termOf(body.terms, 'duasjanelas')!
-    assert.ok(both, 'the word seen in the recent window is a rising term')
-    assert.equal(both.count_recent_raw, 1)
-    assert.ok(both.count_baseline_raw >= 1)
-    assert.ok(termOf(body.present, 'duasjanelas'))
-  })
-
-  it('drops a word seen only 10 to 15 days ago from terms and present', async () => {
-    const body = await rising()
-    assert.equal(termOf(body.terms, 'somentebase'), undefined)
-    assert.equal(termOf(body.present, 'somentebase'), undefined)
-  })
-
-  it('lets a doc aged 25 days contribute to neither window', async () => {
-    const body = await rising()
-    assert.equal(termOf(body.terms, 'alemdoprazo'), undefined)
-    assert.equal(termOf(body.present, 'alemdoprazo'), undefined)
-    const open = await rising('?days=7&min=1')
-    // recent: /1, /2, /6, /7, /38 and the 3-day doc; baseline: /83, /84 and the 10-, 12- and 15-day docs, never the 25-day one.
-    assert.equal(open.about.recent, 6)
-    assert.equal(open.about.baseline, 5)
-  })
-})
-
 describe('GET /api/people/:id/persistence (issue #215)', () => {
   const cur = mondayOf(brtDate())
   type Body = { weeks: number; since: string; first_week: string | null; horizon: number; terms: { term: string; kind: string; series: { week: string; count: number | null }[]; streak: number; half_life: number | null }[] }
@@ -947,12 +858,14 @@ describe('GET /api/people/:id/persistence (issue #215)', () => {
     }
   })
 
-  it('a known person with no rows answers 200 with empty terms and a null first_week; an unknown person 404s', async () => {
+  it('a known person with no rows answers 200 with empty terms, a null first_week and the 21-day horizon; an unknown person 404s (AC23)', async () => {
     const res = await get('', 'tarcisio')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Body
     assert.deepEqual(body.terms, [])
     assert.equal(body.first_week, null)
+    assert.equal(body.horizon, 21)
+    assert.equal(body.weeks, 12)
     const missing = await get('', 'nobody')
     assert.equal(missing.status, 404)
     assert.deepEqual(await missing.json(), { error: 'person not found' })
@@ -1057,7 +970,7 @@ describe('the 21-day horizon end to end (issue #313 acceptance)', () => {
     assert.equal(body.baseline, 14)
     const both = body.terms.find((t) => t.term === 'ambasjanelas')
     assert.ok(both, 'ambasjanelas is a rising term')
-    assert.ok(both.count_recent_raw >= 1)
+    assert.equal(both.count_recent_raw, 1)
     assert.ok(both.count_baseline_raw >= 1)
     assert.ok(body.present.some((t) => t.term === 'ambasjanelas'))
   })
@@ -1084,36 +997,32 @@ describe('the 21-day horizon end to end (issue #313 acceptance)', () => {
     }
   })
 
-  it('days=30 and days=60 return the same /graph body as days=21 (AC18)', async () => {
-    const body = async (days: string) => {
-      const res = await app.request(`/api/people/lula/graph?days=${days}`)
-      assert.equal(res.status, 200)
-      return res.text()
+  it('days=30, 60 and 365 answer exactly as days=21 on every windowed route, and 7 is still its own recorte (AC18)', async () => {
+    const paths = (days: string) => [
+      `/api/people/lula/graph?days=${days}`,
+      `/api/people/lula/sources?days=${days}`,
+      `/api/people/lula/testimony?days=${days}`,
+      `/api/people/lula/lenses?days=${days}`,
+      `/api/people/lula/attention?days=${days}`,
+      `/api/compare?a=lula&b=tarcisio&days=${days}`,
+    ]
+    const edge = paths('21')
+    for (const retired of ['30', '60', '365']) {
+      for (const [i, path] of paths(retired).entries()) {
+        const [a, b] = [await app.request(path), await app.request(edge[i])]
+        assert.equal(a.status, 200, path)
+        assert.equal(await a.text(), await b.text(), path)
+      }
     }
-    const edge = await body('21')
-    assert.equal(await body('30'), edge)
-    assert.equal(await body('60'), edge)
-    assert.notEqual(await body('7'), edge, 'the 7-day window is still its own recorte')
+    const graph = async (days: string) => (await app.request(`/api/people/lula/graph?days=${days}`)).text()
+    assert.notEqual(await graph('7'), await graph('21'), 'the 7-day window is still its own recorte')
   })
 
-  it('persistence answers horizon 21 (AC23)', async () => {
-    await db.exec(`delete from term_weeks`)
-    const res = await app.request('/api/people/lula/persistence')
-    assert.equal(res.status, 200)
-    const body = (await res.json()) as { weeks: number; horizon: number; first_week: string | null; terms: unknown[] }
-    assert.equal(body.horizon, 21)
-    assert.equal(body.weeks, 12)
-    assert.equal(body.first_week, null)
-    assert.deepEqual(body.terms, [])
-  })
-
-  it('attention with no stored series answers { days: 21, series: [] } by default (AC23)', async () => {
-    await db.exec(`delete from person_attention`)
-    const res = await app.request('/api/people/tarcisio/attention')
-    assert.equal(res.status, 200)
-    assert.deepEqual(await res.json(), { days: 21, series: [] })
-    const wide = await app.request('/api/people/tarcisio/attention?days=60')
-    assert.deepEqual(await wide.json(), { days: 21, series: [] })
+  it('a missing days answers the 21-day body on every route whose default moved', async () => {
+    for (const route of ['graph', 'sources', 'testimony', 'lenses', 'attention']) {
+      const [bare, explicit] = [await app.request(`/api/people/lula/${route}`), await app.request(`/api/people/lula/${route}?days=21`)]
+      assert.equal(await bare.text(), await explicit.text(), route)
+    }
   })
 
   it('rising?days=21 answers 200 with an empty baseline on a retained database, since [21, 35) lies beyond retention', async () => {

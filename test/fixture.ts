@@ -371,23 +371,9 @@ export const untrackedDocs: RawDoc[] = [
   { source: 'rss', uri: 'https://untracked.example/blank', text: '   ', publishedAt: daysAgo(1), domain: 'untracked.example' },
 ]
 
-// Issue #313: the rising route's two windows (7 days, then the 14 before them) and what lies beyond. Words appear nowhere else in the fixture. "somentebase" only 10 and 15 days ago (baseline alone); "duasjanelas" 3 and 12 days ago (both windows); "alemdoprazo" 25 days ago, past 7 + 14.
-export const risingDocs: RawDoc[] = [
-  { source: 'rss', uri: 'https://rising.example/b1', text: 'Lula cita somentebase no discurso', publishedAt: daysAgo(10), domain: 'rising.example' },
-  { source: 'rss', uri: 'https://rising.example/b2', text: 'Lula repete somentebase na entrevista', publishedAt: daysAgo(15), domain: 'rising.example' },
-  { source: 'rss', uri: 'https://rising.example/w1', text: 'Lula comenta duasjanelas no evento', publishedAt: daysAgo(3), domain: 'rising.example' },
-  { source: 'rss', uri: 'https://rising.example/w2', text: 'Lula retoma duasjanelas na reunião', publishedAt: daysAgo(12), domain: 'rising.example' },
-  { source: 'rss', uri: 'https://rising.example/f1', text: 'Lula lembra alemdoprazo no plenário', publishedAt: daysAgo(25), domain: 'rising.example' },
-]
-
 export const seedReach = async () => {
   await seed()
   for (const d of reachDocs) await insertDocP(d, persons)
-}
-
-export const seedRising = async () => {
-  await seed()
-  for (const d of risingDocs) await insertDocP(d, persons)
 }
 
 export const seedCandidates = async () => {

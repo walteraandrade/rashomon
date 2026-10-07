@@ -162,15 +162,6 @@ describe('Lenses (#294)', () => {
     expect(of('docs')).toEqual([])
   })
 
-  for (const days of ['30', '60'])
-    it(`AC25: a shared link with days=${days} opens on 21 and requests days=21 on both routes`, async () => {
-      boot({ search: `?days=${days}` })
-      await start()
-      expect(select('lensesDays').value).toBe('21')
-      expect(lensesCalls()[0].params.get('days')).toBe('21')
-      expect(of('sources')[0].params.get('days')).toBe('21')
-    })
-
   it('AC2: nothing fetches before bootData.ready, and the ghost stands in the ruler and the detail', async () => {
     await start()
     expect(calls).toEqual([])
@@ -1129,11 +1120,12 @@ describe('Lenses over the 7 and 21 day windows (issue #313 acceptance)', () => {
   })
 
   for (const days of ['30', '60'])
-    it(`AC25: a shared link with days=${days} leaves the select on 21 and requests days=21`, async () => {
+    it(`AC25: a shared link with days=${days} leaves the select on 21 and requests days=21 on both routes`, async () => {
       boot({ search: `?days=${days}` })
       await start()
       expect(select('lensesDays').value).toBe('21')
       expect(lensesCalls()[0].params.get('days')).toBe('21')
+      expect(of('sources')[0].params.get('days')).toBe('21')
     })
 
   it('AC25: a shared link with days=7 still selects 7', async () => {

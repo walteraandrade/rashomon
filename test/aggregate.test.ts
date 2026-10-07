@@ -216,18 +216,6 @@ describe('buildGraphAggregates', () => {
     await buildGraphAggregates(persons)
   })
 
-  it('builds only the 7 and 21 windows, none of the retired 30, 60 or 365', async () => {
-    const { rows } = await db.query<{ days: number }>(`select distinct days from graph_scopes order by days`)
-    assert.deepEqual(rows.map((r) => r.days), [7, 21])
-  })
-
-  it('graph_scopes.docs equals tracked on every row: the corpus holds only tracked docs', async () => {
-    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes where docs <> tracked`)
-    assert.equal(rows[0].n, 0)
-    const { rows: some } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes where docs > 0`)
-    assert.ok(some[0].n > 0)
-  })
-
   it('writes one scope row per window, source and person, zero-doc sources included', async () => {
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
     assert.equal(rows[0].n, DAYS.length * (SOURCES.length + 1) * persons.length)
@@ -245,7 +233,7 @@ describe('buildGraphAggregates', () => {
 
   for (const person of persons)
     for (const over of recortes)
-      it(`renders the same response as the live query for ${person.id} ${JSON.stringify(over)}`, async () => {
+      it(`renders the same response as the live query for ${person.id} ${JSON.stringify(over)} (AC12)`, async () => {
         const query = q(over)
         assert.equal(precomputable(query), true)
         assert.deepEqual(await fast(person, query), await live(person, query))
@@ -1434,20 +1422,6 @@ describe('buildTermWeeks', () => {
     assert.deepEqual((await rows()).map((r) => r.term), ['aardvark', 'cheetah'])
   })
 
-  it('c_t covers the last 21 days: a term in a doc aged 25 days adds nothing (issue #313)', async () => {
-    const now = later()
-    const cur = curOf(now)
-    await putMany(cur, 'Lula flamingoverde', 2)
-    await put(shift(brtDate(now), -25), 'Lula flamingoverde')
-    await buildTermWeeks(persons, now)
-    const within = (await rows()).find((r) => r.term === 'flamingoverde')
-    assert.equal(within?.count, 2)
-    assert.equal(within?.c_t, 2)
-    await put(shift(brtDate(now), -15), 'Lula flamingoverde')
-    await buildTermWeeks(persons, now)
-    assert.equal((await rows()).find((r) => r.term === 'flamingoverde')?.c_t, 3)
-  })
-
   it('top N bounds rows per person and week (AC5)', async () => {
     const now = later()
     const cur = curOf(now)
@@ -1539,15 +1513,6 @@ describe('the aggregates over a tracked-only, 21-day corpus (issue #313 acceptan
     assert.ok(rows[0].total > 0)
     assert.equal(rows[0].differing, 0)
     assert.ok(rows[0].filled > 0)
-  })
-
-  it('the fast and the live /graph statements render identical output for every fixture recorte (AC12)', async () => {
-    for (const person of persons)
-      for (const over of recortes) {
-        const query = q(over)
-        assert.equal(precomputable(query), true, JSON.stringify(over))
-        assert.deepEqual(await fast(person, query), await live(person, query), `${person.id} ${JSON.stringify(over)}`)
-      }
   })
 
   it('the default build writes graph_scopes rows for days 7 and 21 only (AC20)', async () => {

@@ -18,30 +18,6 @@ const seedWindow = async (days: number) => {
 const WINDOWED = ['graph_scopes', 'graph_terms', 'term_communities', 'term_links', 'outlet_fields', 'outlet_neighbors']
 const daysIn = async (table: string) => (await db.query<{ days: number }>(`select days from ${table} order by days`)).rows.map((r) => r.days)
 
-describe('migrate drops the retired windows (issues #270, #313)', () => {
-  before(async () => {
-    await seed()
-    for (const t of WINDOWED) await db.exec(`delete from ${t}`)
-    for (const days of [7, 21, 30, 60, 365]) await seedWindow(days)
-  })
-  after(async () => {
-    for (const t of WINDOWED) await db.exec(`delete from ${t}`)
-    await reseed()
-  })
-
-  it('removes the retired 30, 60 and 365 windows from every windowed table, keeps 7 and 21, and a second call changes nothing', async () => {
-    await migrateP()
-    for (const t of WINDOWED) assert.deepEqual(await daysIn(t), [7, 21], t)
-    await migrateP()
-    for (const t of WINDOWED) assert.deepEqual(await daysIn(t), [7, 21], t)
-  })
-
-  it('no retired window is in DAYS', () => {
-    assert.deepEqual(RETIRED_WINDOW_DAYS, [30, 60, 365])
-    assert.deepEqual(RETIRED_WINDOW_DAYS.filter((d) => DAYS.includes(d)), [])
-  })
-})
-
 // Issue #313 acceptance criteria, quoted by number.
 describe('migrate and the retired windows (issue #313 acceptance)', () => {
   before(async () => {

@@ -55,10 +55,12 @@ describe('#211: GET /api/people/:id/attention', () => {
     assert.equal(rows[0].n, 1)
   })
 
-  it('a tracked person with no wikipedia field and no rows returns { days: 21, series: [] } with 200 by default (AC3)', async () => {
+  it('a tracked person with no wikipedia field and no rows returns { days: 21, series: [] } with 200 by default and for a retired days=60 (AC3, issue #313 AC23)', async () => {
     const res = await app.request(`/api/people/${bolsonaro.id}/attention`)
     assert.equal(res.status, 200)
     assert.deepEqual(await res.json(), { days: 21, series: [] })
+    const wide = await app.request(`/api/people/${bolsonaro.id}/attention?days=60`)
+    assert.deepEqual(await wide.json(), { days: 21, series: [] })
   })
 
   it('an unknown id returns 404 with { error: "person not found" } (AC4)', async () => {

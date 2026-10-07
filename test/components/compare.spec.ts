@@ -334,14 +334,6 @@ describe('Compare (#293)', () => {
     expect(compareCalls()[0].params.get('days')).toBe('21')
   })
 
-  for (const days of ['30', '60'])
-    it(`AC25: a shared link with days=${days} opens on 21 and requests days=21`, async () => {
-      boot({ search: `?days=${days}` })
-      await start()
-      expect(select('compareDays').value).toBe('21')
-      expect(compareCalls()[0].params.get('days')).toBe('21')
-    })
-
   it('AC7: days, source, limit and measure seed, and the first fetch sends them', async () => {
     boot({ search: '?days=7&source=gdelt&limit=40&compare.measure=pmi' })
     await start()

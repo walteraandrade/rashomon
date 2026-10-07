@@ -16,7 +16,6 @@ const wide: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all'
 const termsOfKind = (nodes: { term: string; kind: string }[], kind: string) => nodes.filter((n) => n.kind === kind).map((n) => n.term)
 
 describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => {
-  const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
   before(seed)
   after(reseed)
 
@@ -30,41 +29,6 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
     await reindexAll(persons)
     assert.ok((await termsOf('https://g1.globo.com/1')).includes('reforma'))
     assert.deepEqual(await termsOf('https://example.org/4'), [])
-  })
-
-  const senado = { source: 'senado' as const, uri: 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999', text: 'Davi Alcolumbre: pronunciamento sobre soberania nacional e infraestrutura portuária', publishedAt: new Date().toISOString(), domain: 'senado.leg.br' }
-  const orphan = { ...senado, uri: 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/orphan-313' }
-  const taggedOf = async (uri: string) =>
-    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [uri])).rows.map((r) => r.person_id)
-  const stored = async (uri: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uri])).rows[0].n
-
-  it('does not recover a doc the writer dropped: reindex reads stored docs only (issue #313)', async () => {
-    assert.equal(await stored(senado.uri), 0, 'seed() drops the Alcolumbre-only doc')
-    await reindexAll([...persons, alcolumbre])
-    assert.equal(await stored(senado.uri), 0)
-    assert.deepEqual(await termsOf(senado.uri), [])
-  })
-
-  it('tags a stored orphan that starts matching after a person is added', async () => {
-    await insertOrphanDoc(orphan)
-    await reindexAll(persons)
-    assert.deepEqual(await taggedOf(orphan.uri), [])
-    assert.deepEqual(await termsOf(orphan.uri), [])
-    await reindexAll([...persons, alcolumbre])
-    assert.deepEqual(await taggedOf(orphan.uri), ['alcolumbre'])
-    assert.ok((await termsOf(orphan.uri)).includes('soberania'))
-    assert.equal(await orphanTermCount(), 0)
-  })
-
-  it('keeps a stored doc that stopped matching anyone, with zero doc_persons rows (reindex deletes nothing)', async () => {
-    await reindexAll([...persons, alcolumbre])
-    assert.deepEqual(await taggedOf(orphan.uri), ['alcolumbre'])
-    const before = await orphanDocCount()
-    await reindexAll(persons)
-    assert.equal(await stored(orphan.uri), 1)
-    assert.deepEqual(await taggedOf(orphan.uri), [])
-    assert.deepEqual(await termsOf(orphan.uri), [])
-    assert.equal(await orphanDocCount(), before + 1)
   })
 
   it('leaves no unreferenced terms row after reindex (issue #252) (AC8)', async () => {
@@ -268,6 +232,7 @@ describe('reindex over a tracked-only store (issue #313 acceptance)', () => {
     await reindexAll([...persons, alcolumbre])
     assert.equal(await storedCount(dropped), 0)
     assert.deepEqual(await taggedOf(dropped), [])
+    assert.deepEqual(await termsOf(dropped), [])
     assert.equal(await orphanDocCount(), 0)
   })
 
@@ -275,17 +240,21 @@ describe('reindex over a tracked-only store (issue #313 acceptance)', () => {
     await insertOrphanDoc({ ...sourceDoc, uri: uri('starts-matching') })
     await reindexAll(persons)
     assert.deepEqual(await taggedOf(uri('starts-matching')), [])
+    assert.deepEqual(await termsOf(uri('starts-matching')), [])
     await reindexAll([...persons, alcolumbre])
     assert.deepEqual(await taggedOf(uri('starts-matching')), ['alcolumbre'])
     assert.ok((await termsOf(uri('starts-matching'))).includes('soberania'))
+    assert.equal(await orphanTermCount(), 0)
   })
 
   it('a stored doc that stops matching anyone stays stored with zero doc_persons rows, and reindex deletes nothing (AC13)', async () => {
     await reindexAll([...persons, alcolumbre])
     assert.deepEqual(await taggedOf(uri('starts-matching')), ['alcolumbre'])
     const before = await docCount()
+    const orphansBefore = await orphanDocCount()
     await reindexAll(persons)
     assert.equal(await docCount(), before)
+    assert.equal(await orphanDocCount(), orphansBefore + 1)
     assert.equal(await storedCount(uri('starts-matching')), 1)
     assert.deepEqual(await taggedOf(uri('starts-matching')), [])
     assert.deepEqual(await termsOf(uri('starts-matching')), [])

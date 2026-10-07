@@ -7,15 +7,6 @@ import { summary, warm, warmFailed, WARM_HEADERS, warmPaths, WARM_DAYS, type War
 // Never hits the network: fetch is injected.
 
 describe('warmPaths', () => {
-  it('warmPaths asks only 7 and 21: every days is one of them and none is a retired window (issue #313)', () => {
-    assert.deepEqual([...WARM_DAYS], ['7', '21'])
-    const paths = warmPaths([{ id: 'lula' }, { id: 'tarcisio' }, { id: 'bolsonaro' }])
-    assert.equal(paths.length, 1 + 3 * 2 * 3)
-    const days = new Set(paths.filter((p) => p !== '/api/people').map((p) => new URLSearchParams(p.split('?')[1]).get('days')))
-    assert.deepEqual([...days].sort(), ['21', '7'])
-    assert.ok(paths.every((p) => !/days=(30|60|365)\b/.test(p)))
-  })
-
   it('is /api/people plus graph, sources and testimony per person and window, in the page\'s own querystring order', () => {
     const paths = warmPaths([{ id: 'lula' }, { id: 'tarcísio' }])
     assert.equal(paths.length, 1 + 2 * WARM_DAYS.length * 3)
@@ -25,7 +16,6 @@ describe('warmPaths', () => {
     assert.equal(paths[2], '/api/people/lula/sources?' + sourcesParams(opts))
     assert.equal(paths[3], '/api/people/lula/testimony?' + testimonyParams(opts))
     assert.ok(paths.some((p) => p.startsWith('/api/people/tarc%C3%ADsio/graph?days=21&')))
-    assert.ok(paths.every((p) => !/days=(30|60|365)\b/.test(p)), 'a retired window is never warmed')
   })
 })
 
@@ -125,11 +115,12 @@ describe('warmPaths over the 7 and 21 day windows (issue #313 acceptance)', () =
   const daysOf = (path: string) => new URL(path, 'http://warm.local').searchParams.get('days')
 
   it('N people yield 1 + N x 2 x 3 paths, every days is 7 or 21 and none carries a retired window (AC22)', () => {
+    assert.deepEqual([...WARM_DAYS], ['7', '21'])
     for (const n of [0, 1, 3, 27]) {
       const paths = warmPaths(people(n))
       assert.equal(paths.length, 1 + n * 2 * 3, `${n} people`)
       for (const path of paths.filter((p) => p !== '/api/people')) assert.ok(['7', '21'].includes(daysOf(path) ?? ''), path)
-      assert.ok(paths.every((p) => !/days=(30|60)\b/.test(p)), `${n} people`)
+      assert.ok(paths.every((p) => !/days=(30|60|365)\b/.test(p)), `${n} people`)
     }
   })
 

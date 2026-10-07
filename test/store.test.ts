@@ -939,131 +939,6 @@ describe('insertDoc reach (issue #210)', () => {
   })
 })
 
-describe('the writer keeps only docs naming a tracked person (issue #313)', () => {
-  before(seed)
-  after(reseed)
-  const untracked = (name: string) => untrackedDocs.find((d) => d.uri.endsWith(`/${name}`))!
-  const tracked = (n: number, text = `Lula fala sobre a pauta ${n}`): RawDoc => ({ source: 'rss', uri: `https://example.org/tracked-${text.slice(0, 4)}-${n}`, text, publishedAt: now(), domain: 'example.org' })
-
-  it('stores no row for a seeded fixture doc naming nobody, and none lacks a doc_persons row', async () => {
-    assert.equal(await textOf('https://example.org/4'), null)
-    assert.equal(await textOf('https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999'), null)
-    assert.equal(await orphanDocCount(), 0)
-  })
-
-  it('returns false from insertDoc for a dropped doc and leaves every table as it was', async () => {
-    const before = await tableCounts()
-    for (const doc of untrackedDocs) assert.equal(await insertDocP(doc, persons), false, doc.uri)
-    assert.deepEqual(await tableCounts(), before)
-    assert.equal(await derivedCounts(untrackedDocs[0].uri), null)
-  })
-
-  it('counts dropped docs apart from written', async () => {
-    const batch = [tracked(1), untracked('plain'), tracked(2), untracked('hugo'), tracked(3)]
-    assert.deepEqual(await insertDocsP(batch, persons), { written: 3, enriched: 0, dropped: 2, failed: 0 })
-    assert.equal(await textOf(untracked('plain').uri), null)
-  })
-
-  it('reports a batch of only untracked docs as dropped, with no table touched', async () => {
-    const before = await tableCounts()
-    assert.deepEqual(await insertDocsP(untrackedDocs, persons), { written: 0, enriched: 0, dropped: untrackedDocs.length, failed: 0 })
-    assert.deepEqual(await tableCounts(), before)
-  })
-
-  it('judges a doc on its truncated text', async () => {
-    const doc = untracked('past-cap')
-    assert.ok(doc.text.includes('Lula') && doc.text.length > MAX_DOC_CHARS)
-    assert.ok(!truncateText(doc.text).includes('Lula'))
-    assert.equal(await insertDocP(doc, persons), false)
-    assert.equal(await textOf(doc.uri), null)
-  })
-
-  it('judges empty and whitespace text as naming nobody', async () => {
-    assert.deepEqual(await insertDocsP([untracked('blank'), { ...untracked('blank'), uri: 'https://untracked.example/empty', text: '' }], persons), { written: 0, enriched: 0, dropped: 2, failed: 0 })
-  })
-
-  it('ignores extraNames and extraTerms: only the text makes a doc tracked', async () => {
-    const gkg = untracked('gkg-names')
-    assert.deepEqual(gkg.extraNames, ['Luiz Inacio'])
-    const org = untracked('org')
-    assert.ok(org.extraTerms?.length)
-    assert.deepEqual(await insertDocsP([gkg, org], persons), { written: 0, enriched: 0, dropped: 2, failed: 0 })
-  })
-
-  it('leaves a stored doc untouched when a re-fetch names nobody', async () => {
-    const uri = 'https://example.org/refetch-names-nobody'
-    await insertDocP({ source: 'gkg', uri, text: 'Lula visita fábrica', publishedAt: now() }, persons)
-    const before = { version: await rowVersion(uri), text: await textOf(uri), row: await stored(uri), counts: await derivedCounts(uri) }
-    const refetch: RawDoc = { source: 'gkg', uri, text: 'Governo anuncia pacote de obras no litoral e novas medidas para o setor', publishedAt: now(), domain: 'novo.example', tone: 3 }
-    assert.deepEqual(await insertDocsP([refetch], persons), { written: 0, enriched: 0, dropped: 1, failed: 0 })
-    assert.equal(await rowVersion(uri), before.version)
-    assert.equal(await textOf(uri), before.text)
-    assert.deepEqual(await stored(uri), before.row)
-    assert.deepEqual(await derivedCounts(uri), before.counts)
-    const { rows } = await db.query<{ domain: string | null }>(`select domain from docs where uri = $1`, [uri])
-    assert.equal(rows[0].domain, null)
-  })
-
-  it('judges each occurrence of a repeated uri alone', async () => {
-    const uri = 'https://example.org/repeated-uri'
-    const nobody: RawDoc = { source: 'rss', uri, text: 'Congresso discute a pauta da semana', publishedAt: now() }
-    const somebody: RawDoc = { source: 'rss', uri, text: 'Lula discute a pauta da semana', publishedAt: now() }
-    assert.deepEqual(await insertDocsP([nobody, somebody], persons), { written: 1, enriched: 0, dropped: 1, failed: 0 })
-    assert.equal(await textOf(uri), somebody.text)
-    assert.deepEqual(await insertDocsP([{ ...somebody, uri: `${uri}-b` }, { ...nobody, uri: `${uri}-b` }], persons), { written: 1, enriched: 0, dropped: 1, failed: 0 })
-  })
-
-  it('counts a dropped doc once when its group is replayed, and the failing doc as failed', async () => {
-    const family = [...persons, untrackedPerson('replay-dropped-count')]
-    const group: RawDoc[] = [
-      { source: 'rss', uri: 'https://example.org/replay-a', text: 'Congresso discute a pauta da semana', publishedAt: now() },
-      { source: 'rss', uri: 'https://example.org/replay-b', text: 'Ciro Gomes fala sobre a reforma', publishedAt: now() },
-      { source: 'rss', uri: 'https://example.org/replay-c', text: 'Lula fala sobre a reforma', publishedAt: now() },
-    ]
-    assert.deepEqual(await insertDocsP(group, family, 3), { written: 1, enriched: 0, dropped: 1, failed: 1 })
-  })
-
-  it('sends no document statement for a batch of only untracked docs', async () => {
-    const real = await runSql(SqlClient.SqlClient)
-    const only = recordingSql(real)
-    const totals = await Effect.runPromise(insertDocs(untrackedDocs, persons).pipe(Effect.provideService(SqlClient.SqlClient, only.client)))
-    assert.equal(totals.dropped, untrackedDocs.length)
-    assert.deepEqual(only.statements, [])
-
-    const mixed = recordingSql(real)
-    await Effect.runPromise(insertDocs([untracked('plain'), tracked(9, 'Lula fala sobre o orçamento')], persons).pipe(Effect.provideService(SqlClient.SqlClient, mixed.client)))
-    assert.ok(mixed.statements.some((text) => /insert into docs/.test(text)))
-  })
-
-  it('judges a Bluesky post with reach on its text, so a dropped post leaves no reach behind', async () => {
-    const doc = untrackedDocs.find((d) => d.source === 'bluesky')!
-    assert.ok(doc.reach)
-    const real = await runSql(SqlClient.SqlClient)
-    const only = recordingSql(real)
-    await Effect.runPromise(insertDocs([doc], persons).pipe(Effect.provideService(SqlClient.SqlClient, only.client)))
-    assert.deepEqual(only.statements, [])
-    assert.equal(await textOf(doc.uri), null)
-  })
-
-  it('tags a stored tracked doc exactly as derive does, from one match', async () => {
-    const doc = tracked(7, 'Lula e Tarcísio disputam a eleição')
-    assert.equal(await insertDocP(doc, persons), true)
-    const { rows } = await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [doc.uri])
-    assert.deepEqual(rows.map((r) => r.person_id), ['lula', 'tarcisio'])
-  })
-})
-
-describe('the candidate fixture stores whole (issue #313)', () => {
-  before(seedCandidates)
-  after(reseed)
-
-  it('keeps every candidate doc, since each names a tracked person', async () => {
-    assert.equal(await orphanDocCount(), 0)
-    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = any($1::text[])`, [candidateDocs.map((d) => d.uri)])
-    assert.equal(rows[0].n, candidateDocs.length)
-  })
-})
-
 // Issue #313 acceptance criteria, quoted by number. The writer keeps only docs whose truncated text names a tracked person.
 describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
   before(seed)
@@ -1073,7 +948,6 @@ describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
   const tracked = (uri: string, text = 'Lula fala sobre a pauta da semana'): RawDoc => ({ source: 'rss', uri, text, publishedAt: now(), domain: 'ac313.example' })
   const nobody = (uri: string, text = 'Congresso discute a pauta econômica da semana'): RawDoc => tracked(uri, text)
   const row = async (uri: string) => (await db.query(`select * from docs where uri = $1`, [uri])).rows[0]
-  const docStatements = (statements: string[]) => statements.filter((text) => /\bdocs\b/i.test(text))
   const sentThrough = async (batch: RawDoc[], ps = persons) => {
     const recorder = recordingSql(await runSql(SqlClient.SqlClient))
     const totals = await Effect.runPromise(insertDocs(batch, ps).pipe(Effect.provideService(SqlClient.SqlClient, recorder.client)))
@@ -1085,15 +959,19 @@ describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
     const gkg: RawDoc = { source: 'gkg', uri: at(1), text: 'Hugo Motta preside a sessão sobre a reforma administrativa', publishedAt: now(), domain: 'ac313.example', tone: -2.5 }
     assert.equal(await insertDocP(gkg, persons), false)
     assert.equal(await insertDocP(nobody(at(2)), persons), false)
+    for (const doc of untrackedDocs) assert.equal(await insertDocP(doc, persons), false, doc.uri)
     assert.deepEqual(await tableCounts(), before)
     assert.equal(await textOf(at(1)), null)
     assert.equal(await textOf(at(2)), null)
+    assert.equal(await derivedCounts(untrackedDocs[0].uri), null)
   })
 
   it('a doc naming a tracked person is still written, tagged and given terms (AC2)', async () => {
     assert.equal(await insertDocP(tracked(at(3), 'Lula e Tarcísio discutem a reforma tributária'), persons), true)
     const counts = await derivedCounts(at(3))
     assert.equal(counts?.persons, 2)
+    const { rows: tagged } = await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [at(3)])
+    assert.deepEqual(tagged.map((r) => r.person_id), ['lula', 'tarcisio'])
     assert.ok((counts?.terms ?? 0) > 0)
     assert.ok((await termsOf(at(3))).includes('reforma'))
     assert.deepEqual(await insertDocsP([tracked(at(3), 'Lula e Tarcísio discutem a reforma tributária')], persons), { written: 0, enriched: 0, dropped: 0, failed: 0 })
@@ -1109,11 +987,14 @@ describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
 
   it('a batch of only untracked docs returns written 0, dropped N, changes no table and sends no statement that touches docs (AC3)', async () => {
     const before = await tableCounts()
-    const batch = [nobody(at(20)), nobody(at(21), 'Outra pauta sem ninguém'), { ...nobody(at(22)), source: 'bluesky' as const, reach: { likes: 5, reposts: 9 } }]
+    const batch = [nobody(at(20)), nobody(at(21), 'Outra pauta sem ninguém'), { ...nobody(at(22)), source: 'bluesky' as const, reach: { likes: 5, reposts: 9 } }, ...untrackedDocs]
     const { totals, statements } = await sentThrough(batch)
-    assert.deepEqual(totals, { written: 0, enriched: 0, dropped: 3, failed: 0 })
-    assert.deepEqual(docStatements(statements), [])
+    assert.deepEqual(totals, { written: 0, enriched: 0, dropped: batch.length, failed: 0 })
+    assert.deepEqual(statements, [])
     assert.deepEqual(await tableCounts(), before)
+    for (const uri of [at(22), ...untrackedDocs.map((d) => d.uri)]) assert.equal(await textOf(uri), null, uri)
+    const mixed = await sentThrough([nobody(at(23)), tracked(at(24), 'Lula fala sobre o orçamento')])
+    assert.ok(mixed.statements.some((text) => /insert into docs/.test(text)), 'a batch with one tracked doc does send its insert')
   })
 
   it('the decision uses the truncated incoming text only (AC4)', async () => {
@@ -1128,6 +1009,14 @@ describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
     assert.equal(await insertDocP(upFront, persons), true)
   })
 
+  it('empty and whitespace text names nobody (AC4)', async () => {
+    const blank = untrackedDocs.find((d) => d.uri.endsWith('/blank'))!
+    assert.equal(blank.text.trim(), '')
+    assert.deepEqual(await insertDocsP([blank, { ...blank, uri: at(34), text: '' }], persons), { written: 0, enriched: 0, dropped: 2, failed: 0 })
+    assert.equal(await textOf(blank.uri), null)
+    assert.equal(await textOf(at(34)), null)
+  })
+
   it('a stored tracked doc re-fetched with text naming nobody is dropped and its row is untouched (AC5)', async () => {
     const stored: RawDoc = { source: 'bluesky', uri: at(40), text: 'Lula comenta a pauta', publishedAt: now(), domain: 'ana.bsky.social', reach: { likes: 2, reposts: 3, replies: 1, quotes: 0 } }
     assert.equal(await insertDocP(stored, persons), true)
@@ -1139,10 +1028,12 @@ describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
 
     const gkg: RawDoc = { source: 'gkg', uri: at(41), text: 'Lula visita fábrica', publishedAt: now(), tone: -1.5 }
     await insertDocP(gkg, persons)
-    const gkgBefore = { version: await rowVersion(at(41)), row: await row(at(41)) }
+    const gkgBefore = { version: await rowVersion(at(41)), row: await row(at(41)), counts: await derivedCounts(at(41)) }
     assert.deepEqual(await insertDocsP([{ ...gkg, text: 'Sem ninguém por aqui, só uma pauta longa o bastante para parecer enriquecimento', domain: 'novo.example', tone: 4 }], persons), { written: 0, enriched: 0, dropped: 1, failed: 0 })
     assert.equal(await rowVersion(at(41)), gkgBefore.version)
     assert.deepEqual(await row(at(41)), gkgBefore.row)
+    assert.deepEqual(await derivedCounts(at(41)), gkgBefore.counts)
+    assert.equal((await row(at(41))).domain, null)
   })
 
   it('a stored tracked doc that arrives again unchanged is neither written nor dropped (AC5)', async () => {
@@ -1156,6 +1047,9 @@ describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
     const second = tracked(at(50), 'Lula discute a pauta')
     assert.deepEqual(await insertDocsP([first, second], persons), { written: 1, enriched: 0, dropped: 1, failed: 0 })
     assert.equal(await textOf(at(50)), second.text)
+    const reversed = { first: { ...second, uri: at(51) }, second: { ...first, uri: at(51) } }
+    assert.deepEqual(await insertDocsP([reversed.first, reversed.second], persons), { written: 1, enriched: 0, dropped: 1, failed: 0 })
+    assert.equal(await textOf(at(51)), reversed.first.text)
   })
 
   it('a failed group replayed doc by doc counts each dropped doc once and the failing doc as failed 1 (AC7)', async () => {
@@ -1176,6 +1070,7 @@ describe('the writer stores only tracked docs (issue #313 acceptance)', () => {
   it('after seed() no stored doc lacks a doc_persons row, and the fixture\'s untracked docs were not stored (AC10)', async () => {
     assert.equal(await orphanDocCount(), 0)
     assert.equal(await textOf('https://example.org/4'), null)
+    assert.equal(await textOf('https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999'), null)
     assert.ok(docs.some((d) => d.uri === 'https://example.org/4'), 'the fixture still lists the untracked doc')
   })
 

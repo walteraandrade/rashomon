@@ -654,25 +654,7 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
     }
   })
 
-  it('DAYS is 7 and 21, 21 is the retention horizon, and anything wider snaps to 21 (issue #313)', () => {
-    assert.deepEqual(DAYS, [7, 21])
-    assert.equal(Math.max(...DAYS), 21)
-    for (const v of ['21', '30', '60', '365', '9999']) assert.equal(snapDays(v, 21), 21, v)
-    assert.equal(snapDays('14', 21), 7, 'a tie goes to the shorter window')
-    assert.equal(snapDays('15', 21), 21)
-    assert.equal(snapDays('7', 21), 7)
-  })
-
-  it('BASELINES is [14]: rising reads 14 for a missing, a retired or a wide baseline, and days=21 keeps it', () => {
-    assert.deepEqual(BASELINES, [14])
-    assert.equal(parseRisingQuery({}).baseline, 14)
-    assert.equal(parseRisingQuery({ baseline: '30' }).baseline, 14)
-    assert.equal(parseRisingQuery({ baseline: '365' }).baseline, 14)
-    assert.deepEqual({ days: parseRisingQuery({ days: '21' }).days, baseline: parseRisingQuery({ days: '21' }).baseline }, { days: 21, baseline: 14 })
-    assert.equal(Math.min(...DAYS) + BASELINES[0], Math.max(...DAYS), 'the recent window and its baseline end at the retention horizon')
-  })
-
-  it('every parser that reads days keeps its own default when days is absent or non-numeric', () => {
+  it('every parser that reads days keeps its own default when days is absent or non-numeric (AC15)', () => {
     for (const [name, parse, fallback] of dayParsers) {
       assert.equal(parse({}).days, fallback, name)
       assert.equal(parse({ days: 'abc' }).days, fallback, name)
@@ -687,7 +669,7 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
     }
   })
 
-  it('any other value snaps to the nearest allowed window, ties to the shorter one', () => {
+  it('any other value snaps to the nearest allowed window, ties to the shorter one, and a retired 30, 60 or 365 reads as 21 on every parser (AC15)', () => {
     // 14 is the midpoint of 7 and 21.
     const cases: [string, number][] = [
       ['1', 7],
@@ -968,32 +950,14 @@ describe('the 7 and 21 day windows (issue #313 acceptance)', () => {
     assert.equal(snapDays('abc', 7), 7)
   })
 
-  it('parsing {} yields days in DAYS, 21 everywhere except rising, week and candidates, which keep 7 (AC15)', () => {
-    const at21 = [parseQuery, parseDocsQuery, parseTimelineQuery, parseToneQuery, parseAgendaQuery, parseTestimonyQuery, parseComentionQuery, parseCompareQuery, parseLensesQuery, parseAttentionQuery]
-    for (const parser of at21) {
-      const { days } = (parser as (q: Record<string, string>) => { days: number })({})
-      assert.ok(DAYS.includes(days), parser.name)
-      assert.equal(days, 21, parser.name)
-    }
-    for (const parser of [parseRisingQuery, parseWeekQuery, parseCandidatesQuery]) {
-      const { days } = (parser as (q: Record<string, string>) => { days: number })({})
-      assert.ok(DAYS.includes(days), parser.name)
-      assert.equal(days, 7, parser.name)
-    }
-  })
-
-  it('a retired days value reads as the 21-day window on every parser that reads days (AC15)', () => {
-    for (const parser of [parseQuery, parseDocsQuery, parseTimelineQuery, parseToneQuery, parseAgendaQuery, parseTestimonyQuery, parseComentionQuery, parseCompareQuery, parseLensesQuery, parseAttentionQuery]) {
-      for (const days of ['30', '60', '365']) assert.equal((parser as (q: Record<string, string>) => { days: number })({ days }).days, 21, `${parser.name} days=${days}`)
-    }
-  })
-
   it('BASELINES equals [14] and parseRisingQuery reads 14 for a missing or retired baseline (AC16)', () => {
     assert.deepEqual([...BASELINES], [14])
     assert.equal(parseRisingQuery({}).baseline, 14)
     assert.equal(parseRisingQuery({ baseline: '30' }).baseline, 14)
+    assert.equal(parseRisingQuery({ baseline: '365' }).baseline, 14)
     const wide = parseRisingQuery({ days: '21' })
     assert.equal(wide.days, 21)
     assert.equal(wide.baseline, 14)
+    assert.equal(Math.min(...DAYS) + BASELINES[0], Math.max(...DAYS), 'the recent window and its baseline end at the retention horizon')
   })
 })

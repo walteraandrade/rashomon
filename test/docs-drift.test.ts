@@ -470,6 +470,8 @@ describe('docs state the 21-day window and retention (issue #313)', () => {
     assert.match(docsText, /fetched F, new W, dropped D/)
     assert.match(docsText, /\/api\/candidates`? only sees names[^.\n]*tracked/i)
     assert.match(docsText, /`stats\.docs`[^.\n]*`graph_scopes\.docs`[^.\n]*tracked|graph_scopes\.docs`? equals `graph_scopes\.tracked`/i)
+    assert.doesNotMatch(docsText, /keeps its `docs` row/)
+    assert.doesNotMatch(docsText, /stats\.docs`? keeps its old meaning/)
   })
 
   it('reindex recovers only stored docs and deletes nothing; a removed person\'s docs leave with retention (AC32)', () => {

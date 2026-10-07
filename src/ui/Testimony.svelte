@@ -260,7 +260,7 @@
     {:else if testimonyPhase === 'error'}
       <p class="note">Não foi possível carregar a avaliação.</p>
     {:else if testimony && !hasScore}
-      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método {testimony.method}).<br>Tente um período maior ou outra fonte.</p></div>
+      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método {testimony.method}).<br>{days === '21' ? 'Tente outra fonte.' : 'Tente um período maior ou outra fonte.'}</p></div>
     {:else if testimony && overall !== null}
       <dl class="verdict stat"><div><dt>Média do recorte</dt><dd style:--tone={testimonyColor(overall)}>{signed(overall)}</dd></div></dl><p class="verdict-class">{testimonyClass(overall)} · média de {fmt(testimony.overall.n)} {testimony.overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>
       {#if outlet !== 'all'}

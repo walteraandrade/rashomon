@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { db } from '../src/db.js'
+import { buildGraphAggregates } from '../src/aggregate.js'
 import { agendaFor, comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
 import { addDays, brtDate, brtMidnightUtc, DAYS, mondayOf, parseAgendaQuery, parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
 import { app, withSeedFields } from '../src/server.js'
-import { insertDocP, upsertPersonsP } from '../src/store.js'
+import { insertDocP, trimOlderThanP, upsertPersonsP } from '../src/store.js'
 import { withEnv } from './env.js'
-import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates } from './fixture.js'
+import { futureDoc, insertTestimony, persons, reseed, seed, seedCandidates, untrackedDocs } from './fixture.js'
 import './close.js'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -83,7 +84,7 @@ describe('the routes answer their *For functions with the default parser (issue 
   it('/api/people/:id/graph stats are the fixture literals test/graph.test.ts pins', async () => {
     const res = await app.request('/api/people/lula/graph')
     const body = (await res.json()) as { stats: { docs: number; about: number } }
-    assert.equal(body.stats.docs, 16)
+    assert.equal(body.stats.docs, 15)
     assert.equal(body.stats.about, 7)
   })
 
@@ -92,16 +93,16 @@ describe('the routes answer their *For functions with the default parser (issue 
     const body = (await res.json()) as { cells: { person_id: string; domain: string; tone: number; n: number }[] }
     const cell = body.cells.find((c) => c.person_id === 'tarcisio' && c.domain === 'estadao.com.br')
     assert.deepEqual(cell, { person_id: 'tarcisio', domain: 'estadao.com.br', tone: -1, n: 3 })
-    assert.deepEqual(JSON.parse(JSON.stringify(await toneFor({ days: 30, min: 3 }))), body)
+    assert.deepEqual(JSON.parse(JSON.stringify(await toneFor({ days: 21, min: 3 }))), body)
   })
 
   it('/api/agenda matches agendaFor and the fixture literal', async () => {
     // min=1 is a MINS member, so it survives parseAgendaQuery's snap unchanged
-    const res = await app.request('/api/agenda?days=30&min=1')
+    const res = await app.request('/api/agenda?days=21&min=1')
     const body = (await res.json()) as { cells: { person_id: string; domain: string; docs: number; share: number }[] }
     const cell = body.cells.find((c) => c.person_id === 'tarcisio' && c.domain === 'estadao.com.br')
     assert.deepEqual(cell, { person_id: 'tarcisio', domain: 'estadao.com.br', docs: 4, share: 1 })
-    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor({ days: 30, source: 'all', min: 1, limit: 30 }))), body)
+    assert.deepEqual(JSON.parse(JSON.stringify(await agendaFor({ days: 21, source: 'all', min: 1, limit: 30 }))), body)
   })
 
   it('GET /api/agenda with no query string is byte-identical to agendaFor(parseAgendaQuery({})) (issue #208 AC11)', async () => {
@@ -140,7 +141,7 @@ describe('/rising default limit is 40, not 20', () => {
   before(seed)
 
   it('a wide window with more than 20 matching terms and no limit param returns more than 20', async () => {
-    const res = await app.request('/api/people/lula/rising?days=60&min=1')
+    const res = await app.request('/api/people/lula/rising?days=21&min=1')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Awaited<ReturnType<typeof risingFor>>
     assert.ok(body.terms.length > 20, `expected more than 20 terms, got ${body.terms.length}`)
@@ -199,23 +200,23 @@ describe('GET /api/people/:id/week (issue #147)', () => {
   })
 
   it('wires the querystring through parseWeekQuery end to end', async () => {
-    const res = await app.request('/api/people/lula/week?days=30&limit=1&kind=word&source=gnews')
+    const res = await app.request('/api/people/lula/week?days=21&limit=1&kind=word&source=gnews')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Awaited<ReturnType<typeof weekFor>>
     const person = { id: lula.id, name: lula.name, aliases: lula.aliases }
-    const expected = await weekFor(person, parseWeekQuery({ days: '30', limit: '1', kind: 'word', source: 'gnews' }))
+    const expected = await weekFor(person, parseWeekQuery({ days: '21', limit: '1', kind: 'word', source: 'gnews' }))
     assert.deepEqual(JSON.parse(JSON.stringify(expected)), body)
-    // days=30 must reach the response's own `days` field, and 30 daily buckets back it up.
-    assert.equal(body.days, 30)
-    assert.equal(body.buckets.length, 30)
+    // days=21 must reach the response's own `days` field, and 21 daily buckets back it up.
+    assert.equal(body.days, 21)
+    assert.equal(body.buckets.length, 21)
     // Control: limit actually reaches weekFor. lula's gnews word terms overflow limit=1 in at
     // least one bucket, so raising it to 8 must change what the route returns.
-    const wider = await app.request('/api/people/lula/week?days=30&limit=8&kind=word&source=gnews')
+    const wider = await app.request('/api/people/lula/week?days=21&limit=8&kind=word&source=gnews')
     const widerBody = await wider.json()
     assert.notDeepEqual(widerBody, body)
     // Control: kind actually reaches weekFor. Today's bucket carries only the hashtag-only
     // '#planalto' mentions, so dropping kind to 'all' must surface a term there kind=word hides.
-    const allKinds = await app.request('/api/people/lula/week?days=30&limit=1&source=gnews')
+    const allKinds = await app.request('/api/people/lula/week?days=21&limit=1&source=gnews')
     const allKindsBody = await allKinds.json()
     assert.notDeepEqual(allKindsBody, body)
   })
@@ -366,14 +367,14 @@ describe('GET /week?testimony=1 (issue #150)', () => {
     body.buckets.find((b) => brtYmd(b.start) === day)!
 
   it('averages the stub scores of the docs behind each day', async () => {
-    const body = await week('days=30&testimony=1&method=stub')
+    const body = await week('days=21&testimony=1&method=stub')
     const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000)
     assert.deepEqual(bucketAt(body, brtYmd(daysAgo(7))).testimony, { score: 6, n: 1 })
     assert.deepEqual(bucketAt(body, brtYmd(daysAgo(6))).testimony, { score: 4, n: 1 })
   })
 
   it('no bucket carries a testimony key across query-parameter combinations when the flag is absent', async () => {
-    const qs = ['days=30', 'days=30&source=gdelt', 'days=30&domain=estadao.com.br', 'days=30&lean=right', 'days=30&kind=word', 'days=30&limit=40']
+    const qs = ['days=21', 'days=21&source=gdelt', 'days=21&domain=estadao.com.br', 'days=21&lean=right', 'days=21&kind=word', 'days=21&limit=40']
     for (const q of qs) {
       const body = await week(q)
       for (const b of body.buckets) assert.equal('testimony' in b, false)
@@ -381,10 +382,10 @@ describe('GET /week?testimony=1 (issue #150)', () => {
   })
 
   it('an unscored method answers a 200 with testimony null on every bucket, not a 4xx', async () => {
-    const res = await app.request('/api/people/tarcisio/week?days=30&testimony=1&method=nobody:ever')
+    const res = await app.request('/api/people/tarcisio/week?days=21&testimony=1&method=nobody:ever')
     assert.equal(res.status, 200)
     const body = await res.json()
-    assert.equal(body.buckets.length, 30)
+    assert.equal(body.buckets.length, 21)
     for (const b of body.buckets) assert.equal(b.testimony, null)
   })
 })
@@ -563,13 +564,23 @@ describe('GET /api/candidates (issue #32)', () => {
     )
   })
 
+  it('an untracked doc adds nothing to a candidate\'s count (issue #313)', async () => {
+    const hugo = untrackedDocs.find((d) => d.uri.endsWith('/hugo'))!
+    assert.ok(hugo.text.includes('Hugo Motta'))
+    assert.equal(await insertDocP(hugo, persons), false)
+    const { candidates } = await get('?min=2')
+    assert.equal(candidates.find((c) => c.name === 'hugo motta')?.count, 4)
+    const wide = await get('?days=21&min=1')
+    assert.equal(wide.candidates.find((c) => c.name === 'hugo motta')?.count, 4)
+  })
+
   it('caps samples at three, newest first, with id, source and text only', async () => {
     const { candidates } = await get('?min=2')
     const hugo = candidates.find((c) => c.name === 'hugo motta')!
     assert.equal(hugo.samples.length, 3)
     assert.deepEqual(hugo.samples.map((s) => s.source), ['rss', 'gnews', 'gkg'])
     assert.deepEqual(Object.keys(hugo.samples[0]).sort(), ['id', 'source', 'text'])
-    assert.equal(hugo.samples[0].text, 'O Senado ouve Hugo Motta sobre a reforma')
+    assert.equal(hugo.samples[0].text, 'O Senado ouve Hugo Motta sobre a reforma segundo Lula')
   })
 
   it('min=1 surfaces the single-doc names and limit trims the list', async () => {
@@ -579,17 +590,16 @@ describe('GET /api/candidates (issue #32)', () => {
     assert.deepEqual(one.candidates.map((c) => c.name), ['hugo motta'])
   })
 
-  // days=14 until issue #111 enumerated the windows; 30 is the next one up and still wide
-  // enough to swallow the previous window and c10 (day 18).
+  // 21 is the next window up and wide enough to swallow the previous window and c10 (day 18).
   it('a longer window moves the previous docs into the count', async () => {
-    const { candidates } = await get('?days=30&min=2')
+    const { candidates } = await get('?days=21&min=2')
     const renan = candidates.find((c) => c.name === 'renan calheiros')!
     assert.equal(renan.count, 5)
     assert.equal(renan.previous, 0)
   })
 
   it('never lists a tracked alias', async () => {
-    const { candidates } = await get('?days=60&min=1&limit=200')
+    const { candidates } = await get('?days=21&min=1&limit=200')
     assert.ok(!candidates.some((c) => ['lula', 'luiz inacio', 'tarcisio', 'bolsonaro', 'jair bolsonaro'].includes(c.name)))
   })
 
@@ -808,36 +818,6 @@ describe('GET /api/people/:id/graph?kind=org (issue #209)', () => {
   })
 })
 
-describe('days beyond the widest window (issue #270)', () => {
-  before(seed)
-
-  it('days=365 answers exactly as days=60 on every windowed route', async () => {
-    const paths = (days: string) => [
-      `/api/people/lula/graph?days=${days}`,
-      `/api/people/lula/sources?days=${days}`,
-      `/api/people/lula/testimony?days=${days}`,
-      `/api/people/lula/lenses?days=${days}`,
-      `/api/compare?a=lula&b=tarcisio&days=${days}`,
-    ]
-    const [wide, edge] = [paths('365'), paths('60')]
-    for (const [i, path] of wide.entries()) {
-      const [a, b] = [await app.request(path), await app.request(edge[i])]
-      assert.equal(a.status, 200, path)
-      assert.equal(await a.text(), await b.text(), path)
-    }
-  })
-
-  it('/rising at days=60 answers 200 with an empty baseline, since [60, 90) lies beyond retention', async () => {
-    const res = await app.request('/api/people/lula/rising?days=60&min=1')
-    assert.equal(res.status, 200)
-    const body = (await res.json()) as Awaited<ReturnType<typeof risingFor>>
-    assert.equal(body.days, 60)
-    assert.equal(body.about.baseline, 0)
-    assert.equal(body.about.words_baseline, 0)
-    assert.ok(body.terms.every((t) => t.count_baseline_raw === 0))
-  })
-})
-
 describe('GET /api/people/:id/persistence (issue #215)', () => {
   const cur = mondayOf(brtDate())
   type Body = { weeks: number; since: string; first_week: string | null; horizon: number; terms: { term: string; kind: string; series: { week: string; count: number | null }[]; streak: number; half_life: number | null }[] }
@@ -858,6 +838,7 @@ describe('GET /api/people/:id/persistence (issue #215)', () => {
     assert.equal(body.weeks, 12)
     assert.equal(body.since, '2026-09-09')
     assert.equal(body.horizon, Math.max(...DAYS))
+    assert.equal(body.horizon, 21)
     assert.equal(body.first_week, addDays(cur, -7))
     assert.equal(body.terms.length, 1)
     const [t] = body.terms
@@ -877,12 +858,14 @@ describe('GET /api/people/:id/persistence (issue #215)', () => {
     }
   })
 
-  it('a known person with no rows answers 200 with empty terms and a null first_week; an unknown person 404s', async () => {
+  it('a known person with no rows answers 200 with empty terms, a null first_week and the 21-day horizon; an unknown person 404s (AC23)', async () => {
     const res = await get('', 'tarcisio')
     assert.equal(res.status, 200)
     const body = (await res.json()) as Body
     assert.deepEqual(body.terms, [])
     assert.equal(body.first_week, null)
+    assert.equal(body.horizon, 21)
+    assert.equal(body.weeks, 12)
     const missing = await get('', 'nobody')
     assert.equal(missing.status, 404)
     assert.deepEqual(await missing.json(), { error: 'person not found' })
@@ -945,12 +928,175 @@ describe('GET /api/people/:id/docs?week= (issue #215)', () => {
   })
 
   it('a malformed, future or out-of-window week returns what the request without week returns', async () => {
-    const open = await get('days=30')
+    const open = await get('days=21')
     for (const week of ['nope', '2026-02-31', addDays(cur, 14), '2020-01-06']) assert.deepEqual(await get(`week=${week}`), open, week)
   })
 
   it('a malformed, future or out-of-window day with a valid week returns what that week alone returns', async () => {
     const weekOnly = await get(`week=${wed}`)
     for (const day of ['nope', '2099-01-01', '2020-01-01']) assert.deepEqual(await get(`day=${day}&week=${wed}`), weekOnly, day)
+  })
+})
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('the 21-day horizon end to end (issue #313 acceptance)', () => {
+  const zefirino: Person = { id: 'zefirino', name: 'Zefirino', aliases: ['Zefirino'] }
+  const aged = (uri: string, days: number, text: string) => ({ source: 'rss' as const, uri: `https://ac313-rising.example/${uri}`, text, publishedAt: new Date(Date.now() - days * 86_400_000).toISOString(), domain: 'ac313-rising.example' })
+  type Rising = { days: number; baseline: number; terms: { term: string; count_recent_raw: number; count_baseline_raw: number }[]; present: { term: string; count_recent_raw: number; count_baseline_raw: number }[]; about: { recent: number; baseline: number; words_recent: number; words_baseline: number } }
+  const rising = async (qs: string) => {
+    const res = await app.request(`/api/people/zefirino/rising${qs}`)
+    assert.equal(res.status, 200)
+    return (await res.json()) as Rising
+  }
+
+  before(async () => {
+    await seed()
+    await upsertPersonsP([...persons, zefirino])
+    const ps = [...persons, zefirino]
+    for (const d of [
+      aged('recent', 3, 'Zefirino cita ambasjanelas na entrevista recente'),
+      aged('both', 12, 'Zefirino retoma ambasjanelas na sessão antiga'),
+      aged('base-a', 10, 'Zefirino repete somentebasex no discurso'),
+      aged('base-b', 15, 'Zefirino cita somentebasex outra vez'),
+      aged('beyond', 25, 'Zefirino lembra alemdoprazox no plenário'),
+    ])
+      await insertDocP(d, ps)
+  })
+  after(reseed)
+
+  it('rising reports baseline 14; a word in the last 7 days and 10 to 15 days ago shows a baseline count of at least 1 (AC17)', async () => {
+    const body = await rising('?min=1')
+    assert.equal(body.days, 7)
+    assert.equal(body.baseline, 14)
+    const both = body.terms.find((t) => t.term === 'ambasjanelas')
+    assert.ok(both, 'ambasjanelas is a rising term')
+    assert.equal(both.count_recent_raw, 1)
+    assert.ok(both.count_baseline_raw >= 1)
+    assert.ok(body.present.some((t) => t.term === 'ambasjanelas'))
+  })
+
+  it('a word seen only 10 to 15 days ago is absent from terms and present (AC17)', async () => {
+    const body = await rising('?min=1')
+    assert.ok(!body.terms.some((t) => t.term === 'somentebasex'))
+    assert.ok(!body.present.some((t) => t.term === 'somentebasex'))
+  })
+
+  it('a doc aged 25 days contributes to neither window (AC17)', async () => {
+    const body = await rising('?min=1')
+    for (const list of [body.terms, body.present]) assert.ok(!list.some((t) => t.term === 'alemdoprazox'))
+    assert.equal(body.about.recent, 1, 'the 3-day doc')
+    assert.equal(body.about.baseline, 3, 'the 10-, 12- and 15-day docs, never the 25-day one')
+  })
+
+  it('baseline=30 and baseline=365 read as 14 (AC17)', async () => {
+    const narrow = await rising('?min=1')
+    for (const baseline of ['30', '365']) {
+      const wide = await rising(`?min=1&baseline=${baseline}`)
+      assert.equal(wide.baseline, 14, baseline)
+      assert.deepEqual(wide, narrow, baseline)
+    }
+  })
+
+  it('days=30, 60 and 365 answer exactly as days=21 on every windowed route, and 7 is still its own recorte (AC18)', async () => {
+    const paths = (days: string) => [
+      `/api/people/lula/graph?days=${days}`,
+      `/api/people/lula/sources?days=${days}`,
+      `/api/people/lula/testimony?days=${days}`,
+      `/api/people/lula/lenses?days=${days}`,
+      `/api/people/lula/attention?days=${days}`,
+      `/api/compare?a=lula&b=tarcisio&days=${days}`,
+    ]
+    const edge = paths('21')
+    for (const retired of ['30', '60', '365']) {
+      for (const [i, path] of paths(retired).entries()) {
+        const [a, b] = [await app.request(path), await app.request(edge[i])]
+        assert.equal(a.status, 200, path)
+        assert.equal(await a.text(), await b.text(), path)
+      }
+    }
+    const graph = async (days: string) => (await app.request(`/api/people/lula/graph?days=${days}`)).text()
+    assert.notEqual(await graph('7'), await graph('21'), 'the 7-day window is still its own recorte')
+  })
+
+  it('a missing days answers the 21-day body on every route whose default moved', async () => {
+    for (const route of ['graph', 'sources', 'testimony', 'lenses', 'attention']) {
+      const [bare, explicit] = [await app.request(`/api/people/lula/${route}`), await app.request(`/api/people/lula/${route}?days=21`)]
+      assert.equal(await bare.text(), await explicit.text(), route)
+    }
+  })
+
+  it('rising?days=21 answers 200 with an empty baseline on a retained database, since [21, 35) lies beyond retention', async () => {
+    await trimOlderThanP(Math.max(...DAYS))
+    const body = await rising('?days=21&min=1')
+    assert.equal(body.days, 21)
+    assert.equal(body.baseline, 14)
+    assert.equal(body.about.baseline, 0)
+    assert.equal(body.about.words_baseline, 0)
+    assert.ok(body.terms.every((t) => t.count_baseline_raw === 0))
+  })
+})
+
+describe('an empty window keeps the empty shape (issue #313 acceptance)', () => {
+  const quincas: Person = { id: 'quincas', name: 'Quincas', aliases: ['Quincas'] }
+  type Graph = { nodes: unknown[]; links: unknown[]; signature: unknown[]; stats: { docs: number; about: number } }
+  const graph = async (qs: string, id = 'quincas') => {
+    const res = await app.request(`/api/people/${id}/graph?${qs}`)
+    assert.equal(res.status, 200)
+    return (await res.json()) as Graph
+  }
+
+  before(async () => {
+    await seed()
+    await upsertPersonsP([...persons, quincas])
+    await insertDocP({ source: 'rss', uri: 'https://ac313-empty.example/q15', text: 'Quincas cita a pauta vazia', publishedAt: new Date(Date.now() - 15 * 86_400_000).toISOString(), domain: 'ac313-empty.example' }, [...persons, quincas])
+  })
+  after(reseed)
+
+  it('a person with no tracked doc in the last 7 days answers nothing there and her 15-day doc at 21', async () => {
+    const week = await graph('days=7')
+    assert.deepEqual([week.nodes, week.links, week.signature], [[], [], []])
+    assert.equal(week.stats.about, 0)
+    const wide = await graph('days=21')
+    assert.equal(wide.stats.about, 1)
+  })
+
+  it('/rising over a recorte with no tracked doc answers the documented empty shape with baseline 14', async () => {
+    const res = await app.request('/api/people/lula/rising?source=camara')
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { days: 7, baseline: 14, terms: [], present: [], outlets: [], about: { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 } })
+  })
+
+  it('a recorte with no tracked doc at all answers stats.docs 0 and no nodes at 7 and at 21 days, live and from the build', async () => {
+    const empty = async (days: number) => {
+      const body = await graph(`source=camara&days=${days}`, 'lula')
+      assert.deepEqual([body.nodes, body.links, body.signature], [[], [], []], `days=${days}`)
+      assert.equal(body.stats.docs, 0, `days=${days}`)
+      assert.equal(body.stats.about, 0, `days=${days}`)
+    }
+    for (const days of [7, 21]) await empty(days)
+    await buildGraphAggregates([...persons, quincas])
+    for (const days of [7, 21]) await empty(days)
+  })
+})
+
+describe('candidates only see tracked docs (issue #313 acceptance)', () => {
+  before(seedCandidates)
+  after(reseed)
+
+  const counts = async (qs: string) => {
+    const res = await app.request(`/api/candidates${qs}`)
+    assert.equal(res.status, 200)
+    const { candidates } = (await res.json()) as { candidates: { name: string; count: number; previous: number }[] }
+    return Object.fromEntries(candidates.map((c) => [c.name, [c.count, c.previous]]))
+  }
+
+  it('the untracked "Hugo Motta" doc adds nothing to that name\'s recent count (AC11)', async () => {
+    const before = await counts('?min=1')
+    const beforeWide = await counts('?min=1&days=21')
+    assert.ok(before['hugo motta'][0] >= 1, 'the tracked candidate docs already mention Hugo Motta')
+    const hugo = untrackedDocs.find((d) => d.text.includes('Hugo Motta'))!
+    assert.equal(await insertDocP({ ...hugo, publishedAt: new Date().toISOString() }, persons), false)
+    assert.deepEqual(await counts('?min=1'), before)
+    assert.deepEqual(await counts('?min=1&days=21'), beforeWide)
   })
 })

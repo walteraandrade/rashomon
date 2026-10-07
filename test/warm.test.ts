@@ -15,8 +15,7 @@ describe('warmPaths', () => {
     assert.equal(paths[1], '/api/people/lula/graph?' + params(opts))
     assert.equal(paths[2], '/api/people/lula/sources?' + sourcesParams(opts))
     assert.equal(paths[3], '/api/people/lula/testimony?' + testimonyParams(opts))
-    assert.ok(paths.some((p) => p.startsWith('/api/people/tarc%C3%ADsio/graph?days=30&')))
-    assert.ok(paths.every((p) => !/days=(60|365)\b/.test(p)), 'the longest window stays cold on purpose')
+    assert.ok(paths.some((p) => p.startsWith('/api/people/tarc%C3%ADsio/graph?days=21&')))
   })
 })
 
@@ -107,5 +106,27 @@ describe('warm and the store', () => {
   it('is a failure on a null status or a 5xx, whatever the store said', () => {
     assert.equal(warmFailed([{ path: '/a', status: null, cache: null, server: null, store: 'none', ms: 1 }]), true)
     assert.equal(warmFailed([{ path: '/a', status: 503, cache: 'HIT', server: null, store: 'hit', ms: 1 }]), true)
+  })
+})
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('warmPaths over the 7 and 21 day windows (issue #313 acceptance)', () => {
+  const people = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }))
+  const daysOf = (path: string) => new URL(path, 'http://warm.local').searchParams.get('days')
+
+  it('N people yield 1 + N x 2 x 3 paths, every days is 7 or 21 and none carries a retired window (AC22)', () => {
+    assert.deepEqual([...WARM_DAYS], ['7', '21'])
+    for (const n of [0, 1, 3, 27]) {
+      const paths = warmPaths(people(n))
+      assert.equal(paths.length, 1 + n * 2 * 3, `${n} people`)
+      for (const path of paths.filter((p) => p !== '/api/people')) assert.ok(['7', '21'].includes(daysOf(path) ?? ''), path)
+      assert.ok(paths.every((p) => !/days=(30|60|365)\b/.test(p)), `${n} people`)
+    }
+  })
+
+  it('each person is warmed at both windows on graph, sources and testimony (AC22)', () => {
+    const paths = warmPaths([{ id: 'lula' }])
+    for (const route of ['graph', 'sources', 'testimony'])
+      for (const days of ['7', '21']) assert.ok(paths.some((p) => p.startsWith(`/api/people/lula/${route}?`) && daysOf(p) === days), `${route} ${days}`)
   })
 })

@@ -13,7 +13,7 @@
   import { seedFor, type SeedKey } from './seed.js'
 
   const KEYS: SeedKey[] = ['person', ['a', null], ['b', null], 'days', 'limit']
-  const DAYS = ['7', '30', '60']
+  const DAYS = ['7', '21']
   const LIMITS = ['20', '40', '60', '100']
   const GHOST_WORDS: [number, number, number, number][] = [
     [110, -14, 86, 20],
@@ -27,7 +27,7 @@
   const GHOST_TICKS = [-1, -0.5, 0, 0.5, 1].map((b) => 28 + ((b + 1) / 2) * (860 - 56))
 
   let person = $state('')
-  let days = $state('30')
+  let days = $state('21')
   let limit = $state('40')
 
   let data = $state.raw<Lenses | null>(null)
@@ -313,7 +313,7 @@
       <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>palavra que liga o vocabulário das duas lentes</dd></div>
       <div><dt>Clique</dt><dd>textos das duas lentes, neste gráfico</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="lensesPerson" aria-label="Pessoa (lentes)" value={person} onchange={onPerson}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> sob <span class="pick"><select id="lensesA" aria-label="Lente A" hidden bind:this={selA} onchange={onLensA}>{@render groups('lensesAOutlets')}</select><Combobox bind:this={comboA} select={selA} inputId="lensesAInput" listId="lensesAList" label="Lente A" listLabel="Opções da lente A" /></span> e <span class="keep"><span class="pick"><select id="lensesB" aria-label="Lente B" hidden bind:this={selB} onchange={onLensB}>{@render groups('lensesBOutlets')}</select><Combobox bind:this={comboB} select={selB} inputId="lensesBInput" listId="lensesBList" label="Lente B" listLabel="Opções da lente B" /></span>,</span> nos últimos <span class="keep"><span class="pick"><select id="lensesDays" aria-label="Período (lentes)" value={days} onchange={onDays}><option value="7">7 dias</option><option value="30">30 dias</option><option value="60">60 dias</option></select></span>.</span> Mostrar <span class="pick"><select id="lensesLimit" aria-label="Quantidade de palavras (lentes)" value={limit} onchange={onLimit}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras.</p></div>
+    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="lensesPerson" aria-label="Pessoa (lentes)" value={person} onchange={onPerson}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> sob <span class="pick"><select id="lensesA" aria-label="Lente A" hidden bind:this={selA} onchange={onLensA}>{@render groups('lensesAOutlets')}</select><Combobox bind:this={comboA} select={selA} inputId="lensesAInput" listId="lensesAList" label="Lente A" listLabel="Opções da lente A" /></span> e <span class="keep"><span class="pick"><select id="lensesB" aria-label="Lente B" hidden bind:this={selB} onchange={onLensB}>{@render groups('lensesBOutlets')}</select><Combobox bind:this={comboB} select={selB} inputId="lensesBInput" listId="lensesBList" label="Lente B" listLabel="Opções da lente B" /></span>,</span> nos últimos <span class="keep"><span class="pick"><select id="lensesDays" aria-label="Período (lentes)" value={days} onchange={onDays}><option value="7">7 dias</option><option value="21">21 dias</option></select></span>.</span> Mostrar <span class="pick"><select id="lensesLimit" aria-label="Quantidade de palavras (lentes)" value={limit} onchange={onLimit}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras.</p></div>
   </header>
   <p class="status" id="lensesStatus" role="status" hidden={!sameLens}>Os dois lados mostram o mesmo recorte.</p>
   <figure class="ruler" id="lensesRuler" aria-label="Régua comparando duas lentes da mesma pessoa" aria-busy={showGhost ? 'true' : 'false'} hidden={peopleError || noPeople} bind:this={rulerEl}>

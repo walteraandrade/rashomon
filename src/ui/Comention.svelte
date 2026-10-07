@@ -12,7 +12,7 @@
   const DEFAULT_WIDTH = 860
   const GHOST_N = 27
   const LIST_GHOST_N = 6
-  const DAYS = ['7', '30', '60']
+  const DAYS = ['7', '21']
   const LEANS = ['all', 'left', 'center', 'right']
   const MINS = ['1', '2', '3', '5']
   const SOURCES = SOURCE_SEGMENTS.map(([value]) => value)
@@ -23,7 +23,7 @@
   let sourceEl: HTMLSelectElement | undefined = $state()
   let leanEl: HTMLSelectElement | undefined = $state()
   let minEl: HTMLSelectElement | undefined = $state()
-  let days = $state('30')
+  let days = $state('21')
   let source = $state(SOURCE_SEGMENTS[0][0])
   let lean = $state('all')
   let min = $state('3')
@@ -159,7 +159,7 @@
       <div><dt>Clique</dt><dd>os textos daquele par</dd></div>
       <div><dt>Nota</dt><dd>aparecer junto não é concordar</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Pares de pessoas citadas juntas nos <span class="keep"><span class="pick"><select id="comentionDays" aria-label="Período (quem aparece junto)" bind:this={daysEl} onchange={onChange((v) => (days = v))}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="comentionSource" aria-label="Fonte (quem aparece junto)" bind:this={sourceEl} onchange={onChange((v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="comentionLean" aria-label="Viés (quem aparece junto)" bind:this={leanEl} onchange={onChange((v) => (lean = v))}><option value="all" selected>todo o viés</option><option value="left">esquerda</option><option value="center">centro</option><option value="right">direita</option></select></span>.</span> Mostrar pares com <span class="pick"><select id="comentionMin" aria-label="Mínimo de textos em comum" bind:this={minEl} onchange={onChange((v) => (min = v))}><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option></select></span> textos em comum ou mais.</p></div>
+    <div class="sentence"><p class="sentence-line">Pares de pessoas citadas juntas nos <span class="keep"><span class="pick"><select id="comentionDays" aria-label="Período (quem aparece junto)" bind:this={daysEl} onchange={onChange((v) => (days = v))}><option value="7">últimos 7 dias</option><option value="21" selected>últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="comentionSource" aria-label="Fonte (quem aparece junto)" bind:this={sourceEl} onchange={onChange((v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="comentionLean" aria-label="Viés (quem aparece junto)" bind:this={leanEl} onchange={onChange((v) => (lean = v))}><option value="all" selected>todo o viés</option><option value="left">esquerda</option><option value="center">centro</option><option value="right">direita</option></select></span>.</span> Mostrar pares com <span class="pick"><select id="comentionMin" aria-label="Mínimo de textos em comum" bind:this={minEl} onchange={onChange((v) => (min = v))}><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option></select></span> textos em comum ou mais.</p></div>
   </header>
   <figure class="comention-body" id="comentionMatrix" aria-label="Matriz de pares de pessoas citadas juntas" aria-busy={ghosting} hidden={failed || !mounted} bind:this={matrixEl}>
     {#if failed}

@@ -128,6 +128,12 @@ describe('HelpDialog', () => {
     for (const id of ['helpDialog', 'helpTitle', 'helpClose', 'help-pmi', 'help-atlas', 'help-analise']) expect(document.getElementById(id), id).not.toBeNull()
   })
 
+  it('names no 30- or 60-day window, and says 14 dias antes for the rising baseline (issue #313 AC28)', () => {
+    const text = dialog().textContent ?? ''
+    expect(text).not.toMatch(/\b(30|60) dias\b/)
+    expect(text).toContain('14 dias antes')
+  })
+
   it('closeHelp closes', () => {
     openHelp('#pmi')
     flushSync()

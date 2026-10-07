@@ -57,6 +57,16 @@ const mountAll = () => {
 
 const requested = (route: string) => urls.filter((u) => u.includes(`/${route}?`))
 
+const remount = async (search: string) => {
+  unmount(instance!)
+  target.innerHTML = ''
+  clearScopes()
+  urls.length = 0
+  setBoot({ ready: false })
+  mountAll()
+  await startBoot(search)
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
   clearScopes()
@@ -116,21 +126,45 @@ describe('Testimony (issue #296)', () => {
 
   it('AC2: seeds person, days and source from the querystring', async () => {
     mountAll()
-    await startBoot('?person=p2&days=60&source=bluesky')
+    await startBoot('?person=p2&days=7&source=bluesky')
     expect(byId('testimonyPerson').value).toBe('p2')
-    expect(byId('testimonyDays').value).toBe('60')
+    expect(byId('testimonyDays').value).toBe('7')
     expect(byId('testimonySource').value).toBe('bluesky')
     const [s] = requested('sources')
     expect(s).toContain('/people/p2/sources')
-    expect(s).toContain('days=60')
+    expect(s).toContain('days=7&')
     expect(s).toContain('source=bluesky')
     expect(requested('testimony')[0]).toContain('/people/p2/testimony')
   })
 
+  it('AC24: the period select offers exactly 7 and 21 with 21 selected, and both requests carry days=21', async () => {
+    mountAll()
+    await startBoot('?person=p1')
+    expect([...byId('testimonyDays').options].map((o) => o.value)).toEqual(['7', '21'])
+    expect([...byId('testimonyDays').options].map((o) => o.textContent)).toEqual(['últimos 7 dias', 'últimos 21 dias'])
+    expect(byId('testimonyDays').value).toBe('21')
+    expect(requested('sources')[0]).toContain('days=21')
+    expect(requested('testimony')[0]).toContain('days=21')
+  })
+
+  it('AC25: a shared link with days=30 or days=60 opens on 21, and days=7 still selects 7', async () => {
+    mountAll()
+    await startBoot('?person=p1&days=30')
+    expect(byId('testimonyDays').value).toBe('21')
+    expect(requested('sources')[0]).toContain('days=21')
+    await remount('?person=p1&days=60')
+    expect(byId('testimonyDays').value).toBe('21')
+    expect(requested('testimony')[0]).toContain('days=21')
+    await remount('?person=p1&days=7')
+    expect(byId('testimonyDays').value).toBe('7')
+    expect(requested('sources')[0]).toContain('days=7&')
+    expect(requested('testimony')[0]).toContain('days=7&')
+  })
+
   it('AC2: prefixed testimony.<key> seeds beat the bare key', async () => {
     mountAll()
-    await startBoot('?days=7&testimony.days=60&testimony.person=p2')
-    expect(byId('testimonyDays').value).toBe('60')
+    await startBoot('?days=21&testimony.days=7&testimony.person=p2')
+    expect(byId('testimonyDays').value).toBe('7')
     expect(byId('testimonyPerson').value).toBe('p2')
   })
 
@@ -138,7 +172,7 @@ describe('Testimony (issue #296)', () => {
     mountAll()
     await startBoot('?person=nobody&days=99&source=nowhere')
     expect(byId('testimonyPerson').value).toBe('p1')
-    expect(byId('testimonyDays').value).toBe('30')
+    expect(byId('testimonyDays').value).toBe('21')
     expect(byId('testimonySource').value).toBe('all')
     expect(requested('testimony')[0]).toContain('/people/p1/testimony')
   })
@@ -151,28 +185,28 @@ describe('Testimony (issue #296)', () => {
     expect(byId('domainLabel').textContent).toBe(' · g1.globo.com')
     expect(openedBy('testimony')).toBe(true)
     const before = urls.length
-    byId('testimonyDays').value = '60'
+    byId('testimonyDays').value = '7'
     byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
     flushSync()
     await settle(300)
     expect(byId('domainLabel').textContent).toBe('')
     expect(requested('sources').length).toBeGreaterThan(0)
     expect(urls.length).toBeGreaterThan(before)
-    expect(urls.slice(before).some((u) => u.includes('/sources?') && u.includes('days=60'))).toBe(true)
-    expect(urls.slice(before).some((u) => u.includes('/testimony?') && u.includes('days=60'))).toBe(true)
+    expect(urls.slice(before).some((u) => u.includes('/sources?') && u.includes('days=7&'))).toBe(true)
+    expect(urls.slice(before).some((u) => u.includes('/testimony?') && u.includes('days=7&'))).toBe(true)
     expect(openedBy('testimony')).toBe(false)
   })
 
   it("AC4: outlet pick opens the docs card with the outlet's query", async () => {
     mountDocsHost()
     mountAll()
-    await startBoot('?person=p1&days=30&source=all')
+    await startBoot('?person=p1&days=21&source=all')
     q('[data-domain="g1.globo.com"]')!.click()
     flushSync()
     await settle(0)
     const docsCalls = urls.filter((u) => u.includes('/docs'))
     expect(docsCalls).toHaveLength(1)
-    const expected = docsParams({ days: '30', source: 'all', domain: 'g1.globo.com' })
+    const expected = docsParams({ days: '21', source: 'all', domain: 'g1.globo.com' })
     expect(docsCalls[0]).toContain('/people/p1/docs')
     expect(docsCalls[0]).toContain(expected.toString())
     expect(openedBy('testimony')).toBe(true)
@@ -325,13 +359,13 @@ describe('Testimony (issue #296)', () => {
 
   it('AC10: memo hit records api:sources', async () => {
     mountAll()
-    await startBoot('?person=p1&days=30')
+    await startBoot('?person=p1&days=21')
     const measure = vi.spyOn(performance, 'measure')
-    byId('testimonyDays').value = '60'
+    byId('testimonyDays').value = '7'
     byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
     await settle(300)
     measure.mockClear()
-    byId('testimonyDays').value = '30'
+    byId('testimonyDays').value = '21'
     byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
     await settle(300)
     const names = measure.mock.calls.map(([name]) => String(name)).filter((n) => n.startsWith('api:'))
@@ -439,18 +473,18 @@ describe('Testimony (issue #296, review gaps)', () => {
     }
   })
 
-  it('a scored payload paints no img in the list; the empty recorte suggests a wider one', async () => {
+  it('a scored payload paints no img in the list; the empty recorte suggests a wider window only below 21 days', async () => {
     mountAll()
     await startBoot('?person=p1')
     expect(byId('testimonyList').querySelector('img')).toBeNull()
-    unmount(instance!)
-    target.innerHTML = ''
-    clearScopes()
     routes.testimony = empty
-    setBoot({ ready: false })
-    mountAll()
-    await startBoot('?person=p1')
-    expect(byId('testimonyList').textContent).toContain('Tente um período maior ou outra fonte')
+    await remount('?person=p1')
+    expect(byId('testimonyDays').value).toBe('21')
+    expect(byId('testimonyList').textContent).toContain('Tente outra fonte.')
+    expect(byId('testimonyList').textContent).not.toContain('período maior')
+    await remount('?person=p1&days=7')
+    expect(byId('testimonyDays').value).toBe('7')
+    expect(byId('testimonyList').textContent).toContain('Tente um período maior ou outra fonte.')
   })
 
   it('a resize during a reload keeps the old drawing and is-loading until it resolves', async () => {
@@ -717,7 +751,7 @@ describe('Testimony (issue #296, ported paintTestimony/paintStrip/docs-card asse
 
   it('a later boot does not re-seed or refetch once started', async () => {
     mountAll()
-    await startBoot('?person=p2&days=60')
+    await startBoot('?person=p2&days=21')
     const before = urls.length
     byId('testimonyDays').value = '7'
     byId('testimonyDays').dispatchEvent(new Event('change', { bubbles: true }))
@@ -931,7 +965,7 @@ describe('Testimony (issue #296): the route and the component agree on the shape
     const { testimonyParams } = await import('../../src/ui/api.js')
     const { signed } = await import('../../src/ui/format.js')
     await seed()
-    const res = await app.request('/api/people/tarcisio/testimony?' + testimonyParams({ days: '30', sort: 'count', limit: '18', source: 'all' }) + '&method=stub')
+    const res = await app.request('/api/people/tarcisio/testimony?' + testimonyParams({ days: '21', sort: 'count', limit: '18', source: 'all' }) + '&method=stub')
     expect(res.status).toBe(200)
     const data = await res.json()
     expect(data.overall.n).toBeGreaterThan(0)

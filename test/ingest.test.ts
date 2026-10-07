@@ -553,8 +553,8 @@ describe('ingest retention (issue #270)', () => {
   const clearOlderThanHorizon = () => db.query(`delete from docs where published_at < now() - make_interval(days => $1::int)`, [HORIZON])
   const runIngest = async (match?: RegExp) => Effect.runPromise(run(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([]) } }), await testLayer(match)))
 
-  it('deletes docs older than the widest window and keeps the rest, cascading to the four derived tables', async () => {
-    const ages = [45, 59, 61, 100]
+  it('keeps a 20-day doc and deletes a 22-day doc, cascading to the four derived tables, and logs the 21-day horizon (AC19)', async () => {
+    const ages = [10, 20, 22, 100]
     await seedAged(ages)
     const before = new Map(await Promise.all(ages.map(async (d) => [d, await idOf(uriAt(d))] as const)))
     for (const id of before.values()) {
@@ -562,13 +562,15 @@ describe('ingest retention (issue #270)', () => {
       assert.deepEqual([c.persons, c.testimony, c.candidates], [1, 1, 1])
       assert.ok(c.terms > 0)
     }
-    const { exit } = await runIngest()
+    const { exit, logs } = await runIngest()
     assert.ok(Exit.isSuccess(exit))
-    for (const d of [61, 100]) {
+    assert.ok(exit.value.deleted >= 2)
+    assert.ok(logs.includes(`retention: deleted ${exit.value.deleted} docs older than 21 days`), JSON.stringify(logs))
+    for (const d of [22, 100]) {
       assert.equal(await idOf(uriAt(d)), undefined, `${d}-day doc is gone`)
       assert.deepEqual(await children(before.get(d)!), { persons: 0, terms: 0, testimony: 0, candidates: 0 }, `${d}-day doc's derived rows are gone`)
     }
-    for (const d of [45, 59]) {
+    for (const d of [10, 20]) {
       assert.ok(await idOf(uriAt(d)), `${d}-day doc stays`)
       const c = await children(before.get(d)!)
       assert.equal(c.persons, 1)
@@ -581,7 +583,7 @@ describe('ingest retention (issue #270)', () => {
 
   it('reports the deleted count and the trimmed total, logged before total docs', async () => {
     await clearOlderThanHorizon()
-    await seedAged([10, 61, 100])
+    await seedAged([10, 22, 100])
     const { exit, logs } = await runIngest()
     assert.ok(Exit.isSuccess(exit))
     assert.equal(exit.value.deleted, 2)
@@ -596,7 +598,7 @@ describe('ingest retention (issue #270)', () => {
 
   it('takes its horizon from DAYS, never a second constant', async () => {
     await clearOlderThanHorizon()
-    await seedAged([45, 59, 61, 100])
+    await seedAged([10, 20, 22, 100])
     const original = [...DAYS]
     DAYS.push(90)
     try {
@@ -604,7 +606,7 @@ describe('ingest retention (issue #270)', () => {
       assert.ok(Exit.isSuccess(exit))
       assert.equal(exit.value.deleted, 1, 'only the 100-day doc lies beyond a 90-day horizon')
       assert.ok(logs.includes('retention: deleted 1 docs older than 90 days'))
-      assert.ok(await idOf(uriAt(61)), 'the 61-day doc is inside the widened horizon')
+      assert.ok(await idOf(uriAt(22)), 'the 22-day doc is inside the widened horizon')
     } finally {
       DAYS.splice(0, DAYS.length, ...original)
     }
@@ -642,5 +644,74 @@ describe('ingest retention (issue #270)', () => {
     assert.ok(failure.cause instanceof SqlError.SqlError)
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
     assert.equal(rows[0].n, 0, 'buildGraphAggregates never ran')
+  })
+})
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('ingest reports dropped docs and keeps a 21-day horizon (issue #313 acceptance)', () => {
+  after(reseed)
+
+  const through = async (source: () => Effect.Effect<RawDoc[], never>, names: string[] = ['rss']) => {
+    const { exit, logs } = await Effect.runPromise(run(ingest(persons, names, { collectors: { rss: source } }), await testLayer()))
+    assert.ok(Exit.isSuccess(exit))
+    return { report: exit.value, logs }
+  }
+  const storedCount = async (uris: string[]) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = any($1::text[])`, [uris])).rows[0].n
+
+  it('sources[i] carries dropped, fetched includes dropped docs and the log line reads fetched, new, dropped (AC8)', async () => {
+    const batch = [doc('https://ac313-ingest.example/a1', 'Lula fala sobre a safra'), doc('https://ac313-ingest.example/a2', 'Congresso vota a pauta'), doc('https://ac313-ingest.example/a3', 'Governo anuncia obras')]
+    const { report, logs } = await through(() => Effect.succeed(batch))
+    assert.deepEqual(report.sources[0], { name: 'rss', fetched: 3, written: 1, enriched: 0, dropped: 2, failed: 0 })
+    assert.ok(logs.includes('[rss] fetched 3, new 1, dropped 2'), JSON.stringify(logs))
+  })
+
+  it('enriched and failed are appended after dropped, only when non-zero (AC8)', async () => {
+    const uri = 'https://ac313-ingest.example/e1'
+    await through(() => Effect.succeed([doc(uri, 'Lula fala sobre a safra')]))
+    const longer = doc(uri, 'Lula fala sobre a safra e detalha o plano de exportação para os próximos meses')
+    const { logs } = await through(() => Effect.succeed([longer, doc('https://ac313-ingest.example/e2', 'Governo anuncia obras')]))
+    assert.ok(logs.includes('[rss] fetched 2, new 0, dropped 1, enriched 1'), JSON.stringify(logs))
+    assert.ok(!logs.some((line) => line.includes('failed')))
+  })
+
+  it('a source that fails or is unknown reports dropped 0 (AC8)', async () => {
+    const { report } = await through(() => Effect.fail(new RssError({ message: 'boom' })) as unknown as Effect.Effect<RawDoc[], never>, ['rss', 'no-such-source'])
+    assert.deepEqual(report.sources.map((s) => s.dropped), [0, 0])
+  })
+
+  it('a source returning only untracked docs reports new 0, dropped N and writes no row (AC8)', async () => {
+    const only = [doc('https://ac313-ingest.example/u1', 'Congresso vota a pauta'), doc('https://ac313-ingest.example/u2', 'Governo anuncia obras')]
+    const { report, logs } = await through(() => Effect.succeed(only))
+    assert.deepEqual(report.sources[0], { name: 'rss', fetched: 2, written: 0, enriched: 0, dropped: 2, failed: 0 })
+    assert.ok(logs.includes('[rss] fetched 2, new 0, dropped 2'), JSON.stringify(logs))
+    assert.equal(await storedCount(only.map((d) => d.uri)), 0)
+  })
+
+  it('dropped docs do not count toward ANALYZE_MIN_DOCS and the line carries written only (AC9)', async () => {
+    const mixed = (tag: string, trackedCount: number) => [
+      ...Array.from({ length: trackedCount }, (_, i) => doc(`https://ac313-ingest.example/${tag}-t${i}`, `Lula fala sobre o tema ${tag} ${i}`)),
+      ...Array.from({ length: 4 }, (_, i) => doc(`https://ac313-ingest.example/${tag}-n${i}`, `Governo anuncia obras ${tag} ${i}`)),
+    ]
+    await withEnv({ ANALYZE_MIN_DOCS: '3' }, async () => {
+      const { logs } = await through(() => Effect.succeed(mixed('below', 2)))
+      assert.ok(logs.includes('skipped analyze: 2 new docs below ANALYZE_MIN_DOCS=3'), JSON.stringify(logs))
+      assert.ok(!logs.some((line) => line.startsWith('analyzed ')), 'two written plus four dropped must not reach the floor of three')
+    })
+    await withEnv({ ANALYZE_MIN_DOCS: '3' }, async () => {
+      const { logs } = await through(() => Effect.succeed(mixed('above', 3)))
+      assert.ok(logs.some((line) => /^analyzed .*after 3 new docs/.test(line)), JSON.stringify(logs))
+    })
+  })
+
+  it('a doc a collector returns older than 21 days is written and trimmed by the same run (collector lookbacks stay wider than retention)', async () => {
+    const old: RawDoc = { ...doc('https://ac313-lookback.example/d26', 'Lula discute a reforma tributária'), publishedAt: new Date(Date.now() - 26 * 86_400_000).toISOString() }
+    const fresh: RawDoc = { ...doc('https://ac313-lookback.example/d2', 'Lula discute a reforma administrativa'), publishedAt: new Date(Date.now() - 2 * 86_400_000).toISOString() }
+    const { report, logs } = await through(() => Effect.succeed([old, fresh]))
+    assert.equal(report.sources[0].written, 2)
+    assert.equal(report.sources[0].dropped, 0)
+    assert.ok(logs.includes('[rss] fetched 2, new 2, dropped 0'), JSON.stringify(logs))
+    assert.equal(await storedCount([old.uri]), 0)
+    assert.equal(await storedCount([fresh.uri]), 1)
+    assert.ok(report.deleted >= 1)
   })
 })

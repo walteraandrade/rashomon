@@ -17,7 +17,7 @@ const inverted = [
   { id: 'dino', name: 'Aline' },
   { id: 'bolsonaro', name: 'Zeca' },
 ]
-const payload = (persons: { id: string; name: string }[], pairs: { a: string; b: string; count: number }[]) => ({ days: 30, persons, pairs })
+const payload = (persons: { id: string; name: string }[], pairs: { a: string; b: string; count: number }[]) => ({ days: 21, persons, pairs })
 
 let target: HTMLElement
 let cardTarget: HTMLElement
@@ -117,6 +117,27 @@ describe('Comention', () => {
     expect(qs.get('source')).toBe('gdelt')
     expect(qs.get('lean')).toBe('left')
     expect(qs.get('min')).toBe('5')
+  })
+
+  it('AC24: the period select offers exactly 7 and 21 with 21 selected, and the first /comention carries days=21', async () => {
+    await start(filled)
+    expect([...select('comentionDays').options].map((o) => o.value)).toEqual(['7', '21'])
+    expect([...select('comentionDays').options].map((o) => o.textContent)).toEqual(['últimos 7 dias', 'últimos 21 dias'])
+    expect(select('comentionDays').value).toBe('21')
+    expect(new URL(comentionUrls()[0], 'http://localhost').searchParams.get('days')).toBe('21')
+  })
+
+  it('AC25: a shared link with days=30 or days=60 opens on 21, and days=7 still selects 7', async () => {
+    for (const days of ['30', '60']) {
+      await start(filled, three, `?days=${days}`)
+      expect(select('comentionDays').value).toBe('21')
+      expect(new URL(comentionUrls().at(-1)!, 'http://localhost').searchParams.get('days')).toBe('21')
+      unmount(instances.pop()!)
+      target.innerHTML = ''
+      clearScopes()
+    }
+    await start(filled, three, '?days=7')
+    expect(select('comentionDays').value).toBe('7')
   })
 
   it('opens one side with with=<b>, smaller id first (AC2)', async () => {
@@ -235,7 +256,7 @@ describe('Comention', () => {
     target.innerHTML = ''
     clearScopes()
     await start(filled, three, '?days=999&source=nope&comention.lean=zzz&comention.min=999')
-    expect(select('comentionDays').value).toBe('30')
+    expect(select('comentionDays').value).toBe('21')
     expect(select('comentionLean').value).toBe('all')
     expect(select('comentionMin').value).toBe('3')
     unmount(instances.pop()!)

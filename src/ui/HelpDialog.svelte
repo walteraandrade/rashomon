@@ -69,7 +69,7 @@
     <div id="help-em-alta">
       <h3>Gráfico 4 · Em alta</h3>
       <p>A régua traz as 40 palavras mais presentes na semana. Cada uma fica onde a sua fatia mudou: a fatia é quantos textos sobre a pessoa trazem a palavra, dividido por todas as palavras escritas sobre ela naquela janela. Ao centro, a mesma fatia de antes; à direita, fatia maior; à esquerda, menor.</p>
-      <p>Embaixo, as que subiram fora da régua: palavras com poucos textos na semana, fora das 40 mais presentes, mas com lift acima de 1, da maior subida para a menor (até 12, e a lista diz quantas ficaram de fora). Os dois números absolutos, textos nos últimos 7 dias e nos 30 dias antes, ficam escritos embaixo da régua. Clique abre os textos da última semana com aquela palavra.</p>
+      <p>Embaixo, as que subiram fora da régua: palavras com poucos textos na semana, fora das 40 mais presentes, mas com lift acima de 1, da maior subida para a menor (até 12, e a lista diz quantas ficaram de fora). Os dois números absolutos, textos nos últimos 7 dias e nos 14 dias antes, ficam escritos embaixo da régua. Clique abre os textos da última semana com aquela palavra.</p>
     </div>
     <div id="help-semana">
       <h3>Gráfico 5 · A semana</h3>

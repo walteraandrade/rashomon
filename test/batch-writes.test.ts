@@ -91,7 +91,7 @@ describe('bounded write batches (issue #50)', () => {
     ]
     const all = [...groupOf('rollback-1', false), ...groupOf('rollback-2', true), ...groupOf('rollback-3', false)]
     const totals = await insertDocsP(all, [...persons, phantom], 2)
-    assert.deepEqual(totals, { written: 5, enriched: 0, failed: 1 })
+    assert.deepEqual(totals, { written: 5, enriched: 0, dropped: 0, failed: 1 })
     const exists = async (uri: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [uri])).rows[0].n > 0
     assert.equal(await exists('https://example.org/rollback-1/a'), true)
     assert.equal(await exists('https://example.org/rollback-1/b'), true)

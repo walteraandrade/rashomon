@@ -16,7 +16,7 @@ const people = [lula, bolsonaro]
 
 const side = (count: number, pmi = 1) => ({ count, pmi, tone: null })
 const reforma: CompareTerm = { term: 'reforma', kind: 'word', a: side(5, 1.2), b: null }
-const payload = (terms: CompareTerm[], a = lula, b = bolsonaro): CompareData => ({ days: 30, a: { person: a, about: 5 }, b: { person: b, about: 5 }, terms })
+const payload = (terms: CompareTerm[], a = lula, b = bolsonaro): CompareData => ({ days: 21, a: { person: a, about: 5 }, b: { person: b, about: 5 }, terms })
 
 type Call = { url: string; path: string; params: URLSearchParams; signal?: AbortSignal }
 type Handler = (call: Call) => unknown
@@ -223,7 +223,7 @@ describe('Compare (#293)', () => {
     await start()
     click(words()[0])
     await settle()
-    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '21' }) }] })
     await settle()
     expect(docsCard.openedBy('compare')).toBe(false)
     await change('compareDays', '7')
@@ -260,7 +260,7 @@ describe('Compare (#293)', () => {
   for (const [id, value] of [
     ['compareA', 'bolsonaro'],
     ['compareB', 'lula'],
-    ['compareDays', '60'],
+    ['compareDays', '7'],
     ['compareSource', 'bluesky'],
     ['compareLimit', '100'],
   ]) {
@@ -325,6 +325,15 @@ describe('Compare (#293)', () => {
     expect(select('compareB').value).toBe('lula')
   })
 
+  it('AC24: the period select offers exactly 7 and 21 with 21 selected, and the first /compare carries days=21', async () => {
+    boot()
+    await start()
+    expect([...select('compareDays').options].map((o) => o.value)).toEqual(['7', '21'])
+    expect([...select('compareDays').options].map((o) => o.textContent)).toEqual(['últimos 7 dias', 'últimos 21 dias'])
+    expect(select('compareDays').value).toBe('21')
+    expect(compareCalls()[0].params.get('days')).toBe('21')
+  })
+
   it('AC7: days, source, limit and measure seed, and the first fetch sends them', async () => {
     boot({ search: '?days=7&source=gdelt&limit=40&compare.measure=pmi' })
     await start()
@@ -339,9 +348,9 @@ describe('Compare (#293)', () => {
   })
 
   it('AC7: a prefixed key overrides the bare one for this figure only', async () => {
-    boot({ search: '?days=7&compare.days=60' })
+    boot({ search: '?days=21&compare.days=7' })
     await start()
-    expect(select('compareDays').value).toBe('60')
+    expect(select('compareDays').value).toBe('7')
   })
 
   it('AC8: #compareStatus is visible iff A and B resolve to the same person', async () => {
@@ -490,12 +499,12 @@ describe('Compare (#293)', () => {
     await start()
     expect(compareCalls()).toHaveLength(1)
     expect(select('compareDays').value).toBe('7')
-    await change('compareDays', '60')
+    await change('compareDays', '21')
     const before = calls.length
     boot({ search: '?compare.days=7', people: [...people, ciro] })
     flushSync()
     await settle(500)
-    expect(select('compareDays').value).toBe('60')
+    expect(select('compareDays').value).toBe('21')
     expect(calls.length).toBe(before)
   })
 
@@ -617,7 +626,7 @@ describe('Compare (#293)', () => {
     boot()
     await start()
     await change('compareDays', '7')
-    await change('compareDays', '30')
+    await change('compareDays', '21')
     expect(calls.filter((c) => c.path === '/api/compare/bridges')).toHaveLength(2)
   })
 
@@ -663,7 +672,7 @@ describe('Compare (#293)', () => {
     await change('compareDays', '7')
     releaseFirst({ bridges: { 'word:stf': 1 } })
     await settle()
-    await change('compareDays', '30')
+    await change('compareDays', '21')
     expect(calls.filter((c) => c.path === '/api/compare/bridges').length).toBeGreaterThanOrEqual(3)
     expect($('compareRuler').querySelectorAll('.ruler-bridge')).toHaveLength(0)
   })
@@ -789,5 +798,22 @@ describe('figure 3 states a people outage in words only (ported from pet-accepta
     expect(document.getElementById('compareRetry')).not.toBeNull()
     expect(target.querySelector('img')).toBeNull()
     unmount(instance); target.remove(); vi.unstubAllGlobals()
+  })
+})
+
+describe('Compare over the 7 and 21 day windows (issue #313 acceptance)', () => {
+  for (const days of ['30', '60'])
+    it(`AC25: a shared link with days=${days} leaves the select on 21 and requests days=21`, async () => {
+      boot({ search: `?days=${days}` })
+      await start()
+      expect(select('compareDays').value).toBe('21')
+      expect(compareCalls()[0].params.get('days')).toBe('21')
+    })
+
+  it('AC25: a shared link with days=7 still selects 7', async () => {
+    boot({ search: '?days=7' })
+    await start()
+    expect(select('compareDays').value).toBe('7')
+    expect(compareCalls()[0].params.get('days')).toBe('7')
   })
 })

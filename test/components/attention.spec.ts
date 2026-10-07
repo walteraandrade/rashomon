@@ -17,7 +17,7 @@ const people = [
   { id: 'bolsonaro', name: 'Bolsonaro' },
 ]
 const bucket = (day: string, count: number) => ({ bucket_start: `${day}T00:00:00.000Z`, count })
-const att = (series: { day: string; views: number }[]) => ({ days: 30, series })
+const att = (series: { day: string; views: number }[]) => ({ days: 21, series })
 
 let calls: Call[]
 let targets: HTMLElement[]
@@ -152,9 +152,11 @@ describe('Attention (issue #295)', () => {
     auto = both()
     await startAll({ search: '?source=gdelt' })
     expect([...named('/attention')[0].qs.entries()].sort()).toEqual([...attentionParams({}).entries()].sort())
-    expect(named('/attention')[0].qs.get('days')).toBe('30')
+    expect(named('/attention')[0].qs.get('days')).toBe('21')
     const qs = named('/timeline')[0].qs
-    expect(Object.fromEntries(qs.entries())).toEqual({ term: '', kind: ATLAS_KINDS, days: '30', bucket: 'day', source: 'gdelt' })
+    expect(Object.fromEntries(qs.entries())).toEqual({ term: '', kind: ATLAS_KINDS, days: '21', bucket: 'day', source: 'gdelt' })
+    expect($('attention').querySelector('.sentence-line')!.textContent).toContain('nos últimos 21 dias')
+    expect($('attention').textContent).not.toMatch(/30 dias|60 dias/)
   })
 
   it('AC5: source change refetches only timeline and both rows end painted', async () => {
@@ -718,7 +720,7 @@ describe('Attention (issue #295)', () => {
     expect(chart().getAttribute('aria-busy')).not.toBe('true')
   })
 
-  it('AC9: day click opens the docs card with owner attention, term empty, that day and days 30', async () => {
+  it('AC27: day click opens the docs card with owner attention, term empty, that day and days 21', async () => {
     auto = { ...both(), '/docs': { docs: [], total: 0 } }
     await startAll({ search: '?source=gdelt', withCard: true })
     day('2026-08-15')[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -728,7 +730,7 @@ describe('Attention (issue #295)', () => {
     expect(d).toBeTruthy()
     expect(d.qs.get('day')).toBe('2026-08-15')
     expect(d.qs.get('term')).toBe('')
-    expect(d.qs.get('days')).toBe('30')
+    expect(d.qs.get('days')).toBe('21')
     expect(d.qs.get('kind')).toBe(ATLAS_KINDS)
     expect(d.qs.get('source')).toBe('gdelt')
     expect(d.path).toContain('/lula/')

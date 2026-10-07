@@ -72,7 +72,8 @@ const reindexPhase = async (name: string) => {
   const { db, migrateP } = await import('./db.js')
   const { reindexAll } = await import('./reindex.js')
   await migrateP()
-  await report(name, DOCS, async () => void (await reindexAll(persons)))
+  const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
+  await report(name, rows[0].n, async () => void (await reindexAll(persons)))
   await db.close()
 }
 

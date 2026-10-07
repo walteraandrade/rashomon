@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { after, before, describe, it, mock } from 'node:test'
 import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
-import { DAYS, parseQuery, parseTestimonyQuery } from '../src/query.js'
+import { parseQuery, parseTestimonyQuery } from '../src/query.js'
 import { app, setWarmStore } from '../src/server.js'
 import { params } from '../src/ui/api.js'
 import { warmPaths, WARM_DAYS } from '../src/warm.js'
@@ -41,6 +41,8 @@ describe('the store entries', () => {
       assert.equal(new Set(own.map((r) => r.key)).size, own.length, 'a person\'s own keys never collide')
     }
     assert.equal(warmRecortes(ids, ['7']).length, recortes.length / 2)
+    assert.deepEqual([...new Set(recortes.map((r) => r.days))].sort((a, b) => a - b), [7, 21], 'warm recortes cover the two windows and no retired one')
+    assert.ok(recortes.every((r) => !/days=(30|60|365)\b/.test(r.path)))
   })
 
   it('materialising writes exactly those pathnames, bolsonaro\'s empty windows included', async () => {
@@ -61,7 +63,7 @@ describe('the store key', () => {
     const { min: _min, ...noMin } = base
     assert.equal(key(base), key(noMin), 'min=2 is the default')
     assert.notEqual(key(base), key(base, 'sources'))
-    const changed: Record<string, string> = { days: '30', source: 'rss', min: '3', limit: '20', sort: 'count', kind: 'word', domain: 'g1.globo.com', lean: 'left', country: 'pt', method: 'stub', testimony: '', communities: '' }
+    const changed: Record<string, string> = { days: '21', source: 'rss', min: '3', limit: '20', sort: 'count', kind: 'word', domain: 'g1.globo.com', lean: 'left', country: 'pt', method: 'stub', testimony: '', communities: '' }
     for (const [name, value] of Object.entries(changed)) {
       const q = { ...base, [name]: value }
       if (name === 'method') q.testimony = '1'
@@ -246,7 +248,7 @@ describe('a recorte that is not warm', () => {
   }
 
   const notWarm: [string, Record<string, string>[]][] = [
-    ['graph', [{ min: '3' }, { source: 'rss' }, { domain: 'x' }, { days: String(Math.max(...DAYS)) }, { kind: 'word' }]],
+    ['graph', [{ min: '3' }, { source: 'rss' }, { domain: 'x' }, { kind: 'word' }]],
     ['sources', [{ source: 'rss' }, { domain: 'x' }]],
     ['testimony', [{ source: 'rss' }, { min: '1' }]],
   ]
@@ -268,6 +270,15 @@ describe('a recorte that is not warm', () => {
       const res = await request(variant(warmOf('testimony'), change))
       assert.equal(res.headers.get('x-warm-store'), 'miss')
       assert.deepEqual(calls, [warm.pathname])
+    }
+  })
+
+  it('a retired days=30 reads as the warm 21-day recorte and looks up its key (issue #313)', async () => {
+    const warm21 = warmRecortes(lula).find((r) => r.route === 'graph' && r.days === 21)!
+    for (const days of ['21', '30', '60', '365']) {
+      const calls = counted()
+      await request(variant(warmOf('graph'), { days }))
+      assert.deepEqual(calls, [warm21.pathname], `days=${days}`)
     }
   })
 
@@ -360,5 +371,28 @@ describe('the blob reader', () => {
     } finally {
       mock.timers.reset()
     }
+  })
+})
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('warmRecortes over the 7 and 21 day windows (issue #313 acceptance)', () => {
+  const people = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }))
+
+  it('N people yield one recorte per warmPaths path but /api/people, i.e. N x 2 x 3, every days 7 or 21 (AC22)', () => {
+    for (const n of [1, 3, 27]) {
+      const recortes = warmRecortes(people(n))
+      assert.equal(recortes.length, warmPaths(people(n)).length - 1, `${n} people`)
+      assert.equal(recortes.length, n * 2 * 3)
+      assert.ok(recortes.every((r) => r.days === 7 || r.days === 21), `${n} people`)
+      assert.ok(recortes.every((r) => !/days=(30|60)\b/.test(r.path)), `${n} people`)
+    }
+  })
+
+  it('the 21-day recortes carry their own keys and pathnames, none shared with the 7-day ones (AC22)', () => {
+    const recortes = warmRecortes(people(2))
+    const keyOf = (days: number) => new Set(recortes.filter((r) => r.days === days).map((r) => r.pathname))
+    assert.equal(keyOf(7).size, 6)
+    assert.equal(keyOf(21).size, 6)
+    assert.deepEqual([...keyOf(7)].filter((p) => keyOf(21).has(p)), [])
   })
 })

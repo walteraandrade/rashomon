@@ -34,11 +34,12 @@
     [768, 14],
   ]
   const TICKS = [-10, -5, 0, 5, 10]
-  const DAYS = ['7', '30', '60']
+  const DAYS = ['7', '21']
+  const WIDEST = DAYS.at(-1)
   const GHOST_WIDTHS = ['', 'is-mid', 'is-short']
 
   let person = $state('')
-  let days = $state('30')
+  let days = $state('21')
   let source = $state('all')
   let outlet = $state('all')
   let started = false
@@ -46,6 +47,7 @@
   let stalePick = false
 
   let testimony = $state.raw<Testimony | null>(null)
+  let testimonyDays = $state('')
   let rows = $state.raw<OutletRow[] | null>(null)
   let testimonyPhase = $state<Phase>('ghost')
   let outletsPhase = $state<Phase>('ghost')
@@ -148,10 +150,10 @@
     detail: (data, qp) => ({ person: qp.get('person'), rows: data.length }),
   })
 
-  const testimonyFigure = createFigure<Testimony>({
+  const testimonyFigure = createFigure<{ testimony: Testimony; days: string }>({
     name: 'testimony',
     params: testimonyParams,
-    fetch: (qp, signal) => api.loadTestimony(qp.get('person')!, api.testimonyParams(asGraphOpts(qp)), signal),
+    fetch: async (qp, signal) => ({ testimony: await api.loadTestimony(qp.get('person')!, api.testimonyParams(asGraphOpts(qp)), signal), days: qp.get('days')! }),
     ghost: () => {
       if (testimony) testimonyDim = true
       else testimonyPhase = 'ghost'
@@ -160,13 +162,15 @@
       dropStalePick()
       // Read at paint time, never memoised, so a resize repaints at the current width.
       stripWidth = stripEl?.clientWidth || 860
-      testimony = data
+      testimony = data.testimony
+      testimonyDays = data.days
       testimonyPhase = 'data'
       testimonyDim = false
     },
     paintError: () => {
       dropStalePick()
       testimony = null
+      testimonyDays = ''
       testimonyPhase = 'error'
       testimonyDim = false
     },
@@ -237,7 +241,7 @@
       <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
       <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)" value={person} onchange={(e) => { person = e.currentTarget.value; onControlChange() }}>{#each people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)" value={days} onchange={(e) => { days = e.currentTarget.value; onControlChange() }}><option value="7">últimos 7 dias</option><option value="30">últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)" value={source} onchange={(e) => { source = e.currentTarget.value; onControlChange() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
+    <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)" value={person} onchange={(e) => { person = e.currentTarget.value; onControlChange() }}>{#each people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)" value={days} onchange={(e) => { days = e.currentTarget.value; onControlChange() }}><option value="7">últimos 7 dias</option><option value="21">últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)" value={source} onchange={(e) => { source = e.currentTarget.value; onControlChange() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
   </header>
   <figure class="strip" class:is-loading={testimonyDim} id="strip" aria-label="Veículos na régua da avaliação" aria-busy={busy(testimonyPhase)} hidden={!stripShown} bind:this={stripEl}>
     {#if testimonyPhase === 'ghost' && !unavailable}
@@ -260,7 +264,7 @@
     {:else if testimonyPhase === 'error'}
       <p class="note">Não foi possível carregar a avaliação.</p>
     {:else if testimony && !hasScore}
-      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método {testimony.method}).<br>Tente um período maior ou outra fonte.</p></div>
+      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método {testimony.method}).<br>{testimonyDays === WIDEST ? 'Tente outra fonte.' : 'Tente um período maior ou outra fonte.'}</p></div>
     {:else if testimony && overall !== null}
       <dl class="verdict stat"><div><dt>Média do recorte</dt><dd style:--tone={testimonyColor(overall)}>{signed(overall)}</dd></div></dl><p class="verdict-class">{testimonyClass(overall)} · média de {fmt(testimony.overall.n)} {testimony.overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>
       {#if outlet !== 'all'}

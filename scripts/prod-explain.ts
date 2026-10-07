@@ -240,7 +240,7 @@ export const run = async (client: Client, opts: Opts): Promise<Result> => {
   const unknown = names.filter((n) => !caseNames.includes(n))
   if (unknown.length) return refuse(`unknown case: ${unknown.join(', ')}\nvalid cases: ${caseNames.join(', ')}`)
 
-  const days = snapDays(String(opts.days ?? 30), 30)
+  const days = snapDays(String(opts.days ?? 21), 21)
   const top = int(String(opts.top ?? 25), 25, 1, 100)
   const personR = await lookup(client, opts.person)
   if (!personR) return refuse(`unknown person: ${opts.person}\nknown ids: ${(await knownIds(client)).join(', ')}`)
@@ -276,14 +276,14 @@ const main = async () => {
     options: {
       person: { type: 'string' },
       other: { type: 'string' },
-      days: { type: 'string', default: '30' },
+      days: { type: 'string', default: '21' },
       cases: { type: 'string', default: '' },
       top: { type: 'string', default: '25' },
       out: { type: 'string' },
       force: { type: 'boolean', default: false },
     },
   })
-  if (!args.person) throw new Error('usage: prod-explain.ts --person <id> [--other <id>] [--days 30] [--cases a,b] [--top 25] [--out file] [--force]')
+  if (!args.person) throw new Error('usage: prod-explain.ts --person <id> [--other <id>] [--days 21] [--cases a,b] [--top 25] [--out file] [--force]')
   const url = process.env.POSTGRES_URL_NON_POOLING ?? process.env.DATABASE_URL ?? process.env.POSTGRES_URL
   if (!url) {
     console.error('POSTGRES_URL_NON_POOLING, DATABASE_URL or POSTGRES_URL is required')
@@ -295,7 +295,7 @@ const main = async () => {
     const result = await run(pool, {
       person: args.person,
       other: args.other,
-      days: snapDays(args.days, 30),
+      days: snapDays(args.days, 21),
       cases: args.cases.split(',').filter(Boolean),
       top: int(args.top, 25, 1, 100),
       force: args.force,

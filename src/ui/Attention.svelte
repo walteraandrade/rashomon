@@ -82,7 +82,7 @@
       owner: OWNER,
       kicker: `Documentos de ${attentionDayLabel(day)}`,
       title: day,
-      sides: [{ personId: person, personName: found?.name ?? person, query: api.docsParams({ days: '30', source, term: '', kind: api.ATLAS_KINDS, day }) }],
+      sides: [{ personId: person, personName: found?.name ?? person, query: api.docsParams({ days: '21', source, term: '', kind: api.ATLAS_KINDS, day }) }],
     })
   }
 
@@ -129,7 +129,7 @@
     name: 'mentions',
     params: () => {
       if (!canFetch()) return null
-      return new URLSearchParams({ term: '', kind: api.ATLAS_KINDS, days: '30', bucket: 'day', source, person })
+      return new URLSearchParams({ term: '', kind: api.ATLAS_KINDS, days: '21', bucket: 'day', source, person })
     },
     fetch: (qp, signal) => tagKey(`${qp.get('person') ?? ''}|${qp.get('source') ?? ''}`, api.loadTimeline(qp.get('person')!, withoutPerson(qp), signal)),
     ghost: () => {},
@@ -286,7 +286,7 @@
       <div><dt>Clique</dt><dd>documentos do dia, em qualquer das duas linhas</dd></div>
     </dl>
     <div class="sentence">
-      <p class="sentence-line">Curiosidade e menções sobre <span class="pick"><select id="attentionPerson" aria-label="Pessoa (atenção)" bind:value={person} onchange={onPerson}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos últimos 30 dias, em <span class="keep"><span class="pick"><select id="attentionSource" aria-label="Fonte (atenção)" bind:value={source} onchange={onSource}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p>
+      <p class="sentence-line">Curiosidade e menções sobre <span class="pick"><select id="attentionPerson" aria-label="Pessoa (atenção)" bind:value={person} onchange={onPerson}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos últimos 21 dias, em <span class="keep"><span class="pick"><select id="attentionSource" aria-label="Fonte (atenção)" bind:value={source} onchange={onSource}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p>
     </div>
   </header>
   <p class="note" id="attentionNote">{note}</p>

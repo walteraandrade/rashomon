@@ -22,7 +22,7 @@ const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString
 const lula = persons.find((p) => p.id === 'lula')!
 const tarcisio = persons.find((p) => p.id === 'tarcisio')!
 const bolsonaro = persons.find((p) => p.id === 'bolsonaro')!
-const q = (over: Record<string, string>) => parseQuery({ days: '30', ...over })
+const q = (over: Record<string, string>) => parseQuery({ days: '21', ...over })
 const live = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graph(person, query).text, queries.graph(person, query).values)).rows[0]
 const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) => (await db.query(queries.graphFast(person, query).text, queries.graphFast(person, query).values)).rows[0]
 
@@ -30,7 +30,6 @@ const fast = async (person: typeof lula, query: ReturnType<typeof parseQuery>) =
 const recortes: Record<string, string>[] = [
   {},
   { days: '7' },
-  { days: '60' },
   { sort: 'pmi' },
   { sort: 'pmi', limit: '5' },
   { min: '1' },
@@ -64,7 +63,7 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
   })
 
   it('a window creates the universe as a keyed temp table and never deletes from it', () => {
-    const texts = aggregateQueries.window(30, persons).map((s) => s.text)
+    const texts = aggregateQueries.window(21, persons).map((s) => s.text)
     assert.equal(texts.filter((t) => /graph_terms_all/.test(t) && /\bdelete\b/i.test(t)).length, 0)
     const create = texts.findIndex((t) => /create temp table graph_terms_all on commit drop as/.test(t))
     const key = texts.findIndex((t) => /alter table graph_terms_all add primary key \(/.test(t))
@@ -74,7 +73,7 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
 
   it('the universe carries its primary key inside the window and is gone after commit', async () => {
     await seed()
-    const window = aggregateQueries.window(30, persons)
+    const window = aggregateQueries.window(21, persons)
     const [universe, key] = ['create temp table', 'add primary key'].map((m) => window.find((q) => q.text.includes(m))!)
     const pk = await inTransaction(async () => {
       await db.query(universe.text, universe.values)
@@ -91,7 +90,7 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
   })
 
   it('a window raises work_mem first and analyzes the universe and graph_terms before reading them (issue #250)', () => {
-    const texts = aggregateQueries.window(30, persons).map((s) => s.text.trim())
+    const texts = aggregateQueries.window(21, persons).map((s) => s.text.trim())
     const at = (re: RegExp) => texts.findIndex((t) => re.test(t))
     const lastAt = (re: RegExp) => texts.length - 1 - [...texts].reverse().findIndex((t) => re.test(t))
     assert.equal(texts[0], `set local work_mem = '128MB'`)
@@ -121,7 +120,7 @@ describe('graph_terms_all as a session-temp table (issue #203)', () => {
 
 describe('precomputable', () => {
   it('holds a built window, one source or all, no domain, no lean, the default country scope', () => {
-    const base = { days: 30, domain: 'all', lean: 'all', source: 'all', country: 'br' as const }
+    const base = { days: 21, domain: 'all', lean: 'all', source: 'all', country: 'br' as const }
     assert.equal(precomputable(base), true)
     assert.equal(precomputable({ ...base, source: 'rss' }), true)
     assert.equal(precomputable({ ...base, source: 'rss,gkg' }), false)
@@ -217,11 +216,6 @@ describe('buildGraphAggregates', () => {
     await buildGraphAggregates(persons)
   })
 
-  it('builds exactly the windows 7, 30 and 60, and none for 365', async () => {
-    const { rows } = await db.query<{ days: number }>(`select distinct days from graph_scopes order by days`)
-    assert.deepEqual(rows.map((r) => r.days), [7, 30, 60])
-  })
-
   it('writes one scope row per window, source and person, zero-doc sources included', async () => {
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
     assert.equal(rows[0].n, DAYS.length * (SOURCES.length + 1) * persons.length)
@@ -239,7 +233,7 @@ describe('buildGraphAggregates', () => {
 
   for (const person of persons)
     for (const over of recortes)
-      it(`renders the same response as the live query for ${person.id} ${JSON.stringify(over)}`, async () => {
+      it(`renders the same response as the live query for ${person.id} ${JSON.stringify(over)} (AC12)`, async () => {
         const query = q(over)
         assert.equal(precomputable(query), true)
         assert.deepEqual(await fast(person, query), await live(person, query))
@@ -379,7 +373,7 @@ const expectedLensTerms = (rows: LensTermRow[]) =>
     a: sideValue(t.is_name, t.a_count, t.a_pmi, t.a_tone),
     b: sideValue(t.is_name, t.b_count, t.b_pmi, t.b_tone),
   }))
-const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, bridges: false }
+const compareBase: CompareQuery = { days: 21, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, bridges: false }
 const cq = (over: Partial<CompareQuery>): CompareQuery => ({ ...compareBase, ...over })
 const liveCompareRow = async (a: Person, b: Person, query: CompareQuery) => {
   const built = queries.compare(a, b, query)
@@ -406,7 +400,7 @@ const rssLens: LensSide = { lens: 'source:rss', domain: 'all', lean: 'all', sour
 const gkgLens: LensSide = { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' }
 const senadoLens: LensSide = { lens: 'source:senado', domain: 'all', lean: 'all', source: 'senado' }
 const blueskyLens: LensSide = { lens: 'source:bluesky', domain: 'all', lean: 'all', source: 'bluesky' }
-const lensesBase: LensesQuery = { days: 30, kind: 'all', limit: 40, a: allLens, b: allLens, bridges: false }
+const lensesBase: LensesQuery = { days: 21, kind: 'all', limit: 40, a: allLens, b: allLens, bridges: false }
 const lensQ = (over: Partial<LensesQuery>): LensesQuery => ({ ...lensesBase, ...over })
 const liveLensesRow = async (person: Person, query: LensesQuery) => {
   const built = queries.lenses(person, query)
@@ -426,7 +420,6 @@ describe('compare fast path (issue #247)', () => {
   const compareRecortes: Partial<CompareQuery>[] = [
     {},
     { days: 7 },
-    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -568,7 +561,7 @@ describe('compare fast path (issue #247)', () => {
       assert.equal(fastTerm![side], null, 'compareFor must route through the fast path and keep the cutoff null')
 
       // country=all adds no docs here: the fixture's only non-br docs (issue #204) are 3800+ days
-      // old, outside this 30-day recorte, so this flips precomputable(q) to false without moving
+      // old, outside this 21-day recorte, so this flips precomputable(q) to false without moving
       // the scope compareFor actually reads -- the null this key carried above was purely an
       // artifact of the shrunk build's own persisted cutoff, not of the underlying documents.
       const liveQuery: CompareQuery = { ...query, country: 'all' }
@@ -592,7 +585,6 @@ describe('lenses fast path (issue #247)', () => {
   const lensesRecortes: Partial<LensesQuery>[] = [
     {},
     { days: 7 },
-    { days: 60 },
     { kind: 'word' },
     { kind: 'phrase,hashtag' },
     { kind: 'org' },
@@ -645,7 +637,7 @@ describe('lenses fast path (issue #247)', () => {
   // enters graph_terms (personTermsQuery's own exclusion) and cannot rank on the fast lenses
   // ruler at all, unlike the live query's own names_a/names_b union (docs/api.md).
   it("a person's own name word is absent from the fast lenses ruler, unlike live (issue #247)", async () => {
-    const query = lensQ({ days: 60, limit: 100 })
+    const query = lensQ({ days: 21, limit: 100 })
     const liveRow = await liveLensesRow(lula, query)
     const fastRow = await fastLensesRow(lula, query)
     const liveName = liveRow.terms.find((t) => t.is_name)
@@ -713,9 +705,9 @@ describe('lenses fast path (issue #247)', () => {
       assert.ok(fastTerm, 'lensesFor must still carry this key on the fast path')
       assert.equal(fastTerm![side], null, 'lensesFor must route through the fast path and keep the cutoff null')
 
-      // days=29 is not one of the three built windows, so this flips lensesFastEligible to false;
-      // no fixture doc falls between 29 and 30 days old, so the underlying scope is unchanged.
-      const liveQuery: LensesQuery = { ...query, days: 29 }
+      // days=20 is not one of the two built windows, so this flips lensesFastEligible to false;
+      // no fixture doc falls between 20 and 21 days old, so the underlying scope is unchanged.
+      const liveQuery: LensesQuery = { ...query, days: 20 }
       assert.equal(lensesFastEligible(liveQuery), false)
       const liveResult = await lensesFor(person, liveQuery)
       const liveTerm = liveResult.terms.find((t) => t.term === termName && t.kind === kind)
@@ -757,7 +749,7 @@ describe('term_communities (issue #214)', () => {
 
   it('a term unique to one document (no surviving co-occurrence edge) still gets its own community', async () => {
     const { rows } = await db.query<{ community: number | null }>(
-      `select community from term_communities where days = 30 and source = 'all' and person_id = 'lula' and term = 'eleicao' and kind = 'word'`,
+      `select community from term_communities where days = 21 and source = 'all' and person_id = 'lula' and term = 'eleicao' and kind = 'word'`,
     )
     assert.equal(rows.length, 1)
     assert.equal(typeof rows[0].community, 'number')
@@ -765,14 +757,14 @@ describe('term_communities (issue #214)', () => {
 
   it('a term never kept by graph_terms stays absent from term_communities too', async () => {
     const { rows } = await db.query<{ n: number }>(
-      `select count(*)::int as n from term_communities where days = 30 and source = 'all' and person_id = 'lula' and term = 'congresso'`,
+      `select count(*)::int as n from term_communities where days = 21 and source = 'all' and person_id = 'lula' and term = 'congresso'`,
     )
     assert.equal(rows[0].n, 0)
   })
 
   it('reforma and tributaria co-occur (docs /1 and /6) and land in the same community', async () => {
     const { rows } = await db.query<{ term: string; community: number }>(
-      `select term, community from term_communities where days = 30 and source = 'all' and person_id = 'lula' and term in ('reforma', 'tributaria') and kind = 'word'`,
+      `select term, community from term_communities where days = 21 and source = 'all' and person_id = 'lula' and term in ('reforma', 'tributaria') and kind = 'word'`,
     )
     assert.equal(rows.length, 2)
     assert.equal(rows[0].community, rows[1].community)
@@ -780,7 +772,7 @@ describe('term_communities (issue #214)', () => {
 
   it('community edges are exactly the pairs two of the person\'s own docs share, sorted', async () => {
     const edges = async (person: string) => {
-      const q = aggregateQueries.communityEdges(30, 'all', person)
+      const q = aggregateQueries.communityEdges(21, 'all', person)
       return (await db.query(q.text, q.values)).rows
     }
     assert.deepEqual(await edges('lula'), [
@@ -795,7 +787,7 @@ describe('term_communities (issue #214)', () => {
     assert.ok(withCommunities.nodes.length > 0, 'sanity: the default window must have nodes')
     assert.ok(withCommunities.nodes.some((n) => typeof n.community === 'number'), 'sanity: a built window must tag at least one node')
 
-    await db.query(`delete from term_communities where days = 30 and source = 'all' and person_id = 'lula'`)
+    await db.query(`delete from term_communities where days = 21 and source = 'all' and person_id = 'lula'`)
 
     // Pin that the fast query itself (not a live-query fallback) is what answers with null
     // communities: a mutant adding an `exists (select 1 from term_communities ...)` guard to
@@ -845,11 +837,11 @@ describe('term_links is never persisted', () => {
 
   it('a build removes stale term_links rows of every window it rebuilds', async () => {
     for (const days of DAYS) await stale(days)
-    await stale(30, 'tarcisio')
+    await stale(21, 'tarcisio')
     assert.equal(await rowCount(), DAYS.length + 1)
-    await buildGraphAggregates(persons, [30])
+    await buildGraphAggregates(persons, [21])
     const left = (await db.query<{ days: number }>(`select days from term_links order by days`)).rows.map((r) => r.days)
-    assert.deepEqual(left, DAYS.filter((d) => d !== 30))
+    assert.deepEqual(left, DAYS.filter((d) => d !== 21))
     await buildGraphAggregates(persons)
     assert.equal(await rowCount(), 0)
   })
@@ -1000,12 +992,12 @@ describe('outlet fields and neighbours (issue #218)', () => {
   })
 
   const fieldsFor = async (domain: string) =>
-    (await db.query<{ field: number }>(`select field from outlet_fields where days = 30 and person_id = 'tarcisio' and domain = $1`, [domain])).rows
+    (await db.query<{ field: number }>(`select field from outlet_fields where days = 21 and person_id = 'tarcisio' and domain = $1`, [domain])).rows
 
   const neighborsFor = async (domain: string) =>
     (
       await db.query<{ neighbor: string; similarity: number }>(
-        `select neighbor, similarity from outlet_neighbors where days = 30 and person_id = 'tarcisio' and domain = $1 order by similarity desc, neighbor`,
+        `select neighbor, similarity from outlet_neighbors where days = 21 and person_id = 'tarcisio' and domain = $1 order by similarity desc, neighbor`,
         [domain],
       )
     ).rows
@@ -1031,7 +1023,7 @@ describe('outlet fields and neighbours (issue #218)', () => {
   it('a domain below the doc floor gets no field or neighbour row', async () => {
     assert.deepEqual(await fieldsFor('riomarginal.example'), [])
     const { rows } = await db.query<{ n: number }>(
-      `select count(*)::int as n from outlet_neighbors where days = 30 and person_id = 'tarcisio' and (domain = 'riomarginal.example' or neighbor = 'riomarginal.example')`,
+      `select count(*)::int as n from outlet_neighbors where days = 21 and person_id = 'tarcisio' and (domain = 'riomarginal.example' or neighbor = 'riomarginal.example')`,
     )
     assert.equal(rows[0].n, 0)
   })
@@ -1042,7 +1034,7 @@ describe('outlet fields and neighbours (issue #218)', () => {
     assert.ok(!rows.some((r) => r.neighbor === 'portovento.example'), 'a domain sharing no term must not surface as a neighbour')
     const { rows: cross } = await db.query<{ n: number }>(
       `select count(*)::int as n from outlet_neighbors
-       where days = 30 and person_id = 'tarcisio'
+       where days = 21 and person_id = 'tarcisio'
          and (domain = 'portovento.example' or neighbor = 'portovento.example')`,
     )
     assert.equal(cross[0].n, 0)
@@ -1063,7 +1055,7 @@ describe('outlet fields and neighbours (issue #218)', () => {
   })
 
   it('outlet_neighbors binds no array mixing integer and fractional numbers (sql-pg infers one OID per array)', () => {
-    const q = aggregateQueries.outletNeighbors(30, 'tarcisio', [
+    const q = aggregateQueries.outletNeighbors(21, 'tarcisio', [
       { domain: 'a.example', neighbor: 'b.example', similarity: 1 },
       { domain: 'a.example', neighbor: 'c.example', similarity: 0.5 },
     ])
@@ -1110,7 +1102,7 @@ describe('outlet fields and neighbours (issue #218)', () => {
     assert.ok(toCampovoz && toCampovoz.similarity > 0)
     assert.ok(!rows.some((r) => r.neighbor === 'portovento.example'))
     const { rows: crossCount } = await db.query<{ n: number }>(
-      `select count(*)::int as n from outlet_neighbors where days = 30 and person_id = 'tarcisio'
+      `select count(*)::int as n from outlet_neighbors where days = 21 and person_id = 'tarcisio'
        and ((domain = 'agroinforme.example' and neighbor = 'portovento.example') or (domain = 'portovento.example' and neighbor = 'agroinforme.example'))`,
     )
     assert.equal(crossCount[0].n, 0)
@@ -1119,7 +1111,7 @@ describe('outlet fields and neighbours (issue #218)', () => {
   it('a domain below the 3-doc floor never appears as domain or neighbor in outlet_fields/outlet_neighbors for that window/person (AC5)', async () => {
     assert.deepEqual(await fieldsFor('riomarginal.example'), [])
     const { rows } = await db.query<{ n: number }>(
-      `select count(*)::int as n from outlet_neighbors where days = 30 and person_id = 'tarcisio'
+      `select count(*)::int as n from outlet_neighbors where days = 21 and person_id = 'tarcisio'
        and (domain = 'riomarginal.example' or neighbor = 'riomarginal.example')`,
     )
     assert.equal(rows[0].n, 0)
@@ -1199,7 +1191,7 @@ describe('compare/lenses fast path acceptance criteria (issue #247)', () => {
   })
 
   it('tone is identical, and null wherever no GDELT doc contributed, between the fast and live compare paths (AC7)', async () => {
-    const query = cq({ days: 60 })
+    const query = cq({ days: 21 })
     const fastRow = await fastCompareRow(tarcisio, lula, query)
     const liveRow = await liveCompareRow(tarcisio, lula, query)
     const tones = (row: typeof fastRow) => row.terms.map((t) => ({ term: t.term, kind: t.kind, a_tone: t.a_tone, b_tone: t.b_tone }))
@@ -1277,7 +1269,7 @@ describe('reach through the build (issue #210)', () => {
   })
   after(reseed)
 
-  const reachRecortes: Record<string, string>[] = [{}, { days: '7' }, { days: '60' }, { min: '1' }, { source: 'bluesky', min: '1' }, { source: 'bluesky', days: '7', min: '1', sort: 'pmi' }]
+  const reachRecortes: Record<string, string>[] = [{}, { days: '7' }, { min: '1' }, { source: 'bluesky', min: '1' }, { source: 'bluesky', days: '7', min: '1', sort: 'pmi' }]
 
   for (const over of reachRecortes)
     it(`renders the same response, reach included, on both paths for ${JSON.stringify(over)}`, async () => {
@@ -1290,9 +1282,9 @@ describe('reach through the build (issue #210)', () => {
   it('graph_terms.reach equals the live sum for the same term and source', async () => {
     const cases: [number, string, number][] = [
       [7, 'all', 16],
-      [30, 'all', 116],
+      [21, 'all', 116],
       [7, 'bluesky', 16],
-      [30, 'gnews', 0],
+      [21, 'gnews', 0],
     ]
     for (const [days, source, expected] of cases) {
       const { rows } = await db.query<{ reach: number | null }>(
@@ -1421,6 +1413,7 @@ describe('buildTermWeeks', () => {
   it('rebuild drops terms that left the top N (AC5)', async () => {
     const now = later()
     const cur = curOf(now)
+    await put(cur, 'Tarcísio inspeciona obras')
     await putMany(cur, 'Lula aardvark badger cheetah', 2)
     await buildTermWeeks(persons, now, 2)
     assert.deepEqual((await rows()).map((r) => r.term), ['aardvark', 'badger'])
@@ -1502,5 +1495,43 @@ describe('term_weeks build, as documented (issue #215)', () => {
     assert.match(docsText, /70k rows|size bound|rows a year/i)
     assert.match(docsText, /pnpm push[^.\n]*(never|not)[^.\n]*term_weeks|term_weeks[^.\n]*(never|not)[^.\n]*pnpm push/i)
     assert.match(docsText, /pnpm migrate[^.\n]*before[^.\n]*(deploy|term_weeks)/i)
+  })
+})
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('the aggregates over a tracked-only, 21-day corpus (issue #313 acceptance)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+  after(reseed)
+
+  it('graph_scopes.docs equals graph_scopes.tracked on every row (AC12)', async () => {
+    const { rows } = await db.query<{ total: number; differing: number; filled: number }>(
+      `select count(*)::int as total, count(*) filter (where docs <> tracked)::int as differing, count(*) filter (where docs > 0)::int as filled from graph_scopes`,
+    )
+    assert.ok(rows[0].total > 0)
+    assert.equal(rows[0].differing, 0)
+    assert.ok(rows[0].filled > 0)
+  })
+
+  it('the default build writes graph_scopes rows for days 7 and 21 only (AC20)', async () => {
+    const report = await buildGraphAggregates(persons)
+    assert.deepEqual(report.windows, [7, 21])
+    for (const table of ['graph_scopes', 'graph_terms']) {
+      const { rows } = await db.query<{ days: number }>(`select distinct days from ${table} order by days`)
+      assert.deepEqual(rows.map((r) => r.days), [7, 21], table)
+    }
+  })
+
+  it('term_weeks.c_t counts tracked docs of the last 21 days; a term in a doc aged 25 days adds nothing (AC20)', async () => {
+    const doc = (uri: string, ageDays: number) => ({ source: 'rss' as const, uri: `https://ac313-weeks.example/${uri}`, text: 'Lula cita kzxterm no plenário', publishedAt: daysAgo(ageDays), domain: 'ac313-weeks.example' })
+    for (const d of [doc('now-a', 0), doc('now-b', 0), doc('old', 25)]) assert.equal(await insertDocP(d, persons), true)
+    await buildGraphAggregates(persons)
+    const read = async () => (await db.query<{ count: number; c_t: number }>(`select count, c_t from term_weeks where person_id = 'lula' and term = 'kzxterm' and kind = 'word'`)).rows
+    assert.deepEqual(await read(), [{ count: 2, c_t: 2 }])
+    assert.equal(await insertDocP(doc('inside', 15), persons), true)
+    await buildGraphAggregates(persons)
+    assert.deepEqual(await read(), [{ count: 2, c_t: 3 }])
   })
 })

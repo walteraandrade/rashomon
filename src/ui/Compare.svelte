@@ -12,7 +12,7 @@
   import { seedFor, type SeedKey } from './seed.js'
 
   const KEYS: SeedKey[] = [['a', 'person'], ['b', null], 'days', 'source', 'limit', ['measure', null]]
-  const DAYS = ['7', '30', '60']
+  const DAYS = ['7', '21']
   const MEASURES = ['count', 'pmi']
   const LIMITS = ['20', '40', '60', '100']
   const GHOST_WORDS: [number, number, number, number][] = [
@@ -28,7 +28,7 @@
 
   let a = $state('')
   let b = $state('')
-  let days = $state('30')
+  let days = $state('21')
   let source = $state('all')
   let measure = $state('count')
   let limit = $state('20')
@@ -209,7 +209,7 @@
       <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>liga os dois vocabulários</dd></div>
       <div><dt>Clique</dt><dd>textos das duas pessoas, neste gráfico</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A" value={a} onchange={(e) => change(e, (v) => (a = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B" value={b} onchange={(e) => change(e, (v) => (b = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="compareDays" aria-label="Período" value={days} onchange={(e) => change(e, (v) => (days = v))}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="compareSource" aria-label="Fonte" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="compareMeasure" aria-label="Medida" value={measure} onchange={(e) => (measure = e.currentTarget.value)}><option value="count">documentos</option><option value="pmi">{scoreName('pmi')}</option></select></span>.</span> Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras" value={limit} onchange={(e) => change(e, (v) => (limit = v))}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras por pessoa.</p></div>
+    <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A" value={a} onchange={(e) => change(e, (v) => (a = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B" value={b} onchange={(e) => change(e, (v) => (b = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="compareDays" aria-label="Período" value={days} onchange={(e) => change(e, (v) => (days = v))}><option value="7">últimos 7 dias</option><option value="21" selected>últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="compareSource" aria-label="Fonte" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="compareMeasure" aria-label="Medida" value={measure} onchange={(e) => (measure = e.currentTarget.value)}><option value="count">documentos</option><option value="pmi">{scoreName('pmi')}</option></select></span>.</span> Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras" value={limit} onchange={(e) => change(e, (v) => (limit = v))}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras por pessoa.</p></div>
   </header>
   <p class="status" id="compareStatus" role="status" hidden={!sameSelf}>Os dois lados mostram a mesma pessoa.</p>
   <figure class="ruler" id="compareRuler" aria-label="Régua comparando as duas pessoas" aria-busy={showGhost ? 'true' : 'false'} hidden={peopleError || noPeople} bind:this={rulerEl}>

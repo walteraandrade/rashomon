@@ -13,7 +13,7 @@ const people = [
   { id: 'tarcisio', name: 'Tarcísio' },
 ]
 const data = (over: Record<string, unknown> = {}) => ({
-  days: 30,
+  days: 21,
   persons: people,
   domains: ['g1.globo.com'],
   cells: [{ person_id: 'lula', domain: 'g1.globo.com', docs: 2, share: 0.004 }],
@@ -237,11 +237,11 @@ describe('Agenda (issue #288)', () => {
   })
 
   it('agenda: docs card days come from the payload, not the control', async () => {
-    body = data({ days: 30 })
+    body = data({ days: 21 })
     await start('?days=7')
     picks()[0].click()
     flushSync()
-    expect((docsCard.open.mock.calls[0][0] as any).sides[0].query.get('days')).toBe('30')
+    expect((docsCard.open.mock.calls[0][0] as any).sides[0].query.get('days')).toBe('21')
   })
 
   it('agenda AC11: empty state names the minimum of 5', async () => {
@@ -309,7 +309,31 @@ describe('Agenda (issue #288)', () => {
 
   it('agenda AC15: an invalid seed falls back to the defaults', async () => {
     await start('?days=9&source=nope')
-    expect((document.getElementById('agendaDays') as HTMLSelectElement).value).toBe('30')
-    expect(new URL(urls[0], 'http://localhost').searchParams.get('days')).toBe('30')
+    expect((document.getElementById('agendaDays') as HTMLSelectElement).value).toBe('21')
+    expect(new URL(urls[0], 'http://localhost').searchParams.get('days')).toBe('21')
+  })
+
+  it('agenda AC24: the period select offers exactly 7 and 21 with 21 selected, and the first /agenda carries days=21', async () => {
+    await start()
+    const select = document.getElementById('agendaDays') as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toEqual(['7', '21'])
+    expect([...select.options].map((o) => o.textContent)).toEqual(['últimos 7 dias', 'últimos 21 dias'])
+    expect(select.value).toBe('21')
+    expect(new URL(urls.find((u) => u.includes('/agenda'))!, 'http://localhost').searchParams.get('days')).toBe('21')
+  })
+
+  it('agenda AC25: a shared link with days=30 or days=60 opens on 21, and days=7 still selects 7', async () => {
+    for (const days of ['30', '60']) {
+      await start(`?days=${days}`)
+      expect((document.getElementById('agendaDays') as HTMLSelectElement).value).toBe('21')
+      expect(new URL(urls[0], 'http://localhost').searchParams.get('days')).toBe('21')
+      unmount(instance!)
+      instance = undefined
+      target.replaceChildren()
+      urls.length = 0
+      clearScopes()
+    }
+    await start('?days=7')
+    expect((document.getElementById('agendaDays') as HTMLSelectElement).value).toBe('7')
   })
 })

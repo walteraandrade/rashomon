@@ -24,8 +24,8 @@ const term = (over: Partial<RisingTerm> = {}): RisingTerm => ({
   ...over,
 })
 const about = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 12 }
-const payload = (terms: RisingTerm[], a: RisingData['about'] = about, present: RisingTerm[] = terms): RisingData => ({ days: 7, baseline: 30, terms, present, outlets: [], about: a })
-const stale = (terms: RisingTerm[], a: RisingData['about'] = { recent: 10, baseline: 5 }): RisingData => ({ days: 7, baseline: 30, terms, outlets: [], about: a })
+const payload = (terms: RisingTerm[], a: RisingData['about'] = about, present: RisingTerm[] = terms): RisingData => ({ days: 7, baseline: 14, terms, present, outlets: [], about: a })
+const stale = (terms: RisingTerm[], a: RisingData['about'] = { recent: 10, baseline: 5 }): RisingData => ({ days: 7, baseline: 14, terms, outlets: [], about: a })
 
 type Call = { url: string; path: string; params: URLSearchParams; signal?: AbortSignal }
 type Handler = (call: Call) => unknown
@@ -146,11 +146,22 @@ describe('Rising (#292)', () => {
   it('risingParams sends the fixed window', () => {
     const qp = risingParams({ source: 'gdelt' })
     expect(qp.get('days')).toBe('7')
-    expect(qp.get('baseline')).toBe('30')
+    expect(qp.get('baseline')).toBe('14')
     expect(qp.get('kind')).toBe('word,hashtag,phrase')
     expect(qp.get('limit')).toBe('40')
     expect(qp.get('min')).toBe('3')
     expect(qp.get('source')).toBe('gdelt')
+  })
+
+  it('AC26: the sentence, the ruler end and the about line all say 14 dias antes, and no text names 30 dias', async () => {
+    handlers['/rising'] = () => payload([term()], { recent: 4, baseline: 6, words_recent: 10, words_baseline: 20 })
+    boot()
+    await start()
+    expect($('rising').querySelector('.sentence-line')!.textContent).toContain('nos últimos 7 dias, contra os 14 dias antes')
+    expect([...$('risingRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
+    expect($('risingAbout').textContent).toContain('6 nos 14 dias antes')
+    expect($('rising').textContent).not.toMatch(/30 dias|60 dias/)
+    expect($('rising').innerHTML).not.toMatch(/NaN/)
   })
 
   it('requests /rising with the fixed recorte plus the selected person and source, and paints the fixture word', async () => {
@@ -160,7 +171,7 @@ describe('Rising (#292)', () => {
     const call = risingCalls()[0]
     expect(call.path).toBe('/api/people/bolsonaro/rising')
     expect(call.params.get('days')).toBe('7')
-    expect(call.params.get('baseline')).toBe('30')
+    expect(call.params.get('baseline')).toBe('14')
     expect(call.params.get('kind')).toBe('word,hashtag,phrase')
     expect(call.params.get('limit')).toBe('40')
     expect(call.params.get('min')).toBe('3')
@@ -308,21 +319,21 @@ describe('Rising (#292)', () => {
     expect($('risingRuler').textContent).toContain('Nenhuma palavra neste recorte.')
     expect($('risingRuler').getAttribute('aria-busy')).toBe('false')
     expect(words()).toHaveLength(0)
-    expect($('risingAbout').textContent).toBe('A pessoa: 0 textos nos últimos 7 dias, 12 nos 30 dias antes; 0 pares texto-palavra agora, 50 antes.')
+    expect($('risingAbout').textContent).toBe('A pessoa: 0 textos nos últimos 7 dias, 12 nos 14 dias antes; 0 pares texto-palavra agora, 50 antes.')
   })
 
   it('the about line is singular for one document and one pair', async () => {
     handlers['/rising'] = () => payload([term()], { recent: 1, baseline: 3, words_recent: 1, words_baseline: 12 })
     boot()
     await start()
-    expect($('risingAbout').textContent).toBe('A pessoa: 1 texto nos últimos 7 dias, 3 nos 30 dias antes; 1 par texto-palavra agora, 12 antes.')
+    expect($('risingAbout').textContent).toBe('A pessoa: 1 texto nos últimos 7 dias, 3 nos 14 dias antes; 1 par texto-palavra agora, 12 antes.')
   })
 
   it('a payload without words_* says nothing about pairs and prints no NaN anywhere', async () => {
-    handlers['/rising'] = () => ({ days: 7, baseline: 30, terms: [term({ term: 'antigo' })], outlets: [], about: { recent: 3, baseline: 12 } })
+    handlers['/rising'] = () => ({ days: 7, baseline: 14, terms: [term({ term: 'antigo' })], outlets: [], about: { recent: 3, baseline: 12 } })
     boot()
     await start()
-    expect($('risingAbout').textContent).toBe('A pessoa: 3 textos nos últimos 7 dias, 12 nos 30 dias antes.')
+    expect($('risingAbout').textContent).toBe('A pessoa: 3 textos nos últimos 7 dias, 12 nos 14 dias antes.')
     expect($('risingAbout').textContent).not.toMatch(/par/)
     expect($('risingRuler').querySelector('[data-term="antigo"]')).not.toBeNull()
     expect($('rising').innerHTML).not.toMatch(/NaN/)
@@ -332,7 +343,7 @@ describe('Rising (#292)', () => {
     handlers['/rising'] = () => payload([term()], { recent: 3, baseline: 12, words_recent: 9 })
     boot()
     await start()
-    expect($('risingAbout').textContent).toBe('A pessoa: 3 textos nos últimos 7 dias, 12 nos 30 dias antes.')
+    expect($('risingAbout').textContent).toBe('A pessoa: 3 textos nos últimos 7 dias, 12 nos 14 dias antes.')
     expect($('rising').innerHTML).not.toMatch(/NaN|undefined/)
   })
 
@@ -341,7 +352,7 @@ describe('Rising (#292)', () => {
     handlers['/rising'] = () => payload(terms, { recent: 10, baseline: 5, words_recent: 40, words_baseline: 16 })
     boot()
     await start()
-    expect([...$('risingRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['antes (30 dias)', 'agora (7 dias)'])
+    expect([...$('risingRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
     expect([...$('risingRuler').querySelectorAll('.ruler-axis-labels span')].map((e) => e.textContent)).toEqual(['Fatia menor que antes', 'mesma fatia', 'Fatia maior que antes'])
     const byTerm = (t: string) => words().find((w) => w.getAttribute('data-term') === t)!
     expect(byTerm('igual').getAttribute('style')).toContain(`--cmp: ${balanceColor(0)}`)
@@ -351,7 +362,7 @@ describe('Rising (#292)', () => {
   })
 
   it('a payload without present is placed by lift: person-pace axis prose, no rare list, no NaN', async () => {
-    const lp = 10 / 7 / ((5 + 1) / 30)
+    const lp = 10 / 7 / ((5 + 1) / 14)
     handlers['/rising'] = () => stale([term({ term: 'igual', lift: lp }), term({ term: 'oito', lift: lp * 8 }), term({ term: 'lenta', lift: lp / 8 })])
     boot()
     await start()
@@ -614,7 +625,7 @@ describe('Rising (#292)', () => {
     await start()
     click(words()[0])
     await settle()
-    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '21' }) }] })
     await settle()
     expect(docsCard.openedBy('rising')).toBe(false)
     await change('risingSource', 'gdelt')
@@ -625,7 +636,7 @@ describe('Rising (#292)', () => {
   it('Escape and a background click do not close a card the atlas opened', async () => {
     boot()
     await start()
-    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '21' }) }] })
     await settle()
     escape()
     click($('risingRuler'))
@@ -911,7 +922,7 @@ describe('Rising (#292)', () => {
       handlers['/rising'] = () => payload([term()], { recent: 3, baseline: 12, words_baseline: 9 })
       boot()
       await start()
-      expect($('risingAbout').textContent).toBe('A pessoa: 3 textos nos últimos 7 dias, 12 nos 30 dias antes.')
+      expect($('risingAbout').textContent).toBe('A pessoa: 3 textos nos últimos 7 dias, 12 nos 14 dias antes.')
       expect($('rising').innerHTML).not.toMatch(/NaN|undefined/)
     })
 

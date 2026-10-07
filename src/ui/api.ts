@@ -27,7 +27,7 @@ export const sourcesParams = (opts: GraphOpts) => narrowToSources(params(opts))
 // Drop sort, limit and domain; `min` is explicit so the panel's copy does not depend on a
 // server default. `method` is left to the server.
 export const narrowToTestimony = (graphParams: URLSearchParams) =>
-  new URLSearchParams({ days: graphParams.get('days') ?? '30', source: graphParams.get('source') ?? 'all', min: '3' })
+  new URLSearchParams({ days: graphParams.get('days') ?? '21', source: graphParams.get('source') ?? 'all', min: '3' })
 
 export const testimonyParams = (opts: GraphOpts) => narrowToTestimony(params(opts))
 
@@ -99,7 +99,7 @@ export const loadCompareBridges = (queryParams: URLSearchParams, signal?: AbortS
 // days/baseline/limit/min stay at the route's own defaults — the figure never exposes them —
 // sent explicitly so the figure keeps working the day the server default changes again.
 export const risingParams = ({ source }: { source: string }) =>
-  new URLSearchParams({ days: '7', baseline: '30', source, kind: FIXED_KINDS, limit: '40', min: '3' })
+  new URLSearchParams({ days: '7', baseline: '14', source, kind: FIXED_KINDS, limit: '40', min: '3' })
 
 export const loadRising = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
   json(endpoint(personId) + '/rising?' + queryParams, signal)
@@ -129,8 +129,8 @@ export const loadLenses = (personId: string, queryParams: URLSearchParams, signa
 export const loadLensBridges = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
   json(endpoint(personId) + '/lenses/bridges?' + queryParams, signal)
 
-// /attention has no parameter but days, fixed at 30 here; any other field passed in is ignored.
-export const attentionParams = (_opts: Record<string, unknown> = {}) => new URLSearchParams({ days: '30' })
+// /attention has no parameter but days, fixed at 21 here; any other field passed in is ignored.
+export const attentionParams = (_opts: Record<string, unknown> = {}) => new URLSearchParams({ days: '21' })
 
 export const loadAttention = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/attention?' + queryParams, signal)
 

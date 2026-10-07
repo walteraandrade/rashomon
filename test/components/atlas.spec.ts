@@ -213,7 +213,7 @@ describe('Atlas (issue #297)', () => {
   it('atlas AC4: the defaults are the first /graph request', async () => {
     await start()
     const qs = q(graphUrls()[0])
-    expect(qs.get('days')).toBe('30')
+    expect(qs.get('days')).toBe('21')
     expect(qs.get('sort')).toBe('pmi')
     expect(qs.get('limit')).toBe('18')
     expect(qs.get('source')).toBe('all')
@@ -222,16 +222,42 @@ describe('Atlas (issue #297)', () => {
     expect(qs.get('testimony')).toBe('1')
   })
 
+  it('atlas AC24: the period select offers exactly 7 and 21, in that order, with 21 selected on mount', async () => {
+    await start()
+    expect([...select('days').options].map((o) => o.value)).toEqual(['7', '21'])
+    expect([...select('days').options].map((o) => o.textContent)).toEqual(['últimos 7 dias', 'últimos 21 dias'])
+    expect(select('days').value).toBe('21')
+    expect(q(graphUrls()[0]).get('days')).toBe('21')
+    fire(nodeEl('word:golpe'))
+    expect($('inspector').textContent).toContain('últimos 21 dias')
+  })
+
+  it('atlas AC25: a shared link with days=30 or days=60 opens on 21, never blank, and days=7 still selects 7', async () => {
+    for (const days of ['30', '60']) {
+      await start(`?days=${days}`)
+      expect(select('days').value).toBe('21')
+      expect(q(graphUrls()[0]).get('days')).toBe('21')
+      unmount(instance!)
+      instance = undefined
+      target.replaceChildren()
+      urls = []
+      clearScopes()
+    }
+    await start('?days=7')
+    expect(select('days').value).toBe('7')
+    expect(q(graphUrls()[0]).get('days')).toBe('7')
+  })
+
   it('atlas AC4: bare keys seed the controls and the first /graph request', async () => {
-    await start('?person=tarcisio&days=60&source=bluesky&sort=count&limit=24')
+    await start('?person=tarcisio&days=7&source=bluesky&sort=count&limit=24')
     expect(select('person').value).toBe('tarcisio')
-    expect(select('days').value).toBe('60')
+    expect(select('days').value).toBe('7')
     expect(select('source').value).toBe('bluesky')
     expect(select('sort').value).toBe('count')
     expect(select('limit').value).toBe('24')
     const first = graphUrls()[0]
     expect(new URL(first, 'http://localhost').pathname).toBe('/api/people/tarcisio/graph')
-    expect(q(first).get('days')).toBe('60')
+    expect(q(first).get('days')).toBe('7')
     expect(q(first).get('source')).toBe('bluesky')
     expect(q(first).get('sort')).toBe('count')
     expect(q(first).get('limit')).toBe('24')
@@ -239,21 +265,21 @@ describe('Atlas (issue #297)', () => {
   })
 
   it('atlas AC4: a prefixed key beats the bare one', async () => {
-    await start('?days=7&atlas.days=60&source=gdelt&atlas.source=rss')
-    expect(select('days').value).toBe('60')
+    await start('?days=21&atlas.days=7&source=gdelt&atlas.source=rss')
+    expect(select('days').value).toBe('7')
     expect(select('source').value).toBe('rss')
-    expect(q(graphUrls()[0]).get('days')).toBe('60')
+    expect(q(graphUrls()[0]).get('days')).toBe('7')
     expect(q(graphUrls()[0]).get('source')).toBe('rss')
   })
 
   it('atlas AC4: an invalid value is ignored', async () => {
     await start('?person=ninguem&days=9&source=nope&sort=zzz&limit=7')
     expect(select('person').value).toBe('lula')
-    expect(select('days').value).toBe('30')
+    expect(select('days').value).toBe('21')
     expect(select('source').value).toBe('all')
     expect(select('sort').value).toBe('pmi')
     expect(select('limit').value).toBe('18')
-    expect(q(graphUrls()[0]).get('days')).toBe('30')
+    expect(q(graphUrls()[0]).get('days')).toBe('21')
   })
 
   it('atlas: first load is a ghost of the map (aria-busy), a reload only dims the section', async () => {
@@ -419,7 +445,7 @@ describe('Atlas (issue #297)', () => {
     expect(req.sides).toHaveLength(1)
     expect(req.sides[0].personId).toBe('lula')
     expect(req.title).toBe('golpe')
-    const expected = docsQuery(params({ days: '30', sort: 'pmi', limit: '18', source: 'all' }), golpe as any)
+    const expected = docsQuery(params({ days: '21', sort: 'pmi', limit: '18', source: 'all' }), golpe as any)
     expect(req.sides[0].query.toString()).toBe(expected.toString())
     expect(req.sides[0].query.get('term')).toBe('golpe')
     expect(req.sides[0].query.get('kind')).toBe('word')
@@ -481,13 +507,13 @@ describe('Atlas (issue #297)', () => {
   it('atlas AC4: a later setBoot never re-seeds the controls nor loads again', async () => {
     await start('?days=7')
     expect(graphUrls()).toHaveLength(1)
-    change('days', '60')
+    change('days', '21')
     await settle()
     expect(graphUrls()).toHaveLength(2)
     setBoot({ search: '?days=7&person=tarcisio', people: [...people] })
     flushSync()
     await settle()
-    expect(select('days').value).toBe('60')
+    expect(select('days').value).toBe('21')
     expect(select('person').value).toBe('lula')
     expect(graphUrls()).toHaveLength(2)
   })
@@ -558,7 +584,7 @@ describe('Atlas (issue #297)', () => {
 
   it('atlas AC6: the word inspector sparkline is one /timeline?days=7&bucket=day on the atlas source, seven bars', async () => {
     bodies.timeline = [1, 2, 3, 4, 5, 6, 99].map((count, i) => ({ bucket_start: `2026-09-0${i + 1}T00:00:00.000Z`, count }))
-    await start('?source=bluesky&days=60')
+    await start('?source=bluesky&days=21')
     fire(nodeEl('word:golpe'))
     await settle()
     expect(timelineUrls()).toHaveLength(1)
@@ -611,12 +637,13 @@ describe('Atlas (issue #297)', () => {
 
   it('atlas AC7: a control change issues one debounced /graph; two quick changes coalesce', async () => {
     await start()
+    change('limit', '24')
     change('days', '7')
-    change('days', '60')
     expect(graphUrls()).toHaveLength(1)
     await settle()
     expect(graphUrls()).toHaveLength(2)
-    expect(q(graphUrls()[1]).get('days')).toBe('60')
+    expect(q(graphUrls()[1]).get('days')).toBe('7')
+    expect(q(graphUrls()[1]).get('limit')).toBe('24')
   })
 
   it('atlas AC7: person, sort, limit and source each reload; the request names what changed', async () => {
@@ -641,7 +668,7 @@ describe('Atlas (issue #297)', () => {
     holding = /\/graph/
     change('days', '7')
     await settle()
-    change('days', '60')
+    change('limit', '24')
     await settle()
     expect(held).toHaveLength(2)
     expect(held[0].signal?.aborted).toBe(true)
@@ -657,14 +684,14 @@ describe('Atlas (issue #297)', () => {
     change('days', '7')
     await settle()
     expect(graphUrls()).toHaveLength(2)
-    change('days', '30')
+    change('days', '21')
     await settle()
     expect(graphUrls()).toHaveLength(2)
     expect(mapNodes().length).toBe(2)
     vi.setSystemTime(Date.now() + SCOPE_TTL_MS + 1000)
     change('days', '7')
     await settle()
-    change('days', '30')
+    change('days', '21')
     await settle()
     expect(graphUrls().length).toBeGreaterThan(2)
   })
@@ -678,7 +705,7 @@ describe('Atlas (issue #297)', () => {
     change('days', '7')
     await settle()
     const measure = vi.spyOn(performance, 'measure')
-    change('days', '30')
+    change('days', '21')
     await settle()
     expect(graphUrls()).toHaveLength(2)
     const hit = measure.mock.calls.find(([name, o]) => name === 'api:graph' && (o as { detail: { cache: string } }).detail.cache === 'memory')
@@ -1297,7 +1324,7 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
   it('a control change reloads /graph alone: no other route is asked', async () => {
     await start()
     const before = urls.length
-    change('days', '60')
+    change('days', '7')
     await settle()
     const added = urls.slice(before).map(routeOf)
     expect(added).toEqual(['graph'])

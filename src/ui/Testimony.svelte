@@ -34,11 +34,11 @@
     [768, 14],
   ]
   const TICKS = [-10, -5, 0, 5, 10]
-  const DAYS = ['7', '30', '60']
+  const DAYS = ['7', '21']
   const GHOST_WIDTHS = ['', 'is-mid', 'is-short']
 
   let person = $state('')
-  let days = $state('30')
+  let days = $state('21')
   let source = $state('all')
   let outlet = $state('all')
   let started = false
@@ -237,7 +237,7 @@
       <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
       <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)" value={person} onchange={(e) => { person = e.currentTarget.value; onControlChange() }}>{#each people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)" value={days} onchange={(e) => { days = e.currentTarget.value; onControlChange() }}><option value="7">últimos 7 dias</option><option value="30">últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)" value={source} onchange={(e) => { source = e.currentTarget.value; onControlChange() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
+    <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)" value={person} onchange={(e) => { person = e.currentTarget.value; onControlChange() }}>{#each people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)" value={days} onchange={(e) => { days = e.currentTarget.value; onControlChange() }}><option value="7">últimos 7 dias</option><option value="21">últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)" value={source} onchange={(e) => { source = e.currentTarget.value; onControlChange() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
   </header>
   <figure class="strip" class:is-loading={testimonyDim} id="strip" aria-label="Veículos na régua da avaliação" aria-busy={busy(testimonyPhase)} hidden={!stripShown} bind:this={stripEl}>
     {#if testimonyPhase === 'ghost' && !unavailable}

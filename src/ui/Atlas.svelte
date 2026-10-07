@@ -33,8 +33,8 @@
   import { createCanvasMeasure } from './measure.js'
 
   const OWNER = 'atlas'
-  const DAYS = ['7', '30', '60']
-  const DAYS_LABELS: Record<string, string> = { '7': 'últimos 7 dias', '30': 'últimos 30 dias', '60': 'últimos 60 dias' }
+  const DAYS = ['7', '21']
+  const DAYS_LABELS: Record<string, string> = { '7': 'últimos 7 dias', '21': 'últimos 21 dias' }
   const SORTS = ['count', 'pmi', 'reach']
   const LIMITS = ['12', '18', '24']
   const SOURCES = SOURCE_SEGMENTS.map(([value]) => value)
@@ -72,7 +72,7 @@
   let sortEl: HTMLSelectElement | undefined = $state()
   let limitEl: HTMLSelectElement | undefined = $state()
   let person = $state('')
-  let days = $state('30')
+  let days = $state('21')
   let source = $state('all')
   let sort = $state('pmi')
   let limit = $state('18')
@@ -497,7 +497,7 @@
       <div><dt>Clique</dt><dd>textos da palavra</dd></div>
     </dl>
     <div class="sentence">
-      <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa" bind:this={personEl} onchange={onControl((v) => (person = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="days" aria-label="Período" bind:this={daysEl} onchange={onControl((v) => (days = v))}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="source" aria-label="Fonte" bind:this={sourceEl} onchange={onControl((v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="sort" aria-label="Tamanho por" bind:this={sortEl} onchange={onControl((v) => (sort = v))}><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option><option value="reach">alcance</option></select></span>.</span> Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras" bind:this={limitEl} onchange={onControl((v) => (limit = v))}><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
+      <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa" bind:this={personEl} onchange={onControl((v) => (person = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="days" aria-label="Período" bind:this={daysEl} onchange={onControl((v) => (days = v))}><option value="7">últimos 7 dias</option><option value="21" selected>últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="source" aria-label="Fonte" bind:this={sourceEl} onchange={onControl((v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="sort" aria-label="Tamanho por" bind:this={sortEl} onchange={onControl((v) => (sort = v))}><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option><option value="reach">alcance</option></select></span>.</span> Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras" bind:this={limitEl} onchange={onControl((v) => (limit = v))}><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
       <p class="status-row"><span class="status" id="status" role="status" class:error={failed || view === 'error'}>{status}</span></p>
     </div>
   </header>

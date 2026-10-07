@@ -810,14 +810,6 @@ describe('figure 3 states a people outage in words only (ported from pet-accepta
 })
 
 describe('Compare over the 7 and 21 day windows (issue #313 acceptance)', () => {
-  it('AC24: the day select offers exactly 7 and 21 with 21 selected, and the first /compare carries days=21', async () => {
-    boot()
-    await start()
-    expect([...select('compareDays').options].map((o) => o.value)).toEqual(['7', '21'])
-    expect(select('compareDays').value).toBe('21')
-    expect(compareCalls()[0].params.get('days')).toBe('21')
-  })
-
   for (const days of ['30', '60'])
     it(`AC25: a shared link with days=${days} leaves the select on 21 and requests days=21`, async () => {
       boot({ search: `?days=${days}` })

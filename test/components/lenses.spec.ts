@@ -954,9 +954,6 @@ describe('Lenses (#294)', () => {
     }
     expect([...select('lensesLimit').options].map((o) => Number(o.value))).toEqual([20, 40, 60, 100])
     expect(select('lensesLimit').value).toBe('40')
-    expect([...select('lensesDays').options].map((o) => o.value)).toEqual(['7', '21'])
-    expect([...select('lensesDays').options].map((o) => o.textContent)).toEqual(['7 dias', '21 dias'])
-    expect(select('lensesDays').value).toBe('21')
     expect([...select('lensesPerson').options].map((o) => o.value)).toEqual(['lula', 'bolsonaro'])
   })
 

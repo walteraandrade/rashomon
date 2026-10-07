@@ -57,6 +57,16 @@ const mountAll = () => {
 
 const requested = (route: string) => urls.filter((u) => u.includes(`/${route}?`))
 
+const remount = async (search: string) => {
+  unmount(instance!)
+  target.innerHTML = ''
+  clearScopes()
+  urls.length = 0
+  setBoot({ ready: false })
+  mountAll()
+  await startBoot(search)
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
   clearScopes()
@@ -142,15 +152,13 @@ describe('Testimony (issue #296)', () => {
     await startBoot('?person=p1&days=30')
     expect(byId('testimonyDays').value).toBe('21')
     expect(requested('sources')[0]).toContain('days=21')
-    unmount(instance!)
-    target.innerHTML = ''
-    clearScopes()
-    urls.length = 0
-    setBoot({ ready: false })
-    mountAll()
-    await startBoot('?person=p1&days=60')
+    await remount('?person=p1&days=60')
     expect(byId('testimonyDays').value).toBe('21')
     expect(requested('testimony')[0]).toContain('days=21')
+    await remount('?person=p1&days=7')
+    expect(byId('testimonyDays').value).toBe('7')
+    expect(requested('sources')[0]).toContain('days=7&')
+    expect(requested('testimony')[0]).toContain('days=7&')
   })
 
   it('AC2: prefixed testimony.<key> seeds beat the bare key', async () => {
@@ -465,18 +473,18 @@ describe('Testimony (issue #296, review gaps)', () => {
     }
   })
 
-  it('a scored payload paints no img in the list; the empty recorte suggests a wider one', async () => {
+  it('a scored payload paints no img in the list; the empty recorte suggests a wider window only below 21 days', async () => {
     mountAll()
     await startBoot('?person=p1')
     expect(byId('testimonyList').querySelector('img')).toBeNull()
-    unmount(instance!)
-    target.innerHTML = ''
-    clearScopes()
     routes.testimony = empty
-    setBoot({ ready: false })
-    mountAll()
-    await startBoot('?person=p1')
-    expect(byId('testimonyList').textContent).toContain('Tente um período maior ou outra fonte')
+    await remount('?person=p1')
+    expect(byId('testimonyDays').value).toBe('21')
+    expect(byId('testimonyList').textContent).toContain('Tente outra fonte.')
+    expect(byId('testimonyList').textContent).not.toContain('período maior')
+    await remount('?person=p1&days=7')
+    expect(byId('testimonyDays').value).toBe('7')
+    expect(byId('testimonyList').textContent).toContain('Tente um período maior ou outra fonte.')
   })
 
   it('a resize during a reload keeps the old drawing and is-loading until it resolves', async () => {

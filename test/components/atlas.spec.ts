@@ -1004,6 +1004,18 @@ describe('Atlas (issue #297)', () => {
     expect(document.body.innerHTML).not.toMatch(/NaN/)
   })
 
+  it('atlas: the empty recorte suggests a wider window only below 21 days, the widest', async () => {
+    bodies.graph = graphOf([], { stats: stats({ about: 0 }) })
+    await start()
+    expect(select('days').value).toBe('21')
+    expect($('viewport').textContent).toContain('Experimente outra pessoa.')
+    expect($('viewport').textContent).not.toContain('período maior')
+    change('days', '7')
+    await settle()
+    expect($('viewport').textContent).toContain('Nenhum termo neste recorte.')
+    expect($('viewport').textContent).toContain('Experimente outra pessoa ou um período maior.')
+  })
+
   it('atlas: the figure never touches figure 2\'s #strip, #testimonyList or #outletList', async () => {
     const probe = document.createElement('div')
     probe.innerHTML = '<div id="strip">keep</div><div id="testimonyList">keep</div><div id="outletList">keep</div>'

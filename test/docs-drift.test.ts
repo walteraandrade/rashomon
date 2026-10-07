@@ -435,18 +435,21 @@ describe('the term dictionary is documented (issue #252)', () => {
   })
 })
 
-// Issue #270: facts about the 60-day window and retention. Each is a loose match on the fact,
-// so a page may be reworded or split without failing it.
-describe('docs state the 60-day window and retention (issue #270)', () => {
-  it('days takes 7, 30 or 60; a larger value, 365 included, snaps to 60; 45 reads as 30 and 46 as 60 (AC17)', () => {
-    assert.match(docsText, /\b7\b\W{1,6}\b30\b\W{1,6}(or|and)?\W{0,6}\b60\b/)
-    assert.match(docsText, /365[^.\n]{0,160}\b60\b/)
-    assert.match(docsText, /\b45\b[^.\n]{0,40}\b30\b[^.\n]{0,60}\b46\b[^.\n]{0,40}\b60\b/)
-    assert.doesNotMatch(docsText, /\b7\b\W{1,6}\b30\b\W{1,6}(or|and)?\W{0,6}\b365\b/)
+// Issue #313: facts about the 21-day window, retention and the tracked-only corpus. Each is a
+// loose match on the fact, so a page may be reworded or split without failing it.
+describe('docs state the 21-day window and retention (issue #313)', () => {
+  it('days takes 7 or 21; 14 reads as 7 and a larger value, 30, 60 and 365 included, snaps to 21; no page names 7/30/60 as the windows (AC29)', () => {
+    assert.match(docsText, /\b7\b\W{1,6}(or|and)?\W{0,6}\b21\b/)
+    assert.match(docsText, /\b14\b[^.\n]{0,60}\b7\b/)
+    assert.match(docsText, /\b30\b[^.\n]{0,40}\b60\b[^.\n]{0,40}\b365\b[^.\n]{0,120}\b21\b/)
+    assert.doesNotMatch(docsText, /\b7\b\W{1,6}\b30\b\W{1,6}(or|and)?\W{0,6}\b60\b/)
+    assert.doesNotMatch(docsText, /7\/30\/60/)
+    assert.doesNotMatch(docsText, /7, 30, 60/)
   })
 
-  it('ingest deletes docs older than the widest window (DAYS largest), with their four derived tables; person_attention and terms stay; the count is logged (AC18)', () => {
-    assert.match(docsText, /ingest[^.\n]*delet[^.\n]*(older|published (before|more than))[^.\n]*(widest|DAYS|60 days)/i)
+  it('ingest deletes docs older than the widest window (DAYS largest, 21 days), with their four derived tables; person_attention and terms stay; the count is logged (AC30)', () => {
+    assert.match(docsText, /ingest[^.\n]*delet[^.\n]*(older|published (before|more than))[^.\n]*(widest|DAYS|21 days)/i)
+    assert.match(docsText, /retention keeps 21 days/i)
     assert.match(docsText, /horizon[^.\n]*DAYS/)
     for (const t of ['doc_terms', 'doc_persons', 'doc_testimony', 'doc_candidates']) assert.match(docsText, new RegExp(t), t)
     assert.match(docsText, /person_attention[^.\n]*(not trimmed|never trimmed|not deleted|stay|survive|untouched)/i)
@@ -454,15 +457,48 @@ describe('docs state the 60-day window and retention (issue #270)', () => {
     assert.match(docsText, /retention:[^.\n]*deleted/)
   })
 
-  it('reindex cannot recover a deleted doc, and retention frees pages without shrinking pg_database_size (AC19)', () => {
+  it('rising baselines 14 days, the only value; rising at days=21 has an empty baseline because it lies beyond retention (AC30)', () => {
+    assert.match(docsText, /`baseline`[^.\n]{0,40}\*\*14\*\*[^.\n]{0,40}only value/i)
+    assert.match(docsText, /baseline[^.\n]{0,80}\b14\b[^.\n]{0,80}(only|default)/i)
+    assert.match(docsText, /rising[^]{0,80}days=21[^]{0,300}empty baseline|days=21[^]{0,300}baseline[^]{0,200}(retention|older)/i)
+    assert.match(docsText, /(beyond|older than|past|outside) (the )?retention/i)
+  })
+
+  it('the store writes only docs naming a tracked person, ingest reports dropped apart from new, candidates and stats.docs follow (AC31)', () => {
+    assert.match(docsText, /store[^.\n]*only (docs|documents)[^.\n]*(name|names)[^.\n]*tracked person/i)
+    assert.match(docsText, /\bdropped\b[^.\n]*(apart|separate|beside)[^.\n]*(written|new)|(written|new)[^.\n]*\bdropped\b/i)
+    assert.match(docsText, /fetched F, new W, dropped D/)
+    assert.match(docsText, /\/api\/candidates`? only sees names[^.\n]*tracked/i)
+    assert.match(docsText, /`stats\.docs`[^.\n]*`graph_scopes\.docs`[^.\n]*tracked|graph_scopes\.docs`? equals `graph_scopes\.tracked`/i)
+  })
+
+  it('reindex recovers only stored docs and deletes nothing; a removed person\'s docs leave with retention (AC32)', () => {
+    assert.match(docsText, /reindex[^.\n]*(reads|recomputes|recovers)[^.\n]*stored[^.\n]*(docs|documents)/i)
+    assert.match(docsText, /person added to `seed\.json`[^.\n]*history only from stored docs/i)
+    assert.match(docsText, /deletes nothing/i)
+    assert.match(docsText, /`pruneRemoved`[^.\n]*not delete[^.\n]*docs[^.\n]*retention/i)
+  })
+
+  it('reindex cannot recover a deleted doc, and retention frees pages without shrinking pg_database_size (AC33)', () => {
     assert.match(docsText, /reindex[^\n]*stored[^\n]*deleted[^\n]*(not recovered|gone|never recovered|cannot)/i)
     assert.match(docsText, /pg_database_size[^.\n]*(not|never|does not) shrink|not shrink[^.\n]*pg_database_size/i)
     assert.match(docsText, /vacuum/i)
   })
 
-  it('rising at days=60 has an empty baseline because it lies beyond retention (AC20)', () => {
-    assert.match(docsText, /rising[^]{0,80}days=60[^]{0,300}empty baseline|days=60[^]{0,300}baseline[^]{0,200}(retention|older)/i)
-    assert.match(docsText, /(beyond|older than|past|outside) (the )?retention/i)
+  it('describes the by-hand shrink: batched deletes with a WAL check, vacuum full on six tables with pnpm size, the deploy order, --if-missing and the orphaned blobs (AC33)', () => {
+    assert.match(docsText, /batches of 20[ ,\u202f]?000[^.\n]*|20[ ,\u202f]?000[^.\n]*batch/i)
+    assert.match(docsText, /\bWAL\b/)
+    assert.match(docsText, /older than 21 days[^.\n]*(batched|before the first ingest)|batched delete for the docs older than 21 days|then the same batched delete/i)
+    assert.match(docsText, /vacuum full[^.\n]*`docs`[^.\n]*`doc_terms`[^.\n]*`doc_candidates`[^.\n]*`doc_tone`[^.\n]*`doc_testimony`[^.\n]*`doc_persons`/i)
+    assert.match(docsText, /pnpm size[^.\n]*before and after|before and after[^.\n]*pnpm size/i)
+    assert.match(docsText, /merge,\s*`pnpm migrate`,\s*`pnpm aggregate`,\s*`pnpm materialize`/)
+    assert.match(docsText, /never `--if-missing`|`--if-missing`[^.\n]*(skip|would skip)[^.\n]*21/i)
+    assert.match(docsText, /`days=30` blobs[^.\n]*orphaned[^.\n]*harmless/i)
+  })
+
+  it('says the page warms recortes at 7 and 21 days, and a shared link with an unsupported days opens on 21 (AC34)', () => {
+    assert.match(docsText, /7 and 21 days/)
+    assert.match(docsText, /shared link with an unsupported `days`[^.\n]*opens on 21/i)
   })
 })
 

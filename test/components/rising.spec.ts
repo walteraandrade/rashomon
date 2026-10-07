@@ -1073,3 +1073,32 @@ describe('Rising (#292)', () => {
     })
   })
 })
+
+describe('Rising over the 7 and 14 day windows (issue #313 acceptance)', () => {
+  it('AC26: the request carries days=7 and baseline=14', async () => {
+    boot()
+    await start()
+    expect(risingCalls()).toHaveLength(1)
+    expect(risingCalls()[0].params.get('days')).toBe('7')
+    expect(risingCalls()[0].params.get('baseline')).toBe('14')
+  })
+
+  it('AC26: a payload that lacks present and words_* still paints by the older rule, saying 14 dias antes, with no NaN and no 30-day claim', async () => {
+    handlers['/rising'] = () => stale([term({ term: 'antigo', lift: 6 }), term({ term: 'recente', lift: 1 })], { recent: 6, baseline: 9 })
+    boot()
+    await start()
+    expect(words().map((w) => w.getAttribute('data-term')).sort()).toEqual(['antigo', 'recente'])
+    expect([...$('risingRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
+    expect($('risingAbout').textContent).toBe('A pessoa: 6 textos nos últimos 7 dias, 9 nos 14 dias antes.')
+    expect($('rising').textContent).not.toMatch(/\b(30|60) dias\b/)
+    expect($('rising').innerHTML).not.toMatch(/NaN|undefined/)
+  })
+
+  it('the figure key counts the documents over the 21 days it reads (7 + 14), never the 37 of the old 7 + 30', async () => {
+    boot()
+    await start()
+    const key = document.querySelector('#rising .figure-key')!.textContent ?? ''
+    expect(key).toContain('21 dias')
+    expect(key).not.toMatch(/37 dias/)
+  })
+})

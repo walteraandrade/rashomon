@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { db } from '../src/db.js'
+import { buildGraphAggregates } from '../src/aggregate.js'
 import { agendaFor, comentionFor, docsFor, graphFor, risingFor, sourcesFor, timelineFor, toneFor, weekFor } from '../src/graph.js'
 import { addDays, brtDate, brtMidnightUtc, DAYS, mondayOf, parseAgendaQuery, parseComentionQuery, parseDocsQuery, parseQuery, parseRisingQuery, parseTestimonyQuery, parseTimelineQuery, parseToneQuery, parseWeekQuery } from '../src/query.js'
 import { methods } from '../src/scorers/index.js'
@@ -1123,6 +1124,49 @@ describe('the 21-day horizon end to end (issue #313 acceptance)', () => {
     assert.equal(body.about.baseline, 0)
     assert.equal(body.about.words_baseline, 0)
     assert.ok(body.terms.every((t) => t.count_baseline_raw === 0))
+  })
+})
+
+describe('an empty window keeps the empty shape (issue #313 acceptance)', () => {
+  const quincas: Person = { id: 'quincas', name: 'Quincas', aliases: ['Quincas'] }
+  type Graph = { nodes: unknown[]; links: unknown[]; signature: unknown[]; stats: { docs: number; about: number } }
+  const graph = async (qs: string, id = 'quincas') => {
+    const res = await app.request(`/api/people/${id}/graph?${qs}`)
+    assert.equal(res.status, 200)
+    return (await res.json()) as Graph
+  }
+
+  before(async () => {
+    await seed()
+    await upsertPersonsP([...persons, quincas])
+    await insertDocP({ source: 'rss', uri: 'https://ac313-empty.example/q15', text: 'Quincas cita a pauta vazia', publishedAt: new Date(Date.now() - 15 * 86_400_000).toISOString(), domain: 'ac313-empty.example' }, [...persons, quincas])
+  })
+  after(reseed)
+
+  it('a person with no tracked doc in the last 7 days answers nothing there and her 15-day doc at 21', async () => {
+    const week = await graph('days=7')
+    assert.deepEqual([week.nodes, week.links, week.signature], [[], [], []])
+    assert.equal(week.stats.about, 0)
+    const wide = await graph('days=21')
+    assert.equal(wide.stats.about, 1)
+  })
+
+  it('/rising over a recorte with no tracked doc answers the documented empty shape with baseline 14', async () => {
+    const res = await app.request('/api/people/lula/rising?source=camara')
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { days: 7, baseline: 14, terms: [], present: [], outlets: [], about: { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 } })
+  })
+
+  it('a recorte with no tracked doc at all answers stats.docs 0 and no nodes at 7 and at 21 days, live and from the build', async () => {
+    const empty = async (days: number) => {
+      const body = await graph(`source=camara&days=${days}`, 'lula')
+      assert.deepEqual([body.nodes, body.links, body.signature], [[], [], []], `days=${days}`)
+      assert.equal(body.stats.docs, 0, `days=${days}`)
+      assert.equal(body.stats.about, 0, `days=${days}`)
+    }
+    for (const days of [7, 21]) await empty(days)
+    await buildGraphAggregates([...persons, quincas])
+    for (const days of [7, 21]) await empty(days)
   })
 })
 

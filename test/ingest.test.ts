@@ -753,6 +753,18 @@ describe('ingest reports dropped docs and keeps a 21-day horizon (issue #313 acc
     })
   })
 
+  it('a doc a collector returns older than 21 days is written and trimmed by the same run (collector lookbacks stay wider than retention)', async () => {
+    const old: RawDoc = { ...doc('https://ac313-lookback.example/d26', 'Lula discute a reforma tributária'), publishedAt: new Date(Date.now() - 26 * 86_400_000).toISOString() }
+    const fresh: RawDoc = { ...doc('https://ac313-lookback.example/d2', 'Lula discute a reforma administrativa'), publishedAt: new Date(Date.now() - 2 * 86_400_000).toISOString() }
+    const { report, logs } = await through(() => Effect.succeed([old, fresh]))
+    assert.equal(report.sources[0].written, 2)
+    assert.equal(report.sources[0].dropped, 0)
+    assert.ok(logs.includes('[rss] fetched 2, new 2, dropped 0'), JSON.stringify(logs))
+    assert.equal(await storedCount([old.uri]), 0)
+    assert.equal(await storedCount([fresh.uri]), 1)
+    assert.ok(report.deleted >= 1)
+  })
+
   it('retention deletes a doc aged 22 days, keeps one aged 20 days and logs the 21-day horizon (AC19)', async () => {
     const aged = (uri: string, days: number): RawDoc => ({ ...doc(uri, 'Lula discute a reforma tributária'), publishedAt: new Date(Date.now() - days * 86_400_000).toISOString() })
     const twenty = aged('https://ac313-retention.example/d20', 20)

@@ -663,6 +663,11 @@ describe('documented facts of the tracked-only corpus and the 21-day horizon (is
     assert.match(docsText, near('orphan', 'days=30|30-day|blob', 200))
   })
 
+  it('the by-hand shrink starts by deleting the docs no tracked person points at, in batches, and says nothing in the code does it (AC33)', () => {
+    assert.match(docsText, near('untracked|no `?doc_persons`? row', 'batch', 400))
+    assert.match(docsText, near('by hand', 'nothing in the code|no code|not in the code|run it deliberately|manual', 600))
+  })
+
   it('the page warms recortes at 7 and 21 days, and a shared link with an unsupported days opens on 21 (AC34)', () => {
     assert.match(docsText, near('warm', '\\b7\\b[^.\\n]{0,20}\\b21\\b', 300))
     assert.match(docsText, near('(shared link|link)', '(unsupported|retired|any value)[^.\\n]{0,160}opens? on 21|opens? on 21', 300))

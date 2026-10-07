@@ -31,6 +31,17 @@ export type IngestOptions = {
 
 const errorMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
+const rootMessage = (e: unknown, depth = 0): string =>
+  (e instanceof Error && e.cause !== undefined && depth < 8 ? rootMessage(e.cause, depth + 1) : '') || errorMessage(e)
+
+const failureLine = (e: unknown): string => {
+  const [at, cause] = e instanceof IngestFailure ? [` at ${e.stage}`, e.cause] : ['', e]
+  return `ingest failed${at}: ${rootMessage(cause) || String(cause)}`
+}
+
+export const logFailure = <A, R>(run: Effect.Effect<A, IngestFailure, R>): Effect.Effect<A, IngestFailure, R> =>
+  run.pipe(Effect.tapCause((cause) => Console.error(failureLine(Cause.squash(cause)))))
+
 type Registry = Partial<Record<Source, Collector>>
 
 // A collector failure or an unknown source name both cost that source alone: logged, `docs = []`, never propagates.
@@ -103,10 +114,8 @@ if (isMain) {
   const sqlClient = await runSql(SqlClient.SqlClient)
   const layer = Layer.merge(fetchClient, Layer.succeed(SqlClient.SqlClient, sqlClient))
   try {
-    await Effect.runPromise(Effect.provide(ingest(personsSeed, names), layer))
-  } catch (e) {
-    console.error(`ingest failed: ${errorMessage(e)}`)
-    process.exitCode = 1
+    const exit = await Effect.runPromiseExit(Effect.provide(logFailure(ingest(personsSeed, names)), layer))
+    if (Exit.isFailure(exit)) process.exitCode = 1
   } finally {
     await db.close()
   }

@@ -35,6 +35,7 @@
   ]
   const TICKS = [-10, -5, 0, 5, 10]
   const DAYS = ['7', '21']
+  const WIDEST = DAYS.at(-1)
   const GHOST_WIDTHS = ['', 'is-mid', 'is-short']
 
   let person = $state('')
@@ -46,6 +47,7 @@
   let stalePick = false
 
   let testimony = $state.raw<Testimony | null>(null)
+  let testimonyDays = $state('')
   let rows = $state.raw<OutletRow[] | null>(null)
   let testimonyPhase = $state<Phase>('ghost')
   let outletsPhase = $state<Phase>('ghost')
@@ -148,10 +150,10 @@
     detail: (data, qp) => ({ person: qp.get('person'), rows: data.length }),
   })
 
-  const testimonyFigure = createFigure<Testimony>({
+  const testimonyFigure = createFigure<{ testimony: Testimony; days: string }>({
     name: 'testimony',
     params: testimonyParams,
-    fetch: (qp, signal) => api.loadTestimony(qp.get('person')!, api.testimonyParams(asGraphOpts(qp)), signal),
+    fetch: async (qp, signal) => ({ testimony: await api.loadTestimony(qp.get('person')!, api.testimonyParams(asGraphOpts(qp)), signal), days: qp.get('days')! }),
     ghost: () => {
       if (testimony) testimonyDim = true
       else testimonyPhase = 'ghost'
@@ -160,13 +162,15 @@
       dropStalePick()
       // Read at paint time, never memoised, so a resize repaints at the current width.
       stripWidth = stripEl?.clientWidth || 860
-      testimony = data
+      testimony = data.testimony
+      testimonyDays = data.days
       testimonyPhase = 'data'
       testimonyDim = false
     },
     paintError: () => {
       dropStalePick()
       testimony = null
+      testimonyDays = ''
       testimonyPhase = 'error'
       testimonyDim = false
     },
@@ -260,7 +264,7 @@
     {:else if testimonyPhase === 'error'}
       <p class="note">Não foi possível carregar a avaliação.</p>
     {:else if testimony && !hasScore}
-      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método {testimony.method}).<br>{days === '21' ? 'Tente outra fonte.' : 'Tente um período maior ou outra fonte.'}</p></div>
+      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método {testimony.method}).<br>{testimonyDays === WIDEST ? 'Tente outra fonte.' : 'Tente um período maior ou outra fonte.'}</p></div>
     {:else if testimony && overall !== null}
       <dl class="verdict stat"><div><dt>Média do recorte</dt><dd style:--tone={testimonyColor(overall)}>{signed(overall)}</dd></div></dl><p class="verdict-class">{testimonyClass(overall)} · média de {fmt(testimony.overall.n)} {testimony.overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>
       {#if outlet !== 'all'}

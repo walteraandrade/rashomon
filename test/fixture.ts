@@ -1,5 +1,5 @@
 import { db, migrateP } from '../src/db.js'
-import { INSERT_DOC_TERMS_SQL, insertDocP, upsertPersonsP } from '../src/store.js'
+import { INSERT_DOC_TERMS_SQL, insertDocP, tonedSources, upsertPersonsP } from '../src/store.js'
 import { countryOf } from '../src/extract.js'
 import type { Person, RawDoc } from '../src/types.js'
 
@@ -482,12 +482,26 @@ export const derivedRows = async () => ({
   candidates: (await db.query<{ k: string }>(`select doc_id || ':' || name as k from doc_candidates order by 1`)).rows.map((r) => r.k),
 })
 
-// A stored doc with no derived row at all: the state an alias edit leaves behind and the writer can no longer make, which reindex, export-docs, score, retention and purge still have to handle.
+// A stored doc with no derived row at all: the state an alias edit leaves behind and the writer can no longer make, which reindex, export-docs, score, retention and purge still have to handle. Tone follows the writer: only gdelt/gkg keep it, with its doc_tone row.
 export const insertOrphanDoc = async (doc: RawDoc) => {
   await db.query(
-    `insert into docs (source, uri, text, published_at, extra_terms, domain, country, tone, extra_names) values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb)
-     on conflict (uri) do nothing`,
-    [doc.source, doc.uri, doc.text, doc.publishedAt, JSON.stringify(doc.extraTerms ?? []), doc.domain ?? null, countryOf(doc.domain) ?? null, doc.tone ?? null, JSON.stringify(doc.extraNames ?? [])],
+    `with ins as (
+       insert into docs (source, uri, text, published_at, extra_terms, domain, country, tone, extra_names) values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb)
+       on conflict (uri) do nothing
+       returning id, tone
+     )
+     insert into doc_tone (doc_id, tone) select id, tone from ins where tone is not null`,
+    [
+      doc.source,
+      doc.uri,
+      doc.text,
+      doc.publishedAt,
+      JSON.stringify(doc.extraTerms ?? []),
+      doc.domain ?? null,
+      countryOf(doc.domain) ?? null,
+      tonedSources.includes(doc.source) ? doc.tone ?? null : null,
+      JSON.stringify(doc.extraNames ?? []),
+    ],
   )
 }
 

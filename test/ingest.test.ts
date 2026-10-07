@@ -8,7 +8,7 @@ import { db, runSql } from '../src/db.js'
 import { fetchClient } from '../src/http.js'
 import { collectors, defaultSources } from '../src/collectors/index.js'
 import { RssError } from '../src/collectors/rss.js'
-import { ingest, IngestFailure } from '../src/ingest.js'
+import { ingest, IngestFailure, logFailure } from '../src/ingest.js'
 import { DAYS } from '../src/query.js'
 import { insertDocP } from '../src/store.js'
 import type { RawDoc, Source } from '../src/types.js'
@@ -256,6 +256,35 @@ describe('ingest', () => {
     assert.ok(failure.cause instanceof SqlError.SqlError)
     const { rows } = await db.query<{ n: number | string }>(`select count(*) as n from docs where uri = $1`, [uri])
     assert.equal(Number(rows[0].n), 1, 'rss must have already reached insertDocs before analyzeTables failed')
+  })
+
+  it('logFailure prints the failed stage and the SQL cause message, never a bare "ingest failed: "', async () => {
+    const uri = 'https://ingest-test.example/failureline1'
+    const layer = await testLayer(/^analyze graph_scopes$/)
+    const { exit, errors } = await Effect.runPromise(
+      run(logFailure(ingest(persons, ['rss'], { collectors: { rss: () => Effect.succeed([doc(uri, 'Lula recebe uma comitiva')]) } })), layer),
+    )
+    assert.ok(Exit.isFailure(exit))
+    assert.equal(failureOf(exit).stage, 'analyzeTables')
+    assert.deepEqual(
+      errors.filter((line) => line.startsWith('ingest failed')),
+      ['ingest failed at analyzeTables: failingSql: analyze graph_scopes'],
+    )
+  })
+
+  // buildGraphAggregates runs on db.ts's own connection, out of failingSql's reach: the cause is
+  // built in the shape @effect/sql-pg gives a server error, its message one level under the reason.
+  it('logFailure prints the driver message under a SqlError reason that carries its own', async () => {
+    const timeout = new SqlError.SqlError({
+      reason: new SqlError.StatementTimeoutError({
+        cause: new Error('canceling statement due to statement timeout'),
+        message: 'PgConnection: The server reported an error',
+      }),
+    })
+    const { errors } = await Effect.runPromise(
+      run(logFailure(Effect.fail(new IngestFailure({ stage: 'buildGraphAggregates', cause: timeout }))), await testLayer()),
+    )
+    assert.deepEqual(errors, ['ingest failed at buildGraphAggregates: canceling statement due to statement timeout'])
   })
 
   it('respects names order, one source at a time', async () => {

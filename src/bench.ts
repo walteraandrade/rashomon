@@ -168,7 +168,7 @@ const measurePhase = async () => {
     )
   ).rows.map((r) => r.id)
 
-  const scope = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
+  const scope = { days: 21, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
   const docs = { ...scope, term: TERM, kind: 'word', limit: 50, offset: 0, day: '', with: '' }
   const plans: [string, Sql][] = [
     ['graph', queries.graph(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
@@ -178,16 +178,16 @@ const measurePhase = async () => {
     ['docsCount', queries.docsCount(person, docs)],
     ['timeline', queries.timeline(person, { ...docs, days: 90, bucket: 'day' })],
     ['week', queries.week(person, { ...scope, days: 7, limit: 8 })],
-    ['rising', queries.rising(person, { ...scope, days: 7, baseline: 30, min: 3, limit: 20 })],
-    ['tone', queries.tone({ days: 30, min: 3 })],
-    ['testimonySummary', queries.testimonySummary(person, { days: 30, source: 'all', method: 'stub', min: 3 })],
+    ['rising', queries.rising(person, { ...scope, days: 7, baseline: 14, min: 3, limit: 20 })],
+    ['tone', queries.tone({ days: 21, min: 3 })],
+    ['testimonySummary', queries.testimonySummary(person, { days: 21, source: 'all', method: 'stub', min: 3 })],
     ['candidates', queries.candidates({ days: 7, min: 5, limit: 50 })],
     ['graphFast', queries.graphFast(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
-    ['agenda', queries.agenda({ days: 30, source: 'all', min: 5, limit: 30 })],
+    ['agenda', queries.agenda({ days: 21, source: 'all', min: 5, limit: 30 })],
     ['compare', queries.compare(person, compareWith, { ...scope, limit: 40, bridges: false })],
     ['compareFast', queries.compareFast(person, compareWith, { ...scope, limit: 40, bridges: false })],
     ['lenses', queries.lenses(person, {
-      days: 30,
+      days: 21,
       kind: 'all',
       limit: 40,
       a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
@@ -195,15 +195,15 @@ const measurePhase = async () => {
       bridges: false,
     })],
     ['lensesFast', queries.lensesFast(person, {
-      days: 30,
+      days: 21,
       kind: 'all',
       limit: 40,
       a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
       b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
       bridges: false,
     })],
-    ['comention', queries.comention({ days: 30, source: 'all', lean: 'all', min: 3 })],
-    ['attention', queries.attention(person, { days: 30 })],
+    ['comention', queries.comention({ days: 21, source: 'all', lean: 'all', min: 3 })],
+    ['attention', queries.attention(person, { days: 21 })],
     ['termTestimony', queries.termTestimony(person, scope, 'stub', ids)],
     ['weekTestimony', queries.weekTestimony(person, { ...scope, days: 7, limit: 8 }, 'stub')],
   ]

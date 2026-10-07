@@ -24,9 +24,9 @@ export const snapTo = (set: readonly number[], v: string | undefined, d: number)
   return set.reduce((best, x) => (Math.abs(x - n) < Math.abs(best - n) ? x : best))
 }
 
-// Only these three windows are cache keys; all route defaults (30 or 7) are members. The largest
+// Only these windows are cache keys; every route default (21 or 7) is a member. The largest
 // one is also the retention horizon (ingest.ts deletes docs older than it).
-export const DAYS = [7, 30, 60]
+export const DAYS = [7, 21]
 
 export const snapDays = (v: string | undefined, d: number): number => snapTo(DAYS, v, d)
 
@@ -81,7 +81,7 @@ export const brtMidnightUtc = (day: string): Date => {
   // both cases to standard time, which is the later of the two. Taking the later one is what
   // keeps this in step with `at time zone` on every Brazilian transition since 1951 (the one
   // exception, 1950-04-16, fell back at 01:00 rather than midnight, so neither probe lands past
-  // it; keepDay only ever asks about dates inside a 7/30/60-day window, so it is unreachable).
+  // it; keepDay only ever asks about dates inside a 7/21-day window, so it is unreachable).
   const first = naive - zoneOffsetMinutes(new Date(naive), WEEK_TZ) * 60_000
   const second = naive - zoneOffsetMinutes(new Date(first), WEEK_TZ) * 60_000
   return new Date(Math.max(first, second))
@@ -145,8 +145,8 @@ export const SMALL_LIMITS = LIMITS.filter((x) => x <= 100)
 // 1 is "no floor", used by acceptance tests against the six-doc fixture.
 export const MINS = [1, 2, 3, 5]
 
-// Nothing in src/ui sends `baseline`; the only reachable value is rising's default.
-export const BASELINES = [30]
+// The baseline is the span right before the recent window, so days + baseline stays at retention.
+export const BASELINES = [14]
 
 // A page of docs is 50 by default; offsets are multiples of 50 up to 1000.
 export const OFFSETS = Array.from({ length: 21 }, (_, i) => i * 50)
@@ -215,7 +215,7 @@ export const parseScope = (q: Record<string, string | undefined>, { days }: { da
 })
 
 export const parseQuery = (q: Record<string, string | undefined>): GraphQuery => ({
-  ...parseScope(q, { days: 30 }),
+  ...parseScope(q, { days: 21 }),
   limit: snapTo(LIMITS, q.limit, 40),
   min: snapTo(MINS, q.min, 2),
   sort: q.sort === 'pmi' ? 'pmi' : 'count',
@@ -227,7 +227,7 @@ export const parseQuery = (q: Record<string, string | undefined>): GraphQuery =>
 
 // personId is the route's own :id, rejecting a self-referential `with`; omitted by every caller that predates it.
 export const parseDocsQuery = (q: Record<string, string | undefined>, personId = '', now = new Date()): DocsQuery => {
-  const scope = parseScope(q, { days: 30 })
+  const scope = parseScope(q, { days: 21 })
   const day = keepDay(q.day, scope.days, now)
   return {
     ...scope,
@@ -242,20 +242,20 @@ export const parseDocsQuery = (q: Record<string, string | undefined>, personId =
 
 export const parseRisingQuery = (q: Record<string, string | undefined>): RisingQuery => ({
   ...parseScope(q, { days: 7 }),
-  baseline: snapTo(BASELINES, q.baseline, 30),
+  baseline: snapTo(BASELINES, q.baseline, 14),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
   min: snapTo(MINS, q.min, 3),
 })
 
 export const parseTimelineQuery = (q: Record<string, string | undefined>): TimelineQuery => ({
-  ...parseScope(q, { days: 30 }),
+  ...parseScope(q, { days: 21 }),
   term: normalize((q.term ?? '').trim()),
   bucket: q.bucket === 'day' ? 'day' : 'week',
 })
 
 // Dedicated parser: min defaults to 3 here, distinct from GraphQuery.min's 2.
 export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery => ({
-  days: snapDays(q.days, 30),
+  days: snapDays(q.days, 21),
   min: snapTo(MINS, q.min, 3),
 })
 
@@ -263,7 +263,7 @@ export const parseToneQuery = (q: Record<string, string | undefined>): ToneQuery
 const AGENDA_LIMIT = 30
 
 export const parseAgendaQuery = (q: Record<string, string | undefined>): AgendaQuery => ({
-  days: snapDays(q.days, 30),
+  days: snapDays(q.days, 21),
   source: parseSourceList(q.source),
   min: snapTo(MINS, q.min, 5),
   limit: AGENDA_LIMIT,
@@ -272,7 +272,7 @@ export const parseAgendaQuery = (q: Record<string, string | undefined>): AgendaQ
 // Dedicated parser: min defaults to 3, a separate literal so changing parseToneQuery's cannot
 // silently change this one.
 export const parseTestimonyQuery = (q: Record<string, string | undefined>): TestimonyQuery => {
-  const { days, source } = parseScope(q, { days: 30 })
+  const { days, source } = parseScope(q, { days: 21 })
   return {
     days,
     source,
@@ -283,7 +283,7 @@ export const parseTestimonyQuery = (q: Record<string, string | undefined>): Test
 
 // No domain/kind/sort (see ComentionQuery); min defaults to 3, like /api/tone and /api/rising.
 export const parseComentionQuery = (q: Record<string, string | undefined>): ComentionQuery => ({
-  days: snapDays(q.days, 30),
+  days: snapDays(q.days, 21),
   source: parseSourceList(q.source),
   lean: parseLeanList(q.lean),
   min: snapTo(MINS, q.min, 3),
@@ -298,7 +298,7 @@ export const parseCandidatesQuery = (q: Record<string, string | undefined>): Can
 
 // No `min` (see CompareQuery). limit snaps to SMALL_LIMITS, capped at 100.
 export const parseCompareQuery = (q: Record<string, string | undefined>): CompareQuery => ({
-  ...parseScope(q, { days: 30 }),
+  ...parseScope(q, { days: 21 }),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
   // `bridges=1` opts in, exactly like testimony's/communities' bare flag: anything else is absent.
   bridges: q.bridges === '1',
@@ -325,7 +325,7 @@ export const parseLens = (raw: string | undefined): LensSide => {
 
 // No `min`, limit snaps to SMALL_LIMITS: same reasons as parseCompareQuery.
 export const parseLensesQuery = (q: Record<string, string | undefined>): LensesQuery => ({
-  days: snapDays(q.days, 30),
+  days: snapDays(q.days, 21),
   kind: parseKindList(q.kind),
   limit: snapTo(SMALL_LIMITS, q.limit, 40),
   a: parseLens(q.a),
@@ -334,7 +334,7 @@ export const parseLensesQuery = (q: Record<string, string | undefined>): LensesQ
 })
 
 export const parseAttentionQuery = (q: Record<string, string | undefined>): AttentionQuery => ({
-  days: snapDays(q.days, 30),
+  days: snapDays(q.days, 21),
 })
 
 export const parseWeekQuery = (q: Record<string, string | undefined>): WeekQuery => ({

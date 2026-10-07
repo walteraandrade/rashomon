@@ -7,6 +7,15 @@ import { summary, warm, warmFailed, WARM_HEADERS, warmPaths, WARM_DAYS, type War
 // Never hits the network: fetch is injected.
 
 describe('warmPaths', () => {
+  it('warmPaths asks only 7 and 21: every days is one of them and none is a retired window (issue #313)', () => {
+    assert.deepEqual([...WARM_DAYS], ['7', '21'])
+    const paths = warmPaths([{ id: 'lula' }, { id: 'tarcisio' }, { id: 'bolsonaro' }])
+    assert.equal(paths.length, 1 + 3 * 2 * 3)
+    const days = new Set(paths.filter((p) => p !== '/api/people').map((p) => new URLSearchParams(p.split('?')[1]).get('days')))
+    assert.deepEqual([...days].sort(), ['21', '7'])
+    assert.ok(paths.every((p) => !/days=(30|60|365)\b/.test(p)))
+  })
+
   it('is /api/people plus graph, sources and testimony per person and window, in the page\'s own querystring order', () => {
     const paths = warmPaths([{ id: 'lula' }, { id: 'tarcísio' }])
     assert.equal(paths.length, 1 + 2 * WARM_DAYS.length * 3)
@@ -15,8 +24,8 @@ describe('warmPaths', () => {
     assert.equal(paths[1], '/api/people/lula/graph?' + params(opts))
     assert.equal(paths[2], '/api/people/lula/sources?' + sourcesParams(opts))
     assert.equal(paths[3], '/api/people/lula/testimony?' + testimonyParams(opts))
-    assert.ok(paths.some((p) => p.startsWith('/api/people/tarc%C3%ADsio/graph?days=30&')))
-    assert.ok(paths.every((p) => !/days=(60|365)\b/.test(p)), 'the longest window stays cold on purpose')
+    assert.ok(paths.some((p) => p.startsWith('/api/people/tarc%C3%ADsio/graph?days=21&')))
+    assert.ok(paths.every((p) => !/days=(30|60|365)\b/.test(p)), 'a retired window is never warmed')
   })
 })
 

@@ -15,7 +15,7 @@ import './close.js'
 const pexec = promisify(execFile)
 
 const [lula, tarcisio] = persons
-const ctx = { person: lula, other: tarcisio, ids: ['word:reforma', 'word:tributaria'], term: 'reforma', window: 30 }
+const ctx = { person: lula, other: tarcisio, ids: ['word:reforma', 'word:tributaria'], term: 'reforma', window: 21 }
 
 const cannedPlan = [
   'Limit  (cost=1.00..2.00 rows=40 width=8) (actual time=1.0..2.0 rows=40 loops=1)',
@@ -83,11 +83,11 @@ describe('prod-explain rendering', () => {
     const rendered = renderCases(queries, ctx, caseNames)
     assert.deepEqual(rendered.map((r) => r.name), names)
     const expected = {
-      linksFast: queries.linksFast(lula, { days: 30, source: 'all' }, ctx.ids),
-      compareFast: queries.compareFast(lula, tarcisio, { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'word,hashtag,phrase,org', limit: 40, bridges: false }),
+      linksFast: queries.linksFast(lula, { days: 21, source: 'all' }, ctx.ids),
+      compareFast: queries.compareFast(lula, tarcisio, { days: 21, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'word,hashtag,phrase,org', limit: 40, bridges: false }),
     }
     const lensesFast = queries.lensesFast(lula, {
-      days: 30,
+      days: 21,
       kind: 'word,hashtag,phrase,org',
       limit: 40,
       bridges: false,
@@ -194,8 +194,8 @@ describe('prod-explain run', () => {
     assert.equal(sent[first - 1].text, 'begin transaction read only')
     assert.equal(sent[first + 1].text, 'rollback')
     const sections = result.report.split('### ').slice(1)
-    assert.match(sections[0], /^graph \(lula, 30d\)/)
-    assert.match(sections[1], /^compare \(lula vs bolsonaro, 30d\)/)
+    assert.match(sections[0], /^graph \(lula, 21d\)/)
+    assert.match(sections[1], /^compare \(lula vs bolsonaro, 21d\)/)
     assert.ok(sections[0].indexOf('| cold |') > 0 && sections[0].indexOf('| cold |') < sections[0].indexOf('| warm |'))
     assert.match(result.report, /\| cold \| 25412\.3 \| 4\.1 \| 120 \| 88 \| 40 \| 41 \|/)
     assert.match(result.report, /flagged lines \(cold\):\n {2}Buckets: 1024 {2}Batches: 16/)

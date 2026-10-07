@@ -115,3 +115,14 @@ describe('help.svelte.ts: openHelp and closeHelp (link interception lives in tes
     }
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('the reading guide names the 7 and 21 day windows (issue #313 acceptance)', () => {
+  const guideText = () => pageMarkup('/como-ler').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+
+  it('the prerendered /como-ler names no 30- or 60-day window and says 14 dias antes for the rising baseline (AC28)', () => {
+    const text = guideText()
+    assert.doesNotMatch(text, /\b(30|60) dias\b/)
+    assert.match(text, /14 dias antes/)
+  })
+})

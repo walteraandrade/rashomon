@@ -951,3 +951,49 @@ describe('parseDocsQuery.week (issue #215)', () => {
     assert.equal(typeof parseDocsQuery({}).week, 'string')
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('the 7 and 21 day windows (issue #313 acceptance)', () => {
+  it('DAYS equals [7, 21] and Math.max(...DAYS) is 21 (AC14)', () => {
+    assert.deepEqual([...DAYS], [7, 21])
+    assert.equal(Math.max(...DAYS), 21)
+  })
+
+  it('snapDays reads 14 as 7, 15 as 21, and 30, 60, 365 and 9999 as 21; undefined and abc return the caller\'s default (AC14)', () => {
+    const expected: [string, number][] = [['7', 7], ['14', 7], ['15', 21], ['21', 21], ['30', 21], ['60', 21], ['365', 21], ['9999', 21]]
+    for (const [value, days] of expected) assert.equal(snapDays(value, 21), days, value)
+    assert.equal(snapDays(undefined, 21), 21)
+    assert.equal(snapDays('abc', 21), 21)
+    assert.equal(snapDays(undefined, 7), 7)
+    assert.equal(snapDays('abc', 7), 7)
+  })
+
+  it('parsing {} yields days in DAYS, 21 everywhere except rising, week and candidates, which keep 7 (AC15)', () => {
+    const at21 = [parseQuery, parseDocsQuery, parseTimelineQuery, parseToneQuery, parseAgendaQuery, parseTestimonyQuery, parseComentionQuery, parseCompareQuery, parseLensesQuery, parseAttentionQuery]
+    for (const parser of at21) {
+      const { days } = (parser as (q: Record<string, string>) => { days: number })({})
+      assert.ok(DAYS.includes(days), parser.name)
+      assert.equal(days, 21, parser.name)
+    }
+    for (const parser of [parseRisingQuery, parseWeekQuery, parseCandidatesQuery]) {
+      const { days } = (parser as (q: Record<string, string>) => { days: number })({})
+      assert.ok(DAYS.includes(days), parser.name)
+      assert.equal(days, 7, parser.name)
+    }
+  })
+
+  it('a retired days value reads as the 21-day window on every parser that reads days (AC15)', () => {
+    for (const parser of [parseQuery, parseDocsQuery, parseTimelineQuery, parseToneQuery, parseAgendaQuery, parseTestimonyQuery, parseComentionQuery, parseCompareQuery, parseLensesQuery, parseAttentionQuery]) {
+      for (const days of ['30', '60', '365']) assert.equal((parser as (q: Record<string, string>) => { days: number })({ days }).days, 21, `${parser.name} days=${days}`)
+    }
+  })
+
+  it('BASELINES equals [14] and parseRisingQuery reads 14 for a missing or retired baseline (AC16)', () => {
+    assert.deepEqual([...BASELINES], [14])
+    assert.equal(parseRisingQuery({}).baseline, 14)
+    assert.equal(parseRisingQuery({ baseline: '30' }).baseline, 14)
+    const wide = parseRisingQuery({ days: '21' })
+    assert.equal(wide.days, 21)
+    assert.equal(wide.baseline, 14)
+  })
+})

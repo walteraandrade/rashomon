@@ -118,3 +118,24 @@ describe('warm and the store', () => {
     assert.equal(warmFailed([{ path: '/a', status: 503, cache: 'HIT', server: null, store: 'hit', ms: 1 }]), true)
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('warmPaths over the 7 and 21 day windows (issue #313 acceptance)', () => {
+  const people = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }))
+  const daysOf = (path: string) => new URL(path, 'http://warm.local').searchParams.get('days')
+
+  it('N people yield 1 + N x 2 x 3 paths, every days is 7 or 21 and none carries a retired window (AC22)', () => {
+    for (const n of [0, 1, 3, 27]) {
+      const paths = warmPaths(people(n))
+      assert.equal(paths.length, 1 + n * 2 * 3, `${n} people`)
+      for (const path of paths.filter((p) => p !== '/api/people')) assert.ok(['7', '21'].includes(daysOf(path) ?? ''), path)
+      assert.ok(paths.every((p) => !/days=(30|60)\b/.test(p)), `${n} people`)
+    }
+  })
+
+  it('each person is warmed at both windows on graph, sources and testimony (AC22)', () => {
+    const paths = warmPaths([{ id: 'lula' }])
+    for (const route of ['graph', 'sources', 'testimony'])
+      for (const days of ['7', '21']) assert.ok(paths.some((p) => p.startsWith(`/api/people/lula/${route}?`) && daysOf(p) === days), `${route} ${days}`)
+  })
+})

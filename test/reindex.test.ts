@@ -247,3 +247,47 @@ describe('reindex builds the lexicon and tags the corpus with it', () => {
     for (const term of termsOfKind(graph.nodes, 'phrase')) assert.ok(!term.split(' ').includes('bolsonaro'), `${term} names the person, it is not said about them`)
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('reindex over a tracked-only store (issue #313 acceptance)', () => {
+  const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
+  const uri = (n: string) => `https://ac313-reindex.example/${n}`
+  const text = 'Davi Alcolumbre defende a soberania nacional e a infraestrutura portuária'
+  const sourceDoc = { source: 'rss' as const, text, publishedAt: new Date().toISOString(), domain: 'ac313-reindex.example' }
+  const docCount = async () => (await db.query<{ n: number }>(`select count(*)::int as n from docs`)).rows[0].n
+  const storedCount = async (u: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [u])).rows[0].n
+  const taggedOf = async (u: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [u])).rows.map((r) => r.person_id)
+
+  before(seed)
+  after(reseed)
+
+  it('reindexAll with a new person does not store the doc the writer dropped (AC13)', async () => {
+    const dropped = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999'
+    assert.equal(await storedCount(dropped), 0)
+    await reindexAll([...persons, alcolumbre])
+    assert.equal(await storedCount(dropped), 0)
+    assert.deepEqual(await taggedOf(dropped), [])
+    assert.equal(await orphanDocCount(), 0)
+  })
+
+  it('a raw-stored orphan that starts matching after a person is added is tagged (AC13)', async () => {
+    await insertOrphanDoc({ ...sourceDoc, uri: uri('starts-matching') })
+    await reindexAll(persons)
+    assert.deepEqual(await taggedOf(uri('starts-matching')), [])
+    await reindexAll([...persons, alcolumbre])
+    assert.deepEqual(await taggedOf(uri('starts-matching')), ['alcolumbre'])
+    assert.ok((await termsOf(uri('starts-matching'))).includes('soberania'))
+  })
+
+  it('a stored doc that stops matching anyone stays stored with zero doc_persons rows, and reindex deletes nothing (AC13)', async () => {
+    await reindexAll([...persons, alcolumbre])
+    assert.deepEqual(await taggedOf(uri('starts-matching')), ['alcolumbre'])
+    const before = await docCount()
+    await reindexAll(persons)
+    assert.equal(await docCount(), before)
+    assert.equal(await storedCount(uri('starts-matching')), 1)
+    assert.deepEqual(await taggedOf(uri('starts-matching')), [])
+    assert.deepEqual(await termsOf(uri('starts-matching')), [])
+  })
+})

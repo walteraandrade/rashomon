@@ -41,3 +41,30 @@ describe('migrate drops the retired windows (issues #270, #313)', () => {
     assert.deepEqual(RETIRED_WINDOW_DAYS.filter((d) => DAYS.includes(d)), [])
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('migrate and the retired windows (issue #313 acceptance)', () => {
+  before(async () => {
+    await seed()
+    for (const t of WINDOWED) await db.exec(`delete from ${t}`)
+    for (const days of [365, 30, 7, 60, 21]) await seedWindow(days)
+  })
+  after(async () => {
+    for (const t of WINDOWED) await db.exec(`delete from ${t}`)
+    await reseed()
+  })
+
+  it('migrate() removes days 30, 60 and 365 from all six windowed tables, keeps 7 and 21, and a second call changes nothing (AC21)', async () => {
+    assert.equal(WINDOWED.length, 6)
+    await migrateP()
+    const first = Object.fromEntries(await Promise.all(WINDOWED.map(async (t) => [t, await daysIn(t)] as const)))
+    for (const t of WINDOWED) assert.deepEqual(first[t], [7, 21], t)
+    await migrateP()
+    for (const t of WINDOWED) assert.deepEqual(await daysIn(t), first[t], `${t} after a second migrate`)
+  })
+
+  it('RETIRED_WINDOW_DAYS names 30, 60 and 365 and shares no member with DAYS (AC21)', () => {
+    assert.deepEqual([...RETIRED_WINDOW_DAYS].sort((a, b) => a - b), [30, 60, 365])
+    assert.deepEqual(RETIRED_WINDOW_DAYS.filter((d) => (DAYS as readonly number[]).includes(d)), [])
+  })
+})

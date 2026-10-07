@@ -691,3 +691,78 @@ describe('ingest retention (issue #270)', () => {
     assert.equal(rows[0].n, 0, 'buildGraphAggregates never ran')
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('ingest reports dropped docs and keeps a 21-day horizon (issue #313 acceptance)', () => {
+  after(reseed)
+
+  const through = async (source: () => Effect.Effect<RawDoc[], never>, names: string[] = ['rss']) => {
+    const { exit, logs } = await Effect.runPromise(run(ingest(persons, names, { collectors: { rss: source } }), await testLayer()))
+    assert.ok(Exit.isSuccess(exit))
+    return { report: exit.value, logs }
+  }
+  const storedCount = async (uris: string[]) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = any($1::text[])`, [uris])).rows[0].n
+
+  it('sources[i] carries dropped, fetched includes dropped docs and the log line reads fetched, new, dropped (AC8)', async () => {
+    const batch = [doc('https://ac313-ingest.example/a1', 'Lula fala sobre a safra'), doc('https://ac313-ingest.example/a2', 'Congresso vota a pauta'), doc('https://ac313-ingest.example/a3', 'Governo anuncia obras')]
+    const { report, logs } = await through(() => Effect.succeed(batch))
+    const [rss] = report.sources
+    assert.equal(rss.fetched, 3)
+    assert.equal(rss.written, 1)
+    assert.equal(rss.dropped, 2)
+    assert.ok(logs.includes('[rss] fetched 3, new 1, dropped 2'), JSON.stringify(logs))
+  })
+
+  it('enriched and failed are appended after dropped, only when non-zero (AC8)', async () => {
+    const uri = 'https://ac313-ingest.example/e1'
+    await through(() => Effect.succeed([doc(uri, 'Lula fala sobre a safra')]))
+    const longer = doc(uri, 'Lula fala sobre a safra e detalha o plano de exportação para os próximos meses')
+    const { logs } = await through(() => Effect.succeed([longer, doc('https://ac313-ingest.example/e2', 'Governo anuncia obras')]))
+    assert.ok(logs.includes('[rss] fetched 2, new 0, dropped 1, enriched 1'), JSON.stringify(logs))
+    assert.ok(!logs.some((line) => line.includes('failed')))
+  })
+
+  it('a source that fails or is unknown reports dropped 0 (AC8)', async () => {
+    const { report } = await through(() => Effect.fail(new RssError({ message: 'boom' })) as unknown as Effect.Effect<RawDoc[], never>, ['rss', 'no-such-source'])
+    assert.deepEqual(report.sources.map((s) => s.dropped), [0, 0])
+  })
+
+  it('a source returning only untracked docs reports new 0, dropped N and writes no row (AC8)', async () => {
+    const only = [doc('https://ac313-ingest.example/u1', 'Congresso vota a pauta'), doc('https://ac313-ingest.example/u2', 'Governo anuncia obras')]
+    const { report, logs } = await through(() => Effect.succeed(only))
+    assert.equal(report.sources[0].written, 0)
+    assert.equal(report.sources[0].dropped, 2)
+    assert.equal(report.sources[0].fetched, 2)
+    assert.ok(logs.includes('[rss] fetched 2, new 0, dropped 2'), JSON.stringify(logs))
+    assert.equal(await storedCount(only.map((d) => d.uri)), 0)
+  })
+
+  it('dropped docs do not count toward ANALYZE_MIN_DOCS and the line carries written only (AC9)', async () => {
+    const mixed = (tag: string, trackedCount: number) => [
+      ...Array.from({ length: trackedCount }, (_, i) => doc(`https://ac313-ingest.example/${tag}-t${i}`, `Lula fala sobre o tema ${tag} ${i}`)),
+      ...Array.from({ length: 4 }, (_, i) => doc(`https://ac313-ingest.example/${tag}-n${i}`, `Governo anuncia obras ${tag} ${i}`)),
+    ]
+    await withEnv({ ANALYZE_MIN_DOCS: '3' }, async () => {
+      const { logs } = await through(() => Effect.succeed(mixed('below', 2)))
+      assert.ok(logs.some((line) => /^skipped analyze: 2 new docs/.test(line)), JSON.stringify(logs))
+      assert.ok(!logs.some((line) => line.startsWith('analyzed ')), 'two written plus four dropped must not reach the floor of three')
+    })
+    await withEnv({ ANALYZE_MIN_DOCS: '3' }, async () => {
+      const { logs } = await through(() => Effect.succeed(mixed('above', 3)))
+      assert.ok(logs.some((line) => /^analyzed .*after 3 new docs/.test(line)), JSON.stringify(logs))
+    })
+  })
+
+  it('retention deletes a doc aged 22 days, keeps one aged 20 days and logs the 21-day horizon (AC19)', async () => {
+    const aged = (uri: string, days: number): RawDoc => ({ ...doc(uri, 'Lula discute a reforma tributária'), publishedAt: new Date(Date.now() - days * 86_400_000).toISOString() })
+    const twenty = aged('https://ac313-retention.example/d20', 20)
+    const twentyTwo = aged('https://ac313-retention.example/d22', 22)
+    assert.equal(await insertDocP(twenty, persons), true)
+    assert.equal(await insertDocP(twentyTwo, persons), true)
+    const { report, logs } = await through(() => Effect.succeed([]))
+    assert.equal(await storedCount([twentyTwo.uri]), 0)
+    assert.equal(await storedCount([twenty.uri]), 1)
+    assert.ok(report.deleted >= 1)
+    assert.ok(logs.includes(`retention: deleted ${report.deleted} docs older than 21 days`), JSON.stringify(logs))
+  })
+})

@@ -300,6 +300,13 @@ describe('prod-explain cli', () => {
     for (const name of ['POSTGRES_URL_NON_POOLING', 'DATABASE_URL', 'POSTGRES_URL']) assert.ok(r.out.includes(name), name)
   })
 
+  it('the usage text names 21 as the default --days, never 30 (AC15)', async () => {
+    const r = await cli([], {})
+    assert.notEqual(r.code, 0)
+    assert.match(r.out, /--days 21/)
+    assert.doesNotMatch(r.out, /--days 30/)
+  })
+
   it('an unknown case exits 1 listing the valid ones before any statement', async () => {
     const r = await cli(['--person', 'lula', '--cases', 'nope', '--force'], { DATABASE_URL: 'postgres://u:p@127.0.0.1:1/db' })
     assert.equal(r.code, 1)

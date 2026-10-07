@@ -610,3 +610,59 @@ describe('#298 docs describe only live front-end code', () => {
       assert.ok(!docsText.includes(name), `docs still mention ${name}`)
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number. Each is a loose match on the fact across every page; none names a page.
+describe('documented facts of the tracked-only corpus and the 21-day horizon (issue #313 acceptance)', () => {
+  const near = (a: string, b: string, span = 400) => new RegExp(`(${a})[^]{0,${span}}(${b})|(${b})[^]{0,${span}}(${a})`, 'i')
+
+  it('days takes 7 or 21, anything else snaps to the nearest with 14 reading as 7 and 30, 60 and 365 as 21, and no page names 7/30/60 as the windows (AC29)', () => {
+    assert.match(docsText, /\bdays\b[^.\n]{0,120}\b7\b[^.\n]{0,40}\b21\b/i)
+    assert.match(docsText, /snap[^.\n]{0,200}(nearest|closest)|(nearest|closest)[^.\n]{0,200}snap/i)
+    assert.match(docsText, /\b14\b[^.\n]{0,80}\b7\b/)
+    assert.match(docsText, /\b30\b[^.\n]{0,80}\b60\b[^.\n]{0,80}\b365\b[^.\n]{0,160}\b21\b/)
+    assert.doesNotMatch(docsText, /7\s*\/\s*30\s*\/\s*60/)
+    assert.doesNotMatch(docsText, /\b7\b[,/ ]+(or |and )?\b30\b[,/ ]+(or |and )?\b60\b/)
+  })
+
+  it('retention keeps 21 days, the widest window; rising\'s baseline is 14 days and the only value; rising at days=21 has an empty baseline beyond retention (AC30)', () => {
+    assert.match(docsText, /retention[^.\n]{0,160}\b21\b|\b21\b[^.\n]{0,120}retention/i)
+    assert.match(docsText, /baseline[^.\n]{0,160}\b14\b[^.\n]{0,160}(only|sole|single)|(only|sole|single)[^.\n]{0,160}\b14\b[^.\n]{0,100}baseline/i)
+    assert.match(docsText, near('days=21', '(empty|zero|no) baseline|baseline[^.\\n]{0,60}(empty|zero)'))
+    assert.match(docsText, /(beyond|past|outside|older than) (the )?retention|retention[^.\n]{0,80}(beyond|past)/i)
+  })
+
+  it('the store writes only docs naming a tracked person, ingest reports dropped apart from new, candidates see only tracked docs, and stats.docs and graph_scopes.docs count tracked docs only (AC31)', () => {
+    assert.match(docsText, /(store|writer|writes?)[^.\n]{0,160}only[^.\n]{0,120}(name|mention)[^.\n]{0,60}tracked person|only (docs|documents)[^.\n]{0,80}(name|mention)[^.\n]{0,40}tracked person/i)
+    assert.match(docsText, near('\\bdropped\\b', '\\b(new|written)\\b', 200))
+    assert.match(docsText, near('\\bdropped\\b', '(per|each) source|ingest', 300))
+    assert.match(docsText, near('/api/candidates|candidates', 'tracked (docs|documents)|docs naming a tracked', 200))
+    assert.match(docsText, /stats\.docs[^.\n]{0,240}tracked|tracked[^.\n]{0,240}stats\.docs/i)
+    assert.match(docsText, /graph_scopes\.docs[^.\n]{0,240}tracked|tracked[^.\n]{0,240}graph_scopes\.docs/i)
+  })
+
+  it('reindex recovers only stored docs, so a person added to seed.json gets history from docs that already mention someone else; reindex deletes nothing; a removed person\'s docs leave with retention (AC32)', () => {
+    assert.match(docsText, near('reindex', '\\bstored\\b', 300))
+    assert.match(docsText, near('(added|new person|adds)[^.\\n]{0,60}seed\\.json|seed\\.json[^.\\n]{0,80}(added|new person)', 'history', 400))
+    assert.match(docsText, near('reindex', '(deletes? nothing|never deletes?|does not delete|doesn.t delete)', 400))
+    assert.match(docsText, near('(removed|pruneRemoved|pruning)', '(not delete|never delete|stay|remain|keep)[^.\\n]{0,160}retention|retention[^.\\n]{0,160}(not delete|never delete|stay|remain|keep|leave)', 500))
+  })
+
+  it('the by-hand shrink is documented: batched deletes with a WAL check, no shrink of pg_database_size, vacuum full of six tables around pnpm size with ingest off, the deploy order, --if-missing and the orphaned blobs (AC33)', () => {
+    assert.match(docsText, near('batch', '20[ ,\\u202f.]?000', 200))
+    assert.match(docsText, /\bWAL\b/)
+    assert.match(docsText, near('batch', 'older than 21 days', 600))
+    assert.match(docsText, /pg_database_size[^.\n]{0,200}(not|never|n't)[^.\n]{0,60}shrink|shrink[^.\n]{0,120}pg_database_size/i)
+    for (const table of ['docs', 'doc_terms', 'doc_candidates', 'doc_tone', 'doc_testimony', 'doc_persons']) assert.match(docsText, new RegExp(`vacuum full[^]{0,500}\\b${table}\\b`, 'i'), table)
+    assert.match(docsText, near('pnpm size', 'before and after|before[^.\\n]{0,40}after', 200))
+    assert.match(docsText, near('vacuum full', '(ingest|ingest\\.yml)[^.\\n]{0,80}(disabled|paused|off|stopped)|(disable|pause|stop)[^.\\n]{0,60}ingest', 600))
+    assert.match(docsText, /merge[^.\n]{0,60}pnpm migrate[^.\n]{0,60}pnpm aggregate[^.\n]{0,60}pnpm materialize/i)
+    assert.match(docsText, near('--if-missing', '\\b21\\b', 300))
+    assert.match(docsText, near('orphan', 'harmless|no harm|unused', 200))
+    assert.match(docsText, near('orphan', 'days=30|30-day|blob', 200))
+  })
+
+  it('the page warms recortes at 7 and 21 days, and a shared link with an unsupported days opens on 21 (AC34)', () => {
+    assert.match(docsText, near('warm', '\\b7\\b[^.\\n]{0,20}\\b21\\b', 300))
+    assert.match(docsText, near('(shared link|link)', '(unsupported|retired|any value)[^.\\n]{0,160}opens? on 21|opens? on 21', 300))
+  })
+})

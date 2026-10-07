@@ -1523,3 +1523,50 @@ describe('term_weeks build, as documented (issue #215)', () => {
     assert.match(docsText, /pnpm migrate[^.\n]*before[^.\n]*(deploy|term_weeks)/i)
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('the aggregates over a tracked-only, 21-day corpus (issue #313 acceptance)', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+  after(reseed)
+
+  it('graph_scopes.docs equals graph_scopes.tracked on every row (AC12)', async () => {
+    const { rows } = await db.query<{ total: number; differing: number; filled: number }>(
+      `select count(*)::int as total, count(*) filter (where docs <> tracked)::int as differing, count(*) filter (where docs > 0)::int as filled from graph_scopes`,
+    )
+    assert.ok(rows[0].total > 0)
+    assert.equal(rows[0].differing, 0)
+    assert.ok(rows[0].filled > 0)
+  })
+
+  it('the fast and the live /graph statements render identical output for every fixture recorte (AC12)', async () => {
+    for (const person of persons)
+      for (const over of recortes) {
+        const query = q(over)
+        assert.equal(precomputable(query), true, JSON.stringify(over))
+        assert.deepEqual(await fast(person, query), await live(person, query), `${person.id} ${JSON.stringify(over)}`)
+      }
+  })
+
+  it('the default build writes graph_scopes rows for days 7 and 21 only (AC20)', async () => {
+    const report = await buildGraphAggregates(persons)
+    assert.deepEqual(report.windows, [7, 21])
+    for (const table of ['graph_scopes', 'graph_terms']) {
+      const { rows } = await db.query<{ days: number }>(`select distinct days from ${table} order by days`)
+      assert.deepEqual(rows.map((r) => r.days), [7, 21], table)
+    }
+  })
+
+  it('term_weeks.c_t counts tracked docs of the last 21 days; a term in a doc aged 25 days adds nothing (AC20)', async () => {
+    const doc = (uri: string, ageDays: number) => ({ source: 'rss' as const, uri: `https://ac313-weeks.example/${uri}`, text: 'Lula cita kzxterm no plenário', publishedAt: daysAgo(ageDays), domain: 'ac313-weeks.example' })
+    for (const d of [doc('now-a', 0), doc('now-b', 0), doc('old', 25)]) assert.equal(await insertDocP(d, persons), true)
+    await buildGraphAggregates(persons)
+    const read = async () => (await db.query<{ count: number; c_t: number }>(`select count, c_t from term_weeks where person_id = 'lula' and term = 'kzxterm' and kind = 'word'`)).rows
+    assert.deepEqual(await read(), [{ count: 2, c_t: 2 }])
+    assert.equal(await insertDocP(doc('inside', 15), persons), true)
+    await buildGraphAggregates(persons)
+    assert.deepEqual(await read(), [{ count: 2, c_t: 3 }])
+  })
+})

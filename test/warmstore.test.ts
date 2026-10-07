@@ -373,3 +373,26 @@ describe('the blob reader', () => {
     }
   })
 })
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('warmRecortes over the 7 and 21 day windows (issue #313 acceptance)', () => {
+  const people = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }))
+
+  it('N people yield one recorte per warmPaths path but /api/people, i.e. N x 2 x 3, every days 7 or 21 (AC22)', () => {
+    for (const n of [1, 3, 27]) {
+      const recortes = warmRecortes(people(n))
+      assert.equal(recortes.length, warmPaths(people(n)).length - 1, `${n} people`)
+      assert.equal(recortes.length, n * 2 * 3)
+      assert.ok(recortes.every((r) => r.days === 7 || r.days === 21), `${n} people`)
+      assert.ok(recortes.every((r) => !/days=(30|60)\b/.test(r.path)), `${n} people`)
+    }
+  })
+
+  it('the 21-day recortes carry their own keys and pathnames, none shared with the 7-day ones (AC22)', () => {
+    const recortes = warmRecortes(people(2))
+    const keyOf = (days: number) => new Set(recortes.filter((r) => r.days === days).map((r) => r.pathname))
+    assert.equal(keyOf(7).size, 6)
+    assert.equal(keyOf(21).size, 6)
+    assert.deepEqual([...keyOf(7)].filter((p) => keyOf(21).has(p)), [])
+  })
+})

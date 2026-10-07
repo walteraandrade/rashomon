@@ -1119,3 +1119,30 @@ describe('lenses: resize', () => {
     expect(words()[0].getAttribute('aria-pressed')).toBe('false')
   })
 })
+
+describe('Lenses over the 7 and 21 day windows (issue #313 acceptance)', () => {
+  it('AC24: the day select offers exactly 7 and 21, in that order, with 21 selected, and the first /lenses and /sources carry days=21', async () => {
+    boot()
+    await start()
+    expect([...select('lensesDays').options].map((o) => o.value)).toEqual(['7', '21'])
+    expect([...select('lensesDays').options].map((o) => o.textContent)).toEqual(['7 dias', '21 dias'])
+    expect(select('lensesDays').value).toBe('21')
+    expect(lensesCalls()[0].params.get('days')).toBe('21')
+    expect(of('sources')[0].params.get('days')).toBe('21')
+  })
+
+  for (const days of ['30', '60'])
+    it(`AC25: a shared link with days=${days} leaves the select on 21 and requests days=21`, async () => {
+      boot({ search: `?days=${days}` })
+      await start()
+      expect(select('lensesDays').value).toBe('21')
+      expect(lensesCalls()[0].params.get('days')).toBe('21')
+    })
+
+  it('AC25: a shared link with days=7 still selects 7', async () => {
+    boot({ search: '?days=7' })
+    await start()
+    expect(select('lensesDays').value).toBe('7')
+    expect(lensesCalls()[0].params.get('days')).toBe('7')
+  })
+})

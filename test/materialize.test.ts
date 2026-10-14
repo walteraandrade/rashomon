@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { after, before, describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { buildGraphAggregates } from '../src/aggregate.js'
+import { buildGraphAggregates, hasGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { statements } from '../src/graph.js'
 import { main } from '../src/materialize.js'
@@ -221,4 +221,202 @@ describe('the workflows', () => {
       assert.doesNotMatch(text, /^\s*TESTIMONY_DTYPE:/m, file)
     }
   })
+})
+
+describe('materialising into warm_entries (issue #317 acceptance)', () => {
+  before(built)
+  after(restore)
+
+  const everyPathname = () => warmRecortes(ids).map((r) => r.pathname).sort()
+  const rows = async () => (await db.query<{ pathname: string; person_id: string }>(`select pathname, person_id from warm_entries order by pathname`)).rows
+  const noEnvironment = () => {
+    for (const name of ['BLOB_READ_WRITE_TOKEN', 'WARM_STORE_URL']) delete process.env[name]
+  }
+
+  it('main([], { log }) with no token or URL writes exactly warmRecortes\' pathnames, each row with its own person, exits 0, and a second run leaves the same row count (AC13)', async () => {
+    noEnvironment()
+    await db.exec(`delete from warm_entries`)
+    const logs: string[] = []
+    assert.equal(await main([], { log: (l) => logs.push(l) }), 0)
+    assert.ok(logs.length > 0)
+    assert.ok(logs.every((l) => !/no warm store configured/i.test(l)), logs.join('\n'))
+    const first = await rows()
+    assert.deepEqual(first.map((r) => r.pathname), everyPathname())
+    const owner = new Map(warmRecortes(ids).map((r) => [r.pathname, r.personId]))
+    for (const row of first) assert.equal(row.person_id, owner.get(row.pathname), row.pathname)
+    assert.equal(await main([], { log: quiet }), 0)
+    assert.deepEqual(await rows(), first)
+  })
+
+  it('a writer that rejects every pathname of one person fails the run, names that person and the error, and every other person\'s rows are stored (AC14)', async () => {
+    noEnvironment()
+    await db.exec(`delete from warm_entries`)
+    const logs: string[] = []
+    const refuse: WarmWriter = {
+      put: (r, text) => (r.personId === 'tarcisio' ? Promise.reject(new Error('refused by the test writer')) : pgWarmStore.put(r, text)),
+    }
+    assert.equal(await main([], { writer: refuse, log: (l) => logs.push(l) }), 1)
+    assert.ok(logs.some((l) => /tarcisio/.test(l) && /refused by the test writer/.test(l)), logs.join('\n'))
+    const stored = (await rows()).map((r) => r.pathname)
+    const expected = warmRecortes(ids).filter((r) => r.personId !== 'tarcisio').map((r) => r.pathname).sort()
+    assert.equal(expected.length, 12)
+    assert.deepEqual(stored, expected)
+    assert.equal((await rows()).filter((r) => r.person_id === 'tarcisio').length, 0)
+  })
+
+  it('--if-stale after a full run exits 0, writes nothing and runs only the person, graph_scopes, warm_entries and aggregate-probe statements (AC15)', async () => {
+    noEnvironment()
+    assert.equal(await main([], { log: quiet }), 0)
+    const before = await rows()
+    const probe = await recordStatements(async () => void (await hasGraphAggregates()))
+    assert.equal(probe.length, 1)
+    const puts: string[] = []
+    const writer: WarmWriter = { put: (r, text) => (puts.push(r.pathname), pgWarmStore.put(r, text)) }
+    let code = -1
+    const statementsRun = await recordStatements(async () => void (code = await main(['--if-stale'], { writer, log: quiet })))
+    assert.equal(code, 0)
+    assert.deepEqual(puts, [])
+    assert.deepEqual(await rows(), before)
+    assert.ok(statementsRun.length > 0)
+    for (const s of statementsRun) {
+      const allowed = s === probe[0] || /\bfrom persons\b/.test(s) || /\bfrom graph_scopes\b/.test(s) || /\bfrom warm_entries\b/.test(s)
+      assert.ok(allowed, `unexpected statement on an up-to-date table: ${s.trim().slice(0, 100)}`)
+      if (s !== probe[0]) assert.doesNotMatch(s, /graph_terms|term_communities|term_links|doc_terms|doc_testimony|\binsert\b|\bupdate\b|\bdelete\b/i)
+    }
+    assert.ok(statementsRun.some((s) => /\bfrom warm_entries\b/.test(s)))
+    assert.ok(statementsRun.some((s) => /\bfrom graph_scopes\b/.test(s)))
+  })
+
+  it('--if-stale rewrites exactly the three entries of a window whose built_at moved, and everything once warm_entries is emptied (AC15)', async () => {
+    noEnvironment()
+    assert.equal(await main([], { log: quiet }), 0)
+    const puts: string[] = []
+    const writer: WarmWriter = { put: (r, text) => (puts.push(r.pathname), pgWarmStore.put(r, text)) }
+
+    await db.exec(`update graph_scopes set built_at = built_at + interval '1 minute' where person_id = 'tarcisio' and days = 21`)
+    assert.equal(await main(['--if-stale'], { writer, log: quiet }), 0)
+    const window = warmRecortes(ids).filter((r) => r.personId === 'tarcisio' && r.days === 21)
+    assert.equal(window.length, 3)
+    assert.deepEqual(puts.sort(), window.map((r) => r.pathname).sort())
+    const { rows: scope } = await db.query<{ built_at: string }>(`select built_at::text as built_at from graph_scopes where person_id = 'tarcisio' and days = 21 and source = 'all'`)
+    const stored = await storedEntries()
+    for (const r of window) assert.equal(splitEntry(stored.get(r.pathname)!)!.key, scope[0].built_at, r.pathname)
+
+    puts.length = 0
+    assert.equal(await main(['--if-stale'], { writer, log: quiet }), 0)
+    assert.deepEqual(puts, [], 'now up to date again')
+
+    await db.exec(`delete from warm_entries`)
+    assert.equal(await main(['--if-stale'], { writer, log: quiet }), 0)
+    assert.deepEqual(puts.sort(), everyPathname())
+  })
+
+  it('--dry-run leaves warm_entries unchanged, also with --if-stale, whatever writer it is given, and logs would write N entries with a byte total and the largest pathname (AC16)', async () => {
+    noEnvironment()
+    await db.exec(`delete from warm_entries`)
+    assert.equal(await main([], { log: quiet }), 0)
+    const full = await storedEntries()
+    const sizes = [...full].map(([pathname, body]) => ({ pathname, bytes: Buffer.byteLength(body) }))
+    const total = sizes.reduce((sum, e) => sum + e.bytes, 0)
+    const largest = sizes.reduce((best, e) => (e.bytes > best.bytes ? e : best)).pathname
+    const never: WarmWriter = { put: () => Promise.reject(new Error('a dry run must not write')) }
+
+    await db.exec(`delete from warm_entries`)
+    for (const argv of [['--dry-run'], ['--dry-run', '--if-stale']]) {
+      const logs: string[] = []
+      assert.equal(await main(argv, { writer: never, log: (l) => logs.push(l) }), 0, argv.join(' '))
+      assert.equal((await rows()).length, 0, `${argv.join(' ')} wrote to warm_entries`)
+      const text = logs.join('\n')
+      assert.match(text, new RegExp(`would write ${warmRecortes(ids).length} entries`), argv.join(' '))
+      assert.match(text, new RegExp(`\\b${total}\\b`), 'the byte total')
+      assert.ok(text.includes(largest), 'the largest pathname')
+    }
+  })
+
+  it('--dry-run --if-stale reads the real table: 0 entries after a full run, one window\'s three when its built_at moved (AC16)', async () => {
+    noEnvironment()
+    assert.equal(await main([], { log: quiet }), 0)
+    const before = await storedEntries()
+    const dry = async () => {
+      const logs: string[] = []
+      assert.equal(await main(['--dry-run', '--if-stale'], { log: (l) => logs.push(l) }), 0)
+      return logs.join('\n')
+    }
+    assert.match(await dry(), /would write 0 entries/)
+    await db.exec(`update graph_scopes set built_at = built_at + interval '1 minute' where person_id = 'lula' and days = 7`)
+    assert.match(await dry(), /would write 3 entries/)
+    assert.deepEqual(await storedEntries(), before)
+  })
+
+  it('with no aggregate build main exits 1, writes nothing and says there are no graph aggregates (AC17)', async () => {
+    noEnvironment()
+    await db.exec(`delete from warm_entries`)
+    await db.exec(`delete from graph_terms`)
+    await db.exec(`delete from graph_scopes`)
+    try {
+      const logs: string[] = []
+      const puts: string[] = []
+      const writer: WarmWriter = { put: (r, text) => (puts.push(r.pathname), pgWarmStore.put(r, text)) }
+      assert.equal(await main([], { writer, log: (l) => logs.push(l) }), 1)
+      assert.deepEqual(puts, [])
+      assert.equal((await rows()).length, 0)
+      assert.match(logs.join('\n'), /no graph aggregates/i)
+    } finally {
+      await restore()
+    }
+  })
+
+  it('an about>0 scope without graph_terms skips only its graph entry, and an about=0 scope is written with nodes [] and links [] (AC17)', async () => {
+    noEnvironment()
+    await db.exec(`delete from warm_entries`)
+    const { rows: scopes } = await db.query<{ person_id: string; days: number; about: number }>(`select person_id, days, about from graph_scopes where source = 'all'`)
+    const aboutOf = (person: string, days: number) => scopes.find((s) => s.person_id === person && s.days === days)!.about
+    assert.ok(aboutOf('lula', 7) > 0)
+    assert.equal(aboutOf('bolsonaro', 7), 0)
+    await db.exec(`delete from graph_terms where person_id = 'lula' and days = 7`)
+    try {
+      await main([], { log: quiet })
+      const stored = await storedEntries()
+      const lula7 = warmRecortes(ids).filter((r) => r.personId === 'lula' && r.days === 7)
+      assert.equal(lula7.length, 3)
+      for (const r of lula7) assert.equal(stored.has(r.pathname), r.route !== 'graph', `${r.route} of lula 7d`)
+      assert.equal(stored.size, warmRecortes(ids).length - 1, 'every other entry is written')
+      for (const r of warmRecortes(ids).filter((r) => r.personId === 'bolsonaro' && r.route === 'graph')) {
+        const body = JSON.parse(splitEntry(stored.get(r.pathname)!)!.body)
+        assert.deepEqual([body.nodes, body.links], [[], []], r.path)
+      }
+    } finally {
+      await restore()
+    }
+  })
+})
+
+describe('the workflows no longer carry the Blob settings (issue #317 acceptance)', () => {
+  const lines = (file: string) => fileText(`.github/workflows/${file}`).split('\n')
+  const stepAt = (all: string[], command: RegExp) => {
+    const start = all.findIndex((l) => /^\s*- run:/.test(l) && command.test(l))
+    assert.notEqual(start, -1, `no step matching ${command}`)
+    const indent = all[start].match(/^\s*/)![0].length
+    const end = all.findIndex((l, i) => i > start && new RegExp(`^\\s{${indent}}- `).test(l))
+    return { start, block: all.slice(start, end === -1 ? undefined : end).join('\n') }
+  }
+
+  const cases: [string, RegExp, number][] = [
+    ['ingest.yml', /pnpm ingest\b/, 20],
+    ['warm.yml', /pnpm aggregate --if-missing/, 15],
+  ]
+  for (const [file, collecting, minutes] of cases) {
+    it(`${file} names neither variable, still passes TESTIMONY_REVISION, and runs pnpm materialize after its collecting step and before the cache purge, continue-on-error, ${minutes} minutes (AC19)`, () => {
+      const text = fileText(`.github/workflows/${file}`)
+      assert.doesNotMatch(text, /BLOB_READ_WRITE_TOKEN/)
+      assert.doesNotMatch(text, /WARM_STORE_URL/)
+      assert.match(text, /^\s*TESTIMONY_REVISION:/m)
+      const all = lines(file)
+      const materialize = stepAt(all, /pnpm materialize\b/)
+      assert.ok(stepAt(all, collecting).start < materialize.start, 'after the collecting step')
+      assert.ok(materialize.start < all.findIndex((l) => /cache dangerously-delete/.test(l)), 'before the cache purge')
+      assert.match(materialize.block, /continue-on-error: true/)
+      assert.match(materialize.block, new RegExp(`timeout-minutes: ${minutes}\\b`))
+    })
+  }
 })

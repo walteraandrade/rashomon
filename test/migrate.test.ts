@@ -81,3 +81,54 @@ describe('migrate and warm_entries (issue #317 acceptance)', () => {
     assert.deepEqual((await db.query(`select pathname, person_id, body from warm_entries`)).rows, [{ pathname: 'warm/v1/lula/graph/k.json', person_id: 'lula', body: 'k\n{}' }])
   })
 })
+
+describe('the warm_entries table (issue #317 acceptance)', () => {
+  before(seed)
+  after(async () => {
+    await db.exec(`delete from warm_entries`)
+    await reseed()
+  })
+
+  const insert = (pathname: string, person: string | null, body: string | null) =>
+    db.query(`insert into warm_entries (pathname, person_id, body) values ($1, $2, $3)`, [pathname, person, body])
+
+  it('migrate() creates warm_entries: pathname text primary key, person_id text not null cascading from persons, body text not null (AC1)', async () => {
+    await migrateP()
+    const { rows: columns } = await db.query<{ column_name: string; data_type: string; is_nullable: string }>(
+      `select column_name, data_type, is_nullable from information_schema.columns where table_name = 'warm_entries' order by column_name`,
+    )
+    assert.deepEqual(columns, [
+      { column_name: 'body', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'pathname', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'person_id', data_type: 'text', is_nullable: 'NO' },
+    ])
+    const { rows: constraints } = await db.query<{ type: string; def: string }>(
+      `select contype::text as type, pg_get_constraintdef(oid) as def from pg_constraint where conrelid = 'warm_entries'::regclass and contype in ('p', 'f') order by contype`,
+    )
+    assert.deepEqual(constraints, [
+      { type: 'f', def: 'FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE' },
+      { type: 'p', def: 'PRIMARY KEY (pathname)' },
+    ])
+  })
+
+  it('refuses a null body, a null person, an unknown person and a repeated pathname (AC1)', async () => {
+    await assert.rejects(insert('warm/v1/lula/graph/null-body.json', 'lula', null))
+    await assert.rejects(insert('warm/v1/lula/graph/null-person.json', null, 'k\n{}'))
+    await assert.rejects(insert('warm/v1/nobody/graph/a.json', 'nobody', 'k\n{}'))
+    await insert('warm/v1/lula/graph/once.json', 'lula', 'k\n{}')
+    await assert.rejects(insert('warm/v1/lula/graph/once.json', 'lula', 'k\n{}'))
+  })
+
+  it('a second migrate() call leaves existing rows untouched (AC1)', async () => {
+    await db.exec(`delete from warm_entries`)
+    await insert('warm/v1/lula/graph/kept.json', 'lula', 'built\n{"a":1}')
+    await insert('warm/v1/tarcisio/sources/kept.json', 'tarcisio', 'built\n{"b":2}')
+    await migrateP()
+    await migrateP()
+    const { rows } = await db.query(`select pathname, person_id, body from warm_entries order by pathname`)
+    assert.deepEqual(rows, [
+      { pathname: 'warm/v1/lula/graph/kept.json', person_id: 'lula', body: 'built\n{"a":1}' },
+      { pathname: 'warm/v1/tarcisio/sources/kept.json', person_id: 'tarcisio', body: 'built\n{"b":2}' },
+    ])
+  })
+})

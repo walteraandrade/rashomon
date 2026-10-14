@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse, type DefaultTreeAdapterMap } from 'parse5'
@@ -796,5 +798,46 @@ describe('#298 imperative front-end leftovers are gone', () => {
 
   it('#298 AC7: ALLOWED_PACKAGES is still empty', () => {
     assert.match(testFileSource('invariants.test.ts'), /ALLOWED_PACKAGES[^=\n]*=\s*\[\s*\]/)
+  })
+})
+
+describe('no Blob dependency is left behind (issue #317 acceptance)', () => {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]))
+  const sources = ['src', 'test'].flatMap((dir) => walk(join(root, dir))).filter((file) => /\.(ts|js|svelte)$/.test(file))
+
+  it('no file under src or test imports @vercel/blob, statically, dynamically or through require (AC18)', () => {
+    assert.ok(sources.length > 50, 'the walk found the source tree')
+    const importsBlob = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]@vercel\/blob/
+    assert.deepEqual(sources.filter((file) => importsBlob.test(readFileSync(file, 'utf8'))).map((file) => file.slice(root.length + 1)), [])
+  })
+
+  it('package.json lists @vercel/blob in no dependency field and pnpm-lock.yaml does not mention it (AC18)', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])
+      assert.ok(!Object.keys((pkg[field] as Record<string, string> | undefined) ?? {}).includes('@vercel/blob'), `${field} must not list it`)
+    assert.doesNotMatch(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'), /@vercel\/blob/)
+  })
+
+  it('src/warmstore-blob.ts and test/warmstore-blob.test.ts no longer exist (AC18)', () => {
+    assert.equal(existsSync(join(root, 'src', 'warmstore-blob.ts')), false)
+    assert.equal(existsSync(join(root, 'test', 'warmstore-blob.test.ts')), false)
+  })
+
+  it('src/warmstore.ts exports neither blobReader, warmStoreFromEnv nor READ_TIMEOUT_MS, and still exports the Postgres store and the memory store (AC18)', async () => {
+    const exported = Object.keys(await import('../src/warmstore.js'))
+    for (const gone of ['blobReader', 'warmStoreFromEnv', 'READ_TIMEOUT_MS']) assert.ok(!exported.includes(gone), `${gone} is still exported`)
+    for (const kept of ['pgWarmStore', 'memoryWarmStore', 'lookup', 'warmRecortes']) assert.ok(exported.includes(kept), `${kept} must stay exported`)
+  })
+
+  it('package.json and pnpm-lock.yaml agree, so pnpm install --frozen-lockfile succeeds (AC18)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rashomon-lock-'))
+    try {
+      for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) if (existsSync(join(root, file))) copyFileSync(join(root, file), join(dir, file))
+      const run = spawnSync('pnpm', ['install', '--frozen-lockfile', '--lockfile-only', '--offline'], { cwd: dir, encoding: 'utf8' })
+      assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

@@ -201,3 +201,30 @@ describe('pnpm size', () => {
     })
   })
 })
+
+describe('warm_entries in the maintained-table lists (issue #317 acceptance)', () => {
+  it('SIZE_TABLES contains warm_entries and collectSizes reports it, while ANALYZED_TABLES, AGGREGATE_TABLES and push.ts\'s tables do not (AC2)', async () => {
+    await seed()
+    assert.ok((SIZE_TABLES as readonly string[]).includes('warm_entries'))
+    const report = await collectSizes(db.query.bind(db))
+    assert.ok('warm_entries' in report.tables, 'collectSizes reports warm_entries')
+    assert.ok(report.tables.warm_entries >= 0)
+    assert.ok(!report.missing.includes('warm_entries'))
+    assert.ok(!(ANALYZED_TABLES as readonly string[]).includes('warm_entries'))
+    assert.ok(!(AGGREGATE_TABLES as readonly string[]).includes('warm_entries'))
+    assert.deepEqual(pushTables.filter((t) => t.name === 'warm_entries'), [])
+  })
+
+  it('names warm_entries as missing on a database without the table, and still reports the others (AC2)', async () => {
+    await seed()
+    await db.exec(`alter table warm_entries rename to warm_entries_hidden`)
+    try {
+      const report = await collectSizes(db.query.bind(db))
+      assert.deepEqual(report.missing, ['warm_entries'])
+      assert.ok(!('warm_entries' in report.tables))
+      assert.ok('persons' in report.tables)
+    } finally {
+      await db.exec(`alter table warm_entries_hidden rename to warm_entries`)
+    }
+  })
+})

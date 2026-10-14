@@ -550,20 +550,6 @@ describe('the warm store is documented', () => {
     assert.match(docsText, near('before `pnpm migrate` creates `warm_entries`', '503', 400))
   })
 
-  // Issue #317 AC24
-  it('gives the by-hand deploy order and says rows left by a changed key are orphaned, harmless and cleared by hand', () => {
-    const order = ['`pnpm migrate`', '`pnpm materialize`', '`gh workflow run warm.yml`', '`x-warm-store: hit`', 'the repository secret `BLOB_READ_WRITE_TOKEN`', 'delete the Blob store']
-    let from = docsText.indexOf('Moving from Vercel Blob')
-    assert.notEqual(from, -1, 'the docs must have the by-hand move')
-    for (const step of order) {
-      const at = docsText.indexOf(step, from)
-      assert.notEqual(at, -1, `the deploy step ${step} is missing or out of order`)
-      from = at + step.length
-    }
-    assert.match(docsText, /only then remove the repository secret[^.\n]*variable[^.\n]*Vercel Production env/i)
-    assert.match(docsText, /orphaned[^.\n]*harmless[^.\n]*`materialize` never deletes from `warm_entries`[^.\n]*by hand/i)
-  })
-
   it('says a stored recorte\'s links come from the build\'s own edges and its freshness key is the scope\'s built_at', () => {
     assert.match(docsText, /links[^.\n]*(come from|sliced from)[^.\n]*build's own[^.\n]*edges/i)
     assert.match(docsText, /freshness key[^.\n]*`?(graph_scopes\.)?built_at`?/i)
@@ -719,6 +705,7 @@ describe('the warm store docs state the table, the headers and the by-hand move 
     const starts = [...docsText.matchAll(/`pnpm migrate`/g)].map((m) => m.index ?? 0)
     assert.ok(starts.some((start) => chain(start, 0)), 'no run of the docs lists the six steps in that order')
     assert.match(docsText, /only then[^.\n]{0,40}(remove|delete)|(remove|delete)[^.\n]{0,80}\bonly (after|once)\b[^.\n]{0,80}x-warm-store: hit|x-warm-store: hit[^.\n]{0,120}(confirm|only then)/i)
+    assert.match(docsText, near('WARM_STORE_URL', 'Vercel[^.\\n]{0,20}\\benv', 300), 'the variable is removed from the Vercel environment too')
   })
 
   it('say rows left by a changed key (a parser change or a new TESTIMONY_REVISION) are orphaned, harmless and cleared by hand (AC24)', () => {

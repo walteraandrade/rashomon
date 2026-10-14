@@ -817,6 +817,34 @@ describe('no Blob dependency is left behind (issue #317 acceptance)', () => {
     assert.doesNotMatch(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'), /@vercel\/blob/)
   })
 
+  // The offline half of "pnpm install --frozen-lockfile succeeds" (AC18): that command fails when the
+  // root importer's specifiers differ from package.json, which removing a package by hand can cause.
+  it('the lockfile\'s root importer holds exactly package.json\'s dependencies, specifier for specifier (AC18)', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, Record<string, string> | undefined>
+    const manifest = Object.fromEntries(
+      ['dependencies', 'devDependencies', 'optionalDependencies'].flatMap((field) => Object.entries(pkg[field] ?? {})),
+    )
+    const lines = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8').split('\n')
+    const start = lines.indexOf('  .:')
+    assert.notEqual(start, -1, 'the lockfile has a root importer')
+    const end = lines.findIndex((line, i) => i > start && /^(\S|  \S)/.test(line))
+    const unquote = (text: string) => text.replace(/^'(.*)'$/, '$1')
+    const locked = lines
+      .slice(start + 1, end === -1 ? undefined : end)
+      .reduce<{ name: string | null; specifiers: Record<string, string> }>(
+        (acc, line) => {
+          const name = /^ {6}(\S.*):$/.exec(line)
+          const specifier = /^ {8}specifier: (.+)$/.exec(line)
+          if (name) return { ...acc, name: unquote(name[1]) }
+          if (specifier && acc.name) return { name: acc.name, specifiers: { ...acc.specifiers, [acc.name]: unquote(specifier[1]) } }
+          return acc
+        },
+        { name: null, specifiers: {} },
+      ).specifiers
+    assert.ok(Object.keys(manifest).length > 10, 'package.json lists its dependencies')
+    assert.deepEqual(locked, manifest)
+  })
+
   it('src/warmstore-blob.ts and test/warmstore-blob.test.ts no longer exist (AC18)', () => {
     assert.equal(existsSync(join(root, 'src', 'warmstore-blob.ts')), false)
     assert.equal(existsSync(join(root, 'test', 'warmstore-blob.test.ts')), false)

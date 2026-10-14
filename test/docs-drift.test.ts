@@ -517,37 +517,42 @@ describe('docs state the 21-day window, retention and the tracked-only corpus (i
 
 describe('the warm store is documented', () => {
   const near = (a: string, b: string, span = 400) => new RegExp(`(${a})[^]{0,${span}}(${b})|(${b})[^]{0,${span}}(${a})`, 'i')
+  const around = (index: number, span: number) => docsText.slice(Math.max(0, index - span), index + span)
 
-  // Issue #317 AC21
-  it('states that the warm store is the warm_entries table, that a miss falls back to live, and that it is no longer outside Postgres', () => {
-    assert.match(docsText, near('warm store', '`warm_entries` table'))
-    assert.match(docsText, /table[^.\n]*same database|same database[^.\n]*table/i)
-    assert.match(docsText, /fall back to (the )?live/i)
-    assert.doesNotMatch(docsText, /store outside Postgres/i)
+  it('states that the warm store is the warm_entries table in the database, that a miss falls back to the live route, and that it is not outside Postgres (AC21)', () => {
+    assert.match(docsText, near('warm store', '`warm_entries`'))
+    assert.match(docsText, near('`warm_entries`', '(same|existing|one) (Postgres )?database|in the database', 300))
+    assert.match(docsText, /\bmiss\b[^]{0,200}falls? back to (the )?live|fall(s)? back to (the )?live[^]{0,200}\bmiss\b/i)
+    assert.doesNotMatch(docsText, /outside (of )?(Postgres|the database)/i)
+    assert.doesNotMatch(docsText, /materiali[sz]ed[^.\n]{0,80}in a (public )?Vercel Blob store/i)
   })
 
-  // Issue #317 AC22
-  it('names the retired variables only as something to remove, and no longer says a lookup needs a configured store, an unset variable skips materialize or a read times out', () => {
+  it('names WARM_STORE_URL and BLOB_READ_WRITE_TOKEN only as something to remove, with "remove" or "delete" nearby each time (AC22)', () => {
     for (const name of ['WARM_STORE_URL', 'BLOB_READ_WRITE_TOKEN']) {
-      const mentions = [...docsText.matchAll(new RegExp(name, 'g'))]
-      assert.ok(mentions.length > 0, `the docs must still say what to do with ${name}`)
-      for (const m of mentions) {
-        const around = docsText.slice(Math.max(0, (m.index ?? 0) - 400), (m.index ?? 0) + 400)
-        assert.match(around, /\b(remove|delete)\b/i, `${name} appears without "remove" or "delete" nearby: ...${around.slice(300, 500)}...`)
-      }
+      const at = [...docsText.matchAll(new RegExp(name, 'g'))].map((m) => m.index ?? 0)
+      assert.ok(at.length > 0, `the docs must still say what to do with ${name}`)
+      for (const index of at) assert.match(around(index, 300), /\b(remove|delete)\b/i, `${name} appears with no "remove" or "delete" nearby: ...${around(index, 80)}...`)
     }
-    assert.doesNotMatch(docsText, /no warm store configured/i)
-    assert.doesNotMatch(docsText, /when a store is configured|only when a store is configured/i)
-    assert.doesNotMatch(docsText, /timed out \(2 s\)|reader's 2 s|2 s timeout/i)
-    assert.doesNotMatch(docsText, /(unset|empty)[^.\n]*(skips?|skipping)[^.\n]*`?pnpm materialize/i)
   })
 
-  // Issue #317 AC23
-  it('says every lookup-eligible request carries x-warm-store, and that before pnpm migrate those requests are a miss (503 with x-warm-store-only)', () => {
+  it('no longer says a lookup needs a configured store, that an unset variable skips pnpm materialize, or that a read times out after 2 s (AC22)', () => {
+    assert.doesNotMatch(docsText, /no warm store configured/i)
+    assert.doesNotMatch(docsText, /(only )?when a store is configured|a configured (warm )?store|store (is )?configured|means no store/i)
+    assert.doesNotMatch(docsText, /(unset|empty)[^.\n]{0,120}(skips?|skipping|exits? 0)[^.\n]{0,80}materialize|materialize[^.\n]{0,120}(unset|empty)[^.\n]{0,60}(skips?|skipping|exits? 0)/i)
+    assert.doesNotMatch(docsText, /(time[sd]? ?out|timeout)[^.\n]{0,40}(?<![\d.])2 ?s\b|(?<![\d.])2 ?s\b[^.\n]{0,40}(time[sd]? ?out|timeout)/i)
+    assert.doesNotMatch(docsText, /reader's 2 s/i)
+    assert.doesNotMatch(docsText, /READ_TIMEOUT_MS/)
+  })
+
+  it('names the command and both headers, says every lookup-eligible request carries x-warm-store, and that before pnpm migrate creates warm_entries those requests are a miss, a 503 with x-warm-store-only (AC23)', () => {
     for (const name of ['pnpm materialize', 'x-warm-store', 'x-warm-store-only']) assert.ok(docsText.includes(name), `the docs must name ${name}`)
-    assert.match(docsText, /every lookup-eligible request[^.\n]*carries? `x-warm-store`|`x-warm-store[^.\n]*on every lookup-eligible request/i)
-    assert.match(docsText, near('before `pnpm migrate` creates `warm_entries`', '`miss`', 300))
-    assert.match(docsText, near('before `pnpm migrate` creates `warm_entries`', '503', 400))
+    assert.match(docsText, near('every (lookup-)?eligible request', '`?x-warm-store`?', 200))
+    const before = /before[^.\n]{0,20}`pnpm migrate`[^.\n]{0,40}`warm_entries`|(?:no|without|missing|before the)[^.\n]{0,30}`warm_entries` table/i.exec(docsText)
+    assert.ok(before, 'the docs must say what happens before warm_entries exists')
+    const after = docsText.slice(before.index, before.index + 500)
+    assert.match(after, /\bmiss\b/)
+    assert.match(after, /\b503\b/)
+    assert.match(after, /x-warm-store-only/)
   })
 
   it('says a stored recorte\'s links come from the build\'s own edges and its freshness key is the scope\'s built_at', () => {
@@ -562,6 +567,39 @@ describe('the warm store is documented', () => {
   it('no longer says the default recorte\'s links always run live', () => {
     assert.doesNotMatch(docsText, /`\/graph`'s links always run live/)
     assert.match(docsText, /links run live off the warm set/)
+  })
+
+  it('gives the by-hand deploy order: pnpm migrate, pnpm materialize, gh workflow run warm.yml, a confirmed x-warm-store: hit, and only then the secret, the variable and the Blob store (AC24)', () => {
+    const steps = [
+      /`pnpm migrate`/,
+      /`pnpm materialize`/,
+      /`gh workflow run warm\.yml`/,
+      /`?x-warm-store: hit`?/,
+      /\b(remove|delete)\b[^.\n]{0,60}\bsecret\b/i,
+      /\bvariable\b/i,
+      /\bBlob store\b/i,
+    ]
+    const chain = (from: number, step: number): boolean => {
+      if (step === steps.length) return true
+      const rest = docsText.slice(from, from + 3000)
+      const m = steps[step].exec(rest)
+      return m ? chain(from + m.index + m[0].length, step + 1) : false
+    }
+    const starts = [...docsText.matchAll(/`pnpm migrate`/g)].map((m) => m.index ?? 0)
+    assert.ok(starts.some((start) => chain(start, 0)), 'no run of the docs lists the six steps in that order')
+    assert.match(docsText, /only then[^.\n]{0,40}(remove|delete)|(remove|delete)[^.\n]{0,80}\bonly (after|once)\b[^.\n]{0,80}x-warm-store: hit|x-warm-store: hit[^.\n]{0,120}(confirm|only then)/i)
+    assert.match(docsText, near('WARM_STORE_URL', 'Vercel[^.\\n]{0,20}\\benv', 300), 'the variable is removed from the Vercel environment too')
+  })
+
+  it('says rows left by a changed key (a parser change or a new TESTIMONY_REVISION) are orphaned, harmless and cleared by hand (AC24)', () => {
+    const at = [...docsText.matchAll(/orphaned?/gi)].map((m) => m.index ?? 0).find((index) => /warm_entries|pathname/.test(around(index, 400)))
+    assert.notEqual(at, undefined, 'the docs never call a leftover warm_entries row orphaned')
+    const text = around(at ?? 0, 600)
+    assert.match(text, /parser/i)
+    assert.match(text, /TESTIMONY_REVISION/)
+    assert.match(text, /harmless/i)
+    assert.match(text, /by hand|manually|delete from `?warm_entries/i)
+    assert.match(text, /never deletes?|does not delete|no code deletes|nothing deletes/i)
   })
 })
 
@@ -645,77 +683,5 @@ describe('#298 docs describe only live front-end code', () => {
     const { docsText } = await import('./docs.js')
     for (const name of ['runFigure', 'render.ts', 'render.js', 'figures/', 'mount' + 'DocsCard', 'mount' + 'Help', 'attach' + 'Combobox', 'figure.ts'])
       assert.ok(!docsText.includes(name), `docs still mention ${name}`)
-  })
-})
-
-describe('the warm store docs state the table, the headers and the by-hand move (issue #317 acceptance)', () => {
-  const near = (a: string, b: string, span = 400) => new RegExp(`(?:${a})[^]{0,${span}}(?:${b})|(?:${b})[^]{0,${span}}(?:${a})`, 'i')
-  const around = (index: number, span: number) => docsText.slice(Math.max(0, index - span), index + span)
-
-  it('say the warm store is the warm_entries table in the database, that a miss falls back to the live route, and never that it is outside Postgres (AC21)', () => {
-    assert.match(docsText, near('warm store', '`warm_entries`'))
-    assert.match(docsText, near('`warm_entries`', '(same|existing|one) (Postgres )?database|in the database', 300))
-    assert.match(docsText, /\bmiss\b[^]{0,200}falls? back to (the )?live|fall(s)? back to (the )?live[^]{0,200}\bmiss\b/i)
-    assert.doesNotMatch(docsText, /outside (of )?(Postgres|the database)/i)
-    assert.doesNotMatch(docsText, /materiali[sz]ed[^.\n]{0,80}in a (public )?Vercel Blob store/i)
-  })
-
-  it('name WARM_STORE_URL and BLOB_READ_WRITE_TOKEN only as something to remove, with "remove" or "delete" nearby each time (AC22)', () => {
-    for (const name of ['WARM_STORE_URL', 'BLOB_READ_WRITE_TOKEN']) {
-      const at = [...docsText.matchAll(new RegExp(name, 'g'))].map((m) => m.index ?? 0)
-      assert.ok(at.length > 0, `the docs must say what to do with ${name}`)
-      for (const index of at) assert.match(around(index, 300), /\b(remove|delete)\b/i, `${name} appears with no "remove" or "delete" nearby: ...${around(index, 80)}...`)
-    }
-  })
-
-  it('no longer say a lookup needs a configured store, that an unset variable skips pnpm materialize, or that a read times out after 2 s (AC22)', () => {
-    assert.doesNotMatch(docsText, /no warm store configured/i)
-    assert.doesNotMatch(docsText, /(only )?when a store is configured|a configured (warm )?store|store (is )?configured|means no store/i)
-    assert.doesNotMatch(docsText, /(unset|empty)[^.\n]{0,120}(skips?|skipping|exits? 0)[^.\n]{0,80}materialize|materialize[^.\n]{0,120}(unset|empty)[^.\n]{0,60}(skips?|skipping|exits? 0)/i)
-    assert.doesNotMatch(docsText, /(time[sd]? ?out|timeout)[^.\n]{0,40}(?<![\d.])2 ?s\b|(?<![\d.])2 ?s\b[^.\n]{0,40}(time[sd]? ?out|timeout)/i)
-    assert.doesNotMatch(docsText, /READ_TIMEOUT_MS/)
-  })
-
-  it('say every lookup-eligible request carries x-warm-store, and that before pnpm migrate creates warm_entries those requests are a miss, a 503 with x-warm-store-only (AC23)', () => {
-    assert.match(docsText, near('every (lookup-)?eligible request', '`?x-warm-store`?', 200))
-    const before = /before[^.\n]{0,20}`pnpm migrate`[^.\n]{0,40}`warm_entries`|(?:no|without|missing|before the)[^.\n]{0,30}`warm_entries` table/i.exec(docsText)
-    assert.ok(before, 'the docs must say what happens before warm_entries exists')
-    const after = docsText.slice(before.index, before.index + 500)
-    assert.match(after, /\bmiss\b/)
-    assert.match(after, /\b503\b/)
-    assert.match(after, /x-warm-store-only/)
-  })
-
-  it('give the by-hand deploy order: pnpm migrate, pnpm materialize, gh workflow run warm.yml, a confirmed x-warm-store: hit, and only then the secret, the variable and the Blob store (AC24)', () => {
-    const steps = [
-      /`pnpm migrate`/,
-      /`pnpm materialize`/,
-      /`gh workflow run warm\.yml`/,
-      /`?x-warm-store: hit`?/,
-      /\b(remove|delete)\b[^.\n]{0,60}\bsecret\b/i,
-      /\bvariable\b/i,
-      /\bBlob store\b/i,
-    ]
-    const chain = (from: number, step: number): boolean => {
-      if (step === steps.length) return true
-      const rest = docsText.slice(from, from + 3000)
-      const m = steps[step].exec(rest)
-      return m ? chain(from + m.index + m[0].length, step + 1) : false
-    }
-    const starts = [...docsText.matchAll(/`pnpm migrate`/g)].map((m) => m.index ?? 0)
-    assert.ok(starts.some((start) => chain(start, 0)), 'no run of the docs lists the six steps in that order')
-    assert.match(docsText, /only then[^.\n]{0,40}(remove|delete)|(remove|delete)[^.\n]{0,80}\bonly (after|once)\b[^.\n]{0,80}x-warm-store: hit|x-warm-store: hit[^.\n]{0,120}(confirm|only then)/i)
-    assert.match(docsText, near('WARM_STORE_URL', 'Vercel[^.\\n]{0,20}\\benv', 300), 'the variable is removed from the Vercel environment too')
-  })
-
-  it('say rows left by a changed key (a parser change or a new TESTIMONY_REVISION) are orphaned, harmless and cleared by hand (AC24)', () => {
-    const at = [...docsText.matchAll(/orphaned?/gi)].map((m) => m.index ?? 0).find((index) => /warm_entries|pathname/.test(around(index, 400)))
-    assert.notEqual(at, undefined, 'the docs never call a leftover warm_entries row orphaned')
-    const text = around(at ?? 0, 600)
-    assert.match(text, /parser/i)
-    assert.match(text, /TESTIMONY_REVISION/)
-    assert.match(text, /harmless/i)
-    assert.match(text, /by hand|manually|delete from `?warm_entries/i)
-    assert.match(text, /never deletes?|does not delete|no code deletes|nothing deletes/i)
   })
 })

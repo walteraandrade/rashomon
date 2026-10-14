@@ -27,6 +27,19 @@ const live = async (path: string) => {
   return request(path)
 }
 
+const ROUTES = ['graph', 'sources', 'testimony'] as const
+const pathOf = (person: string, route: (typeof ROUTES)[number], days: 7 | 21) =>
+  warmPathsOf([{ id: person }]).find((p) => routeOf(p) === route && new URL(p, 'http://warm.local').searchParams.get('days') === String(days))!
+const lulaPath = (route: (typeof ROUTES)[number], days: 7 | 21) => pathOf('lula', route, days)
+const pathnameOf = (path: string) => warmRecortes(ids).find((r) => r.path === path)!.pathname
+const served = async (store: WarmReader | null, path: string, headers: Record<string, string> = {}) => {
+  setWarmStore(store)
+  let res!: Awaited<ReturnType<typeof request>>
+  const statements = await recordStatements(async () => void (res = await request(path, headers)))
+  return { res, statements }
+}
+const touches = (statements: string[], table: RegExp) => statements.filter((s) => table.test(s)).length
+
 const PERSON = /from persons where id = \$1/
 const SCOPE = /from graph_scopes/
 const ENTRY = /^select body from warm_entries where pathname = \$1$/
@@ -95,35 +108,58 @@ describe('the Postgres store', () => {
   after(restore)
 
   const lula = { pathname: 'warm/v1/lula/graph/one.json', personId: 'lula' }
+  const insertRow = (pathname: string, person: string, body: string) =>
+    db.query(`insert into warm_entries (pathname, person_id, body) values ($1, $2, $3)`, [pathname, person, body])
 
-  it('get returns the body for a known pathname and null for an unknown one in one statement', async () => {
-    await pgWarmStore.put(lula, 'k\n{"a":1}')
-    let known: string | null = null
-    let unknown: string | null = 'unset'
+  it('get returns the stored body for a known pathname and null for an unknown one, each in exactly one select (AC4)', async () => {
+    await db.exec(`delete from warm_entries`)
+    await insertRow(lula.pathname, 'lula', 'key\n{"stored":true}')
+    const calls: (string | null)[] = []
     const statements = await recordStatements(async () => {
-      known = await pgWarmStore.get(lula.pathname)
-      unknown = await pgWarmStore.get('warm/v1/lula/graph/none.json')
+      calls.push(await pgWarmStore.get(lula.pathname))
+      calls.push(await pgWarmStore.get('warm/v1/lula/graph/unknown.json'))
     })
-    assert.equal(known, 'k\n{"a":1}')
-    assert.equal(unknown, null)
-    assert.equal(statements.length, 2)
-    for (const statement of statements) assert.equal(statement, 'select body from warm_entries where pathname = $1')
+    assert.deepEqual(calls, ['key\n{"stored":true}', null])
+    assert.deepEqual(statements, Array(2).fill('select body from warm_entries where pathname = $1'))
   })
 
-  it('put twice on one pathname keeps one row with the second body and the person id', async () => {
+  it('put twice on one pathname keeps one row holding the second body and the given person id (AC5)', async () => {
+    await db.exec(`delete from warm_entries`)
     await pgWarmStore.put(lula, 'first')
     await pgWarmStore.put({ ...lula, personId: 'tarcisio' }, 'second')
-    const { rows } = await db.query<{ person_id: string; body: string }>(`select person_id, body from warm_entries where pathname = $1`, [lula.pathname])
-    assert.deepEqual(rows, [{ person_id: 'tarcisio', body: 'second' }])
+    const { rows } = await db.query<{ pathname: string; person_id: string; body: string }>(`select pathname, person_id, body from warm_entries`)
+    assert.deepEqual(rows, [{ pathname: lula.pathname, person_id: 'tarcisio', body: 'second' }])
   })
 
-  it('a row goes with its person and only its person', async () => {
-    await upsertPersonsP([{ id: 'warm-gone', name: 'Warm Gone', aliases: ['Warm Gone'] }])
-    await pgWarmStore.put({ pathname: 'warm/v1/warm-gone/graph/a.json', personId: 'warm-gone' }, 'k\n{}')
-    await pgWarmStore.put(lula, 'k\n{}')
-    await db.exec(`delete from persons where id = 'warm-gone'`)
+  it('put keeps other pathnames of the same person as separate rows (AC5)', async () => {
+    await db.exec(`delete from warm_entries`)
+    await pgWarmStore.put(lula, 'one\n{}')
+    await pgWarmStore.put({ pathname: 'warm/v1/lula/sources/two.json', personId: 'lula' }, 'two\n{}')
     const { rows } = await db.query<{ pathname: string }>(`select pathname from warm_entries order by pathname`)
-    assert.deepEqual(rows.map((r) => r.pathname), [lula.pathname])
+    assert.deepEqual(rows.map((r) => r.pathname), [lula.pathname, 'warm/v1/lula/sources/two.json'])
+  })
+
+  it('deleting a person deletes that person\'s warm_entries rows and no one else\'s (AC3)', async () => {
+    await db.exec(`delete from warm_entries`)
+    await upsertPersonsP([
+      { id: 'warm-gone', name: 'Warm Gone', aliases: ['Warm Gone'] },
+      { id: 'warm-stays', name: 'Warm Stays', aliases: ['Warm Stays'] },
+    ])
+    try {
+      await insertRow('warm/v1/warm-gone/graph/a.json', 'warm-gone', 'k\n{}')
+      await insertRow('warm/v1/warm-gone/sources/a.json', 'warm-gone', 'k\n{}')
+      await insertRow('warm/v1/warm-stays/graph/a.json', 'warm-stays', 'k\n{}')
+      await insertRow(lula.pathname, 'lula', 'k\n{}')
+      await db.exec(`delete from persons where id = 'warm-gone'`)
+      const { rows } = await db.query<{ pathname: string; person_id: string }>(`select pathname, person_id from warm_entries order by pathname`)
+      assert.deepEqual(rows, [
+        { pathname: lula.pathname, person_id: 'lula' },
+        { pathname: 'warm/v1/warm-stays/graph/a.json', person_id: 'warm-stays' },
+      ])
+    } finally {
+      await db.exec(`delete from warm_entries`)
+      await db.exec(`delete from persons where id in ('warm-gone', 'warm-stays')`)
+    }
   })
 
   it('rejects a row for a person that does not exist', async () => {
@@ -135,9 +171,11 @@ describe('a stored recorte', () => {
   before(built)
   after(restore)
 
-  it('is byte-identical to the live route on every warm path of every fixture person, bolsonaro\'s empty windows included', async () => {
+  it('every warm path of every fixture person answers 200 with x-warm-store hit and the live route\'s body, content-type and cache-control, bolsonaro\'s empty windows included (AC6)', async () => {
     await materialized()
-    for (const path of warmPathsOf()) {
+    const paths = warmPathsOf()
+    assert.equal(paths.length, persons.length * 2 * 3)
+    for (const path of paths) {
       setWarmStore(pgWarmStore)
       const stored = await request(path)
       const expected = await live(path)
@@ -148,6 +186,9 @@ describe('a stored recorte', () => {
       assert.equal(stored.headers.get('cache-control'), expected.headers.get('cache-control'), path)
       assert.equal(expected.headers.get('x-warm-store'), null, path)
     }
+    setWarmStore(pgWarmStore)
+    const empty = JSON.parse((await request(pathOf('bolsonaro', 'graph', 7))).text)
+    assert.deepEqual([empty.nodes, empty.links], [[], []])
   })
 
   it('carries person-less links in at least one graph body, at most C(n,2) of them', async () => {
@@ -164,23 +205,25 @@ describe('a stored recorte', () => {
     assert.ok(personLess > 0, 'the byte-identity check is not vacuous: some body has a word-to-word link')
   })
 
-  it('answers a hit without the corpus, in three statements', async () => {
-    const { store } = await materialized()
-    setWarmStore(store)
-    const path = warmPathsOf()[0]
-    const before = await request(path)
+  it('answers a hit in three statements, person, graph_scopes, warm_entries, touching neither doc_terms nor graph_terms, and still returns its text once both are emptied (AC7)', async () => {
+    await materialized()
+    for (const route of ROUTES) {
+      const first = await served(pgWarmStore, lulaPath(route, 21))
+      assert.equal(first.res.headers.get('x-warm-store'), 'hit', route)
+      assert.equal(first.statements.length, 3, `${route}: ${first.statements.map((s) => s.slice(0, 40)).join(' | ')}`)
+      assert.match(first.statements[0], PERSON)
+      assert.match(first.statements[1], SCOPE)
+      assert.match(first.statements[2], ENTRY)
+      for (const s of first.statements) assert.doesNotMatch(s, /doc_terms|graph_terms/)
+    }
+    const path = lulaPath('graph', 7)
+    const before = await served(pgWarmStore, path)
     await db.exec(`delete from graph_terms`)
     await db.exec(`delete from doc_terms`)
     try {
-      let after!: Awaited<ReturnType<typeof request>>
-      const statements = await recordStatements(async () => void (after = await request(path)))
-      assert.equal(after.headers.get('x-warm-store'), 'hit')
-      assert.equal(after.text, before.text)
-      assert.equal(statements.length, 3)
-      assert.match(statements[0], PERSON)
-      assert.match(statements[1], SCOPE)
-      assert.match(statements[2], ENTRY)
-      for (const s of statements) assert.doesNotMatch(s, /doc_terms|graph_terms/)
+      const after = await served(pgWarmStore, path)
+      assert.equal(after.res.headers.get('x-warm-store'), 'hit')
+      assert.equal(after.res.text, before.res.text)
     } finally {
       setWarmStore(null)
       await restore()
@@ -192,8 +235,7 @@ describe('the fallback', () => {
   before(built)
   after(restore)
 
-  const path = () => warmPathsOf([{ id: 'lula' }]).find((p) => routeOf(p) === 'graph')!
-  const pathnameFor = (p: string) => warmRecortes([{ id: 'lula' }]).find((r) => r.path === p)!.pathname
+  const path = () => lulaPath('graph', 7)
 
   it('with setWarmStore(null) reads no row and sets no header', async () => {
     await materialized()
@@ -205,68 +247,81 @@ describe('the fallback', () => {
     assert.ok(statements.every((s) => !/warm_entries/.test(s)))
   })
 
-  it('reads a recorte with no row as a miss and answers the live body', async () => {
+  it('reads a recorte with no row as a miss and answers the live body, on all three routes (AC8)', async () => {
     await built()
-    const expected = await live(path())
-    setWarmStore(pgWarmStore)
-    const res = await request(path())
-    assert.equal(res.status, 200)
-    assert.equal(res.headers.get('x-warm-store'), 'miss')
-    assert.equal(res.text, expected.text)
+    for (const route of ROUTES) {
+      const expected = await live(lulaPath(route, 7))
+      const { res } = await served(pgWarmStore, lulaPath(route, 7))
+      assert.equal(res.status, 200, route)
+      assert.equal(res.headers.get('x-warm-store'), 'miss', route)
+      assert.equal(res.text, expected.text, route)
+    }
   })
 
-  it('reads an entry built before a second aggregate build as stale and answers the live body', async () => {
-    const { store } = await materialized()
+  it('reads an entry built before a second aggregate build as stale and answers the live body, on all three routes (AC8)', async () => {
+    await materialized()
     await buildGraphAggregates(persons)
     try {
-      const expected = await live(path())
-      setWarmStore(store)
-      const res = await request(path())
-      assert.equal(res.status, 200)
-      assert.equal(res.headers.get('x-warm-store'), 'stale')
-      assert.equal(res.text, expected.text)
+      for (const route of ROUTES) {
+        const expected = await live(lulaPath(route, 7))
+        const { res } = await served(pgWarmStore, lulaPath(route, 7))
+        assert.equal(res.status, 200, route)
+        assert.equal(res.headers.get('x-warm-store'), 'stale', route)
+        assert.equal(res.text, expected.text, route)
+      }
     } finally {
       await restore()
     }
   })
 
-  it('reads a throwing reader and a keyless row as a miss with status 200', async () => {
+  it('reads a throwing reader, a keyless reader and a stored row without a key line as a miss with status 200 (AC8)', async () => {
     await built()
-    await pgWarmStore.put({ pathname: pathnameFor(path()), personId: 'lula' }, '{"person":{}}')
-    const expected = await live(path())
-    const throwing: WarmReader = { get: async () => { throw new Error('store down') } }
-    const keyless: WarmReader = { get: async () => '{"person":{}}' }
-    for (const store of [throwing, keyless, pgWarmStore]) {
-      setWarmStore(store)
-      const res = await request(path())
-      assert.equal(res.status, 200)
-      assert.equal(res.headers.get('x-warm-store'), 'miss')
-      assert.equal(res.text, expected.text)
+    const expected = (await live(path())).text
+    const missWith = async (label: string, store: WarmReader) => {
+      const { res } = await served(store, path())
+      assert.equal(res.status, 200, label)
+      assert.equal(res.headers.get('x-warm-store'), 'miss', label)
+      assert.equal(res.text, expected, label)
+    }
+    await missWith('a throwing reader', { get: async () => { throw new Error('store down') } })
+    await missWith('a keyless reader', { get: async () => '{"person":{}}' })
+    for (const body of ['{"person":{}}', '\n{"person":{}}', '']) {
+      await db.exec(`delete from warm_entries`)
+      await pgWarmStore.put({ pathname: pathnameOf(path()), personId: 'lula' }, body)
+      await missWith(`a stored ${JSON.stringify(body)}`, pgWarmStore)
     }
   })
 
-  it('reads a missing warm_entries table as a miss, 503 with the store-only header, and hits again after migrate', async () => {
+  it('reads a missing warm_entries table as a miss, 503 with the store-only header, and hits again after migrate, on all three routes (AC9)', async () => {
     await materialized()
-    const expected = await live(path())
+    const expected = new Map<string, string>()
+    for (const route of ROUTES) expected.set(route, (await live(lulaPath(route, 21))).text)
     await db.exec(`drop table warm_entries`)
     try {
-      setWarmStore(pgWarmStore)
-      const res = await request(path())
-      assert.equal(res.status, 200)
-      assert.equal(res.headers.get('x-warm-store'), 'miss')
-      assert.equal(res.text, expected.text)
-      const only = await request(path(), { 'x-warm-store-only': '1' })
-      assert.equal(only.status, 503)
-      assert.deepEqual(JSON.parse(only.text), { error: 'warm store miss' })
-      assert.equal(only.headers.get('cache-control'), 'no-store')
+      for (const route of ROUTES) {
+        const plain = await served(pgWarmStore, lulaPath(route, 21))
+        assert.equal(plain.res.status, 200, route)
+        assert.equal(plain.res.headers.get('x-warm-store'), 'miss', route)
+        assert.equal(plain.res.text, expected.get(route), route)
+        const only = await served(pgWarmStore, lulaPath(route, 21), { 'x-warm-store-only': '1' })
+        assert.equal(only.res.status, 503, route)
+        assert.deepEqual(JSON.parse(only.res.text), { error: 'warm store miss' })
+        assert.equal(only.res.headers.get('cache-control'), 'no-store')
+      }
     } finally {
       await migrateP()
     }
-    assert.equal((await request(path())).headers.get('x-warm-store'), 'miss', 'the new table is empty until materialize runs')
+    for (const route of ROUTES) {
+      const empty = await served(pgWarmStore, lulaPath(route, 21))
+      assert.equal(empty.res.headers.get('x-warm-store'), 'miss', `${route}: the new table is empty until materialize runs`)
+    }
     await materialize(await dbPersons(), { store: pgWarmStore })
-    const again = await request(path())
-    assert.equal(again.headers.get('x-warm-store'), 'hit')
-    assert.equal(again.text, expected.text)
+    for (const route of ROUTES) {
+      const again = await served(pgWarmStore, lulaPath(route, 21))
+      assert.equal(again.res.status, 200, route)
+      assert.equal(again.res.headers.get('x-warm-store'), 'hit', route)
+      assert.equal(again.res.text, expected.get(route), route)
+    }
   })
 
   it('reads a person-window with no graph_scopes row as a miss without asking the store, and 503 when the store alone was asked', async () => {
@@ -275,7 +330,7 @@ describe('the fallback', () => {
     try {
       const calls: string[] = []
       setWarmStore({ get: async (pathname) => (calls.push(pathname), null) })
-      const p = warmPathsOf([{ id: 'tarcisio' }]).find((x) => routeOf(x) === 'graph' && x.includes('days=7&'))!
+      const p = pathOf('tarcisio', 'graph', 7)
       const res = await request(p)
       assert.equal(res.status, 200)
       assert.equal(res.headers.get('x-warm-store'), 'miss')
@@ -315,7 +370,7 @@ describe('a recorte that is not warm', () => {
 
   for (const [route, changes] of notWarm)
     for (const change of changes)
-      it(`${route} with ${JSON.stringify(change)} runs no warm_entries statement and carries no header`, async () => {
+      it(`${route} with ${JSON.stringify(change)} runs no warm_entries statement and carries no header (AC11)`, async () => {
         setWarmStore(pgWarmStore)
         let res!: Awaited<ReturnType<typeof request>>
         const statements = await recordStatements(async () => void (res = await request(variant(warmOf(route), change))))
@@ -356,66 +411,76 @@ describe('x-warm-store-only', () => {
   after(restore)
 
   const only = { 'x-warm-store-only': '1' }
-  const path = () => warmPathsOf([{ id: 'lula' }]).find((p) => routeOf(p) === 'sources')!
 
-  it('answers a hit as usual', async () => {
-    const { store } = await materialized()
-    setWarmStore(store)
-    const res = await request(path(), only)
-    assert.equal(res.status, 200)
-    assert.equal(res.headers.get('x-warm-store'), 'hit')
+  it('answers a hit as usual, with the live body, on all three routes (AC10)', async () => {
+    await materialized()
+    for (const route of ROUTES) {
+      const expected = await live(lulaPath(route, 7))
+      const { res } = await served(pgWarmStore, lulaPath(route, 7), only)
+      assert.equal(res.status, 200, route)
+      assert.equal(res.headers.get('x-warm-store'), 'hit', route)
+      assert.equal(res.text, expected.text, route)
+    }
   })
 
-  it('turns a miss or stale entry into a 503 that runs only the three lookup statements', async () => {
-    const lookupOnly = async () => {
-      setWarmStore(pgWarmStore)
-      let res!: Awaited<ReturnType<typeof request>>
-      const statements = await recordStatements(async () => void (res = await request(path(), only)))
-      assert.equal(res.status, 503)
-      assert.deepEqual(JSON.parse(res.text), { error: 'warm store miss' })
-      assert.equal(res.headers.get('cache-control'), 'no-store')
-      assert.equal(statements.length, 3, 'the person, the scope and the entry lookups, no live statement')
-      assert.match(statements[0], PERSON)
-      assert.match(statements[1], SCOPE)
-      assert.match(statements[2], ENTRY)
+  it('turns a miss or stale entry into a 503 that runs only the person, graph_scopes and warm_entries statements, on all three routes (AC10)', async () => {
+    const lookups = async (label: string) => {
+      for (const route of ROUTES) {
+        const { res, statements } = await served(pgWarmStore, lulaPath(route, 7), only)
+        assert.equal(res.status, 503, `${label} ${route}`)
+        assert.deepEqual(JSON.parse(res.text), { error: 'warm store miss' })
+        assert.equal(res.headers.get('cache-control'), 'no-store')
+        assert.equal(statements.length, 3, `${label} ${route}: the person, the scope and the entry lookups, no live statement: ${statements.map((s) => s.slice(0, 40)).join(' | ')}`)
+        assert.match(statements[0], PERSON)
+        assert.match(statements[1], SCOPE)
+        assert.match(statements[2], ENTRY)
+        assert.equal(touches(statements, /graph_terms|doc_terms|doc_testimony|term_links|term_communities/), 0)
+      }
     }
     try {
       await built()
-      await lookupOnly()
+      await lookups('miss')
       await materialized()
       await buildGraphAggregates(persons)
-      await lookupOnly()
+      await lookups('stale')
     } finally {
       await restore()
     }
   })
 
-  it('with no graph_scopes row for the window runs two statements and never reads warm_entries', async () => {
+  it('with no graph_scopes row for the window runs two statements and never reads warm_entries, on all three routes (AC10)', async () => {
     await materialized()
-    await db.exec(`delete from graph_scopes where person_id = 'lula' and days = 7`)
+    await db.exec(`delete from graph_scopes where person_id = 'lula' and days = 21`)
     try {
-      setWarmStore(pgWarmStore)
-      const p = warmPathsOf([{ id: 'lula' }]).find((x) => routeOf(x) === 'sources' && x.includes('days=7&'))!
-      let res!: Awaited<ReturnType<typeof request>>
-      const statements = await recordStatements(async () => void (res = await request(p, only)))
-      assert.equal(res.status, 503)
-      assert.equal(statements.length, 2)
-      assert.ok(statements.every((s) => !/warm_entries/.test(s)))
+      for (const route of ROUTES) {
+        const { res, statements } = await served(pgWarmStore, lulaPath(route, 21), only)
+        assert.equal(res.status, 503, route)
+        assert.equal(statements.length, 2, `${route}: ${statements.map((s) => s.slice(0, 40)).join(' | ')}`)
+        assert.equal(touches(statements, /warm_entries/), 0)
+      }
     } finally {
       await restore()
     }
   })
 
-  it('is ignored on /api/people, on a non-warm recorte and with no store configured', async () => {
+  it('is ignored on /api/people, on a non-warm recorte and with no store configured (AC10)', async () => {
+    const path = lulaPath('graph', 7)
+    const expected = (await live(path)).text
     const calls: string[] = []
     setWarmStore({ get: async (pathname) => (calls.push(pathname), null) })
     const people = await request('/api/people', only)
     assert.equal(people.status, 200)
-    const coldPath = path().replace('source=all', 'source=rss')
-    assert.equal((await request(coldPath, only)).status, 200)
-    setWarmStore(null)
-    assert.equal((await request(path(), only)).status, 200)
+    assert.equal(people.headers.get('x-warm-store'), null)
+    const coldQuery = new URLSearchParams(path.split('?')[1])
+    coldQuery.set('source', 'rss')
+    const cold = await request(`${path.split('?')[0]}?${coldQuery}`, only)
+    assert.equal(cold.status, 200)
+    assert.equal(cold.headers.get('x-warm-store'), null)
     assert.equal(calls.length, 0)
+    const off = await served(null, path, only)
+    assert.equal(off.res.status, 200)
+    assert.equal(off.res.headers.get('x-warm-store'), null)
+    assert.equal(off.res.text, expected)
   })
 })
 
@@ -442,279 +507,3 @@ describe('warmRecortes over the 7 and 21 day windows (issue #313 acceptance)', (
   })
 })
 
-describe('the table behind pgWarmStore (issue #317 acceptance)', () => {
-  before(built)
-  after(restore)
-
-  const lula = { pathname: 'warm/v1/lula/graph/ac.json', personId: 'lula' }
-  const insertRow = (pathname: string, person: string, body: string) =>
-    db.query(`insert into warm_entries (pathname, person_id, body) values ($1, $2, $3)`, [pathname, person, body])
-
-  it('deleting a person deletes that person\'s warm_entries rows and no one else\'s (AC3)', async () => {
-    await db.exec(`delete from warm_entries`)
-    await upsertPersonsP([
-      { id: 'ac3-gone', name: 'Ac Three Gone', aliases: ['Ac Three Gone'] },
-      { id: 'ac3-stays', name: 'Ac Three Stays', aliases: ['Ac Three Stays'] },
-    ])
-    try {
-      await insertRow('warm/v1/ac3-gone/graph/a.json', 'ac3-gone', 'k\n{}')
-      await insertRow('warm/v1/ac3-gone/sources/a.json', 'ac3-gone', 'k\n{}')
-      await insertRow('warm/v1/ac3-stays/graph/a.json', 'ac3-stays', 'k\n{}')
-      await insertRow('warm/v1/lula/graph/a.json', 'lula', 'k\n{}')
-      await db.exec(`delete from persons where id = 'ac3-gone'`)
-      const { rows } = await db.query<{ pathname: string; person_id: string }>(`select pathname, person_id from warm_entries order by pathname`)
-      assert.deepEqual(rows, [
-        { pathname: 'warm/v1/ac3-stays/graph/a.json', person_id: 'ac3-stays' },
-        { pathname: 'warm/v1/lula/graph/a.json', person_id: 'lula' },
-      ])
-    } finally {
-      await db.exec(`delete from warm_entries`)
-      await db.exec(`delete from persons where id in ('ac3-gone', 'ac3-stays')`)
-    }
-  })
-
-  it('pgWarmStore.get returns the stored body for a known pathname and null for an unknown one, each in exactly one select (AC4)', async () => {
-    await db.exec(`delete from warm_entries`)
-    await insertRow(lula.pathname, 'lula', 'key\n{"stored":true}')
-    const calls: (string | null)[] = []
-    const statements = await recordStatements(async () => {
-      calls.push(await pgWarmStore.get(lula.pathname))
-      calls.push(await pgWarmStore.get('warm/v1/lula/graph/unknown.json'))
-    })
-    assert.deepEqual(calls, ['key\n{"stored":true}', null])
-    assert.deepEqual(statements, Array(2).fill('select body from warm_entries where pathname = $1'))
-  })
-
-  it('pgWarmStore.put twice on one pathname leaves one row holding the second body and the given person_id (AC5)', async () => {
-    await db.exec(`delete from warm_entries`)
-    await pgWarmStore.put(lula, 'one\n{"n":1}')
-    await pgWarmStore.put({ pathname: lula.pathname, personId: 'bolsonaro' }, 'two\n{"n":2}')
-    const { rows } = await db.query(`select pathname, person_id, body from warm_entries`)
-    assert.deepEqual(rows, [{ pathname: lula.pathname, person_id: 'bolsonaro', body: 'two\n{"n":2}' }])
-  })
-
-  it('pgWarmStore.put keeps other pathnames of the same person as separate rows (AC5)', async () => {
-    await db.exec(`delete from warm_entries`)
-    await pgWarmStore.put(lula, 'one\n{}')
-    await pgWarmStore.put({ pathname: 'warm/v1/lula/sources/ac.json', personId: 'lula' }, 'two\n{}')
-    assert.equal((await db.query(`select 1 from warm_entries`)).rows.length, 2)
-  })
-})
-
-describe('a stored recorte served from warm_entries (issue #317 acceptance)', () => {
-  before(built)
-  after(restore)
-
-  const ROUTES = ['graph', 'sources', 'testimony'] as const
-  const lulaPath = (route: (typeof ROUTES)[number], days: 7 | 21) =>
-    warmPathsOf([{ id: 'lula' }]).find((p) => routeOf(p) === route && new URL(p, 'http://warm.local').searchParams.get('days') === String(days))!
-  const pathnameOf = (path: string) => warmRecortes(ids).find((r) => r.path === path)!.pathname
-  const served = async (store: WarmReader | null, path: string, headers: Record<string, string> = {}) => {
-    setWarmStore(store)
-    let res!: Awaited<ReturnType<typeof request>>
-    const statements = await recordStatements(async () => void (res = await request(path, headers)))
-    return { res, statements }
-  }
-  const touches = (statements: string[], table: RegExp) => statements.filter((s) => table.test(s)).length
-
-  it('every warm path of every fixture person answers 200 with x-warm-store hit and the live route\'s body, content-type and cache-control (AC6)', async () => {
-    await materialized()
-    const paths = warmPathsOf()
-    assert.equal(paths.length, persons.length * 2 * 3)
-    for (const path of paths) {
-      setWarmStore(pgWarmStore)
-      const stored = await request(path)
-      const expected = await live(path)
-      assert.equal(stored.status, 200, path)
-      assert.equal(stored.headers.get('x-warm-store'), 'hit', path)
-      assert.equal(stored.text, expected.text, path)
-      assert.equal(stored.headers.get('content-type'), expected.headers.get('content-type'), path)
-      assert.equal(stored.headers.get('cache-control'), expected.headers.get('cache-control'), path)
-      assert.equal(expected.headers.get('x-warm-store'), null, path)
-    }
-    const empty = JSON.parse((await request(warmPathsOf([{ id: 'bolsonaro' }]).find((p) => routeOf(p) === 'graph')!)).text)
-    assert.deepEqual([empty.nodes, empty.links], [[], []])
-  })
-
-  it('a hit runs three statements in order, person, graph_scopes, warm_entries, touching neither doc_terms nor graph_terms, and still returns its text once both are emptied (AC7)', async () => {
-    await materialized()
-    for (const route of ROUTES) {
-      const path = lulaPath(route, 21)
-      const first = await served(pgWarmStore, path)
-      assert.equal(first.res.headers.get('x-warm-store'), 'hit', route)
-      assert.equal(first.statements.length, 3, `${route}: ${first.statements.map((s) => s.slice(0, 40)).join(' | ')}`)
-      assert.match(first.statements[0], /\bpersons\b/)
-      assert.match(first.statements[1], /\bgraph_scopes\b/)
-      assert.match(first.statements[2], /\bwarm_entries\b/)
-      for (const s of first.statements) assert.doesNotMatch(s, /doc_terms|graph_terms/)
-    }
-    const path = lulaPath('graph', 7)
-    const before = await served(pgWarmStore, path)
-    await db.exec(`delete from graph_terms`)
-    await db.exec(`delete from doc_terms`)
-    try {
-      const after = await served(pgWarmStore, path)
-      assert.equal(after.res.headers.get('x-warm-store'), 'hit')
-      assert.equal(after.res.text, before.res.text)
-    } finally {
-      setWarmStore(null)
-      await restore()
-    }
-  })
-
-  it('with no warm_entries row the answer is the live body with miss; after a second buildGraphAggregates it is the live body with stale (AC8)', async () => {
-    await built()
-    const expected = new Map<string, string>()
-    for (const route of ROUTES) expected.set(route, (await live(lulaPath(route, 7))).text)
-    for (const route of ROUTES) {
-      const { res } = await served(pgWarmStore, lulaPath(route, 7))
-      assert.equal(res.status, 200, route)
-      assert.equal(res.headers.get('x-warm-store'), 'miss', route)
-      assert.equal(res.text, expected.get(route), route)
-    }
-    await materialize(await dbPersons(), { store: pgWarmStore })
-    await buildGraphAggregates(persons)
-    try {
-      for (const route of ROUTES) {
-        const { res } = await served(pgWarmStore, lulaPath(route, 7))
-        assert.equal(res.status, 200, route)
-        assert.equal(res.headers.get('x-warm-store'), 'stale', route)
-        assert.equal(res.text, (await live(lulaPath(route, 7))).text, route)
-      }
-    } finally {
-      await restore()
-    }
-  })
-
-  it('a keyless row and a reader that throws are a miss with status 200 and the live body (AC8)', async () => {
-    await built()
-    const path = lulaPath('graph', 7)
-    const expected = (await live(path)).text
-    for (const body of ['{"person":{}}', '\n{"person":{}}', '']) {
-      await db.exec(`delete from warm_entries`)
-      await db.query(`insert into warm_entries (pathname, person_id, body) values ($1, 'lula', $2)`, [pathnameOf(path), body])
-      const { res } = await served(pgWarmStore, path)
-      assert.equal(res.status, 200, JSON.stringify(body))
-      assert.equal(res.headers.get('x-warm-store'), 'miss', JSON.stringify(body))
-      assert.equal(res.text, expected, JSON.stringify(body))
-    }
-    const { res } = await served({ get: () => Promise.reject(new Error('the store is down')) }, path)
-    assert.equal(res.status, 200)
-    assert.equal(res.headers.get('x-warm-store'), 'miss')
-    assert.equal(res.text, expected)
-  })
-
-  it('with the warm_entries table dropped an eligible request is 200, live, miss, and 503 with x-warm-store-only; after migrate() it hits once materialized (AC9)', async () => {
-    await materialized()
-    const path = lulaPath('sources', 21)
-    const expected = (await live(path)).text
-    await db.exec(`drop table warm_entries`)
-    try {
-      const plain = await served(pgWarmStore, path)
-      assert.equal(plain.res.status, 200)
-      assert.equal(plain.res.headers.get('x-warm-store'), 'miss')
-      assert.equal(plain.res.text, expected)
-      const only = await served(pgWarmStore, path, { 'x-warm-store-only': '1' })
-      assert.equal(only.res.status, 503)
-      assert.deepEqual(JSON.parse(only.res.text), { error: 'warm store miss' })
-      assert.equal(only.res.headers.get('cache-control'), 'no-store')
-    } finally {
-      await migrateP()
-    }
-    await materialize(await dbPersons(), { store: pgWarmStore })
-    const after = await served(pgWarmStore, path)
-    assert.equal(after.res.status, 200)
-    assert.equal(after.res.headers.get('x-warm-store'), 'hit')
-    assert.equal(after.res.text, expected)
-  })
-
-  it('x-warm-store-only on a miss or stale recorte answers 503 after exactly the person, graph_scopes and warm_entries statements, on all three routes (AC10)', async () => {
-    const only = { 'x-warm-store-only': '1' }
-    const lookups = async (label: string) => {
-      for (const route of ROUTES) {
-        const { res, statements } = await served(pgWarmStore, lulaPath(route, 7), only)
-        assert.equal(res.status, 503, `${label} ${route}`)
-        assert.deepEqual(JSON.parse(res.text), { error: 'warm store miss' })
-        assert.equal(res.headers.get('cache-control'), 'no-store')
-        assert.equal(statements.length, 3, `${label} ${route}: ${statements.map((s) => s.slice(0, 40)).join(' | ')}`)
-        assert.match(statements[0], /\bpersons\b/)
-        assert.match(statements[1], /\bgraph_scopes\b/)
-        assert.match(statements[2], /\bwarm_entries\b/)
-        assert.equal(touches(statements, /graph_terms|doc_terms|doc_testimony|term_links|term_communities/), 0)
-      }
-    }
-    try {
-      await built()
-      await lookups('miss')
-      await materialize(await dbPersons(), { store: pgWarmStore })
-      await buildGraphAggregates(persons)
-      await lookups('stale')
-    } finally {
-      await restore()
-    }
-  })
-
-  it('x-warm-store-only with no graph_scopes row for the window is two statements and never reads warm_entries (AC10)', async () => {
-    await materialized()
-    await db.exec(`delete from graph_scopes where person_id = 'lula' and days = 21`)
-    try {
-      for (const route of ROUTES) {
-        const { res, statements } = await served(pgWarmStore, lulaPath(route, 21), { 'x-warm-store-only': '1' })
-        assert.equal(res.status, 503, route)
-        assert.equal(statements.length, 2, `${route}: ${statements.map((s) => s.slice(0, 40)).join(' | ')}`)
-        assert.equal(touches(statements, /warm_entries/), 0)
-      }
-    } finally {
-      await restore()
-    }
-  })
-
-  it('x-warm-store-only is ignored on a hit, on /api/people, on a non-warm recorte and with setWarmStore(null) (AC10)', async () => {
-    await materialized()
-    const only = { 'x-warm-store-only': '1' }
-    const path = lulaPath('graph', 7)
-    const expected = (await live(path)).text
-
-    const hit = await served(pgWarmStore, path, only)
-    assert.equal(hit.res.status, 200)
-    assert.equal(hit.res.headers.get('x-warm-store'), 'hit')
-    assert.equal(hit.res.text, expected)
-
-    const people = await served(pgWarmStore, '/api/people', only)
-    assert.equal(people.res.status, 200)
-    assert.equal(people.res.headers.get('x-warm-store'), null)
-
-    await db.exec(`delete from warm_entries`)
-    const coldQuery = new URLSearchParams(path.split('?')[1])
-    coldQuery.set('source', 'rss')
-    const cold = await served(pgWarmStore, `${path.split('?')[0]}?${coldQuery}`, only)
-    assert.equal(cold.res.status, 200)
-    assert.equal(cold.res.headers.get('x-warm-store'), null)
-
-    const off = await served(null, path, only)
-    assert.equal(off.res.status, 200)
-    assert.equal(off.res.headers.get('x-warm-store'), null)
-    assert.equal(off.res.text, expected)
-  })
-
-  const notWarm: [(typeof ROUTES)[number], Record<string, string>][] = [
-    ['graph', { min: '3' }],
-    ['graph', { source: 'rss' }],
-    ['graph', { domain: 'x' }],
-    ['graph', { kind: 'word' }],
-    ['sources', { source: 'rss' }],
-    ['testimony', { source: 'rss' }],
-  ]
-  for (const [route, change] of notWarm)
-    it(`${route} with ${JSON.stringify(change)} runs no warm_entries statement and carries no x-warm-store header (AC11)`, async () => {
-      await materialized()
-      const [base, qs] = lulaPath(route, 7).split('?')
-      const q = new URLSearchParams(qs)
-      for (const [k, v] of Object.entries(change)) q.set(k, v)
-      const { res, statements } = await served(pgWarmStore, `${base}?${q}`)
-      assert.equal(res.status, 200)
-      assert.equal(res.headers.get('x-warm-store'), null)
-      assert.ok(statements.length > 0)
-      assert.equal(touches(statements, /warm_entries/), 0)
-    })
-})

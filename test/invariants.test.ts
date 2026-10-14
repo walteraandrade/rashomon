@@ -542,19 +542,60 @@ describe('the warm store lives in Postgres alone', () => {
     return [...seen]
   }
 
-  it('no module under src or test imports @vercel/blob and neither package.json nor the lockfile lists it', () => {
-    const blob = /from\s+['"]@vercel\/blob['"]/
-    assert.deepEqual(srcFiles().filter((file) => blob.test(srcSource(file))), [])
-    assert.deepEqual(readdirSync(testDir).filter((file) => file.endsWith('.ts') && blob.test(testFileSource(file))), [])
-    assert.ok(!existsSync(join(srcDir, 'warmstore-blob.ts')))
-    assert.ok(!existsSync(join(testDir, 'warmstore-blob.test.ts')))
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]))
+  const sources = ['src', 'test'].flatMap((dir) => walk(join(root, dir))).filter((file) => /\.(ts|js|svelte)$/.test(file))
+
+  it('no file under src or test imports @vercel/blob, statically, dynamically or through require (AC18)', () => {
+    assert.ok(sources.length > 50, 'the walk found the source tree')
+    const importsBlob = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]@vercel\/blob/
+    assert.deepEqual(sources.filter((file) => importsBlob.test(readFileSync(file, 'utf8'))).map((file) => file.slice(root.length + 1)), [])
+  })
+
+  it('package.json lists @vercel/blob in no dependency field and pnpm-lock.yaml does not mention it (AC18)', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])
+      assert.ok(!Object.keys((pkg[field] as Record<string, string> | undefined) ?? {}).includes('@vercel/blob'), `${field} must not list it`)
     for (const file of ['package.json', 'pnpm-lock.yaml']) assert.doesNotMatch(readFileSync(join(root, file), 'utf8'), /@vercel\/blob/, file)
   })
 
-  it('src/warmstore.ts exports neither a Blob reader, an environment constructor nor the read timeout', async () => {
-    const names = Object.keys(await import('../src/warmstore.js'))
-    for (const gone of ['blobReader', 'warmStoreFromEnv', 'READ_TIMEOUT_MS']) assert.ok(!names.includes(gone), `${gone} must be gone`)
-    assert.ok(names.includes('pgWarmStore'))
+  // The offline half of "pnpm install --frozen-lockfile succeeds" (AC18): that command fails when the
+  // root importer's specifiers differ from package.json, which removing a package by hand can cause.
+  it('the lockfile\'s root importer holds exactly package.json\'s dependencies, specifier for specifier (AC18)', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, Record<string, string> | undefined>
+    const manifest = Object.fromEntries(
+      ['dependencies', 'devDependencies', 'optionalDependencies'].flatMap((field) => Object.entries(pkg[field] ?? {})),
+    )
+    const lines = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8').split('\n')
+    const start = lines.indexOf('  .:')
+    assert.notEqual(start, -1, 'the lockfile has a root importer')
+    const end = lines.findIndex((line, i) => i > start && /^(\S|  \S)/.test(line))
+    const unquote = (text: string) => text.replace(/^'(.*)'$/, '$1')
+    const locked = lines
+      .slice(start + 1, end === -1 ? undefined : end)
+      .reduce<{ name: string | null; specifiers: Record<string, string> }>(
+        (acc, line) => {
+          const name = /^ {6}(\S.*):$/.exec(line)
+          const specifier = /^ {8}specifier: (.+)$/.exec(line)
+          if (name) return { ...acc, name: unquote(name[1]) }
+          if (specifier && acc.name) return { name: acc.name, specifiers: { ...acc.specifiers, [acc.name]: unquote(specifier[1]) } }
+          return acc
+        },
+        { name: null, specifiers: {} },
+      ).specifiers
+    assert.ok(Object.keys(manifest).length > 10, 'package.json lists its dependencies')
+    assert.deepEqual(locked, manifest)
+  })
+
+  it('src/warmstore-blob.ts and test/warmstore-blob.test.ts no longer exist (AC18)', () => {
+    assert.equal(existsSync(join(root, 'src', 'warmstore-blob.ts')), false)
+    assert.equal(existsSync(join(root, 'test', 'warmstore-blob.test.ts')), false)
+  })
+
+  it('src/warmstore.ts exports neither blobReader, warmStoreFromEnv nor READ_TIMEOUT_MS, and still exports the Postgres store and the memory store (AC18)', async () => {
+    const exported = Object.keys(await import('../src/warmstore.js'))
+    for (const gone of ['blobReader', 'warmStoreFromEnv', 'READ_TIMEOUT_MS']) assert.ok(!exported.includes(gone), `${gone} is still exported`)
+    for (const kept of ['pgWarmStore', 'memoryWarmStore', 'lookup', 'warmRecortes']) assert.ok(exported.includes(kept), `${kept} must stay exported`)
   })
 
   it('src/server.ts still reaches src/warmstore.ts', () => {
@@ -796,63 +837,5 @@ describe('#298 imperative front-end leftovers are gone', () => {
 
   it('#298 AC7: ALLOWED_PACKAGES is still empty', () => {
     assert.match(testFileSource('invariants.test.ts'), /ALLOWED_PACKAGES[^=\n]*=\s*\[\s*\]/)
-  })
-})
-
-describe('no Blob dependency is left behind (issue #317 acceptance)', () => {
-  const walk = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]))
-  const sources = ['src', 'test'].flatMap((dir) => walk(join(root, dir))).filter((file) => /\.(ts|js|svelte)$/.test(file))
-
-  it('no file under src or test imports @vercel/blob, statically, dynamically or through require (AC18)', () => {
-    assert.ok(sources.length > 50, 'the walk found the source tree')
-    const importsBlob = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]@vercel\/blob/
-    assert.deepEqual(sources.filter((file) => importsBlob.test(readFileSync(file, 'utf8'))).map((file) => file.slice(root.length + 1)), [])
-  })
-
-  it('package.json lists @vercel/blob in no dependency field and pnpm-lock.yaml does not mention it (AC18)', () => {
-    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
-    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])
-      assert.ok(!Object.keys((pkg[field] as Record<string, string> | undefined) ?? {}).includes('@vercel/blob'), `${field} must not list it`)
-    assert.doesNotMatch(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'), /@vercel\/blob/)
-  })
-
-  // The offline half of "pnpm install --frozen-lockfile succeeds" (AC18): that command fails when the
-  // root importer's specifiers differ from package.json, which removing a package by hand can cause.
-  it('the lockfile\'s root importer holds exactly package.json\'s dependencies, specifier for specifier (AC18)', () => {
-    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, Record<string, string> | undefined>
-    const manifest = Object.fromEntries(
-      ['dependencies', 'devDependencies', 'optionalDependencies'].flatMap((field) => Object.entries(pkg[field] ?? {})),
-    )
-    const lines = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8').split('\n')
-    const start = lines.indexOf('  .:')
-    assert.notEqual(start, -1, 'the lockfile has a root importer')
-    const end = lines.findIndex((line, i) => i > start && /^(\S|  \S)/.test(line))
-    const unquote = (text: string) => text.replace(/^'(.*)'$/, '$1')
-    const locked = lines
-      .slice(start + 1, end === -1 ? undefined : end)
-      .reduce<{ name: string | null; specifiers: Record<string, string> }>(
-        (acc, line) => {
-          const name = /^ {6}(\S.*):$/.exec(line)
-          const specifier = /^ {8}specifier: (.+)$/.exec(line)
-          if (name) return { ...acc, name: unquote(name[1]) }
-          if (specifier && acc.name) return { name: acc.name, specifiers: { ...acc.specifiers, [acc.name]: unquote(specifier[1]) } }
-          return acc
-        },
-        { name: null, specifiers: {} },
-      ).specifiers
-    assert.ok(Object.keys(manifest).length > 10, 'package.json lists its dependencies')
-    assert.deepEqual(locked, manifest)
-  })
-
-  it('src/warmstore-blob.ts and test/warmstore-blob.test.ts no longer exist (AC18)', () => {
-    assert.equal(existsSync(join(root, 'src', 'warmstore-blob.ts')), false)
-    assert.equal(existsSync(join(root, 'test', 'warmstore-blob.test.ts')), false)
-  })
-
-  it('src/warmstore.ts exports neither blobReader, warmStoreFromEnv nor READ_TIMEOUT_MS, and still exports the Postgres store and the memory store (AC18)', async () => {
-    const exported = Object.keys(await import('../src/warmstore.js'))
-    for (const gone of ['blobReader', 'warmStoreFromEnv', 'READ_TIMEOUT_MS']) assert.ok(!exported.includes(gone), `${gone} is still exported`)
-    for (const kept of ['pgWarmStore', 'memoryWarmStore', 'lookup', 'warmRecortes']) assert.ok(exported.includes(kept), `${kept} must stay exported`)
   })
 })

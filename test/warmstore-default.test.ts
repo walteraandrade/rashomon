@@ -3,32 +3,19 @@ import { after, describe, it } from 'node:test'
 import { db } from '../src/db.js'
 import { app } from '../src/server.js'
 import { splitEntry, warmRecortes } from '../src/warmstore.js'
+import { persons } from './fixture.js'
 import { materialized, restore, storedEntries } from './warmstore-helpers.js'
 import './close.js'
 
 // Never calls setWarmStore: another test's call would hide what the server starts with.
-describe('the server\'s default store', () => {
+describe('the server\'s default store (issue #317 acceptance)', () => {
   after(restore)
 
-  it('answers a hit from warm_entries with no environment variable set', async () => {
-    for (const name of ['BLOB_READ_WRITE_TOKEN', 'WARM_STORE_URL']) delete process.env[name]
-    await materialized()
-    for (const r of warmRecortes([{ id: 'lula' }])) {
-      const res = await app.request(r.path)
-      assert.equal(res.status, 200, r.path)
-      assert.equal(res.headers.get('x-warm-store'), 'hit', r.path)
-    }
-  })
-})
-
-describe('the default store, from the spec (issue #317 acceptance)', () => {
-  after(restore)
-
-  it('a materialized warm path answers x-warm-store hit in a process that never calls setWarmStore, with no environment variable set (AC12)', async () => {
+  it('a materialized warm path answers x-warm-store hit with the row\'s own body, with no environment variable set (AC12)', async () => {
     for (const name of ['BLOB_READ_WRITE_TOKEN', 'WARM_STORE_URL']) delete process.env[name]
     await materialized()
     const stored = await storedEntries()
-    const recortes = warmRecortes([{ id: 'lula' }, { id: 'tarcisio' }, { id: 'bolsonaro' }])
+    const recortes = warmRecortes(persons.map((p) => ({ id: p.id })))
     assert.equal(recortes.length, 18)
     for (const r of recortes) {
       const res = await app.request(r.path)

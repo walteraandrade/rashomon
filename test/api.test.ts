@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-import { ATLAS_KINDS, attentionParams, bridgeParams, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadPersistence, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, persistenceParams, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
+import { ATLAS_KINDS, attentionParams, bridgeParams, compareParams, docsParams, endpoint, json, lensesParams, loadAttention, loadCompare, loadDocs, loadGraph, loadPeople, loadPersistence, loadSources, loadTestimony, loadTimeline, loadWeek, narrowToSources, narrowToTestimony, params, persistenceParams, risingParams, sourcesParams, sparklineParams, testimonyParams, weekParams } from '../src/ui/api.js'
 
 // src/ui/api.ts: URL building and fetching for the documented routes. No DOM.
 
@@ -227,20 +227,33 @@ describe('weekParams / loadWeek stay fixed at days=7', () => {
   })
 })
 
-// Issue #216 (figure 7, attention vs mentions): attentionParams always sends days=30, the
-// route's only window, never exposed as a control -- same fixed-window precedent as
-// weekParams' days=7 above.
-describe('attentionParams / loadAttention stay fixed at days=30 (issue #216)', () => {
-  it('attentionParams always sends days=30 regardless of any other input (AC5)', () => {
-    assert.equal(attentionParams({}).get('days'), '30')
+// Issue #216 (figure 7, attention vs mentions): attentionParams always sends the route's one
+// window, 21 days since issue #313, never exposed as a control -- same fixed-window precedent
+// as weekParams' days=7 above.
+describe('attentionParams / loadAttention stay fixed at days=21 (issues #216, #313)', () => {
+  it('attentionParams always sends days=21 regardless of any other input (AC5)', () => {
+    assert.equal(attentionParams({}).get('days'), '21')
     // Passing an unrelated/extra field must not change the fixed window either.
-    assert.equal(attentionParams({ source: 'gdelt' } as any).get('days'), '30')
+    assert.equal(attentionParams({ source: 'gdelt' } as any).get('days'), '21')
   })
 
   it('loadAttention calls GET /api/people/:id/attention', async () => {
-    const calls = stubFetch(true, { days: 30, series: [] })
+    const calls = stubFetch(true, { days: 21, series: [] })
     await loadAttention('lula', attentionParams({}))
     assert.equal(calls[0].url, '/api/people/lula/attention?' + attentionParams({}).toString())
+  })
+})
+
+describe('risingParams and the 21-day fallbacks (issue #313)', () => {
+  it('risingParams sends days=7 and baseline=14, whatever the figure selects', () => {
+    const p = risingParams({ source: 'all' })
+    assert.equal(p.get('days'), '7')
+    assert.equal(p.get('baseline'), '14')
+    assert.equal(risingParams({ source: 'gkg' }).get('source'), 'gkg')
+  })
+
+  it('narrowToTestimony falls back to 21 days when the graph params carry no days', () => {
+    assert.equal(narrowToTestimony(new URLSearchParams({ source: 'all' })).get('days'), '21')
   })
 })
 

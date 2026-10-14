@@ -7,12 +7,12 @@
   import { agendaRows, fmt, LEAN_LABELS, SOURCE_SEGMENTS, sourceLabels, type Agenda } from './format.js'
   import { seedFor } from './seed.js'
 
-  const DAY_CHOICES = ['7', '30', '60']
+  const DAY_CHOICES = ['7', '21']
   const WIDTHS = ['', 'is-mid', 'is-short']
 
   let gridEl: HTMLElement | undefined = $state()
   let mounted = $state(false)
-  let days = $state('30')
+  let days = $state('21')
   let source = $state('all')
   let selected = $state<{ person: string; domain: string } | null>(null)
   let started = false
@@ -99,7 +99,7 @@
       <div><dt>Posição</dt><dd>veículo na linha, pessoa na coluna</dd></div>
       <div><dt>Clique</dt><dd>documentos daquela pessoa naquele veículo</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">Qual fatia da cobertura de cada veículo é sobre cada pessoa, nos <span class="keep"><span class="pick"><select id="agendaDays" aria-label="Período (agenda)" value={days} onchange={(e) => { days = e.currentTarget.value; onControl() }}><option value="7">últimos 7 dias</option><option value="30">últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="agendaSource" aria-label="Fonte (agenda)" value={source} onchange={(e) => { source = e.currentTarget.value; onControl() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
+    <div class="sentence"><p class="sentence-line">Qual fatia da cobertura de cada veículo é sobre cada pessoa, nos <span class="keep"><span class="pick"><select id="agendaDays" aria-label="Período (agenda)" value={days} onchange={(e) => { days = e.currentTarget.value; onControl() }}><option value="7">últimos 7 dias</option><option value="21">últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="agendaSource" aria-label="Fonte (agenda)" value={source} onchange={(e) => { source = e.currentTarget.value; onControl() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
   </header>
   <figure class="agenda-grid" id="agendaGrid" bind:this={gridEl} aria-label="Fatia de cobertura por veículo e por pessoa" hidden={!mounted} aria-busy={view === 'ghost' ? 'true' : 'false'}>
     {#if view === 'unavailable'}

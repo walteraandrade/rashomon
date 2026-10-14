@@ -64,9 +64,9 @@ const timelineBase: TimelineQuery = { term: '', kind: 'all', days: 30, source: '
 const toneBase: ToneQuery = { days: 30, min: 3 }
 const agendaBase: AgendaQuery = { days: 30, source: 'all', min: 5, limit: 30 }
 const testimonyBase: TestimonyQuery = { days: 30, source: 'all', method: 'stub', min: 3 }
-const compareBase: CompareQuery = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, bridges: false }
+const compareBase: CompareQuery = { days: 21, source: 'all', domain: 'all', lean: 'all', country: 'br', kind: 'all', limit: 40, bridges: false }
 const allLens = { lens: 'all', domain: 'all', lean: 'all', source: 'all' }
-const lensesBase: LensesQuery = { days: 30, kind: 'all', limit: 40, a: allLens, b: allLens, bridges: false }
+const lensesBase: LensesQuery = { days: 21, kind: 'all', limit: 40, a: allLens, b: allLens, bridges: false }
 
 const node = (g: Awaited<ReturnType<typeof graphFor>>, id: string) => g.nodes.find((n) => n.id === id)
 const sumOf = (rows: { count: number }[]) => rows.reduce((a, r) => a + r.count, 0)
@@ -79,15 +79,16 @@ describe('graphFor', () => {
     // days:30 also picks up docs /30-/36 (tarcisio gdelt/rss tone fixtures for issue #5; doc /37
     // sits at day 35, just outside this window), doc /38 (gkg, about lula, issue #8's
     // press-vs-network fixture) and docs /83-/84 (issue #207's comention fixture, about lula and
-    // tarcisio), widening both the person-agnostic scope (docs 13 -> 16) and about (4 -> 7)
-    assert.equal(g.stats.docs, 16)
+    // tarcisio), widening both the person-agnostic scope (docs 12 -> 15, doc /4 names nobody and is
+    // never stored) and about (4 -> 7)
+    assert.equal(g.stats.docs, 15)
     assert.equal(g.stats.about, 7)
   })
 
   it('widens with the window', async () => {
     // 60 days also picks up docs /17-/19 (estabilidade fiscal, day31/35/50), added for risingFor's tests
     const g = await graphFor(lula, { ...graphBase, days: 60 })
-    assert.equal(g.stats.docs, 20)
+    assert.equal(g.stats.docs, 19)
     assert.equal(g.stats.about, 10)
   })
 
@@ -247,7 +248,7 @@ describe('graphFor communities=1', () => {
   })
 
   it('tags every node on a precomputable recorte', async () => {
-    const g = await graphFor(lula, { ...graphBase, communities: true })
+    const g = await graphFor(lula, { ...graphBase, days: 21, communities: true })
     assert.ok(g.nodes.length > 0, 'sanity: the default window must have nodes')
     for (const n of g.nodes) assert.equal(typeof n.community, 'number')
   })
@@ -376,11 +377,12 @@ describe('multi-source filtering (issue #8)', () => {
 
   it('a comma-separated list counts only docs whose source is in the list', async () => {
     const g = await graphFor(lula, { ...graphBase, source: 'gnews,rss,gkg' })
-    // hand-counted from the fixture: within the default 30-day window, gnews has docs /1,/6
-    // (about lula) and /3 (not about lula); rss has /4 (not about lula), /7, /36 (about
+    // hand-counted from the fixture: within the default window, gnews has docs /1,/6
+    // (about lula) and /3 (not about lula); rss has /7, /36 (about
     // tarcisio), /83, /84 (about lula and tarcisio, issue #207's comention fixture); gkg has
-    // /38 (about lula) -> 9 docs in scope, 6 about lula (/1, /6, /7, /38, /83, /84)
-    assert.equal(g.stats.docs, 9)
+    // /38 (about lula) -> 8 docs in scope, 6 about lula (/1, /6, /7, /38, /83, /84); doc /4 names
+    // nobody and is never stored
+    assert.equal(g.stats.docs, 8)
     assert.equal(g.stats.about, 6)
   })
 
@@ -2728,18 +2730,18 @@ describe('shared graph aggregations (issue #45)', () => {
 
   it('runs one probe of the aggregates, then one statement for stats, nodes and signature, plus links', async () => {
     await db.query(`delete from graph_scopes`)
-    assert.equal(await countStatements(() => graphFor(lula, graphBase)), 3)
+    assert.equal(await countStatements(() => graphFor(lula, { ...graphBase, days: 21 })), 3)
   })
 
   it('runs the probe and the aggregate statement when the graph has no node to link', async () => {
     await db.query(`delete from graph_scopes`)
-    assert.equal(await countStatements(() => graphFor(nobody, graphBase)), 2)
+    assert.equal(await countStatements(() => graphFor(nobody, { ...graphBase, days: 21 })), 2)
   })
 
   it('once the window is built: the aggregates, the empty term_links probe, then live links', async () => {
     await buildGraphAggregates(persons)
-    assert.equal(await countStatements(() => graphFor(lula, graphBase)), 3)
-    assert.equal(await countStatements(() => graphFor(lula, { ...graphBase, domain: 'example.org' })), 2, 'a domain is never precomputed: live statement plus links')
+    assert.equal(await countStatements(() => graphFor(lula, { ...graphBase, days: 21 })), 3)
+    assert.equal(await countStatements(() => graphFor(lula, { ...graphBase, days: 21, domain: 'example.org' })), 2, 'a domain is never precomputed: live statement plus links')
   })
 })
 

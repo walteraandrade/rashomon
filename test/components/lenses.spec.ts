@@ -16,7 +16,7 @@ const people = [lula, bolsonaro]
 
 const side = (count: number, pmi = 1) => ({ count, pmi, tone: null })
 const reforma: CompareTerm = { term: 'reforma', kind: 'word', a: side(5, 1.2), b: null }
-const payload = (terms: CompareTerm[], a = 'all', b = 'lean:right'): LensesData => ({ days: 30, a: { lens: a, about: 5 }, b: { lens: b, about: 5 }, terms })
+const payload = (terms: CompareTerm[], a = 'all', b = 'lean:right'): LensesData => ({ days: 21, a: { lens: a, about: 5 }, b: { lens: b, about: 5 }, terms })
 const folha = { domain: 'folha.uol.com.br', docs: 12 }
 const g1 = { domain: 'g1.globo.com', docs: 4 }
 
@@ -148,16 +148,16 @@ describe('Lenses (#294)', () => {
     expect(lensesCalls()).toHaveLength(1)
     const c = lensesCalls()[0]
     expect(c.path).toBe('/api/people/lula/lenses')
-    expect(c.url).toBe('/api/people/lula/lenses?' + lensesParams({ a: 'all', b: 'all', days: '30', limit: '40' }).toString())
+    expect(c.url).toBe('/api/people/lula/lenses?' + lensesParams({ a: 'all', b: 'all', days: '21', limit: '40' }).toString())
     expect(c.params.get('a')).toBe('all')
     expect(c.params.get('b')).toBe('all')
-    expect(c.params.get('days')).toBe('30')
+    expect(c.params.get('days')).toBe('21')
     expect(c.params.get('limit')).toBe('40')
     expect(c.params.get('kind')).toBe('word,hashtag,phrase')
     expect(of('sources')).toHaveLength(1)
     expect(of('sources')[0].path).toBe('/api/people/lula/sources')
-    expect(of('sources')[0].url).toBe('/api/people/lula/sources?' + sourcesParams({ days: '30', sort: 'count', limit: '80', source: 'all' }).toString())
-    expect(of('sources')[0].params.get('days')).toBe('30')
+    expect(of('sources')[0].url).toBe('/api/people/lula/sources?' + sourcesParams({ days: '21', sort: 'count', limit: '80', source: 'all' }).toString())
+    expect(of('sources')[0].params.get('days')).toBe('21')
     expect(of('sources')[0].params.get('source')).toBe('all')
     expect(of('docs')).toEqual([])
   })
@@ -219,7 +219,7 @@ describe('Lenses (#294)', () => {
     await start()
     expect(select('lensesA').value).toBe('all')
     expect(select('lensesB').value).toBe('all')
-    expect(lensesCalls()[0].params.get('days')).toBe('30')
+    expect(lensesCalls()[0].params.get('days')).toBe('21')
     expect(lensesCalls()[0].params.get('limit')).toBe('40')
   })
 
@@ -227,12 +227,12 @@ describe('Lenses (#294)', () => {
     boot({ search: '?lenses.days=7' })
     await start()
     expect(lensesCalls()).toHaveLength(1)
-    await change('lensesDays', '60')
+    await change('lensesDays', '21')
     const before = calls.length
     boot({ search: '?lenses.days=7', people: [...people, { id: 'ciro', name: 'Ciro' }] })
     flushSync()
     await settle(500)
-    expect(select('lensesDays').value).toBe('60')
+    expect(select('lensesDays').value).toBe('21')
     expect(calls.length).toBe(before)
   })
 
@@ -344,7 +344,7 @@ describe('Lenses (#294)', () => {
     boot()
     await start()
     await change('lensesDays', '7')
-    await change('lensesDays', '30')
+    await change('lensesDays', '21')
     expect(outletValues('lensesAOutlets')).toEqual(['domain:fresh.example'])
     first.release([{ domain: 'stale.example', docs: 1 }])
     await settle(220)
@@ -374,15 +374,15 @@ describe('Lenses (#294)', () => {
 
     const sourcesBefore = of('sources').length
     handlers.sources = () => [folha]
-    await change('lensesDays', '60')
+    await change('lensesDays', '7')
     expect(of('sources').length).toBe(sourcesBefore + 1)
-    expect(of('sources').pop()!.params.get('days')).toBe('60')
+    expect(of('sources').pop()!.params.get('days')).toBe('7')
     expect(select('lensesA').value).toBe('domain:folha.uol.com.br')
 
     handlers.sources = () => [g1]
-    await change('lensesDays', '7')
+    await change('lensesDays', '21')
     expect(select('lensesA').value).toBe('all')
-    expect(lensesCalls().pop()!.params.get('a')).toBe('all')
+    expect($('lensesRuler').getAttribute('aria-label')).not.toContain('folha.uol.com.br')
   })
 
   it('AC5: lenses: a limit change keeps both sides and does not refetch /sources', async () => {
@@ -399,7 +399,7 @@ describe('Lenses (#294)', () => {
   for (const [id, value, param] of [
     ['lensesA', 'lean:left', 'a'],
     ['lensesB', 'source:rss', 'b'],
-    ['lensesDays', '60', 'days'],
+    ['lensesDays', '7', 'days'],
     ['lensesLimit', '100', 'limit'],
     ['lensesPerson', 'bolsonaro', 'person'],
   ]) {
@@ -562,7 +562,7 @@ describe('Lenses (#294)', () => {
     }
     click(words()[0])
     await settle()
-    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '21' }) }] })
     await settle()
     expect(docsCard.openedBy('lenses')).toBe(false)
     await change('lensesA', 'source:rss')
@@ -665,7 +665,7 @@ describe('Lenses (#294)', () => {
     await start()
     click(words()[0])
     await settle()
-    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '30' }) }] })
+    void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '21' }) }] })
     await settle()
     await change('lensesDays', '7')
     expect(docsCard.openedBy('atlas')).toBe(true)
@@ -797,10 +797,10 @@ describe('Lenses (#294)', () => {
     expect($('lensesHiddenNote').textContent).toBe('1 palavra deixada de fora por ser o próprio nome da pessoa.')
     expect(words().map((w) => w.getAttribute('data-term'))).toEqual(['reforma'])
     handlers.lenses = () => payload([{ term: 'lula', kind: 'word', a: 'name', b: side(2) }, { term: 'luiz', kind: 'word', a: side(2), b: 'name' }, reforma])
-    await change('lensesDays', '60')
+    await change('lensesLimit', '60')
     expect($('lensesHiddenNote').textContent).toBe('2 palavras deixadas de fora por ser o próprio nome da pessoa.')
     handlers.lenses = () => payload([reforma])
-    await change('lensesDays', '30')
+    await change('lensesLimit', '100')
     expect($('lensesHiddenNote').hidden).toBe(true)
   })
 
@@ -945,8 +945,6 @@ describe('Lenses (#294)', () => {
     }
     expect([...select('lensesLimit').options].map((o) => Number(o.value))).toEqual([20, 40, 60, 100])
     expect(select('lensesLimit').value).toBe('40')
-    expect([...select('lensesDays').options].map((o) => o.value)).toEqual(['7', '30', '60'])
-    expect(select('lensesDays').value).toBe('30')
     expect([...select('lensesPerson').options].map((o) => o.value)).toEqual(['lula', 'bolsonaro'])
   })
 
@@ -1107,5 +1105,33 @@ describe('lenses: resize', () => {
     await settle()
     expect(docsCard.isOpen()).toBe(false)
     expect(words()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+describe('Lenses over the 7 and 21 day windows (issue #313 acceptance)', () => {
+  it('AC24: the day select offers exactly 7 and 21, in that order, with 21 selected, and the first /lenses and /sources carry days=21', async () => {
+    boot()
+    await start()
+    expect([...select('lensesDays').options].map((o) => o.value)).toEqual(['7', '21'])
+    expect([...select('lensesDays').options].map((o) => o.textContent)).toEqual(['7 dias', '21 dias'])
+    expect(select('lensesDays').value).toBe('21')
+    expect(lensesCalls()[0].params.get('days')).toBe('21')
+    expect(of('sources')[0].params.get('days')).toBe('21')
+  })
+
+  for (const days of ['30', '60'])
+    it(`AC25: a shared link with days=${days} leaves the select on 21 and requests days=21 on both routes`, async () => {
+      boot({ search: `?days=${days}` })
+      await start()
+      expect(select('lensesDays').value).toBe('21')
+      expect(lensesCalls()[0].params.get('days')).toBe('21')
+      expect(of('sources')[0].params.get('days')).toBe('21')
+    })
+
+  it('AC25: a shared link with days=7 still selects 7', async () => {
+    boot({ search: '?days=7' })
+    await start()
+    expect(select('lensesDays').value).toBe('7')
+    expect(lensesCalls()[0].params.get('days')).toBe('7')
   })
 })

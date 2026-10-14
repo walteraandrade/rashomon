@@ -4,9 +4,8 @@ import { db } from '../src/db.js'
 import { testimonyFor } from '../src/graph.js'
 import { resolveRun, scoreAll } from '../src/score.js'
 import { scorers } from '../src/scorers/index.js'
-import { insertDocP } from '../src/store.js'
 import { withEnv } from './env.js'
-import { insertTestimony, persons, reseed, seed } from './fixture.js'
+import { insertOrphanDoc, insertTestimony, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
 const countRows = async (method: string) =>
@@ -46,9 +45,9 @@ describe('scoreAll', () => {
 
   it('inserts a null row (not a missing one) for empty/whitespace text, and never re-attempts it', async () => {
     const uri = 'https://example.org/empty-text-doc'
-    await insertDocP({ source: 'rss', uri, text: '   ', publishedAt: new Date().toISOString(), domain: 'example.org' }, persons)
-    // insertDoc only links doc_persons for docs that mention a tracked person's alias, so link
-    // it directly to exercise scoreAll's null-score path deterministically
+    await insertOrphanDoc({ source: 'rss', uri, text: '   ', publishedAt: new Date().toISOString(), domain: 'example.org' })
+    // The writer drops a doc naming nobody, so store it raw and link doc_persons directly to
+    // exercise scoreAll's null-score path deterministically
     const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, [uri])
     await db.query(`insert into doc_persons values ($1, $2) on conflict do nothing`, [rows[0].id, persons[0].id])
 

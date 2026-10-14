@@ -43,7 +43,7 @@
 
   // words_* are doc_terms rows (text-word pairs); a payload from before they existed says nothing about them.
   const aboutLine = (about: RisingAbout) => {
-    const docs = `A pessoa: ${fmt(about.recent)} ${about.recent === 1 ? 'texto' : 'textos'} nos últimos 7 dias, ${fmt(about.baseline)} nos 30 dias antes`
+    const docs = `A pessoa: ${fmt(about.recent)} ${about.recent === 1 ? 'texto' : 'textos'} nos últimos 7 dias, ${fmt(about.baseline)} nos 14 dias antes`
     const pairs =
       Number.isFinite(about.words_recent) && Number.isFinite(about.words_baseline)
         ? `; ${fmt(about.words_recent!)} ${about.words_recent === 1 ? 'par texto-palavra' : 'pares texto-palavra'} agora, ${fmt(about.words_baseline!)} antes.`
@@ -67,7 +67,7 @@
       rareTotal: rareAll.length,
       layout: {
         ...laid,
-        endA: 'antes (30 dias)',
+        endA: 'antes (14 dias)',
         endB: 'agora (7 dias)',
         axisLabels: (shares ? ['Fatia menor que antes', 'mesma fatia', 'Fatia maior que antes'] : ['Mais devagar que a pessoa', 'no mesmo ritmo', 'Mais rápido que a pessoa']) as [string, string, string],
         ariaLabel: 'Régua de termos em alta',
@@ -80,7 +80,7 @@
 
   const resolvePerson = (seeded: string | undefined) => (seeded && bootData.people.some((p) => p.id === seeded) ? seeded : (bootData.people[0]?.id ?? ''))
 
-  // Always the last 7 days, never the 30-day baseline the figure also scores against.
+  // Always the last 7 days, never the 14-day baseline the figure also scores against.
   const showDocs = (word: { term: string; kind: string }) => {
     const found = bootData.people.find((p) => p.id === person)
     void docsCard.open({
@@ -169,12 +169,12 @@
     <p class="figure-sub">As palavras mais presentes na semana, e se cada uma ocupa fatia maior ou menor do que se escreve sobre a pessoa. <a href="/como-ler#em-alta">Como ler</a>.</p>
     <dl class="figure-key">
       <div><dt>Posição</dt><dd>fatia da palavra em tudo o que se escreve sobre a pessoa, agora contra antes; no meio, a mesma fatia</dd></div>
-      <div><dt>Tamanho</dt><dd>textos nos 37 dias</dd></div>
+      <div><dt>Tamanho</dt><dd>textos nos 21 dias</dd></div>
       <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>para que lado pende</dd></div>
       <div><dt>Clique</dt><dd>textos da semana</dd></div>
       <div><dt>Lista</dt><dd>fora da régua, as que subiram de fato, da maior subida para a menor</dd></div>
     </dl>
-    <div class="sentence"><p class="sentence-line">O que se escreve sobre <span class="pick"><select id="risingPerson" aria-label="Pessoa (em alta)" value={person} onchange={(e) => change(e, (v) => (person = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos últimos 7 dias, contra os 30 dias antes, em <span class="keep"><span class="pick"><select id="risingSource" aria-label="Fonte (em alta)" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
+    <div class="sentence"><p class="sentence-line">O que se escreve sobre <span class="pick"><select id="risingPerson" aria-label="Pessoa (em alta)" value={person} onchange={(e) => change(e, (v) => (person = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos últimos 7 dias, contra os 14 dias antes, em <span class="keep"><span class="pick"><select id="risingSource" aria-label="Fonte (em alta)" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
   </header>
   <figure class="ruler" id="risingRuler" aria-label="Régua de termos em alta" aria-busy={showGhost ? 'true' : 'false'} hidden={peopleError || noPeople} bind:this={rulerEl}>
     {#if showGhost}

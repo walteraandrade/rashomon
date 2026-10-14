@@ -104,6 +104,24 @@ export const failingSql = (client: SqlClient.SqlClient, match: RegExp): SqlClien
     },
   })
 
+// A SqlClient proxy that forwards every statement unchanged and records the text of each `unsafe` call, so a test can say which statements a write sent (and which it never did).
+export const recordingSql = (client: SqlClient.SqlClient): { client: SqlClient.SqlClient; statements: string[] } => {
+  const statements: string[] = []
+  const proxy = new Proxy(client, {
+    apply: (target, thisArg, args) => Reflect.apply(target as unknown as (...a: unknown[]) => unknown, thisArg, args),
+    get: (target, prop, receiver) => {
+      if (prop === 'unsafe') {
+        return <A extends object>(sql: string, params?: readonly unknown[]) => {
+          statements.push(sql)
+          return target.unsafe<A>(sql, params)
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+  })
+  return { client: proxy, statements }
+}
+
 // Like runTest, but rethrows a failure or defect as the real exception it carries, so an
 // assertion made inside the program itself (a retry-timing scenario stepping the clock by
 // hand) surfaces with its own message and stack instead of an opaque Exit.

@@ -51,10 +51,13 @@ const generate = async () => {
   // PGlite creates the leaf directory but not its parents.
   await mkdir(resolve(DATA_DIR), { recursive: true })
   const { db, migrateP } = await import('./db.js')
-  const { insertDocP, upsertPersonsP } = await import('./store.js')
+  const { insertDocP, truncateText, upsertPersonsP } = await import('./store.js')
+  const { personsMentioned } = await import('./extract.js')
   await migrateP()
+  const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: Date.now() })
+  const tracked = new Set(docs.filter((d) => personsMentioned(truncateText(d.text), persons).length).map((d) => d.uri)).size
   const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from docs`)
-  if (rows[0].n === DOCS && process.env.BENCH_RESET !== '1') {
+  if (rows[0].n === tracked && process.env.BENCH_RESET !== '1') {
     console.log(`dataset: reusing ${rows[0].n} docs in ${DATA_DIR}`)
     // A corpus generated before the aggregates existed still needs them; the build is idempotent.
     // Dynamic like db.js below: aggregate.js imports db.js, which reads DATA_DIR at import time.
@@ -68,7 +71,6 @@ const generate = async () => {
   // One statement per db.exec call: the extended query protocol parses one at a time.
   for (const table of ['doc_testimony', 'doc_candidates', 'doc_terms', 'terms', 'doc_persons', 'docs', 'persons']) await db.exec(`delete from ${table}`)
   await upsertPersonsP(persons)
-  const docs = corpus(persons, { docs: DOCS, days: DAYS, seed: SEED, now: Date.now() })
   for (const doc of docs) await insertDocP(doc, persons)
   // One testimony row per (doc, person) pair, deterministic, so the testimony route has
   // something to aggregate. `stub` is the hermetic scorer's label.
@@ -166,7 +168,7 @@ const measurePhase = async () => {
     )
   ).rows.map((r) => r.id)
 
-  const scope = { days: 30, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
+  const scope = { days: 21, source: 'all', domain: 'all', lean: 'all', country: 'br' as const, kind: 'all' }
   const docs = { ...scope, term: TERM, kind: 'word', limit: 50, offset: 0, day: '', with: '' }
   const plans: [string, Sql][] = [
     ['graph', queries.graph(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
@@ -176,16 +178,16 @@ const measurePhase = async () => {
     ['docsCount', queries.docsCount(person, docs)],
     ['timeline', queries.timeline(person, { ...docs, days: 90, bucket: 'day' })],
     ['week', queries.week(person, { ...scope, days: 7, limit: 8 })],
-    ['rising', queries.rising(person, { ...scope, days: 7, baseline: 30, min: 3, limit: 20 })],
-    ['tone', queries.tone({ days: 30, min: 3 })],
-    ['testimonySummary', queries.testimonySummary(person, { days: 30, source: 'all', method: 'stub', min: 3 })],
+    ['rising', queries.rising(person, { ...scope, days: 7, baseline: 14, min: 3, limit: 20 })],
+    ['tone', queries.tone({ days: 21, min: 3 })],
+    ['testimonySummary', queries.testimonySummary(person, { days: 21, source: 'all', method: 'stub', min: 3 })],
     ['candidates', queries.candidates({ days: 7, min: 5, limit: 50 })],
     ['graphFast', queries.graphFast(person, { ...scope, min: 2, sort: 'count', limit: 40, communities: false })],
-    ['agenda', queries.agenda({ days: 30, source: 'all', min: 5, limit: 30 })],
+    ['agenda', queries.agenda({ days: 21, source: 'all', min: 5, limit: 30 })],
     ['compare', queries.compare(person, compareWith, { ...scope, limit: 40, bridges: false })],
     ['compareFast', queries.compareFast(person, compareWith, { ...scope, limit: 40, bridges: false })],
     ['lenses', queries.lenses(person, {
-      days: 30,
+      days: 21,
       kind: 'all',
       limit: 40,
       a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
@@ -193,15 +195,15 @@ const measurePhase = async () => {
       bridges: false,
     })],
     ['lensesFast', queries.lensesFast(person, {
-      days: 30,
+      days: 21,
       kind: 'all',
       limit: 40,
       a: { lens: 'source:gkg', domain: 'all', lean: 'all', source: 'gkg' },
       b: { lens: 'source:rss', domain: 'all', lean: 'all', source: 'rss' },
       bridges: false,
     })],
-    ['comention', queries.comention({ days: 30, source: 'all', lean: 'all', min: 3 })],
-    ['attention', queries.attention(person, { days: 30 })],
+    ['comention', queries.comention({ days: 21, source: 'all', lean: 'all', min: 3 })],
+    ['attention', queries.attention(person, { days: 21 })],
     ['termTestimony', queries.termTestimony(person, scope, 'stub', ids)],
     ['weekTestimony', queries.weekTestimony(person, { ...scope, days: 7, limit: 8 }, 'stub')],
   ]

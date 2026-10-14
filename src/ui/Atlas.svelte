@@ -33,8 +33,9 @@
   import { createCanvasMeasure } from './measure.js'
 
   const OWNER = 'atlas'
-  const DAYS = ['7', '30', '60']
-  const DAYS_LABELS: Record<string, string> = { '7': 'últimos 7 dias', '30': 'últimos 30 dias', '60': 'últimos 60 dias' }
+  const DAYS = ['7', '21']
+  const WIDEST = DAYS.at(-1)
+  const DAYS_LABELS: Record<string, string> = { '7': 'últimos 7 dias', '21': 'últimos 21 dias' }
   const SORTS = ['count', 'pmi', 'reach']
   const LIMITS = ['12', '18', '24']
   const SOURCES = SOURCE_SEGMENTS.map(([value]) => value)
@@ -72,7 +73,7 @@
   let sortEl: HTMLSelectElement | undefined = $state()
   let limitEl: HTMLSelectElement | undefined = $state()
   let person = $state('')
-  let days = $state('30')
+  let days = $state('21')
   let source = $state('all')
   let sort = $state('pmi')
   let limit = $state('18')
@@ -497,7 +498,7 @@
       <div><dt>Clique</dt><dd>textos da palavra</dd></div>
     </dl>
     <div class="sentence">
-      <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa" bind:this={personEl} onchange={onControl((v) => (person = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="days" aria-label="Período" bind:this={daysEl} onchange={onControl((v) => (days = v))}><option value="7">últimos 7 dias</option><option value="30" selected>últimos 30 dias</option><option value="60">últimos 60 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="source" aria-label="Fonte" bind:this={sourceEl} onchange={onControl((v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="sort" aria-label="Tamanho por" bind:this={sortEl} onchange={onControl((v) => (sort = v))}><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option><option value="reach">alcance</option></select></span>.</span> Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras" bind:this={limitEl} onchange={onControl((v) => (limit = v))}><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
+      <p class="sentence-line">Palavras ligadas a <span class="pick"><select id="person" aria-label="Pessoa" bind:this={personEl} onchange={onControl((v) => (person = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="days" aria-label="Período" bind:this={daysEl} onchange={onControl((v) => (days = v))}><option value="7">últimos 7 dias</option><option value="21" selected>últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="source" aria-label="Fonte" bind:this={sourceEl} onchange={onControl((v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="sort" aria-label="Tamanho por" bind:this={sortEl} onchange={onControl((v) => (sort = v))}><option value="count">frequência</option><option value="pmi" selected>PMI ponderado</option><option value="reach">alcance</option></select></span>.</span> Mostrar <span class="pick"><select id="limit" aria-label="Quantidade de palavras" bind:this={limitEl} onchange={onControl((v) => (limit = v))}><option>12</option><option selected>18</option><option>24</option></select></span> palavras.</p>
       <p class="status-row"><span class="status" id="status" role="status" class:error={failed || view === 'error'}>{status}</span></p>
     </div>
   </header>
@@ -515,7 +516,7 @@
         {:else if ghosting}
           <div class="map-stage" aria-hidden="true"><svg class="map-svg" viewBox="-430 -402 860 804"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g class="ghost-field">{#each GHOST_WORDS as [x, y, w, h]}<rect class="ghost" x={x - w / 2} y={y - h / 2} width={w} height={h} rx="6"/>{/each}<rect class="ghost" x="-72" y="-26" width="144" height="52" rx="10"/></g></svg></div>
         {:else if empty}
-          <div class="empty">Nenhum termo neste recorte.<br>Experimente outra pessoa ou um período maior.</div>
+          <div class="empty">Nenhum termo neste recorte.<br>{shown?.days === WIDEST ? 'Experimente outra pessoa.' : 'Experimente outra pessoa ou um período maior.'}</div>
         {:else if view === 'data' && layout}
           {@const c = layout.center}
           <div class="map-stage"><svg class="map-svg" class:is-masked={masked} class:is-themed={themed} viewBox="-430 -402 860 804" aria-label="Mapa de palavras associadas a {personName}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="350" fill="url(#halo)"/><circle class="boundary" r="360"/><path d="M-7,-360 H7 M-7,360 H7 M-360,-7 V7 M360,-7 V7" stroke="var(--accent)" stroke-width="2" opacity=".7"/><g id="edges">{#each edges as e (e.key)}<path class="edge" d={e.d} stroke-linejoin="round" stroke-width={e.w}/>{/each}</g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os {fmt(about)} documentos sobre {personName}" onclick={showPerson} onkeydown={activate(showPerson)}><rect class="center-hit" x={-c.w / 2} y={-c.h / 2} width={c.w} height={c.h} rx="10"/><text class="micro" text-anchor="middle" y={-c.h / 2 + 23}>NO CENTRO DA CONVERSA</text><text class="person-name" style:--size="{c.size}px" text-anchor="middle" dominant-baseline="central">{#each c.lines as line, i}<tspan x="0" y={-((c.lines.length - 1) * c.lineHeight) / 2 + i * c.lineHeight}>{line}</tspan>{/each}</text><path d="M-18,{c.h / 2 - 35} H18" stroke="var(--accent)" opacity=".65"/><text class="center-note" text-anchor="middle" y={c.h / 2 - 10}>{fmt(about)} documentos</text></g><g id="words">{#each layout.placed as p (p.id)}{@const s = states.get(p.id)}{@const tone = termMask(p, personScore)}{@const theme = themeMask(p, ranking)}<g class="atlas-word" class:is-selected={s?.on} class:is-neighbor={s?.neighbor} class:is-dim={s?.dim} class:is-match={s?.match} data-kind={p.kind} transform="translate({p.x},{p.y})" style:--size="{p.size}px" style:--mask={tone} style:--theme={theme} data-node={p.id} role="button" tabindex="0" aria-pressed={!!s?.on} aria-label="{label(p)}, {fmt(p.count)} documentos; {scoreName(viewSort)}: {fmt(p.score)}" onclick={() => pick(p.id)} onkeydown={activate(() => pick(p.id))}><title>{label(p)} · {kinds[p.kind] || p.kind || 'Tipo desconhecido'} · {fmt(p.count)} documentos · {scoreName(viewSort)}: {fmt(p.score)}{p.testimony ? ` · avaliação ${signed(p.testimony.score)} em ${fmt(p.testimony.n)} textos` : ''}</title><rect class="atlas-glow" x={-p.w / 2 - 4} y={-p.h / 2 - 3} width={p.w + 8} height={p.h + 6}/><rect class="atlas-hit" x={-p.w / 2} y={-p.h / 2} width={p.w} height={p.h}/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">{#each p.lines as line, i}<tspan x="0" y={(i - (p.lines.length - 1) / 2) * p.lineHeight}>{line}</tspan>{/each}</text><line class="underline" x1={-Math.min(p.w * 0.35, 40)} x2={Math.min(p.w * 0.35, 40)} y1={p.h / 2 - 2} y2={p.h / 2 - 2}/></g>{/each}</g><text class="micro" x="0" y="392" text-anchor="middle">UM RECORTE DA CONVERSA · NÃO UM JUÍZO DE VALOR</text></svg></div>

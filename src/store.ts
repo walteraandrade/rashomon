@@ -145,15 +145,13 @@ export const inTransaction = runInTransaction
 export type Derived = { docId: number; persons: string[]; terms: Term[]; names: string[] }
 type Extractable = Pick<RawDoc, 'source' | 'text' | 'extraTerms' | 'extraNames'>
 
-export const derive = (docId: number, doc: Extractable, ps: Person[], lexicon: Phrases = new Set<string>()): Derived => {
-  const matched = personsMentioned(doc.text, ps)
-  return {
-    docId,
-    persons: matched.map((p) => p.id),
-    terms: matched.length ? terms(doc.text, doc.extraTerms, lexicon) : [],
-    names: discoverNames(doc, ps),
-  }
-}
+// `matched` is the writer's own tagging of the same text, so a doc is matched once.
+export const derive = (docId: number, doc: Extractable, ps: Person[], lexicon: Phrases = new Set<string>(), matched: Person[] = personsMentioned(doc.text, ps)): Derived => ({
+  docId,
+  persons: matched.map((p) => p.id),
+  terms: matched.length ? terms(doc.text, doc.extraTerms, lexicon) : [],
+  names: discoverNames(doc, ps),
+})
 
 const derivedStatements = (rows: readonly Derived[], size: number): [string, unknown[]][] => {
   const persons = rows.flatMap((r) => r.persons.map((personId) => ({ docId: r.docId, personId })))
@@ -171,6 +169,7 @@ const outcome = (row: { inserted: boolean; took_incoming: boolean } | undefined)
   !row ? 'unchanged' : row.inserted ? 'inserted' : row.took_incoming ? 'enriched' : 'unchanged'
 
 type Batch = { derived: Derived[]; stale: number[]; written: number; enriched: number }
+type Counts = { written: number; enriched: number; dropped: number }
 
 // Every writer below is Effect-native, so a caller can Effect.catchTag a typed SqlError; each has a one-line `P`-suffixed Promise adapter, `runSql(<name>(...))`, for a caller outside the Effect world.
 
@@ -255,17 +254,21 @@ const clearDerived = (sql: SqlClient.SqlClient, ids: readonly number[]) =>
       })
     : Effect.void
 
-// Cap is applied before upsert and before `derive` so stored text and derived terms match.
-const writeBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Effect.Effect<{ written: number; enriched: number }, SqlError.SqlError> =>
+// Cap is applied before the match, the upsert and `derive`, so the text judged, stored and derived is one. A doc naming nobody tracked is dropped here, before any statement: the corpus holds only docs a `doc_persons` row points at.
+const writeBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps: Person[], lexicon: Phrases): Effect.Effect<Counts, SqlError.SqlError> =>
   Effect.gen(function* () {
-    const truncated = docs.map((raw) => ({ ...raw, text: truncateText(raw.text) }))
-    const rows = yield* upsertDocsBatch(sql, truncated)
-    const batch = truncated.reduce((a: Batch, doc): Batch => {
+    const judged = docs.map((raw) => {
+      const doc = { ...raw, text: truncateText(raw.text) }
+      return { doc, matched: personsMentioned(doc.text, ps) }
+    })
+    const kept = judged.filter((j) => j.matched.length > 0)
+    const rows = yield* upsertDocsBatch(sql, kept.map((j) => j.doc))
+    const batch = kept.reduce((a: Batch, { doc, matched }): Batch => {
       const row = rows.get(doc)
       const result = outcome(row)
       if (result === 'unchanged' || !row) return a
       return {
-        derived: [...a.derived, derive(row.id, { ...doc, source: row.source, extraTerms: row.extra_terms, extraNames: row.extra_names }, ps, lexicon)],
+        derived: [...a.derived, derive(row.id, { ...doc, source: row.source, extraTerms: row.extra_terms, extraNames: row.extra_names }, ps, lexicon, matched)],
         stale: result === 'enriched' ? [...a.stale, row.id] : a.stale,
         written: a.written + (result === 'inserted' ? 1 : 0),
         enriched: a.enriched + (result === 'enriched' ? 1 : 0),
@@ -273,7 +276,7 @@ const writeBatch = (sql: SqlClient.SqlClient, docs: readonly RawDoc[], ps: Perso
     }, { derived: [], stale: [], written: 0, enriched: 0 })
     yield* clearDerived(sql, batch.stale)
     yield* writeDerivedRows(sql, batch.derived, writeBatchRows())
-    return { written: batch.written, enriched: batch.enriched }
+    return { written: batch.written, enriched: batch.enriched, dropped: judged.length - kept.length }
   })
 
 export const insertDoc = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<string>()): Effect.Effect<boolean, SqlError.SqlError, SqlClient.SqlClient> =>
@@ -285,7 +288,7 @@ export const insertDoc = (doc: RawDoc, ps: Person[], lexicon: Phrases = new Set<
 export const insertDocP = (doc: RawDoc, ps: Person[], lexicon?: Phrases) => runSql(insertDoc(doc, ps, lexicon))
 
 // A batch failure rolls back and is replayed doc by doc, so one bad doc costs only itself.
-export type InsertTotals = { written: number; enriched: number; failed: number }
+export type InsertTotals = { written: number; enriched: number; dropped: number; failed: number }
 
 export const insertDocs = (
   docs: readonly RawDoc[],
@@ -296,15 +299,15 @@ export const insertDocs = (
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient
     const insertGroup = (group: readonly RawDoc[]) => sql.withTransaction(writeBatch(sql, group, ps, lexicon))
-    return yield* Effect.reduce(batches(docs, size), (): InsertTotals => ({ written: 0, enriched: 0, failed: 0 }), (totals, group) =>
+    return yield* Effect.reduce(batches(docs, size), (): InsertTotals => ({ written: 0, enriched: 0, dropped: 0, failed: 0 }), (totals, group) =>
       Effect.gen(function* () {
         // Effect.exit: a defect costs the group the same doc-by-doc replay the Promise path used to give.
         const counts = yield* Effect.exit(insertGroup(group))
-        if (Exit.isSuccess(counts)) return { ...totals, written: totals.written + counts.value.written, enriched: totals.enriched + counts.value.enriched }
+        if (Exit.isSuccess(counts)) return { ...totals, written: totals.written + counts.value.written, enriched: totals.enriched + counts.value.enriched, dropped: totals.dropped + counts.value.dropped }
         return yield* Effect.reduce(group, (): InsertTotals => totals, (t, doc) =>
           Effect.gen(function* () {
             const one = yield* Effect.exit(insertGroup([doc]))
-            if (Exit.isSuccess(one)) return { ...t, written: t.written + one.value.written, enriched: t.enriched + one.value.enriched }
+            if (Exit.isSuccess(one)) return { ...t, written: t.written + one.value.written, enriched: t.enriched + one.value.enriched, dropped: t.dropped + one.value.dropped }
             console.error(`[store] ${doc.uri}: ${(Cause.squash(one.cause) as Error).message}`)
             return { ...t, failed: t.failed + 1 }
           }),

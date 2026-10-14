@@ -39,7 +39,7 @@ Run `pnpm reindex` after editing `seed.json` or `src/extract.ts`. Both `pnpm typ
 ## How it works
 
 1. **Collect.** One collector per source in `src/collectors/*`, same signature, each storing `{ text, uri, domain, published_at, source, tone }`.
-2. **Extract.** `src/extract.ts` normalizes the text and pulls hashtags, words and phrases, then tags the docs whose text names a person in `seed.json`. Terms are stored only for docs that name someone tracked.
+2. **Extract.** `src/extract.ts` normalizes the text and pulls hashtags, words and phrases, then tags the docs whose text names a person in `seed.json`. Only docs that name someone tracked are stored at all (a doc naming nobody is dropped, and counted as `dropped` in the ingest log), and every ingest deletes docs older than 21 days.
 3. **Score.** `src/graph.ts` counts terms per person and computes PMI against the docs in the window that mention any tracked person. `pnpm score` adds kikori's testimony on top, per `(doc, person)`.
 4. **Serve.** `src/server.ts` is the Hono API and the site is prerendered by SvelteKit from `web/routes` + `src/ui` into `build/`.
 

@@ -5,7 +5,7 @@ import { nameTokens } from '../src/extract.js'
 import { graphFor, type GraphQuery } from '../src/graph.js'
 import { reindexAll } from '../src/reindex.js'
 import { MAX_DOC_CHARS, insertDocP, truncateText } from '../src/store.js'
-import { derivedRows, insertDocTerm, lastAnalyzed, orphanTermCount, planRowEstimate, termsOf, persons, reseed, seed } from './fixture.js'
+import { derivedRows, insertDocTerm, insertOrphanDoc, lastAnalyzed, orphanDocCount, orphanTermCount, planRowEstimate, termsOf, persons, reseed, seed } from './fixture.js'
 import './close.js'
 
 // Reindex is destructive (it clears doc_terms/doc_persons/doc_candidates and rebuilds them),
@@ -16,8 +16,8 @@ const wide: GraphQuery = { days: 2210, source: 'all', domain: 'all', lean: 'all'
 const termsOfKind = (nodes: { term: string; kind: string }[], kind: string) => nodes.filter((n) => n.kind === kind).map((n) => n.term)
 
 describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => {
-  const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
   before(seed)
+  after(reseed)
 
   it('leaves no doc_terms row for a doc without a doc_persons row', async () => {
     const { docs } = await reindexAll(persons)
@@ -29,15 +29,6 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
     await reindexAll(persons)
     assert.ok((await termsOf('https://g1.globo.com/1')).includes('reforma'))
     assert.deepEqual(await termsOf('https://example.org/4'), [])
-  })
-
-  it('indexes the terms of a doc that only matches after a person is added', async () => {
-    const uri = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999'
-    await reindexAll(persons)
-    assert.deepEqual(await termsOf(uri), [])
-    await reindexAll([...persons, alcolumbre])
-    assert.ok((await termsOf(uri)).includes('soberania'))
-    assert.equal(await orphanTermCount(), 0)
   })
 
   it('leaves no unreferenced terms row after reindex (issue #252) (AC8)', async () => {
@@ -52,7 +43,8 @@ describe('reindex skips terms of docs naming nobody tracked (issue #52)', () => 
 
   it('purge orphan-terms deletes exactly the rows reindex would not write', async () => {
     await reindexAll(persons)
-    const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, ['https://example.org/4'])
+    await insertOrphanDoc({ source: 'rss', uri: 'https://example.org/orphan-terms', text: 'Congresso discute a pauta', publishedAt: new Date().toISOString() })
+    const { rows } = await db.query<{ id: number }>(`select id from docs where uri = $1`, ['https://example.org/orphan-terms'])
     await insertDocTerm(rows[0].id, 'congresso', 'word')
     assert.equal(await orphanTermCount(), 1)
     await db.query(`delete from doc_terms t where not exists (select 1 from doc_persons p where p.doc_id = t.doc_id)`)
@@ -217,5 +209,54 @@ describe('reindex builds the lexicon and tags the corpus with it', () => {
     assert.equal(rows[0].n, 1, 'sanity: the run this filter has to hide must exist')
     const graph = await graphFor(persons[2], wide)
     for (const term of termsOfKind(graph.nodes, 'phrase')) assert.ok(!term.split(' ').includes('bolsonaro'), `${term} names the person, it is not said about them`)
+  })
+})
+
+// Issue #313 acceptance criteria, quoted by number.
+describe('reindex over a tracked-only store (issue #313 acceptance)', () => {
+  const alcolumbre = { id: 'alcolumbre', name: 'Davi Alcolumbre', aliases: ['Alcolumbre', 'Davi Alcolumbre'] }
+  const uri = (n: string) => `https://ac313-reindex.example/${n}`
+  const text = 'Davi Alcolumbre defende a soberania nacional e a infraestrutura portuária'
+  const sourceDoc = { source: 'rss' as const, text, publishedAt: new Date().toISOString(), domain: 'ac313-reindex.example' }
+  const docCount = async () => (await db.query<{ n: number }>(`select count(*)::int as n from docs`)).rows[0].n
+  const storedCount = async (u: string) => (await db.query<{ n: number }>(`select count(*)::int as n from docs where uri = $1`, [u])).rows[0].n
+  const taggedOf = async (u: string) =>
+    (await db.query<{ person_id: string }>(`select person_id from doc_persons dp join docs d on d.id = dp.doc_id where d.uri = $1 order by 1`, [u])).rows.map((r) => r.person_id)
+
+  before(seed)
+  after(reseed)
+
+  it('reindexAll with a new person does not store the doc the writer dropped (AC13)', async () => {
+    const dropped = 'https://www25.senado.leg.br/web/atividade/pronunciamentos/-/p/texto/999999'
+    assert.equal(await storedCount(dropped), 0)
+    await reindexAll([...persons, alcolumbre])
+    assert.equal(await storedCount(dropped), 0)
+    assert.deepEqual(await taggedOf(dropped), [])
+    assert.deepEqual(await termsOf(dropped), [])
+    assert.equal(await orphanDocCount(), 0)
+  })
+
+  it('a raw-stored orphan that starts matching after a person is added is tagged (AC13)', async () => {
+    await insertOrphanDoc({ ...sourceDoc, uri: uri('starts-matching') })
+    await reindexAll(persons)
+    assert.deepEqual(await taggedOf(uri('starts-matching')), [])
+    assert.deepEqual(await termsOf(uri('starts-matching')), [])
+    await reindexAll([...persons, alcolumbre])
+    assert.deepEqual(await taggedOf(uri('starts-matching')), ['alcolumbre'])
+    assert.ok((await termsOf(uri('starts-matching'))).includes('soberania'))
+    assert.equal(await orphanTermCount(), 0)
+  })
+
+  it('a stored doc that stops matching anyone stays stored with zero doc_persons rows, and reindex deletes nothing (AC13)', async () => {
+    await reindexAll([...persons, alcolumbre])
+    assert.deepEqual(await taggedOf(uri('starts-matching')), ['alcolumbre'])
+    const before = await docCount()
+    const orphansBefore = await orphanDocCount()
+    await reindexAll(persons)
+    assert.equal(await docCount(), before)
+    assert.equal(await orphanDocCount(), orphansBefore + 1)
+    assert.equal(await storedCount(uri('starts-matching')), 1)
+    assert.deepEqual(await taggedOf(uri('starts-matching')), [])
+    assert.deepEqual(await termsOf(uri('starts-matching')), [])
   })
 })

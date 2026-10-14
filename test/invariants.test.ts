@@ -525,7 +525,7 @@ describe('CLAUDE.md documents the persistence figure', () => {
   })
 })
 
-describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
+describe('the warm store lives in Postgres alone', () => {
   const relativeImports = (file: string) =>
     importsOf(srcSource(file))
       .filter((spec) => spec.startsWith('.'))
@@ -542,16 +542,36 @@ describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
     return [...seen]
   }
 
-  it('only src/warmstore-blob.ts imports @vercel/blob', () => {
-    const importers = srcFiles().filter((file) => /from\s+['"]@vercel\/blob['"]/.test(srcSource(file)))
-    assert.deepEqual(importers, ['warmstore-blob.ts'])
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)]))
+  const sources = ['src', 'test'].flatMap((dir) => walk(join(root, dir))).filter((file) => /\.(ts|js|svelte)$/.test(file))
+
+  it('no file under src or test imports @vercel/blob, statically, dynamically or through require (AC18)', () => {
+    assert.ok(sources.length > 50, 'the walk found the source tree')
+    const importsBlob = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]@vercel\/blob/
+    assert.deepEqual(sources.filter((file) => importsBlob.test(readFileSync(file, 'utf8'))).map((file) => file.slice(root.length + 1)), [])
   })
 
-  it('nothing src/server.ts imports, transitively, is src/warmstore-blob.ts or imports @vercel/blob', () => {
-    const reached = closure('server.ts')
-    assert.ok(reached.includes('warmstore.ts'), 'the walk really reaches the store reader')
-    assert.ok(!reached.includes('warmstore-blob.ts'))
-    for (const file of reached) assert.doesNotMatch(srcSource(file), /@vercel\/blob/, `${file} must not reach @vercel/blob`)
+  it('package.json lists @vercel/blob in no dependency field and pnpm-lock.yaml does not mention it (AC18)', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])
+      assert.ok(!Object.keys((pkg[field] as Record<string, string> | undefined) ?? {}).includes('@vercel/blob'), `${field} must not list it`)
+    for (const file of ['package.json', 'pnpm-lock.yaml']) assert.doesNotMatch(readFileSync(join(root, file), 'utf8'), /@vercel\/blob/, file)
+  })
+
+  it('src/warmstore-blob.ts and test/warmstore-blob.test.ts no longer exist (AC18)', () => {
+    assert.equal(existsSync(join(root, 'src', 'warmstore-blob.ts')), false)
+    assert.equal(existsSync(join(root, 'test', 'warmstore-blob.test.ts')), false)
+  })
+
+  it('src/warmstore.ts exports neither blobReader, warmStoreFromEnv nor READ_TIMEOUT_MS, and still exports the Postgres store and the memory store (AC18)', async () => {
+    const exported = Object.keys(await import('../src/warmstore.js'))
+    for (const gone of ['blobReader', 'warmStoreFromEnv', 'READ_TIMEOUT_MS']) assert.ok(!exported.includes(gone), `${gone} is still exported`)
+    for (const kept of ['pgWarmStore', 'memoryWarmStore', 'lookup', 'warmRecortes']) assert.ok(exported.includes(kept), `${kept} must stay exported`)
+  })
+
+  it('src/server.ts still reaches src/warmstore.ts', () => {
+    assert.ok(closure('server.ts').includes('warmstore.ts'), 'the walk really reaches the store reader')
   })
 })
 

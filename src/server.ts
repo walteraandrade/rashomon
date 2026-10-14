@@ -6,7 +6,7 @@ import { db, migrateP } from './db.js'
 import { agendaFor, attentionFor, candidatesFor, comentionFor, compareBridgesFor, compareFor, docsFor, graphFor, lensBridgesFor, lensesFor, persistenceFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
-import { eligibleKey, lookup, warmStoreFromEnv, type WarmReader, type WarmRoute } from './warmstore.js'
+import { eligibleKey, lookup, pgWarmStore, type WarmReader, type WarmRoute } from './warmstore.js'
 import {
   parseAgendaQuery,
   parseBridgeIds,
@@ -76,10 +76,10 @@ app.use('/api/people/:id/*', async (c, next) => {
   await next()
 })
 
-// Warm recortes are answered from a store outside Postgres (src/materialize.ts writes it) when its
-// entry was built against the scope's current built_at; any miss runs the live statement, unless
-// the caller asked for the store alone (`pnpm warm`), which turns it into a 503.
-let warmStore: WarmReader | null = warmStoreFromEnv(process.env)
+// Warm recortes are answered from warm_entries (src/materialize.ts writes it) when the entry was
+// built against the scope's current built_at; any miss runs the live statement, unless the caller
+// asked for the store alone (`pnpm warm`), which turns it into a 503. null disables lookups (tests).
+let warmStore: WarmReader | null = pgWarmStore
 export const setWarmStore = (store: WarmReader | null) => {
   warmStore = store
 }

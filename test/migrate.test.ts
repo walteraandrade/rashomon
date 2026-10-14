@@ -44,3 +44,67 @@ describe('migrate and the retired windows (issue #313 acceptance)', () => {
     assert.deepEqual(RETIRED_WINDOW_DAYS.filter((d) => (DAYS as readonly number[]).includes(d)), [])
   })
 })
+
+// Issue #317 acceptance criterion 1, read back through the catalog rather than the schema string.
+describe('migrate and warm_entries (issue #317 acceptance)', () => {
+  before(seed)
+  after(async () => {
+    await db.exec(`delete from warm_entries`)
+    await reseed()
+  })
+
+  const columns = async () =>
+    (await db.query<{ column_name: string; data_type: string; is_nullable: string }>(
+      `select column_name, data_type, is_nullable from information_schema.columns where table_schema = current_schema() and table_name = 'warm_entries' order by column_name`,
+    )).rows
+  const insert = (pathname: string, person: string | null, body: string | null) =>
+    db.query(`insert into warm_entries (pathname, person_id, body) values ($1, $2, $3)`, [pathname, person, body])
+
+  it('migrate() creates warm_entries: pathname text primary key, person_id text not null cascading from persons, body text not null (AC1)', async () => {
+    await migrateP()
+    assert.deepEqual(await columns(), [
+      { column_name: 'body', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'pathname', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'person_id', data_type: 'text', is_nullable: 'NO' },
+    ])
+    const { rows } = await db.query<{ type: string; columns: string[]; target: string | null; delete_rule: string | null }>(
+      `select c.contype::text as type,
+              array(select a.attname::text from unnest(c.conkey) k join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k order by a.attname) as columns,
+              c.confrelid::regclass::text as target,
+              c.confdeltype::text as delete_rule
+         from pg_constraint c where c.conrelid = 'warm_entries'::regclass order by c.contype`,
+    )
+    const primary = rows.find((r) => r.type === 'p')
+    const foreign = rows.find((r) => r.type === 'f')
+    assert.deepEqual(primary?.columns, ['pathname'])
+    assert.deepEqual(foreign?.columns, ['person_id'])
+    assert.equal(foreign?.target, 'persons')
+    assert.equal(foreign?.delete_rule, 'c')
+  })
+
+  it('refuses a null body, a null person, an unknown person and a repeated pathname (AC1)', async () => {
+    await assert.rejects(insert('warm/v1/lula/graph/null-body.json', 'lula', null))
+    await assert.rejects(insert('warm/v1/lula/graph/null-person.json', null, 'k\n{}'))
+    await assert.rejects(insert('warm/v1/nobody/graph/a.json', 'nobody', 'k\n{}'))
+    await insert('warm/v1/lula/graph/once.json', 'lula', 'k\n{}')
+    await assert.rejects(insert('warm/v1/lula/graph/once.json', 'lula', 'k\n{}'))
+  })
+
+  it('a second migrate() call leaves existing rows untouched (AC1)', async () => {
+    await db.exec(`delete from warm_entries`)
+    await insert('warm/v1/lula/graph/kept.json', 'lula', 'built\n{"a":1}')
+    await insert('warm/v1/tarcisio/sources/kept.json', 'tarcisio', 'built\n{"b":2}')
+    await migrateP()
+    await migrateP()
+    const { rows } = await db.query(`select pathname, person_id, body from warm_entries order by pathname`)
+    assert.deepEqual(rows, [
+      { pathname: 'warm/v1/lula/graph/kept.json', person_id: 'lula', body: 'built\n{"a":1}' },
+      { pathname: 'warm/v1/tarcisio/sources/kept.json', person_id: 'tarcisio', body: 'built\n{"b":2}' },
+    ])
+    assert.deepEqual(await columns(), [
+      { column_name: 'body', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'pathname', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'person_id', data_type: 'text', is_nullable: 'NO' },
+    ])
+  })
+})

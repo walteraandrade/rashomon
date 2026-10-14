@@ -181,7 +181,7 @@ sole statement of its implicit block, but this path is unverified against the re
 part of the manual round that gates the Effect db PR (issue #184), not of the test suite.
 
 **Measuring size.** `pnpm size` prints every table in `SIZE_TABLES` (`src/size.ts`; wider than
-`ANALYZED_TABLES` — it adds `persons`, `gkg_files`, `phrases`, `phrase_stage` and `person_attention`,
+`ANALYZED_TABLES` — it adds `persons`, `gkg_files`, `phrases`, `phrase_stage`, `person_attention` and `warm_entries`,
 all of which have caused real disk incidents or are simply never analyzed/vacuumed by that other
 list) by `pg_total_relation_size`, plus `pg_database_size` for the database
 total, largest first, followed by one JSON line with the same numbers. A table a pending migration

@@ -44,3 +44,40 @@ describe('migrate and the retired windows (issue #313 acceptance)', () => {
     assert.deepEqual(RETIRED_WINDOW_DAYS.filter((d) => (DAYS as readonly number[]).includes(d)), [])
   })
 })
+
+// Issue #317 acceptance criterion 1, read back through the catalog rather than the schema string.
+describe('migrate and warm_entries (issue #317 acceptance)', () => {
+  after(reseed)
+
+  const columns = async () =>
+    (await db.query<{ column_name: string; data_type: string; is_nullable: string }>(
+      `select column_name, data_type, is_nullable from information_schema.columns where table_schema = current_schema() and table_name = 'warm_entries' order by column_name`,
+    )).rows
+
+  it('creates warm_entries with its primary key and a cascading person foreign key, and a second migrate keeps its rows (AC1)', async () => {
+    await seed()
+    await migrateP()
+    assert.deepEqual(await columns(), [
+      { column_name: 'body', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'pathname', data_type: 'text', is_nullable: 'NO' },
+      { column_name: 'person_id', data_type: 'text', is_nullable: 'NO' },
+    ])
+    const { rows } = await db.query<{ type: string; columns: string[]; target: string | null; delete_rule: string | null }>(
+      `select c.contype::text as type,
+              array(select a.attname::text from unnest(c.conkey) k join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k order by a.attname) as columns,
+              c.confrelid::regclass::text as target,
+              c.confdeltype::text as delete_rule
+         from pg_constraint c where c.conrelid = 'warm_entries'::regclass order by c.contype`,
+    )
+    const primary = rows.find((r) => r.type === 'p')
+    const foreign = rows.find((r) => r.type === 'f')
+    assert.deepEqual(primary?.columns, ['pathname'])
+    assert.deepEqual(foreign?.columns, ['person_id'])
+    assert.equal(foreign?.target, 'persons')
+    assert.equal(foreign?.delete_rule, 'c')
+
+    await db.query(`insert into warm_entries (pathname, person_id, body) values ('warm/v1/lula/graph/k.json', 'lula', 'k\n{}')`)
+    await migrateP()
+    assert.deepEqual((await db.query(`select pathname, person_id, body from warm_entries`)).rows, [{ pathname: 'warm/v1/lula/graph/k.json', person_id: 'lula', body: 'k\n{}' }])
+  })
+})

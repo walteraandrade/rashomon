@@ -525,7 +525,7 @@ describe('CLAUDE.md documents the persistence figure', () => {
   })
 })
 
-describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
+describe('the warm store lives in Postgres alone', () => {
   const relativeImports = (file: string) =>
     importsOf(srcSource(file))
       .filter((spec) => spec.startsWith('.'))
@@ -542,16 +542,23 @@ describe('the warm store\'s Blob writer is out of the server\'s reach', () => {
     return [...seen]
   }
 
-  it('only src/warmstore-blob.ts imports @vercel/blob', () => {
-    const importers = srcFiles().filter((file) => /from\s+['"]@vercel\/blob['"]/.test(srcSource(file)))
-    assert.deepEqual(importers, ['warmstore-blob.ts'])
+  it('no module under src or test imports @vercel/blob and neither package.json nor the lockfile lists it', () => {
+    const blob = /from\s+['"]@vercel\/blob['"]/
+    assert.deepEqual(srcFiles().filter((file) => blob.test(srcSource(file))), [])
+    assert.deepEqual(readdirSync(testDir).filter((file) => file.endsWith('.ts') && blob.test(testFileSource(file))), [])
+    assert.ok(!existsSync(join(srcDir, 'warmstore-blob.ts')))
+    assert.ok(!existsSync(join(testDir, 'warmstore-blob.test.ts')))
+    for (const file of ['package.json', 'pnpm-lock.yaml']) assert.doesNotMatch(readFileSync(join(root, file), 'utf8'), /@vercel\/blob/, file)
   })
 
-  it('nothing src/server.ts imports, transitively, is src/warmstore-blob.ts or imports @vercel/blob', () => {
-    const reached = closure('server.ts')
-    assert.ok(reached.includes('warmstore.ts'), 'the walk really reaches the store reader')
-    assert.ok(!reached.includes('warmstore-blob.ts'))
-    for (const file of reached) assert.doesNotMatch(srcSource(file), /@vercel\/blob/, `${file} must not reach @vercel/blob`)
+  it('src/warmstore.ts exports neither a Blob reader, an environment constructor nor the read timeout', async () => {
+    const names = Object.keys(await import('../src/warmstore.js'))
+    for (const gone of ['blobReader', 'warmStoreFromEnv', 'READ_TIMEOUT_MS']) assert.ok(!names.includes(gone), `${gone} must be gone`)
+    assert.ok(names.includes('pgWarmStore'))
+  })
+
+  it('src/server.ts still reaches src/warmstore.ts', () => {
+    assert.ok(closure('server.ts').includes('warmstore.ts'), 'the walk really reaches the store reader')
   })
 })
 

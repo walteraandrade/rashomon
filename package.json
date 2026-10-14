@@ -31,7 +31,6 @@
     "@hono/node-server": "^2.1.1",
     "@sveltejs/adapter-static": "3.0.10",
     "@sveltejs/kit": "2.70.3",
-    "@vercel/blob": "2.8.0",
     "effect": "4.0.0-rc.117",
     "fast-xml-parser": "^5.11.1",
     "fflate": "^0.8.3",

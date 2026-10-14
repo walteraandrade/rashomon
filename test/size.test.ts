@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
+import { AGGREGATE_TABLES } from '../src/aggregate.js'
 import { ANALYZED_TABLES, db } from '../src/db.js'
+import { tables as pushTables } from '../src/push.js'
 import { collectSizes, SIZE_TABLES } from '../src/size.js'
 import { docsText } from './docs.js'
 import { seed } from './fixture.js'
@@ -101,7 +103,7 @@ describe('pnpm size', () => {
       }
     })
 
-    it('SIZE_TABLES has exactly the eighteen documented table names (AC13)', () => {
+    it('SIZE_TABLES has exactly the documented table names (AC13)', () => {
       assert.deepEqual(
         [...SIZE_TABLES].sort(),
         [
@@ -124,8 +126,20 @@ describe('pnpm size', () => {
           'outlet_neighbors',
           'doc_tone',
           'term_weeks',
+          'warm_entries',
         ].sort(),
       )
+    })
+
+    it('warm_entries is sized but never analyzed, aggregate-checked or pushed (issue #317 acceptance)', async () => {
+      await seed()
+      assert.ok((SIZE_TABLES as readonly string[]).includes('warm_entries'))
+      const { tables, missing } = await collectSizes(db.query.bind(db))
+      assert.deepEqual(missing, [])
+      assert.equal(typeof tables.warm_entries, 'number')
+      assert.ok(!(ANALYZED_TABLES as readonly string[]).includes('warm_entries'))
+      assert.ok(!(AGGREGATE_TABLES as readonly string[]).includes('warm_entries'))
+      assert.ok(!pushTables.some((t) => t.name === 'warm_entries'))
     })
 
     // spec criterion (docs/operations.md:146): every analyzed table is also a sized one,

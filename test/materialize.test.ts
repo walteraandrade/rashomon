@@ -6,28 +6,21 @@ import { buildGraphAggregates } from '../src/aggregate.js'
 import { db } from '../src/db.js'
 import { statements } from '../src/graph.js'
 import { main } from '../src/materialize.js'
-import { memoryWarmStore, splitEntry, warmRecortes } from '../src/warmstore.js'
-import type { BlobPut } from '../src/warmstore-blob.js'
+import { pgWarmStore, splitEntry, warmRecortes, type WarmReader, type WarmWriter } from '../src/warmstore.js'
 import { persons } from './fixture.js'
-import { built, materialized, recordStatements, restore } from './warmstore-helpers.js'
+import { built, materialized, recordStatements, restore, storedEntries } from './warmstore-helpers.js'
 import './close.js'
 
 const ids = persons.map((p) => ({ id: p.id }))
 const pathnamesOf = (personId: string) => warmRecortes(ids).filter((r) => r.personId === personId)
 const fileText = (rel: string) => readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), 'utf8')
 
-// A stand-in for the SDK's put that lands in a memory store, and can be told to fail a pathname.
-const recordingPut = (store = memoryWarmStore(), failing: (pathname: string) => boolean = () => false) => {
-  const puts: string[] = []
-  const put: BlobPut = async (pathname, body) => {
-    if (failing(pathname)) throw new Error(`put refused ${pathname}`)
-    puts.push(pathname)
-    store.entries.set(pathname, body)
-  }
-  return { store, puts, put }
-}
+// A writer that refuses one person's entries and stores everyone else's for real.
+const failingFor = (person: string, store: WarmWriter = pgWarmStore): WarmWriter => ({
+  put: (r, text) => (r.personId === person ? Promise.reject(new Error(`put refused ${r.pathname}`)) : store.put(r, text)),
+})
 
-const withToken = { BLOB_READ_WRITE_TOKEN: 'token' }
+const quiet = () => undefined
 
 describe('materialising', () => {
   before(built)
@@ -39,11 +32,21 @@ describe('materialising', () => {
     assert.equal(texts.filter((t) => t === statements.links || t === statements.linksFast).length, 0)
   })
 
-  it('writes the same pathnames on every run, so the store never grows', async () => {
-    const first = (await materialized()).store
-    const second = (await materialized()).store
-    assert.deepEqual([...first.entries.keys()].sort(), [...second.entries.keys()].sort())
-    assert.equal(first.entries.size, warmRecortes(ids).length)
+  it('writes the same pathnames on every run, so the table never grows', async () => {
+    await materialized()
+    const first = await storedEntries()
+    assert.equal(await main([], { log: quiet }), 0)
+    const second = await storedEntries()
+    assert.deepEqual([...first.keys()].sort(), [...second.keys()].sort())
+    assert.equal(second.size, warmRecortes(ids).length)
+  })
+
+  it('writes each row with its own person\'s id', async () => {
+    await materialized()
+    const { rows } = await db.query<{ pathname: string; person_id: string }>(`select pathname, person_id from warm_entries`)
+    const owner = new Map(warmRecortes(ids).map((r) => [r.pathname, r.personId]))
+    assert.equal(rows.length, owner.size)
+    for (const row of rows) assert.equal(row.person_id, owner.get(row.pathname))
   })
 })
 
@@ -52,25 +55,25 @@ describe('a failing run', () => {
   after(restore)
 
   it('one failing person does not stop the others, and the run reports it', async () => {
-    const { store, puts, put } = recordingPut(undefined, (p) => p.startsWith('warm/v1/lula/'))
+    await db.exec(`delete from warm_entries`)
     const logs: string[] = []
-    const code = await main([], withToken, { put, log: (l) => logs.push(l) })
+    const code = await main([], { writer: failingFor('lula'), log: (l) => logs.push(l) })
     assert.equal(code, 1)
-    assert.equal(puts.length, warmRecortes(ids).length - 6)
-    assert.ok(puts.every((p) => !p.startsWith('warm/v1/lula/')))
-    assert.ok(puts.some((p) => p.startsWith('warm/v1/tarcisio/')) && puts.some((p) => p.startsWith('warm/v1/bolsonaro/')))
+    const stored = [...(await storedEntries()).keys()]
+    assert.equal(stored.length, warmRecortes(ids).length - 6)
+    assert.ok(stored.every((p) => !p.startsWith('warm/v1/lula/')))
+    assert.ok(stored.some((p) => p.startsWith('warm/v1/tarcisio/')) && stored.some((p) => p.startsWith('warm/v1/bolsonaro/')))
     assert.ok(logs.some((l) => /lula/.test(l) && /put refused/.test(l)))
-    assert.equal(store.entries.size, puts.length, 'a failed entry is never half-written')
   })
 
   it('with no aggregate build it writes nothing and says why', async () => {
+    await db.exec(`delete from warm_entries`)
     await db.exec(`delete from graph_terms`)
     await db.exec(`delete from graph_scopes`)
     try {
-      const { puts, put } = recordingPut()
       const logs: string[] = []
-      assert.equal(await main([], withToken, { put, log: (l) => logs.push(l) }), 1)
-      assert.equal(puts.length, 0)
+      assert.equal(await main([], { log: (l) => logs.push(l) }), 1)
+      assert.equal((await storedEntries()).size, 0)
       assert.match(logs.join('\n'), /no graph aggregates/)
     } finally {
       await restore()
@@ -80,18 +83,18 @@ describe('a failing run', () => {
   it('an about>0 scope without terms skips only its graph entry; an about=0 scope without terms is written', async () => {
     await db.exec(`delete from graph_terms where person_id = 'lula' and days = 7`)
     try {
-      const { store, puts, put } = recordingPut()
       const logs: string[] = []
-      const code = await main([], withToken, { put, log: (l) => logs.push(l) })
+      const code = await main([], { log: (l) => logs.push(l) })
       assert.equal(code, 0)
+      const entries = await storedEntries()
       const lula7 = pathnamesOf('lula').filter((r) => r.days === 7)
-      assert.deepEqual(puts.filter((p) => lula7.some((r) => r.pathname === p)).sort(), lula7.filter((r) => r.route !== 'graph').map((r) => r.pathname).sort())
+      assert.deepEqual([...entries.keys()].filter((p) => lula7.some((r) => r.pathname === p)).sort(), lula7.filter((r) => r.route !== 'graph').map((r) => r.pathname).sort())
       assert.ok(logs.some((l) => /lula 7d/.test(l) && /graph entry skipped/.test(l)))
-      assert.equal(puts.length, warmRecortes(ids).length - 1)
+      assert.equal(entries.size, warmRecortes(ids).length - 1)
       const bolsonaro = pathnamesOf('bolsonaro')
-      assert.ok(bolsonaro.every((r) => store.entries.has(r.pathname)))
+      assert.ok(bolsonaro.every((r) => entries.has(r.pathname)))
       const graph = bolsonaro.find((r) => r.route === 'graph' && r.days === 7)!
-      const body = JSON.parse(splitEntry(store.entries.get(graph.pathname)!)!.body)
+      const body = JSON.parse(splitEntry(entries.get(graph.pathname)!)!.body)
       assert.deepEqual([body.nodes, body.links], [[], []])
     } finally {
       await restore()
@@ -99,21 +102,16 @@ describe('a failing run', () => {
   })
 })
 
-describe('without a token', () => {
-  it('skips with exit 0, no put and no statement, also with --if-stale', async () => {
-    const put: BlobPut = async () => {
-      throw new Error('put must not be called')
-    }
-    for (const argv of [[], ['--if-stale']]) {
-      for (const env of [{}, { BLOB_READ_WRITE_TOKEN: '' }]) {
-        const logs: string[] = []
-        let code = -1
-        const texts = await recordStatements(async () => void (code = await main(argv, env, { put, log: (l) => logs.push(l) })))
-        assert.equal(code, 0)
-        assert.deepEqual(logs, ['no warm store configured, skipping'])
-        assert.deepEqual(texts, [])
-      }
-    }
+describe('with nothing configured', () => {
+  before(built)
+  after(restore)
+
+  it('writes to warm_entries, exits 0 and never logs "no warm store configured"', async () => {
+    for (const name of ['BLOB_READ_WRITE_TOKEN', 'WARM_STORE_URL']) delete process.env[name]
+    const logs: string[] = []
+    assert.equal(await main([], { log: (l) => logs.push(l) }), 0)
+    assert.ok(logs.every((l) => !/no warm store configured/.test(l)))
+    assert.deepEqual([...(await storedEntries()).keys()].sort(), warmRecortes(ids).map((r) => r.pathname).sort())
   })
 })
 
@@ -121,48 +119,74 @@ describe('--if-stale and --dry-run', () => {
   before(built)
   after(restore)
 
-  it('checks the stored keys before building anything and rewrites only what changed', async () => {
-    const { store, puts, put } = recordingPut()
-    const run = (reader: { get: (p: string, k: string) => Promise<string | null> } = store) => main(['--if-stale'], withToken, { put, reader, log: () => undefined })
-    const total = warmRecortes(ids).length
+  const total = warmRecortes(ids).length
+  const countingWriter = () => {
+    const puts: string[] = []
+    const writer: WarmWriter = { put: (r, text) => (puts.push(r.pathname), pgWarmStore.put(r, text)) }
+    return { puts, writer }
+  }
+  const run = (argv: string[], writer: WarmWriter = pgWarmStore, reader?: WarmReader) => main(argv, { writer, reader, log: quiet })
 
-    assert.equal(await run(), 0)
-    assert.equal(puts.length, total, 'an empty store is rewritten whole')
+  it('checks the stored keys before building anything and rewrites only what changed', async () => {
+    await db.exec(`delete from warm_entries`)
+    const { puts, writer } = countingWriter()
+
+    assert.equal(await run(['--if-stale'], writer), 0)
+    assert.equal(puts.length, total, 'an empty table is rewritten whole')
 
     puts.length = 0
-    const texts = await recordStatements(async () => void (await run()))
+    let code = -1
+    const texts = await recordStatements(async () => void (code = await run(['--if-stale'], writer)))
+    assert.equal(code, 0)
     assert.equal(puts.length, 0)
-    const reads = [/^select built_at::text as built_at, about from graph_scopes/, /from persons/, /^\s*select exists \(select 1 from graph_scopes\)/]
-    for (const t of texts) assert.ok(reads.some((r) => r.test(t)), `unexpected statement on an up-to-date store: ${t.slice(0, 80)}`)
+    const reads = [
+      /^select built_at::text as built_at, about from graph_scopes/,
+      /from persons/,
+      /^\s*select exists \(select 1 from graph_scopes\)/,
+      /^select body from warm_entries where pathname = \$1/,
+    ]
+    for (const t of texts) assert.ok(reads.some((r) => r.test(t)), `unexpected statement on an up-to-date table: ${t.slice(0, 80)}`)
     assert.ok(texts.every((t) => !/graph_terms/.test(t) || /^\s*select exists/.test(t)))
+    assert.ok(texts.some((t) => /warm_entries/.test(t)), 'the stored keys are read')
 
     await db.exec(`update graph_scopes set built_at = built_at + interval '1 second' where person_id = 'lula' and days = 7 and source = 'all'`)
-    assert.equal(await run(), 0)
+    assert.equal(await run(['--if-stale'], writer), 0)
     assert.deepEqual(puts.sort(), pathnamesOf('lula').filter((r) => r.days === 7).map((r) => r.pathname).sort())
 
     puts.length = 0
-    assert.equal(await run({ get: async () => null }), 0)
-    assert.equal(puts.length, total, 'with no store to read from, everything is rewritten')
+    await db.exec(`delete from warm_entries`)
+    assert.equal(await run(['--if-stale'], writer), 0)
+    assert.equal(puts.length, total, 'with the table emptied, everything is rewritten')
   })
 
   it('rewrites every entry once a fresh aggregate build moves every built_at', async () => {
-    const { store, puts, put } = recordingPut()
-    const run = () => main(['--if-stale'], withToken, { put, reader: store, log: () => undefined })
-    assert.equal(await run(), 0)
+    const { puts, writer } = countingWriter()
+    assert.equal(await run(['--if-stale'], writer), 0)
     puts.length = 0
     await buildGraphAggregates(persons)
-    assert.equal(await run(), 0)
+    assert.equal(await run(['--if-stale'], writer), 0)
     assert.deepEqual(puts.sort(), warmRecortes(ids).map((r) => r.pathname).sort())
   })
 
-  it('writes nothing to any real store on --dry-run, needs neither token nor url, and reports size', async () => {
-    const put: BlobPut = async () => {
-      throw new Error('put must not be called')
+  it('--dry-run writes nothing to warm_entries, also with --if-stale, and reports size', async () => {
+    await db.exec(`delete from warm_entries`)
+    const never: WarmWriter = { put: () => Promise.reject(new Error('put must not be called')) }
+    for (const argv of [['--dry-run'], ['--dry-run', '--if-stale']]) {
+      const logs: string[] = []
+      assert.equal(await main(argv, { writer: never, log: (l) => logs.push(l) }), 0)
+      assert.equal((await storedEntries()).size, 0)
+      const summary = logs.find((l) => /^dry run/.test(l))!
+      assert.match(summary, new RegExp(`would write ${total} entries, \\d+ B, largest warm/v1/`))
     }
+  })
+
+  it('--dry-run --if-stale after a full run reports 0 entries to write', async () => {
+    assert.equal(await run([]), 0)
+    const before = await storedEntries()
     const logs: string[] = []
-    assert.equal(await main(['--dry-run'], {}, { put, log: (l) => logs.push(l) }), 0)
-    const summary = logs.find((l) => /^dry run/.test(l))!
-    assert.match(summary, new RegExp(`would write ${warmRecortes(ids).length} entries, \\d+ B, largest warm/v1/`))
+    assert.equal(await main(['--dry-run', '--if-stale'], { log: (l) => logs.push(l) }), 0)
+    assert.match(logs.find((l) => /^dry run/.test(l))!, /would write 0 entries, 0 B, largest none, \d+ windows already up to date, 0 failed/)
+    assert.deepEqual(await storedEntries(), before)
   })
 })
 
@@ -175,7 +199,7 @@ describe('the workflows', () => {
     return { text, at, slice: text.slice(at, next === -1 ? undefined : next) }
   }
 
-  it('both run materialize in order, carry the env, continue-on-error, and the timeout-minutes 20 and 15', () => {
+  it('both run materialize in order, continue-on-error, with the timeout-minutes 20 and 15', () => {
     const ingest = step('ingest.yml', 'pnpm materialize')
     assert.ok(ingest.at > ingest.text.indexOf('- run: pnpm ingest'))
     assert.ok(ingest.at < ingest.text.indexOf('cache dangerously-delete'))
@@ -187,24 +211,14 @@ describe('the workflows', () => {
     assert.ok(warm.at < warm.text.indexOf('cache dangerously-delete'))
     assert.match(warm.slice, /continue-on-error: true/)
     assert.match(warm.slice, /timeout-minutes: 15\b/)
-
-    for (const { text } of [ingest, warm]) {
-      assert.match(text, /BLOB_READ_WRITE_TOKEN: \$\{\{ secrets\.BLOB_READ_WRITE_TOKEN \}\}/)
-      assert.match(text, /WARM_STORE_URL: \$\{\{ vars\.WARM_STORE_URL \}\}/)
-      assert.match(text, /TESTIMONY_REVISION: \$\{\{ vars\.TESTIMONY_REVISION \}\}/)
-      assert.doesNotMatch(text, /^\s*TESTIMONY_DTYPE:/m)
-    }
   })
-})
 
-describe('the dependency', () => {
-  it('package.json pins @vercel/blob exactly and the lockfile agrees', () => {
-    const pkg = JSON.parse(fileText('package.json')) as { dependencies: Record<string, string> }
-    const version = pkg.dependencies['@vercel/blob']
-    assert.match(version, /^\d+\.\d+\.\d+$/, 'no ^ or ~')
-    assert.ok(Number(version.split('.')[0]) >= 1)
-    const lock = fileText('pnpm-lock.yaml')
-    assert.match(lock, new RegExp(`'@vercel/blob':\\s+specifier: ${version.replace(/\./g, '\\.')}\\s+version: ${version.replace(/\./g, '\\.')}`))
-    assert.match(lock, new RegExp(`^  '@vercel/blob@${version.replace(/\./g, '\\.')}':`, 'm'))
+  it('neither workflow carries the Blob variables any more, and both still pass TESTIMONY_REVISION', () => {
+    for (const file of ['ingest.yml', 'warm.yml']) {
+      const text = fileText(`.github/workflows/${file}`)
+      assert.doesNotMatch(text, /BLOB_READ_WRITE_TOKEN|WARM_STORE_URL/, file)
+      assert.match(text, /TESTIMONY_REVISION: \$\{\{ vars\.TESTIMONY_REVISION \}\}/, file)
+      assert.doesNotMatch(text, /^\s*TESTIMONY_DTYPE:/m, file)
+    }
   })
 })

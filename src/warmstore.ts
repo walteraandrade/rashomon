@@ -6,13 +6,11 @@ import { warmPaths, WARM_DAYS } from './warm.js'
 
 export type WarmRoute = 'graph' | 'sources' | 'testimony'
 
-export type WarmReader = { get: (pathname: string, key: string) => Promise<string | null> }
-export type WarmWriter = { put: (pathname: string, text: string) => Promise<void> }
+export type WarmReader = { get: (pathname: string) => Promise<string | null> }
+export type WarmWriter = { put: (recorte: Pick<WarmRecorte, 'pathname' | 'personId'>, text: string) => Promise<void> }
 export type WarmStore = WarmReader & WarmWriter
 
 export type WarmState = 'hit' | 'stale' | 'miss'
-
-export const READ_TIMEOUT_MS = 2000
 
 const PARSERS: Record<WarmRoute, (q: Record<string, string | undefined>) => GraphQuery | TestimonyQuery> = {
   graph: parseQuery,
@@ -76,12 +74,12 @@ export const scopeRow = async (personId: string, days: number): Promise<ScopeRow
 
 export type Lookup = { state: WarmState; body: string | null }
 
-// Any failure is a miss: the store is an accelerator, never a dependency.
+// Any failure, a table a pending migrate has not created included, is a miss, never an error.
 export const lookup = async (store: WarmReader, r: { personId: string; route: WarmRoute; key: string; days: number }): Promise<Lookup> => {
   try {
     const scope = await scopeRow(r.personId, r.days)
     if (!scope) return { state: 'miss', body: null }
-    const text = await store.get(pathnameOf(r.personId, r.route, r.key), scope.built_at)
+    const text = await store.get(pathnameOf(r.personId, r.route, r.key))
     const entry = text === null ? null : splitEntry(text)
     if (!entry) return { state: 'miss', body: null }
     return entry.key === scope.built_at ? { state: 'hit', body: entry.body } : { state: 'stale', body: null }
@@ -90,37 +88,17 @@ export const lookup = async (store: WarmReader, r: { personId: string; route: Wa
   }
 }
 
-// setTimeout raced against the whole fetch, never AbortSignal.timeout: a timer the test clock drives.
-const within = <T>(work: Promise<T>, ms: number): Promise<T> =>
-  new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('warm store timeout')), ms)
-    work.then(
-      (v) => (clearTimeout(timer), resolve(v)),
-      (e) => (clearTimeout(timer), reject(e)),
-    )
-  })
-
-// The public object read as `${base}/${pathname}?v=<built_at>`: the query string makes every build
-// its own CDN key, so an overwritten object is never read from an older cached copy.
-export const blobReader = (base: string, fetchFn: typeof fetch = (...args) => fetch(...args), timeoutMs = READ_TIMEOUT_MS): WarmReader => ({
-  get: async (pathname, key) => {
-    try {
-      return await within(
-        (async () => {
-          const res = await fetchFn(`${base.replace(/\/+$/, '')}/${pathname}?v=${encodeURIComponent(key)}`)
-          return res.status === 200 ? await res.text() : null
-        })(),
-        timeoutMs,
-      )
-    } catch {
-      return null
-    }
+export const pgWarmStore: WarmStore = {
+  get: async (pathname) => {
+    const { rows } = await db.query<{ body: string }>(`select body from warm_entries where pathname = $1`, [pathname])
+    return rows[0]?.body ?? null
   },
-})
-
-export const warmStoreFromEnv = (env: Record<string, string | undefined>): WarmReader | null => {
-  const base = (env.WARM_STORE_URL ?? '').trim()
-  return base ? blobReader(base) : null
+  put: async (recorte, text) => {
+    await db.query(
+      `insert into warm_entries (pathname, person_id, body) values ($1, $2, $3) on conflict (pathname) do update set person_id = excluded.person_id, body = excluded.body`,
+      [recorte.pathname, recorte.personId, text],
+    )
+  },
 }
 
 export type MemoryWarmStore = WarmStore & { entries: Map<string, string> }
@@ -130,6 +108,6 @@ export const memoryWarmStore = (): MemoryWarmStore => {
   return {
     entries,
     get: async (pathname) => entries.get(pathname) ?? null,
-    put: async (pathname, text) => void entries.set(pathname, text),
+    put: async (recorte, text) => void entries.set(recorte.pathname, text),
   }
 }

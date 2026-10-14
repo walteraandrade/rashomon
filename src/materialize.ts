@@ -4,9 +4,9 @@ import { db } from './db.js'
 import { graphFor, sourcesFor, testimonyFor, type GraphQuery, type LinkRow, type TestimonyQuery } from './graph.js'
 import type { Person } from './types.js'
 import {
-  blobReader,
   entryText,
   memoryWarmStore,
+  pgWarmStore,
   scopeRow,
   splitEntry,
   warmRecortes,
@@ -14,7 +14,6 @@ import {
   type WarmRecorte,
   type WarmWriter,
 } from './warmstore.js'
-import { blobWriter, realPut, type BlobPut } from './warmstore-blob.js'
 
 export type MaterializeOptions = {
   store: WarmWriter
@@ -58,7 +57,7 @@ const sliceLinks = (edges: CoEdge[], ids: string[]): LinkRow[] => {
 const differing = async (reader: WarmReader, group: WarmRecorte[], builtAt: string): Promise<WarmRecorte[]> => {
   const stale: WarmRecorte[] = []
   for (const r of group) {
-    const text = await reader.get(r.pathname, builtAt).catch(() => null)
+    const text = await reader.get(r.pathname).catch(() => null)
     if (splitEntry(text ?? '')?.key !== builtAt) stale.push(r)
   }
   return stale
@@ -116,7 +115,7 @@ export const materialize = async (persons: Person[], opts: MaterializeOptions): 
               }
             }
             const text = entryText(scope.built_at, JSON.stringify(body))
-            await opts.store.put(r.pathname, text)
+            await opts.store.put(r, text)
             const bytes = Buffer.byteLength(text)
             result.written += 1
             result.bytes += bytes
@@ -133,20 +132,15 @@ export const materialize = async (persons: Person[], opts: MaterializeOptions): 
   return result
 }
 
-export type MainDeps = { put?: BlobPut; reader?: WarmReader; fetch?: typeof fetch; log?: (line: string) => void }
+export type MainDeps = { writer?: WarmWriter; reader?: WarmReader; log?: (line: string) => void }
 
-// Returns the exit code. Reads persons and graph_scopes through the module-level db, like the
-// routes; it never migrates, since it only reads tables a prior migrate or ingest created.
-export const main = async (argv: string[], env: Record<string, string | undefined>, deps: MainDeps = {}): Promise<number> => {
+// Returns the exit code. Reads through the module-level db, like the routes; it never migrates.
+// A dry run writes to memory but reads the real table, so `--dry-run --if-stale` reports what the
+// real run would rewrite.
+export const main = async (argv: string[], deps: MainDeps = {}): Promise<number> => {
   const log = deps.log ?? console.log
   const dryRun = argv.includes('--dry-run')
   const ifStale = argv.includes('--if-stale')
-  const token = (env.BLOB_READ_WRITE_TOKEN ?? '').trim()
-  const base = (env.WARM_STORE_URL ?? '').trim()
-  if (!token && !dryRun) {
-    log('no warm store configured, skipping')
-    return 0
-  }
   if (!(await hasGraphAggregates())) {
     log('no graph aggregates built (run pnpm aggregate first), nothing written')
     return 1
@@ -155,10 +149,8 @@ export const main = async (argv: string[], env: Record<string, string | undefine
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)
   const persons = rows.filter((p) => known.has(p.id))
 
-  const memory = memoryWarmStore()
-  const store: WarmWriter = dryRun ? memory : blobWriter(deps.put ?? realPut, token)
-  const reader: WarmReader = dryRun ? memory : (deps.reader ?? (base ? blobReader(base, deps.fetch) : nullReader))
-  if (ifStale && !dryRun && !deps.reader && !base) log('WARM_STORE_URL is unset: every stored key reads as missing, rewriting everything')
+  const store: WarmWriter = dryRun ? memoryWarmStore() : (deps.writer ?? pgWarmStore)
+  const reader: WarmReader = deps.reader ?? pgWarmStore
 
   const result = await materialize(persons, { store, reader, ifStale, log })
   const largest = result.largest ? `${result.largest.pathname} (${result.largest.bytes} B)` : 'none'
@@ -171,7 +163,7 @@ export const main = async (argv: string[], env: Record<string, string | undefine
 
 const run = async () => {
   try {
-    process.exitCode = await main(process.argv.slice(2), process.env)
+    process.exitCode = await main(process.argv.slice(2))
   } catch (err) {
     console.error(err)
     process.exitCode = 1

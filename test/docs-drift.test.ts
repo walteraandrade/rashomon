@@ -491,7 +491,7 @@ describe('docs state the 21-day window, retention and the tracked-only corpus (i
     assert.match(docsText, /vacuum/i)
   })
 
-  it('describes the by-hand shrink: batched deletes with a WAL check, vacuum full on six tables with pnpm size and ingest off, the deploy order, --if-missing and the orphaned blobs (AC33)', () => {
+  it('describes the by-hand shrink: batched deletes with a WAL check, vacuum full on six tables with pnpm size and ingest off, the deploy order, --if-missing and the days=30 objects of the old Blob store (AC33)', () => {
     assert.match(docsText, /batches of 20[ , ]?000[^.\n]*|20[ , ]?000[^.\n]*batch/i)
     assert.match(docsText, /\bWAL\b/)
     assert.match(docsText, /older than 21 days[^.\n]*(batched|before the first ingest)|batched delete for the docs older than 21 days|then the same batched delete/i)
@@ -500,7 +500,7 @@ describe('docs state the 21-day window, retention and the tracked-only corpus (i
     assert.match(docsText, near('vacuum full', '(ingest|ingest\\.yml)[^.\\n]{0,80}(disabled|paused|off|stopped)|(disable|pause|stop)[^.\\n]{0,60}ingest', 600))
     assert.match(docsText, /merge,\s*`pnpm migrate`,\s*`pnpm aggregate`,\s*`pnpm materialize`/)
     assert.match(docsText, /never `--if-missing`|`--if-missing`[^.\n]*(skip|would skip)[^.\n]*21/i)
-    assert.match(docsText, /`days=30` blobs[^.\n]*orphaned[^.\n]*harmless/i)
+    assert.match(docsText, /Blob store's `days=30` objects[^.\n]*leave with that store[^.\n]*`warm_entries`[^.\n]*never held `days=30`/i)
   })
 
   it('the by-hand shrink starts by deleting the docs no tracked person points at, in batches, and says nothing in the code does it (AC33)', () => {
@@ -516,14 +516,52 @@ describe('docs state the 21-day window, retention and the tracked-only corpus (i
 })
 
 describe('the warm store is documented', () => {
-  it('states that warm recortes come from a store outside Postgres and fall back to live on a miss', () => {
-    assert.match(docsText, /store outside Postgres/i)
+  const near = (a: string, b: string, span = 400) => new RegExp(`(${a})[^]{0,${span}}(${b})|(${b})[^]{0,${span}}(${a})`, 'i')
+
+  // Issue #317 AC21
+  it('states that the warm store is the warm_entries table, that a miss falls back to live, and that it is no longer outside Postgres', () => {
+    assert.match(docsText, near('warm store', '`warm_entries` table'))
+    assert.match(docsText, /table[^.\n]*same database|same database[^.\n]*table/i)
     assert.match(docsText, /fall back to (the )?live/i)
+    assert.doesNotMatch(docsText, /store outside Postgres/i)
   })
 
-  it('names the command, both variables and both headers', () => {
-    for (const name of ['pnpm materialize', 'WARM_STORE_URL', 'BLOB_READ_WRITE_TOKEN', 'x-warm-store', 'x-warm-store-only'])
-      assert.ok(docsText.includes(name), `the docs must name ${name}`)
+  // Issue #317 AC22
+  it('names the retired variables only as something to remove, and no longer says a lookup needs a configured store, an unset variable skips materialize or a read times out', () => {
+    for (const name of ['WARM_STORE_URL', 'BLOB_READ_WRITE_TOKEN']) {
+      const mentions = [...docsText.matchAll(new RegExp(name, 'g'))]
+      assert.ok(mentions.length > 0, `the docs must still say what to do with ${name}`)
+      for (const m of mentions) {
+        const around = docsText.slice(Math.max(0, (m.index ?? 0) - 400), (m.index ?? 0) + 400)
+        assert.match(around, /\b(remove|delete)\b/i, `${name} appears without "remove" or "delete" nearby: ...${around.slice(300, 500)}...`)
+      }
+    }
+    assert.doesNotMatch(docsText, /no warm store configured/i)
+    assert.doesNotMatch(docsText, /when a store is configured|only when a store is configured/i)
+    assert.doesNotMatch(docsText, /timed out \(2 s\)|reader's 2 s|2 s timeout/i)
+    assert.doesNotMatch(docsText, /(unset|empty)[^.\n]*(skips?|skipping)[^.\n]*`?pnpm materialize/i)
+  })
+
+  // Issue #317 AC23
+  it('says every lookup-eligible request carries x-warm-store, and that before pnpm migrate those requests are a miss (503 with x-warm-store-only)', () => {
+    for (const name of ['pnpm materialize', 'x-warm-store', 'x-warm-store-only']) assert.ok(docsText.includes(name), `the docs must name ${name}`)
+    assert.match(docsText, /every lookup-eligible request[^.\n]*carries? `x-warm-store`|`x-warm-store[^.\n]*on every lookup-eligible request/i)
+    assert.match(docsText, near('before `pnpm migrate` creates `warm_entries`', '`miss`', 300))
+    assert.match(docsText, near('before `pnpm migrate` creates `warm_entries`', '503', 400))
+  })
+
+  // Issue #317 AC24
+  it('gives the by-hand deploy order and says rows left by a changed key are orphaned, harmless and cleared by hand', () => {
+    const order = ['`pnpm migrate`', '`pnpm materialize`', '`gh workflow run warm.yml`', '`x-warm-store: hit`', 'the repository secret `BLOB_READ_WRITE_TOKEN`', 'delete the Blob store']
+    let from = docsText.indexOf('Moving from Vercel Blob')
+    assert.notEqual(from, -1, 'the docs must have the by-hand move')
+    for (const step of order) {
+      const at = docsText.indexOf(step, from)
+      assert.notEqual(at, -1, `the deploy step ${step} is missing or out of order`)
+      from = at + step.length
+    }
+    assert.match(docsText, /only then remove the repository secret[^.\n]*variable[^.\n]*Vercel Production env/i)
+    assert.match(docsText, /orphaned[^.\n]*harmless[^.\n]*`materialize` never deletes from `warm_entries`[^.\n]*by hand/i)
   })
 
   it('says a stored recorte\'s links come from the build\'s own edges and its freshness key is the scope\'s built_at', () => {

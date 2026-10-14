@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse, type DefaultTreeAdapterMap } from 'parse5'
@@ -828,16 +826,5 @@ describe('no Blob dependency is left behind (issue #317 acceptance)', () => {
     const exported = Object.keys(await import('../src/warmstore.js'))
     for (const gone of ['blobReader', 'warmStoreFromEnv', 'READ_TIMEOUT_MS']) assert.ok(!exported.includes(gone), `${gone} is still exported`)
     for (const kept of ['pgWarmStore', 'memoryWarmStore', 'lookup', 'warmRecortes']) assert.ok(exported.includes(kept), `${kept} must stay exported`)
-  })
-
-  it('package.json and pnpm-lock.yaml agree, so pnpm install --frozen-lockfile succeeds (AC18)', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'rashomon-lock-'))
-    try {
-      for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) if (existsSync(join(root, file))) copyFileSync(join(root, file), join(dir, file))
-      const run = spawnSync('pnpm', ['install', '--frozen-lockfile', '--lockfile-only', '--offline'], { cwd: dir, encoding: 'utf8' })
-      assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`)
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
   })
 })

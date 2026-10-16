@@ -347,7 +347,7 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
   })
 })
 
-// Trimmed from the live feeds on 2026-10-16.
+// Each sample keeps its outlet's real markup and line breaks: the patterns key on that shape.
 describe('rss body(): other stories\' headlines never enter the doc', () => {
   it('drops Correio Braziliense\'s "Saiba Mais" list, so a CNBB story is not tagged with Lula', () => {
     const item = {

@@ -3,7 +3,8 @@ name: ingest
 # Collects every 6 hours into the managed Postgres behind production. GKG_SLOTS=28
 # looks back 7 hours, so one missed run still leaves no gap. Runs never overlap:
 # each one is a long-lived pg session doing bulk inserts and an ANALYZE. A full run
-# takes ~25 min, ~20 of them Bluesky (which defaultSources runs last).
+# takes ~25 min, ~20 of them Bluesky (which defaultSources runs last), plus the score
+# of the new pairs.
 on:
   schedule:
     - cron: '17 */6 * * *'
@@ -29,8 +30,10 @@ jobs:
       BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
       GKG_SLOTS: 28
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      # Must equal the Vercel project's value: it is part of the testimony `method`, which is part
-      # of every stored key. TESTIMONY_DTYPE stays unset on both sides (the default, q8).
+      TESTIMONY_MODEL: drifting-walter/kikori
+      # Must equal the Vercel project's value: it is part of the testimony `method`, the label
+      # `pnpm score` writes and part of every stored key. TESTIMONY_DTYPE stays unset on both sides
+      # (the default, q8).
       TESTIMONY_REVISION: ${{ vars.TESTIMONY_REVISION }}
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +46,20 @@ jobs:
       - run: test -n "$DATABASE_URL" || { echo 'DATABASE_URL secret is missing'; exit 1; }
       - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
       - run: pnpm ingest ${{ inputs.sources }}
+      # The q8 model files of that revision (~110 MB), in MODEL_DIR's default. Saved only when the
+      # job succeeds, so a download cut by the timeout below is never cached.
+      - uses: actions/cache@v4
+        with:
+          path: data/models
+          key: kikori-q8-${{ vars.TESTIMONY_REVISION }}
+      # Before materialize, which reads doc_testimony into the warm bodies. Nothing else writes
+      # doc_testimony, and retention deletes a doc's rows with the doc. A backlog stops at the
+      # timeout and resumes on the next run, since rows land 500 per insert. continue-on-error so a
+      # Hub outage never skips materialize, purge and warm; the last step fails the job afterwards.
+      - run: pnpm score
+        id: score
+        continue-on-error: true
+        timeout-minutes: 10
       # Writes the warm recortes' response bodies to the warm_entries table. continue-on-error and
       # its own timeout: a failed or slow store step must not skip the cache purge and warm below.
       - run: pnpm materialize
@@ -67,3 +84,6 @@ jobs:
       - run: pnpm warm
         env:
           SITE_URL: https://rashomon-five.vercel.app
+      # Last, so the site is refreshed whether or not the score step failed or timed out.
+      - if: steps.score.outcome == 'failure'
+        run: echo '::error::pnpm score failed or timed out, so some pairs have no testimony row' && exit 1

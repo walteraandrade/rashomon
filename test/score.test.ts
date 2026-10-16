@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, it, before } from 'node:test'
 import { db } from '../src/db.js'
 import { testimonyFor } from '../src/graph.js'
@@ -158,5 +160,36 @@ describe('a revision change re-scores every pair and leaves the old rows readabl
     assert.notDeepEqual(a, legacy, 'and neither may be answered from the unversioned rows')
 
     assert.deepEqual(await overall('kikori:q8:never-scored'), { score: null, n: 0 })
+  })
+})
+
+describe('ingest.yml scores the pairs each ingest adds', () => {
+  const workflow = readFileSync(fileURLToPath(new URL('../.github/workflows/ingest.yml', import.meta.url)), 'utf8')
+  const lines = workflow.split('\n')
+  const stepAt = (command: RegExp) => {
+    const start = lines.findIndex((l) => /^\s*- run:/.test(l) && command.test(l))
+    assert.notEqual(start, -1, `no step matching ${command}`)
+    const end = lines.findIndex((l, i) => i > start && /^\s{6}- /.test(l))
+    return { start, block: lines.slice(start, end === -1 ? undefined : end).join('\n') }
+  }
+
+  it('runs pnpm score after pnpm ingest and before pnpm materialize, continue-on-error, 10 minutes', () => {
+    const score = stepAt(/pnpm score$/)
+    assert.ok(stepAt(/pnpm ingest\b/).start < score.start, 'after the ingest')
+    assert.ok(score.start < stepAt(/pnpm materialize$/).start, 'before materialize reads doc_testimony')
+    assert.match(score.block, /id: score/)
+    assert.match(score.block, /continue-on-error: true/)
+    assert.match(score.block, /timeout-minutes: 10\b/)
+  })
+
+  it('names the model and caches its files under the revision the rows are labelled with', () => {
+    assert.match(workflow, /TESTIMONY_MODEL: drifting-walter\/kikori/)
+    assert.match(workflow, /path: data\/models\n\s*key: kikori-q8-\$\{\{ vars\.TESTIMONY_REVISION \}\}/)
+  })
+
+  it('fails the job after the warm when the score step failed', () => {
+    const gate = lines.findIndex((l) => /if: steps\.score\.outcome == 'failure'/.test(l))
+    assert.ok(gate > stepAt(/pnpm warm$/).start, 'after the purge and warm')
+    assert.match(lines.slice(gate, gate + 2).join('\n'), /exit 1/)
   })
 })

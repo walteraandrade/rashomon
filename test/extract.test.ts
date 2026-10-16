@@ -8,6 +8,7 @@ import {
   collocations,
   contentWords,
   countryOf,
+  decodeEntities,
   discoverNames,
   domainOf,
   hashtags,
@@ -43,6 +44,21 @@ describe('words', () => {
   it('drops onomatopoeia and stretched words', () => {
     const ts = words('kkkkk hahaha goooool reforma').map((t) => t.term)
     assert.deepEqual(ts, ['reforma'])
+  })
+
+  it('reads an HTML named entity as its letter, never as a word of its own', () => {
+    const ts = words('A atua&ccedil;&atilde;o n&atilde;o amea&ccedil;a a Presid&ecirc;ncia').map((t) => t.term)
+    assert.deepEqual(ts, ['atuacao', 'ameaca', 'presidencia'])
+  })
+})
+
+describe('decodeEntities', () => {
+  it('decodes every named entity, plus decimal and hex ones', () => {
+    assert.equal(decodeEntities('n&atilde;o &eacute; &mdash; &#227; &#xE3; &amp;'), 'não é — ã ã &')
+  })
+
+  it('leaves an ampersand that closes no entity as text', () => {
+    assert.equal(decodeEntities('AT&T ?a=1&notícias &foo;'), 'AT&T ?a=1&notícias &foo;')
   })
 })
 
@@ -104,6 +120,10 @@ describe('personsMentioned', () => {
   it('still tags Jair on a bare surname', () => {
     assert.deepEqual(ids('Bolsonaro nega participação'), ['bolsonaro'])
     assert.deepEqual(ids('JAIR BOLSONARO é réu'), ['bolsonaro'])
+  })
+
+  it('reads an escaped name as the name, so the longer alias still owns the surname', () => {
+    assert.deepEqual(ids('Fl&aacute;vio Bolsonaro critica o governo'), ['flavio-bolsonaro'])
   })
 
   it('tags both when the bare surname appears apart from the longer alias', () => {

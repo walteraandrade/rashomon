@@ -347,6 +347,65 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
   })
 })
 
+// Trimmed from the live feeds on 2026-10-16.
+describe('rss body(): other stories\' headlines never enter the doc', () => {
+  it('drops Correio Braziliense\'s "Saiba Mais" list, so a CNBB story is not tagged with Lula', () => {
+    const item = {
+      'content:encoded': `<p>A CNBB divulgou uma nota sobre a crise no STF.</p><p><strong>* Estagi&aacute;rio sob supervis&atilde;o de Paulo Floro.</strong></p><p><div class="read-more">    <h4>Saiba Mais</h4>    <ul>
+        <li>                <a href="https://www.correiobraziliense.com.br/politica/2026/10/7522243-a-nova-disputa.html" onclick="eventoGA('veja mais', 'saiba mais', 'x')">
+          <img class="lazy" data-src="https://midias.correiobraziliense.com.br/x.png" alt="" src="">    <strong>Política</strong>
+          <span>Cury descarta apoio a Lula e cobra explicações de Flávio Bolsonaro</span>                </a>            </li>    </ul></div></p>`,
+    }
+    assert.equal(body(item), 'A CNBB divulgou uma nota sobre a crise no STF. * Estagiário sob supervisão de Paulo Floro.')
+  })
+
+  it('drops CNN Brasil\'s "Leia Mais" aside and keeps the paragraphs around it', () => {
+    const item = {
+      'content:encoded': `<p>O Congresso votou a PEC.</p>
+<aside class="read-too read-too--with-img">
+            <h2 class='read-too__title'>Leia Mais</h2>
+            <ul class="read-too__list">
+        <li class="read-too__list-item">
+    <a class="read-too__link" href="https://www.cnnbrasil.com.br/eleicoes/poderdata/" target="_self">
+        <h3 class="read-too__post-title">PoderData/AYA: Lula é desaprovado por 47%; aprovação é de 46%</h3>
+    </a>
+</li></ul></aside>
+<p>A promulgação ocorre na sexta.</p>`,
+    }
+    assert.equal(body(item), 'O Congresso votou a PEC. A promulgação ocorre na sexta.')
+  })
+
+  it('drops g1\'s channel calls, widget lines and marker-led headlines from its plain-text description', () => {
+    const description = [
+      '<img src="https://s2-g1.glbimg.com/x.jpg" /><br /> Luiz Inácio Lula da Silva (PT)',
+      '✅ Siga o canal de notícias de eleições do g1 no WhatsApp',
+      'Lula defendeu a redução da maioridade penal.',
+      'LEIA TAMBÉM:',
+      'Lula diz que não sabia que Bolsa Família passou quase 4 anos sem reajuste',
+      'Veja o que é #FATO e o que é  #FAKE na entrevista de Lula à Globo',
+      'Lula foi questionado sobre o STF.',
+      'Agora no g1',
+      'LEIA MAIS: Fim da escala 6x1 é promulgado e prazos começam a contar',
+      'VEJA TAMBÉM',
+      'Guia do Eleitor: Posso votar no segundo turno se faltei no primeiro?',
+      'O texto vai à sanção.',
+      '📲 Participe do canal do g1 AM no WhatsApp',
+      'Leia mais notícias sobre a região no g1 DF.',
+    ].join('\n')
+    assert.equal(
+      body({ description }),
+      'Luiz Inácio Lula da Silva (PT) Lula defendeu a redução da maioridade penal. Lula foi questionado sobre o STF. O texto vai à sanção.',
+    )
+  })
+
+  it('keeps prose that only names WhatsApp or "leia mais", and never touches the title', () => {
+    const prose = 'O PT aposta no canal de WhatsApp "Exército do Lula". A Meta, dona do Whatsapp, respondeu (leia mais abaixo).'
+    assert.equal(body({ description: prose }), prose)
+    const doc = toDoc('rss')({ link: 'https://example.org/t', title: 'Saiba mais: o que muda com a PEC', description: 'Resumo.' })
+    assert.equal(doc?.text, 'Saiba mais: o que muda com a PEC. Resumo.')
+  })
+})
+
 describe('collectors on Effect, drop the Promise helpers (issue #183)', () => {
   it('juridico, oficial and nicho each fetch their own distinct hardcoded feed list, every doc stamped with the family source and never a tone (issue #183 AC4)', async () => {
     const seen = new Map<string, Set<string>>()

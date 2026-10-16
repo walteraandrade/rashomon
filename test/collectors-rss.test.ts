@@ -300,6 +300,10 @@ describe('rss body(): content:encoded is the article a publisher syndicates on p
     assert.equal(body({ 'content:encoded': '<p>Lula &amp; Bolsonaro</p><p>no Congresso</p>' }), 'Lula & Bolsonaro no Congresso')
   })
 
+  it('decodes named accents too, so Correio Braziliense\'s "n&atilde;o" is stored as "não"', () => {
+    assert.equal(body({ 'content:encoded': '<p>Lula n&atilde;o comenta a a&ccedil;&atilde;o</p>' }), 'Lula não comenta a ação')
+  })
+
   it('unwraps content:encoded when it carries its own inline xmlns attribute (Planalto\'s real shape), never leaking "[object Object]"', () => {
     // With ignoreAttributes: false, fast-xml-parser turns an element carrying its own attribute
     // into {'#text': ..., '@_xmlns:content': ...} instead of a bare string.

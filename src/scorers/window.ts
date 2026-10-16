@@ -1,4 +1,4 @@
-import { aliasSpans, normalize, type Span } from '../extract.js'
+import { aliasSpans, decodeEntities, normalize, type Span } from '../extract.js'
 import type { Person } from '../types.js'
 
 // The text kikori sees for one (text, person) pair: the largest window around the first mention
@@ -74,7 +74,8 @@ const largest = (ok: (budget: number) => boolean, max: number): number => {
   return lo
 }
 
-export const scoredText = (text: string, person: Person, persons: Person[], fits: Fits): string => {
+export const scoredText = (raw: string, person: Person, persons: Person[], fits: Fits): string => {
+  const text = decodeEntities(raw)
   if (fits(text)) return text
   const hit = firstMention(text, person, persons) ?? { start: 0, end: 0 }
   const centre = Math.floor((hit.start + hit.end) / 2)

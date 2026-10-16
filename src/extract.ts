@@ -1,3 +1,4 @@
+import { decodeHTMLStrict } from 'entities'
 import type { Person, Phrases, RawDoc, Term } from './types.js'
 
 // Five obvious neighbours are deliberately absent, because a stopword also forbids a phrase
@@ -108,12 +109,8 @@ export const standaloneWords = (text: string, lexicon: Phrases = new Set<string>
 export const terms = (text: string, extra: Term[] = [], lexicon: Phrases = new Set<string>()): Term[] =>
   uniq([...hashtags(text), ...standaloneWords(text, lexicon), ...properNouns(text), ...collocations(text, lexicon), ...extra], (t) => `${t.kind}:${t.term}`)
 
-const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
-export const decodeEntities = (s: string) =>
-  s
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
-    .replace(/&(\w+);/g, (m, n) => entities[n] ?? m)
+// Every HTML entity, strict: "n&atilde;o" reads "não", "&notícias" (no `;`) stays as text.
+export const decodeEntities = (s: string): string => decodeHTMLStrict(s)
 
 export const aliasRe = (alias: string) => new RegExp(`(?<![a-z0-9])${escapeRe(normalize(alias))}(?![a-z0-9])`, 'g')
 
@@ -123,7 +120,7 @@ export type Span = { start: number; end: number }
 // first, so "Flávio Bolsonaro" cannot also feed the bare "Bolsonaro" alias of another person;
 // `exclude` entries claim spans that belong to nobody. Offsets index `norm`, which normalize()
 // may have made shorter than the original text. Tagging (personsMentioned) and the scorer's
-// window (src/scorers/window.ts) both find mentions here, so they can never disagree.
+// window (src/scorers/window.ts) decode, then find mentions here, so they never disagree.
 export const aliasSpans = (norm: string, persons: Person[]): Map<string, Span[]> => {
   const aliases = persons
     .flatMap((person) => [
@@ -145,7 +142,7 @@ export const aliasSpans = (norm: string, persons: Person[]): Map<string, Span[]>
 }
 
 export const personsMentioned = (text: string, persons: Person[]): Person[] => {
-  const spans = aliasSpans(normalize(text), persons)
+  const spans = aliasSpans(normalize(decodeEntities(text)), persons)
   return persons.filter((p) => spans.has(p.id))
 }
 

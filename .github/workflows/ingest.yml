@@ -52,11 +52,10 @@ jobs:
         with:
           path: data/models
           key: kikori-q8-${{ vars.TESTIMONY_REVISION }}
-      # Scores the pairs this ingest added, before materialize reads doc_testimony into the warm
-      # bodies. Nothing else writes doc_testimony, and retention deletes a doc's rows with the doc,
-      # so without this step the page loses its colours within 21 days. A backlog stops at the
-      # timeout and resumes on the next run: rows land 500 per insert. continue-on-error so a Hub
-      # outage never skips materialize, purge and warm; the last step fails the job afterwards.
+      # Before materialize, which reads doc_testimony into the warm bodies. Nothing else writes
+      # doc_testimony, and retention deletes a doc's rows with the doc. A backlog stops at the
+      # timeout and resumes on the next run, since rows land 500 per insert. continue-on-error so a
+      # Hub outage never skips materialize, purge and warm; the last step fails the job afterwards.
       - run: pnpm score
         id: score
         continue-on-error: true
@@ -85,7 +84,6 @@ jobs:
       - run: pnpm warm
         env:
           SITE_URL: https://rashomon-five.vercel.app
-      # A failed or timed-out score turns the run red here, after the site is refreshed, instead of
-      # leaving unscored pairs that only show up as uncoloured words on the page.
+      # Last, so the site is refreshed whether or not the score step failed or timed out.
       - if: steps.score.outcome == 'failure'
         run: echo '::error::pnpm score failed or timed out, so some pairs have no testimony row' && exit 1

@@ -25,6 +25,38 @@ const decode = (buf: Uint8Array) => {
 }
 
 const stripHtml = (s: unknown) => decodeEntities(String(s ?? '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim()
+
+// Other stories' headlines, which tag a doc with people it is not about: a heading over a list
+// (Correio, CNN) or, in g1's plain-text body, a marker line over headline lines.
+const related = String.raw`(?:saiba mais|leia (?:mais|tamb(?:[eé]|&eacute;)m)|veja (?:mais|tamb(?:[eé]|&eacute;)m))`
+const relatedList = new RegExp(String.raw`<(h[1-6])\b[^>]*>\s*${related}\s*:?\s*</\1>\s*<(ul|ol)\b[\s\S]*?</\2>`, 'gi')
+const relatedMarker = new RegExp(String.raw`^${related}\s*:?$`, 'i')
+const relatedInline = new RegExp(String.raw`^${related}\s*:\s*\S`, 'i')
+const promo = /^(?:\W*(?:siga|participe)\b.*\bcanal\b.*\bwhatsapp\W*|agora no g1:?|leia mais not[ií]cias\b.*)$/i
+const sentenceEnd = /[.!…:]["”'’)]*$/
+const blockBreak = /<br\s*\/?>|<\/(?:p|li|h[1-6]|div|aside|ul|ol)>/gi
+
+const dropRelated = (lines: string[]): string[] =>
+  lines.reduce<{ kept: string[]; inList: boolean }>(
+    ({ kept, inList }, line) =>
+      relatedMarker.test(line) || (inList && !sentenceEnd.test(line))
+        ? { kept, inList: true }
+        : relatedInline.test(line) || promo.test(line)
+          ? { kept, inList: false }
+          : { kept: [...kept, line], inList: false },
+    { kept: [], inList: false },
+  ).kept
+
+const bodyText = (s: unknown) =>
+  dropRelated(
+    String(s ?? '')
+      .replace(relatedList, ' ')
+      .replace(blockBreak, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .split('\n')
+      .map((line) => decodeEntities(line).replace(/\s+/g, ' ').trim())
+      .filter(Boolean),
+  ).join(' ')
 const asArray = <T>(x: T | T[] | undefined): T[] => (x === undefined ? [] : Array.isArray(x) ? x : [x])
 
 const text = (v: unknown) => (typeof v === 'object' && v !== null ? String((v as any)['#text'] ?? '') : String(v ?? ''))
@@ -33,8 +65,8 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 // `content:encoded` is the full article body; description wins only when it is longer.
 export const body = (item: any) => {
   // An element carrying its own inline xmlns (Planalto's content:encoded) parses as {'#text', '@_xmlns:...'}.
-  const encoded = stripHtml(text(item['content:encoded']))
-  const description = stripHtml(text(item.description))
+  const encoded = bodyText(text(item['content:encoded']))
+  const description = bodyText(text(item.description))
   return encoded.length > description.length ? encoded : description
 }
 

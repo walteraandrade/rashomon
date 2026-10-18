@@ -122,6 +122,14 @@ describe('scoredText', () => {
     for (const w of out.split(' ')) assert.match(w, /^(palavra\d+|Lula)$/, `broken word ${w}`)
   })
 
+  it('scores the decoded text, so an escaped name anchors the window the way tagging reads it', () => {
+    const flavio = byName('Flávio Bolsonaro')
+    assert.equal(scoredText('Fl&aacute;vio Bolsonaro falou.', flavio, seed, byChars), 'Flávio Bolsonaro falou.')
+    const out = scoredText(`${words(300)} Fl&aacute;vio Bolsonaro ${words(300)}`, flavio, seed, byChars)
+    assert.match(out, /Flávio Bolsonaro/)
+    assert.doesNotMatch(out, /&aacute;/)
+  })
+
   it('clamps to the head when the mention is near the start and to the tail when near the end', () => {
     const head = `Lula ${words(400)}`
     assert.match(scoredText(head, lula, seed, byChars), /^Lula /)

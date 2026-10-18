@@ -34,6 +34,9 @@ importers:
       effect:
         specifier: 4.0.0-rc.117
         version: 4.0.0-rc.117
+      entities:
+        specifier: ^8.1.0
+        version: 8.1.0
       fast-xml-parser:
         specifier: ^5.11.1
         version: 5.11.1

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { FONT_DISPLAY, FONT_MONO } from '../src/ui/layout.js'
+import { FONT_MONO } from '../src/ui/layout.js'
 import { SOURCE_SEGMENTS } from '../src/ui/format.js'
 import { VERCEL_INSIGHTS_TAG } from './pages.js'
 import { ROUTES, appTemplate, pageMarkup, siteFile } from './pages.js'
@@ -42,7 +42,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     assert.match(html, /<h1 id="comoLerTitle">Como ler o rashomon<\/h1>/)
     assert.equal(html.match(/<h1[\s>]/g)?.length, 1, 'exactly one h1 per page')
     for (const chapterTitle of ['Como fazer uma análise', 'Gráfico 1 · Atlas de palavras', 'PMI']) assert.match(chapter, new RegExp(`<h2>${chapterTitle}<\\/h2>`), chapterTitle)
-    for (const topic of ['Frequência', 'Linha entre duas palavras', 'Tom']) assert.match(chapter, new RegExp(`<h3>${topic}<\\/h3>`), topic)
+    for (const topic of ['Frequência', 'Dispersão', 'Tom']) assert.match(chapter, new RegExp(`<h3>${topic}<\\/h3>`), topic)
     assert.match(chapter, /<div id="pmi">\s*<h2>PMI<\/h2>/, 'PMI is a chapter of its own, not a topic inside avaliação')
     assert.match(chapter, /mais do que apareceria por acaso/, 'PMI must be defined in plain words')
     assert.match(chapter, /PMI × ln\(1 \+ documentos\)/, 'the weighted size must be spelled out')
@@ -81,12 +81,12 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       assert.match(text, /quando[^.]{0,80}colet/i, `${name} must say the count is taken at collection time`)
       assert.match(text, /S[óo]\s+documentos\s+do\s+Bluesky/i, `${name} must say only Bluesky documents have it`)
     }
-    const tamanho = (html: string) => /Tamanho<\/dt><dd>([^<]*)<\/dd>/.exec(html)?.[1]
+    const barra = (html: string) => /Barra<\/dt><dd>([^<]*)<\/dd>/.exec(html)?.[1]
     const keyDefault = atlasHtml.match(/<dl class="figure-key" id="keyDefault"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? ''
     assert.ok(keyDefault, '#keyDefault must exist in atlas.html')
-    assert.match(tamanho(keyDefault) ?? '', /alcance/i, "#keyDefault's Tamanho must name alcance")
-    assert.match(tamanho(help) ?? '', /alcance/i, "#help-atlas's Tamanho must name alcance")
-    assert.equal(tamanho(keyDefault), tamanho(help), 'the two Tamanho lines must not drift')
+    assert.match(barra(keyDefault) ?? '', /alcance/i, "#keyDefault's Barra must name alcance")
+    assert.match(barra(help) ?? '', /alcance/i, "#help-atlas's Barra must name alcance")
+    assert.equal(barra(keyDefault), barra(help), 'the two Barra lines must not drift')
   })
 
   it('atlas.html no longer carries the chapter and keeps como-ler.html as the shareable copy', () => {
@@ -114,7 +114,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       )
     const figure = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const help = html.match(/id="help-atlas"[\s\S]*?(?=<div id="help-pmi")/)?.[0] ?? ''
-    assert.deepEqual(dts(figure), ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Clique'])
+    assert.deepEqual(dts(figure), ['Barra', 'Cor', 'Organização', 'Clique'])
     assert.deepEqual(dts(help), dts(figure))
   })
 
@@ -127,9 +127,8 @@ describe('Leitura UI: the site explains itself on its own page', () => {
     ] as const) {
       assert.match(hay, /expressão/i, `${label} names phrases`)
       assert.match(hay, /arrasta pelo topo/, `${label} names the floating docs card`)
-      assert.match(hay, /no centro/i, `${label} names the atlas centre entry`)
       assert.match(hay, /primeira linha da lista/, `${label} names the list-head entry`)
-      assert.match(hay, /não couberam/, `${label} names the ruler overflow list`)
+      assert.match(hay, /não couberam/, `${label} names the week overflow list`)
       assert.match(hay, /próprio nome[\s\S]{0,200}(de fora|não entra|não ganha)/, `${label} names own-name words dropped from the compare chart`)
     }
   })
@@ -154,8 +153,7 @@ describe('Leitura UI: one stylesheet, one type system', () => {
     assert.match(css, /--mono:\s*'IBM Plex Mono'/)
     assert.match(css, /--display:\s*'IBM Plex Sans Condensed'/)
     assert.ok(FONT_MONO.startsWith("'IBM Plex Mono'"), 'canvas measurement must use the face the map is painted with')
-    assert.match(css, /\.map-svg \.atlas-text \{[^}]*var\(--mono\)/, 'the map paints words in the face layout.js measures them with')
-    assert.ok(FONT_DISPLAY.startsWith("'IBM Plex Sans Condensed'"), 'the centre name is measured with the display face')
+    assert.match(css, /\.scatter-label \{[^}]*font-family:\s*var\(--mono\)/, 'the scatter paints its labels in the face scatterLayout measures them with')
     // compare.html is gone (issue #91): the ruler now lives on atlas.html, already in this
     // loop, so the deleted page's own slot is dropped rather than replaced.
     assert.match(appTemplate(), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*IBM\+Plex\+Sans\+Condensed/, 'the shared shell loads the three faces')
@@ -213,7 +211,7 @@ describe('the page is a sequence of graphs', () => {
     assert.doesNotMatch(html, /class="side"/)
     // The atlas keeps its toolbar and its detail column inside its own figure.
     const atlas = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
-    for (const id of ['search', 'modeMap', 'mask', 'zoomIn', 'clear', 'viewport', 'legend', 'inspector']) assert.match(atlas, new RegExp(`id="${id}"`), `${id} belongs to the atlas figure`)
+    for (const id of ['search', 'modeColumns', 'modeScatter', 'mask', 'clear', 'columns', 'scatter', 'legend', 'inspector']) assert.match(atlas, new RegExp(`id="${id}"`), `${id} belongs to the atlas figure`)
   })
 
   it('there is no page-wide outlet filter: no chip under the sentence, and each figure keeps its own controls', () => {
@@ -311,9 +309,10 @@ describe('every page finds what it names', () => {
     assert.match(css, /\.segment\s*\{[^}]*max-width:\s*100%;[^}]*overflow-x:\s*auto;/)
   })
 
-  it('the workspace carries an id so a reload can dim it in place instead of blanking the map', () => {
+  it('the workspace carries an id so a reload can dim it in place instead of blanking the figure', () => {
     assert.match(read('atlas.html'), /<section class="figure workspace" id="workspace"/)
-    assert.match(read('atlas.css'), /\.figure\.is-loading \.viewport[^{]*\{[^}]*opacity/)
+    assert.match(read('atlas.css'), /\.figure\.is-loading \.columns[^{]*\{[^}]*opacity/)
+    assert.match(read('atlas.css'), /\.figure\.is-loading [^{]*\.scatter\b[^{]*\{[^}]*opacity/)
   })
 
   it('the como-ler page explains the centring of the mask', () => {
@@ -325,27 +324,25 @@ describe('every page finds what it names', () => {
 })
 
 describe('markup for figure 1\'s third view, Avaliação', () => {
-  it('#modeStrip sits in the same segment as #modeMap/#modeColumns, and #keyDefault is unchanged', () => {
+  it('#modeStrip closes the segment Lista, Dispersão, Avaliação, and #keyDefault is the first key (issue #328 AC1/AC19)', () => {
     const html = read('atlas.html')
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const segment = workspace.match(/<div class="segment"[^>]*role="group"[^>]*>[\s\S]*?<\/div>/)?.[0] ?? ''
-    assert.match(segment, /<button id="modeMap"/)
-    assert.match(segment, /<button id="modeColumns"/)
-    assert.match(segment, /<button id="modeStrip"[^>]*>Avaliação<\/button>/, 'the third button reads "Avaliação"')
+    assert.deepEqual([...segment.matchAll(/<button id="(\w+)"[^>]*>([^<]*)<\/button>/g)].map((m) => [m[1], m[2]]), [['modeColumns', 'Lista'], ['modeScatter', 'Dispersão'], ['modeStrip', 'Avaliação']])
+    for (const gone of ['modeMap', 'zoomGroup', 'zoomIn', 'viewport', 'overflow']) assert.doesNotMatch(workspace, new RegExp(`id="${gone}"`), `#${gone} is gone`)
     // #keyDefault must stay the first <dl class="figure-key"> in #workspace, with exactly the
-    // five rows Tamanho/Cor/Posição/Tracejado/Clique, unchanged (test/leitura-ui-acceptance.test.ts
-    // "figure 1's key on the page and in the dialog name the same encodings" relies on this order).
+    // four rows Barra/Cor/Organização/Clique (the dialog's #help-atlas mirrors them row for row).
     const firstKey = workspace.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? ''
     assert.match(firstKey, /id="keyDefault"/)
     const rows = [...firstKey.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim())
-    assert.deepEqual(rows, ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Clique'])
+    assert.deepEqual(rows, ['Barra', 'Cor', 'Organização', 'Clique'])
   })
 
   it('#keyStrip is a second, initially-hidden figure-key with the four Posição/Tamanho/Cor/Clique rows', () => {
     const workspace = read('atlas.html').match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const keyStrip = workspace.match(/<dl class="figure-key" id="keyStrip"[^>]*>[\s\S]*?<\/dl>/)?.[0]
     assert.ok(keyStrip, '#workspace must carry a second <dl class="figure-key" id="keyStrip">')
-    assert.match(keyStrip!, /hidden/, '#keyStrip starts hidden: the default view is the map, not the strip')
+    assert.match(keyStrip!, /hidden/, '#keyStrip starts hidden: the default view is the list, not the strip')
     const rows = [...keyStrip!.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim())
     assert.deepEqual(rows, ['Posição', 'Tamanho', 'Cor', 'Clique'])
     const dds = [...keyStrip!.matchAll(/<dd>([\s\S]*?)<\/dd>/g)].map((m) => m[1].trim())
@@ -408,5 +405,81 @@ describe('the overflow list under a day column stays inside the column', () => {
     assert.match(css, /\.week-overflow \.quiet-button \{[^}]*overflow-wrap: anywhere/)
     assert.match(css, /\.week-overflow \{[^}]*min-width: 0/)
     assert.match(css, /\.quiet-button \{[^}]*white-space: nowrap/, "the ruler's own overflow keeps the shared nowrap")
+  })
+})
+
+describe('the atlas is read as Lista, Dispersão and Avaliação (issue #328)', () => {
+  const plain = (html: string) => html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')
+  const part = (html: string, id: string, until: string) => html.match(new RegExp(`<div id="${id}"[\\s\\S]*?(?=<div id="${until}")`))?.[0] ?? ''
+  const guide = () => read('como-ler.html')
+  const surfaces = (): [string, string][] => {
+    const page = guide()
+    const dialog = read('atlas.html')
+    return [
+      ['/como-ler #atlas', plain(part(page, 'atlas', 'avaliacao'))],
+      ['#help-atlas', plain(part(dialog, 'help-atlas', 'help-pmi'))],
+    ]
+  }
+
+  it('/como-ler and #help-atlas state the new reading', () => {
+    for (const [name, text] of surfaces()) {
+      assert.match(text, /lista[^.]{0,60}padr[ãa]o/i, `${name}: the list is the default view`)
+      assert.match(text, /horizontal[^.]{0,80}documentos[^.]{0,60}escala log/i, `${name}: the horizontal axis is documents on a log scale`)
+      assert.match(text, /vertical[^.]{0,40}PMI/i, `${name}: the vertical axis is PMI`)
+      assert.match(text, /PMI[^.]{0,30}negativo/i, `${name}: PMI can be negative`)
+      assert.match(text, /sem rótulo[\s\S]{0,160}clic[áa]vel/i, `${name}: a term without a label is still clickable`)
+      assert.match(text, /\borg\b[\s\S]{0,200}GDELT/, `${name}: organisation terms carry the org tag and come only from GDELT`)
+      assert.match(text, /primeira linha da lista[^.]{0,30}(abre|textos)[^.]{0,40}pessoa/i, `${name}: the first line of the list opens the person's texts`)
+    }
+  })
+
+  it('the first-line entry is also in the analysis steps of both surfaces', () => {
+    for (const [name, html] of [
+      ['/como-ler #analise', part(guide(), 'analise', 'atlas')],
+      ['#help-analise', read('atlas.html').match(/<div id="help-analise"[\s\S]*?(?=<div id="help-atlas")/)?.[0] ?? ''],
+    ] as const) assert.match(plain(html), /primeira linha[^.]{0,60}pessoa/i, name)
+  })
+
+  it('none of the old wording survives in #analise, #atlas, #avaliacao or #help-atlas', () => {
+    const page = guide()
+    const dialog = read('atlas.html')
+    const scopes: [string, string][] = [
+      ['/como-ler #analise', plain(part(page, 'analise', 'atlas'))],
+      ['/como-ler #atlas', plain(part(page, 'atlas', 'avaliacao'))],
+      ['/como-ler #avaliacao', plain(part(page, 'avaliacao', 'pmi'))],
+      ['#help-atlas', plain(part(dialog, 'help-atlas', 'help-pmi'))],
+    ]
+    for (const [name, text] of scopes) {
+      assert.doesNotMatch(text, /no centro|nome no centro/i, `${name} still speaks of the centre`)
+      assert.doesNotMatch(text, /sublinhado tracejado|Tracejado/, `${name} still speaks of the dashed underline`)
+      assert.doesNotMatch(text, /máscara do mapa/i, `${name} still speaks of the map mask`)
+      assert.doesNotMatch(text, /(posi[çc][õo]?[ãe]?s?|posição)[^.]{0,50}evit[ao]m?\s+colis/i, `${name} still says position avoids collisions`)
+      assert.doesNotMatch(text, /Linha entre duas palavras|zoom/i, `${name} still speaks of the term-term line or zoom`)
+    }
+    assert.match(scopes[2][1], /máscara da lista e da dispersão/i)
+  })
+
+  it('the page and atlas.css hold none of the radial map', () => {
+    const html = read('atlas.html')
+    assert.doesNotMatch(html, /id="viewport"|class="viewport"/)
+    const css = read('atlas.css')
+    for (const selector of ['.map-svg', '.atlas-word', '.atlas-glow', '.atlas-hit', '.center-label', '.center-hit', '.zoom', '.mobile-hint', '.edge', '.boundary', '.viewport', '.column-card']) {
+      const escaped = selector.replace('.', '\\.')
+      assert.doesNotMatch(css, new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`), `atlas.css still styles ${selector}`)
+    }
+    assert.doesNotMatch(css, /\[data-col\]|data-kind="org"/, 'no dashed underline for kind and no column-card hook')
+    assert.doesNotMatch(css, /\.atlas-word|\.underline/, 'the org kind is a tag now, not an underline')
+  })
+
+  it('atlas.css styles the list, the org tag and the scatter, sizing every type from the --t-* ramp', () => {
+    const css = read('atlas.css')
+    for (const selector of ['.list-row', '.list-rank', '.list-term', '.list-tag', '.list-bar', '.list-value', '.list-dot', '.scatter', '.scatter-point', '.scatter-dot', '.scatter-label', '.scatter-tick', '.scatter-axis', '.scatter-gridline', '.scatter-zero']) {
+      assert.match(css, new RegExp(`${selector.replace('.', '\\.')}\\b`), `${selector} needs a rule`)
+    }
+    assert.match(css, /\.list-bar[^{]*\{[^}]*var\(--w\)|\.list-bar[^{]*::?(?:before|after)[^{]*\{[^}]*var\(--w\)/, 'the bar length reads --w')
+    assert.match(css, /\.list-tag\s*\{[^}]*var\(--mono\)/, 'the org tag is mono')
+    const rules = [...css.matchAll(/([^{}]*\.(?:list-|scatter)[^{}]*)\{([^}]*)\}/g)].map((m) => m[2])
+    assert.ok(rules.length > 0)
+    for (const body of rules) assert.doesNotMatch(body, /font(?:-size)?:\s*(?:\d+\s+)?\d+(?:\.\d+)?px/, 'no px type in the list and scatter rules')
   })
 })

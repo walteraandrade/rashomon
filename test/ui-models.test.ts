@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { butterflyRows } from '../src/ui/butterfly-model.js'
 import { THIN_ABOUT, compareModeFor, thinNoteText } from '../src/ui/compare-model.js'
 import { stripLayout } from '../src/ui/strip-model.js'
-import { hasShares, liftBalance, liftOfPerson, rareRisers, risingRulerItems, shareBalance, type CompareTerm, type RisingTerm } from '../src/ui/format.js'
+import { axisTicks, dumbbellModel, hasShares, rareRisers, ratioLabel, shareBalance, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripRadius } from '../src/ui/layout.js'
 
 // The pure models behind the figures (compare-model, strip-model, format's rising helpers) and the
@@ -175,62 +175,28 @@ const risingTerm = (over: Partial<RisingTerm> = {}): RisingTerm => ({
   ...over,
 })
 
-describe('risingRulerItems / shareBalance position by the word\'s share of everything written about the person', () => {
-  // 40 word rows this week, 16 before: a word with 5 rows now and 1 (+1 smoothing → 2) before
+describe('shareBalance clamps a word\'s share of everything written about the person (the rare list\'s colour)', () => {
+  // 40 word rows this week, 16 before: a word with 5 rows now and 1 (+1 smoothing -> 2) before
   // holds 1/8 of the words in both windows.
   const about = { recent: 10, baseline: 5, words_recent: 40, words_baseline: 16 }
-  const byShare = (a: typeof about) => (t: RisingTerm) => shareBalance(t, a)
 
   it('a term whose share is unchanged sits at the centre (balance === 0)', () => {
-    const items = risingRulerItems([risingTerm({ term: 'igual', count_recent_raw: 5, count_baseline_raw: 1 })], byShare(about))
-    assert.equal(items[0].balance, 0)
+    assert.equal(shareBalance(risingTerm({ count_recent_raw: 5, count_baseline_raw: 1 }), about), 0)
   })
 
-  it('a share 8x bigger than before clamps to the rightmost position (balance === 1)', () => {
-    const exactlyEight = risingRulerItems([risingTerm({ term: 'oito', count_recent_raw: 40, count_baseline_raw: 1 })], byShare(about))
-    assert.equal(exactlyEight[0].balance, 1, 'log2(8)/3 === 1 exactly')
-    const wellOver = risingRulerItems([risingTerm({ term: 'muito-mais', count_recent_raw: 40, count_baseline_raw: 0 })], byShare({ ...about, words_baseline: 5000 }))
-    assert.equal(wellOver[0].balance, 1, 'anything past the clamp still reads as 1, never more')
-  })
-
-  it('a share 8x smaller than before clamps to the leftmost position (balance === -1)', () => {
-    const items = risingRulerItems([risingTerm({ term: 'oitavo', count_recent_raw: 1, count_baseline_raw: 15 })], byShare({ ...about, words_recent: 64 }))
-    assert.equal(items[0].balance, -1, '1/64 now against 16/16 before, clamped at -1')
-  })
-
-  it('a corpus whose docs grew longer does not push a steady word right: shares, not doc counts', () => {
-    // Same 10 docs both weeks, but the recent ones carry 6x the words. A word in half the docs
-    // either week keeps its share only if the totals scale with it.
-    const grown = { recent: 10, baseline: 10, words_recent: 600, words_baseline: 100 }
-    const steady = risingRulerItems([risingTerm({ term: 'sempre', count_recent_raw: 30, count_baseline_raw: 4 })], byShare(grown))
-    assert.equal(steady[0].balance, 0)
+  it('a share 8x bigger than before clamps to +1, 8x smaller to -1', () => {
+    assert.equal(shareBalance(risingTerm({ count_recent_raw: 40, count_baseline_raw: 1 }), about), 1, 'log2(8)/3 === 1 exactly')
+    assert.equal(shareBalance(risingTerm({ count_recent_raw: 40, count_baseline_raw: 0 }), { ...about, words_baseline: 5000 }), 1)
+    assert.equal(shareBalance(risingTerm({ count_recent_raw: 1, count_baseline_raw: 15 }), { ...about, words_recent: 64 }), -1)
   })
 
   it('stays finite with no baseline words at all: everything present is new, so it reads +1', () => {
-    const items = risingRulerItems([risingTerm({ term: 'novo', count_recent_raw: 3, count_baseline_raw: 0 })], byShare({ recent: 5, baseline: 0, words_recent: 9, words_baseline: 0 }))
-    assert.equal(items[0].balance, 1)
+    assert.equal(shareBalance(risingTerm({ count_recent_raw: 3, count_baseline_raw: 0 }), { recent: 5, baseline: 0, words_recent: 9, words_baseline: 0 }), 1)
     assert.equal(shareBalance({ count_recent_raw: 0, count_baseline_raw: 0 }, { recent: 0, baseline: 0, words_recent: 0, words_baseline: 0 }), 0)
   })
 
   it('no words in the recent window reads -1, whatever the counts', () => {
     assert.equal(shareBalance({ count_recent_raw: 4, count_baseline_raw: 2 }, { recent: 0, baseline: 5, words_recent: 0, words_baseline: 9 }), -1)
-  })
-
-  it('combined is the raw recent+baseline doc count, independent of balance', () => {
-    const items = risingRulerItems([risingTerm({ term: 'soma', count_recent_raw: 12, count_baseline_raw: 3 })], byShare(about))
-    assert.equal(items[0].combined, 15)
-  })
-
-  // The pre-#164 rule, kept for a payload that predates `present`/`about.words_*`.
-  it('liftBalance / liftOfPerson: the fallback positions by the person\'s own lift and stays finite at baseline 0', () => {
-    const lp = liftOfPerson({ recent: 10, baseline: 5 }, 7, 30)
-    assert.equal(liftBalance({ lift: lp }, lp), 0)
-    assert.equal(liftBalance({ lift: lp * 8 }, lp), 1)
-    assert.equal(liftBalance({ lift: lp / 8 }, lp), -1)
-    const zero = liftOfPerson({ recent: 5, baseline: 0 }, 7, 30)
-    assert.ok(Number.isFinite(zero) && zero > 0)
-    assert.equal(liftBalance({ lift: 3 }, 0), 1, 'a person with no pace at all: any lift reads +1')
-    assert.equal(liftBalance({ lift: 0 }, 0), 0, 'and no lift against no pace reads the middle')
   })
 
   it('hasShares is true only when present and both word totals arrived', () => {
@@ -249,12 +215,164 @@ describe('risingRulerItems / shareBalance position by the word\'s share of every
   })
 })
 
+const risingData = (terms: RisingTerm[], over: Partial<Rising> = {}, about: Rising['about'] = { recent: 8, baseline: 3, words_recent: 40, words_baseline: 16 }): Rising => ({
+  days: 7,
+  baseline: 14,
+  terms,
+  present: terms,
+  outlets: [],
+  about,
+  ...over,
+})
+const raw = (term: string, cr: number, cb: number, kind = 'word') => risingTerm({ term, kind, count_recent_raw: cr, count_baseline_raw: cb })
+const finiteOrNull = (m: ReturnType<typeof dumbbellModel>) => [m.max, ...m.ticks.map((t) => t.value), ...m.rows.flatMap((r) => [r.before, r.now, r.ratio])].every((v) => v === null || Number.isFinite(v))
+
+describe('dumbbellModel (#327)', () => {
+  it('dumbbellModel takes the 20 present terms with the most recent occurrences', () => {
+    const terms = Array.from({ length: 25 }, (_, i) => raw(`t${String(i).padStart(2, '0')}`, 3 + i, 1))
+    const m = dumbbellModel(risingData(terms))
+    assert.equal(m.rows.length, 20)
+    assert.deepEqual(new Set(m.rows.map((r) => r.term)), new Set(terms.slice(5).map((t) => t.term)))
+    assert.equal(dumbbellModel(risingData(terms.slice(0, 7))).rows.length, 7)
+    assert.deepEqual(dumbbellModel(risingData([])).rows, [])
+  })
+
+  it('dumbbellModel breaks a tie at the 20-row cut by term, then kind', () => {
+    const terms = [...Array.from({ length: 19 }, (_, i) => raw(`a${i}`, 9, 1)), raw('zeta', 4, 1), raw('beta', 4, 1), raw('beta', 4, 1, 'hashtag')]
+    const m = dumbbellModel(risingData(terms))
+    assert.equal(m.rows.length, 20)
+    assert.ok(m.rows.some((r) => r.term === 'beta' && r.kind === 'hashtag'), 'kind ascending breaks a tie on the same term')
+    assert.ok(!m.rows.some((r) => r.term === 'beta' && r.kind === 'word'))
+    assert.ok(!m.rows.some((r) => r.term === 'zeta'))
+  })
+
+  it('dumbbellModel falls back to terms ranked by recent count when present is missing', () => {
+    const terms = Array.from({ length: 22 }, (_, i) => raw(`t${i}`, 3 + i, 1))
+    const m = dumbbellModel(risingData(terms, { present: undefined }))
+    assert.equal(m.rows.length, 20)
+    assert.equal(m.unit, 'cem')
+    assert.ok(!m.rows.some((r) => r.term === 't0' || r.term === 't1'))
+  })
+
+  it('dumbbellModel orders rows by smoothed share ratio, ties by recent count then term', () => {
+    const m = dumbbellModel(risingData([raw('pouco', 5, 1), raw('muito', 40, 1), raw('b', 5, 1), raw('a', 5, 1), raw('mais', 6, 1)]))
+    assert.deepEqual(m.rows.map((r) => r.term), ['muito', 'mais', 'a', 'b', 'pouco'])
+    const tied = dumbbellModel(risingData([raw('b', 4, 1), raw('a', 4, 1), raw('c', 8, 3)], {}, { recent: 8, baseline: 3, words_recent: 40, words_baseline: 40 }))
+    assert.deepEqual(tied.rows.map((r) => r.term), ['c', 'a', 'b'], 'all three smooth to 2: recent count first, then term')
+  })
+
+  it('dumbbellModel dots are per thousand words and ratio is raw now over before', () => {
+    const m = dumbbellModel(risingData([raw('a', 5, 1), raw('b', 3, 9)]))
+    assert.equal(m.unit, 'mil')
+    const a = m.rows.find((r) => r.term === 'a')!
+    assert.equal(a.now, 125)
+    assert.equal(a.before, 62.5)
+    assert.equal(a.ratio, 2)
+    assert.equal(ratioLabel(a.ratio!), '×2,0')
+    const b = m.rows.find((r) => r.term === 'b')!
+    assert.equal(b.now, 75)
+    assert.equal(b.before, 562.5)
+    assert.equal(ratioLabel(b.ratio!), '×0,1')
+    assert.equal(m.max, 562.5)
+  })
+
+  it('dumbbellModel marks a zero baseline as nova and draws no before value', () => {
+    const m = dumbbellModel(risingData([raw('novo', 6, 0), raw('quase', 60, 1)]))
+    const novo = m.rows.find((r) => r.term === 'novo')!
+    assert.equal(novo.isNew, true)
+    assert.equal(novo.before, null)
+    assert.equal(novo.ratio, null)
+    assert.equal(novo.now, 150)
+    const quase = m.rows.find((r) => r.term === 'quase')!
+    assert.equal(quase.isNew, false)
+    assert.ok(quase.ratio! > 20)
+  })
+
+  it('dumbbellModel uses per-hundred-texts when a words_* total is 0 or missing', () => {
+    for (const about of [{ recent: 8, baseline: 4, words_recent: 40, words_baseline: 0 }, { recent: 8, baseline: 4 }, { recent: 8, baseline: 4, words_recent: 0, words_baseline: 9 }]) {
+      const m = dumbbellModel(risingData([raw('a', 2, 1)], {}, about))
+      assert.equal(m.unit, 'cem')
+      assert.equal(m.rows[0].now, 25)
+      assert.equal(m.rows[0].before, 25)
+    }
+    assert.equal(dumbbellModel(risingData([raw('a', 2, 1)], { present: undefined })).unit, 'cem')
+  })
+
+  it('dumbbellModel stays finite on empty and zero-denominator payloads', () => {
+    const terms = [raw('a', 3, 2), raw('b', 4, 0)]
+    for (const [name, about] of Object.entries({
+      none: { recent: 0, baseline: 0 },
+      wordsRecent0: { recent: 5, baseline: 5, words_recent: 0, words_baseline: 9 },
+      wordsBaseline0: { recent: 5, baseline: 5, words_recent: 9, words_baseline: 0 },
+      baseline0: { recent: 5, baseline: 0 },
+    })) {
+      const m = dumbbellModel(risingData(terms, name === 'baseline0' ? { present: undefined } : {}, about))
+      assert.ok(finiteOrNull(m), name)
+      assert.ok(m.max > 0 && m.ticks.length >= 4, name)
+    }
+    const empty = dumbbellModel(risingData([]))
+    assert.deepEqual(empty.rows, [])
+    assert.equal(empty.max, 1)
+    assert.ok(finiteOrNull(empty))
+  })
+
+  it('dumbbellModel keeps a payload with a baseline count but no baseline denominator without a ratio', () => {
+    const m = dumbbellModel(risingData([raw('a', 3, 2)], { present: undefined }, { recent: 5, baseline: 0 }))
+    assert.equal(m.rows[0].before, null)
+    assert.equal(m.rows[0].ratio, null)
+    assert.equal(m.rows[0].isNew, false)
+    assert.equal(dumbbellModel(risingData([raw('a', 3, 2)], { present: undefined }, { recent: 0, baseline: 0 })).rows[0].now, null)
+  })
+})
+
+describe('ratioLabel (#327)', () => {
+  it('ratioLabel prints one pt-BR decimal', () => {
+    assert.equal(ratioLabel(3.2), '×3,2')
+    assert.equal(ratioLabel(0.6), '×0,6')
+    assert.equal(ratioLabel(1234.5), '×1.234,5')
+    assert.equal(ratioLabel(0.04), '×0,0')
+  })
+})
+
+describe('axisTicks (#327)', () => {
+  const sweep = [0.003, 0.07, 0.3, 0.6, 0.7, 0.9, 1, 12, 37, 100, 480, 2500]
+
+  it('axisTicks gives 4 to 6 nice ticks starting at 0 for any max', () => {
+    for (const max of sweep) {
+      const ticks = axisTicks(max)
+      assert.ok(ticks.length >= 4 && ticks.length <= 6, `${max}: ${ticks.length} ticks`)
+      assert.equal(ticks[0].value, 0)
+      assert.ok(ticks.at(-1)!.value <= max + 1e-9, `${max}: last tick ${ticks.at(-1)!.value}`)
+      const step = ticks[1].value
+      const exp = Math.floor(Math.log10(step) + 1e-9)
+      const mantissa = step / 10 ** exp
+      assert.ok([1, 2, 2.5, 5].some((m) => Math.abs(m - mantissa) < 1e-9), `${max}: step ${step}`)
+      ticks.forEach((t, i) => assert.ok(Math.abs(t.value - i * step) < 1e-9, `${max}: tick ${i}`))
+    }
+  })
+
+  it('axisTicks labels carry the decimals the step needs in pt-BR', () => {
+    assert.deepEqual(axisTicks(12).map((t) => t.label), ['0,0', '2,5', '5,0', '7,5', '10,0'])
+    assert.deepEqual(axisTicks(1).map((t) => t.label), ['0,00', '0,25', '0,50', '0,75', '1,00'])
+    assert.deepEqual(axisTicks(2500).map((t) => t.label), ['0', '500', '1.000', '1.500', '2.000', '2.500'])
+    for (const max of sweep) for (const t of axisTicks(max)) assert.doesNotMatch(t.label, /\d\.\d{1,2}$/, `${max}: ${t.label} must use the pt-BR comma`)
+  })
+
+  it('axisTicks does not throw for a max that is not positive or not finite', () => {
+    for (const max of [0, -3, NaN, Infinity]) {
+      const ticks = axisTicks(max)
+      assert.ok(ticks.length >= 4, String(max))
+      assert.ok(ticks.every((t) => Number.isFinite(t.value)))
+    }
+  })
+})
+
 describe('one rx source for the word marks', () => {
   const root = dirname(dirname(fileURLToPath(import.meta.url)))
   const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
 
   // The block-body finder for a class selector, tolerant of a rule declared with several
-  // comma-separated selectors (".ruler-glow, .week-glow { rx: 8px }" is how the spec's own
+  // comma-separated selectors (".atlas-glow, .week-glow { rx: 8px }" would be how the spec's own
   // example groups the shared value).
   const ruleFor = (selector: string) => {
     for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
@@ -273,11 +391,9 @@ describe('one rx source for the word marks', () => {
     assert.match(css, /\.map-svg\.is-masked \.atlas-word/)
   })
 
-  it('atlas.css sets rx on the six rules, at the same values the markup used to carry', () => {
+  it('atlas.css sets rx on the four rules, at the same values the markup used to carry', () => {
     assert.equal(rxOf('.atlas-glow'), 9)
     assert.equal(rxOf('.atlas-hit'), 6)
-    assert.equal(rxOf('.ruler-glow'), 8)
-    assert.equal(rxOf('.ruler-hit'), 5)
     assert.equal(rxOf('.week-glow'), 8)
     assert.equal(rxOf('.week-hit'), 5)
   })

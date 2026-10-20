@@ -1,4 +1,4 @@
-import { balanceColor, fmt, isBridge, kinds, label, score, termMask, type PersonTestimony, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { fmt, label, score, termMask, type PersonTestimony, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
 
 // Literal copies of atlas.css's --sans / --mono / --display: canvas measurement cannot read custom properties.
 export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -233,80 +233,6 @@ export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5)
     },
     escape: (item, candidates) => Math.max(...candidates.map(Math.abs)) + item.r + gap,
   }).placed
-
-export const RULER_PAD = 28
-// Words cannot shrink past 11px, so the ruler trades height for legibility before dropping.
-export const RULER_MAX_HEIGHT = 520
-export const RULER_SIZE_MIN = 11
-const RULER_SIZE_MAX = 30
-const RULER_GAP_X = 8
-const RULER_GAP_Y = 3
-
-export type RulerItem = { term: string; kind: string; balance: number; combined: number; bridge?: number }
-
-export type RulerLayout<T> = {
-  words: (T & { text: string; x: number; y: number; size: number; w: number; h: number })[]
-  overflow: (T & { text: string; size: number })[]
-  x: (balance: number) => number
-  half: number
-  height: number
-  width: number
-}
-
-// Word-on-axis layout: x is balance (-1..+1), size sqrt(combined) so one loud word cannot dwarf the rest.
-export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], width = 860): RulerLayout<T> => {
-  const inner = Math.max(80, width - 2 * RULER_PAD)
-  const x = (balance: number) => RULER_PAD + ((Math.max(-1, Math.min(1, balance)) + 1) / 2) * inner
-  if (!items.length) return { words: [], overflow: [], x, half: 40, height: 80, width }
-  const roots = items.map((it) => Math.sqrt(Math.max(0, it.combined)))
-  const lo = Math.min(...roots)
-  const hi = Math.max(...roots)
-  // Narrow viewports get a shorter type ramp but never a smaller floor.
-  const top = Math.max(RULER_SIZE_MIN + 2, RULER_SIZE_MAX * Math.min(1, Math.max(0.62, width / 860)))
-  const sized = items.map((it, i) => {
-    const t = hi === lo ? 0.5 : (roots[i] - lo) / (hi - lo)
-    const size = Math.round(RULER_SIZE_MIN + (top - RULER_SIZE_MIN) * t)
-    const text = label(it)
-    const w = measure(text, size) + 10
-    // A word at either extreme would hang off the frame; nudge it just far enough inward.
-    const centre = Math.min(Math.max(x(it.balance), w / 2), Math.max(w / 2, width - w / 2))
-    return { ...it, text, x: centre, size, w, h: Math.round(size * 1.24) }
-  })
-  const half = RULER_MAX_HEIGHT / 2
-  const { placed, overflow } = swarmBy(sized, {
-    size: (d) => d.size,
-    reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + RULER_GAP_X ? (p.h + item.h) / 2 + RULER_GAP_Y : null),
-    fits: (item, y) => Math.abs(y) + item.h / 2 <= half,
-  })
-  const reach = placed.reduce((m, p) => Math.max(m, Math.abs(p.y) + p.h / 2), 0)
-  const used = Math.max(40, Math.ceil(reach) + 6)
-  return { words: placed, overflow, x, half: used, height: used * 2, width }
-}
-
-// What Ruler.svelte draws, from rulerLayout's output.
-export const rulerModel = (layout: RulerLayout<RulerItem>) => ({
-  width: layout.width,
-  height: layout.height,
-  half: layout.half,
-  x0: RULER_PAD,
-  x1: layout.width - RULER_PAD,
-  ticks: [-1, -0.5, 0, 0.5, 1].map(layout.x),
-  words: layout.words.map((d) => ({
-    term: d.term,
-    kind: d.kind,
-    text: d.text,
-    x: d.x,
-    y: d.y,
-    size: d.size,
-    w: d.w,
-    h: d.h,
-    cmp: balanceColor(d.balance),
-    bridge: isBridge(d),
-    aria: `${d.text}, ${fmt(d.combined)} documentos`,
-    title: `${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos`,
-  })),
-  overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
-})
 
 // Figure 5: one column per day, words stacked around the column's centre (x = 0) by swarmBy's clearance.
 export const WEEK_SIZE_MIN = 12

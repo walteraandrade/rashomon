@@ -6,7 +6,7 @@ import * as docsCard from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { risingParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
-import { balanceColor, RARE_SHOWN, shareBalance } from '../../src/ui/format.js'
+import { axisTicks, balanceColor, RARE_SHOWN, shareBalance } from '../../src/ui/format.js'
 import type { Rising as RisingData, RisingTerm } from '../../src/ui/format.js'
 
 const lula = { id: 'lula', name: 'Lula' }
@@ -38,9 +38,10 @@ let instances: ReturnType<typeof mount>[]
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement
 const select = (id: string) => $(id) as HTMLSelectElement
-const words = () => [...$('risingRuler').querySelectorAll('.ruler-word')] as HTMLElement[]
-const overflow = () => [...$('risingRuler').querySelectorAll('.ruler-overflow:not(.ruler-rare) [data-term]')] as HTMLElement[]
-const rare = () => [...$('risingRuler').querySelectorAll('.ruler-rare [data-term]')] as HTMLElement[]
+const words = () => [...$('risingRuler').querySelectorAll('.dumbbell-row[data-term]')] as HTMLElement[]
+const rare = () => [...$('risingRuler').querySelectorAll('.dumbbell-rare [data-term]')] as HTMLElement[]
+const dot = (row: Element, which: 'before' | 'now') => row.querySelector(`.dumbbell-dot[data-dot="${which}"]`) as HTMLElement | null
+const xOf = (el: Element | null) => el?.getAttribute('style')?.match(/--x:\s*([\d.]+)%/)?.[1]
 const risingCalls = () => calls.filter((c) => c.path.endsWith('/rising'))
 const docsCalls = () => calls.filter((c) => c.path.endsWith('/docs'))
 
@@ -76,8 +77,8 @@ const escape = () => {
 const boot = (patch: Partial<{ ready: boolean; people: typeof people; peopleError: unknown; search: string }> = {}) =>
   setBoot({ ready: true, people, peopleError: null, search: '', ...patch })
 
-const start = async (props: Record<string, unknown> = {}) => {
-  instances.push(mount(Rising, { target, props }))
+const start = async () => {
+  instances.push(mount(Rising, { target }))
   instances.push(mount(DocsCard, { target }))
   flushSync()
   await settle()
@@ -114,10 +115,6 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   }
-  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-    configurable: true,
-    value: () => ({ font: '', measureText: (t: string) => ({ width: t.length * 8, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 0 }) }),
-  })
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: { signal?: AbortSignal }) => {
@@ -153,12 +150,14 @@ describe('Rising (#292)', () => {
     expect(qp.get('source')).toBe('gdelt')
   })
 
-  it('AC26: the sentence, the ruler end and the about line all say 14 dias antes, and no text names 30 dias', async () => {
+  it('AC26: the sentence, the legend and the about line all say 14 dias antes, and no text names 30 dias', async () => {
     handlers['/rising'] = () => payload([term()], { recent: 4, baseline: 6, words_recent: 10, words_baseline: 20 })
     boot()
     await start()
     expect($('rising').querySelector('.sentence-line')!.textContent).toContain('nos últimos 7 dias, contra os 14 dias antes')
-    expect([...$('risingRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
+    expect([...$('risingRuler').querySelectorAll('.dumbbell-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
+    expect($('risingRuler').querySelector('.dumbbell-end.cmp-a')?.textContent).toBe('antes (14 dias)')
+    expect($('risingRuler').querySelector('.dumbbell-end.cmp-b')?.textContent).toBe('agora (7 dias)')
     expect($('risingAbout').textContent).toContain('6 nos 14 dias antes')
     expect($('rising').textContent).not.toMatch(/30 dias|60 dias/)
     expect($('rising').innerHTML).not.toMatch(/NaN/)
@@ -195,8 +194,8 @@ describe('Rising (#292)', () => {
     expect($('rising').tagName).toBe('SECTION')
     expect($('risingTitle').tagName).toBe('H2')
     expect($('risingRuler').tagName).toBe('FIGURE')
-    expect($('risingRuler').classList.contains('ruler')).toBe(true)
-    expect($('risingRuler').getAttribute('aria-label')).toBeTruthy()
+    expect($('risingRuler').classList.contains('dumbbell')).toBe(true)
+    expect($('risingRuler').getAttribute('aria-label')).toBe('Gráfico de termos em alta')
     expect($('risingAbout')).not.toBeNull()
     expect(document.querySelector('#rising .figure-key')).not.toBeNull()
     expect(document.querySelector('#rising .eyebrow')?.textContent).toBe('Gráfico 4')
@@ -209,9 +208,10 @@ describe('Rising (#292)', () => {
     expect($('risingRuler').hidden).toBe(false)
     expect($('risingRuler').getAttribute('aria-busy')).toBe('true')
     expect($('risingRuler').querySelector('.ghost-field')).not.toBeNull()
-    expect($('risingRuler').querySelectorAll('.ghost').length).toBeGreaterThan(0)
-    expect($('risingRuler').querySelectorAll('.ruler-axis')).toHaveLength(1)
-    expect($('risingRuler').querySelectorAll('.ruler-tick')).toHaveLength(5)
+    const ghostRows = $('risingRuler').querySelectorAll('.ghost-field .dumbbell-row')
+    expect(ghostRows).toHaveLength(8)
+    for (const row of ghostRows) expect(row.querySelectorAll('.ghost')).toHaveLength(2)
+    expect($('risingRuler').querySelector('[data-term]')).toBeNull()
     expect($('risingRuler').querySelector('.sr-only')?.textContent).toBe('Lendo os termos em alta.')
     expect($('risingRuler').textContent).not.toMatch(/Carregando/)
     expect($('risingAbout').textContent).toBe('')
@@ -263,7 +263,7 @@ describe('Rising (#292)', () => {
     expect(words()[0].getAttribute('data-term')).toBe('novo')
   })
 
-  it('peopleError hides the ruler, says so in #risingAbout and sends no request', async () => {
+  it('peopleError hides the chart, says so in #risingAbout and sends no request', async () => {
     boot({ people: [], peopleError: new Error('down') })
     await start()
     expect(calls).toEqual([])
@@ -347,45 +347,110 @@ describe('Rising (#292)', () => {
     expect($('rising').innerHTML).not.toMatch(/NaN|undefined/)
   })
 
-  it('a payload with present is placed by share: ends, axis prose, --cmp from shareBalance', async () => {
+  it('draws one row per word with a before dot and a now dot, positioned by occurrences per thousand words', async () => {
     const terms = [term({ term: 'igual', count_recent_raw: 5, count_baseline_raw: 1, lift: 2 }), term({ term: 'oito', count_recent_raw: 40, count_baseline_raw: 1, lift: 9 })]
     handlers['/rising'] = () => payload(terms, { recent: 10, baseline: 5, words_recent: 40, words_baseline: 16 })
     boot()
     await start()
-    expect([...$('risingRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
-    expect([...$('risingRuler').querySelectorAll('.ruler-axis-labels span')].map((e) => e.textContent)).toEqual(['Fatia menor que antes', 'mesma fatia', 'Fatia maior que antes'])
+    expect(words().map((w) => w.getAttribute('data-term'))).toEqual(['oito', 'igual'])
     const byTerm = (t: string) => words().find((w) => w.getAttribute('data-term') === t)!
-    expect(byTerm('igual').getAttribute('style')).toContain(`--cmp: ${balanceColor(0)}`)
-    expect(byTerm('oito').getAttribute('style')).toContain(`--cmp: ${balanceColor(1)}`)
-    expect($('risingRuler').querySelector('.ruler-end.cmp-a')).not.toBeNull()
-    expect($('risingRuler').querySelector('.ruler-end.cmp-b')).not.toBeNull()
+    expect(xOf(dot(byTerm('oito'), 'now'))).toBe('100')
+    expect(xOf(dot(byTerm('oito'), 'before'))).toBe('6.25')
+    expect(xOf(dot(byTerm('igual'), 'now'))).toBe('12.5')
+    expect(xOf(dot(byTerm('igual'), 'before'))).toBe('6.25')
+    expect(byTerm('oito').querySelector('.dumbbell-dot.cmp-a')).not.toBeNull()
+    expect(byTerm('oito').querySelector('.dumbbell-dot.cmp-b')).not.toBeNull()
+    expect(byTerm('oito').querySelector('.dumbbell-line')).not.toBeNull()
+    expect(byTerm('oito').querySelector('.dumbbell-ratio')?.textContent).toBe('×16,0')
+    expect(byTerm('igual').querySelector('.dumbbell-ratio')?.textContent).toBe('×2,0')
   })
 
-  it('a payload without present is placed by lift: person-pace axis prose, no rare list, no NaN', async () => {
-    const lp = 10 / 7 / ((5 + 1) / 14)
-    handlers['/rising'] = () => stale([term({ term: 'igual', lift: lp }), term({ term: 'oito', lift: lp * 8 }), term({ term: 'lenta', lift: lp / 8 })])
+  it('draws one labelled tick per axis tick and the largest dot at 100% of the plot', async () => {
+    const terms = [term({ term: 'a', count_recent_raw: 5, count_baseline_raw: 1 }), term({ term: 'b', count_recent_raw: 9, count_baseline_raw: 3 })]
+    handlers['/rising'] = () => payload(terms)
     boot()
     await start()
-    expect(words()).toHaveLength(3)
-    expect([...$('risingRuler').querySelectorAll('.ruler-axis-labels span')].map((e) => e.textContent)).toEqual(['Mais devagar que a pessoa', 'no mesmo ritmo', 'Mais rápido que a pessoa'])
-    expect($('risingRuler').querySelector('.ruler-rare')).toBeNull()
-    expect($('rising').innerHTML).not.toMatch(/NaN/)
-    expect($('rising').innerHTML).not.toMatch(/Fatia/)
-    const byTerm = (t: string) => words().find((w) => w.getAttribute('data-term') === t)!
-    expect(byTerm('igual').getAttribute('style')).toContain(`--cmp: ${balanceColor(0)}`)
-    expect(byTerm('oito').getAttribute('style')).toContain(`--cmp: ${balanceColor(1)}`)
-    expect(byTerm('lenta').getAttribute('style')).toContain(`--cmp: ${balanceColor(-1)}`)
+    const max = Math.max(5 / 40, 9 / 40, 1 / 12, 3 / 12) * 1000
+    expect([...$('risingRuler').querySelectorAll('.dumbbell-axis .dumbbell-tick')].map((t) => t.textContent)).toEqual(axisTicks(max).map((t) => t.label))
+    const dots = [...$('risingRuler').querySelectorAll('.dumbbell-row .dumbbell-dot')].map((d) => Number(xOf(d)))
+    expect(Math.max(...dots)).toBe(100)
+    expect(Math.min(...dots)).toBeGreaterThanOrEqual(0)
   })
 
-  it('stale payload with baseline 0 stays finite', async () => {
-    handlers['/rising'] = () => stale([term({ term: 'novo', lift: 40 })], { recent: 5, baseline: 0 })
+  it('a nova word draws only the now dot and prints nova; a baseline of one is never nova', async () => {
+    handlers['/rising'] = () => payload([term({ term: 'novo', count_recent_raw: 6, count_baseline_raw: 0 }), term({ term: 'quase', count_recent_raw: 40, count_baseline_raw: 1 })])
     boot()
     await start()
-    expect(words()).toHaveLength(1)
-    expect($('rising').innerHTML).not.toMatch(/NaN/)
+    const byTerm = (t: string) => words().find((w) => w.getAttribute('data-term') === t)!
+    expect(dot(byTerm('novo'), 'before')).toBeNull()
+    expect(dot(byTerm('novo'), 'now')).not.toBeNull()
+    expect(byTerm('novo').querySelector('.dumbbell-line')).toBeNull()
+    expect(byTerm('novo').querySelector('.dumbbell-ratio')?.textContent).toBe('nova')
+    expect(dot(byTerm('quase'), 'before')).not.toBeNull()
+    expect(byTerm('quase').querySelector('.dumbbell-ratio')?.textContent).not.toBe('nova')
   })
 
-  it('risers off the ruler (terms minus present, lift > 1) are listed after the overflow as buttons', async () => {
+  it('the chart names the unit: mil palavras with shares, cem textos in the fallback', async () => {
+    boot()
+    await start()
+    expect($('risingRuler').querySelector('.dumbbell-caption')?.textContent).toMatch(/mil palavras/)
+    expect($('risingRuler').querySelector('.dumbbell-caption')?.textContent).not.toMatch(/cem textos/)
+    const fallbacks: RisingData[] = [
+      payload([term()], { recent: 8, baseline: 3, words_recent: 40, words_baseline: 0 }),
+      payload([term()], { recent: 8, baseline: 3 }),
+      stale([term()], { recent: 8, baseline: 3 }),
+    ]
+    for (const fallback of fallbacks) {
+      handlers['/rising'] = () => fallback
+      clearScopes()
+      await change('risingSource', fallback === fallbacks[0] ? 'gdelt' : fallback === fallbacks[1] ? 'rss' : 'bluesky')
+      const caption = $('risingRuler').querySelector('.dumbbell-caption')?.textContent ?? ''
+      expect(caption).toMatch(/cem textos/)
+      expect(caption).not.toMatch(/mil palavras/)
+    }
+  })
+
+  it('a payload without present or words_* draws by texts, finite, with no rare list', async () => {
+    handlers['/rising'] = () => stale([term({ term: 'igual', count_recent_raw: 5, count_baseline_raw: 5 }), term({ term: 'oito', count_recent_raw: 40, count_baseline_raw: 2 }), term({ term: 'lenta', count_recent_raw: 3, count_baseline_raw: 9 })], { recent: 10, baseline: 5 })
+    boot()
+    await start()
+    expect(words().map((w) => w.getAttribute('data-term'))).toEqual(['oito', 'igual', 'lenta'])
+    expect($('risingRuler').querySelector('.dumbbell-rare')).toBeNull()
+    expect($('rising').innerHTML).not.toMatch(/NaN|Infinity|undefined|null/)
+    expect(xOf(dot(words()[0], 'now'))).toBe('100')
+  })
+
+  it('stays finite on every zero-denominator payload and never prints NaN, Infinity, undefined or null', async () => {
+    const t = [term({ term: 'a', count_recent_raw: 3, count_baseline_raw: 2 }), term({ term: 'b', count_recent_raw: 4, count_baseline_raw: 0 })]
+    const cases: [string, RisingData][] = [
+      ['no totals', payload(t, { recent: 0, baseline: 0 })],
+      ['words_recent 0', payload(t, { recent: 5, baseline: 5, words_recent: 0, words_baseline: 9 })],
+      ['words_baseline 0', payload(t, { recent: 5, baseline: 5, words_recent: 9, words_baseline: 0 })],
+      ['baseline 0 in the fallback', stale(t, { recent: 5, baseline: 0 })],
+      ['empty terms', payload([], { recent: 5, baseline: 5, words_recent: 9, words_baseline: 9 })],
+    ]
+    boot()
+    let n = 0
+    for (const [name, body] of cases) {
+      handlers['/rising'] = () => body
+      clearScopes()
+      if (n++ === 0) await start()
+      else await change('risingSource', ['all', 'gdelt', 'rss', 'bluesky', 'gnews', 'camara'][n] ?? 'senado')
+      expect($('rising').innerHTML, name).not.toMatch(/NaN|Infinity|undefined|null/)
+      expect($('rising').textContent, name).not.toMatch(/NaN|Infinity|undefined|null/)
+    }
+  })
+
+  it('a baseline count without a baseline denominator prints a dash, not a ratio', async () => {
+    handlers['/rising'] = () => stale([term({ term: 'a', count_recent_raw: 3, count_baseline_raw: 2 })], { recent: 5, baseline: 0 })
+    boot()
+    await start()
+    expect(words()[0].querySelector('.dumbbell-ratio')?.textContent).toBe('–')
+    expect(dot(words()[0], 'before')).toBeNull()
+    expect(words()[0].getAttribute('aria-label')).toContain('sem valor')
+  })
+
+  it('risers off the chart (terms minus present, lift > 1) are listed after the rows as buttons', async () => {
     const present = [term({ term: 'diretor', count_recent_raw: 12, count_baseline_raw: 1, lift: 2 })]
     const terms = [
       term({ term: 'sigilo', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 }),
@@ -397,8 +462,8 @@ describe('Rising (#292)', () => {
     boot()
     await start()
     expect(words().map((w) => w.getAttribute('data-term'))).toEqual(['diretor'])
-    const list = $('risingRuler').querySelector('.ruler-rare')!
-    expect(list.textContent).toMatch(/Fora da régua, 2 palavras com poucos textos na semana, mas mais que antes/)
+    const list = $('risingRuler').querySelector('.dumbbell-rare')!
+    expect(list.textContent).toMatch(/Fora do gráfico, 2 palavras com poucos textos na semana, mas mais que antes, da maior subida para a menor:/)
     expect(rare().map((b) => b.getAttribute('data-term'))).toEqual(['sigilo', 'vorcaro'])
     expect(rare().every((b) => b.tagName === 'BUTTON')).toBe(true)
     expect(rare()[1].getAttribute('data-kind')).toBe('hashtag')
@@ -406,9 +471,10 @@ describe('Rising (#292)', () => {
     expect($('risingRuler').querySelector('[data-term="caiu"]')).toBeNull()
     expect($('risingRuler').querySelectorAll('[data-term="diretor"]')).toHaveLength(1)
     const all = [...$('risingRuler').children]
-    const labels = all.findIndex((e) => e.classList.contains('ruler-axis-labels'))
-    const tail = all.findIndex((e) => e.classList.contains('ruler-rare'))
-    expect(tail).toBeGreaterThan(labels)
+    const chart = all.findIndex((e) => e.classList.contains('dumbbell-chart'))
+    const tail = all.findIndex((e) => e.classList.contains('dumbbell-rare'))
+    expect(chart).toBeGreaterThanOrEqual(0)
+    expect(tail).toBeGreaterThan(chart)
   })
 
   it('no present words but risers still paints the list, not the empty note', async () => {
@@ -419,6 +485,9 @@ describe('Rising (#292)', () => {
     expect(words()).toHaveLength(0)
     expect(rare()).toHaveLength(1)
     expect($('risingRuler').textContent).not.toContain('Nenhuma palavra neste recorte')
+    expect($('risingRuler').querySelector('.dumbbell-chart')).toBeNull()
+    expect($('risingRuler').querySelector('.dumbbell-axis')).toBeNull()
+    expect($('risingRuler').querySelector('.dumbbell-legend')).toBeNull()
   })
 
   it('only the first RARE_SHOWN risers are listed, in lift order, saying "12 de 30"', async () => {
@@ -431,7 +500,7 @@ describe('Rising (#292)', () => {
     expect(rare()).toHaveLength(12)
     expect(rare()[11].getAttribute('data-term')).toBe('rara11')
     expect($('risingRuler').querySelector('[data-term="rara12"]')).toBeNull()
-    expect($('risingRuler').querySelector('.ruler-rare p')?.textContent).toMatch(/^Fora da régua, 12 de 30 palavras/)
+    expect($('risingRuler').querySelector('.dumbbell-rare p')?.textContent).toMatch(/^Fora do gráfico, 12 de 30 palavras/)
   })
 
   it('three risers say "3 palavras" with no "de N"', async () => {
@@ -440,7 +509,7 @@ describe('Rising (#292)', () => {
     handlers['/rising'] = () => payload([...risers, ...present], about, present)
     boot()
     await start()
-    expect($('risingRuler').querySelector('.ruler-rare p')?.textContent).toMatch(/^Fora da régua, 3 palavras com/)
+    expect($('risingRuler').querySelector('.dumbbell-rare p')?.textContent).toMatch(/^Fora do gráfico, 3 palavras com/)
   })
 
   it('a picked rare button opens the card the way a word does and is marked selected', async () => {
@@ -457,45 +526,32 @@ describe('Rising (#292)', () => {
     expect(docsCalls()[0].params.get('term')).toBe('sigilo')
   })
 
-  it('words that do not fit are counted and listed as buttons that pick', async () => {
-    const terms = Array.from({ length: 200 }, (_, i) => term({ term: `palavralongademais${i}`, count_recent_raw: 50, count_baseline_raw: 1, lift: 9 }))
+  it('only the 20 most present words are drawn, however many the payload holds', async () => {
+    const terms = Array.from({ length: 40 }, (_, i) => term({ term: `palavra${String(i).padStart(2, '0')}`, count_recent_raw: 50 + i, count_baseline_raw: 1, lift: 9 }))
     handlers['/rising'] = () => payload(terms)
     boot()
     await start()
-    const spilled = overflow()
-    expect(spilled.length).toBeGreaterThan(0)
-    expect(words().length + spilled.length).toBe(200)
-    for (const b of spilled) expect(b.tagName).toBe('BUTTON')
-    expect($('risingRuler').querySelector('.ruler-overflow p')?.textContent).toMatch(new RegExp(`^${spilled.length} palavras não couberam`))
-    click(spilled[0])
-    await settle()
-    expect(docsCard.openedBy('rising')).toBe(true)
-    expect(overflow()[0].classList.contains('is-selected')).toBe(true)
+    expect(words()).toHaveLength(20)
+    expect(words().every((w) => Number(w.getAttribute('data-term')!.slice(7)) >= 20)).toBe(true)
+    expect($('risingRuler').textContent).not.toMatch(/não couberam/)
   })
 
-  it('every drawn word keeps its hooks', async () => {
+  it('every row keeps its hooks and a hashtag row reads #term', async () => {
+    handlers['/rising'] = () => payload([term(), term({ term: 'vorcaro', kind: 'hashtag', count_recent_raw: 3 })])
     boot()
     await start()
-    const w = words()[0]
-    expect(w.getAttribute('data-term')).toBe('diretor')
+    const w = words().find((r) => r.getAttribute('data-term') === 'diretor')!
     expect(w.getAttribute('data-kind')).toBe('word')
     expect(w.getAttribute('role')).toBe('button')
     expect(w.getAttribute('tabindex')).toBe('0')
     expect(w.getAttribute('aria-pressed')).toBe('false')
-    expect(w.getAttribute('aria-label')).toBeTruthy()
-    expect(w.querySelector('text.ruler-text > tspan')?.textContent).toBe('diretor')
-    const style = w.getAttribute('style') ?? ''
-    expect(style).toMatch(/--size/)
-    expect(style).toMatch(/--cmp/)
-    expect(style).not.toMatch(/font-size/)
-  })
-
-  it('an injected measure prop is what places the words', async () => {
-    const measure = vi.fn((text: string, size: number) => text.length * size)
-    boot()
-    await start({ measure })
-    expect(measure).toHaveBeenCalled()
-    expect(words()).toHaveLength(1)
+    expect(w.getAttribute('aria-label')).toBe('diretor, antes 83,33 a cada mil palavras, agora 300 a cada mil palavras, ×3,6')
+    expect(w.querySelector('.dumbbell-label')?.textContent).toBe('diretor')
+    const tag = words().find((r) => r.getAttribute('data-term') === 'vorcaro')!
+    expect(tag.getAttribute('data-kind')).toBe('hashtag')
+    expect(tag.querySelector('.dumbbell-label')?.textContent).toBe('#vorcaro')
+    expect(tag.getAttribute('tabindex')).toBe('0')
+    for (const el of $('risingRuler').querySelectorAll('[style]')) expect(el.getAttribute('style')).not.toMatch(/font-size/)
   })
 
   it('a click picks the word and opens the card once, one side, owned by rising, days=7 and the figure source', async () => {
@@ -659,7 +715,7 @@ describe('Rising (#292)', () => {
     expect(calls.length).toBe(before)
     expect(docsCard.openedBy('rising')).toBe(true)
     expect(words()[0].getAttribute('aria-pressed')).toBe('true')
-    expect($('risingRuler').innerHTML).not.toBe(markup)
+    expect($('risingRuler').innerHTML).toBe(markup)
     click(words()[0])
     await settle()
     expect(docsCard.isOpen()).toBe(false)
@@ -851,7 +907,7 @@ describe('Rising (#292)', () => {
       pickRare([term({ term: 'sigilo', count_recent_raw: 3, count_baseline_raw: 0, lift: 12 })])
       boot()
       await start()
-      expect($('risingRuler').querySelector('.ruler-rare p')?.textContent).toMatch(/^Fora da régua, 1 palavra com/)
+      expect($('risingRuler').querySelector('.dumbbell-rare p')?.textContent).toMatch(/^Fora do gráfico, 1 palavra com/)
     })
 
     it('a word and a hashtag of the same name are two rare buttons, and only the picked kind is selected', async () => {
@@ -909,15 +965,6 @@ describe('Rising (#292)', () => {
       expect(rare()[0].getAttribute('data-kind')).toBe('word')
     })
 
-    it('the ruler svg keeps its accessible name and falls back to 860 wide when unmeasured', async () => {
-      width = 0
-      boot()
-      await start()
-      const svg = $('risingRuler').querySelector('svg.ruler-svg')!
-      expect(svg.getAttribute('aria-label')).toBe('Régua de termos em alta')
-      expect(svg.getAttribute('viewBox')).toMatch(/^0 0 860 /)
-    })
-
     it('a payload with only words_baseline prints no pairs either', async () => {
       handlers['/rising'] = () => payload([term()], { recent: 3, baseline: 12, words_baseline: 9 })
       boot()
@@ -960,7 +1007,7 @@ describe('Rising (#292)', () => {
       expect($('risingAbout').textContent).toBe('Falha de rede ou base indisponível.')
     })
 
-    it('a reload after an error ghosts the figure again, then paints the ruler without the error note', async () => {
+    it('a reload after an error ghosts the figure again, then paints the chart without the error note', async () => {
       boot()
       handlers['/rising'] = () => {
         throw new Error('offline')
@@ -1080,17 +1127,19 @@ describe('Rising over the 7 and 14 day windows (issue #313 acceptance)', () => {
     boot()
     await start()
     expect(words().map((w) => w.getAttribute('data-term')).sort()).toEqual(['antigo', 'recente'])
-    expect([...$('risingRuler').querySelectorAll('.ruler-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
+    expect([...$('risingRuler').querySelectorAll('.dumbbell-end')].map((e) => e.textContent)).toEqual(['antes (14 dias)', 'agora (7 dias)'])
     expect($('risingAbout').textContent).toBe('A pessoa: 6 textos nos últimos 7 dias, 9 nos 14 dias antes.')
     expect($('rising').textContent).not.toMatch(/\b(30|60) dias\b/)
     expect($('rising').innerHTML).not.toMatch(/NaN|undefined/)
   })
 
-  it('the figure key counts the documents over the 21 days it reads (7 + 14), never the 37 of the old 7 + 30', async () => {
+  it('the key has Posição, Cor, Clique and Lista only, in the unit of a thousand words', async () => {
     boot()
     await start()
-    const key = document.querySelector('#rising .figure-key')!.textContent ?? ''
-    expect(key).toContain('21 dias')
-    expect(key).not.toMatch(/37 dias/)
+    const keyEl = document.querySelector('#rising .figure-key')!
+    expect([...keyEl.querySelectorAll('dt')].map((e) => e.textContent?.trim())).toEqual(['Posição', 'Cor', 'Clique', 'Lista'])
+    const key = keyEl.textContent ?? ''
+    expect(key).toContain('mil palavras')
+    expect(key).not.toMatch(/Tamanho|21 dias|37 dias/)
   })
 })

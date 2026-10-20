@@ -196,12 +196,12 @@ describe('the #compare figure head describes the butterfly', () => {
   const dts = () => [...(figure().match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim())
 
   it('titles the figure and keeps the eyebrow', () => {
-    assert.match(figure(), /<h2 id="compareTitle">Duas pessoas, palavra a palavra<\/h2>/)
+    assert.match(figure(), /<h2 id="compareTitle">Duas pessoas ou dois recortes<\/h2>/)
     assert.match(figure(), /<span class="eyebrow">Gráfico 3<\/span>/)
   })
 
-  it('says a bar is a share of each person\'s texts and links the guide', () => {
-    assert.match(figure(), /<p class="figure-sub">Cada barra é a fatia dos textos de cada pessoa que traz a palavra\. <a href="\/como-ler#comparar">Como ler<\/a>\.<\/p>/)
+  it('names both readings, two people and one person by two recortes, and links the guide', () => {
+    assert.match(figure(), /<p class="figure-sub">Duas pessoas lidas pelas mesmas palavras, ou uma pessoa lida por dois recortes: um veículo, um viés ou uma fonte\. <a href="\/como-ler#comparar">Como ler<\/a>\.<\/p>/)
   })
 
   it('keys Barra, Cor, Ponte and Clique, with no Tamanho or Posição, and a bridge mark on Ponte', () => {

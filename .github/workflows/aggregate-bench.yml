@@ -1,0 +1,143 @@
+name: aggregate-bench
+
+# Issue #321. Times the graph aggregate build on the runner's own Postgres, fed by a
+# data-only dump of production's input tables. Production is only ever read, by pg_dump:
+# DATABASE_URL points at the local container for every pnpm step.
+on:
+  workflow_dispatch:
+    inputs:
+      pg_major:
+        description: 'Postgres major version, must equal production (checked)'
+        required: true
+        default: '17'
+      shared_buffers:
+        description: 'shared_buffers of the local Postgres'
+        required: true
+        default: '4GB'
+      work_mem:
+        description: 'work_mem of the local Postgres'
+        required: true
+        default: '256MB'
+
+concurrency:
+  group: aggregate-bench
+  cancel-in-progress: false
+
+# Explicit, so pipes run with pipefail.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PROD_URL: ${{ secrets.DATABASE_URL }}
+      PG_SSL_CA: ${{ secrets.PG_SSL_CA }}
+      PG_IMAGE: postgres:${{ inputs.pg_major }}
+      LOCAL_URL: postgres://postgres:bench@127.0.0.1:5432/bench
+      DUMP_DIR: ${{ runner.temp }}/dump
+      TABLES: persons docs doc_persons terms doc_terms doc_tone
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: test -n "$PROD_URL" || { echo 'DATABASE_URL secret is missing'; exit 1; }
+      - run: test -n "$PG_SSL_CA" || { echo 'PG_SSL_CA secret is missing'; exit 1; }
+
+      # libpq needs the CA as a file with real newlines (db.ts's normalizeCa), and pg_dump
+      # needs a session: the transaction-mode pooler port 6543 becomes the session port 5432.
+      - name: Prepare production connection
+        run: |
+          mkdir -p "$DUMP_DIR"
+          node -e "process.stdout.write(process.env.PG_SSL_CA.replace(/\\\\r\\\\n/g,'\r\n').replace(/\\\\n/g,'\n'))" > "$RUNNER_TEMP/ca.pem"
+          grep -q -- '-----BEGIN CERTIFICATE-----' "$RUNNER_TEMP/ca.pem"
+          url=$(node -e "const u=new URL(process.env.PROD_URL);u.searchParams.delete('sslmode');if(u.port==='6543')u.port='5432';process.stdout.write(u.toString())")
+          echo "::add-mask::$url"
+          echo "DUMP_URL=$url" >> "$GITHUB_ENV"
+
+      # A service container cannot take `-c` flags, so the local Postgres is a plain docker run.
+      - name: Start local Postgres
+        run: |
+          docker run -d --name pg --network host --shm-size=1g \
+            -e POSTGRES_PASSWORD=bench -e POSTGRES_DB=bench "$PG_IMAGE" \
+            -c shared_buffers=${{ inputs.shared_buffers }} \
+            -c work_mem=${{ inputs.work_mem }} \
+            -c maintenance_work_mem=1GB \
+            -c max_wal_size=8GB \
+            -c synchronous_commit=off
+          for i in $(seq 1 30); do docker exec pg pg_isready -h 127.0.0.1 -U postgres -d bench && break; sleep 2; done
+
+      - name: Check production major version
+        run: |
+          v=$(docker run --rm --network host -v "$RUNNER_TEMP:/w" \
+            -e PGSSLMODE=verify-full -e PGSSLROOTCERT=/w/ca.pem "$PG_IMAGE" \
+            psql "$DUMP_URL" -At -c 'show server_version_num')
+          echo "production server_version_num: $v"
+          test "$((v / 10000))" = "${{ inputs.pg_major }}" || { echo "::error::production is major $((v / 10000)), input pg_major is ${{ inputs.pg_major }}"; exit 1; }
+
+      - name: Create schema
+        run: DATABASE_URL="$LOCAL_URL" pnpm migrate
+
+      # Read-only on production. Custom format, so the restore below can run in parallel.
+      - name: Dump production input tables
+        run: |
+          args=$(printf -- '-t public.%s ' $TABLES)
+          s=$(date +%s)
+          docker run --rm --network host -v "$RUNNER_TEMP:/w" \
+            -e PGSSLMODE=verify-full -e PGSSLROOTCERT=/w/ca.pem "$PG_IMAGE" \
+            pg_dump "$DUMP_URL" --data-only --no-owner --no-privileges -Fc -Z 1 $args -f /w/dump/input.dump
+          echo "DUMP_S=$(( $(date +%s) - s ))" >> "$GITHUB_ENV"
+          echo "DUMP_BYTES=$(stat -c %s "$DUMP_DIR/input.dump")" >> "$GITHUB_ENV"
+
+      # --disable-triggers lets the parallel workers load child tables before their parents.
+      - name: Restore into local Postgres
+        run: |
+          s=$(date +%s)
+          docker run --rm --network host -v "$RUNNER_TEMP:/w" "$PG_IMAGE" \
+            pg_restore -d "$LOCAL_URL" --data-only --disable-triggers -j 4 /w/dump/input.dump
+          echo "RESTORE_S=$(( $(date +%s) - s ))" >> "$GITHUB_ENV"
+          s=$(date +%s)
+          docker exec pg psql -U postgres -d bench -c 'vacuum analyze'
+          echo "ANALYZE_S=$(( $(date +%s) - s ))" >> "$GITHUB_ENV"
+
+      - name: Build aggregates
+        run: |
+          docker exec pg psql -U postgres -d bench -At -c "select temp_bytes from pg_stat_database where datname = 'bench'" > "$RUNNER_TEMP/temp_before"
+          ( while :; do free -m | awk '/^Mem:/ {print $3}'; sleep 2; done ) > "$RUNNER_TEMP/mem.log" &
+          sampler=$!
+          s=$(date +%s)
+          DATABASE_URL="$LOCAL_URL" pnpm -s aggregate | tee "$RUNNER_TEMP/aggregate.log"
+          echo "BUILD_S=$(( $(date +%s) - s ))" >> "$GITHUB_ENV"
+          kill "$sampler"
+          echo "PEAK_MEM_MB=$(sort -n "$RUNNER_TEMP/mem.log" | tail -1)" >> "$GITHUB_ENV"
+          after=$(docker exec pg psql -U postgres -d bench -At -c "select temp_bytes from pg_stat_database where datname = 'bench'")
+          echo "TEMP_BYTES=$(( after - $(cat "$RUNNER_TEMP/temp_before") ))" >> "$GITHUB_ENV"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## aggregate-bench"
+            echo
+            echo "postgres ${{ inputs.pg_major }}, shared_buffers ${{ inputs.shared_buffers }}, work_mem ${{ inputs.work_mem }}, $(nproc) vCPU, $(free -g | awk '/^Mem:/ {print $2}') GB RAM"
+            echo
+            echo "| step | value |"
+            echo "|---|---|"
+            echo "| dump | ${DUMP_S:-?} s, ${DUMP_BYTES:-?} B |"
+            echo "| restore | ${RESTORE_S:-?} s |"
+            echo "| vacuum analyze | ${ANALYZE_S:-?} s |"
+            echo "| build | ${BUILD_S:-?} s |"
+            echo "| peak runner memory | ${PEAK_MEM_MB:-?} MB |"
+            echo "| temp bytes during build | ${TEMP_BYTES:-?} |"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/aggregate.log" 2>/dev/null
+            docker exec pg psql -U postgres -d bench -c "select relname, n_live_tup from pg_stat_user_tables where n_live_tup > 0 order by n_live_tup desc" 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -121,7 +121,7 @@ const show = () => {
   dialog.classList?.toggle('is-floating', float)
   if (!dialog.open) {
     if (float) {
-      // Floating card returns focus to prevent stealing keyboard from the map on every click.
+      // Floating card returns focus to prevent stealing the keyboard from the figure on every click.
       const had = document.activeElement as HTMLElement | null
       dialog.show?.()
       const now = document.activeElement as HTMLElement | null

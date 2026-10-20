@@ -11,11 +11,15 @@ describe('Atlas on the server (issue #297)', () => {
     const { body } = render(Atlas)
     expect(body).toMatch(/<section[^>]*id="workspace"/)
     expect(body).toMatch(/<[^>]*id="selectionNote"/)
-    for (const id of ['viewport', 'columns', 'atlasStrip', 'inspector', 'keyDefault', 'keyTheme', 'keyStrip', 'atlasStats'])
+    for (const id of ['columns', 'scatter', 'atlasStrip', 'inspector', 'keyDefault', 'keyScatter', 'keyTheme', 'keyStrip', 'atlasStats'])
       expect(body, `#${id}`).toMatch(new RegExp(`id="${id}"`))
+    expect(body).not.toMatch(/id="viewport"/)
   })
-  it('the prerendered viewport holding the ghost is hidden until the component mounts', () => {
+  it('the prerendered list holding the ghost is hidden until the component mounts, and the scatter and strip stay hidden', () => {
     const { body } = render(Atlas)
-    expect(body).toMatch(/<div class="viewport" id="viewport"[^>]*\shidden/)
+    expect(body).toMatch(/<div[^>]*\bid="columns"[^>]*\shidden/)
+    expect(body).toMatch(/<figure[^>]*\bid="scatter"[^>]*\shidden/)
+    expect(body).toMatch(/<figure[^>]*\bid="atlasStrip"[^>]*\shidden/)
+    expect(body).not.toMatch(/data-node=/)
   })
 })

@@ -219,7 +219,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
     const model = await import('../src/ui/atlas-model.js')
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing atlas-model.js must not touch document at import time')
-    assert.deepEqual(Object.keys(model).sort(), ['docsQuery', 'layoutKey', 'scopeKeys'])
+    assert.deepEqual(Object.keys(model).sort(), ['docsQuery', 'scopeKeys'])
   })
 
   it('#297 AC1: figures/atlas.ts is gone', () => {
@@ -755,7 +755,7 @@ describe('the comention figure lives only in Comention.svelte', () => {
 
 describe('#297 AC2: web/routes/+page.svelte mounts <Atlas /> and holds none of its markup', () => {
   const source = () => pageSource('/')
-  const IDS = ['workspace', 'atlasTitle', 'atlasStats', 'keyDefault', 'keyTheme', 'keyStrip', 'person', 'days', 'source', 'sort', 'limit', 'status', 'search', 'searchNote', 'modeMap', 'modeColumns', 'modeStrip', 'mask', 'zoomGroup', 'viewport', 'overflow', 'columns', 'atlasStrip', 'stripHiddenNote', 'legend', 'inspector', 'selectionNote']
+  const IDS = ['workspace', 'atlasTitle', 'atlasStats', 'keyDefault', 'keyScatter', 'keyTheme', 'keyStrip', 'person', 'days', 'source', 'sort', 'limit', 'status', 'search', 'searchNote', 'modeColumns', 'modeScatter', 'modeStrip', 'mask', 'columns', 'scatter', 'atlasStrip', 'stripHiddenNote', 'legend', 'inspector', 'selectionNote']
 
   it('the page carries <Atlas /> and none of the figure ids as static markup', () => {
     assert.match(source(), /<Atlas \/>/)

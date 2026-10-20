@@ -439,17 +439,21 @@ export const attentionLayout = (measure: Measure, mentions: { day: string; count
 // The comention matrix (figure 9): a half-matrix, upper triangle only; a two-axis grid, no packing.
 export const MATRIX_CELL_MIN = 26
 export const MATRIX_CELL_MAX = 42
-const MATRIX_ROWHEAD = 140
+export const MATRIX_ROWHEAD = 140
+// Margin on each side of a cell; a column header has none, so it spans the cell plus both gaps.
+export const MATRIX_GAP = 1
 
 export type MatrixCell = { a: string; b: string; count: number | null; ink: number }
-export type MatrixLayout = { cellSize: number; cells: MatrixCell[] }
+// `pitch` is one column's full step, shared by headers and cells: cellSize + 2 * gap.
+export type MatrixLayout = { cellSize: number; gap: number; pitch: number; rowhead: number; cells: MatrixCell[] }
 
 // Rows/columns follow `persons` (by name); a pair's a/b order is id string order, so lookups sort the ids.
 const pairKey = (x: string, y: string) => (x < y ? `${x}\u0000${y}` : `${y}\u0000${x}`)
 
 export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[], width: number): MatrixLayout => {
   const ids = persons.map((p) => p.id)
-  const cellSize = Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, Math.floor((width - MATRIX_ROWHEAD) / Math.max(1, ids.length))))
+  const fit = Math.floor((width - MATRIX_ROWHEAD) / Math.max(1, ids.length)) - 2 * MATRIX_GAP
+  const cellSize = Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, fit))
   const byPair = new Map(pairs.map((p) => [pairKey(p.a, p.b), p.count]))
   const max = pairs.reduce((m, p) => Math.max(m, p.count), 0)
   const cells: MatrixCell[] = []
@@ -459,7 +463,7 @@ export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[],
       cells.push({ a: ids[i], b: ids[j], count, ink: count && max ? Math.max(0.18, count / max) : 0 })
     }
   }
-  return { cellSize, cells }
+  return { cellSize, gap: MATRIX_GAP, pitch: cellSize + 2 * MATRIX_GAP, rowhead: MATRIX_ROWHEAD, cells }
 }
 
 // Figure 10: level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest count; 0 is only a null count.

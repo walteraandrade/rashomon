@@ -614,6 +614,17 @@ describe('matrixLayout (figure 9, issue #207)', () => {
     const wide = matrixLayout(persons, [], 4000)
     assert.equal(wide.cellSize, MATRIX_CELL_MAX)
   })
+
+  // A column header spans one pitch; a cell is cellSize plus a gap on each side. If the pitch
+  // left the gap out, headers stepped 2px short of cells per column and the grid outgrew its box.
+  it('one pitch is the cell plus both gaps, and the row head plus every column fits the width', () => {
+    const persons = Array.from({ length: 27 }, (_, i) => ({ id: `p${i}`, name: `P${i}` }))
+    for (const width of [900, 1000, 1247, 1300, 1440]) {
+      const l = matrixLayout(persons, [], width)
+      assert.equal(l.pitch, l.cellSize + 2 * l.gap)
+      assert.ok(l.rowhead + persons.length * l.pitch <= width, `width ${width}: ${l.rowhead} + 27 * ${l.pitch} overflows`)
+    }
+  })
 })
 
 // Issue #215 (figure 10): persistenceLayout is a fixed table grid, not a beeswarm: one row per

@@ -5,6 +5,7 @@ import {
   MASK_MIN,
   SCALE_MID,
   applyBridges,
+  barShare,
   bridgeIds,
   hasBridges,
   SOURCE_SEGMENTS,
@@ -148,6 +149,25 @@ describe('score / scoreName', () => {
   it('scoreName names each sort mode in pt-BR', () => {
     assert.equal(scoreName('count'), 'frequência em documentos')
     assert.equal(scoreName('pmi'), 'PMI × ln(1 + docs)')
+  })
+})
+
+describe('barShare (issue #328 AC4)', () => {
+  it('is the score over the largest score shown', () => {
+    assert.equal(barShare(8, 8), 1)
+    assert.equal(barShare(4, 8), 0.5)
+    assert.equal(barShare(2, 8), 0.25)
+  })
+
+  it('is 0 for a zero or negative max, a zero or negative score, and never NaN or Infinity', () => {
+    for (const [value, max] of [[0, 0], [5, 0], [5, -3], [-2, 8], [0, 8], [NaN, 8], [3, NaN], [3, Infinity], [Infinity, 8]]) {
+      const share = barShare(value, max)
+      assert.equal(share, 0, `${value}/${max}`)
+    }
+  })
+
+  it('never passes 1', () => {
+    assert.equal(barShare(9, 8), 1)
   })
 })
 

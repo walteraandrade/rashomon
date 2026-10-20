@@ -1,192 +1,150 @@
-import { fmt, label, score, termMask, type PersonTestimony, type Box, type CenterBox, type ComentionPair, type ComentionPerson, type Layout, type Measure, type Persistence, type PlacedTerm, type Point, type Routing, type Term, type WeekTerm } from './format.js'
+import { fmt, label, termMask, type PersonTestimony, type ComentionPair, type ComentionPerson, type Measure, type Persistence, type Term, type WeekTerm } from './format.js'
 
-// Literal copies of atlas.css's --sans / --mono / --display: canvas measurement cannot read custom properties.
+// Literal copy of atlas.css's --mono: canvas measurement cannot read custom properties.
 export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
-export const FONT_DISPLAY = "'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif"
 
-export const wrapLines = (measure: Measure, text: string, size: number, maxWidth: number, family = FONT_MONO, weight = 500): string[] => {
-  if (measure(text, size, family, weight) <= maxWidth) return [text]
-  const units = Array.from(text)
-  const lines: string[] = []
-  let line = ''
-  for (const ch of units) {
-    if (line && measure(line + ch, size, family, weight) > maxWidth) {
-      const split = Math.max(line.lastIndexOf(' '), line.lastIndexOf('_'), line.lastIndexOf('-'))
-      if (split > line.length * 0.3) {
-        lines.push(line.slice(0, split + 1).trimEnd())
-        line = line.slice(split + 1) + ch
-      } else {
-        lines.push(line)
-        line = ch
-      }
-    } else line += ch
-  }
-  if (line) lines.push(line.trimEnd())
-  return lines
-}
+// Figure 1's Dispersão: documents on a log x axis, raw PMI on a linear y axis, one constant-radius point per term.
+const STEPS = [1, 2, 5]
 
-export const centerLabel = (measure: Measure, name: string): CenterBox => {
-  const size = 52
-  const lines = wrapLines(measure, name, size, 286, FONT_DISPLAY, 700)
-  const lineHeight = 57
-  const w = Math.max(...lines.map((line) => measure(line, size, FONT_DISPLAY, 700))) + 28
-  return { lines, size, lineHeight, w: Math.max(240, w), h: lines.length * lineHeight + 88, x: 0, y: 0 }
-}
-
-const overlaps = (a: Box, b: Box, gap = 7) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 + gap && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + gap
-
-const inCircle = (box: Box, radius = 346) =>
-  [-1, 1].every((sx) => [-1, 1].every((sy) => Math.hypot(box.x + (sx * box.w) / 2, box.y + (sy * box.h) / 2) <= radius))
-
-// Placement candidates: fixed polar grid computed once so packing is deterministic.
-const candidates: { x: number; y: number; r: number }[] = []
-for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.push({ x: r * Math.cos((a * Math.PI) / 180), y: r * Math.sin((a * Math.PI) / 180), r })
-
-// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill.
-export const SIZE_CEILING = 38
-export const SIZE_FLOOR = 13
-
-export const sizeRange = (count: number): { minSize: number; maxSize: number } => {
-  const density = Math.max(0, Math.min(1, (count - 8) / 14))
-  return { minSize: 20 - (20 - SIZE_FLOOR) * density, maxSize: SIZE_CEILING - 16 * density }
-}
-
-export const packPass = (measure: Measure, terms: Term[], center: CenterBox, sort: string, phase = 0): Layout => {
-  const values = terms.map((n) => score(n, sort))
-  const min = Math.min(...values, 0)
-  const max = Math.max(...values, 0)
-  const placed: PlacedTerm[] = []
-  const overflow: Term[] = []
-  const { minSize, maxSize } = sizeRange(terms.length)
-  for (const [rank, n] of terms.entries()) {
-    const t = max === min ? 0.5 : (values[rank] - min) / (max - min)
-    const size = minSize + (maxSize - minSize) * Math.max(0, Math.min(1, t)) ** 0.7
-    const lines = wrapLines(measure, label(n), size, 250)
-    const lineHeight = size * 1.18
-    const w = Math.max(...lines.map((line) => measure(line, size))) + 18
-    const h = lines.length * lineHeight + 12
-    const fraction = rank / Math.max(1, terms.length - 1)
-    const targetR = 182 + 104 * Math.sqrt(fraction)
-    const angle = -Math.PI / 2 + rank * Math.PI * (3 - Math.sqrt(5)) + phase
-    const target = { x: targetR * Math.cos(angle), y: targetR * Math.sin(angle) }
-    let best: Box | null = null
-    let cost = Infinity
-    for (const c of candidates) {
-      const nextCost = (c.r - targetR) ** 2 * 1.2 + (c.x - target.x) ** 2 * 0.22 + (c.y - target.y) ** 2 * 0.22
-      if (nextCost >= cost) continue
-      const box = { x: c.x, y: c.y, w, h }
-      if (!inCircle(box) || overlaps(box, center, 14) || placed.some((p) => overlaps(box, p))) continue
-      best = box
-      cost = nextCost
+// 1, 2, 5, 10, 20, 50, ... up to and including the first value strictly above `above`.
+const ladder = (above: number): number[] => {
+  const out: number[] = []
+  for (let p = 0; p < 15; p++)
+    for (const m of STEPS) {
+      const v = m * 10 ** p
+      out.push(v)
+      if (v > above) return out
     }
-    if (best) placed.push({ ...n, ...best, rank, size, lines, lineHeight, score: values[rank] })
-    else overflow.push(n)
-  }
-  return { placed, overflow, center }
+  return out
 }
 
-// Retries the whole layout at a few starting phases when overflow occurs, keeping the most-placed.
-export const pack = (measure: Measure, terms: Term[], center: CenterBox, sort: string): Layout => {
-  let best = packPass(measure, terms, center, sort)
-  for (const phase of [0.5, -0.5, 1.1, -1.1]) {
-    if (!best.overflow.length || !best.placed.length) break
-    const next = packPass(measure, terms, center, sort, phase)
-    if (next.placed.length > best.placed.length) best = next
-  }
-  return best
+export const logTicks = (min: number, max: number): number[] => {
+  const lo = Math.max(1, Number.isFinite(min) ? min : 1)
+  const hi = Math.max(lo, Number.isFinite(max) ? max : lo)
+  const values = ladder(hi)
+  const inside = values.filter((v) => v >= lo && v <= hi)
+  if (inside.length >= 2) return inside
+  const below = values.filter((v) => v < lo).at(-1)
+  const above = values.find((v) => v > hi) as number
+  return [...(below === undefined ? [] : [below]), ...inside, above]
 }
 
-const segmentBlocked = (a: Point, b: Point, rect: Box) => {
-  let lo = 0
-  let hi = 1
-  for (const [start, delta, min, max] of [
-    [a.x, b.x - a.x, rect.x - rect.w / 2, rect.x + rect.w / 2],
-    [a.y, b.y - a.y, rect.y - rect.h / 2, rect.y + rect.h / 2],
-  ]) {
-    if (Math.abs(delta) < 1e-9) {
-      if (start <= min || start >= max) return false
-    } else {
-      const t1 = (min - start) / delta
-      const t2 = (max - start) / delta
-      lo = Math.max(lo, Math.min(t1, t2))
-      hi = Math.min(hi, Math.max(t1, t2))
-    }
-    if (lo >= hi) return false
-  }
-  return hi > 0 && lo < 1
+const clean = (v: number) => Number(v.toPrecision(12))
+
+export const niceTicks = (min: number, max: number, target = 5): number[] => {
+  const [lo, hi] = min === max ? [min - 1, max + 1] : [min, max]
+  const raw = (hi - lo) / Math.max(1, target)
+  const decade = 10 ** Math.floor(Math.log10(raw))
+  const step = clean((STEPS.map((m) => m * decade).find((s) => s >= raw * (1 - 1e-9)) ?? 10 * decade))
+  let first = Math.floor(lo / step)
+  let last = Math.ceil(hi / step)
+  if (clean(first * step) > lo) first--
+  if (clean(last * step) < hi) last++
+  if (last === first) last++
+  return Array.from({ length: last - first + 1 }, (_, i) => clean((first + i) * step))
 }
 
-// Visibility graph around every placed box (corners and edge midpoints) for routesFrom.
-export const routeGraph = (layout: Layout): Routing => {
-  const obstacles = [layout.center, ...layout.placed].map((p) => ({ ...p, w: p.w + 6, h: p.h + 6 }))
-  const points: Point[] = []
-  const ports = new Map<string, number[]>()
-  const add = (x: number, y: number) => {
-    if (Math.hypot(x, y) > 355 || obstacles.some((r) => Math.abs(x - r.x) < r.w / 2 && Math.abs(y - r.y) < r.h / 2)) return null
-    points.push({ x, y })
-    return points.length - 1
+export type LabelItem = { id: string; x: number; y: number; r: number; w: number; h: number }
+export type LabelBounds = { left: number; top: number; right: number; bottom: number }
+export type LabelSide = 'right' | 'left' | 'above' | 'below'
+// `x` is where the text anchors (its start, end or middle by `anchor`) and `y` the box's vertical centre.
+export type LabelPlacement = { x: number; y: number; anchor: 'start' | 'end' | 'middle'; side: LabelSide }
+
+type Rect = { left: number; top: number; right: number; bottom: number }
+
+const boxesClash = (a: Rect, b: Rect, gap: number) => a.left < b.right + gap && b.left < a.right + gap && a.top < b.bottom + gap && b.top < a.bottom + gap
+
+const hitsCircle = (box: Rect, c: { x: number; y: number; r: number }, gap: number) =>
+  Math.hypot(c.x - Math.max(box.left, Math.min(c.x, box.right)), c.y - Math.max(box.top, Math.min(c.y, box.bottom))) < c.r + gap
+
+// Items come in priority order and each takes the first of right, left, above, below that stays inside
+// `bounds` and clear of every earlier label and every other point; none left, no label.
+export const placeLabels = (items: LabelItem[], bounds: LabelBounds, gap: number): Map<string, LabelPlacement> => {
+  const placed = new Map<string, LabelPlacement>()
+  const taken: Rect[] = []
+  for (const it of items) {
+    const { x: cx, y: cy, r, w, h } = it
+    const tries: { side: LabelSide; anchor: LabelPlacement['anchor']; box: Rect }[] = [
+      { side: 'right', anchor: 'start', box: { left: cx + r + gap, top: cy - h / 2, right: cx + r + gap + w, bottom: cy + h / 2 } },
+      { side: 'left', anchor: 'end', box: { left: cx - r - gap - w, top: cy - h / 2, right: cx - r - gap, bottom: cy + h / 2 } },
+      { side: 'above', anchor: 'middle', box: { left: cx - w / 2, top: cy - r - gap - h, right: cx + w / 2, bottom: cy - r - gap } },
+      { side: 'below', anchor: 'middle', box: { left: cx - w / 2, top: cy + r + gap, right: cx + w / 2, bottom: cy + r + gap + h } },
+    ]
+    const pick = tries.find(
+      ({ box }) =>
+        box.left >= bounds.left &&
+        box.right <= bounds.right &&
+        box.top >= bounds.top &&
+        box.bottom <= bounds.bottom &&
+        !taken.some((t) => boxesClash(box, t, gap)) &&
+        !items.some((o) => o.id !== it.id && hitsCircle(box, o, gap)),
+    )
+    if (!pick) continue
+    taken.push(pick.box)
+    placed.set(it.id, {
+      x: pick.anchor === 'start' ? pick.box.left : pick.anchor === 'end' ? pick.box.right : (pick.box.left + pick.box.right) / 2,
+      y: (pick.box.top + pick.box.bottom) / 2,
+      anchor: pick.anchor,
+      side: pick.side,
+    })
   }
-  for (const r of obstacles) {
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) add(r.x + sx * (r.w / 2 + 1), r.y + sy * (r.h / 2 + 1))
-    if (r.id)
-      ports.set(
-        r.id,
-        [
-          [r.x - r.w / 2 - 1, r.y],
-          [r.x + r.w / 2 + 1, r.y],
-          [r.x, r.y - r.h / 2 - 1],
-          [r.x, r.y + r.h / 2 + 1],
-        ]
-          .map(([x, y]) => add(x, y))
-          .filter((i): i is number => i !== null),
-      )
-  }
-  const adjacent: { index: number; weight: number }[][] = points.map(() => [])
-  for (let i = 0; i < points.length; i++)
-    for (let j = i + 1; j < points.length; j++) {
-      const a = points[i]
-      const b = points[j]
-      if (obstacles.some((r) => segmentBlocked(a, b, r))) continue
-      const weight = Math.hypot(a.x - b.x, a.y - b.y)
-      adjacent[i].push({ index: j, weight })
-      adjacent[j].push({ index: i, weight })
-    }
-  return { points, ports, adjacent }
+  return placed
 }
 
-// Dijkstra from every port of `id`. Routing graph is cached on `layout.routing` on first call.
-export const routesFrom = (layout: Layout, id: string): Map<string, string> => {
-  const { points, ports, adjacent } = (layout.routing ??= routeGraph(layout))
-  const distances = points.map(() => Infinity)
-  const previous: (number | null)[] = points.map(() => null)
-  const visited = new Set<number>()
-  for (const start of ports.get(id) || []) distances[start] = 0
-  for (let step = 0; step < points.length; step++) {
-    let best = -1
-    for (let i = 0; i < points.length; i++) if (!visited.has(i) && Number.isFinite(distances[i]) && (best < 0 || distances[i] < distances[best])) best = i
-    if (best < 0) break
-    visited.add(best)
-    for (const edge of adjacent[best])
-      if (distances[best] + edge.weight < distances[edge.index]) {
-        distances[edge.index] = distances[best] + edge.weight
-        previous[edge.index] = best
-      }
+export const SCATTER_PAD = { left: 54, right: 22, top: 36, bottom: 54 }
+export const SCATTER_POINT_R = 5
+export const SCATTER_LABEL_SIZE = 11
+export const SCATTER_LABEL_H = 14
+export const SCATTER_LABEL_GAP = 4
+export const SCATTER_DEFAULT_WIDTH = 860
+
+export type ScatterPoint = { id: string; x: number; y: number }
+export type ScatterLayout = {
+  width: number
+  height: number
+  plot: LabelBounds
+  r: number
+  points: ScatterPoint[]
+  xTicks: { value: number; x: number }[]
+  yTicks: { value: number; y: number }[]
+  zeroY: number | null
+  labels: Map<string, LabelPlacement>
+}
+
+const finite = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+// A count of 0 is read as 1 before the log, a missing pmi as 0, so the layout only ever sees finite numbers.
+export const scatterLayout = (measure: Measure, nodes: Term[], width: number): ScatterLayout => {
+  const height = Math.round(Math.max(320, Math.min(460, width * 0.55)))
+  const plot = { left: SCATTER_PAD.left, top: SCATTER_PAD.top, right: Math.max(SCATTER_PAD.left + 1, width - SCATTER_PAD.right), bottom: height - SCATTER_PAD.bottom }
+  const counts = nodes.map((n) => Math.max(1, finite(n.count)))
+  const pmis = nodes.map((n) => finite(n.pmi))
+  const minCount = counts.length ? Math.min(...counts) : 1
+  const maxCount = counts.length ? Math.max(...counts) : 1
+  const lo = Math.max(1, ladder(minCount).filter((v) => v <= minCount).at(-1) ?? 1)
+  const hi = ladder(maxCount).find((v) => v > maxCount) as number
+  const yTicksRaw = niceTicks(pmis.length ? Math.min(...pmis) : 0, pmis.length ? Math.max(...pmis) : 0)
+  const yFirst = yTicksRaw[0]
+  const yLast = yTicksRaw[yTicksRaw.length - 1]
+  const x = (count: number) => plot.left + ((Math.log(count) - Math.log(lo)) / (Math.log(hi) - Math.log(lo))) * (plot.right - plot.left)
+  const y = (pmi: number) => plot.top + ((yLast - pmi) / (yLast - yFirst)) * (plot.bottom - plot.top)
+  const points = nodes.map((n, i) => ({ id: n.id, x: x(counts[i]), y: y(pmis[i]) }))
+  const labels = placeLabels(
+    points.map((p, i) => ({ ...p, r: SCATTER_POINT_R, w: measure(label(nodes[i]), SCATTER_LABEL_SIZE, FONT_MONO, 500), h: SCATTER_LABEL_H })),
+    plot,
+    SCATTER_LABEL_GAP,
+  )
+  return {
+    width,
+    height,
+    plot,
+    r: SCATTER_POINT_R,
+    points,
+    xTicks: logTicks(lo, hi).map((value) => ({ value, x: x(value) })),
+    yTicks: yTicksRaw.map((value) => ({ value, y: y(value) })),
+    zeroY: yFirst <= 0 && yLast >= 0 ? y(0) : null,
+    labels,
   }
-  const routes = new Map<string, string>()
-  for (const [target, ends] of ports) {
-    if (target === id) continue
-    let end: number | null = null
-    for (const i of ends) if (end === null || distances[i] < distances[end]) end = i
-    if (end === null) continue
-    const path: Point[] = []
-    let cursor: number | null = end
-    while (cursor !== null) {
-      path.unshift(points[cursor])
-      cursor = previous[cursor]
-    }
-    routes.set(target, path.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' '))
-  }
-  return routes
 }
 
 // Beeswarm skeleton both strips share: `reach` is the vertical clearance two items need (null if

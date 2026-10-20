@@ -278,7 +278,7 @@
 
 <section class="figure attention" id="attention" class:is-loading={dim} aria-labelledby="attentionTitle">
   <header class="figure-head">
-    <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="attentionTitle">Atenção e menções</h2></div>
+    <div class="figure-title"><span class="eyebrow">Gráfico 6</span><h2 id="attentionTitle">Atenção e menções</h2></div>
     <p class="figure-sub">Quanto se buscou o nome na Wikipédia contra quanto se escreveu sobre a pessoa, dia a dia. <a href="/como-ler#atencao">Como ler</a>.</p>
     <dl class="figure-key">
       <div><dt>Posição</dt><dd>o dia, o mesmo eixo nas duas linhas</dd></div>

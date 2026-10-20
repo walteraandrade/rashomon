@@ -151,7 +151,7 @@
 
 <section class="figure comention" id="comention" aria-labelledby="comentionTitle" class:is-loading={dim}>
   <header class="figure-head">
-    <div class="figure-title"><span class="eyebrow">Gráfico 9</span><h2 id="comentionTitle">Quem aparece junto</h2></div>
+    <div class="figure-title"><span class="eyebrow">Gráfico 8</span><h2 id="comentionTitle">Quem aparece junto</h2></div>
     <p class="figure-sub">Quantos textos citam duas pessoas rastreadas ao mesmo tempo, na mesma janela. <a href="/como-ler#junto">Como ler</a>.</p>
     <dl class="figure-key">
       <div><dt>Célula</dt><dd>textos que citam as duas pessoas juntas na janela</dd></div>

@@ -392,7 +392,7 @@ export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], wi
   return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
 }
 
-// Figure 7: the day of a series' maximum, oldest on a tie, null when all zero.
+// Figure 6: the day of a series' maximum, oldest on a tie, null when all zero.
 export type AttentionSeriesPoint = { day: string; value: number }
 
 export const peakDay = (series: AttentionSeriesPoint[]): string | null => {
@@ -436,7 +436,7 @@ export const attentionLayout = (measure: Measure, mentions: { day: string; count
   }
 }
 
-// The comention matrix (figure 9): a half-matrix, upper triangle only; a two-axis grid, no packing.
+// The comention matrix (figure 8): a half-matrix, upper triangle only; a two-axis grid, no packing.
 export const MATRIX_CELL_MIN = 26
 export const MATRIX_CELL_MAX = 42
 export const MATRIX_ROWHEAD = 140
@@ -466,7 +466,7 @@ export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[],
   return { cellSize, gap: MATRIX_GAP, pitch: cellSize + 2 * MATRIX_GAP, rowhead: MATRIX_ROWHEAD, cells }
 }
 
-// Figure 10: level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest count; 0 is only a null count.
+// Figure 9: level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest count; 0 is only a null count.
 const PERSISTENCE_LEVELS = 5
 
 export type PersistenceCell = { week: string; count: number | null; level: number }

@@ -24,7 +24,7 @@
       <ol>
         <li>Escolha pessoa, período e fonte na frase.</li>
         <li>Leia as palavras maiores. Clique numa para ver os textos.</li>
-        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é. No 4, o que ganhou ou perdeu espaço esta semana. No 5, em que dia da semana cada palavra apareceu. No 6, leia a mesma pessoa por dois recortes ao mesmo tempo. No 7, veja a fatia de cada veículo por pessoa.</li>
+        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é, ou como uma pessoa muda de um recorte para outro. No 4, o que ganhou ou perdeu espaço esta semana. No 5, em que dia da semana cada palavra apareceu. No 7, veja a fatia de cada veículo por pessoa.</li>
       </ol>
     </div>
     <div id="help-atlas">
@@ -61,11 +61,20 @@
       <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara do mapa e da lista. É a mesma nota, não outra medida.</p>
     </div>
     <div id="help-comparar">
-      <h3>Gráfico 3 · Duas pessoas</h3>
+      <h3>Gráfico 3 · Duas pessoas ou dois recortes</h3>
       <p>Cada linha é uma palavra, com uma barra para cada pessoa. A barra é a fatia dos documentos daquela pessoa que trazem a palavra, na mesma escala para as duas. Clique abre os textos das duas pessoas.</p>
       <p>As linhas vêm em três grupos: só da primeira pessoa, dos dois e só da segunda. “Só” quer dizer que a barra desta pessoa existe e a da outra não. “Documentos” ou “PMI ponderado” na frase mudam só quais palavras ganham uma linha, nunca o comprimento de uma barra. Cada pessoa entra com as suas palavras mais fortes, até o número escolhido, então a figura pode ter até o dobro de linhas.</p>
       <p>Uma barra que falta pode querer dizer que a palavra ficou abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero. O nome de uma das duas pessoas não é desenhado; quantas palavras saíram aparece embaixo.</p>
       <p>Uma marca âmbar antes da palavra é uma ponte: pelos textos das duas pessoas, ela liga um vocabulário ao outro. A mais atravessada vale 1 e ganham marca as que passam de 0,5. A ponte não muda nem a escolha nem a ordem das linhas.</p>
+      <div id="help-lentes">
+        <h3>Uma pessoa, duas lentes</h3>
+        <p>No modo “uma pessoa, dois recortes” da frase, o gráfico lê a mesma pessoa por duas lentes. Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. Começa com Bluesky à esquerda e Google News à direita.</p>
+        <p><b>Barras e grupos</b> funcionam como na comparação entre duas pessoas, com as lentes no lugar delas: cada barra é a fatia dos textos daquela lente que trazem a palavra, os grupos são “só” de uma lente, dos dois e “só” da outra, e “Documentos” ou “PMI ponderado” não mudam o comprimento de uma barra. Aqui as palavras são escolhidas por PMI. Clique abre os textos das duas lentes.</p>
+        <p><b>Mesmo recorte.</b> Se as duas lentes forem exatamente a mesma, aparece o aviso “Os dois lados mostram o mesmo recorte”. Uma lente inválida ou vazia volta para “Tudo”, o corpus inteiro daquele lado, sem erro.</p>
+        <p><b>Poucos textos.</b> Uma lente com menos de 50 textos da pessoa ganha uma nota embaixo dizendo quantos são: leia com cuidado, porque poucas palavras dominam a fatia.</p>
+        <p><b>Barra que falta.</b> Uma barra ausente pode querer dizer que a palavra ficou abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero. O próprio nome da pessoa não entra; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas.</p>
+        <p><b>Ponte.</b> A marca âmbar antes da palavra é a mesma da comparação entre duas pessoas, com as duas lentes no lugar das duas pessoas: é a palavra que as duas lentes precisam para falar da pessoa.</p>
+      </div>
     </div>
     <div id="help-em-alta">
       <h3>Gráfico 4 · Em alta</h3>
@@ -79,30 +88,23 @@
       <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte. Clique numa palavra abre os textos daquele dia com aquela palavra.</p>
       <p>O gráfico 1 tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do gráfico 1.</p>
     </div>
-    <div id="help-lentes">
-      <h3>Gráfico 6 · Uma pessoa, duas lentes</h3>
-      <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara as duas lentes escolhidas para a mesma pessoa: a posição diz de qual lente a palavra é mais, o tamanho é documentos das duas lentes somados. Clique abre os textos das duas lentes.</p>
-      <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". O nome da pessoa não entra na régua; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas, já que é a mesma pessoa nos dois lados.</p>
-      <p>Uma lente inválida ou vazia volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
-      <p>O sublinhado âmbar marca a ponte desta régua: a mesma conta da marca de ponte da comparação entre duas pessoas, com as duas lentes no lugar das duas pessoas. É a palavra que as duas lentes precisam para falar da pessoa.</p>
-    </div>
     <div id="help-atencao">
-      <h3>Gráfico 7 · Atenção e menções</h3>
+      <h3>Gráfico 6 · Atenção e menções</h3>
       <p>Uma linha traz quantas pessoas visitaram a página da Wikipédia da pessoa, dia a dia: curiosidade, não opinião. A outra traz quantos textos a citam naquele mesmo dia. As duas nunca são comparadas como um número contra o outro: vivem em ordens de grandeza diferentes, cada uma na sua própria escala.</p>
       <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever. Sem pico em nenhuma das duas (pessoa sem página rastreada, ou janela vazia), não há frase, só uma nota. Clique em qualquer das duas linhas abre os textos de menções do dia; pageviews não têm texto próprio para abrir.</p>
     </div>
     <div id="help-agenda">
-      <h3>Gráfico 8 · Agenda por veículo</h3>
+      <h3>Gráfico 7 · Agenda por veículo</h3>
       <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total.</p>
       <p>A soma de uma linha pode passar de 100%: um documento que cita duas pessoas acompanhadas conta para as duas, uma vez cada. Um veículo com poucos documentos rastreados nem entra na tabela. Clique numa célula abre os documentos daquela pessoa naquele veículo.</p>
     </div>
     <div id="help-junto">
-      <h3>Gráfico 9 · Quem aparece junto</h3>
+      <h3>Gráfico 8 · Quem aparece junto</h3>
       <p>Cada célula conta os textos que citam as duas pessoas ao mesmo tempo, na mesma janela. Aparecer junto não é concordar: a célula não diz se as duas foram citadas a favor, contra ou uma da outra, só que o mesmo texto falou das duas.</p>
       <p>O mínimo escolhido na frase esconde os pares com poucos textos em comum: um par abaixo dele fica em branco na matriz, não desaparece dela. Clicar numa célula preenchida abre os textos daquele par; clique de novo, ou fora da matriz, fecha.</p>
     </div>
     <div id="help-persistencia">
-      <h3>Gráfico 10 · Persistência</h3>
+      <h3>Gráfico 9 · Persistência</h3>
       <p>Cada linha é uma palavra; cada célula, uma semana de segunda a domingo, no calendário de Brasília, da mais antiga à esquerda à atual à direita. A célula mostra quantos documentos sobre a pessoa trazem a palavra naquela semana. A palavra só entra na semana se estiver entre as 50 mais fortes dela, com pelo menos 2 documentos.</p>
       <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
       <p>A sequência conta as semanas seguidas com a palavra, até agora. A semana em curso ainda está incompleta e não interrompe a conta se estiver vazia. A meia-vida é o número de semanas do pico até a primeira semana completa em que a palavra caiu à metade ou menos; &ldquo;sem queda&rdquo; quer dizer que isso ainda não aconteceu.</p>

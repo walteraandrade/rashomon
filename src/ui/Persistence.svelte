@@ -137,7 +137,7 @@
 
 <section class="figure persistence" id="persistence" class:is-loading={dimmed} aria-labelledby="persistenceTitle">
   <header class="figure-head">
-    <div class="figure-title"><span class="eyebrow">Gráfico 10</span><h2 id="persistenceTitle">Persistência</h2></div>
+    <div class="figure-title"><span class="eyebrow">Gráfico 9</span><h2 id="persistenceTitle">Persistência</h2></div>
     <p class="figure-sub">Quais palavras grudaram na pessoa semana após semana, e quais sumiram. <a href="/como-ler#persistencia">Como ler</a>.</p>
     <dl class="figure-key">
       <div><dt>Palavra</dt><dd>uma linha por palavra, das que ficaram mais tempo às que ficaram menos</dd></div>

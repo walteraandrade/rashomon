@@ -75,3 +75,25 @@ describe('rising docs describe the dumbbell (#327)', () => {
     })
   }
 })
+
+describe('the rising figure key and copy in the page (#327)', () => {
+  const section = () => {
+    const page = pageMarkup('/')
+    return page.slice(page.indexOf('id="rising"'), page.indexOf('id="rising"') + 6000)
+  }
+
+  it('the key names Posição, Cor, Clique and Lista in that order, in the unit of a thousand words, without Tamanho or a 21-day claim', () => {
+    const key = section().match(/<dl class="figure-key">[\s\S]*?<\/dl>/)?.[0] ?? ''
+    assert.ok(key, 'figure-key must exist')
+    const terms = [...key.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim())
+    assert.deepEqual(terms, ['Posição', 'Cor', 'Clique', 'Lista'])
+    assert.match(key, /mil palavras/)
+    assert.doesNotMatch(key, /Tamanho|21 dias|37 dias/)
+  })
+
+  it('the figure names the 14 days before and the last 7, and claims no other window', () => {
+    const text = section().replace(/<[^>]+>/g, ' ')
+    assert.match(text, /últimos 7 dias, contra os 14 dias antes/)
+    assert.doesNotMatch(text, /\b(30|60) dias\b/)
+  })
+})

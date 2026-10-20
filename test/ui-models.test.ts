@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { butterflyRows } from '../src/ui/butterfly-model.js'
 import { THIN_ABOUT, compareModeFor, thinNoteText } from '../src/ui/compare-model.js'
 import { stripLayout } from '../src/ui/strip-model.js'
-import { axisTicks, dumbbellModel, hasShares, rareRisers, ratioLabel, shareBalance, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
+import { axisTicks, dumbbellModel, hasShares, rareRisers, ratioLabel, ratioText, shareBalance, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 import { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripRadius } from '../src/ui/layout.js'
 
 // The pure models behind the figures (compare-model, strip-model, format's rising helpers) and the
@@ -325,6 +325,45 @@ describe('dumbbellModel (#327)', () => {
   })
 })
 
+describe('dumbbellModel arithmetic edges (#327)', () => {
+  it('a row with no recent denominator and no baseline count has no dot at all and reads nova', () => {
+    const m = dumbbellModel(risingData([raw('a', 4, 0)], {}, { recent: 0, baseline: 0 }))
+    const row = m.rows[0]
+    assert.equal(m.unit, 'cem')
+    assert.deepEqual([row.before, row.now, row.ratio, row.isNew], [null, null, null, true])
+    assert.equal(ratioText(row), 'nova')
+    assert.equal(m.max, 1)
+  })
+
+  it('the axis scales to the drawn rows only, never to the terms cut off', () => {
+    const drawn = Array.from({ length: 20 }, (_, i) => raw(`d${String(i).padStart(2, '0')}`, 10, 1))
+    const cut = raw('fora', 2, 300)
+    const m = dumbbellModel(risingData([...drawn, cut]))
+    assert.ok(!m.rows.some((r) => r.term === 'fora'))
+    assert.equal(m.max, Math.max(...m.rows.flatMap((r) => [r.before, r.now]).filter((v): v is number => v !== null)))
+    assert.equal(m.max, 250)
+  })
+
+  it('a shrinking word keeps its before dot right of its now dot and a ratio under one', () => {
+    const row = dumbbellModel(risingData([raw('caiu', 2, 10)])).rows[0]
+    assert.ok(row.before! > row.now!)
+    assert.ok(row.ratio! < 1)
+    assert.equal(ratioText(row), '×0,1')
+  })
+
+  it('ratioText prints the dash only for a non-nova row with no ratio', () => {
+    const dash = dumbbellModel(risingData([raw('a', 3, 2)], { present: undefined }, { recent: 5, baseline: 0 })).rows[0]
+    assert.equal(ratioText(dash), '–')
+    assert.equal(ratioText({ ...dash, isNew: true }), 'nova')
+    assert.equal(ratioText({ ...dash, ratio: 3.24 }), '×3,2')
+  })
+
+  it('a hashtag and a word of the same name are two rows', () => {
+    const m = dumbbellModel(risingData([raw('lula', 5, 1), raw('lula', 5, 1, 'hashtag')]))
+    assert.deepEqual(m.rows.map((r) => r.kind).sort(), ['hashtag', 'word'])
+  })
+})
+
 describe('ratioLabel (#327)', () => {
   it('ratioLabel prints one pt-BR decimal', () => {
     assert.equal(ratioLabel(3.2), '×3,2')
@@ -349,6 +388,20 @@ describe('axisTicks (#327)', () => {
       assert.ok([1, 2, 2.5, 5].some((m) => Math.abs(m - mantissa) < 1e-9), `${max}: step ${step}`)
       ticks.forEach((t, i) => assert.ok(Math.abs(t.value - i * step) < 1e-9, `${max}: tick ${i}`))
     }
+  })
+
+  it('axisTicks values carry no floating-point residue', () => {
+    for (const max of [0.003, 0.07, 0.3, 0.6, 0.7, 0.9, 1.1, 12, 37, 480]) {
+      for (const t of axisTicks(max)) assert.equal(t.value, Number(t.value.toFixed(6)), `${max}: ${t.value}`)
+    }
+    assert.deepEqual(axisTicks(0.7).map((t) => t.value), [0, 0.2, 0.4, 0.6])
+  })
+
+  it('axisTicks takes the largest step that still gives three intervals', () => {
+    assert.deepEqual(axisTicks(100).map((t) => t.value), [0, 25, 50, 75, 100])
+    assert.deepEqual(axisTicks(37).map((t) => t.value), [0, 10, 20, 30])
+    assert.deepEqual(axisTicks(30).map((t) => t.value), [0, 10, 20, 30])
+    assert.deepEqual(axisTicks(29).map((t) => t.value), [0, 5, 10, 15, 20, 25])
   })
 
   it('axisTicks labels carry the decimals the step needs in pt-BR', () => {

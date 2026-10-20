@@ -1143,3 +1143,57 @@ describe('Rising over the 7 and 14 day windows (issue #313 acceptance)', () => {
     expect(key).not.toMatch(/Tamanho|21 dias|37 dias/)
   })
 })
+
+describe('Rising dumbbell marks (#327 acceptance)', () => {
+  const styleVar = (el: Element | null, name: string) => el?.getAttribute('style')?.match(new RegExp(`${name}:\\s*([\\d.]+)%`))?.[1]
+
+  it('the line spans exactly the two dots, whichever is left', async () => {
+    handlers['/rising'] = () => payload([term({ term: 'sobe', count_recent_raw: 20, count_baseline_raw: 1 }), term({ term: 'cai', count_recent_raw: 4, count_baseline_raw: 10 })])
+    boot()
+    await start()
+    for (const w of words()) {
+      const a = Number(xOf(dot(w, 'before')))
+      const b = Number(xOf(dot(w, 'now')))
+      const line = w.querySelector('.dumbbell-line')
+      expect(Number(styleVar(line, '--x0'))).toBe(Math.min(a, b))
+      expect(Number(styleVar(line, '--x1'))).toBe(Math.max(a, b))
+    }
+    const cai = words().find((w) => w.getAttribute('data-term') === 'cai')!
+    expect(Number(xOf(dot(cai, 'before')))).toBeGreaterThan(Number(xOf(dot(cai, 'now'))))
+    expect(cai.querySelector('.dumbbell-ratio')?.textContent).toBe('×0,1')
+  })
+
+  it('each row carries its full term as a title and one gridline per axis tick', async () => {
+    handlers['/rising'] = () => payload([term({ term: 'uma-palavra-bem-comprida-demais' })])
+    boot()
+    await start()
+    const row = words()[0]
+    expect(row.querySelector('.dumbbell-label')?.getAttribute('title')).toBe('uma-palavra-bem-comprida-demais')
+    const ticks = $('risingRuler').querySelectorAll('.dumbbell-axis .dumbbell-tick').length
+    expect(ticks).toBeGreaterThanOrEqual(4)
+    expect(ticks).toBeLessThanOrEqual(6)
+    expect(row.querySelectorAll('.dumbbell-gridline')).toHaveLength(ticks)
+  })
+
+  it('a row with no denominator at all draws no dot, reads nova, and says sem valor', async () => {
+    handlers['/rising'] = () => stale([term({ term: 'solta', count_recent_raw: 4, count_baseline_raw: 0 })], { recent: 0, baseline: 0 })
+    boot()
+    await start()
+    const row = words()[0]
+    expect(row.querySelectorAll('.dumbbell-dot')).toHaveLength(0)
+    expect(row.querySelector('.dumbbell-line')).toBeNull()
+    expect(row.querySelector('.dumbbell-ratio')?.textContent).toBe('nova')
+    expect(row.getAttribute('aria-label')).toContain('antes sem valor, agora sem valor')
+    expect($('rising').innerHTML).not.toMatch(/NaN|Infinity|undefined|null/)
+  })
+
+  it('the rows are the 20 with the most recent occurrences and the axis ignores the terms cut', async () => {
+    const drawn = Array.from({ length: 20 }, (_, i) => term({ term: `d${String(i).padStart(2, '0')}`, count_recent_raw: 10, count_baseline_raw: 1 }))
+    handlers['/rising'] = () => payload([...drawn, term({ term: 'fora', count_recent_raw: 2, count_baseline_raw: 300 })], { recent: 8, baseline: 3, words_recent: 40, words_baseline: 16 })
+    boot()
+    await start()
+    expect(words()).toHaveLength(20)
+    expect($('risingRuler').querySelector('[data-term="fora"]')).toBeNull()
+    expect([...$('risingRuler').querySelectorAll('.dumbbell-axis .dumbbell-tick')].map((t) => t.textContent)).toEqual(axisTicks(250).map((t) => t.label))
+  })
+})

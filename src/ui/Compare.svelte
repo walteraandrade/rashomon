@@ -1,30 +1,19 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import Ruler from './Ruler.svelte'
+  import Butterfly from './Butterfly.svelte'
   import * as api from './api.js'
   import { bootData } from './boot.svelte.js'
+  import { butterflyRows } from './butterfly-model.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { SOURCE_SEGMENTS, applyBridges, bridgeIds, fmt, hasBridges, isBridge, kinds, label, scoreName, sourceLabels, type Compare, type CompareSide, type CompareTerm, type Measure } from './format.js'
-  import { rulerLayout, rulerModel } from './layout.js'
-  import { createCanvasMeasure } from './measure.js'
-  import { rulerTerms } from './ruler-model.js'
+  import { SOURCE_SEGMENTS, applyBridges, bridgeIds, fmt, hasBridges, isBridge, kinds, label, scoreName, sourceLabels, type Compare, type CompareSide, type CompareTerm } from './format.js'
   import { seedFor, type SeedKey } from './seed.js'
 
   const KEYS: SeedKey[] = [['a', 'person'], ['b', null], 'days', 'source', 'limit', ['measure', null]]
   const DAYS = ['7', '21']
   const MEASURES = ['count', 'pmi']
   const LIMITS = ['20', '40', '60', '100']
-  const GHOST_WORDS: [number, number, number, number][] = [
-    [110, -14, 86, 20],
-    [210, 12, 64, 16],
-    [320, -8, 100, 22],
-    [430, 0, 72, 18],
-    [530, 16, 90, 20],
-    [640, -12, 58, 16],
-    [740, 8, 80, 18],
-  ]
-  const GHOST_TICKS = [-1, -0.5, 0, 0.5, 1].map((b) => 28 + ((b + 1) / 2) * (860 - 56))
+  const GHOST_BARS: [number, number][] = [[62, 38], [48, 20], [30, 54], [74, 12], [22, 66], [56, 44], [36, 28], [18, 50]]
 
   let a = $state('')
   let b = $state('')
@@ -35,15 +24,12 @@
 
   let data = $state.raw<Compare | null>(null)
   let selected = $state.raw<{ term: string; kind: string } | null>(null)
-  let width = $state(0)
+  let shownLimit = $state(20)
   let version = $state(0)
   let errored = $state(false)
   let waiting = $state(true)
   let dimmed = $state(false)
   let rulerEl: HTMLElement | undefined = $state()
-
-  let metrics: Measure | null = null
-  const measured = () => (metrics ??= createCanvasMeasure())
 
   const peopleError = $derived(bootData.ready && !!bootData.peopleError)
   const noPeople = $derived(bootData.ready && !bootData.peopleError && bootData.people.length === 0)
@@ -52,23 +38,7 @@
 
   const model = $derived.by(() => {
     void version
-    if (!data) return null
-    const { items, hiddenCount } = rulerTerms(data.terms, measure)
-    if (!items.length) return { hiddenCount, layout: null }
-    const nameA = data.a.person.name
-    const nameB = data.b.person.name
-    const laid = rulerModel(rulerLayout(measured(), items, width || 860))
-    return {
-      hiddenCount,
-      layout: {
-        ...laid,
-        endA: nameA,
-        endB: nameB,
-        axisLabels: [`Só de ${nameA}`, 'dividida', `Só de ${nameB}`] as [string, string, string],
-        ariaLabel: `Régua comparando ${nameA} e ${nameB}`,
-        note: `Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.`,
-      },
-    }
+    return data ? butterflyRows(data.terms, data.a.about, data.b.about, shownLimit, measure) : null
   })
 
   const hiddenCount = $derived(model?.hiddenCount ?? 0)
@@ -154,7 +124,7 @@
         dropStalePick()
         loadBridges(result)
       }
-      width = rulerEl?.clientWidth || 0
+      shownLimit = Number(limit)
       errored = false
       waiting = false
       dimmed = false
@@ -200,39 +170,31 @@
 
 <section class="figure compare" id="compare" aria-labelledby="compareTitle" class:is-loading={dimmed}>
   <header class="figure-head">
-    <div class="figure-title"><span class="eyebrow">Gráfico 3</span><h2 id="compareTitle">Régua entre duas pessoas</h2></div>
-    <p class="figure-sub">A palavra escrita na régua nunca é de uma pessoa só. <a href="/como-ler#comparar">Como ler</a>.</p>
+    <div class="figure-title"><span class="eyebrow">Gráfico 3</span><h2 id="compareTitle">Duas pessoas, palavra a palavra</h2></div>
+    <p class="figure-sub">Cada barra é a fatia dos textos de cada pessoa que traz a palavra. <a href="/como-ler#comparar">Como ler</a>.</p>
     <dl class="figure-key">
-      <div><dt>Posição</dt><dd>de quem a palavra é mais</dd></div>
-      <div><dt>Tamanho</dt><dd>documentos dos dois, somados</dd></div>
-      <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>de que lado ela pende</dd></div>
-      <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>liga os dois vocabulários</dd></div>
+      <div><dt>Barra</dt><dd>fatia dos textos de cada pessoa</dd></div>
+      <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>de quem</dd></div>
+      <div><dt><span class="butterfly-bridge-mark" aria-hidden="true"></span>Ponte</dt><dd>liga os dois vocabulários</dd></div>
       <div><dt>Clique</dt><dd>textos das duas pessoas, neste gráfico</dd></div>
     </dl>
     <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A" value={a} onchange={(e) => change(e, (v) => (a = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B" value={b} onchange={(e) => change(e, (v) => (b = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="compareDays" aria-label="Período" value={days} onchange={(e) => change(e, (v) => (days = v))}><option value="7">últimos 7 dias</option><option value="21" selected>últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="compareSource" aria-label="Fonte" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="compareMeasure" aria-label="Medida" value={measure} onchange={(e) => (measure = e.currentTarget.value)}><option value="count">documentos</option><option value="pmi">{scoreName('pmi')}</option></select></span>.</span> Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras" value={limit} onchange={(e) => change(e, (v) => (limit = v))}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras por pessoa.</p></div>
   </header>
   <p class="status" id="compareStatus" role="status" hidden={!sameSelf}>Os dois lados mostram a mesma pessoa.</p>
-  <figure class="ruler" id="compareRuler" aria-label="Régua comparando as duas pessoas" aria-busy={showGhost ? 'true' : 'false'} hidden={peopleError || noPeople} bind:this={rulerEl}>
+  <figure class="butterfly" id="compareRuler" aria-label="Barras comparando as duas pessoas" aria-busy={showGhost ? 'true' : 'false'} hidden={peopleError || noPeople} bind:this={rulerEl}>
     {#if showGhost}
-      <div class="ghost-field" aria-hidden="true">
-        <div class="ruler-end-row"><span class="ghost ghost-name"></span><span class="ghost ghost-name"></span></div>
-        <svg class="ruler-svg" width="860" height="88" viewBox="0 0 860 88">
-          <line class="ruler-axis" x1="28" x2="832" y1="44" y2="44" />
-          {#each GHOST_TICKS as tick}
-            <line class="ruler-tick" x1={tick} x2={tick} y1="39" y2="49" />
-          {/each}
-          {#each GHOST_WORDS as [x, y, w, h]}
-            <rect class="ghost" x={x - w / 2} y={44 + y - h / 2} width={w} height={h} rx="5" />
-          {/each}
-        </svg>
+      <div class="ghost-field butterfly-ghost" aria-hidden="true">
+        {#each GHOST_BARS as [left, right]}
+          <div class="butterfly-ghost-row"><span class="ghost butterfly-ghost-bar is-a" style:--bar={left / 100}></span><span class="butterfly-ghost-gap"></span><span class="ghost butterfly-ghost-bar is-b" style:--bar={right / 100}></span></div>
+        {/each}
       </div>
-      <p class="sr-only">Lendo a régua.</p>
+      <p class="sr-only">Lendo as barras.</p>
     {:else if errored}
       <p class="note">Não foi possível carregar a comparação.</p>
-    {:else if model && !model.layout}
+    {:else if model && !model.groups.length}
       <p class="note">Nenhuma palavra neste recorte.</p>
-    {:else if model?.layout}
-      <Ruler {...model.layout} {selected} onpick={pick} />
+    {:else if model && data}
+      <Butterfly groups={model.groups} scale={model.scale} labelA={data.a.person.name} labelB={data.b.person.name} {selected} onpick={pick} ariaLabel={`Barras comparando ${data.a.person.name} e ${data.b.person.name}`} />
     {/if}
   </figure>
   <div class="detail" id="compareDetail">

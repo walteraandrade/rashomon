@@ -133,6 +133,18 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       assert.match(hay, /não entra na régua/, `${label} names own-name words dropped from the ruler`)
     }
   })
+
+  it('no prose sentence refers to the compare figure as "gráfico 3"', () => {
+    const dialog = read('atlas.html').match(/id="helpDialog"[\s\S]*?<\/dialog>/)?.[0] ?? ''
+    for (const [hay, label] of [
+      [dialog, 'dialog'],
+      [read('como-ler.html'), 'como-ler.html'],
+    ] as const) {
+      for (const [, p] of hay.matchAll(/<p>([\s\S]*?)<\/p>/g)) {
+        assert.doesNotMatch(p, /gráfico 3/i, `${label}: ${p.slice(0, 60)}`)
+      }
+    }
+  })
 })
 
 describe('Leitura UI: one stylesheet, one type system', () => {

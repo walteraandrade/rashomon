@@ -67,23 +67,159 @@ describe('the header carries no in-page link to the ruler', () => {
   })
 })
 
-describe('como-ler.html explains the ruler under #comparar', () => {
-  it('carries an anchor id="comparar" explaining position, area and the middle pile', () => {
-    const html = comoLer()
-    assert.match(html, /id="comparar"/)
-    const section = html.match(/<div id="comparar">[\s\S]*?<\/div>/)?.[0] ?? ''
-    assert.ok(section, 'the #comparar section must exist')
-    assert.match(section, /posição/i, 'must explain that position is who the word belongs to')
-    assert.match(section, /de quem/i)
-    assert.match(section, /tamanho/i, 'must explain that area is documents summed')
-    assert.match(section, /document/i)
-    assert.match(section, /somad/i)
-    assert.match(section, /dividida/i, 'must explain the middle pile as a divided word')
+const sectionOf = (html: string, id: string) => html.match(new RegExp(`<div id="${id}">[\\s\\S]*?</div>`))?.[0] ?? ''
+
+// Criterion 17: the facts the butterfly cannot say by itself live in the reading page and in the
+// in-page dialog, which carry the same copy.
+describe('the guide explains the butterfly under #comparar and #help-comparar', () => {
+  const dialog = () => pageMarkup('/').match(/<div id="help-comparar">[\s\S]*?<\/div>/)?.[0] ?? ''
+  const sections = (): [string, string][] => [
+    ['como-ler #comparar', sectionOf(comoLer(), 'comparar')],
+    ['dialog #help-comparar', dialog()],
+  ]
+
+  it('both sections exist and carry the anchor the figure links to', () => {
+    assert.match(comoLer(), /id="comparar"/)
+    for (const [label, text] of sections()) assert.ok(text, `${label} must exist`)
+  })
+
+  it('both state that a bar is a share of that person\'s documents, on one scale for both people', () => {
+    for (const [label, text] of sections()) {
+      assert.match(text, /fatia dos documentos/, label)
+      assert.match(text, /mesma escala para as duas/, label)
+    }
+  })
+
+  it('both name the three groups and what "só" means', () => {
+    for (const [label, text] of sections()) {
+      assert.match(text, /só da primeira pessoa, dos dois e só da segunda/, label)
+      assert.match(text, /barra desta pessoa existe e a da outra não/, label)
+    }
+  })
+
+  it('both say the measure choice changes only which words get a row, and that each person contributes their top words', () => {
+    for (const [label, text] of sections()) {
+      assert.match(text, /“Documentos” ou “PMI ponderado”[\s\S]{0,80}só quais palavras ganham uma linha, nunca o comprimento de uma barra/, label)
+      assert.match(text, /até o dobro de linhas/, label)
+    }
+  })
+
+  it('both say a missing bar can mean below the kept threshold, not zero', () => {
+    for (const [label, text] of sections()) assert.match(text, /abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero/, label)
+  })
+
+  it('does not claim a bar comes out smaller than the real one', () => {
+    for (const [label, text] of sections()) assert.doesNotMatch(text, /um pouco menor/, label)
+  })
+
+  it('both say the own-name words are left out and counted', () => {
+    for (const [label, text] of sections()) {
+      assert.match(text, /nome de uma das duas pessoas não é desenhado/, label)
+      assert.match(text, /quantas palavras saíram aparece embaixo/, label)
+    }
+  })
+
+  it('both describe the bridge as a mark before the word; #ponte keeps its computation', () => {
+    for (const [label, text] of sections()) {
+      assert.match(text, /marca âmbar antes da palavra/, label)
+      assert.match(text, /A ponte não muda nem a escolha nem a ordem das linhas/, label)
+    }
+    const page = sectionOf(comoLer(), 'comparar')
+    assert.match(page, /<h3 id="ponte">Ponte<\/h3>/)
+    assert.match(page, /centralidade de intermediação/)
+  })
+
+  it('neither describes a position axis, a letter size, an overflow list or a PMI clamp for this figure', () => {
+    for (const [label, text] of sections()) {
+      assert.doesNotMatch(text, /posição|tamanho da letra|régua|lista abaixo|não couberam|sublinhad|PMI negativo/i, label)
+    }
+  })
+
+  it('no sentence in the guide refers to the compare figure as "gráfico 3" or its bridge as "sublinhado âmbar" (titles keep the number)', () => {
+    const paragraphs = (html: string) => [...html.matchAll(/<p>([\s\S]*?)<\/p>/g)].map((m) => m[1])
+    const compareParagraphs = [...sections().flatMap(([, text]) => paragraphs(text)), ...paragraphs(pageMarkup('/')).filter((p) => /gráfico 3/i.test(p)), ...paragraphs(comoLer()).filter((p) => /gráfico 3/i.test(p))]
+    for (const p of compareParagraphs) assert.doesNotMatch(p, /gráfico 3|sublinhado âmbar/i, p)
+    const figureKey = pageMarkup('/').match(/id="compare"[\s\S]*?<\/dl>/)?.[0] ?? ''
+    assert.doesNotMatch(figureKey, /gráfico 3(?!<\/span>)|sublinhado âmbar/i)
+    assert.match(figureKey, /butterfly-bridge-mark/)
+  })
+
+  it('the lenses sections point at the compare figure\'s bridge mark by section', () => {
+    const page = sectionOf(comoLer(), 'lentes')
+    assert.match(page, /marca de ponte da comparação entre duas pessoas/)
+    assert.match(page, /<a href="#ponte">Ponte<\/a>/)
+    const help = pageMarkup('/').match(/<div id="help-lentes">[\s\S]*?<\/div>/)?.[0] ?? ''
+    assert.match(help, /marca de ponte da comparação entre duas pessoas/)
+  })
+})
+
+describe('the #compare figure head describes the butterfly', () => {
+  const figure = () => design5().match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
+  const dts = () => [...(figure().match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim())
+
+  it('titles the figure and keeps the eyebrow', () => {
+    assert.match(figure(), /<h2 id="compareTitle">Duas pessoas, palavra a palavra<\/h2>/)
+    assert.match(figure(), /<span class="eyebrow">Gráfico 3<\/span>/)
+  })
+
+  it('says a bar is a share of each person\'s texts and links the guide', () => {
+    assert.match(figure(), /<p class="figure-sub">Cada barra é a fatia dos textos de cada pessoa que traz a palavra\. <a href="\/como-ler#comparar">Como ler<\/a>\.<\/p>/)
+  })
+
+  it('keys Barra, Cor, Ponte and Clique, with no Tamanho or Posição, and a bridge mark on Ponte', () => {
+    assert.deepEqual(dts(), ['Barra', 'Cor', 'Ponte', 'Clique'])
+    assert.match(figure(), /<span class="butterfly-bridge-mark"[^>]*><\/span>Ponte/)
+    assert.match(figure(), /key-pair/)
+  })
+
+  it('keeps the measure select with its two options and aria-label', () => {
+    const select = figure().match(/<select id="compareMeasure"[\s\S]*?<\/select>/)?.[0] ?? ''
+    assert.match(select, /aria-label="Medida"/)
+    assert.equal(select.match(/<option/g)?.length, 2)
+    assert.match(select, /value="count"/)
+    assert.match(select, /value="pmi"/)
+  })
+
+  it('holds the container as a figure for the butterfly, not the ruler', () => {
+    const tag = figure().match(/<figure[^>]*id="compareRuler"[^>]*>/)?.[0] ?? ''
+    assert.ok(tag, '#compareRuler is a <figure>')
+    assert.match(tag, /class="butterfly"/)
+    assert.doesNotMatch(tag, /\bruler\b/)
+  })
+})
+
+describe('atlas.css styles the butterfly rows', () => {
+  const css = () => readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+
+  it('carries the row, bar, count and bridge-mark rules', () => {
+    for (const rule of [/\.butterfly-row \{/, /\.butterfly-bar \{[^}]*calc\(var\(--bar\)/, /\.butterfly-count \{[^}]*font-family:\s*var\(--mono\)/, /\.butterfly-bridge-mark \{[^}]*background:\s*var\(--accent\)/, /\.butterfly-axis-label\.cmp-a \{[^}]*var\(--cmp-a\)/, /\.butterfly-axis-label\.cmp-b \{[^}]*var\(--cmp-b\)/])
+      assert.match(css(), rule)
+  })
+
+  it('tints the bars with their own side hue and the selected row with both, never --accent', () => {
+    assert.match(css(), /\.butterfly-bar\.cmp-a \{[^}]*var\(--cmp-a\)/)
+    assert.match(css(), /\.butterfly-bar\.cmp-b \{[^}]*var\(--cmp-b\)/)
+    const selected = css().match(/\.butterfly-row\.is-selected \{[^}]*\}/)?.[0] ?? ''
+    assert.match(selected, /background:[^;}]*color-mix\([^;}]*var\(--cmp-a\)[^;}]*var\(--cmp-b\)/)
+    assert.doesNotMatch(selected, /--accent/)
+  })
+
+  it('never underlines the bridge and stacks the row under 520px', () => {
+    assert.doesNotMatch(css().match(/\.butterfly-[\w-]*bridge[^{]*\{[^}]*\}/g)?.join('') ?? '', /text-decoration/)
+    const narrow = css().match(/@media \(max-width: 519px\) \{[\s\S]*?\n\}/g)?.find((m) => /\.butterfly-row/.test(m)) ?? ''
+    assert.ok(narrow, 'a max-width: 519px block must restyle .butterfly-row')
+  })
+
+  it('extends the loading dim to the butterfly and keeps the ruler selectors for the other figures', () => {
+    assert.match(css(), /\.compare \.butterfly[^{]*\{[^}]*transition:\s*opacity/)
+    assert.match(css(), /\.figure\.is-loading \.butterfly/)
+    assert.match(css(), /\.rising \.ruler/)
+    assert.match(css(), /\.lenses \.ruler/)
   })
 })
 
 describe('atlas.css styles words, not dots (issue #99 AC7)', () => {
-  it('carries the ruler word rules and no longer carries the dot rules', () => {
+  it('carries the ruler word rules Rising and Lenses still use and no longer carries the dot rules', () => {
     const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
     assert.match(css, /\.ruler-text \{/)
     // Neither the cursor nor the pick repaints the word: the box behind it carries both, in the
@@ -110,6 +246,7 @@ describe('figure 3 as a Svelte component (#293)', () => {
     for (const id of ['compareTitle', 'compareA', 'compareB', 'compareDays', 'compareSource', 'compareMeasure', 'compareLimit', 'compareStatus', 'compareRuler', 'compareDetail', 'compareHiddenNote'])
       assert.match(html, new RegExp(`id="${id}"`), `#${id}`)
     assert.ok(existsSync(join(root, 'src', 'ui', 'Compare.svelte')))
-    assert.ok(existsSync(join(root, 'src', 'ui', 'Ruler.svelte')))
+    assert.ok(existsSync(join(root, 'src', 'ui', 'Butterfly.svelte')))
+    assert.ok(existsSync(join(root, 'src', 'ui', 'Ruler.svelte')), 'Rising and Lenses still draw a ruler')
   })
 })

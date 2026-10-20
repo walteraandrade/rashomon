@@ -283,11 +283,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
-.compare .ruler, .compare .detail, .rising .ruler, .rising .note,
+.compare .ruler, .compare .butterfly, .compare .detail, .rising .ruler, .rising .note,
 .lenses .ruler, .lenses .detail, .attention .attention-chart, .attention .note, .agenda .agenda-grid, .persistence .persistence-chart { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
-.figure.is-loading .ruler, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
+.figure.is-loading .ruler, .figure.is-loading .butterfly, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
 .figure.is-loading .attention-chart, .figure.is-loading .agenda-grid, .figure.is-loading .persistence-chart,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
@@ -766,6 +766,63 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .detail-sides dd.empty-hint { color: var(--muted); font-style: italic; }
 #compareHiddenNote { margin: 10px 0 0; }
 #compareA, #compareB { font-family: var(--mono); }
+
+/* ---------- the butterfly (figure 3, compare two people, issue #325): one row per word, the word
+   in the middle, one bar per person growing outward from it. A bar is the person's share of her
+   own documents on one scale for both sides, so a bar is never longer because the other person
+   wrote more. The axes and the rows share one grid so a tick sits over the bar length it names.
+   --bf-room is the strip past a bar's end that the count lives in, so a full bar never clips it. ---------- */
+.butterfly { --bf-label: 224px; --bf-room: 48px; --bf-hover: 7%; margin: 18px 0 0; padding: 6px 0 10px; }
+.butterfly-axes, .butterfly-row, .butterfly-ghost-row { display: grid; grid-template-columns: minmax(0, 1fr) var(--bf-label) minmax(0, 1fr); align-items: center; }
+.butterfly-axes { padding-bottom: var(--space-2); }
+.butterfly-axis { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.butterfly-axis.is-a { grid-column: 1; align-items: flex-end; }
+.butterfly-axis.is-b { grid-column: 3; align-items: flex-start; }
+.butterfly-axis-label { font-family: var(--mono); font-size: var(--t-xs); font-weight: 600; overflow-wrap: anywhere; }
+.butterfly-axis-label.cmp-a { color: var(--cmp-a); }
+.butterfly-axis-label.cmp-b { color: var(--cmp-b); }
+.butterfly-axis-ticks { position: relative; align-self: stretch; height: 1.5em; border-bottom: 1px solid var(--line); }
+.butterfly-axis.is-a .butterfly-axis-ticks { margin-left: var(--bf-room); }
+.butterfly-axis.is-b .butterfly-axis-ticks { margin-right: var(--bf-room); }
+.butterfly-axis-tick { position: absolute; bottom: var(--space-1); transform: translateX(-50%); font-family: var(--mono); font-size: var(--t-micro); font-variant-numeric: tabular-nums; color: var(--muted); }
+.butterfly-axis.is-a .butterfly-axis-tick { left: calc((1 - var(--at)) * 100%); }
+.butterfly-axis.is-b .butterfly-axis-tick { left: calc(var(--at) * 100%); }
+.butterfly-group { margin-top: var(--space-4); }
+.butterfly-group-head { margin: 0 0 var(--space-1); max-width: none; font-family: var(--mono); font-size: var(--t-micro); font-weight: 500; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); text-align: center; }
+.butterfly-row { min-height: 28px; padding: 2px 0; border-radius: 2px; cursor: pointer; outline: none; }
+.butterfly-row:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--cmp-a) var(--bf-hover), transparent), color-mix(in srgb, var(--cmp-b) var(--bf-hover), transparent)); }
+.butterfly-row:focus-visible { background: linear-gradient(90deg, color-mix(in srgb, var(--cmp-a) 12%, transparent), color-mix(in srgb, var(--cmp-b) 12%, transparent)); }
+.butterfly-row.is-selected { background: linear-gradient(90deg, color-mix(in srgb, var(--cmp-a) 20%, transparent), color-mix(in srgb, var(--cmp-b) 20%, transparent)); }
+.butterfly-side { display: flex; align-items: center; min-width: 0; }
+.butterfly-side.is-a { grid-column: 1; }
+.butterfly-side.is-b { grid-column: 3; }
+.butterfly-track { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; }
+.butterfly-side.is-a .butterfly-track { flex-direction: row-reverse; }
+.butterfly-bar { flex: 0 0 calc(var(--bar) * (100% - var(--bf-room))); height: 12px; border-radius: 2px; }
+.butterfly-bar.cmp-a { background: var(--cmp-a); }
+.butterfly-bar.cmp-b { background: var(--cmp-b); }
+.butterfly-count { flex: none; font-family: var(--mono); font-size: var(--t-2xs); font-variant-numeric: tabular-nums; color: var(--muted); }
+.butterfly-side.is-a .butterfly-count { margin-right: var(--space-2); }
+.butterfly-side.is-b .butterfly-count { margin-left: var(--space-2); }
+.butterfly-label { grid-column: 2; display: flex; align-items: center; justify-content: center; min-width: 0; padding: 0 var(--space-2); font-family: var(--mono); font-size: var(--t-xs); color: var(--ink); }
+.butterfly-word { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.butterfly-bridge-mark { display: inline-block; flex: none; width: 8px; height: 8px; margin-right: var(--space-2); border-radius: 50%; background: var(--accent); }
+.butterfly .note { margin-top: var(--space-3); }
+.butterfly-ghost-row { min-height: 28px; padding: 2px 0; }
+.butterfly-ghost-bar { height: 12px; width: calc(var(--bar) * (100% - var(--bf-room))); }
+.butterfly-ghost-bar.is-a { grid-column: 1; justify-self: end; }
+.butterfly-ghost-bar.is-b { grid-column: 3; justify-self: start; }
+.butterfly-ghost-gap { grid-column: 2; }
+@media (max-width: 519px) {
+  .butterfly { --bf-label: 12px; --bf-room: 48px; }
+  .butterfly-axes { grid-template-columns: minmax(0, 1fr) var(--space-4) minmax(0, 1fr); }
+  .butterfly-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--space-4); row-gap: var(--space-1); padding: var(--space-1) 0 var(--space-2); }
+  .butterfly-label { grid-column: 1 / -1; grid-row: 1; justify-content: flex-start; padding: 0; }
+  .butterfly-side.is-a { grid-column: 1; grid-row: 2; }
+  .butterfly-side.is-b { grid-column: 2; grid-row: 2; }
+  .butterfly-side { min-height: 12px; }
+  .butterfly-ghost-row { grid-template-columns: minmax(0, 1fr) var(--space-4) minmax(0, 1fr); }
+}
 
 /* ---------- the week (figure 5, calendar days, issue #147): seven columns, oldest at the
    left; each column is a day head (the .stat pattern above: --accent label, ink number) and an

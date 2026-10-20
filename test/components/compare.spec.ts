@@ -922,7 +922,7 @@ const atlasCard = () =>
   void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '21' }) }] })
 
 describe('Compare lens mode (#326)', () => {
-  it('lens mode: request params and defaults', async () => {
+  it('lens mode: AC2: lenses: request params and defaults', async () => {
     await startLens()
     expect(lensCalls()).toHaveLength(1)
     expect(compareCalls()).toEqual([])
@@ -943,7 +943,7 @@ describe('Compare lens mode (#326)', () => {
     expect(of('docs')).toEqual([])
   })
 
-  it('lens mode: nothing fetches before bootData.ready, and the ghost stands in the chart and the detail', async () => {
+  it('lens mode: AC2: nothing fetches before bootData.ready, and the ghost stands in the chart and the detail', async () => {
     await start()
     expect(calls).toEqual([])
     expect($('compareRuler').hidden).toBe(false)
@@ -962,7 +962,7 @@ describe('Compare lens mode (#326)', () => {
     expect(rows()).toHaveLength(1)
   })
 
-  it('lens mode: seeds from the querystring, a bare a= never seeds lens A', async () => {
+  it('lens mode: AC3: lenses: seeds from the querystring, a bare a= never seeds lens A', async () => {
     boot({ search: '?person=bolsonaro&lenses.a=all&lenses.b=lean:right&days=7&limit=60' })
     await start()
     await settle(220)
@@ -1011,7 +1011,7 @@ describe('Compare lens mode (#326)', () => {
     expect(c.params.get('limit')).toBe('60')
   })
 
-  it('lens mode: an unknown lens token, limit or days is ignored and the side keeps its default', async () => {
+  it('lens mode: AC3: lenses: an unknown lens token or option stays on the default (never all), an unknown limit or days is ignored', async () => {
     await startLens('lenses.a=lean:nope&lenses.b=source:nope&limit=7&days=9')
     expect(select('compareLensA').value).toBe('source:bluesky')
     expect(select('compareLensB').value).toBe('source:gnews')
@@ -1021,7 +1021,7 @@ describe('Compare lens mode (#326)', () => {
     expect(lensCalls()[0].params.get('limit')).toBe('20')
   })
 
-  it('lens mode: a later setBoot never re-seeds nor refetches', async () => {
+  it('lens mode: AC3: a later setBoot never re-seeds nor refetches', async () => {
     await startLens('lenses.days=7')
     expect(lensCalls()).toHaveLength(1)
     await change('compareDays', '21')
@@ -1033,14 +1033,14 @@ describe('Compare lens mode (#326)', () => {
     expect(calls.length).toBe(before)
   })
 
-  it('lens mode: the Veículo optgroup lists each top domain once and skips rows without a domain', async () => {
+  it('lens mode: AC4: lenses: the Veículo optgroup lists each top domain once and skips rows without a domain', async () => {
     handlers.sources = () => [folha, { domain: 'folha.uol.com.br', docs: 3 }, { domain: null, docs: 2 }, g1]
     await startLens()
     expect(outletValues('compareLensAOutlets')).toEqual(['domain:folha.uol.com.br', 'domain:g1.globo.com'])
     expect(outletValues('compareLensBOutlets')).toEqual(['domain:folha.uol.com.br', 'domain:g1.globo.com'])
   })
 
-  it('lens mode: domain seed deferred until optgroup fills', async () => {
+  it('lens mode: AC4: lenses: domain seed deferred until optgroup fills', async () => {
     const gate = held()
     handlers.sources = () => gate.promise
     await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=lean:left')
@@ -1056,7 +1056,7 @@ describe('Compare lens mode (#326)', () => {
     expect(lensCalls()[0].params.get('a')).toBe('domain:folha.uol.com.br')
   })
 
-  it('lens mode: a domain seed the optgroup never gets stays on the default, never on all', async () => {
+  it('lens mode: AC4: lenses: a domain seed the optgroup never gets stays on the default, never all', async () => {
     handlers.sources = () => [g1]
     await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=domain:nowhere.example')
     expect(select('compareLensA').value).toBe('source:bluesky')
@@ -1069,7 +1069,7 @@ describe('Compare lens mode (#326)', () => {
     ['A', 'compareLensA', 'a'],
     ['B', 'compareLensB', 'b'],
   ]) {
-    it(`lens mode: a touched ${side} skips the deferred domain seed`, async () => {
+    it(`lens mode: AC4: lenses: touched side skips domain seed (${side})`, async () => {
       const gate = held()
       handlers.sources = () => gate.promise
       await startLens(`lenses.${param}=domain:folha.uol.com.br`)
@@ -1082,7 +1082,7 @@ describe('Compare lens mode (#326)', () => {
     })
   }
 
-  it('lens mode: a non-domain seed applies at once and a reader change survives the pending fill', async () => {
+  it('lens mode: AC4: lenses: a non-domain seed applies at once and a reader change survives the pending fill', async () => {
     const gate = held()
     handlers.sources = () => gate.promise
     await startLens('lenses.a=lean:left')
@@ -1095,7 +1095,7 @@ describe('Compare lens mode (#326)', () => {
     expect(lensCalls().pop()!.params.get('a')).toBe('source:rss')
   })
 
-  it('lens mode: a limit change while /sources is in flight keeps the deferred domain seed', async () => {
+  it('lens mode: AC4: lenses: a limit change while /sources is in flight keeps the deferred domain seed', async () => {
     const gate = held()
     handlers.sources = () => gate.promise
     await startLens('lenses.a=domain:folha.uol.com.br')
@@ -1122,7 +1122,7 @@ describe('Compare lens mode (#326)', () => {
     })
   }
 
-  it('lens mode: stale /sources response ignored (another person)', async () => {
+  it('lens mode: AC4: lenses: stale /sources response ignored (another person)', async () => {
     const first = held()
     let n = 0
     handlers.sources = (call) => {
@@ -1141,7 +1141,7 @@ describe('Compare lens mode (#326)', () => {
     expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
   })
 
-  it('lens mode: stale /sources response ignored (days back to its starting value)', async () => {
+  it('lens mode: AC4: lenses: stale /sources response ignored (days back to its starting value)', async () => {
     const first = held()
     let n = 0
     handlers.sources = () => {
@@ -1157,7 +1157,7 @@ describe('Compare lens mode (#326)', () => {
     expect(outletValues('compareLensAOutlets')).toEqual(['domain:fresh.example'])
   })
 
-  it('lens mode: person and days change keep or drop a domain', async () => {
+  it('lens mode: AC5: lenses: person and days change keep or drop a domain', async () => {
     await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=lean:left')
     expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
 
@@ -1200,7 +1200,7 @@ describe('Compare lens mode (#326)', () => {
     expect(lensCalls().pop()!.params.get('b')).toBe('all')
   })
 
-  it('lens mode: a limit change keeps both sides and does not refetch /sources', async () => {
+  it('lens mode: AC5: lenses: a limit change keeps both sides and does not refetch /sources', async () => {
     await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=lean:left')
     const sources = of('sources').length
     await change('compareLimit', '100')
@@ -1217,7 +1217,7 @@ describe('Compare lens mode (#326)', () => {
     ['compareLimit', '100', 'limit'],
     ['comparePerson', 'bolsonaro', 'person'],
   ]) {
-    it(`lens mode: control changes refetch and release (#${id})`, async () => {
+    it(`lens mode: AC5: lenses: control changes refetch and release (#${id})`, async () => {
       await startLens()
       const before = lensCalls().length
       await change(id, value)
@@ -1229,7 +1229,7 @@ describe('Compare lens mode (#326)', () => {
     })
   }
 
-  it('lens mode: status notice for identical lenses', async () => {
+  it('lens mode: AC6: lenses: status notice for identical lenses', async () => {
     await startLens()
     expect($('compareStatus').hidden).toBe(true)
     await change('compareLensB', 'source:bluesky')
@@ -1243,7 +1243,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareStatus').hidden).toBe(true)
   })
 
-  it('lens mode: #compareStatus stays hidden while the ghost shows', async () => {
+  it('lens mode: AC6: #compareStatus stays hidden while the ghost shows', async () => {
     const gate = held()
     handlers.lenses = () => gate.promise
     await startLens()
@@ -1254,7 +1254,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareStatus').hidden).toBe(false)
   })
 
-  it('lens mode: click opens a two-sided docs card owned by compare', async () => {
+  it('lens mode: AC7: lenses: click opens two-sided docs card', async () => {
     handlers.lenses = () => lensPayload([reforma], 'domain:folha.uol.com.br', 'lean:right')
     await startLens('days=7')
     click(rows()[0])
@@ -1285,7 +1285,7 @@ describe('Compare lens mode (#326)', () => {
     expect(text).toContain('Lula')
   })
 
-  it('lens mode: a source lens sends source=, an all lens sends source=all and no domain or lean', async () => {
+  it('lens mode: AC7: lenses: a source lens sends source=, an all lens sends source=all and no domain or lean', async () => {
     handlers.lenses = () => lensPayload([reforma], 'source:rss', 'all')
     await startLens()
     click(rows()[0])
@@ -1300,7 +1300,7 @@ describe('Compare lens mode (#326)', () => {
     expect(document.body.textContent).toContain('Tudo')
   })
 
-  it('lens mode: a lean lens on the other side and pressing Enter or Space on a row picks it', async () => {
+  it('lens mode: AC7: lenses: a lean lens on the other side and pressing Enter or Space on a word picks it', async () => {
     handlers.lenses = () => lensPayload([reforma], 'lean:left', 'source:gdelt')
     await startLens()
     for (const key of ['Enter', ' ']) {
@@ -1318,7 +1318,7 @@ describe('Compare lens mode (#326)', () => {
     expect(docs.some((c) => c.params.get('source') === 'gdelt')).toBe(true)
   })
 
-  it('lens mode: the same row again, the background and Escape each clear the pick and close the card', async () => {
+  it('lens mode: AC7: the same word again, the background and Escape each clear the pick and close the card', async () => {
     await startLens()
     const releasers: [string, () => void][] = [
       ['same row', () => click(rows()[0])],
@@ -1337,7 +1337,7 @@ describe('Compare lens mode (#326)', () => {
     }
   })
 
-  it('lens mode: control change releases own card only', async () => {
+  it('lens mode: AC8: lenses: control change releases own card only', async () => {
     await startLens()
     for (const [id, value] of [
       ['compareLensA', 'lean:left'],
@@ -1362,7 +1362,7 @@ describe('Compare lens mode (#326)', () => {
     expect(docsCard.openedBy('atlas')).toBe(true)
   })
 
-  it('lens mode: a days change closes the compare card at once, before the new data lands', async () => {
+  it('lens mode: a days change closes the lenses card at once, before the new data lands', async () => {
     await startLens()
     click(rows()[0])
     await settle()
@@ -1374,7 +1374,7 @@ describe('Compare lens mode (#326)', () => {
     expect(rows()[0].getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('lens mode: resize keeps the pick', async () => {
+  it('lens mode: AC8: lenses: resize keeps the pick', async () => {
     await startLens()
     click(rows()[0])
     await settle()
@@ -1390,7 +1390,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareRuler').innerHTML).toBe(markup)
   })
 
-  it('lens mode: a resize during loading repaints nothing', async () => {
+  it('lens mode: AC8: a resize during loading repaints nothing', async () => {
     await startLens()
     const gate = held()
     handlers.lenses = () => gate.promise
@@ -1407,7 +1407,7 @@ describe('Compare lens mode (#326)', () => {
     expect(rows()).toHaveLength(1)
   })
 
-  it('lens mode: a second click on the same row after a resize still releases', async () => {
+  it('lens mode: a second click on the same word after a resize still releases', async () => {
     await startLens()
     click(rows()[0])
     await settle()
@@ -1422,7 +1422,7 @@ describe('Compare lens mode (#326)', () => {
     expect(rows()[0].getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('lens mode: a click on the header, the subtitle, a select, a combobox or the detail keeps the pick and the card', async () => {
+  it('lens mode: AC8: a click on the header, the subtitle, a select, a combobox or the detail keeps the pick and the card', async () => {
     await startLens()
     click(rows()[0])
     await settle()
@@ -1435,7 +1435,7 @@ describe('Compare lens mode (#326)', () => {
     }
   })
 
-  it('lens mode: stale pick dropped mid-reload (data lands)', async () => {
+  it('lens mode: AC8: lenses: stale pick dropped mid-reload (data lands)', async () => {
     await startLens()
     const gate = held()
     handlers.lenses = () => gate.promise
@@ -1452,7 +1452,7 @@ describe('Compare lens mode (#326)', () => {
     expect(rows()[0].getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('lens mode: stale pick dropped mid-reload (reload fails)', async () => {
+  it('lens mode: AC8: lenses: stale pick dropped mid-reload (reload fails)', async () => {
     await startLens()
     const gate = held()
     handlers.lenses = () => gate.promise
@@ -1467,7 +1467,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareRuler').textContent).toContain('Não foi possível carregar a comparação.')
   })
 
-  it('lens mode: a card another figure opened over a pick made on dimmed data survives the new data', async () => {
+  it('lens mode: AC8: a card another figure opened over a pick made on dimmed data survives the new data', async () => {
     await startLens()
     click(rows()[0])
     await settle()
@@ -1477,7 +1477,7 @@ describe('Compare lens mode (#326)', () => {
     expect(docsCard.openedBy('atlas')).toBe(true)
   })
 
-  it('lens mode: bridges applied after paint, aborted on change', async () => {
+  it('lens mode: AC9: lenses: bridges applied after paint, aborted on change', async () => {
     const terms: CompareTerm[] = [
       { term: 'stf', kind: 'word', a: side(5), b: side(5) },
       { term: 'pix', kind: 'word', a: side(2), b: null },
@@ -1501,7 +1501,7 @@ describe('Compare lens mode (#326)', () => {
     expect(calls.filter((c) => c.path === '/api/compare/bridges')).toEqual([])
   })
 
-  it('lens mode: a control change during the bridge load aborts it and its late result is dropped', async () => {
+  it('lens mode: AC9: a control change during the bridge load aborts it and its late result is dropped', async () => {
     const late = held()
     let first: Call | undefined
     handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
@@ -1520,7 +1520,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareRuler').querySelectorAll('[data-bridge]')).toHaveLength(0)
   })
 
-  it('lens mode: a control change aborts the bridge load before the new data lands', async () => {
+  it('lens mode: AC9: a control change aborts the bridge load before the new data lands', async () => {
     let first: Call | undefined
     handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
     handlers.bridges = (call) => {
@@ -1533,7 +1533,7 @@ describe('Compare lens mode (#326)', () => {
     expect(first!.signal?.aborted).toBe(true)
   })
 
-  it('lens mode: unmounting aborts the in-flight bridge request', async () => {
+  it('lens mode: AC9: unmounting aborts the in-flight bridge request', async () => {
     let first: Call | undefined
     handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
     handlers.bridges = (call) => {
@@ -1548,7 +1548,7 @@ describe('Compare lens mode (#326)', () => {
     expect(first!.signal?.aborted).toBe(true)
   })
 
-  it('lens mode: a failed bridge request leaves the chart as painted', async () => {
+  it('lens mode: AC9: a failed bridge request leaves the chart as painted', async () => {
     handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
     handlers.bridges = () => {
       throw new Error('nope')
@@ -1579,7 +1579,7 @@ describe('Compare lens mode (#326)', () => {
     expect(bridge.params.get('ids')).toBe('word:stf')
   })
 
-  it('lens mode: name word and bridge detail copy', async () => {
+  it('lens mode: AC9: lenses: name word and bridge detail copy', async () => {
     handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(7, 1.5), b: side(3, 0.5) }])
     handlers.bridges = () => ({ bridges: { 'word:stf': 1 } })
     await startLens()
@@ -1592,7 +1592,7 @@ describe('Compare lens mode (#326)', () => {
     expect([...$('compareDetail').querySelectorAll('dt')].map((e) => e.textContent)).toEqual(['Bluesky', 'Google News'])
   })
 
-  it('lens mode: the detail line labels each side by its lens and reads "nenhum documento" for a null side', async () => {
+  it('lens mode: AC9: the detail line labels each side by its lens and reads "nenhum documento" for a null side', async () => {
     handlers.lenses = () => lensPayload([reforma], 'domain:folha.uol.com.br', 'lean:right')
     await startLens()
     click(rows()[0])
@@ -1614,7 +1614,7 @@ describe('Compare lens mode (#326)', () => {
     expect([...document.querySelectorAll('#docs .docs-side-name')].map((e) => e.textContent)).toEqual(['folha.uol.com.br', 'Direita'])
   })
 
-  it('lens mode: own-name words are dropped from the chart and counted in #compareHiddenNote', async () => {
+  it('lens mode: AC11: own-name words are dropped from the chart and counted in #compareHiddenNote', async () => {
     await startLens()
     expect($('compareHiddenNote').hidden).toBe(true)
     expect($('compareHiddenNote').textContent).toBe('')
@@ -1631,7 +1631,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareHiddenNote').hidden).toBe(true)
   })
 
-  it('lens mode: empty state', async () => {
+  it('lens mode: AC10: lenses: empty state', async () => {
     handlers.lenses = () => lensPayload([])
     await startLens()
     expect($('compareRuler').hidden).toBe(false)
@@ -1641,7 +1641,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareDetail').textContent).toContain('Clique numa palavra para ver os números das duas lentes.')
   })
 
-  it('lens mode: /lenses failure and retry', async () => {
+  it('lens mode: AC10: lenses: /lenses failure and retry', async () => {
     handlers.lenses = () => {
       throw new Error('offline')
     }
@@ -1669,7 +1669,7 @@ describe('Compare lens mode (#326)', () => {
     expect(rows()).toHaveLength(1)
   })
 
-  it('lens mode: peopleError', async () => {
+  it('lens mode: AC10: lenses: peopleError', async () => {
     const reload = vi.fn()
     vi.stubGlobal('location', { ...window.location, reload })
     await startLens('', { people: [], peopleError: new Error('down') })
@@ -1687,14 +1687,14 @@ describe('Compare lens mode (#326)', () => {
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
-  it('lens mode: no people says so and fetches nothing', async () => {
+  it('lens mode: AC10: no people says so and fetches nothing', async () => {
     await startLens('', { people: [] })
     expect(calls).toEqual([])
     expect($('compareRuler').hidden).toBe(true)
     expect($('compareDetail').textContent).toContain('Nenhuma pessoa cadastrada.')
   })
 
-  it('lens mode: combobox sync after programmatic writes', async () => {
+  it('lens mode: AC12: lenses: combobox sync after programmatic writes', async () => {
     await startLens('lenses.a=lean:left')
     for (const id of ['compareLensA', 'compareLensB']) expect(select(id).hasAttribute('hidden')).toBe(true)
     expect(input('compareLensAInput').value).toBe('Esquerda')
@@ -1708,7 +1708,7 @@ describe('Compare lens mode (#326)', () => {
     expect($('compareLensBList').getAttribute('aria-label')).toBe('Opções da lente B')
   })
 
-  it('lens mode: an optgroup refill that drops a domain resyncs the input text', async () => {
+  it('lens mode: AC12: lenses: an optgroup refill that drops a domain resyncs the input text', async () => {
     await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=domain:g1.globo.com')
     expect(input('compareLensAInput').value).toBe('folha.uol.com.br')
     expect(input('compareLensBInput').value).toBe('g1.globo.com')
@@ -1718,7 +1718,7 @@ describe('Compare lens mode (#326)', () => {
     expect(input('compareLensBInput').value).toBe('g1.globo.com')
   })
 
-  it('lens mode: picking a listbox option writes the select, fires change and the figure reloads', async () => {
+  it('lens mode: AC12: picking a listbox option writes the select, fires change and the figure reloads', async () => {
     await startLens()
     const before = lensCalls().length
     let changes = 0
@@ -1754,7 +1754,7 @@ describe('Compare lens mode (#326)', () => {
     expect(rows()[0].getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('lens mode: Fonte options equal SOURCES', async () => {
+  it('lens mode: AC13: lenses: Fonte options equal SOURCES', async () => {
     await startLens()
     for (const id of ['compareLensA', 'compareLensB']) {
       const groups = [...select(id).querySelectorAll('optgroup')]
@@ -1765,7 +1765,7 @@ describe('Compare lens mode (#326)', () => {
     }
   })
 
-  it('lens mode: the ids exist and the limit options are 20/40/60/100', async () => {
+  it('lens mode: AC13: the ids exist and the limit options are 20/40/60/100', async () => {
     await startLens()
     for (const id of ['compareTitle', 'compareMode', 'comparePerson', 'compareLensA', 'compareLensB', 'compareLensAOutlets', 'compareLensBOutlets', 'compareLensAInput', 'compareLensAList', 'compareLensBInput', 'compareLensBList', 'compareDays', 'compareLimit', 'compareStatus', 'compareRuler', 'compareDetail', 'compareHiddenNote', 'compareThinNote']) {
       expect(document.getElementById(id), id).not.toBeNull()
@@ -1819,21 +1819,21 @@ describe('Compare lens mode (#326)', () => {
   })
 
   for (const days of ['30', '60'])
-    it(`lens mode: a shared link with days=${days} leaves the select on 21 and requests days=21 on both routes`, async () => {
+    it(`lens mode: AC25: a shared link with days=${days} leaves the select on 21 and requests days=21 on both routes`, async () => {
       await startLens(`days=${days}`)
       expect(select('compareDays').value).toBe('21')
       expect(lensCalls()[0].params.get('days')).toBe('21')
       expect(of('sources')[0].params.get('days')).toBe('21')
     })
 
-  it('lens mode: a shared link with days=7 selects 7 and the first /lenses and /sources carry it', async () => {
+  it('lens mode: AC25: a shared link with days=7 still selects 7 and the first /lenses and /sources carry it', async () => {
     await startLens('days=7')
     expect(select('compareDays').value).toBe('7')
     expect(lensCalls()[0].params.get('days')).toBe('7')
     expect(of('sources')[0].params.get('days')).toBe('7')
   })
 
-  it('lens mode: the day select offers exactly 7 and 21 with 21 selected, and the first /lenses and /sources carry days=21', async () => {
+  it('lens mode: AC24: the day select offers exactly 7 and 21, in that order, with 21 selected, and the first /lenses and /sources carry days=21', async () => {
     await startLens()
     expect([...select('compareDays').options].map((o) => o.value)).toEqual(['7', '21'])
     expect(select('compareDays').value).toBe('21')

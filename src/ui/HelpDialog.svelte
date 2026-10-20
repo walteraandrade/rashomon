@@ -73,7 +73,7 @@
         <p><b>Mesmo recorte.</b> Se as duas lentes forem exatamente a mesma, aparece o aviso “Os dois lados mostram o mesmo recorte”. Uma lente inválida ou vazia volta para “Tudo”, o corpus inteiro daquele lado, sem erro.</p>
         <p><b>Poucos textos.</b> Uma lente com menos de 50 textos da pessoa ganha uma nota embaixo dizendo quantos são: leia com cuidado, porque poucas palavras dominam a fatia.</p>
         <p><b>Barra que falta.</b> Uma barra ausente pode querer dizer que a palavra ficou abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero. O próprio nome da pessoa não entra; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas.</p>
-        <p><b>Ponte.</b> A marca âmbar antes da palavra é a mesma da comparação entre duas pessoas, com as duas lentes no lugar das duas pessoas: é a palavra que as duas lentes precisam para falar da pessoa.</p>
+        <p><b>Ponte.</b> É a ponte da comparação entre duas pessoas, com as duas lentes no lugar delas: a marca âmbar antes da palavra que as duas lentes precisam para falar da pessoa.</p>
       </div>
     </div>
     <div id="help-em-alta">

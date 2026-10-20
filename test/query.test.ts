@@ -642,7 +642,7 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
     const attr = (n: Node, name: string) => n.attrs?.find((a) => a.name === name)?.value
     const text = (n: Node): string => (n.childNodes ?? []).map((c) => (c.tagName ? text(c) : c.value ?? '')).join('')
     const page = walk(parse(pageMarkup('/')) as Node)
-    const ids = ['days', 'testimonyDays', 'compareDays', 'lensesDays', 'agendaDays', 'comentionDays']
+    const ids = ['days', 'testimonyDays', 'compareDays', 'agendaDays', 'comentionDays']
     for (const id of ids) {
       const select = page.find((n) => n.tagName === 'select' && attr(n, 'id') === id)
       assert.ok(select, `atlas.html has no #${id}`)
@@ -650,7 +650,7 @@ describe('days enumeration acceptance criteria (issue #111)', () => {
       assert.deepEqual(options.map((o) => Number(attr(o, 'value'))), DAYS, id)
       const bound = attr(select, 'value') !== undefined
       if (!bound) assert.deepEqual(options.filter((o) => attr(o, 'selected') !== undefined).map((o) => attr(o, 'value')), ['21'], id)
-      assert.equal(text(options[1]), id === 'lensesDays' ? '21 dias' : 'últimos 21 dias', id)
+      assert.equal(text(options[1]), 'últimos 21 dias', id)
     }
   })
 

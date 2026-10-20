@@ -430,46 +430,53 @@ Two key forms, read in this order:
 
 The figure ids are `atlas` (figure 1, `#workspace`), `testimony` (figure 2, `#testimony`),
 `compare` (figure 3, `#compare`), `rising` (figure 4, `#rising`), `week` (figure 5, `#week`),
-`lenses` (figure 6, `#lenses`), `attention` (figure 7, `#attention`), `agenda` (figure 8,
-`#agenda`), `comention` (figure 9, `#comention`) and `persistence` (figure 10, `#persistence`). Figure 1 reads `person`,
+`attention` (figure 6, `#attention`), `agenda` (figure 7, `#agenda`), `comention` (figure 8,
+`#comention`) and `persistence` (figure 9, `#persistence`). Figure 1 reads `person`,
 `days`, `source`, `sort` and `limit`; figure 2 reads `person`, `days` and `source` — it has no
 sort or limit control, matching what `narrowToTestimony` and `narrowToSources` already drop.
 Figure 3 reads `a` (bare fallback `person`, same as figure 1 and 2's own `person` key), `b`,
-`days`, `source`, `limit` and `measure` — `b` and `measure` have no bare equivalent, since no
-other figure has a second person or a measure selector. Figure 4 reads `person` and `source`
+`days`, `source`, `limit`, `measure` and `mode` — `b`, `measure` and `mode` have no bare equivalent, since no
+other figure has a second person, a measure selector or a mode. `compare.mode` takes `pessoas` or
+`recortes` (prefixed only; any other value is ignored). `recortes` is the lens mode: one person read
+through two lenses, a lens being `domain:<host>`, `lean:<value>` or `source:<name>`. The legacy
+`lenses.person`, `lenses.a`, `lenses.b`, `lenses.days` and `lenses.limit` keys still open lens mode (any
+one of them does, with `compare.mode` absent or invalid) and seed it: `person` falls back to the bare
+`person`, `days` and `limit` to their bare keys, while `a` and `b` never fall back to a bare key, so a
+bare `?a=` never leaks into a lens. Where both seeds name `days` or `limit`, the opening mode's wins; an unknown lens token, or a `domain:`
+the person's outlets never include, leaves that side on its default (`source:bluesky` and `source:gnews`). Figure 4 reads `person` and `source`
 only — its `days` (7), `baseline` (14), `kind` and `limit`/`min` are the route's own fixed
 values, sent explicitly by the figure and never seeded from the querystring. Figure 5 reads
 `person`, `source` and `limit`; its `days` is always 7 and a bare `days=` never reaches it.
-Figure 6 reads `person`, `a`, `b`, `days` and `limit` — `a` and `b` are lens tokens
-(`domain:<host>`, `lean:<value>` or `source:<name>`; an unknown or absent one falls back to
-`all`), each with no bare equivalent (`['a', null]`/`['b', null]`, like figure 3's `b`/`measure`)
-so a bare `?a=` never leaks into it. Figure 7 reads `person` and `source`; its `days` is always
-21 and a bare `days=` never reaches it. Figure 8 reads only `days` and `source` — it spans every
+Figure 6 reads `person` and `source`; its `days` is always
+21 and a bare `days=` never reaches it. Figure 7 reads only `days` and `source` — it spans every
 tracked person at once, so it has no `person` key, and it sends no `min`, which stays at the
-route's own default of 5. Figure 9 reads `days` and `source` (bare or prefixed) plus `lean` and
-`min`, prefixed only (`comention.lean`, `comention.min`, no bare fallback, like figure 6's
-`a`/`b`) — it has no `person` key at all, since a shared count is never one person's.
+route's own default of 5. Figure 8 reads `days` and `source` (bare or prefixed) plus `lean` and
+`min`, prefixed only (`comention.lean`, `comention.min`, no bare fallback, like figure 3's
+`b`) — it has no `person` key at all, since a shared count is never one person's.
 Figure 1 is a Svelte component (`src/ui/Atlas.svelte`) too, reading boot data (`bootData`) and
 seeding through `seedFor('atlas', ['person', 'days', 'source', 'sort', 'limit'], bootData.search)`
 once `bootData.ready`; its graph load is `createFigure`, while the inspector sparkline (`GET
 /timeline?days=7&bucket=day`) is the atlas's own fetch outside `createFigure`.
-Figure 9 is a Svelte component (`src/ui/Comention.svelte`): it seeds
+Figure 8 is a Svelte component (`src/ui/Comention.svelte`): it seeds
 from `days`, `source`, `lean` and `min` with `seedFor` over `bootData.search`, starts its first
 load only once `bootData.ready`, and shares the single `/api/people` fetch the page makes once
 (it never fetches people itself).
 Figure 4 (`rising`) is a Svelte component (`src/ui/Rising.svelte`), prop-less like the others: it seeds
 `person` and `source` with `seedFor('rising', ['person', 'source'], bootData.search)`, applies a
 source only if it is one of its options, and loads only once `bootData.ready`.
-The figure id `persistence` (figure 10, `#persistence`) reads `person` and `limit`, bare or
+The figure id `persistence` (figure 9, `#persistence`) reads `person` and `limit`, bare or
 prefixed (`persistence.person`, `persistence.limit`), and `weeks`, prefixed only
-(`persistence.weeks`, no bare fallback, like figure 6's `a`/`b`): no other figure has a
+(`persistence.weeks`, no bare fallback, like figure 3's `b`): no other figure has a
 `weeks` control, so a bare `?weeks=` never reaches it.
-Figure 10 is a Svelte component too (`src/ui/Persistence.svelte`): it seeds with `seedFor` over
+Figure 9 is a Svelte component too (`src/ui/Persistence.svelte`): it seeds with `seedFor` over
 `bootData.search` once `bootData.ready`, and a seeded `weeks` or `limit` outside its options is ignored.
-Figure 6 is a Svelte component too (`src/ui/Lenses.svelte`): it seeds with `seedFor` (`a` and `b` never fall
-back to a bare key), loads once `bootData.ready`, and mounts `Combobox.svelte` (props `{ select, inputId,
-listId, label, listLabel }`) over each of its two hidden lens selects, calling `sync()` after every
-programmatic write.
+Figure 3 is a Svelte component too (`src/ui/Compare.svelte`): it seeds with `seedFor('compare', …)`
+for the two-people mode and `seedFor('lenses', …)` for the lens mode (the legacy figure id survives
+only as that prefix), loads once `bootData.ready`, and in lens mode mounts `Combobox.svelte` (props
+`{ select, inputId, listId, label, listLabel }`) over each of its two hidden lens selects, calling
+`sync()` after every programmatic write. The lens mode fetches `GET /people/:id/sources` lazily, on
+entering it and on a person or period change there, to fill the outlets of the two lens selects, and
+its bridges come from `GET /people/:id/lenses/bridges`.
 
 `/?days=7&testimony.person=tarcisio` therefore puts every figure on a 7-day window and figure 2
 on Tarcísio, whoever figure 1 is showing. A key with neither form left undefined lets the

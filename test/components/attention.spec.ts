@@ -848,7 +848,7 @@ describe('Attention (issue #295)', () => {
     expect(section.getAttribute('aria-labelledby')).toBe('attentionTitle')
     expect(section.classList.contains('figure')).toBe(true)
     expect(section.classList.contains('attention')).toBe(true)
-    expect(section.querySelector('.eyebrow')!.textContent).toBe('Gráfico 7')
+    expect(section.querySelector('.eyebrow')!.textContent).toBe('Gráfico 6')
     expect($('attentionTitle').textContent).toBe('Atenção e menções')
     expect(section.querySelectorAll('.pick')).toHaveLength(2)
     expect(section.querySelector('a[href="/como-ler#atencao"]')).not.toBeNull()

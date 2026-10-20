@@ -747,7 +747,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .dumbbell-dot.cmp-a { background: var(--cmp-a); }
 .dumbbell-dot.cmp-b { background: var(--cmp-b); }
 .dumbbell-ratio { grid-column: 3; text-align: right; font-family: var(--mono); font-size: var(--t-xs); font-variant-numeric: tabular-nums; color: var(--ink); }
-.dumbbell-caption { margin: var(--space-2) 0 0; max-width: none; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
+.dumbbell-caption { margin: var(--space-3) 0 0; max-width: none; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .dumbbell .note { margin-top: var(--space-3); }
 .dumbbell-ghost-label { display: block; width: 7em; height: .85em; border-radius: 2px; background: color-mix(in srgb, var(--ink) 28%, var(--soft)); }
 @media (max-width: 519px) {

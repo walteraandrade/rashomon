@@ -19,7 +19,7 @@
 </script>
 
 <div class="dumbbell-legend"><span class="dumbbell-end cmp-a">antes (14 dias)</span><span class="dumbbell-end cmp-b">agora (7 dias)</span></div>
-<div class="dumbbell-chart" role="group" aria-label="Gráfico de termos em alta">
+<div class="dumbbell-chart" role="group">
   <div class="dumbbell-axis" aria-hidden="true">
     <span class="dumbbell-axis-ticks">
       {#each model.ticks as tick (tick.value)}

@@ -196,6 +196,7 @@ describe('Rising (#292)', () => {
     expect($('risingRuler').tagName).toBe('FIGURE')
     expect($('risingRuler').classList.contains('dumbbell')).toBe(true)
     expect($('risingRuler').getAttribute('aria-label')).toBe('Gráfico de termos em alta')
+    expect($('risingRuler').querySelector('.dumbbell-chart')?.hasAttribute('aria-label')).toBe(false)
     expect($('risingAbout')).not.toBeNull()
     expect(document.querySelector('#rising .figure-key')).not.toBeNull()
     expect(document.querySelector('#rising .eyebrow')?.textContent).toBe('Gráfico 4')

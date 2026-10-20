@@ -723,7 +723,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 @media (max-width: 900px) { .about-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .about-steps, .about-cols { grid-template-columns: 1fr; } }
 
-/* ---------- the dumbbell (figure 4, one person against her own past, issues #151, #327): one row per word, a
+/* ---------- the dumbbell (`#rising`, one person against her own past, issues #151, #327): one row per word, a
    "before" and a "now" dot on one linear scale, the ratio at the row's end. The axis and the rows share one
    three-column grid so a tick sits over the position it names; dot positions are percentages of the plot
    (--x), so the chart needs no width measurement. ---------- */

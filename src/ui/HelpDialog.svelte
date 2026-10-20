@@ -61,10 +61,11 @@
       <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara do mapa e da lista. É a mesma nota, não outra medida.</p>
     </div>
     <div id="help-comparar">
-      <h3>Gráfico 3 · Régua</h3>
-      <p>A posição diz de quem a palavra é. O tamanho é documentos dos dois, somados. No meio, a palavra é dividida. Clique abre os textos das duas pessoas.</p>
-      <p>As que não couberam sem cobrir outra ficam numa lista abaixo, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
-      <p>Uma palavra sublinhada em âmbar é uma ponte: pelos textos das duas pessoas, ela liga um vocabulário ao outro. A mais atravessada vale 1 e ganham sublinhado as que passam de 0,5. A ponte não muda a posição.</p>
+      <h3>Gráfico 3 · Duas pessoas</h3>
+      <p>Cada linha é uma palavra, com uma barra para cada pessoa. A barra é a fatia dos documentos daquela pessoa que trazem a palavra, na mesma escala para as duas. Clique abre os textos das duas pessoas.</p>
+      <p>As linhas vêm em três grupos: só da primeira pessoa, dos dois e só da segunda. “Só” quer dizer que a barra desta pessoa existe e a da outra não. “Documentos” ou “PMI ponderado” na frase mudam só quais palavras ganham uma linha, nunca o comprimento de uma barra. Cada pessoa entra com as suas palavras mais fortes, até o número escolhido, então a figura pode ter até o dobro de linhas.</p>
+      <p>Uma barra que falta pode querer dizer que a palavra ficou abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero. O nome de uma das duas pessoas não é desenhado; quantas palavras saíram aparece embaixo.</p>
+      <p>Uma marca âmbar antes da palavra é uma ponte: pelos textos das duas pessoas, ela liga um vocabulário ao outro. A mais atravessada vale 1 e ganham marca as que passam de 0,5. A ponte não muda nem a escolha nem a ordem das linhas.</p>
     </div>
     <div id="help-em-alta">
       <h3>Gráfico 4 · Em alta</h3>
@@ -80,10 +81,10 @@
     </div>
     <div id="help-lentes">
       <h3>Gráfico 6 · Uma pessoa, duas lentes</h3>
-      <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara as duas lentes escolhidas para a mesma pessoa, do mesmo jeito que o gráfico 3 compara duas pessoas: a posição diz de qual lente a palavra é mais, o tamanho é documentos das duas lentes somados. Clique abre os textos das duas lentes.</p>
+      <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara as duas lentes escolhidas para a mesma pessoa: a posição diz de qual lente a palavra é mais, o tamanho é documentos das duas lentes somados. Clique abre os textos das duas lentes.</p>
       <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". O nome da pessoa não entra na régua; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas, já que é a mesma pessoa nos dois lados.</p>
       <p>Uma lente inválida ou vazia volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
-      <p>O sublinhado âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa.</p>
+      <p>O sublinhado âmbar marca a ponte desta régua: a mesma conta da marca de ponte da comparação entre duas pessoas, com as duas lentes no lugar das duas pessoas. É a palavra que as duas lentes precisam para falar da pessoa.</p>
     </div>
     <div id="help-atencao">
       <h3>Gráfico 7 · Atenção e menções</h3>

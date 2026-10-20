@@ -2348,6 +2348,8 @@ describe('null meaning, bridges and rising unaffected (issue #247)', () => {
     const belowKeptSentence = /(n[aã]o entrou|abaixo|n[aã]o guardou|n[aã]o couber)[\s\S]{0,200}(recorte pr[eé]-calculad|constru[cç][aã]o|pr[eé]-comput)/i
     assert.match(section('comparar'), belowKeptSentence, "public/como-ler.html's #comparar section (spec section 4) needs a sentence on the new null meaning")
     assert.match(section('lentes'), belowKeptSentence, "public/como-ler.html's #lentes section (spec section 4) needs a sentence on the new null meaning")
+    assert.match(section('comparar'), /abaixo do que a construção pré-computada deste recorte guardou/)
+    assert.match(section('comparar'), /Esse lado conta como zero também no comprimento da barra e na escolha das palavras que concorrem a ponte\./)
   })
 
   it('/compare/bridges and /lenses/bridges always run the live edge statement, regardless of whether compareFor/lensesFor itself went fast (AC10)', async () => {

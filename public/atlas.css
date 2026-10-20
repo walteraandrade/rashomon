@@ -847,11 +847,13 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    evaluation. Both .comention-grid and .comention-list are always in the DOM; only the media
    query below decides which one shows, the same move the week figure's own breakpoint uses. ---- */
 .comention-body { margin: 18px 0 0; overflow-x: auto; }
-.comention-grid { display: table; border-collapse: collapse; }
-.comention-row { display: flex; align-items: stretch; }
+.comention-grid { display: block; }
+/* Every row, header included, shares one track list from matrixLayout: a column header and its
+   cells sit in the same track, so they cannot drift apart whatever a cell's margin or border. */
+.comention-row { display: grid; grid-template-columns: var(--rowhead) repeat(var(--n), var(--pitch)); align-items: stretch; }
+.comention-grid.is-ghost .comention-row { display: flex; }
 .comention-rowhead {
-  flex: 0 0 140px;
-  width: 140px;
+  min-width: 0;
   display: flex;
   align-items: center;
   padding-right: var(--space-2);
@@ -863,11 +865,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.comention-headrow .comention-rowhead { flex-basis: 140px; }
 .comention-colhead {
-  flex: 1 1 var(--cell, 26px);
-  width: var(--cell, 26px);
-  max-width: var(--cell, 26px);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -878,14 +879,15 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   color: var(--muted);
 }
 .comention-cell {
-  flex: 1 1 var(--cell, 26px);
+  box-sizing: border-box;
+  flex: 0 0 auto;
   width: var(--cell, 26px);
-  max-width: var(--cell, 26px);
-  aspect-ratio: 1;
+  height: var(--cell, 26px);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 1px;
+  margin: var(--gap, 1px);
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 2px;
   font-family: var(--mono);

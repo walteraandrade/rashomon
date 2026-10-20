@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, MATRIX_GAP, MATRIX_ROWHEAD, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/ruler-model.js'
 import type { CompareTerm } from '../src/ui/format.js'
 import { balanceColor } from '../src/ui/format.js'
@@ -613,6 +613,56 @@ describe('matrixLayout (figure 9, issue #207)', () => {
     assert.equal(narrow.cellSize, MATRIX_CELL_MIN)
     const wide = matrixLayout(persons, [], 4000)
     assert.equal(wide.cellSize, MATRIX_CELL_MAX)
+  })
+
+  const many = Array.from({ length: 27 }, (_, i) => ({ id: `p${i}`, name: `P${i}` }))
+
+  it('returns pitch as cellSize plus both gaps, with the gap and row head constants', () => {
+    for (const width of [10, 895, 900, 1247, 1440, 4000]) {
+      const l = matrixLayout(many, [], width)
+      assert.equal(l.gap, MATRIX_GAP)
+      assert.equal(l.gap, 1)
+      assert.equal(l.rowhead, MATRIX_ROWHEAD)
+      assert.equal(l.rowhead, 140)
+      assert.equal(l.pitch, l.cellSize + 2 * l.gap)
+    }
+  })
+
+  it('fits rowhead plus 27 pitches inside the width at and above the floor width', () => {
+    for (const width of [896, 900, 1000, 1247, 1300, 1328, 1440, 4000]) {
+      const l = matrixLayout(many, [], width)
+      assert.ok(l.rowhead + 27 * l.pitch <= width, `width ${width}: ${l.rowhead} + 27 * ${l.pitch} overflows`)
+    }
+  })
+
+  it('pins the fit at the 26 floor, 27, 41 and 42 ceiling boundaries for 27 persons', () => {
+    const at = (width: number) => matrixLayout(many, [], width).cellSize
+    assert.equal(at(895), 26)
+    assert.equal(at(896), 26)
+    assert.equal(at(923), 27)
+    assert.equal(at(1327), 41)
+    assert.equal(at(1328), 42)
+    assert.equal(at(4000), 42)
+  })
+
+  it('below the floor keeps the 26 cell and reports a grid wider than the width', () => {
+    for (const width of [10, 895]) {
+      const l = matrixLayout(many, [], width)
+      assert.equal(l.cellSize, MATRIX_CELL_MIN)
+      assert.ok(l.rowhead + 27 * l.pitch > width)
+      assert.equal(l.cells.length, 351)
+    }
+  })
+
+  it('never yields NaN or a negative size for no persons, one person, a zero width or no pairs', () => {
+    for (const persons of [[], many.slice(0, 1)]) {
+      for (const width of [0, 1, 4000]) {
+        const l = matrixLayout(persons, [], width)
+        assert.equal(l.cells.length, 0)
+        assert.ok(Number.isFinite(l.cellSize) && l.cellSize >= MATRIX_CELL_MIN)
+      }
+    }
+    assert.ok(matrixLayout(many, [], 0).cells.every((c) => c.count === null))
   })
 })
 

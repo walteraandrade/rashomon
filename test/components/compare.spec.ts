@@ -2511,11 +2511,12 @@ describe('Compare binds a payload to what it was asked for (#326 validator round
     })
 
   it('a payload painted for one person keeps asking for that person after the control moves on', async () => {
-    handlers.lenses = (call) => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }, { ...reforma, term: `from-${call.person}` }])
-    handlers.bridges = () => ({ bridges: {} })
+    handlers.lenses = (call) => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }, { term: `from-${call.person}`, kind: 'word', a: side(5), b: null }])
     await startLens()
     expect(chartLabel()).toContain('Lula')
-    select('comparePerson').value = 'bolsonaro'
+    handlers.sources = () => held().promise
+    fire('comparePerson', 'bolsonaro')
+    await settle()
     click(rows().find((r) => r.dataset.term === 'from-lula')!)
     await settle()
     const docs = of('docs')
@@ -2525,24 +2526,25 @@ describe('Compare binds a payload to what it was asked for (#326 validator round
       expect(c.params.get('term')).toBe('from-lula')
       expect(c.params.get('days')).toBe('21')
     }
+    expect(of('bridges').length).toBeGreaterThan(0)
     expect(of('bridges').every((c) => c.path === '/api/people/lula/lenses/bridges')).toBe(true)
   })
 
-  it('person mode: a click asks for the window and source the payload was fetched with', async () => {
+  it('person mode: a request that lands before the debounced reload asks docs for the source it was fetched with', async () => {
+    boot()
     await start()
-    boot({ search: '' })
-    flushSync()
-    await settle(220)
     const gate = held()
     handlers['/api/compare'] = () => gate.promise.then(() => payload([reforma]))
     fire('compareLimit', '40')
     await settle(220)
     fire('compareSource', 'gdelt')
     gate.release(null)
-    await settle(220)
+    await settle()
     expect(rows()).toHaveLength(1)
     click(rows()[0])
     await settle()
-    for (const c of of('docs')) expect(c.params.get('source')).toBe('gdelt')
+    const docs = of('docs')
+    expect(docs).toHaveLength(2)
+    for (const c of docs) expect(c.params.get('source')).toBe('all')
   })
 })

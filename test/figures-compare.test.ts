@@ -108,6 +108,10 @@ describe('the guide explains the butterfly under #comparar and #help-comparar', 
     for (const [label, text] of sections()) assert.match(text, /abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero/, label)
   })
 
+  it('does not claim a bar comes out smaller than the real one', () => {
+    for (const [label, text] of sections()) assert.doesNotMatch(text, /um pouco menor/, label)
+  })
+
   it('both say the own-name words are left out and counted', () => {
     for (const [label, text] of sections()) {
       assert.match(text, /nome de uma das duas pessoas não é desenhado/, label)

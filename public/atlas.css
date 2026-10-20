@@ -814,7 +814,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .butterfly-ghost-bar.is-b { grid-column: 3; justify-self: start; }
 .butterfly-ghost-gap { grid-column: 2; }
 @media (max-width: 519px) {
-  .butterfly { --bf-label: 12px; --bf-room: 40px; }
+  .butterfly { --bf-label: 12px; --bf-room: 48px; }
   .butterfly-axes { grid-template-columns: minmax(0, 1fr) var(--space-4) minmax(0, 1fr); }
   .butterfly-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: var(--space-4); row-gap: var(--space-1); padding: var(--space-1) 0 var(--space-2); }
   .butterfly-label { grid-column: 1 / -1; grid-row: 1; justify-content: flex-start; padding: 0; }

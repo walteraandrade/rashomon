@@ -472,6 +472,34 @@ describe('butterflyRows', () => {
     assert.deepEqual(order, ['wide', 'Álvaro', 'zebra', 'lean'])
   })
 
+  it('breaks a balance tie by combined share, then kind', () => {
+    const terms = [
+      t('small', real(10), real(10)),
+      t('large', real(40), real(40)),
+      { ...t('same', real(20), real(20)), kind: 'word' },
+      { ...t('same', real(20), real(20)), kind: 'hashtag' },
+    ]
+    const order = butterflyRows(terms, 412, 412, 20, 'count').groups[0].rows.map((x) => `${x.kind}:${x.term}`)
+    assert.deepEqual(order, ['word:large', 'hashtag:same', 'word:same', 'word:small'])
+  })
+
+  it('does not let an own-name term take a slot, and skips a term with no real side', () => {
+    const terms = [t('lula', real(99), 'name'), t('keep', real(5), null), t('ghost', null, null), t('gone', 'name', 'name')]
+    const r = butterflyRows(terms, 412, 168, 1, 'count')
+    assert.deepEqual(names(r), ['keep'])
+    assert.equal(r.hiddenCount, 2)
+  })
+
+  it('breaks a selection tie by pt-BR term, then kind', () => {
+    const terms = [t('zeta', real(7), null), t('Álvaro', real(7), null), t('beta', real(7), null)]
+    assert.deepEqual(names(butterflyRows(terms, 412, 168, 2, 'count')), ['beta', 'Álvaro'].sort())
+  })
+
+  it('ranks a side only among terms that side really has', () => {
+    const terms = [t('onlyB', null, real(500)), t('a1', real(3), null), t('a2', real(2), null), t('a3', real(1), null)]
+    assert.deepEqual(names(butterflyRows(terms, 412, 168, 2, 'count')), ['a1', 'a2', 'onlyB'])
+  })
+
   it('guards about = 0 (finite shares, balance 0)', () => {
     const r = butterflyRows([t('a', real(5), null), t('b', null, real(5)), t('both', real(5), real(5))], 0, 0, 20, 'count')
     for (const x of rows(r)) {
@@ -495,6 +523,10 @@ describe('butterflyRows', () => {
     assert.deepEqual(at(12), { domain: 15, ticks: [0, 5, 10, 15] })
     assert.deepEqual(at(0.8), { domain: 1, ticks: [0, 0.5, 1] })
     assert.deepEqual(at(0), { domain: 0, ticks: [0] })
+    assert.deepEqual(at(60), { domain: 60, ticks: [0, 20, 40, 60] })
+    assert.deepEqual(at(100), { domain: 100, ticks: [0, 50, 100] })
+    assert.deepEqual(at(7), { domain: 10, ticks: [0, 5, 10] })
+    assert.deepEqual(at(2.5), { domain: 3, ticks: [0, 1, 2, 3] })
     const r = butterflyRows([t('w', real(38), real(12))], 100, 100, 20, 'count')
     assert.ok(rows(r).every((x) => (x.a?.share ?? 0) <= r.scale.domain && (x.b?.share ?? 0) <= r.scale.domain))
   })

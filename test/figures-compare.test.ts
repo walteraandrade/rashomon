@@ -149,6 +149,41 @@ describe('the guide explains the butterfly under #comparar and #help-comparar', 
   })
 })
 
+describe('the #compare figure head describes the butterfly', () => {
+  const figure = () => design5().match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
+  const dts = () => [...(figure().match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim())
+
+  it('titles the figure and keeps the eyebrow', () => {
+    assert.match(figure(), /<h2 id="compareTitle">Duas pessoas, palavra a palavra<\/h2>/)
+    assert.match(figure(), /<span class="eyebrow">Gráfico 3<\/span>/)
+  })
+
+  it('says a bar is a share of each person\'s texts and links the guide', () => {
+    assert.match(figure(), /<p class="figure-sub">Cada barra é a fatia dos textos de cada pessoa que traz a palavra\. <a href="\/como-ler#comparar">Como ler<\/a>\.<\/p>/)
+  })
+
+  it('keys Barra, Cor, Ponte and Clique, with no Tamanho or Posição, and a bridge mark on Ponte', () => {
+    assert.deepEqual(dts(), ['Barra', 'Cor', 'Ponte', 'Clique'])
+    assert.match(figure(), /<span class="butterfly-bridge-mark"[^>]*><\/span>Ponte/)
+    assert.match(figure(), /key-pair/)
+  })
+
+  it('keeps the measure select with its two options and aria-label', () => {
+    const select = figure().match(/<select id="compareMeasure"[\s\S]*?<\/select>/)?.[0] ?? ''
+    assert.match(select, /aria-label="Medida"/)
+    assert.equal(select.match(/<option/g)?.length, 2)
+    assert.match(select, /value="count"/)
+    assert.match(select, /value="pmi"/)
+  })
+
+  it('holds the container as a figure for the butterfly, not the ruler', () => {
+    const tag = figure().match(/<figure[^>]*id="compareRuler"[^>]*>/)?.[0] ?? ''
+    assert.ok(tag, '#compareRuler is a <figure>')
+    assert.match(tag, /class="butterfly"/)
+    assert.doesNotMatch(tag, /\bruler\b/)
+  })
+})
+
 describe('atlas.css styles the butterfly rows', () => {
   const css = () => readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
 

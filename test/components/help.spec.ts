@@ -124,6 +124,18 @@ describe('HelpDialog', () => {
     expect(scrolled).toEqual(['help-pmi'])
   })
 
+  it('opens at help-comparar from a #comparar link', () => {
+    const a = document.createElement('a')
+    a.id = 'comparar-link'
+    a.href = '/como-ler#comparar'
+    links.append(a)
+    expect(document.getElementById('help-comparar')).not.toBeNull()
+    const event = click('comparar-link')
+    expect(event.defaultPrevented).toBe(true)
+    expect(dialog().open).toBe(true)
+    expect(scrolled).toEqual(['help-comparar'])
+  })
+
   it('keeps the ids the page and the links rely on', () => {
     for (const id of ['helpDialog', 'helpTitle', 'helpClose', 'help-pmi', 'help-atlas', 'help-analise']) expect(document.getElementById(id), id).not.toBeNull()
   })

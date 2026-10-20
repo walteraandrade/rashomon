@@ -646,6 +646,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .chapter-nav a:hover { color: var(--accent); }
 .chapter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-7) var(--space-7); align-items: start; }
 .chapter-grid > div { scroll-margin-top: var(--space-5); }
+.chapter-grid #lentes { margin-top: var(--space-6); scroll-margin-top: var(--space-5); }
 .chapter h2[id], .chapter h3[id] { scroll-margin-top: var(--space-5); }
 /* Inside the grid a column is narrow, so prose drops one step to --t-sm and stays muted: the
    headings above it are what a reader scans, and the body is what they land on. */

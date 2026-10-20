@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { butterflyRows } from '../src/ui/butterfly-model.js'
 import { rulerTerms } from '../src/ui/ruler-model.js'
 import { stripLayout } from '../src/ui/strip-model.js'
 import { hasShares, liftBalance, liftOfPerson, rareRisers, risingRulerItems, shareBalance, type CompareTerm, type RisingTerm } from '../src/ui/format.js'
@@ -406,5 +407,104 @@ describe('atlas.css never gives the attention views row --accent', () => {
     assert.ok(block, 'the attention figure CSS block must exist')
     assert.doesNotMatch(block, /data-row="views"\s*\.attention-mark/)
     assert.doesNotMatch(block, /var\(--accent\)/)
+  })
+})
+describe('butterflyRows', () => {
+  const real = (count: number, pmi = 1) => ({ count, pmi, tone: null })
+  const t = (term: string, a: CompareTerm['a'], b: CompareTerm['b'], extra: Partial<CompareTerm> = {}): CompareTerm => ({ term, kind: 'word', a, b, ...extra })
+  const rows = (r: ReturnType<typeof butterflyRows>) => r.groups.flatMap((g) => g.rows)
+  const names = (r: ReturnType<typeof butterflyRows>) => rows(r).map((x) => x.term).sort()
+
+  const skewed = [
+    t('x', real(30, 0.1), null),
+    t('y', real(20, 0.2), null),
+    t('z', real(5, 3), null),
+    t('p', null, real(30, 0.1)),
+    t('q', null, real(20, 0.2)),
+    t('r', null, real(5, 3)),
+  ]
+
+  it('selects the top limit per side by the sort measure and unions them', () => {
+    const byCount = butterflyRows(skewed, 412, 168, 2, 'count')
+    const byPmi = butterflyRows(skewed, 412, 168, 2, 'pmi')
+    assert.deepEqual(names(byCount), ['p', 'q', 'x', 'y'])
+    assert.deepEqual(names(byPmi), ['q', 'r', 'y', 'z'])
+    assert.ok(rows(byCount).length <= 4 && rows(byPmi).length <= 4)
+  })
+
+  it("keeps a term picked by one side and shows the other side's bar", () => {
+    const terms = [t('shared', real(30), real(2)), t('b1', null, real(9)), t('b2', null, real(8)), t('lost', null, real(1))]
+    const r = butterflyRows(terms, 412, 168, 1, 'count')
+    assert.deepEqual(names(r), ['b1', 'shared'])
+    assert.ok(!names(r).includes('lost'))
+    const shared = rows(r).find((x) => x.term === 'shared')!
+    assert.equal(shared.b!.count, 2)
+    assert.equal(shared.a!.count, 30)
+  })
+
+  it('drops own-name terms and counts them', () => {
+    const terms = [t('lula', 'name', real(3)), t('bolsonaro', real(4), 'name'), t('reforma', real(2), null)]
+    const r = butterflyRows(terms, 412, 168, 20, 'count')
+    assert.deepEqual(names(r), ['reforma'])
+    assert.equal(r.hiddenCount, 2)
+  })
+
+  it('orders groups a-only, both, b-only and omits an empty group', () => {
+    const terms = [t('b', null, real(3)), t('both', real(3), real(3)), t('a', real(3), null)]
+    const r = butterflyRows(terms, 412, 168, 20, 'count')
+    assert.deepEqual(r.groups.map((g) => g.key), ['a', 'both', 'b'])
+    assert.ok(rows({ ...r, groups: [r.groups[0]] }).every((x) => x.b === null))
+    assert.ok(r.groups[2].rows.every((x) => x.a === null))
+    assert.ok(r.groups[1].rows.every((x) => x.a && x.b))
+    assert.deepEqual(butterflyRows([t('a', real(3), null)], 412, 168, 20, 'count').groups.map((g) => g.key), ['a'])
+    assert.deepEqual(butterflyRows([], 412, 168, 20, 'count').groups, [])
+  })
+
+  it('orders a group by balance, combined share, then pt-BR term', () => {
+    const terms = [
+      t('zebra', real(41), real(17)),
+      t('Álvaro', real(41), real(17)),
+      t('wide', real(100), real(17)),
+      t('lean', real(10), real(80)),
+    ]
+    const r = butterflyRows(terms, 412, 168, 20, 'count')
+    const order = r.groups[0].rows.map((x) => x.term)
+    assert.deepEqual(order, ['wide', 'Álvaro', 'zebra', 'lean'])
+  })
+
+  it('guards about = 0 (finite shares, balance 0)', () => {
+    const r = butterflyRows([t('a', real(5), null), t('b', null, real(5)), t('both', real(5), real(5))], 0, 0, 20, 'count')
+    for (const x of rows(r)) {
+      assert.ok(Number.isFinite(x.balance) && Number.isFinite(x.combined))
+      assert.equal(x.a?.share ?? 0, 0)
+      assert.equal(x.b?.share ?? 0, 0)
+      assert.equal(x.balance, 0)
+    }
+    assert.deepEqual(r.scale, { domain: 0, ticks: [0] })
+  })
+
+  it('computes share as count over about, in percent', () => {
+    const r = butterflyRows([t('a', real(41), real(17))], 412, 168, 20, 'count')
+    assert.ok(Math.abs(rows(r)[0].a!.share - (41 / 412) * 100) < 1e-9)
+    assert.ok(Math.abs(rows(r)[0].b!.share - (17 / 168) * 100) < 1e-9)
+  })
+
+  it('shares one scale with nice ticks (38, 12, 0.8, 0)', () => {
+    const at = (share: number) => butterflyRows([t('w', real(share), null)], 100, 100, 20, 'count').scale
+    assert.deepEqual(at(38), { domain: 40, ticks: [0, 20, 40] })
+    assert.deepEqual(at(12), { domain: 15, ticks: [0, 5, 10, 15] })
+    assert.deepEqual(at(0.8), { domain: 1, ticks: [0, 0.5, 1] })
+    assert.deepEqual(at(0), { domain: 0, ticks: [0] })
+    const r = butterflyRows([t('w', real(38), real(12))], 100, 100, 20, 'count')
+    assert.ok(rows(r).every((x) => (x.a?.share ?? 0) <= r.scale.domain && (x.b?.share ?? 0) <= r.scale.domain))
+  })
+
+  it('marks bridges without changing selection or order', () => {
+    const base = [t('x', real(30), real(10)), t('y', real(20), real(10)), t('z', real(5), real(30))]
+    const plain = butterflyRows(base, 412, 168, 2, 'count')
+    const bridged = butterflyRows(base.map((x, i) => ({ ...x, bridge: i === 2 ? 0.5 : 0.49 })), 412, 168, 2, 'count')
+    assert.deepEqual(rows(bridged).map((x) => x.term), rows(plain).map((x) => x.term))
+    assert.deepEqual(rows(bridged).map((x) => [x.term, x.bridge]), rows(bridged).map((x) => [x.term, x.term === 'z']))
+    assert.ok(rows(plain).every((x) => x.bridge === false))
   })
 })

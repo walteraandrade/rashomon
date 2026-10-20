@@ -10,7 +10,7 @@ export type FigureTarget = { addEventListener: (type: string, listener: (event?:
 
 export type FigureOptions<T> = {
   name: string
-  scope?: string
+  scope?: string | (() => string)
   key?: (params: URLSearchParams) => string
   params: () => URLSearchParams | null
   fetch: (params: URLSearchParams, signal: AbortSignal) => Promise<T>
@@ -26,16 +26,19 @@ export type FigureOptions<T> = {
 const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
 export const createFigure = <T>(opts: FigureOptions<T>) => {
-  const { name, scope = name, key: keyOf = (q: URLSearchParams) => q.toString(), params, fetch, ghost, paint, paintError, detail, onRelease } = opts
+  const { name, scope: scopeOpt = name, key: keyOf = (q: URLSearchParams) => q.toString(), params, fetch, ghost, paint, paintError, detail, onRelease } = opts
   let data = $state.raw<T | undefined>(undefined)
   let loading = $state(false)
   let error = $state.raw<unknown>(null)
   let requestId = 0
   let controller: AbortController | null = null
   let alive = true
+  let epoch = 0
+  let scheduled = 0
 
   const load = async () => {
     const id = ++requestId
+    const scope = typeof scopeOpt === 'function' ? scopeOpt() : scopeOpt
     controller?.abort()
     controller = new AbortController()
     const current = controller
@@ -68,13 +71,24 @@ export const createFigure = <T>(opts: FigureOptions<T>) => {
   }
 
   const debouncedLoad = debounce(() => {
-    if (alive) void load()
+    if (alive && scheduled === epoch) void load()
   })
 
   const reload = () => {
+    scheduled = epoch
     loading = true
     if (data !== undefined) ghost()
     debouncedLoad()
+  }
+
+  // Drops whatever is in flight or scheduled and keeps repaint() inert until the next load():
+  // a caller whose params are about to change meaning (a mode switch) never paints the old ones.
+  const abort = () => {
+    ++epoch
+    ++requestId
+    controller?.abort()
+    controller = null
+    loading = true
   }
 
   // A no-op while loading: painting old data over a ghost would make it clickable again.
@@ -148,5 +162,6 @@ export const createFigure = <T>(opts: FigureOptions<T>) => {
     load,
     reload,
     release,
+    abort,
   }
 }

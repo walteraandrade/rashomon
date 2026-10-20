@@ -6,7 +6,6 @@
   import { onMount } from 'svelte'
   import Agenda from '$lib/Agenda.svelte'
   import Atlas from '$lib/Atlas.svelte'
-  import Lenses from '$lib/Lenses.svelte'
   import Compare from '$lib/Compare.svelte'
   import Rising from '$lib/Rising.svelte'
   import Comention from '$lib/Comention.svelte'
@@ -49,8 +48,6 @@
   <Rising />
 
   <Week />
-
-  <Lenses />
 
   <Attention />
 

@@ -4,15 +4,14 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { butterflyRows } from '../src/ui/butterfly-model.js'
-import { rulerTerms } from '../src/ui/ruler-model.js'
+import { THIN_ABOUT, compareModeFor, thinNoteText } from '../src/ui/compare-model.js'
 import { stripLayout } from '../src/ui/strip-model.js'
 import { hasShares, liftBalance, liftOfPerson, rareRisers, risingRulerItems, shareBalance, type CompareTerm, type RisingTerm } from '../src/ui/format.js'
 import { STRIP_MAX_HEIGHT, STRIP_MIN_R, stripRadius } from '../src/ui/layout.js'
 
-// The pure models behind the figures (ruler-model, strip-model, format's rising helpers) and the
+// The pure models behind the figures (compare-model, strip-model, format's rising helpers) and the
 // stylesheet rules the figures rely on. Nothing here fetches.
 
-const side = (count: number, pmi: number) => ({ count, pmi, tone: null })
 
 describe('stripLayout: the outlets on the axis', () => {
   it('stripLayout puts -10 at the left pad, +10 at the right pad and sizes dots by texts', () => {
@@ -160,118 +159,6 @@ describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)',
       /\.columns\.is-themed \.column-card\s*\{[^}]*--wc:\s*var\(--theme,\s*var\(--muted\)\)/,
       'the columns list must keep the --muted fallback on --wc in tema mode',
     )
-  })
-})
-
-describe('rulerTerms: balance is -1/+1 for a one-sided term and 0 for an identical-both-sides term (issue #91 AC5)', () => {
-  it('an a-only term is -1, a b-only term is +1, an identical-both-sides term is 0, under count', () => {
-    const terms = [
-      { term: 'onlyA', kind: 'word', a: { count: 5, pmi: 1, tone: null }, b: null },
-      { term: 'onlyB', kind: 'word', a: null, b: { count: 5, pmi: 1, tone: null } },
-      { term: 'same', kind: 'word', a: { count: 4, pmi: 2, tone: null }, b: { count: 4, pmi: 2, tone: null } },
-    ]
-    const { items } = rulerTerms(terms, 'count')
-    assert.equal(items.find((t) => t.term === 'onlyA')!.balance, -1)
-    assert.equal(items.find((t) => t.term === 'onlyB')!.balance, 1)
-    assert.equal(items.find((t) => t.term === 'same')!.balance, 0)
-  })
-
-  it('the identical-both-sides term stays 0 under pmi too, regardless of measure', () => {
-    const terms = [{ term: 'same', kind: 'word', a: { count: 4, pmi: 2, tone: null }, b: { count: 4, pmi: 2, tone: null } }]
-    assert.equal(rulerTerms(terms, 'pmi').items[0].balance, 0)
-  })
-})
-
-describe('rulerTerms: measure changes position but never the combined document count (issue #91 AC6)', () => {
-  it('switching measure moves at least one term\'s balance while combined stays identical for every term', () => {
-    const terms = [
-      { term: 'mixed', kind: 'word', a: { count: 10, pmi: 0.1, tone: null }, b: { count: 2, pmi: 5, tone: null } },
-      { term: 'aonly', kind: 'word', a: { count: 1, pmi: 0.1, tone: null }, b: null },
-    ]
-    const byCount = rulerTerms(terms, 'count')
-    const byPmi = rulerTerms(terms, 'pmi')
-    assert.deepEqual(
-      byCount.items.map((t) => t.combined),
-      byPmi.items.map((t) => t.combined),
-      'combined must never depend on measure',
-    )
-    const balanceCount = byCount.items.find((t) => t.term === 'mixed')!.balance
-    const balancePmi = byPmi.items.find((t) => t.term === 'mixed')!.balance
-    assert.notEqual(balanceCount, balancePmi, 'balance must move with measure for a term with different count/pmi shapes on each side')
-  })
-})
-
-describe('regression: an opposite-signed-but-real term on both sides never pins to a literal end, and a null side never wins on the other\'s negative score', () => {
-  it('alcolumbre (real docs and a negative PMI on the b side) settles short of -1', () => {
-    const terms = [{ term: 'alcolumbre', kind: 'word', a: { count: 233, pmi: 0.61, tone: null }, b: { count: 8, pmi: -2.93, tone: null } }]
-    const balance = rulerTerms(terms, 'pmi').items[0].balance
-    assert.ok(Math.abs(balance) < 1, `balance must not pin to a literal end when both sides have documents, got ${balance}`)
-  })
-
-  it('an a-only term (b truly absent) with a negative PMI is still -1, not +1', () => {
-    const terms = [{ term: 'onlyANegative', kind: 'word', a: { count: 5, pmi: -1, tone: null }, b: null }]
-    assert.equal(rulerTerms(terms, 'pmi').items[0].balance, -1)
-  })
-})
-
-describe('rulerTerms copies bridge, and the ruler-bridge mark (issue #219 AC7)', () => {
-  it('rulerTerms attaches bridge onto its emitted item only when the source CompareTerm carries it', () => {
-    const terms = [
-      { term: 'ponte', kind: 'word', a: side(10, 1), b: side(10, 1), bridge: 0.9 },
-      { term: 'sembridge', kind: 'word', a: side(10, 1), b: side(10, 1) },
-    ] as (CompareTerm & { bridge?: number })[]
-    const { items } = rulerTerms(terms as CompareTerm[], 'count') as { items: (typeof terms[number] & { balance: number; combined: number })[] }
-    assert.equal(items.find((i) => i.term === 'ponte')?.bridge, 0.9)
-    assert.equal(items.find((i) => i.term === 'sembridge')?.bridge, undefined)
-  })
-})
-
-describe('rulerTerms: a term where either side is the string "name" is absent from the rendered set (issue #91 AC7)', () => {
-  it('rulerTerms drops it and counts it as hidden, for either side', () => {
-    const terms: CompareTerm[] = [
-      { term: 'lula', kind: 'word', a: 'name', b: { count: 3, pmi: 1, tone: null } },
-      { term: 'bolsonaro', kind: 'word', a: { count: 4, pmi: 1, tone: null }, b: 'name' },
-      { term: 'reforma', kind: 'word', a: { count: 2, pmi: 1, tone: null }, b: null },
-    ]
-    const { items, hiddenCount } = rulerTerms(terms, 'count')
-    assert.deepEqual(items.map((t) => t.term), ['reforma'])
-    assert.equal(hiddenCount, 2, 'a name on the b side hides the term just as one on the a side does')
-  })
-})
-
-describe('rulerTerms: the amended balance formula clamps each side at zero before differencing', () => {
-  // Spec §3 as amended on issue #91 after this branch's first validation round. The formula
-  // originally written there — balance = (scoreOf(b) − scoreOf(a)) / mag, unclamped — sends a
-  // term whose two sides carry opposite-signed pmi to exactly ±1, because rawB − rawA
-  // telescopes to |rawA| + |rawB| = mag whenever the signs differ. Measured against the real
-  // corpus (lula × bolsonaro, days=365, limit=100): 141 of the 232 terms with documents on
-  // BOTH sides landed on a literal end, under an axis labelled "Só de <Nome>". A word the
-  // other person has 14 documents of is not that person's exclusive word, so the amended rule
-  // clamps each side's score at zero before differencing. The cost, stated: a side that
-  // actively repels a term (negative pmi) and a side merely indifferent to it now share a
-  // position. Both exact numbers stay on the detail line, where the reader can still tell them
-  // apart.
-  it('a term present on both sides never reaches a literal end, even with opposite-signed pmi', () => {
-    const a = { count: 40, pmi: 0.3, tone: null }
-    const b = { count: 5, pmi: -2.1, tone: null }
-    const terms: CompareTerm[] = [{ term: 'divergente', kind: 'word', a, b }]
-    const score = (n: { count: number; pmi: number }) => n.pmi * Math.log1p(n.count)
-    const mag = Math.abs(score(a)) + Math.abs(score(b))
-    const expected = (Math.max(0, score(b)) - Math.max(0, score(a))) / mag
-    const actual = rulerTerms(terms, 'pmi').items[0].balance
-    assert.equal(actual, expected, 'each side is clamped at zero before differencing')
-    assert.ok(actual > -1 && actual < 1, `a term with documents on both sides must stay off the ends, got ${actual}`)
-    assert.ok(actual < 0, 'it still leans toward the side with the positive relationship')
-  })
-
-  it('an end is reachable only when one side has no documents at all', () => {
-    const onlyA: CompareTerm[] = [{ term: 'exclusiva', kind: 'word', a: { count: 3, pmi: -0.9, tone: null }, b: null }]
-    assert.equal(rulerTerms(onlyA, 'pmi').items[0].balance, -1, "a one-sided term pins to that side's end whatever its pmi sign")
-    const bothSides: CompareTerm[] = [
-      { term: 'compartilhada', kind: 'word', a: { count: 300, pmi: 4, tone: null }, b: { count: 1, pmi: -5, tone: null } },
-    ]
-    const balance = rulerTerms(bothSides, 'pmi').items[0].balance
-    assert.ok(balance > -1, `a term with one document on the other side must not read as exclusive, got ${balance}`)
   })
 })
 
@@ -538,5 +425,55 @@ describe('butterflyRows', () => {
     assert.deepEqual(rows(bridged).map((x) => x.term), rows(plain).map((x) => x.term))
     assert.deepEqual(rows(bridged).map((x) => [x.term, x.bridge]), rows(bridged).map((x) => [x.term, x.term === 'z']))
     assert.ok(rows(plain).every((x) => x.bridge === false))
+  })
+})
+
+describe('compareModeFor: compare.mode wins, legacy lenses keys open lens mode, bare keys do not (issue #326 AC9)', () => {
+  const table: [string, string, 'pessoas' | 'recortes'][] = [
+    ['compare.mode=recortes alone', '?compare.mode=recortes', 'recortes'],
+    ['compare.mode=pessoas beats a lenses key', '?compare.mode=pessoas&lenses.a=lean:left', 'pessoas'],
+    ['compare.mode=recortes beats nothing else', '?compare.mode=recortes&compare.a=lula', 'recortes'],
+    ['lenses.person alone', '?lenses.person=lula', 'recortes'],
+    ['lenses.a alone', '?lenses.a=lean:left', 'recortes'],
+    ['lenses.b alone', '?lenses.b=source:rss', 'recortes'],
+    ['lenses.days alone', '?lenses.days=7', 'recortes'],
+    ['lenses.limit alone', '?lenses.limit=60', 'recortes'],
+    ['an invalid compare.mode falls through to the legacy key', '?compare.mode=foo&lenses.a=all', 'recortes'],
+    ['an invalid compare.mode with no legacy key', '?compare.mode=foo', 'pessoas'],
+    ['empty search', '', 'pessoas'],
+    ['bare person', '?person=lula', 'pessoas'],
+    ['bare a', '?a=lean:left', 'pessoas'],
+    ['bare b', '?b=lean:left', 'pessoas'],
+    ['bare days', '?days=7', 'pessoas'],
+    ['bare limit', '?limit=60', 'pessoas'],
+    ['an unrelated lenses key', '?lenses.foo=1', 'pessoas'],
+  ]
+  for (const [name, search, expected] of table) it(name, () => assert.equal(compareModeFor(search), expected))
+})
+
+describe('thinNoteText: one sentence per side under the 50-text floor (issue #326 AC19)', () => {
+  const sides = (a: number, b: number) => [{ label: 'Esquerda', about: a }, { label: 'Direita', about: b }]
+
+  it('names both sides, A first, with their counts', () => {
+    assert.equal(thinNoteText(sides(14, 25)), 'Esquerda tem só 14 textos neste recorte: leia com cuidado. Direita tem só 25 textos neste recorte: leia com cuidado.')
+  })
+
+  it('is empty when no side is thin, and exactly 50 is not thin', () => {
+    assert.equal(THIN_ABOUT, 50)
+    assert.equal(thinNoteText(sides(50, 50)), '')
+    assert.equal(thinNoteText(sides(400, 51)), '')
+  })
+
+  it('names only the thin side', () => {
+    assert.equal(thinNoteText(sides(400, 49)), 'Direita tem só 49 textos neste recorte: leia com cuidado.')
+  })
+
+  it('says texto for 1 and textos for 0', () => {
+    assert.equal(thinNoteText(sides(1, 400)), 'Esquerda tem só 1 texto neste recorte: leia com cuidado.')
+    assert.equal(thinNoteText(sides(0, 400)), 'Esquerda tem só 0 textos neste recorte: leia com cuidado.')
+  })
+
+  it('collapses identical sentences into one', () => {
+    assert.equal(thinNoteText([{ label: 'Tudo', about: 3 }, { label: 'Tudo', about: 3 }]), 'Tudo tem só 3 textos neste recorte: leia com cuidado.')
   })
 })

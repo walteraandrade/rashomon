@@ -53,7 +53,7 @@
   --danger: #ff8a8a;
   /* Quiet grey in the middle of every ramp: SCALE_MID in format.ts. Not --muted (chrome). */
   --scale-mid: #8b909c;
-  /* The ruler figure's own hue pair, one per side (issue #91): kept in step with format.js's
+  /* The hue pair for "who", one per side -- the butterfly's two people, the dumbbell's before and now (issue #91): kept in step with format.js's
      balanceColor, whose ends resolve to these exact colours. */
   --cmp-a: #7fa8ff;
   --cmp-b: #ff9d6b;
@@ -282,11 +282,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
-.compare .ruler, .compare .butterfly, .compare .detail, .rising .ruler, .rising .note,
+.compare .butterfly, .compare .detail, .rising .dumbbell, .rising .note,
 .attention .attention-chart, .attention .note, .agenda .agenda-grid, .persistence .persistence-chart { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
-.figure.is-loading .ruler, .figure.is-loading .butterfly, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
+.figure.is-loading .dumbbell, .figure.is-loading .butterfly, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
 .figure.is-loading .attention-chart, .figure.is-loading .agenda-grid, .figure.is-loading .persistence-chart,
 .strip.is-loading, .testimony-lists.is-loading, #outletList.is-loading { opacity: .45; pointer-events: none; }
 .canvas { min-width: 0; }
@@ -318,8 +318,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .atlas-word { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .atlas-glow { rx: 9px; }
 .atlas-hit { rx: 6px; }
-.ruler-glow, .week-glow { rx: 8px; }
-.ruler-hit, .week-hit { rx: 5px; }
+.week-glow { rx: 8px; }
+.week-hit { rx: 5px; }
 .atlas-glow, .atlas-hit { fill: transparent; }
 /* Under the cursor a ground; picked or matched, the same ground at twice the strength. Its edge
    is two shapes, not one: a core barely blurred (2px) and a wider penumbra behind it (7px). One
@@ -330,8 +330,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    hard rectangle reappears for the length of the fade.
    The mark's own colour never changes either: painting a picked word --accent threw away the one
    thing the colour is there to say. */
-.atlas-glow, .ruler-glow { filter: blur(7px); transition: fill .16s ease-out; }
-.atlas-hit, .ruler-hit { filter: blur(2px); transition: fill .16s ease-out; }
+.atlas-glow { filter: blur(7px); transition: fill .16s ease-out; }
+.atlas-hit { filter: blur(2px); transition: fill .16s ease-out; }
 .center-hit, .dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
 .atlas-word:hover .atlas-glow, .atlas-word:focus-visible .atlas-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
 .atlas-word:hover .atlas-hit, .atlas-word:focus-visible .atlas-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
@@ -525,7 +525,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 }
 @media (prefers-reduced-motion: reduce) {
   .docs-dialog[open] { animation: none; }
-  .atlas-glow, .atlas-hit, .ruler-glow, .ruler-hit, .center-hit, .dot-halo, .outlet, .column-card,
+  .atlas-glow, .atlas-hit, .center-hit, .dot-halo, .outlet, .column-card,
   .attention-glow, .attention-hit { transition: none; }
   .ghost-field { animation: none; }
 }
@@ -551,7 +551,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* The texts fade at both scroll edges rather than being sliced by the card's rim -- a cut edge
    reads as a line, and this site draws none. */
 #docs { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 6px 22px var(--space-5); min-height: 120px; mask-image: linear-gradient(transparent, #000 14px, #000 calc(100% - 20px), transparent); }
-/* The ruler asks the same word of both people, so its card answers in two columns -- one per
+/* The compare figure asks the same word of both people, so its card answers in two columns -- one per
    person, each under its own name. Below the card's own width they stack. */
 .docs-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-5); }
 /* The column's own header, not the domain line each document carries. */
@@ -595,7 +595,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .inspector .ghost-title { display: block; }
 .source-chip .ghost-chip { display: inline-block; }
 .outlet .ghost { display: inline-block; }
-.ruler-end-row .ghost-name:last-child { margin-left: auto; }
 
 /* ---------- the in-page guide ---------- */
 /* Same card language as the documents dialog, but this one is always a modal: it is a reading
@@ -724,36 +723,48 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 @media (max-width: 900px) { .about-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .about-steps, .about-cols { grid-template-columns: 1fr; } }
 
-/* ---------- the ruler (figure 4, one person's own
-   before/now, issues #91 and #151): a term on a -1..1 axis with the --cmp-a/--cmp-b pair.
-   Figure 3 draws the butterfly instead and no longer uses it. ---------- */
-.ruler { margin: 18px 0 0; padding: 6px 0 10px; }
-.ruler-end-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); padding-bottom: var(--space-1); }
-.ruler-end { font-weight: 600; overflow-wrap: anywhere; }
-.ruler-end.cmp-a { color: var(--cmp-a); }
-.ruler-end.cmp-b { color: var(--cmp-b); }
-.ruler-svg { display: block; width: 100%; height: auto; overflow: visible; }
-.ruler-axis { stroke: var(--line); stroke-width: 2; }
-.ruler-tick { stroke: var(--muted); stroke-width: 1; opacity: .6; }
-/* The atlas's --wc/--wc-soft pair again: the word's colour is which side it leans to, and the
-   ground under the cursor is that same colour, desaturated and nearly transparent. Recolouring
-   the word on hover or on a pick would have hidden the one thing this figure draws. */
-.ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.ruler-glow, .ruler-hit { fill: transparent; }
-.ruler-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
-.ruler-word:hover .ruler-glow, .ruler-word:focus-visible .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
-.ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
-.ruler-word.is-selected .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
-.ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.ruler-bridge .ruler-bridge-mark { stroke: var(--accent); stroke-width: 2; }
+/* ---------- the dumbbell (figure 4, one person against her own past, issues #151, #327): one row per word, a
+   "before" and a "now" dot on one linear scale, the ratio at the row's end. The axis and the rows share one
+   three-column grid so a tick sits over the position it names; dot positions are percentages of the plot
+   (--x), so the chart needs no width measurement. ---------- */
+.dumbbell { --db-label: 160px; --db-ratio: 56px; --db-pad: 6px; margin: 18px 0 0; padding: 6px 0 10px; }
+.dumbbell-legend { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); padding-bottom: var(--space-1); }
+.dumbbell-end { font-weight: 600; overflow-wrap: anywhere; }
+.dumbbell-end.cmp-a { color: var(--cmp-a); }
+.dumbbell-end.cmp-b { color: var(--cmp-b); }
+.dumbbell-axis, .dumbbell-row { display: grid; grid-template-columns: var(--db-label) minmax(0, 1fr) var(--db-ratio); align-items: center; }
+.dumbbell-axis-ticks { grid-column: 2; position: relative; height: 1.5em; margin: 0 var(--db-pad); border-bottom: 1px solid var(--line); }
+.dumbbell-tick { position: absolute; bottom: var(--space-1); left: var(--x); transform: translateX(-50%); font-family: var(--mono); font-size: var(--t-micro); font-variant-numeric: tabular-nums; color: var(--muted); }
+.dumbbell-row { min-height: 28px; padding: 2px 0; border-radius: 2px; cursor: pointer; outline: none; }
+.dumbbell-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.dumbbell-row:focus-visible { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.dumbbell-row.is-selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.dumbbell-label { min-width: 0; padding-right: var(--space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--t-xs); color: var(--ink); }
+.dumbbell-plot { grid-column: 2; position: relative; height: 20px; margin: 0 var(--db-pad); }
+.dumbbell-gridline { position: absolute; top: 0; bottom: 0; left: var(--x); width: 1px; background: var(--line); opacity: .5; }
+.dumbbell-line { position: absolute; top: 50%; left: var(--x0); width: calc(var(--x1) - var(--x0)); height: 2px; transform: translateY(-50%); background: var(--muted); }
+.dumbbell-dot { position: absolute; top: 50%; left: var(--x); width: 10px; height: 10px; border-radius: 50%; transform: translate(-50%, -50%); }
+.dumbbell-dot.cmp-a { background: var(--cmp-a); }
+.dumbbell-dot.cmp-b { background: var(--cmp-b); }
+.dumbbell-ratio { grid-column: 3; text-align: right; font-family: var(--mono); font-size: var(--t-xs); font-variant-numeric: tabular-nums; color: var(--ink); }
+.dumbbell-caption { margin: var(--space-2) 0 0; max-width: none; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
+.dumbbell .note { margin-top: var(--space-3); }
+.dumbbell-ghost-label { display: block; width: 7em; height: .85em; border-radius: 2px; background: color-mix(in srgb, var(--ink) 28%, var(--soft)); }
+@media (max-width: 519px) {
+  .dumbbell-row { grid-template-columns: minmax(0, 1fr) var(--db-ratio); grid-template-areas: "label ratio" "plot plot"; }
+  .dumbbell-axis { grid-template-columns: minmax(0, 1fr); }
+  .dumbbell-axis-ticks { grid-column: 1; }
+  .dumbbell-label { grid-area: label; }
+  .dumbbell-plot { grid-area: plot; }
+  .dumbbell-ratio { grid-area: ratio; }
+}
 .detail-bridge { margin: var(--space-1) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--accent); }
-.ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
-.ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
-.ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }
-.ruler-overflow .quiet-button:hover { color: var(--ink); }
-.ruler-overflow .quiet-button.is-selected { color: var(--cmp, var(--ink)); background: color-mix(in srgb, var(--cmp, var(--muted)) 22%, var(--soft)); font-weight: 600; }
-.ruler-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
-.ruler .note { margin-top: var(--space-3); }
+/* Words the chart left out: a wrapped row of chips under it, each tinted by its own balance (--cmp). */
+.dumbbell-rare { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
+.dumbbell-rare p { flex: 1 0 100%; margin: 0; max-width: none; }
+.dumbbell-rare .quiet-button { color: var(--cmp, var(--muted)); }
+.dumbbell-rare .quiet-button:hover { color: var(--ink); }
+.dumbbell-rare .quiet-button.is-selected { color: var(--cmp, var(--ink)); background: color-mix(in srgb, var(--cmp, var(--muted)) 22%, var(--soft)); font-weight: 600; }
 /* The detail line: the word at h4 rank because it is the subject of the line, then one stat pair
    per person. Both sides keep the same shape whether the number is real or missing. */
 .detail { margin: 18px 0 0; min-height: 26px; }
@@ -827,7 +838,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* ---------- the week (figure 5, calendar days, issue #147): seven columns, oldest at the
    left; each column is a day head (the .stat pattern above: --accent label, ink number) and an
    SVG swarm of that day's words, sized by that day's count, positioned only to avoid collision.
-   Same glow/hit/text triad as the atlas and the ruler; no --hostile/--favor/--cmp-a/--cmp-b
+   Same glow/hit/text triad as the atlas; no --hostile/--favor/--cmp-a/--cmp-b
    here, --ink only. ---------- */
 .week-chart { margin: 18px 0 0; padding: 6px 0 10px; }
 .week-columns { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
@@ -847,7 +858,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); min-width: 0; }
 /* The label takes its own row; narrower than about 120px it wraps, it never clips. */
 .week-overflow .eyebrow { flex-basis: 100%; margin: 0; }
-/* The ruler's overflow keeps .quiet-button's nowrap; a week column is 145px at 1280px and a
+/* This overflow list undoes .quiet-button's nowrap; a week column is 145px at 1280px and a
    phrase button must wrap inside it, never draw across the next day (#148 review, 1). A word
    longer than the column breaks with a hyphen where the page's pt-BR lets the browser find
    one, and anywhere as the last resort: this list is where such words go, so it cannot refuse. */
@@ -880,7 +891,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .attention-mark.is-selected .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 #attentionNote { margin-bottom: var(--space-3); }
 /* ---------- agenda (figure 7, domain × person coverage share, issue #208): a plain table --
-   the mark is a percentage, not a position to lay out, so it earns no swarm/ruler of its own.
+   the mark is a percentage, not a position to lay out, so it earns no swarm of its own.
    Ink only: no new hue, share alone drives how dark a cell's own number reads. */
 .agenda-grid { display: block; margin-top: 18px; }
 .agenda-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }

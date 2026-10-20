@@ -724,9 +724,9 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 @media (max-width: 900px) { .about-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .about-steps, .about-cols { grid-template-columns: 1fr; } }
 
-/* ---------- the ruler (figure 3, compare two people or one person's two lenses, issue #91; figure 4, one person's own
-   before/now, issue #151) — one set of rules, since both figures draw a term on a -1..1 axis
-   with the same --cmp-a/--cmp-b pair, only the words at either end and axis prose differ. ---------- */
+/* ---------- the ruler (figure 4, one person's own
+   before/now, issues #91 and #151): a term on a -1..1 axis with the --cmp-a/--cmp-b pair.
+   Figure 3 draws the butterfly instead and no longer uses it. ---------- */
 .ruler { margin: 18px 0 0; padding: 6px 0 10px; }
 .ruler-end-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); padding-bottom: var(--space-1); }
 .ruler-end { font-weight: 600; overflow-wrap: anywhere; }

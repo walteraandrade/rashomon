@@ -444,7 +444,16 @@ describe('Comention', () => {
     expect(px(g, '--cell')).toBe(l.cellSize)
     expect(px(g, '--pitch')).toBe(px(g, '--cell') + 2 * px(g, '--gap'))
     expect(px(g, '--rowhead') + 27 * px(g, '--pitch')).toBe(l.rowhead + 27 * l.pitch)
-    expect(rows()[0].children).toHaveLength(28)
+    expect(g.style.getPropertyValue('--n')).toBe('27')
+    expect(px(g, '--gap')).toBe(l.gap)
+    expect(px(g, '--rowhead')).toBe(l.rowhead)
+    expect(l.rowhead + 27 * l.pitch).toBeGreaterThan(600)
+    const [head, ...body] = rows()
+    expect(head.children).toHaveLength(28)
+    body.forEach((row, i) => {
+      expect(row.children).toHaveLength(28)
+      expect(head.children[i + 1].getAttribute('title')).toBe(row.querySelector('.comention-rowhead')!.textContent)
+    })
   })
 
   it('ghost rows keep 27 ghost cells and no --pitch dependency', () => {

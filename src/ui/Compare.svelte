@@ -1,3 +1,10 @@
+<script lang="ts" module>
+  // What a payload was asked for, so a click, its bridges and its chart label never read the
+  // controls as they stand after the payload left the network (a memo hit returns the same object).
+  type Asked = { person: string; days: string; source: string; limit: string }
+  const asked = new WeakMap<object, Asked>()
+</script>
+
 <script lang="ts">
   import { untrack } from 'svelte'
   import Butterfly from './Butterfly.svelte'
@@ -106,19 +113,21 @@
     comboB?.sync()
   }
 
-  const lensDocsQuery = (lens: string, word: string, kind: string) => {
-    if (lens.startsWith('domain:')) return api.docsParams({ days, source: 'all', domain: lens.slice('domain:'.length), term: word, kind })
-    if (lens.startsWith('lean:')) return api.docsParams({ days, source: 'all', lean: lens.slice('lean:'.length), term: word, kind })
-    if (lens.startsWith('source:')) return api.docsParams({ days, source: lens.slice('source:'.length), term: word, kind })
-    return api.docsParams({ days, source: 'all', term: word, kind })
+  const lensDocsQuery = (lens: string, window: string, word: string, kind: string) => {
+    if (lens.startsWith('domain:')) return api.docsParams({ days: window, source: 'all', domain: lens.slice('domain:'.length), term: word, kind })
+    if (lens.startsWith('lean:')) return api.docsParams({ days: window, source: 'all', lean: lens.slice('lean:'.length), term: word, kind })
+    if (lens.startsWith('source:')) return api.docsParams({ days: window, source: lens.slice('source:'.length), term: word, kind })
+    return api.docsParams({ days: window, source: 'all', term: word, kind })
   }
 
   const showDocs = (word: { term: string; kind: string }) => {
     const shown = data
     if (!shown) return
+    const was = asked.get(shown)
+    const window = was?.days ?? days
     const sides = isLens(shown)
-      ? [shown.a.lens, shown.b.lens].map((lens) => ({ personId: shownPerson, personName: personName(shownPerson), label: lensLabel(lens), query: lensDocsQuery(lens, word.term, word.kind) }))
-      : [shown.a.person, shown.b.person].map((person) => ({ personId: person.id, personName: person.name, label: person.name, query: api.docsParams({ days, source, term: word.term, kind: word.kind }) }))
+      ? [shown.a.lens, shown.b.lens].map((lens) => ({ personId: shownPerson, personName: personName(shownPerson), label: lensLabel(lens), query: lensDocsQuery(lens, window, word.term, word.kind) }))
+      : [shown.a.person, shown.b.person].map((person) => ({ personId: person.id, personName: person.name, label: person.name, query: api.docsParams({ days: window, source: was?.source ?? source, term: word.term, kind: word.kind }) }))
     void docsCard.open({
       owner: 'compare',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
@@ -199,9 +208,10 @@
     if (hasBridges(result.terms) || !ids.length) return
     const controller = new AbortController()
     bridgesAbort = controller
+    const was = asked.get(result) ?? { person: lensPerson, days, source, limit }
     const pending = isLens(result)
-      ? api.loadLensBridges(lensPerson, api.bridgeParams(api.lensesParams({ a: lensA(), b: lensB(), days, limit }), ids), controller.signal)
-      : api.loadCompareBridges(api.bridgeParams(api.compareParams({ a, b, days, source, limit }), ids), controller.signal)
+      ? api.loadLensBridges(was.person, api.bridgeParams(api.lensesParams({ a: result.a.lens, b: result.b.lens, days: was.days, limit: was.limit }), ids), controller.signal)
+      : api.loadCompareBridges(api.bridgeParams(api.compareParams({ a: result.a.person.id, b: result.b.person.id, days: was.days, source: was.source, limit: was.limit }), ids), controller.signal)
     pending
       .then((r: { bridges?: Record<string, number> } | undefined) => {
         if (data !== result || !r?.bridges) return
@@ -224,14 +234,19 @@
     return qp
   }
 
-  const request = (queryParams: URLSearchParams, signal: AbortSignal): Promise<Payload> => {
+  const request = async (queryParams: URLSearchParams, signal: AbortSignal): Promise<Payload> => {
+    const was = { person: queryParams.get('person') ?? '', days: queryParams.get('days')!, source: queryParams.get('source') ?? 'all', limit: queryParams.get('limit')! }
     if (queryParams.get('mode') === 'recortes') {
-      const lensQuery = api.lensesParams({ a: queryParams.get('a')!, b: queryParams.get('b')!, days: queryParams.get('days')!, limit: queryParams.get('limit')! })
-      return api.loadLenses(queryParams.get('person')!, lensQuery, signal)
+      const lensQuery = api.lensesParams({ a: queryParams.get('a')!, b: queryParams.get('b')!, days: was.days, limit: was.limit })
+      const result: Payload = await api.loadLenses(was.person, lensQuery, signal)
+      asked.set(result, was)
+      return result
     }
     const plain = new URLSearchParams(queryParams)
     plain.delete('mode')
-    return api.loadCompare(plain, signal)
+    const result: Payload = await api.loadCompare(plain, signal)
+    asked.set(result, was)
+    return result
   }
 
   const figure = createFigure<Payload>({
@@ -253,8 +268,9 @@
         dropStalePick()
         loadBridges(result)
       }
-      shownLimit = Number(limit)
-      shownPerson = lensPerson
+      const was = asked.get(result)
+      shownLimit = Number(was?.limit ?? limit)
+      shownPerson = was?.person ?? lensPerson
       errored = false
       waiting = false
       dimmed = false
@@ -289,6 +305,9 @@
   const changeAfterOutlets = async (apply: () => void) => {
     apply()
     settleChange()
+    // The request in flight was asked for the old person or window; it must not land under the new one.
+    figure.abort()
+    if (data) dimmed = true
     const token = switchToken
     await ensureOutlets()
     if (token === switchToken) figure.reload()

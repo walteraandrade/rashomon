@@ -2481,3 +2481,68 @@ describe('Compare lens B survives quick switching while /sources and /lenses are
           expectEndsOn(values.at(-1)!)
         })
 })
+
+describe('Compare binds a payload to what it was asked for (#326 validator round 1)', () => {
+  const chartLabel = () => $('compareRuler').querySelector('[role="group"]')?.getAttribute('aria-label')
+
+  for (const [id, value] of [
+    ['comparePerson', 'bolsonaro'],
+    ['compareDays', '7'],
+  ] as const)
+    it(`an old /lenses landing while ${id} waits on /sources is dropped, never painted under the new ${id === 'comparePerson' ? 'person' : 'window'}`, async () => {
+      await startLens()
+      const lensGate = held()
+      handlers.lenses = (call) => lensGate.promise.then(() => lensPayload([{ ...reforma, term: `from-${call.person}-${call.params.get('days')}` }]))
+      fire('compareLimit', '40')
+      await settle(220)
+      const sourcesGate = held()
+      handlers.sources = () => sourcesGate.promise
+      fire(id, value)
+      await settle()
+      lensGate.release(null)
+      await settle()
+      expect(rows().map((r) => r.dataset.term), 'the late response is not painted; the first payload stays, dimmed').toEqual(['reforma'])
+      expect($('compare').classList.contains('is-loading')).toBe(true)
+      handlers.lenses = (call) => lensPayload([{ ...reforma, term: `from-${call.person}-${call.params.get('days')}` }])
+      sourcesGate.release([folha])
+      await settle(220)
+      expect(rows().map((r) => r.dataset.term)).toEqual([id === 'comparePerson' ? 'from-bolsonaro-21' : 'from-lula-7'])
+      expect(chartLabel()).toContain(id === 'comparePerson' ? 'Bolsonaro' : 'Lula')
+    })
+
+  it('a payload painted for one person keeps asking for that person after the control moves on', async () => {
+    handlers.lenses = (call) => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }, { ...reforma, term: `from-${call.person}` }])
+    handlers.bridges = () => ({ bridges: {} })
+    await startLens()
+    expect(chartLabel()).toContain('Lula')
+    select('comparePerson').value = 'bolsonaro'
+    click(rows().find((r) => r.dataset.term === 'from-lula')!)
+    await settle()
+    const docs = of('docs')
+    expect(docs).toHaveLength(2)
+    for (const c of docs) {
+      expect(c.path).toBe('/api/people/lula/docs')
+      expect(c.params.get('term')).toBe('from-lula')
+      expect(c.params.get('days')).toBe('21')
+    }
+    expect(of('bridges').every((c) => c.path === '/api/people/lula/lenses/bridges')).toBe(true)
+  })
+
+  it('person mode: a click asks for the window and source the payload was fetched with', async () => {
+    await start()
+    boot({ search: '' })
+    flushSync()
+    await settle(220)
+    const gate = held()
+    handlers['/api/compare'] = () => gate.promise.then(() => payload([reforma]))
+    fire('compareLimit', '40')
+    await settle(220)
+    fire('compareSource', 'gdelt')
+    gate.release(null)
+    await settle(220)
+    expect(rows()).toHaveLength(1)
+    click(rows()[0])
+    await settle()
+    for (const c of of('docs')) expect(c.params.get('source')).toBe('gdelt')
+  })
+})

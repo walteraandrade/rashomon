@@ -182,7 +182,7 @@
       <p class="note">Não foi possível carregar quem aparece junto.</p>
     {:else if view === 'data' && shown && layout}
       {@const persons = shown.persons}
-      <div class="comention-grid" style:--cell="{layout.cellSize}px">
+      <div class="comention-grid" style:--n={persons.length} style:--rowhead="{layout.rowhead}px" style:--pitch="{layout.pitch}px" style:--cell="{layout.cellSize}px" style:--gap="{layout.gap}px">
         <div class="comention-row comention-headrow">
           <div class="comention-rowhead" aria-hidden="true"></div>
           {#each persons as p (p.id)}<span class="comention-colhead" title={p.name}>{personInitials(p.name)}</span>{/each}

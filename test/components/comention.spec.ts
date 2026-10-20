@@ -5,6 +5,7 @@ import Comention from '../../src/ui/Comention.svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
 import { close, isOpen, open, openedBy } from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
+import { matrixLayout } from '../../src/ui/layout.js'
 import { clearScopes } from '../../src/ui/state.js'
 
 type Pending = { url: string; resolve: (body: unknown) => void }
@@ -100,6 +101,22 @@ const change = async (id: string, value: string) => {
   const el = select(id)
   el.value = value
   el.dispatchEvent(new Event('change', { bubbles: true }))
+  await settle()
+}
+
+const many = Array.from({ length: 27 }, (_, i) => ({ id: `p${String(i).padStart(2, '0')}`, name: `Pessoa ${String(i).padStart(2, '0')}` }))
+const manyPairs = [
+  { a: 'p00', b: 'p01', count: 9 },
+  { a: 'p05', b: 'p26', count: 4 },
+  { a: 'p25', b: 'p26', count: 2 },
+]
+const manyPayload = payload(many, manyPairs)
+const px = (el: HTMLElement, name: string) => Number.parseFloat(el.style.getPropertyValue(name))
+const grid = () => matrix().querySelector('.comention-grid') as HTMLElement
+const rows = () => [...grid().querySelectorAll<HTMLElement>(':scope > .comention-row')]
+const resizeTo = async (width: number) => {
+  Object.defineProperty(matrix(), 'clientWidth', { value: width, configurable: true })
+  observers.forEach((o) => o.cb())
   await settle()
 }
 
@@ -374,5 +391,71 @@ describe('Comention', () => {
     body = payload(three, [{ a: 'lula', b: 'tarcisio', count: 5 }])
     await change('comentionMin', '5')
     expect(cell('lula', 'tarcisio')!.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('header and cells share the grid custom properties and pitch arithmetic at 1440 (AC6)', async () => {
+    await start(manyPayload, many)
+    await resizeTo(1440)
+    const l = matrixLayout(many, manyPairs, 1440)
+    const g = grid()
+    expect(g.style.getPropertyValue('--n')).toBe('27')
+    expect(px(g, '--rowhead')).toBe(l.rowhead)
+    expect(px(g, '--pitch')).toBe(l.pitch)
+    expect(px(g, '--cell')).toBe(l.cellSize)
+    expect(px(g, '--gap')).toBe(l.gap)
+    expect(px(g, '--pitch')).toBe(px(g, '--cell') + 2 * px(g, '--gap'))
+    expect(27 * px(g, '--pitch') + px(g, '--rowhead')).toBe(l.rowhead + 27 * l.pitch)
+    expect(l.rowhead + 27 * l.pitch).toBeLessThanOrEqual(1440)
+  })
+
+  it('header row and every row have n+1 children and matching column order (AC6)', async () => {
+    await start(manyPayload, many)
+    await resizeTo(1440)
+    const [head, ...body] = rows()
+    expect(body).toHaveLength(27)
+    expect(head.children).toHaveLength(28)
+    body.forEach((row, i) => {
+      expect(row.children).toHaveLength(28)
+      const name = row.querySelector('.comention-rowhead')!.textContent
+      const colhead = head.children[i + 1] as HTMLElement
+      expect(colhead.classList.contains('comention-colhead')).toBe(true)
+      expect(colhead.getAttribute('title')).toBe(name)
+      expect(name).toBe(many[i].name)
+      const own = row.children[i + 1] as HTMLElement
+      expect(own.classList.contains('is-blank')).toBe(true)
+      for (let j = i + 1; j < 27; j++) {
+        const c = row.children[j + 1] as HTMLElement
+        const pair = manyPairs.find((p) => p.a === many[i].id && p.b === many[j].id)
+        expect(c.getAttribute('data-a') ?? null).toBe(pair ? many[i].id : null)
+        expect(c.getAttribute('data-b') ?? null).toBe(pair ? many[j].id : null)
+        expect(c.classList.contains('comention-cell')).toBe(true)
+        expect(head.children[j + 1].getAttribute('title')).toBe(many[j].name)
+      }
+    })
+    expect(cell('p25', 'p26')).not.toBeNull()
+    expect(cell('p25', 'p26')!.parentElement).toBe(rows()[26])
+  })
+
+  it('below the floor width the pitch still equals cell plus two gaps (AC6)', async () => {
+    await start(manyPayload, many)
+    await resizeTo(600)
+    const l = matrixLayout(many, manyPairs, 600)
+    const g = grid()
+    expect(px(g, '--cell')).toBe(l.cellSize)
+    expect(px(g, '--pitch')).toBe(px(g, '--cell') + 2 * px(g, '--gap'))
+    expect(px(g, '--rowhead') + 27 * px(g, '--pitch')).toBe(l.rowhead + 27 * l.pitch)
+    expect(rows()[0].children).toHaveLength(28)
+  })
+
+  it('ghost rows keep 27 ghost cells and no --pitch dependency', () => {
+    setBoot({ people: [], peopleError: null, search: '', ready: false })
+    instances.push(mount(Comention, { target }))
+    flushSync()
+    const ghost = matrix().querySelector('.comention-grid') as HTMLElement
+    expect(ghost.classList.contains('is-ghost')).toBe(true)
+    expect(ghost.style.getPropertyValue('--pitch')).toBe('')
+    expect(ghost.querySelectorAll('.comention-row')).toHaveLength(27)
+    expect(ghost.querySelectorAll('.comention-cell.ghost')).toHaveLength(27 * 27)
+    expect(matrix().getAttribute('aria-busy')).toBe('true')
   })
 })

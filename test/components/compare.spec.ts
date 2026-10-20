@@ -1362,6 +1362,46 @@ describe('Compare lens mode (#326)', () => {
     expect(docsCard.openedBy('atlas')).toBe(true)
   })
 
+  for (const id of ['compareLensA', 'compareLensB']) {
+    it(`lens mode: changing #${id} clears the pick, closes the card and aborts the bridges before the new data lands`, async () => {
+      let bridgeCall: Call | undefined
+      const shared: CompareTerm[] = [{ term: 'stf', kind: 'word', a: side(5), b: side(5) }]
+      handlers.lenses = () => lensPayload(shared)
+      handlers.bridges = (call) => {
+        bridgeCall ??= call
+        return new Promise(() => {})
+      }
+      await startLens()
+      click(rows()[0])
+      await settle()
+      expect(docsCard.openedBy('compare')).toBe(true)
+      expect(bridgeCall!.signal?.aborted).toBe(false)
+      const gate = held()
+      handlers.lenses = () => gate.promise
+      fire(id, 'lean:center')
+      expect(docsCard.isOpen()).toBe(false)
+      expect(bridgeCall!.signal?.aborted).toBe(true)
+      expect(rows().some((r) => r.classList.contains('is-selected'))).toBe(false)
+      gate.release(lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }], 'source:bluesky', 'lean:center'))
+      await settle(220)
+      expect(rows().some((r) => r.classList.contains('is-selected'))).toBe(false)
+    })
+  }
+
+  it('lens mode: a domain or all lens sends source=all whatever the person-mode source was seeded to', async () => {
+    await startLens('compare.source=gdelt&lenses.a=domain:folha.uol.com.br&lenses.b=all')
+    expect(select('compareSource').value).toBe('gdelt')
+    click(rows()[0])
+    await settle()
+    const [first, second] = of('docs')
+    expect(first.params.get('domain')).toBe('folha.uol.com.br')
+    expect(first.params.get('source')).toBe('all')
+    expect(first.params.has('lean')).toBe(false)
+    expect(second.params.get('source')).toBe('all')
+    expect(second.params.has('domain')).toBe(false)
+    expect(second.params.has('lean')).toBe(false)
+  })
+
   it('lens mode: a days change closes the lenses card at once, before the new data lands', async () => {
     await startLens()
     click(rows()[0])
@@ -1997,6 +2037,25 @@ describe('Compare mode switch (#326)', () => {
     expect(docsCard.openedBy('atlas')).toBe(true)
   })
 
+  it('mode: after a switch in either direction the figure shows the ghost, not a dimmed old chart', async () => {
+    boot()
+    await start()
+    expect(rows()).toHaveLength(1)
+    fire('compareMode', 'recortes')
+    await settle()
+    expect($('compare').classList.contains('is-loading'), 'person to lens, dimmed').toBe(false)
+    expect($('compareRuler').querySelectorAll('.butterfly-ghost-row')).toHaveLength(8)
+    await settle(220)
+    expect(rows()).toHaveLength(1)
+    fire('compareMode', 'pessoas')
+    await settle()
+    expect($('compare').classList.contains('is-loading'), 'lens to person, dimmed').toBe(false)
+    expect(rows()).toHaveLength(0)
+    await settle(220)
+    expect(rows()).toHaveLength(1)
+    expect($('compare').classList.contains('is-loading')).toBe(false)
+  })
+
   it('mode: a /compare held in flight, switch to recortes, /compare resolves while /sources is pending and a resize fires: nothing paints, nothing throws, the old signal is aborted right after flushSync', async () => {
     const compare = held()
     const outlets = held()
@@ -2041,6 +2100,32 @@ describe('Compare mode switch (#326)', () => {
     expect(compareCalls()).toHaveLength(1)
     expect(select('compareMode').value).toBe('recortes')
     expect(outletValues('compareLensAOutlets')).toEqual(['domain:folha.uol.com.br', 'domain:g1.globo.com'])
+    expect(rows()).toHaveLength(1)
+  })
+
+  it('mode: a stale switch continuation never reloads over the later switch', async () => {
+    const stale = held()
+    let n = 0
+    handlers.sources = () => (++n === 1 ? stale.promise : [folha, g1])
+    boot()
+    await start()
+    expect(compareCalls()).toHaveLength(1)
+    fire('compareMode', 'recortes')
+    await settle()
+    await settle(25000)
+    const second = held()
+    handlers['/api/compare'] = () => second.promise
+    fire('compareMode', 'pessoas')
+    await settle(220)
+    expect(compareCalls()).toHaveLength(2)
+    expect(compareCalls()[1].signal?.aborted).toBe(false)
+    stale.release([g1])
+    await settle(500)
+    expect(compareCalls()).toHaveLength(2)
+    expect(compareCalls()[1].signal?.aborted).toBe(false)
+    expect(lensCalls()).toEqual([])
+    second.release(payload([reforma]))
+    await settle(220)
     expect(rows()).toHaveLength(1)
   })
 
@@ -2283,4 +2368,116 @@ describe('Compare request failures and the people outage, in both modes (#326)',
     expect($('compareRetry')).not.toBeNull()
     expect($('compareRuler').hidden).toBe(true)
   })
+})
+
+describe('Compare lens B survives quick switching while /sources and /lenses are held (#326)', () => {
+  type Trigger = 'boot' | 'mode' | 'days' | 'person'
+  type Order = 'sources, lenses' | 'lenses, sources' | 'sources, lenses reversed' | 'lenses reversed, sources'
+  type Pending = { gate: ReturnType<typeof held>; call: Call }
+
+  const lensName = (token: string) => ({ 'lean:left': 'Esquerda', 'lean:center': 'Centro', 'lean:right': 'Direita', 'source:gdelt': 'GDELT', all: 'Tudo' })[token] ?? token
+  const sequences = [
+    ['lean:left', 'lean:center'],
+    ['lean:left', 'lean:center', 'lean:right', 'lean:center'],
+    ['lean:center', 'lean:left', 'source:gdelt', 'all', 'lean:left', 'lean:center'],
+  ]
+  const orders: Order[] = ['sources, lenses', 'lenses, sources', 'sources, lenses reversed', 'lenses reversed, sources']
+
+  const pickByCombobox = (value: string) => {
+    input('compareLensBInput').dispatchEvent(new FocusEvent('focus'))
+    flushSync()
+    const option = $('compareLensBList').querySelector(`[data-value="${value}"]`) as HTMLElement
+    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    flushSync()
+  }
+  const pickBySelect = (value: string) => fire('compareLensB', value)
+
+  const run = async (trigger: Trigger, values: string[], gap: number, order: Order, pickWith: (value: string) => void) => {
+    const lenses: Pending[] = []
+    const sources: ReturnType<typeof held>[] = []
+    let holdSources = false
+    handlers.sources = () => {
+      if (!holdSources) return [folha, g1]
+      const gate = held()
+      sources.push(gate)
+      return gate.promise
+    }
+    handlers.lenses = (call) => {
+      if (!holdLenses) return echo(call)
+      const gate = held()
+      lenses.push({ gate, call })
+      return gate.promise
+    }
+    let holdLenses = false
+
+    if (trigger === 'boot') {
+      holdSources = holdLenses = true
+      await startLens()
+    } else if (trigger === 'mode') {
+      boot()
+      await start()
+      holdSources = holdLenses = true
+      fire('compareMode', 'recortes')
+      await settle()
+    } else {
+      await startLens()
+      holdSources = holdLenses = true
+      if (trigger === 'days') fire('compareDays', '7')
+      else fire('comparePerson', 'bolsonaro')
+      await settle()
+    }
+
+    for (const value of values) {
+      pickWith(value)
+      await settle(gap)
+    }
+    await settle(300)
+
+    const releaseSources = async () => {
+      holdSources = false
+      sources.splice(0).forEach((gate) => gate.release([folha, g1]))
+      await settle(300)
+    }
+    const releaseLenses = async (reversed: boolean) => {
+      const pending = lenses.splice(0)
+      ;(reversed ? pending.reverse() : pending).forEach(({ gate, call }) => gate.release(echo(call)))
+      await settle(300)
+    }
+    for (const step of order.split(', ')) {
+      if (step === 'sources') await releaseSources()
+      else await releaseLenses(step.endsWith('reversed'))
+    }
+    holdSources = holdLenses = false
+    for (let round = 0; round < 4; round++) {
+      await releaseSources()
+      await releaseLenses(false)
+      await settle(300)
+    }
+  }
+
+  const expectEndsOn = (value: string) => {
+    expect(select('compareLensB').value, 'the hidden select').toBe(value)
+    expect(input('compareLensBInput').value, 'the combobox input').toBe(lensName(value))
+    const last = lensCalls().at(-1)
+    expect(last?.params.get('b'), 'the last /lenses request').toBe(value)
+    expect(select('compareLensA').value, 'lens A is left alone').toBe('source:bluesky')
+    expect([...$('compareRuler').querySelectorAll('.butterfly-axis-label')].map((e) => e.textContent), 'the painted axis labels').toEqual(['Bluesky', lensName(value)])
+  }
+
+  for (const trigger of ['boot', 'mode', 'days', 'person'] as Trigger[])
+    for (const values of sequences)
+      for (const gap of [0, 200])
+        for (const order of orders)
+          it(`B quick switching: refill by ${trigger}, ${values.join(' > ')}, ${gap} ms apart, resolved ${order}`, async () => {
+            await run(trigger, values, gap, order, pickBySelect)
+            expectEndsOn(values.at(-1)!)
+          })
+
+  for (const trigger of ['boot', 'days'] as Trigger[])
+    for (const values of sequences)
+      for (const order of orders)
+        it(`B quick switching through the combobox: refill by ${trigger}, ${values.join(' > ')}, resolved ${order}`, async () => {
+          await run(trigger, values, 0, order, pickByCombobox)
+          expectEndsOn(values.at(-1)!)
+        })
 })

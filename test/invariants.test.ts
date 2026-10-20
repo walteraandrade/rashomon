@@ -810,3 +810,43 @@ describe('#298 imperative front-end leftovers are gone', () => {
     assert.match(testFileSource('invariants.test.ts'), /ALLOWED_PACKAGES[^=\n]*=\s*\[\s*\]/)
   })
 })
+
+describe('#326 the lenses figure is gone; #compare owns its ids and removals stay removed', () => {
+  const walkAll = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : walkAll(join(dir, e.name))) : [join(dir, e.name)]))
+  const retired = ['', 'Title', 'Person', 'A', 'B', 'Days', 'Limit', 'Ruler', 'Status', 'Detail', 'HiddenNote', 'Retry', 'AOutlets', 'BOutlets'].map((suffix) => 'lenses' + suffix)
+  const scanned = () =>
+    ['src', 'web', 'test']
+      .flatMap((dir) => walkAll(join(root, dir)))
+      .filter((f) => /\.(ts|svelte|js)$/.test(f) && !f.endsWith(join('components', 'combobox.spec.ts')) && !f.endsWith('invariants.test.ts'))
+
+  it('criterion 25: none of the retired whole ids appears as an id attribute or an element lookup in src, web or test', () => {
+    const quoted = retired.map((id) => `["']${id}["']`).join('|')
+    const idAttr = new RegExp(`\\bid=(${quoted})`)
+    const lookup = new RegExp(`(getElementById|\\$|querySelector)\\((${quoted.replace(/\["']/g, '["\'#]')})\\)`)
+    for (const f of scanned()) {
+      const text = readFileSync(f, 'utf8')
+      assert.doesNotMatch(text, idAttr, `${f} still carries a retired lenses id`)
+      assert.doesNotMatch(text, lookup, `${f} still looks up a retired lenses id`)
+    }
+  })
+
+  it('criterion 25: no .lenses selector remains in atlas.css, and .key-bridge is gone iff nothing in src or web uses it', () => {
+    const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+    assert.doesNotMatch(css, /\.lenses\b/)
+    const used = [...walkAll(join(root, 'src')), ...walkAll(join(root, 'web'))].some((f) => /key-bridge/.test(readFileSync(f, 'utf8')))
+    assert.equal(/\.key-bridge\b/.test(css), used, '.key-bridge must be in atlas.css exactly when src or web use it')
+  })
+
+  it('criterion 26: the Lenses component, its specs and its page slot are gone', () => {
+    for (const f of [join(jsDir, 'Lenses.svelte'), join(testDir, 'components', 'Lenses.server.spec.ts'), join(testDir, 'components', 'lenses.spec.ts')]) assert.equal(existsSync(f), false, `${f} must not exist`)
+    assert.doesNotMatch(readFileSync(join(root, 'web', 'routes', '+page.svelte'), 'utf8'), /Lenses/)
+    assert.equal(existsSync(join(jsDir, 'compare-model.ts')), true)
+  })
+
+  it('criterion 29: ruler-model.ts exists exactly when a module under src still imports rulerTerms', () => {
+    const callers = walkAll(srcDir).filter((f) => /\.(ts|svelte)$/.test(f) && !f.endsWith('ruler-model.ts') && /\brulerTerms\b/.test(readFileSync(f, 'utf8')))
+    assert.equal(existsSync(join(jsDir, 'ruler-model.ts')), callers.length > 0, `rulerTerms callers: ${callers.join(', ') || 'none'}`)
+    assert.equal(/'ruler-model\.ts':/.test(testFileSource('invariants.test.ts')), callers.length > 0)
+  })
+})

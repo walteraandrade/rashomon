@@ -273,6 +273,21 @@ describe('createFigure', () => {
     expect(calls.paintError).toBe(1)
   })
 
+  it('abort() with nothing in flight still marks the figure loading, so a resize repaints nothing (criterion 36)', async () => {
+    const { calls, handle } = setup()
+    const first = handle.load()
+    calls.fetches[0].resolve({ v: 1 })
+    await first
+    flushSync()
+    expect(handle.loading).toBe(false)
+    const painted = calls.paint.length
+    Object.defineProperty(el, 'clientWidth', { get: () => 420, configurable: true })
+    handle.abort()
+    expect(handle.loading).toBe(true)
+    observers[0].cb()
+    expect(calls.paint.length).toBe(painted)
+  })
+
   it('abort() also cancels a reload still waiting on its debounce', async () => {
     const { calls, handle } = setup()
     handle.reload()

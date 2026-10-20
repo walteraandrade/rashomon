@@ -4,9 +4,10 @@ import Compare from '../../src/ui/Compare.svelte'
 import DocsCard from '../../src/ui/DocsCard.svelte'
 import * as docsCard from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
-import { compareParams } from '../../src/ui/api.js'
+import { compareParams, lensesParams, sourcesParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
-import type { Compare as CompareData, CompareTerm } from '../../src/ui/format.js'
+import { SOURCES } from '../../src/query.js'
+import type { Compare as CompareData, CompareTerm, Lenses as LensesData } from '../../src/ui/format.js'
 
 const lula = { id: 'lula', name: 'Lula' }
 const bolsonaro = { id: 'bolsonaro', name: 'Bolsonaro' }
@@ -16,8 +17,11 @@ const people = [lula, bolsonaro]
 const side = (count: number, pmi = 1) => ({ count, pmi, tone: null })
 const reforma: CompareTerm = { term: 'reforma', kind: 'word', a: side(5, 1.2), b: null }
 const payload = (terms: CompareTerm[], a = lula, b = bolsonaro): CompareData => ({ days: 21, a: { person: a, about: 412 }, b: { person: b, about: 168 }, terms })
+const lensPayload = (terms: CompareTerm[], a = 'source:bluesky', b = 'source:gnews', about: [number, number] = [412, 168]): LensesData => ({ days: 21, a: { lens: a, about: about[0] }, b: { lens: b, about: about[1] }, terms })
+const folha = { domain: 'folha.uol.com.br', docs: 12 }
+const g1 = { domain: 'g1.globo.com', docs: 4 }
 
-type Call = { url: string; path: string; params: URLSearchParams; signal?: AbortSignal }
+type Call = { url: string; path: string; route: string; person: string; params: URLSearchParams; signal?: AbortSignal }
 type Handler = (call: Call) => unknown
 let calls: Call[]
 let handlers: Record<string, Handler>
@@ -30,6 +34,22 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement
 const select = (id: string) => $(id) as HTMLSelectElement
 const rows = () => [...$('compareRuler').querySelectorAll('[data-term]')] as HTMLElement[]
 const compareCalls = () => calls.filter((c) => c.path === '/api/compare')
+const input = (id: string) => $(id) as HTMLInputElement
+const of = (route: string) => calls.filter((c) => c.route === route)
+const lensCalls = () => of('lenses')
+const outletValues = (id: string) => [...$(id).querySelectorAll('option')].map((o) => o.value)
+
+const echo: Handler = (call) => lensPayload([reforma], call.params.get('a') ?? 'all', call.params.get('b') ?? 'all')
+
+const held = () => {
+  let release: (v: unknown) => void = () => {}
+  let fail: (e: unknown) => void = () => {}
+  const promise = new Promise((resolve, reject) => {
+    release = resolve
+    fail = reject
+  })
+  return { promise, release: (v: unknown) => release(v), fail: (e: unknown) => fail(e) }
+}
 
 const settle = async (ms = 0) => {
   await vi.advanceTimersByTimeAsync(ms)
@@ -74,7 +94,13 @@ beforeEach(() => {
   vi.useFakeTimers()
   clearScopes()
   calls = []
-  handlers = { '/api/compare': () => payload([reforma]), '/api/compare/bridges': () => ({ bridges: {} }) }
+  handlers = {
+    '/api/compare': () => payload([reforma]),
+    '/api/compare/bridges': () => ({ bridges: {} }),
+    lenses: echo,
+    sources: () => [folha, g1],
+    bridges: () => ({ bridges: {} }),
+  }
   width = 600
   observers = []
   instances = []
@@ -99,9 +125,11 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string, init?: { signal?: AbortSignal }) => {
       const u = new URL(url, 'http://localhost')
-      const call: Call = { url, path: u.pathname, params: u.searchParams, signal: init?.signal }
+      const m = /^\/api\/people\/([^/]+)\/(lenses\/bridges|lenses|sources|docs)$/.exec(u.pathname)
+      const route = m ? (m[2] === 'lenses/bridges' ? 'bridges' : m[2]) : u.pathname
+      const call: Call = { url, path: u.pathname, route, person: m?.[1] ?? '', params: u.searchParams, signal: init?.signal }
       calls.push(call)
-      const body = await (handlers[u.pathname] ?? (() => ({ docs: [], total: 0 })))(call)
+      const body = await (handlers[u.pathname] ?? handlers[route] ?? (() => ({ docs: [], total: 0 })))(call)
       return { ok: true, status: 200, headers: new Headers(), json: async () => body }
     }),
   )
@@ -858,5 +886,1401 @@ describe('Compare over the 7 and 21 day windows (issue #313 acceptance)', () => 
     await start()
     expect(select('compareDays').value).toBe('7')
     expect(compareCalls()[0].params.get('days')).toBe('7')
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Lens mode (#326): the former #lenses figure folded into #compare. Ported from lenses.spec.ts.
+// ---------------------------------------------------------------------------------------------
+
+const lensSearch = (extra = '') => '?compare.mode=recortes' + (extra ? '&' + extra.replace(/^\?/, '') : '')
+
+const startLens = async (extra = '', patch: Partial<{ people: typeof people; peopleError: unknown }> = {}) => {
+  boot({ search: lensSearch(extra), ...patch })
+  await start()
+  await settle(220)
+}
+
+const remount = () => {
+  for (const i of instances) unmount(i)
+  instances = []
+  document.body.innerHTML = ''
+  target = document.createElement('div')
+  document.body.append(target)
+  clearScopes()
+  calls = []
+}
+
+const fire = (id: string, value: string) => {
+  select(id).value = value
+  select(id).dispatchEvent(new Event('change', { bubbles: true }))
+  flushSync()
+}
+
+const barOf = (el: Element) => Number(/--bar:\s*([0-9.]+)/.exec(el.getAttribute('style') ?? '')?.[1])
+const atlasCard = () =>
+  void docsCard.open({ owner: 'atlas', kicker: 'Documentos com', title: 'golpe', sides: [{ personId: 'lula', personName: 'Lula', label: 'Lula', query: new URLSearchParams({ days: '21' }) }] })
+
+describe('Compare lens mode (#326)', () => {
+  it('lens mode: request params and defaults', async () => {
+    await startLens()
+    expect(lensCalls()).toHaveLength(1)
+    expect(compareCalls()).toEqual([])
+    const c = lensCalls()[0]
+    expect(c.path).toBe('/api/people/lula/lenses')
+    expect(c.url).toBe('/api/people/lula/lenses?' + lensesParams({ a: 'source:bluesky', b: 'source:gnews', days: '21', limit: '20' }).toString())
+    expect(c.params.get('a')).toBe('source:bluesky')
+    expect(c.params.get('b')).toBe('source:gnews')
+    expect(c.params.get('days')).toBe('21')
+    expect(c.params.get('limit')).toBe('20')
+    expect(c.params.get('kind')).toBe('word,hashtag,phrase')
+    for (const key of ['mode', 'person', 'source', 'measure']) expect(c.params.has(key), key).toBe(false)
+    expect(input('compareLensAInput').value).toBe('Bluesky')
+    expect(input('compareLensBInput').value).toBe('Google News')
+    expect(of('sources')).toHaveLength(1)
+    expect(of('sources')[0].path).toBe('/api/people/lula/sources')
+    expect(of('sources')[0].url).toBe('/api/people/lula/sources?' + sourcesParams({ days: '21', sort: 'count', limit: '80', source: 'all' }).toString())
+    expect(of('docs')).toEqual([])
+  })
+
+  it('lens mode: nothing fetches before bootData.ready, and the ghost stands in the chart and the detail', async () => {
+    await start()
+    expect(calls).toEqual([])
+    expect($('compareRuler').hidden).toBe(false)
+    expect($('compareRuler').querySelector('.ghost-field')).not.toBeNull()
+    expect($('compareRuler').textContent).toContain('Lendo as barras.')
+    expect($('compareDetail').querySelector('.detail-sides')).not.toBeNull()
+    expect($('compareStatus').hidden).toBe(true)
+    expect($('compareThinNote').hidden).toBe(true)
+    await settle(500)
+    expect($('compareRuler').querySelector('.ghost-field')).not.toBeNull()
+    boot({ search: lensSearch() })
+    flushSync()
+    await settle(220)
+    expect(lensCalls()).toHaveLength(1)
+    expect($('compareRuler').querySelector('.ghost-field')).toBeNull()
+    expect(rows()).toHaveLength(1)
+  })
+
+  it('lens mode: seeds from the querystring, a bare a= never seeds lens A', async () => {
+    boot({ search: '?person=bolsonaro&lenses.a=all&lenses.b=lean:right&days=7&limit=60' })
+    await start()
+    await settle(220)
+    const c = lensCalls()[0]
+    expect(select('compareMode').value).toBe('recortes')
+    expect(c.path).toBe('/api/people/bolsonaro/lenses')
+    expect(c.params.get('a')).toBe('all')
+    expect(c.params.get('b')).toBe('lean:right')
+    expect(c.params.get('days')).toBe('7')
+    expect(c.params.get('limit')).toBe('60')
+    expect(select('comparePerson').value).toBe('bolsonaro')
+    expect(select('compareLensB').value).toBe('lean:right')
+    expect(select('compareDays').value).toBe('7')
+    expect(select('compareLimit').value).toBe('60')
+    expect(of('sources')[0].path).toBe('/api/people/bolsonaro/sources')
+    expect(of('sources')[0].params.get('days')).toBe('7')
+
+    remount()
+    boot({ search: '?a=lean:left&lenses.b=lean:right' })
+    await start()
+    await settle(220)
+    expect(select('compareLensA').value).toBe('source:bluesky')
+    expect(lensCalls()[0].params.get('a')).toBe('source:bluesky')
+    expect(lensCalls()[0].params.get('b')).toBe('lean:right')
+
+    remount()
+    boot({ search: '?a=lean:left&lenses.a=lean:left' })
+    await start()
+    await settle(220)
+    expect(select('compareLensA').value).toBe('lean:left')
+    expect(lensCalls()[0].params.get('a')).toBe('lean:left')
+  })
+
+  it('lens mode: the legacy lenses.* keys open lens mode with exactly their values', async () => {
+    boot({ search: '?lenses.person=bolsonaro&lenses.a=lean:left&lenses.b=source:gdelt&lenses.days=7&lenses.limit=60' })
+    await start()
+    await settle(220)
+    expect(select('compareMode').value).toBe('recortes')
+    expect(compareCalls()).toEqual([])
+    expect(lensCalls()).toHaveLength(1)
+    const c = lensCalls()[0]
+    expect(c.path).toBe('/api/people/bolsonaro/lenses')
+    expect(c.params.get('a')).toBe('lean:left')
+    expect(c.params.get('b')).toBe('source:gdelt')
+    expect(c.params.get('days')).toBe('7')
+    expect(c.params.get('limit')).toBe('60')
+  })
+
+  it('lens mode: an unknown lens token, limit or days is ignored and the side keeps its default', async () => {
+    await startLens('lenses.a=lean:nope&lenses.b=source:nope&limit=7&days=9')
+    expect(select('compareLensA').value).toBe('source:bluesky')
+    expect(select('compareLensB').value).toBe('source:gnews')
+    expect(lensCalls()[0].params.get('a')).toBe('source:bluesky')
+    expect(lensCalls()[0].params.get('b')).toBe('source:gnews')
+    expect(lensCalls()[0].params.get('days')).toBe('21')
+    expect(lensCalls()[0].params.get('limit')).toBe('20')
+  })
+
+  it('lens mode: a later setBoot never re-seeds nor refetches', async () => {
+    await startLens('lenses.days=7')
+    expect(lensCalls()).toHaveLength(1)
+    await change('compareDays', '21')
+    const before = calls.length
+    boot({ search: lensSearch('lenses.days=7'), people: [...people, ciro] })
+    flushSync()
+    await settle(500)
+    expect(select('compareDays').value).toBe('21')
+    expect(calls.length).toBe(before)
+  })
+
+  it('lens mode: the Veículo optgroup lists each top domain once and skips rows without a domain', async () => {
+    handlers.sources = () => [folha, { domain: 'folha.uol.com.br', docs: 3 }, { domain: null, docs: 2 }, g1]
+    await startLens()
+    expect(outletValues('compareLensAOutlets')).toEqual(['domain:folha.uol.com.br', 'domain:g1.globo.com'])
+    expect(outletValues('compareLensBOutlets')).toEqual(['domain:folha.uol.com.br', 'domain:g1.globo.com'])
+  })
+
+  it('lens mode: domain seed deferred until optgroup fills', async () => {
+    const gate = held()
+    handlers.sources = () => gate.promise
+    await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=lean:left')
+    expect(select('compareLensA').value).toBe('source:bluesky')
+    expect(select('compareLensB').value).toBe('lean:left')
+    expect(input('compareLensAInput').value).toBe('Bluesky')
+    expect(lensCalls()).toHaveLength(0)
+    gate.release([folha, g1])
+    await settle(220)
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+    expect(input('compareLensAInput').value).toBe('folha.uol.com.br')
+    expect(lensCalls()).toHaveLength(1)
+    expect(lensCalls()[0].params.get('a')).toBe('domain:folha.uol.com.br')
+  })
+
+  it('lens mode: a domain seed the optgroup never gets stays on the default, never on all', async () => {
+    handlers.sources = () => [g1]
+    await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=domain:nowhere.example')
+    expect(select('compareLensA').value).toBe('source:bluesky')
+    expect(select('compareLensB').value).toBe('source:gnews')
+    expect(lensCalls()[0].params.get('a')).toBe('source:bluesky')
+    expect(lensCalls()[0].params.get('b')).toBe('source:gnews')
+  })
+
+  for (const [side, id, param] of [
+    ['A', 'compareLensA', 'a'],
+    ['B', 'compareLensB', 'b'],
+  ]) {
+    it(`lens mode: a touched ${side} skips the deferred domain seed`, async () => {
+      const gate = held()
+      handlers.sources = () => gate.promise
+      await startLens(`lenses.${param}=domain:folha.uol.com.br`)
+      fire(id, 'source:rss')
+      await settle()
+      gate.release([folha])
+      await settle(220)
+      expect(select(id).value).toBe('source:rss')
+      expect(lensCalls().pop()!.params.get(param)).toBe('source:rss')
+    })
+  }
+
+  it('lens mode: a non-domain seed applies at once and a reader change survives the pending fill', async () => {
+    const gate = held()
+    handlers.sources = () => gate.promise
+    await startLens('lenses.a=lean:left')
+    expect(select('compareLensA').value).toBe('lean:left')
+    fire('compareLensA', 'source:rss')
+    await settle()
+    gate.release([folha])
+    await settle(220)
+    expect(select('compareLensA').value).toBe('source:rss')
+    expect(lensCalls().pop()!.params.get('a')).toBe('source:rss')
+  })
+
+  it('lens mode: a limit change while /sources is in flight keeps the deferred domain seed', async () => {
+    const gate = held()
+    handlers.sources = () => gate.promise
+    await startLens('lenses.a=domain:folha.uol.com.br')
+    await change('compareLimit', '60')
+    gate.release([folha])
+    await settle(220)
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+  })
+
+  for (const [name, id, value, applied] of [
+    ['a person change marks both sides touched', 'comparePerson', 'bolsonaro', false],
+    ['a days change marks neither', 'compareDays', '7', true],
+  ] as const) {
+    it(`lens mode: ${name}, so the pending domain seeds ${applied ? 'still apply' : 'are skipped'}`, async () => {
+      const first = held()
+      let n = 0
+      handlers.sources = () => (++n === 1 ? first.promise : [folha, g1])
+      await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=domain:g1.globo.com')
+      await change(id, value)
+      first.release([folha, g1])
+      await settle(220)
+      expect(select('compareLensA').value).toBe(applied ? 'domain:folha.uol.com.br' : 'source:bluesky')
+      expect(select('compareLensB').value).toBe(applied ? 'domain:g1.globo.com' : 'source:gnews')
+    })
+  }
+
+  it('lens mode: stale /sources response ignored (another person)', async () => {
+    const first = held()
+    let n = 0
+    handlers.sources = (call) => {
+      n++
+      if (n === 1) return first.promise
+      return call.person === 'bolsonaro' ? [folha] : [g1]
+    }
+    await startLens()
+    await change('comparePerson', 'bolsonaro')
+    expect(outletValues('compareLensAOutlets')).toEqual(['domain:folha.uol.com.br'])
+    select('compareLensA').value = 'domain:folha.uol.com.br'
+    first.release([g1])
+    await settle(220)
+    expect(outletValues('compareLensAOutlets')).toEqual(['domain:folha.uol.com.br'])
+    expect(outletValues('compareLensBOutlets')).toEqual(['domain:folha.uol.com.br'])
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+  })
+
+  it('lens mode: stale /sources response ignored (days back to its starting value)', async () => {
+    const first = held()
+    let n = 0
+    handlers.sources = () => {
+      n++
+      return n === 1 ? first.promise : [{ domain: 'fresh.example', docs: 1 }]
+    }
+    await startLens()
+    await change('compareDays', '7')
+    await change('compareDays', '21')
+    expect(outletValues('compareLensAOutlets')).toEqual(['domain:fresh.example'])
+    first.release([{ domain: 'stale.example', docs: 1 }])
+    await settle(220)
+    expect(outletValues('compareLensAOutlets')).toEqual(['domain:fresh.example'])
+  })
+
+  it('lens mode: person and days change keep or drop a domain', async () => {
+    await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=lean:left')
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+
+    handlers.sources = () => [g1]
+    await change('comparePerson', 'bolsonaro')
+    expect(select('compareLensA').value).toBe('all')
+    expect(input('compareLensAInput').value).toBe('Tudo')
+    expect(select('compareLensB').value).toBe('lean:left')
+    expect(lensCalls().pop()!.path).toBe('/api/people/bolsonaro/lenses')
+    expect(lensCalls().pop()!.params.get('a')).toBe('all')
+
+    handlers.sources = () => [folha, g1]
+    await change('comparePerson', 'lula')
+    await change('compareLensA', 'domain:folha.uol.com.br')
+    handlers.sources = () => [folha]
+    await change('comparePerson', 'bolsonaro')
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+    expect(lensCalls().pop()!.params.get('a')).toBe('domain:folha.uol.com.br')
+
+    const sourcesBefore = of('sources').length
+    handlers.sources = () => [folha]
+    await change('compareDays', '7')
+    expect(of('sources').length).toBe(sourcesBefore + 1)
+    expect(of('sources').pop()!.params.get('days')).toBe('7')
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+
+    handlers.sources = () => [g1]
+    await change('compareDays', '21')
+    expect(select('compareLensA').value).toBe('all')
+    expect($('compareRuler').querySelector('[role="group"]')?.getAttribute('aria-label')).not.toContain('folha.uol.com.br')
+  })
+
+  it('lens mode: a person change drops a B domain the new person lacks', async () => {
+    await startLens('lenses.b=domain:folha.uol.com.br')
+    expect(select('compareLensB').value).toBe('domain:folha.uol.com.br')
+    handlers.sources = () => [g1]
+    await change('comparePerson', 'bolsonaro')
+    expect(select('compareLensB').value).toBe('all')
+    expect(input('compareLensBInput').value).toBe('Tudo')
+    expect(lensCalls().pop()!.params.get('b')).toBe('all')
+  })
+
+  it('lens mode: a limit change keeps both sides and does not refetch /sources', async () => {
+    await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=lean:left')
+    const sources = of('sources').length
+    await change('compareLimit', '100')
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+    expect(select('compareLensB').value).toBe('lean:left')
+    expect(of('sources')).toHaveLength(sources)
+    expect(lensCalls().pop()!.params.get('limit')).toBe('100')
+  })
+
+  for (const [id, value, param] of [
+    ['compareLensA', 'lean:left', 'a'],
+    ['compareLensB', 'source:rss', 'b'],
+    ['compareDays', '7', 'days'],
+    ['compareLimit', '100', 'limit'],
+    ['comparePerson', 'bolsonaro', 'person'],
+  ]) {
+    it(`lens mode: control changes refetch and release (#${id})`, async () => {
+      await startLens()
+      const before = lensCalls().length
+      await change(id, value)
+      const added = lensCalls().slice(before)
+      expect(added).toHaveLength(1)
+      if (param === 'person') expect(added[0].path).toBe('/api/people/bolsonaro/lenses')
+      else expect(added[0].params.get(param)).toBe(value)
+      expect(of('docs')).toEqual([])
+    })
+  }
+
+  it('lens mode: status notice for identical lenses', async () => {
+    await startLens()
+    expect($('compareStatus').hidden).toBe(true)
+    await change('compareLensB', 'source:bluesky')
+    expect($('compareStatus').hidden).toBe(false)
+    expect($('compareStatus').textContent).toBe('Os dois lados mostram o mesmo recorte.')
+    await change('compareLensA', 'lean:right')
+    expect($('compareStatus').hidden).toBe(true)
+    await change('compareLensB', 'lean:right')
+    expect($('compareStatus').hidden).toBe(false)
+    await change('compareLensB', 'all')
+    expect($('compareStatus').hidden).toBe(true)
+  })
+
+  it('lens mode: #compareStatus stays hidden while the ghost shows', async () => {
+    const gate = held()
+    handlers.lenses = () => gate.promise
+    await startLens()
+    expect($('compareRuler').querySelector('.ghost-field')).not.toBeNull()
+    expect($('compareStatus').hidden).toBe(true)
+    gate.release(lensPayload([reforma], 'all', 'all'))
+    await settle()
+    expect($('compareStatus').hidden).toBe(false)
+  })
+
+  it('lens mode: click opens a two-sided docs card owned by compare', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'domain:folha.uol.com.br', 'lean:right')
+    await startLens('days=7')
+    click(rows()[0])
+    await settle()
+    expect(rows()[0].getAttribute('aria-pressed')).toBe('true')
+    expect(docsCard.isOpen()).toBe(true)
+    expect(docsCard.openedBy('compare')).toBe(true)
+    const docs = of('docs')
+    expect(docs).toHaveLength(2)
+    for (const c of docs) {
+      expect(c.path).toBe('/api/people/lula/docs')
+      expect(c.params.get('term')).toBe('reforma')
+      expect(c.params.get('kind')).toBe('word')
+      expect(c.params.get('days')).toBe('7')
+      expect(c.params.get('source')).toBe('all')
+    }
+    const a = docs.find((c) => c.params.get('domain') === 'folha.uol.com.br')
+    const b = docs.find((c) => c.params.get('lean') === 'right')
+    expect(a).toBeDefined()
+    expect(b).toBeDefined()
+    expect(a!.params.has('lean')).toBe(false)
+    expect(b!.params.has('domain')).toBe(false)
+    expect($('docsTitle').textContent).toBe('reforma')
+    expect($('docsKicker').textContent).toBe('Documentos com palavra')
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('folha.uol.com.br')
+    expect(text).toContain('Direita')
+    expect(text).toContain('Lula')
+  })
+
+  it('lens mode: a source lens sends source=, an all lens sends source=all and no domain or lean', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'source:rss', 'all')
+    await startLens()
+    click(rows()[0])
+    await settle()
+    const docs = of('docs')
+    expect(docs).toHaveLength(2)
+    expect(docs.map((c) => c.params.get('source')).sort()).toEqual(['all', 'rss'])
+    for (const c of docs) {
+      expect(c.params.has('domain')).toBe(false)
+      expect(c.params.has('lean')).toBe(false)
+    }
+    expect(document.body.textContent).toContain('Tudo')
+  })
+
+  it('lens mode: a lean lens on the other side and pressing Enter or Space on a row picks it', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'lean:left', 'source:gdelt')
+    await startLens()
+    for (const key of ['Enter', ' ']) {
+      const e = keydown(rows()[0], key)
+      expect(e.defaultPrevented).toBe(true)
+      await settle()
+      expect(rows()[0].getAttribute('aria-pressed')).toBe('true')
+      expect(docsCard.openedBy('compare')).toBe(true)
+      escape()
+      await settle()
+      expect(docsCard.isOpen()).toBe(false)
+    }
+    const docs = of('docs')
+    expect(docs.some((c) => c.params.get('lean') === 'left' && c.params.get('source') === 'all')).toBe(true)
+    expect(docs.some((c) => c.params.get('source') === 'gdelt')).toBe(true)
+  })
+
+  it('lens mode: the same row again, the background and Escape each clear the pick and close the card', async () => {
+    await startLens()
+    const releasers: [string, () => void][] = [
+      ['same row', () => click(rows()[0])],
+      ['background', () => click($('compareRuler'))],
+      ['escape', escape],
+    ]
+    for (const [name, release] of releasers) {
+      click(rows()[0])
+      await settle()
+      expect(docsCard.openedBy('compare'), `${name}: open`).toBe(true)
+      release()
+      await settle()
+      expect(docsCard.isOpen(), `${name}: card closed`).toBe(false)
+      expect(rows()[0].getAttribute('aria-pressed'), `${name}: unpicked`).toBe('false')
+      expect($('compareDetail').textContent).toMatch(/Clique numa palavra para ver os números das duas lentes\./)
+    }
+  })
+
+  it('lens mode: control change releases own card only', async () => {
+    await startLens()
+    for (const [id, value] of [
+      ['compareLensA', 'lean:left'],
+      ['compareLensB', 'lean:center'],
+      ['compareDays', '7'],
+      ['compareLimit', '60'],
+      ['comparePerson', 'bolsonaro'],
+    ]) {
+      click(rows()[0])
+      await settle()
+      expect(docsCard.openedBy('compare'), `${id}: open`).toBe(true)
+      await change(id, value)
+      expect(docsCard.isOpen(), `${id}: closed`).toBe(false)
+    }
+    click(rows()[0])
+    await settle()
+    atlasCard()
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(false)
+    await change('compareLensA', 'source:rss')
+    expect(docsCard.isOpen()).toBe(true)
+    expect(docsCard.openedBy('atlas')).toBe(true)
+  })
+
+  it('lens mode: a days change closes the compare card at once, before the new data lands', async () => {
+    await startLens()
+    click(rows()[0])
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(true)
+    handlers.lenses = () => new Promise(() => {})
+    fire('compareDays', '7')
+    await settle()
+    expect(docsCard.isOpen()).toBe(false)
+    expect(rows()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('lens mode: resize keeps the pick', async () => {
+    await startLens()
+    click(rows()[0])
+    await settle()
+    const before = calls.length
+    const markup = $('compareRuler').innerHTML
+    width = 400
+    for (const o of observers) o.cb()
+    flushSync()
+    await settle()
+    expect(calls.length).toBe(before)
+    expect(docsCard.openedBy('compare')).toBe(true)
+    expect(rows()[0].getAttribute('aria-pressed')).toBe('true')
+    expect($('compareRuler').innerHTML).toBe(markup)
+  })
+
+  it('lens mode: a resize during loading repaints nothing', async () => {
+    await startLens()
+    const gate = held()
+    handlers.lenses = () => gate.promise
+    fire('compareDays', '7')
+    await settle(220)
+    const ghost = $('compareRuler').innerHTML
+    width = 300
+    for (const o of observers) o.cb()
+    flushSync()
+    await settle()
+    expect($('compareRuler').innerHTML).toBe(ghost)
+    gate.release(lensPayload([reforma]))
+    await settle()
+    expect(rows()).toHaveLength(1)
+  })
+
+  it('lens mode: a second click on the same row after a resize still releases', async () => {
+    await startLens()
+    click(rows()[0])
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(true)
+    width = 400
+    for (const o of observers) o.cb()
+    flushSync()
+    await settle()
+    click(rows()[0])
+    await settle()
+    expect(docsCard.isOpen()).toBe(false)
+    expect(rows()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('lens mode: a click on the header, the subtitle, a select, a combobox or the detail keeps the pick and the card', async () => {
+    await startLens()
+    click(rows()[0])
+    await settle()
+    const els = [document.querySelector('#compare .figure-head')!, document.querySelector('#compare .figure-sub')!, select('compareMode'), select('comparePerson'), select('compareLensA'), $('compareLensAInput'), $('compareDetail')]
+    for (const el of els) {
+      click(el)
+      await settle()
+      expect(docsCard.openedBy('compare')).toBe(true)
+      expect(rows()[0].getAttribute('aria-pressed')).toBe('true')
+    }
+  })
+
+  it('lens mode: stale pick dropped mid-reload (data lands)', async () => {
+    await startLens()
+    const gate = held()
+    handlers.lenses = () => gate.promise
+    fire('compareLensA', 'lean:left')
+    await settle(220)
+    expect($('compare').classList.contains('is-loading')).toBe(true)
+    click(rows()[0])
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(true)
+    gate.release(lensPayload([reforma], 'lean:left', 'source:gnews'))
+    await settle()
+    expect($('compare').classList.contains('is-loading')).toBe(false)
+    expect(docsCard.isOpen()).toBe(false)
+    expect(rows()[0].getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('lens mode: stale pick dropped mid-reload (reload fails)', async () => {
+    await startLens()
+    const gate = held()
+    handlers.lenses = () => gate.promise
+    fire('compareDays', '7')
+    await settle(220)
+    click(rows()[0])
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(true)
+    gate.fail(new Error('boom'))
+    await settle()
+    expect(docsCard.isOpen()).toBe(false)
+    expect($('compareRuler').textContent).toContain('Não foi possível carregar a comparação.')
+  })
+
+  it('lens mode: a card another figure opened over a pick made on dimmed data survives the new data', async () => {
+    await startLens()
+    click(rows()[0])
+    await settle()
+    atlasCard()
+    await settle()
+    await change('compareDays', '7')
+    expect(docsCard.openedBy('atlas')).toBe(true)
+  })
+
+  it('lens mode: bridges applied after paint, aborted on change', async () => {
+    const terms: CompareTerm[] = [
+      { term: 'stf', kind: 'word', a: side(5), b: side(5) },
+      { term: 'pix', kind: 'word', a: side(2), b: null },
+    ]
+    handlers.lenses = () => lensPayload(terms)
+    handlers.bridges = () => ({ bridges: { 'word:stf': 1, 'word:pix': 0 } })
+    await startLens()
+    const chart = calls.findIndex((c) => c.route === 'lenses')
+    const bridges = calls.findIndex((c) => c.route === 'bridges')
+    expect(chart).toBeGreaterThanOrEqual(0)
+    expect(bridges).toBeGreaterThan(chart)
+    expect(calls[bridges].path).toBe('/api/people/lula/lenses/bridges')
+    expect(calls[bridges].params.get('ids')).toBe('word:pix,word:stf')
+    expect(calls[bridges].params.get('a')).toBe('source:bluesky')
+    expect(calls[bridges].params.get('b')).toBe('source:gnews')
+    expect(calls[bridges].params.get('days')).toBe('21')
+    expect(calls[bridges].params.get('limit')).toBe('20')
+    expect(calls[chart].params.has('bridges')).toBe(false)
+    expect($('compareRuler').querySelectorAll('[data-bridge="1"]')).toHaveLength(1)
+    expect($('compareRuler').querySelector('[data-bridge="1"]')?.getAttribute('data-term')).toBe('stf')
+    expect(calls.filter((c) => c.path === '/api/compare/bridges')).toEqual([])
+  })
+
+  it('lens mode: a control change during the bridge load aborts it and its late result is dropped', async () => {
+    const late = held()
+    let first: Call | undefined
+    handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
+    handlers.bridges = (call) => {
+      first ??= call
+      return late.promise
+    }
+    await startLens()
+    expect(first!.signal?.aborted).toBe(false)
+    handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(9), b: side(4) }])
+    handlers.bridges = () => new Promise(() => {})
+    await change('compareDays', '7')
+    expect(first!.signal?.aborted).toBe(true)
+    late.release({ bridges: { 'word:stf': 1 } })
+    await settle()
+    expect($('compareRuler').querySelectorAll('[data-bridge]')).toHaveLength(0)
+  })
+
+  it('lens mode: a control change aborts the bridge load before the new data lands', async () => {
+    let first: Call | undefined
+    handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
+    handlers.bridges = (call) => {
+      first ??= call
+      return new Promise(() => {})
+    }
+    await startLens()
+    handlers.lenses = () => new Promise(() => {})
+    fire('compareLimit', '60')
+    expect(first!.signal?.aborted).toBe(true)
+  })
+
+  it('lens mode: unmounting aborts the in-flight bridge request', async () => {
+    let first: Call | undefined
+    handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
+    handlers.bridges = (call) => {
+      first ??= call
+      return new Promise(() => {})
+    }
+    await startLens()
+    expect(first?.signal?.aborted).toBe(false)
+    for (const i of instances) unmount(i)
+    instances = []
+    flushSync()
+    expect(first!.signal?.aborted).toBe(true)
+  })
+
+  it('lens mode: a failed bridge request leaves the chart as painted', async () => {
+    handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }])
+    handlers.bridges = () => {
+      throw new Error('nope')
+    }
+    await startLens()
+    expect(rows()).toHaveLength(1)
+    expect($('compareRuler').querySelectorAll('[data-bridge]')).toHaveLength(0)
+    expect($('compareRuler').textContent).not.toMatch(/Não foi possível/)
+  })
+
+  it('lens mode: a memoized payload that already carries bridges never asks for them again', async () => {
+    handlers.lenses = (call) => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }], call.params.get('a')!, call.params.get('b')!)
+    handlers.bridges = () => ({ bridges: { 'word:stf': 1 } })
+    await startLens()
+    await change('compareLimit', '60')
+    await change('compareLimit', '20')
+    expect(of('bridges')).toHaveLength(2)
+  })
+
+  it('lens mode: the bridges request carries both lenses', async () => {
+    handlers.lenses = (call) => lensPayload([{ term: 'stf', kind: 'word', a: side(5), b: side(5) }], call.params.get('a')!, call.params.get('b')!)
+    await startLens('lenses.a=lean:left&lenses.b=source:rss')
+    const bridge = of('bridges').pop()!
+    expect(bridge.params.get('a')).toBe('lean:left')
+    expect(bridge.params.get('b')).toBe('source:rss')
+    expect(bridge.params.get('days')).toBe('21')
+    expect(bridge.params.get('limit')).toBe('20')
+    expect(bridge.params.get('ids')).toBe('word:stf')
+  })
+
+  it('lens mode: name word and bridge detail copy', async () => {
+    handlers.lenses = () => lensPayload([{ term: 'stf', kind: 'word', a: side(7, 1.5), b: side(3, 0.5) }])
+    handlers.bridges = () => ({ bridges: { 'word:stf': 1 } })
+    await startLens()
+    expect($('compareDetail').textContent).toContain('Clique numa palavra para ver os números das duas lentes.')
+    click(rows()[0])
+    await settle()
+    expect($('compareDetail').textContent).toContain('7 documentos · PMI 1,5')
+    expect($('compareDetail').querySelector('.detail-bridge')?.textContent).toBe('ponte: as duas lentes precisam dela')
+    expect($('compareDetail').textContent).not.toContain('liga os dois vocabulários')
+    expect([...$('compareDetail').querySelectorAll('dt')].map((e) => e.textContent)).toEqual(['Bluesky', 'Google News'])
+  })
+
+  it('lens mode: the detail line labels each side by its lens and reads "nenhum documento" for a null side', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'domain:folha.uol.com.br', 'lean:right')
+    await startLens()
+    click(rows()[0])
+    await settle()
+    const detail = $('compareDetail')
+    expect(detail.textContent).toContain('reforma')
+    expect([...detail.querySelectorAll('dt')].map((e) => e.textContent)).toEqual(['folha.uol.com.br', 'Direita'])
+    expect(detail.textContent).toContain('nenhum documento')
+    expect(detail.textContent).toContain('5 documentos · PMI 1,2')
+    expect(detail.querySelector('.detail-bridge')).toBeNull()
+  })
+
+  it('lens mode: the docs card columns are labelled by lensLabel, a first then b', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'domain:folha.uol.com.br', 'lean:right')
+    handlers.docs = () => ({ docs: [], total: 0 })
+    await startLens()
+    click(rows()[0])
+    await settle()
+    expect([...document.querySelectorAll('#docs .docs-side-name')].map((e) => e.textContent)).toEqual(['folha.uol.com.br', 'Direita'])
+  })
+
+  it('lens mode: own-name words are dropped from the chart and counted in #compareHiddenNote', async () => {
+    await startLens()
+    expect($('compareHiddenNote').hidden).toBe(true)
+    expect($('compareHiddenNote').textContent).toBe('')
+    handlers.lenses = () => lensPayload([{ term: 'lula', kind: 'word', a: 'name', b: 'name' }, reforma])
+    await change('compareDays', '7')
+    expect($('compareHiddenNote').hidden).toBe(false)
+    expect($('compareHiddenNote').textContent).toBe('1 palavra deixada de fora por ser o próprio nome da pessoa.')
+    expect(rows().map((w) => w.getAttribute('data-term'))).toEqual(['reforma'])
+    handlers.lenses = () => lensPayload([{ term: 'lula', kind: 'word', a: 'name', b: side(2) }, { term: 'luiz', kind: 'word', a: side(2), b: 'name' }, reforma])
+    await change('compareLimit', '60')
+    expect($('compareHiddenNote').textContent).toBe('2 palavras deixadas de fora por ser o próprio nome da pessoa.')
+    handlers.lenses = () => lensPayload([reforma])
+    await change('compareLimit', '100')
+    expect($('compareHiddenNote').hidden).toBe(true)
+  })
+
+  it('lens mode: empty state', async () => {
+    handlers.lenses = () => lensPayload([])
+    await startLens()
+    expect($('compareRuler').hidden).toBe(false)
+    expect($('compareRuler').textContent).toContain('Nenhuma palavra neste recorte.')
+    expect(rows()).toHaveLength(0)
+    expect($('compareHiddenNote').hidden).toBe(true)
+    expect($('compareDetail').textContent).toContain('Clique numa palavra para ver os números das duas lentes.')
+  })
+
+  it('lens mode: /lenses failure and retry', async () => {
+    handlers.lenses = () => {
+      throw new Error('offline')
+    }
+    await startLens()
+    expect($('compareRuler').textContent).toContain('Não foi possível carregar a comparação.')
+    expect($('compareRuler').querySelector('.ghost-field')).toBeNull()
+    expect($('compareDetail').textContent).toContain('Clique numa palavra para ver os números das duas lentes.')
+    expect($('compareStatus').hidden).toBe(true)
+    expect($('compareThinNote').hidden).toBe(true)
+    expect(rows()).toHaveLength(0)
+    width = 350
+    for (const o of observers) o.cb()
+    flushSync()
+    await settle()
+    expect(rows()).toHaveLength(0)
+    expect($('compareRuler').textContent).toContain('Não foi possível carregar a comparação.')
+    const retry = $('compareErrorRetry')
+    expect(retry).not.toBeNull()
+    handlers.lenses = echo
+    const before = lensCalls().length
+    click(retry)
+    await settle(220)
+    expect(lensCalls().length).toBe(before + 1)
+    expect($('compareRuler').textContent).not.toContain('Não foi possível carregar a comparação.')
+    expect(rows()).toHaveLength(1)
+  })
+
+  it('lens mode: peopleError', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    await startLens('', { people: [], peopleError: new Error('down') })
+    expect(calls).toEqual([])
+    expect($('compareRuler').hidden).toBe(true)
+    expect($('compareStatus').hidden).toBe(true)
+    expect($('compareHiddenNote').hidden).toBe(true)
+    expect($('compareThinNote').hidden).toBe(true)
+    expect($('compareDetail').textContent).toContain('Falha de rede ou base indisponível.')
+    expect($('compareDetail').textContent).not.toContain('Nenhuma pessoa cadastrada.')
+    expect($('compare').querySelector('img')).toBeNull()
+    const retry = $('compareRetry')
+    expect(retry.textContent).toContain('Tentar novamente')
+    click(retry)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('lens mode: no people says so and fetches nothing', async () => {
+    await startLens('', { people: [] })
+    expect(calls).toEqual([])
+    expect($('compareRuler').hidden).toBe(true)
+    expect($('compareDetail').textContent).toContain('Nenhuma pessoa cadastrada.')
+  })
+
+  it('lens mode: combobox sync after programmatic writes', async () => {
+    await startLens('lenses.a=lean:left')
+    for (const id of ['compareLensA', 'compareLensB']) expect(select(id).hasAttribute('hidden')).toBe(true)
+    expect(input('compareLensAInput').value).toBe('Esquerda')
+    expect(input('compareLensBInput').value).toBe('Google News')
+    expect(input('compareLensAInput').getAttribute('aria-label')).toBe('Lente A')
+    expect(input('compareLensBInput').getAttribute('aria-label')).toBe('Lente B')
+    expect(input('compareLensAInput').getAttribute('aria-controls')).toBe('compareLensAList')
+    expect(input('compareLensBInput').getAttribute('aria-controls')).toBe('compareLensBList')
+    expect($('compareLensAList').getAttribute('role')).toBe('listbox')
+    expect($('compareLensAList').getAttribute('aria-label')).toBe('Opções da lente A')
+    expect($('compareLensBList').getAttribute('aria-label')).toBe('Opções da lente B')
+  })
+
+  it('lens mode: an optgroup refill that drops a domain resyncs the input text', async () => {
+    await startLens('lenses.a=domain:folha.uol.com.br&lenses.b=domain:g1.globo.com')
+    expect(input('compareLensAInput').value).toBe('folha.uol.com.br')
+    expect(input('compareLensBInput').value).toBe('g1.globo.com')
+    handlers.sources = () => [g1]
+    await change('comparePerson', 'bolsonaro')
+    expect(input('compareLensAInput').value).toBe('Tudo')
+    expect(input('compareLensBInput').value).toBe('g1.globo.com')
+  })
+
+  it('lens mode: picking a listbox option writes the select, fires change and the figure reloads', async () => {
+    await startLens()
+    const before = lensCalls().length
+    let changes = 0
+    select('compareLensA').addEventListener('change', () => changes++)
+    input('compareLensAInput').dispatchEvent(new Event('focus'))
+    flushSync()
+    expect($('compareLensAList').hasAttribute('hidden')).toBe(false)
+    const option = $('compareLensAList').querySelector('[data-value="domain:g1.globo.com"]') as HTMLElement
+    expect(option).not.toBeNull()
+    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    flushSync()
+    await settle(220)
+    expect(select('compareLensA').value).toBe('domain:g1.globo.com')
+    expect(changes).toBe(1)
+    expect(input('compareLensAInput').value).toBe('g1.globo.com')
+    expect(lensCalls()).toHaveLength(before + 1)
+    expect(lensCalls().pop()!.params.get('a')).toBe('domain:g1.globo.com')
+    expect(lensCalls().pop()!.params.get('b')).toBe('source:gnews')
+  })
+
+  it('lens mode: Escape inside an open lens combobox closes the list but keeps the pick and the card', async () => {
+    await startLens()
+    click(rows()[0])
+    await settle()
+    input('compareLensAInput').dispatchEvent(new Event('focus'))
+    flushSync()
+    expect($('compareLensAList').hidden).toBe(false)
+    input('compareLensAInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    flushSync()
+    await settle()
+    expect($('compareLensAList').hidden).toBe(true)
+    expect(docsCard.openedBy('compare')).toBe(true)
+    expect(rows()[0].getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('lens mode: Fonte options equal SOURCES', async () => {
+    await startLens()
+    for (const id of ['compareLensA', 'compareLensB']) {
+      const groups = [...select(id).querySelectorAll('optgroup')]
+      expect(groups.map((g) => g.getAttribute('label'))).toEqual(['Veículo', 'Viés', 'Fonte'])
+      expect([...groups[2].querySelectorAll('option')].map((o) => o.value)).toEqual(SOURCES.map((s) => `source:${s}`))
+      expect([...groups[1].querySelectorAll('option')].map((o) => o.value)).toEqual(['lean:left', 'lean:center', 'lean:right'])
+      expect(select(id).options[0].value).toBe('all')
+    }
+  })
+
+  it('lens mode: the ids exist and the limit options are 20/40/60/100', async () => {
+    await startLens()
+    for (const id of ['compareTitle', 'compareMode', 'comparePerson', 'compareLensA', 'compareLensB', 'compareLensAOutlets', 'compareLensBOutlets', 'compareLensAInput', 'compareLensAList', 'compareLensBInput', 'compareLensBList', 'compareDays', 'compareLimit', 'compareStatus', 'compareRuler', 'compareDetail', 'compareHiddenNote', 'compareThinNote']) {
+      expect(document.getElementById(id), id).not.toBeNull()
+    }
+    expect([...select('compareLimit').options].map((o) => Number(o.value))).toEqual([20, 40, 60, 100])
+    expect(select('compareLimit').value).toBe('20')
+    expect([...select('comparePerson').options].map((o) => o.value)).toEqual(['lula', 'bolsonaro'])
+  })
+
+  it('lens mode: the group headings, the side labels and the chart aria label name both lenses and the person', async () => {
+    const terms: CompareTerm[] = [reforma, { term: 'stf', kind: 'word', a: side(4), b: side(3) }, { term: 'eleicao', kind: 'hashtag', a: null, b: side(6) }]
+    handlers.lenses = () => lensPayload(terms, 'domain:folha.uol.com.br', 'lean:right')
+    await startLens()
+    expect([...$('compareRuler').querySelectorAll('.butterfly-axis-label')].map((e) => e.textContent)).toEqual(['folha.uol.com.br', 'Direita'])
+    expect([...$('compareRuler').querySelectorAll('.butterfly-group-head')].map((e) => e.textContent)).toEqual(['só folha.uol.com.br', 'dos dois', 'só Direita'])
+    expect($('compareRuler').querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Barras comparando folha.uol.com.br e Direita para Lula')
+    expect($('compareRuler').getAttribute('aria-label')).toBe('Barras comparando dois recortes da mesma pessoa')
+    expect(rows().find((r) => r.getAttribute('data-term') === 'reforma')!.getAttribute('aria-label')).toBe('reforma: folha.uol.com.br 5 documentos, Direita nenhum documento')
+    await change('comparePerson', 'bolsonaro')
+    expect($('compareRuler').querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Barras comparando folha.uol.com.br e Direita para Bolsonaro')
+  })
+
+  it('lens mode: rows are chosen by PMI, not count, and the bars are document share', async () => {
+    const terms: CompareTerm[] = Array.from({ length: 25 }, (_, i) => ({ term: `w${i}`, kind: 'word', a: side(100 - i, 0.1 + i * 0.2), b: null }))
+    handlers.lenses = () => lensPayload(terms)
+    await startLens()
+    const shown = rows().map((r) => r.getAttribute('data-term'))
+    expect(shown).toHaveLength(20)
+    expect(shown).toContain('w24')
+    expect(shown).not.toContain('w0')
+    const bar = (term: string) => barOf(rows().find((r) => r.getAttribute('data-term') === term)!.querySelector('.butterfly-bar')!)
+    expect(bar('w24') / bar('w5')).toBeCloseTo(76 / 95, 5)
+    expect(rows().find((r) => r.getAttribute('data-term') === 'w24')!.querySelector('.butterfly-count')?.textContent).toBe('76')
+  })
+
+  it('lens mode: the measure and source selects sit under a hidden wrapper and neither reaches the request', async () => {
+    await startLens('source=gdelt&compare.measure=pmi')
+    expect(select('compareMeasure').closest('[hidden]')).not.toBeNull()
+    expect(select('compareSource').closest('[hidden]')).not.toBeNull()
+    expect(lensCalls()[0].params.has('measure')).toBe(false)
+    expect(lensCalls()[0].params.has('source')).toBe(false)
+  })
+
+  it('exactly one ResizeObserver watches the chart in both modes', async () => {
+    boot()
+    await start()
+    expect(observers.filter((o) => o.target === $('compareRuler'))).toHaveLength(1)
+    await change('compareMode', 'recortes')
+    expect(observers.filter((o) => o.target === $('compareRuler'))).toHaveLength(1)
+    expect(observers).toHaveLength(1)
+  })
+
+  for (const days of ['30', '60'])
+    it(`lens mode: a shared link with days=${days} leaves the select on 21 and requests days=21 on both routes`, async () => {
+      await startLens(`days=${days}`)
+      expect(select('compareDays').value).toBe('21')
+      expect(lensCalls()[0].params.get('days')).toBe('21')
+      expect(of('sources')[0].params.get('days')).toBe('21')
+    })
+
+  it('lens mode: a shared link with days=7 selects 7 and the first /lenses and /sources carry it', async () => {
+    await startLens('days=7')
+    expect(select('compareDays').value).toBe('7')
+    expect(lensCalls()[0].params.get('days')).toBe('7')
+    expect(of('sources')[0].params.get('days')).toBe('7')
+  })
+
+  it('lens mode: the day select offers exactly 7 and 21 with 21 selected, and the first /lenses and /sources carry days=21', async () => {
+    await startLens()
+    expect([...select('compareDays').options].map((o) => o.value)).toEqual(['7', '21'])
+    expect(select('compareDays').value).toBe('21')
+    expect(lensCalls()[0].params.get('days')).toBe('21')
+    expect(of('sources')[0].params.get('days')).toBe('21')
+  })
+})
+
+describe('Compare mode switch (#326)', () => {
+  it('mode: the select is first with both options and pessoas selected', async () => {
+    boot()
+    await start()
+    const first = document.querySelector('#compare .sentence-line select') as HTMLSelectElement
+    expect(first.id).toBe('compareMode')
+    expect([...first.options].map((o) => o.value)).toEqual(['pessoas', 'recortes'])
+    expect([...first.options].map((o) => o.textContent)).toEqual(['duas pessoas', 'uma pessoa, dois recortes'])
+    expect(first.value).toBe('pessoas')
+  })
+
+  it('mode: visible controls per mode, shared days and limit are the same nodes', async () => {
+    boot()
+    await start()
+    const hiddenIn = (id: string) => $(id).closest('[hidden]') !== null
+    const days = $('compareDays')
+    const limit = $('compareLimit')
+    for (const id of ['compareA', 'compareB', 'compareSource', 'compareMeasure', 'compareMode', 'compareDays', 'compareLimit']) expect(hiddenIn(id), id).toBe(false)
+    for (const id of ['comparePerson', 'compareLensA', 'compareLensB', 'compareLensAInput', 'compareLensBInput']) expect(hiddenIn(id), id).toBe(true)
+    await change('compareMode', 'recortes')
+    for (const id of ['comparePerson', 'compareLensAInput', 'compareLensBInput', 'compareMode', 'compareDays', 'compareLimit']) expect(hiddenIn(id), id).toBe(false)
+    for (const id of ['compareA', 'compareB', 'compareSource', 'compareMeasure']) expect(hiddenIn(id), id).toBe(true)
+    expect($('compareDays')).toBe(days)
+    expect($('compareLimit')).toBe(limit)
+    expect(document.querySelectorAll('#compare .sentence-line .pick')).toHaveLength(10)
+  })
+
+  it('mode: days and limit are one state across the modes and reach the next request', async () => {
+    boot()
+    await start()
+    expect([...select('compareLimit').options].map((o) => Number(o.value))).toEqual([20, 40, 60, 100])
+    expect(select('compareLimit').value).toBe('20')
+    await change('compareDays', '7')
+    await change('compareLimit', '60')
+    await change('compareMode', 'recortes')
+    expect(select('compareDays').value).toBe('7')
+    expect(select('compareLimit').value).toBe('60')
+    expect(lensCalls()[0].params.get('days')).toBe('7')
+    expect(lensCalls()[0].params.get('limit')).toBe('60')
+    await change('compareLimit', '100')
+    await change('compareMode', 'pessoas')
+    expect(select('compareLimit').value).toBe('100')
+    expect(compareCalls().pop()!.params.get('limit')).toBe('100')
+    expect(compareCalls().pop()!.params.get('days')).toBe('7')
+  })
+
+  it('mode: no /sources request at boot in person mode', async () => {
+    boot()
+    await start()
+    await change('compareDays', '7')
+    await change('comparePerson', 'bolsonaro').catch(() => {})
+    expect(of('sources')).toEqual([])
+  })
+
+  it('mode: switching to lens mode requests /sources once, with the shared days', async () => {
+    boot()
+    await start()
+    await change('compareMode', 'recortes')
+    expect(of('sources')).toHaveLength(1)
+    const c = of('sources')[0]
+    expect(c.path).toBe('/api/people/lula/sources')
+    expect(c.url).toBe('/api/people/lula/sources?' + sourcesParams({ days: '21', sort: 'count', limit: '80', source: 'all' }).toString())
+    expect(c.params.get('days')).toBe('21')
+    expect(c.params.get('source')).toBe('all')
+    expect(lensCalls()).toHaveLength(1)
+  })
+
+  it('mode: compare.mode=recortes opens lens mode', async () => {
+    boot({ search: '?compare.mode=recortes' })
+    await start()
+    await settle(220)
+    expect(select('compareMode').value).toBe('recortes')
+    expect($('comparePerson').closest('[hidden]')).toBeNull()
+    expect($('compareA').closest('[hidden]')).not.toBeNull()
+    expect(compareCalls()).toEqual([])
+    expect(lensCalls()).toHaveLength(1)
+  })
+
+  it('mode: an invalid compare.mode is ignored', async () => {
+    boot({ search: '?compare.mode=foo' })
+    await start()
+    expect(select('compareMode').value).toBe('pessoas')
+    expect(compareCalls()).toHaveLength(1)
+  })
+
+  it('mode: compare.mode=pessoas wins over lenses.* and a later switch shows the seeded lens', async () => {
+    boot({ search: '?compare.mode=pessoas&lenses.a=lean:left' })
+    await start()
+    expect(select('compareMode').value).toBe('pessoas')
+    expect(compareCalls()).toHaveLength(1)
+    expect(lensCalls()).toHaveLength(0)
+    expect(select('compareLensA').value).toBe('lean:left')
+    await change('compareMode', 'recortes')
+    expect(lensCalls()[0].params.get('a')).toBe('lean:left')
+    expect(input('compareLensAInput').value).toBe('Esquerda')
+  })
+
+  it('mode: a domain seed given while person mode opens waits for the first lens-mode fill', async () => {
+    boot({ search: '?compare.mode=pessoas&lenses.a=domain:folha.uol.com.br' })
+    await start()
+    expect(of('sources')).toEqual([])
+    await change('compareMode', 'recortes')
+    expect(select('compareLensA').value).toBe('domain:folha.uol.com.br')
+    expect(lensCalls()[0].params.get('a')).toBe('domain:folha.uol.com.br')
+  })
+
+  it('mode: where both seeds name days or limit, the opening mode wins', async () => {
+    boot({ search: '?compare.mode=pessoas&compare.days=7&lenses.days=21&compare.limit=40&lenses.limit=60' })
+    await start()
+    expect(select('compareDays').value).toBe('7')
+    expect(select('compareLimit').value).toBe('40')
+    remount()
+    boot({ search: '?compare.mode=recortes&compare.days=7&lenses.days=21&compare.limit=40&lenses.limit=60' })
+    await start()
+    await settle(220)
+    expect(select('compareDays').value).toBe('21')
+    expect(select('compareLimit').value).toBe('60')
+  })
+
+  it('mode: switching aborts request and bridges, releases the pick, closes only compare\'s card, paints no stale rows', async () => {
+    const terms: CompareTerm[] = [{ term: 'stf', kind: 'word', a: side(5), b: side(5) }]
+    let bridgeCall: Call | undefined
+    handlers['/api/compare'] = () => payload(terms)
+    handlers['/api/compare/bridges'] = (call) => {
+      bridgeCall ??= call
+      return new Promise(() => {})
+    }
+    boot()
+    await start()
+    click(rows()[0])
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(true)
+    expect(bridgeCall!.signal?.aborted).toBe(false)
+    fire('compareMode', 'recortes')
+    expect(bridgeCall!.signal?.aborted).toBe(true)
+    expect(docsCard.isOpen()).toBe(false)
+    expect(rows()).toHaveLength(0)
+    expect($('compareRuler').querySelectorAll('.butterfly-ghost-row')).toHaveLength(8)
+    expect($('compareRuler').textContent).not.toContain('Lula')
+    expect($('compareDetail').textContent).not.toContain('stf')
+    await settle(220)
+    expect(lensCalls()).toHaveLength(1)
+    expect(compareCalls()).toHaveLength(1)
+    expect(rows().map((r) => r.getAttribute('data-term'))).toEqual(['reforma'])
+    expect([...$('compareRuler').querySelectorAll('.butterfly-axis-label')].map((e) => e.textContent)).toEqual(['Bluesky', 'Google News'])
+
+    click(rows()[0])
+    await settle()
+    atlasCard()
+    await settle()
+    expect(docsCard.openedBy('compare')).toBe(false)
+    await change('compareMode', 'pessoas')
+    expect(docsCard.openedBy('atlas')).toBe(true)
+  })
+
+  it('mode: a /compare held in flight, switch to recortes, /compare resolves while /sources is pending and a resize fires: nothing paints, nothing throws, the old signal is aborted right after flushSync', async () => {
+    const compare = held()
+    const outlets = held()
+    handlers['/api/compare'] = () => compare.promise
+    handlers.sources = () => outlets.promise
+    boot()
+    await start()
+    const old = compareCalls()[0]
+    expect(old.signal?.aborted).toBe(false)
+    fire('compareMode', 'recortes')
+    expect(old.signal?.aborted).toBe(true)
+    compare.release(payload([reforma]))
+    await settle()
+    width = 333
+    for (const o of observers) expect(() => o.cb()).not.toThrow()
+    flushSync()
+    await settle()
+    expect(rows()).toHaveLength(0)
+    expect($('compareRuler').querySelectorAll('.butterfly-ghost-row')).toHaveLength(8)
+    outlets.release([folha])
+    await settle(220)
+    expect(lensCalls()).toHaveLength(1)
+    expect(rows()).toHaveLength(1)
+    expect([...$('compareRuler').querySelectorAll('.butterfly-axis-label')].map((e) => e.textContent)).toEqual(['Bluesky', 'Google News'])
+  })
+
+  it('mode: a second switch during ensureOutlets leaves only the later load', async () => {
+    const first = held()
+    let n = 0
+    handlers.sources = () => (++n === 1 ? first.promise : [folha, g1])
+    boot()
+    await start()
+    fire('compareMode', 'recortes')
+    await settle()
+    fire('compareMode', 'pessoas')
+    await settle()
+    fire('compareMode', 'recortes')
+    await settle(220)
+    first.release([g1])
+    await settle(220)
+    expect(lensCalls()).toHaveLength(1)
+    expect(compareCalls()).toHaveLength(1)
+    expect(select('compareMode').value).toBe('recortes')
+    expect(outletValues('compareLensAOutlets')).toEqual(['domain:folha.uol.com.br', 'domain:g1.globo.com'])
+    expect(rows()).toHaveLength(1)
+  })
+
+  it('mode: a switch away while /sources is pending drops that fill and loads the other mode', async () => {
+    const outlets = held()
+    handlers.sources = () => outlets.promise
+    boot()
+    await start()
+    fire('compareMode', 'recortes')
+    await settle()
+    fire('compareMode', 'pessoas')
+    await settle(220)
+    outlets.release([folha])
+    await settle(220)
+    expect(lensCalls()).toEqual([])
+    expect(outletValues('compareLensAOutlets')).toEqual([])
+    expect([...$('compareRuler').querySelectorAll('.butterfly-axis-label')].map((e) => e.textContent)).toEqual(['Lula', 'Bolsonaro'])
+  })
+
+  it('mode: pessoas, recortes, pessoas inside the memo window issues one request per mode, and a memo hit records its own api mark', async () => {
+    boot()
+    await start()
+    const axis = () => [...$('compareRuler').querySelectorAll('.butterfly-axis-label')].map((e) => e.textContent)
+    expect(axis()).toEqual(['Lula', 'Bolsonaro'])
+    await change('compareMode', 'recortes')
+    expect(axis()).toEqual(['Bluesky', 'Google News'])
+    const measure = vi.spyOn(performance, 'measure')
+    await change('compareMode', 'pessoas')
+    expect(axis()).toEqual(['Lula', 'Bolsonaro'])
+    await change('compareMode', 'recortes')
+    expect(axis()).toEqual(['Bluesky', 'Google News'])
+    expect(compareCalls()).toHaveLength(1)
+    expect(lensCalls()).toHaveLength(1)
+    const hits = measure.mock.calls.filter(([name, o]) => String(name).startsWith('api:') && (o as { detail: { cache: string } }).detail.cache === 'memory').map(([name]) => name)
+    expect(hits).toEqual(['api:compare', 'api:lenses'])
+    measure.mockRestore()
+  })
+
+  it('mode: a days change in person mode refetches /sources on entering lens mode, an unchanged key does not', async () => {
+    boot()
+    await start()
+    await change('compareDays', '7')
+    await change('compareMode', 'recortes')
+    expect(of('sources')).toHaveLength(1)
+    expect(of('sources')[0].params.get('days')).toBe('7')
+    await change('compareMode', 'pessoas')
+    await change('compareMode', 'recortes')
+    expect(of('sources')).toHaveLength(1)
+    await change('compareMode', 'pessoas')
+    await change('compareDays', '21')
+    await change('compareMode', 'recortes')
+    expect(of('sources')).toHaveLength(2)
+    expect(of('sources')[1].params.get('days')).toBe('21')
+  })
+
+  it('mode: sameness text per mode', async () => {
+    handlers['/api/compare'] = () => payload([], lula, lula)
+    boot()
+    await start()
+    await change('compareB', 'lula')
+    expect($('compareStatus').hidden).toBe(false)
+    expect($('compareStatus').textContent).toBe('Os dois lados mostram a mesma pessoa.')
+    await change('compareMode', 'recortes')
+    expect($('compareStatus').hidden).toBe(true)
+    await change('compareLensB', 'source:bluesky')
+    expect($('compareStatus').hidden).toBe(false)
+    expect($('compareStatus').textContent).toBe('Os dois lados mostram o mesmo recorte.')
+    await change('compareMode', 'pessoas')
+    expect($('compareStatus').textContent).toBe('Os dois lados mostram a mesma pessoa.')
+  })
+
+  it('mode: hidden-note wording per mode', async () => {
+    handlers['/api/compare'] = () => payload([{ term: 'lula', kind: 'word', a: 'name', b: side(3) }, reforma])
+    handlers.lenses = () => lensPayload([{ term: 'lula', kind: 'word', a: 'name', b: 'name' }, reforma])
+    boot()
+    await start()
+    expect($('compareHiddenNote').textContent).toBe('1 palavra deixada de fora por ser o próprio nome de uma das duas pessoas.')
+    await change('compareMode', 'recortes')
+    expect($('compareHiddenNote').textContent).toBe('1 palavra deixada de fora por ser o próprio nome da pessoa.')
+    await change('compareMode', 'pessoas')
+    expect($('compareHiddenNote').textContent).toBe('1 palavra deixada de fora por ser o próprio nome de uma das duas pessoas.')
+  })
+})
+
+describe('Compare thin note (#326)', () => {
+  const thin = () => $('compareThinNote')
+
+  it('thin note: follows the hidden-words note in the DOM and starts hidden', async () => {
+    boot()
+    await start()
+    expect($('compareHiddenNote').nextElementSibling).toBe(thin())
+    expect(thin().tagName).toBe('P')
+    expect(thin().classList.contains('note')).toBe(true)
+    expect(thin().hidden).toBe(true)
+  })
+
+  it('thin note: sides below 50, in A then B order with their lens labels', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'lean:left', 'lean:right', [14, 25])
+    await startLens()
+    expect(thin().hidden).toBe(false)
+    expect(thin().textContent).toBe('Esquerda tem só 14 textos neste recorte: leia com cuidado. Direita tem só 25 textos neste recorte: leia com cuidado.')
+  })
+
+  it('thin note: exactly 50 on both sides is not thin; one thin side names only itself', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'lean:left', 'lean:right', [50, 50])
+    await startLens()
+    expect(thin().hidden).toBe(true)
+    expect(thin().textContent).toBe('')
+    handlers.lenses = () => lensPayload([reforma], 'lean:left', 'lean:right', [400, 49])
+    await change('compareDays', '7')
+    expect(thin().textContent).toBe('Direita tem só 49 textos neste recorte: leia com cuidado.')
+  })
+
+  it('thin note: says texto for 1 and textos for 0, and a side with no documents draws no bars', async () => {
+    handlers.lenses = () => lensPayload([{ term: 'reforma', kind: 'word', a: null, b: side(5) }], 'lean:left', 'lean:right', [1, 400])
+    await startLens()
+    expect(thin().textContent).toBe('Esquerda tem só 1 texto neste recorte: leia com cuidado.')
+    handlers.lenses = () => lensPayload([{ term: 'reforma', kind: 'word', a: null, b: side(5) }], 'lean:left', 'lean:right', [0, 400])
+    await change('compareDays', '7')
+    expect(thin().textContent).toBe('Esquerda tem só 0 textos neste recorte: leia com cuidado.')
+    expect($('compareRuler').querySelectorAll('.butterfly-bar[data-side="a"]')).toHaveLength(0)
+    expect($('compareRuler').querySelectorAll('.butterfly-bar[data-side="b"]')).toHaveLength(1)
+  })
+
+  it('thin note: identical sentences collapse into one', async () => {
+    handlers.lenses = () => lensPayload([reforma], 'lean:left', 'lean:left', [3, 3])
+    await startLens()
+    expect(thin().textContent).toBe('Esquerda tem só 3 textos neste recorte: leia com cuidado.')
+  })
+
+  it('thin note: hidden in person mode even when a side is under 50, and while the ghost shows', async () => {
+    const gate = held()
+    handlers['/api/compare'] = () => gate.promise
+    boot()
+    await start()
+    expect(thin().hidden).toBe(true)
+    gate.release({ ...payload([reforma]), a: { person: lula, about: 10 }, b: { person: bolsonaro, about: 5 } })
+    await settle()
+    expect(thin().hidden).toBe(true)
+    expect(thin().textContent).toBe('')
+    const lens = held()
+    handlers.lenses = () => lens.promise
+    fire('compareMode', 'recortes')
+    await settle(220)
+    expect($('compareRuler').querySelector('.ghost-field')).not.toBeNull()
+    expect(thin().hidden).toBe(true)
+    lens.release(lensPayload([reforma], 'lean:left', 'lean:right', [10, 5]))
+    await settle()
+    expect(thin().hidden).toBe(false)
+  })
+
+  it('thin note: hidden on error', async () => {
+    handlers.lenses = () => {
+      throw new Error('offline')
+    }
+    await startLens()
+    expect(thin().hidden).toBe(true)
+  })
+})
+
+describe('Compare request failures and the people outage, in both modes (#326)', () => {
+  for (const mode of ['pessoas', 'recortes'] as const) {
+    const open = async (patch: Partial<{ people: typeof people; peopleError: unknown }> = {}) => {
+      boot({ search: `?compare.mode=${mode}`, ...patch })
+      await start()
+      await settle(220)
+    }
+    const route = () => (mode === 'pessoas' ? compareCalls() : lensCalls())
+    const fail = () => {
+      const boom = () => {
+        throw new Error('offline')
+      }
+      if (mode === 'pessoas') handlers['/api/compare'] = boom
+      else handlers.lenses = boom
+    }
+
+    it(`states: a failed request prints the note and #compareErrorRetry issues a new request (${mode})`, async () => {
+      fail()
+      await open()
+      expect($('compareRuler').textContent).toContain('Não foi possível carregar a comparação.')
+      expect($('compareRuler').querySelector('img')).toBeNull()
+      expect($('compareDetail').textContent).toContain(mode === 'pessoas' ? 'Clique numa palavra para ver os números dos dois lados.' : 'Clique numa palavra para ver os números das duas lentes.')
+      expect(document.getElementById('compareRetry')).toBeNull()
+      const before = route().length
+      handlers['/api/compare'] = () => payload([reforma])
+      handlers.lenses = echo
+      click($('compareErrorRetry'))
+      await settle(220)
+      expect(route()).toHaveLength(before + 1)
+      expect(rows()).toHaveLength(1)
+    })
+
+    it(`states: empty payload prints the empty note (${mode})`, async () => {
+      handlers['/api/compare'] = () => payload([])
+      handlers.lenses = () => lensPayload([])
+      await open()
+      expect($('compareRuler').textContent).toContain('Nenhuma palavra neste recorte.')
+    })
+
+    it(`states: peopleError fetches nothing, hides the chart and #compareRetry reloads the page (${mode})`, async () => {
+      const reload = vi.fn()
+      vi.stubGlobal('location', { ...window.location, reload })
+      await open({ people: [], peopleError: new Error('down') })
+      expect(calls).toEqual([])
+      expect($('compareRuler').hidden).toBe(true)
+      expect($('compare').querySelector('img')).toBeNull()
+      click($('compareRetry'))
+      expect(reload).toHaveBeenCalledTimes(1)
+    })
+
+    it(`states: no people says so and fetches nothing (${mode})`, async () => {
+      await open({ people: [] })
+      expect(calls).toEqual([])
+      expect($('compareDetail').textContent).toContain('Nenhuma pessoa cadastrada.')
+    })
+
+    it(`states: before bootData.ready the ghost shows and nothing fetches (${mode})`, async () => {
+      await start()
+      expect(calls).toEqual([])
+      expect($('compareRuler').querySelector('.ghost-field')).not.toBeNull()
+    })
+  }
+
+  it('states: a single tracked person works in both modes', async () => {
+    boot({ people: [lula] })
+    await start()
+    expect(select('compareA').value).toBe('lula')
+    expect(select('compareB').value).toBe('lula')
+    await change('compareMode', 'recortes')
+    expect(select('comparePerson').value).toBe('lula')
+    expect(lensCalls()).toHaveLength(1)
+    expect(rows()).toHaveLength(1)
+  })
+
+  it('states: switching to lens mode with a people outage fetches nothing and keeps the retry', async () => {
+    boot({ people: [], peopleError: new Error('down') })
+    await start()
+    await change('compareMode', 'recortes')
+    expect(calls).toEqual([])
+    expect($('compareRetry')).not.toBeNull()
+    expect($('compareRuler').hidden).toBe(true)
   })
 })

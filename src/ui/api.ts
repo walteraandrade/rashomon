@@ -32,8 +32,8 @@ export const narrowToTestimony = (graphParams: URLSearchParams) =>
 export const testimonyParams = (opts: GraphOpts) => narrowToTestimony(params(opts))
 
 // `domain` travels only when a figure names an outlet; `day` only when figure 5 names a column;
-// `week` only when figure 10 names a cell (a Monday);
-// `lean` only when a figure 6 lens is `lean:<value>` — /docs already accepts it server-side.
+// `week` only when figure 9 names a cell (a Monday);
+// `lean` only when a lens in `#compare`'s lens mode is `lean:<value>` — /docs already accepts it server-side.
 export type DocsOpts = { days: string; source: string; term?: string; kind?: string; domain?: string; lean?: string; limit?: string; day?: string; week?: string; withId?: string }
 
 // `withId` (`with` is a reserved word) travels only when the comention matrix names the other
@@ -110,7 +110,7 @@ export const weekParams = ({ source, limit }: { source: string; limit: string })
 
 export const loadWeek = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/week?' + queryParams, signal)
 
-// Figure 10: one fixed scope (all sources, word/hashtag/phrase), so only the two figure values travel.
+// Figure 9: one fixed scope (all sources, word/hashtag/phrase), so only the two figure values travel.
 export const persistenceParams = ({ weeks, limit }: { weeks: string; limit: string }) => new URLSearchParams({ weeks, limit })
 
 export const loadPersistence = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) => json(endpoint(personId) + '/persistence?' + queryParams, signal)

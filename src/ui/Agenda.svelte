@@ -92,7 +92,7 @@
 
 <section class="figure agenda" id="agenda" aria-labelledby="agendaTitle" class:is-loading={figure.loading && figure.data !== undefined}>
   <header class="figure-head">
-    <div class="figure-title"><span class="eyebrow">Gráfico 8</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
+    <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
     <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="/como-ler#agenda">Como ler</a>.</p>
     <dl class="figure-key">
       <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo</dd></div>

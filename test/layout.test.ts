@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, MATRIX_GAP, MATRIX_ROWHEAD, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
-import { rulerTerms } from '../src/ui/ruler-model.js'
-import type { CompareTerm } from '../src/ui/format.js'
-import { balanceColor } from '../src/ui/format.js'
+import type { CompareSide, CompareTerm } from '../src/ui/format.js'
+import { balanceColor, score } from '../src/ui/format.js'
 
-// src/ui/layout.ts: pure geometry. rulerTerms (ruler-model.ts) is imported only to build the items
-// rulerLayout packs, the same way the browser hands them over.
+// src/ui/layout.ts: pure geometry. rulerTerms below stands in for the items Rising.svelte hands
+// rulerLayout: a balance in [-1, 1] and the combined document count of both sides.
+const present = (v: CompareSide | 'name' | null): v is CompareSide => v !== null && v !== 'name'
+const rulerTerms = (terms: CompareTerm[], measure: string) => ({
+  items: terms
+    .filter((t) => t.a !== 'name' && t.b !== 'name')
+    .map((t) => {
+      const mag = present(t.a) && present(t.b) ? Math.abs(score(t.a, measure)) + Math.abs(score(t.b, measure)) : 0
+      const balance =
+        present(t.a) !== present(t.b) ? (present(t.a) ? -1 : 1) : !mag ? 0 : Math.max(-1, Math.min(1, (Math.max(0, score(t.b as CompareSide, measure)) - Math.max(0, score(t.a as CompareSide, measure))) / mag))
+      return { ...t, balance, combined: (present(t.a) ? t.a.count : 0) + (present(t.b) ? t.b.count : 0) }
+    }),
+})
 
 // Deterministic stand-in for the browser canvas adapter (measure.ts's
 // createCanvasMeasure): width scales linearly with character count and font size, so wrapping

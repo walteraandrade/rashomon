@@ -9,8 +9,8 @@ import { compareParams } from '../src/ui/api.js'
 import './close.js'
 import { pageMarkup } from './pages.js'
 
-// Figure 3 (issues #91, #93, #99, #293): its behaviour is test/components/compare.spec.ts. What
-// stays here needs no component: the route the figure calls and the markup and CSS the page ships.
+// Figure 3 (issues #91, #93, #99, #293, #326): its behaviour is test/components/compare.spec.ts.
+// What stays here needs no component: the route the figure calls and the markup and CSS the page ships.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const design5 = () => pageMarkup('/')
@@ -32,7 +32,7 @@ describe('compareParams matches calling /api/compare directly', () => {
 })
 
 describe('atlas.html carries the third figure card', () => {
-  it('a <section class="figure ..." id="compare"> exists after #testimony, with eyebrow "Gráfico 3" and the six sentence controls', () => {
+  it('a <section class="figure ..." id="compare"> exists after #testimony, with eyebrow "Gráfico 3" and the sentence controls of both modes', () => {
     const html = design5()
     const testimonyIdx = html.indexOf('id="testimony"')
     const compareIdx = html.indexOf('id="compare"')
@@ -42,7 +42,31 @@ describe('atlas.html carries the third figure card', () => {
     assert.match(html, /<span class="eyebrow">Gráfico 3<\/span>/)
     const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
     const sentence = compare.match(/class="sentence-line">[\s\S]*?<\/p>/)?.[0] ?? ''
-    for (const id of ['compareA', 'compareB', 'compareDays', 'compareSource', 'compareMeasure', 'compareLimit']) assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must live in the ruler's own sentence`)
+    for (const id of ['compareMode', 'compareA', 'compareB', 'compareDays', 'compareSource', 'compareMeasure', 'compareLimit', 'comparePerson', 'compareLensA', 'compareLensB'])
+      assert.match(sentence, new RegExp(`id="${id}"`), `#${id} must live in the figure's own sentence`)
+    assert.match(compare, /<h2 id="compareTitle">Duas pessoas ou dois recortes<\/h2>/)
+  })
+
+  it('the key lists Barra, Cor, Ponte and Clique once, and the subtitle names both readings and links the guide (#326 AC23)', () => {
+    const compare = design5().match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const key = compare.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? ''
+    assert.deepEqual([...key.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim()), ['Barra', 'Cor', 'Ponte', 'Clique'])
+    const sub = compare.match(/<p class="figure-sub">[\s\S]*?<\/p>/)?.[0] ?? ''
+    assert.match(sub, /Duas pessoas/)
+    assert.match(sub, /uma pessoa lida por dois recortes/)
+    assert.match(sub, /href="\/como-ler#comparar"/)
+  })
+
+  it('both sentence variants ship in the markup, each under a wrapper that hides it in the other mode, and the lens selects are hidden behind comboboxes', () => {
+    const compare = design5().match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
+    assert.match(compare, /<span hidden=\{mode !== 'recortes'\}>[^]*?id="comparePerson"/)
+    assert.match(compare, /<span hidden=\{mode !== 'pessoas'\}>[^]*?id="compareA"/)
+    assert.match(compare, /<select id="compareLensA"[^>]*hidden/)
+    for (const id of ['compareThinNote']) assert.match(compare, new RegExp(`id="${id}"`), id)
+    // The comboboxes' ids are props of the component and the outlets' ids are snippet arguments.
+    for (const id of ['compareLensAInput', 'compareLensAList', 'compareLensBInput', 'compareLensBList']) assert.match(compare, new RegExp(`(inputId|listId)="${id}"`), id)
+    for (const id of ['compareLensAOutlets', 'compareLensBOutlets']) assert.match(compare, new RegExp(`@render groups\\('${id}'\\)`), id)
+    assert.match(compare, /<select id="compareMode"[^>]*>\s*<option value="pessoas">duas pessoas<\/option><option value="recortes">uma pessoa, dois recortes<\/option>/)
   })
 })
 
@@ -66,6 +90,18 @@ describe('the header carries no in-page link to the ruler', () => {
     assert.doesNotMatch(comoLer(), /compare-link|comparar pessoas/)
   })
 })
+
+// The whole <div id="..."> including nested divs, which the lazy sectionOf stops short of.
+const balanced = (html: string, id: string) => {
+  const start = html.indexOf(`<div id="${id}"`)
+  if (start < 0) return ''
+  let depth = 0
+  for (const m of html.slice(start).matchAll(/<div\b|<\/div>/g)) {
+    depth += m[0] === '</div>' ? -1 : 1
+    if (depth === 0) return html.slice(start, start + m.index! + m[0].length)
+  }
+  return ''
+}
 
 const sectionOf = (html: string, id: string) => html.match(new RegExp(`<div id="${id}">[\\s\\S]*?</div>`))?.[0] ?? ''
 
@@ -144,12 +180,14 @@ describe('the guide explains the butterfly under #comparar and #help-comparar', 
     assert.match(figureKey, /butterfly-bridge-mark/)
   })
 
-  it('the lenses sections point at the compare figure\'s bridge mark by section', () => {
-    const page = sectionOf(comoLer(), 'lentes')
-    assert.match(page, /marca de ponte da comparação entre duas pessoas/)
-    assert.match(page, /<a href="#ponte">Ponte<\/a>/)
-    const help = pageMarkup('/').match(/<div id="help-lentes">[\s\S]*?<\/div>/)?.[0] ?? ''
-    assert.match(help, /marca de ponte da comparação entre duas pessoas/)
+  it('the lens block sits inside the compare section and points at its bridge explanation', () => {
+    const lentes = balanced(comoLer(), 'lentes')
+    assert.ok(lentes, 'como-ler must carry <div id="lentes">')
+    assert.match(balanced(comoLer(), 'comparar'), /id="lentes"/, '#lentes is nested inside #comparar')
+    assert.match(lentes, /<a href="#ponte">/)
+    const help = balanced(pageMarkup('/'), 'help-lentes')
+    assert.match(help, /ponte da comparação entre duas pessoas/)
+    assert.match(balanced(pageMarkup('/'), 'help-comparar'), /id="help-lentes"/, 'help-lentes is nested inside help-comparar')
   })
 })
 
@@ -158,12 +196,12 @@ describe('the #compare figure head describes the butterfly', () => {
   const dts = () => [...(figure().match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim())
 
   it('titles the figure and keeps the eyebrow', () => {
-    assert.match(figure(), /<h2 id="compareTitle">Duas pessoas, palavra a palavra<\/h2>/)
+    assert.match(figure(), /<h2 id="compareTitle">Duas pessoas ou dois recortes<\/h2>/)
     assert.match(figure(), /<span class="eyebrow">Gráfico 3<\/span>/)
   })
 
-  it('says a bar is a share of each person\'s texts and links the guide', () => {
-    assert.match(figure(), /<p class="figure-sub">Cada barra é a fatia dos textos de cada pessoa que traz a palavra\. <a href="\/como-ler#comparar">Como ler<\/a>\.<\/p>/)
+  it('names both readings, two people and one person by two recortes, and links the guide', () => {
+    assert.match(figure(), /<p class="figure-sub">Duas pessoas lidas pelas mesmas palavras, ou uma pessoa lida por dois recortes: um veículo, um viés ou uma fonte\. <a href="\/como-ler#comparar">Como ler<\/a>\.<\/p>/)
   })
 
   it('keys Barra, Cor, Ponte and Clique, with no Tamanho or Posição, and a bridge mark on Ponte', () => {
@@ -214,12 +252,12 @@ describe('atlas.css styles the butterfly rows', () => {
     assert.match(css(), /\.compare \.butterfly[^{]*\{[^}]*transition:\s*opacity/)
     assert.match(css(), /\.figure\.is-loading \.butterfly/)
     assert.match(css(), /\.rising \.ruler/)
-    assert.match(css(), /\.lenses \.ruler/)
+    assert.doesNotMatch(css(), /\.lenses\b/, 'the lenses figure is gone (issue #326)')
   })
 })
 
 describe('atlas.css styles words, not dots (issue #99 AC7)', () => {
-  it('carries the ruler word rules Rising and Lenses still use and no longer carries the dot rules', () => {
+  it('carries the ruler word rules Rising still uses and no longer carries the dot rules', () => {
     const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
     assert.match(css, /\.ruler-text \{/)
     // Neither the cursor nor the pick repaints the word: the box behind it carries both, in the
@@ -243,10 +281,52 @@ describe('atlas.css styles words, not dots (issue #99 AC7)', () => {
 describe('figure 3 as a Svelte component (#293)', () => {
   it('the page renders Compare.svelte and still ships every id and hook figure 3 had', () => {
     const html = design5()
-    for (const id of ['compareTitle', 'compareA', 'compareB', 'compareDays', 'compareSource', 'compareMeasure', 'compareLimit', 'compareStatus', 'compareRuler', 'compareDetail', 'compareHiddenNote'])
+    for (const id of ['compareTitle', 'compareA', 'compareB', 'compareDays', 'compareSource', 'compareMeasure', 'compareLimit', 'compareStatus', 'compareRuler', 'compareDetail', 'compareHiddenNote', 'compareMode', 'comparePerson', 'compareLensA', 'compareLensB', 'compareThinNote'])
       assert.match(html, new RegExp(`id="${id}"`), `#${id}`)
     assert.ok(existsSync(join(root, 'src', 'ui', 'Compare.svelte')))
     assert.ok(existsSync(join(root, 'src', 'ui', 'Butterfly.svelte')))
-    assert.ok(existsSync(join(root, 'src', 'ui', 'Ruler.svelte')), 'Rising and Lenses still draw a ruler')
+    assert.ok(existsSync(join(root, 'src', 'ui', 'Ruler.svelte')), 'Rising still draws a ruler')
+  })
+})
+
+// Issue #326: the lenses figure became #compare's lens mode; its guide text is the #lentes block
+// nested in #comparar, and the figures after it renumber.
+describe('the reading page folds the lenses guide into #comparar (issue #326 AC30)', () => {
+  const page = () => comoLer()
+  const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+
+  it('#lentes is a descendant of #comparar and holds the "below what the build kept" sentence', () => {
+    assert.match(balanced(page(), 'comparar'), /<div id="lentes">/)
+    const lentes = balanced(page(), 'lentes')
+    assert.ok(lentes)
+    assert.match(lentes, /(abaixo|n[aã]o guardou)[\s\S]{0,200}(constru[cç][aã]o|pr[eé]-comput)/i)
+    assert.match(lentes, /abaixo do que a construção pré-computada deste recorte guardou/)
+  })
+
+  it('#lentes links the bridge explanation, uses no "régua" and adds no heading above h3', () => {
+    const lentes = balanced(page(), 'lentes')
+    assert.match(lentes, /<a href="#ponte">/)
+    assert.doesNotMatch(lentes, /régua/i)
+    assert.doesNotMatch(lentes, /<h[12]\b/)
+    assert.match(text(lentes), /uma pessoa, dois recortes/)
+  })
+
+  it('the former figure 6 heading is gone, the nav keeps Lentes right after Comparar, and the figure headings read 1 to 9 in order', () => {
+    const html = page()
+    assert.doesNotMatch(html, /Gráfico 6 · Uma pessoa, duas lentes/)
+    assert.match(html, /<a href="#comparar">Comparar<\/a><a href="#lentes">Lentes<\/a>/)
+    assert.deepEqual([...html.matchAll(/<h2>Gráfico (\d+) ·/g)].map((m) => Number(m[1])), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+    assert.deepEqual([...design5().matchAll(/<span class="eyebrow">Gráfico (\d+)<\/span>/g)].map((m) => Number(m[1])), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+  })
+
+  it('the lede counts as many graphs as the page has figures, and the analysis list no longer sends the reader to figure 6', () => {
+    const html = page()
+    const words: Record<string, number> = { Sete: 7, Oito: 8, Nove: 9, Dez: 10 }
+    const lede = html.match(/<p class="lede">(\w+) gráficos/)?.[1] ?? ''
+    assert.equal(words[lede], design5().match(/<section class="figure[^"]*" id="/g)?.length)
+    const analysis = balanced(html, 'analise')
+    assert.doesNotMatch(analysis, /No 6<\/b>|<b>No 6/)
+    assert.match(analysis, /dois recortes/)
+    assert.match(analysis, /No 7<\/b>, veja a fatia de cada veículo por pessoa/)
   })
 })

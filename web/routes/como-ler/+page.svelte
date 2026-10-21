@@ -7,11 +7,11 @@
   <header class="masthead">
     <p class="eyebrow">Rashomon · guia</p>
     <h1 id="comoLerTitle">Como ler o rashomon</h1>
-    <p class="lede">Sete gráficos sobre os textos que citam uma pessoa. A chave embaixo de cada título é o gráfico. Esta página é a mesma chave, para mandar o link.</p>
+    <p class="lede">Nove gráficos sobre os textos que citam uma pessoa. A chave embaixo de cada título é o gráfico. Esta página é a mesma chave, para mandar o link.</p>
   </header>
   <section class="chapter chapter-page" id="como-ler" aria-labelledby="comoLerTitle">
     <p class="chapter-intro">Tudo vale só para o recorte da frase: pessoa, período e fonte.</p>
-    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#em-alta">Em alta</a><a href="#semana">A semana</a><a href="#lentes">Lentes</a><a href="#atencao">Atenção</a><a href="#agenda">Agenda</a><a href="#junto">Quem aparece junto</a><a href="#persistencia">Persistência</a></nav>
+    <nav class="chapter-nav" aria-label="Seções"><a href="#analise">Uma análise</a><a href="#atlas">Atlas</a><a href="#avaliacao">Avaliação</a><a href="#pmi">PMI</a><a href="#comparar">Comparar</a><a href="#lentes">Lentes</a><a href="#em-alta">Em alta</a><a href="#semana">A semana</a><a href="#atencao">Atenção</a><a href="#agenda">Agenda</a><a href="#junto">Quem aparece junto</a><a href="#persistencia">Persistência</a></nav>
     <div class="chapter-grid">
       <div id="analise">
         <h2>Como fazer uma análise</h2>
@@ -19,7 +19,7 @@
           <li><b>Escolha uma pessoa</b>, o período e a fonte. Isso é o recorte.</li>
           <li><b>Olhe as palavras maiores.</b> Clique numa para ler os textos. O cartão fica aberto na próxima escolha e arrasta pelo topo.</li>
           <li><b>Clique no nome no centro</b> (na primeira linha da lista) para os textos da pessoa, sem palavra no meio.</li>
-          <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é. <b>No 6</b>, leia a mesma pessoa por dois recortes ao mesmo tempo. <b>No 7</b>, veja a fatia de cada veículo por pessoa.</li>
+          <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é, ou leia a mesma pessoa por dois recortes ao mesmo tempo. <b>No 7</b>, veja a fatia de cada veículo por pessoa.</li>
         </ol>
       </div>
       <div id="atlas">
@@ -61,13 +61,24 @@
         <p>Cada +1 dobra. <b>PMI ponderado</b> segura a palavra rara: o tamanho usa PMI × ln(1 + documentos).</p>
       </div>
       <div id="comparar">
-        <h2>Gráfico 3 · Duas pessoas, palavra a palavra</h2>
+        <h2>Gráfico 3 · Duas pessoas ou dois recortes</h2>
         <p>Cada linha é uma palavra, com uma barra para cada pessoa. A barra é a fatia dos documentos daquela pessoa que trazem a palavra, na mesma escala para as duas. Clique abre os textos das duas pessoas.</p>
         <p>As linhas vêm em três grupos: só da primeira pessoa, dos dois e só da segunda. “Só” quer dizer que a barra desta pessoa existe e a da outra não. “Documentos” ou “PMI ponderado” na frase mudam só quais palavras ganham uma linha, nunca o comprimento de uma barra. Cada pessoa entra com as suas palavras mais fortes, até o número escolhido, então a figura pode ter até o dobro de linhas.</p>
         <p>Uma barra que falta pode querer dizer que a palavra ficou abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero. Esse lado conta como zero também no comprimento da barra e na escolha das palavras que concorrem a ponte. Por isso a palavra pode cair no grupo “só” de uma pessoa mesmo quando a outra também a usou.</p>
         <p>O nome de uma das duas pessoas não é desenhado; quantas palavras saíram aparece embaixo.</p>
         <h3 id="ponte">Ponte</h3>
         <p>Uma marca âmbar antes da palavra é uma ponte: pelos documentos das duas pessoas, ela liga palavras de um vocabulário às do outro. A conta junta as palavras que aparecem juntas no mesmo texto, dos dois lados, e mede por quantos caminhos mais curtos entre duas palavras quaisquer ela passa (centralidade de intermediação). A mais atravessada vale 1; ganham marca as que passam de 0,5. A ponte não muda nem a escolha nem a ordem das linhas: uma palavra pode ter barra só de um lado e ainda assim ligar os dois.</p>
+        <div id="lentes">
+          <h3>Uma pessoa, duas lentes</h3>
+          <p>Na frase do gráfico, “uma pessoa, dois recortes” no lugar de “duas pessoas” lê a mesma pessoa por duas lentes ao mesmo tempo. Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. Começa com Bluesky de um lado e Google News do outro.</p>
+          <p><b>Barras e grupos.</b> Funcionam como na comparação entre duas pessoas, com as lentes no lugar delas: cada barra é a fatia dos textos daquela lente que trazem a palavra, na mesma escala para as duas, e os grupos são os da tela: “só” com o nome de uma lente, “dos dois” e “só” com o nome da outra. Neste modo as palavras são sempre escolhidas por PMI ponderado, sem a escolha entre “Documentos” e “PMI ponderado”, e a barra continua sendo a fatia dos textos. Clique abre os textos das duas lentes, cada uma com o seu veículo, viés ou fonte.</p>
+          <p><b>Barra que falta.</b> Uma barra ausente pode querer dizer que a palavra ficou abaixo do que a construção pré-computada deste recorte guardou, não que a contagem é zero. Esse lado conta como zero também no comprimento da barra e na escolha das palavras que concorrem a ponte.</p>
+          <p><b>Mesmo recorte.</b> Quando as duas lentes são exatamente a mesma, aparece o aviso “Os dois lados mostram o mesmo recorte”. Não há detecção de recortes equivalentes com nomes diferentes: só a mesma lente, escrita do mesmo jeito, conta.</p>
+          <p><b>Poucos textos.</b> Uma lente com menos de 50 textos da pessoa ganha uma nota embaixo dizendo quantos são: leia com cuidado, porque poucas palavras dominam a fatia.</p>
+          <p><b>Nome próprio.</b> O próprio nome da pessoa fica de fora, nas duas lentes, porque é a mesma pessoa dos dois lados. Em parte dos recortes quantas palavras saíram por isso aparece embaixo; nos outros o nome já fica fora da construção e a contagem não aparece.</p>
+          <p><b>Lente inválida.</b> Uma lente vazia, malformada ou desconhecida volta para “Tudo”, o corpus inteiro daquele lado, sem erro.</p>
+          <p><b>Ponte.</b> É a marca âmbar da comparação entre duas pessoas, com as duas lentes no lugar delas. A conta está em <a href="#ponte">Ponte</a>.</p>
+        </div>
       </div>
       <div id="em-alta">
         <h2>Gráfico 4 · Em alta</h2>
@@ -90,25 +101,8 @@
         <p>Abre os textos daquele dia com aquela palavra.</p>
         <p>O gráfico 1 tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do gráfico 1.</p>
       </div>
-      <div id="lentes">
-        <h2>Gráfico 6 · Uma pessoa, duas lentes</h2>
-        <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara duas lentes escolhidas para a mesma pessoa.</p>
-        <h3>Posição e tamanho</h3>
-        <p>A posição diz de qual lente a palavra é mais; no meio, ela é dividida entre as duas. O tamanho da letra é quantos documentos ela tem nas duas lentes, somados.</p>
-        <p>Uma palavra desenhada toda numa ponta pode ter sido usada também pela outra lente, só que abaixo do que a construção pré-computada deste recorte guardou: nesses casos o outro lado não é sempre zero, é só o que sobrou de fora dela. Esse lado conta como zero também no tamanho da letra e na escolha das palavras que concorrem a ponte, então a palavra pode sair um pouco menor do que a soma real.</p>
-        <h3>Mesmo recorte</h3>
-        <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". Não há detecção de recortes equivalentes com nomes diferentes: só a mesma lente, escrita do mesmo jeito, conta.</p>
-        <h3>Nome próprio</h3>
-        <p>O nome da pessoa não entra na régua, nas duas lentes: é a mesma pessoa dos dois lados. Quando as duas lentes são Tudo ou uma fonte, num dos períodos pré-calculados, o nome dela já fica fora da construção e a contagem não aparece; nos outros recortes, quantas palavras saíram por isso aparece embaixo da régua.</p>
-        <h3>Lente inválida</h3>
-        <p>Uma lente vazia, malformada ou desconhecida volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
-        <h3>Ponte</h3>
-        <p>O sublinhado âmbar marca a ponte desta régua: a mesma conta da marca de ponte da comparação entre duas pessoas, com as duas lentes no lugar das duas pessoas. A conta está em <a href="#ponte">Ponte</a>.</p>
-        <h3>Clique</h3>
-        <p>Abre os textos das duas lentes ao mesmo tempo, cada uma com o seu recorte de veículo, viés ou fonte.</p>
-      </div>
       <div id="atencao">
-        <h2>Gráfico 7 · Atenção e menções</h2>
+        <h2>Gráfico 6 · Atenção e menções</h2>
         <p>Uma linha traz quantas pessoas visitaram a página da Wikipédia da pessoa, dia a dia: curiosidade, não opinião. Ninguém escreve nada para gerar uma visita; a página só é procurada. A outra linha traz quantos textos a citam a cada dia, documentos por dia contados em janelas corridas de 24 horas, não o dia-calendário do gráfico 5.</p>
         <h3>Duas escalas, nunca uma</h3>
         <p>As duas linhas nunca são comparadas como um número contra o outro: pageviews e documentos vivem em ordens de grandeza diferentes, e cada linha tem seu próprio tamanho, na sua própria escala, independente da outra. O que se compara é a posição: o dia em que cada linha atingiu seu pico.</p>
@@ -118,7 +112,7 @@
         <p>Abre os textos de menções daquele dia, em qualquer das duas linhas. Pageviews não têm texto próprio para abrir.</p>
       </div>
       <div id="agenda">
-        <h2>Gráfico 8 · Agenda por veículo</h2>
+        <h2>Gráfico 7 · Agenda por veículo</h2>
         <p>Uma tabela: uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Diferente dos outros gráficos, ele não olha uma pessoa por vez: compara todas de uma vez, veículo por veículo.</p>
         <h3>A fatia</h3>
         <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais escura a tinta do número.</p>
@@ -130,7 +124,7 @@
         <p>Abre os documentos daquela pessoa naquele veículo.</p>
       </div>
       <div id="junto">
-        <h2>Gráfico 9 · Quem aparece junto</h2>
+        <h2>Gráfico 8 · Quem aparece junto</h2>
         <p>Uma matriz com todas as pessoas rastreadas nas duas margens. Cada célula conta os textos que citam as duas pessoas daquela linha e coluna ao mesmo tempo, na mesma janela de dias.</p>
         <h3>Aparecer junto não é concordar</h3>
         <p>A célula só diz que o mesmo texto falou das duas pessoas. Não diz se foi a favor, contra, ou uma da outra: exposição, não avaliação. É por isso que a cor usa só uma tonalidade de tinta, nunca as cores de avaliação do gráfico 2.</p>
@@ -142,7 +136,7 @@
         <p>Abaixo de 700px de largura a matriz vira uma lista, do par com mais textos em comum para o com menos, e o clique funciona igual.</p>
       </div>
       <div id="persistencia">
-        <h2>Gráfico 10 · Persistência</h2>
+        <h2>Gráfico 9 · Persistência</h2>
         <p>Uma linha por palavra, uma célula por semana, de segunda a domingo na hora de Brasília: a mais antiga à esquerda, a atual à direita. A figura responde a uma pergunta que os outros não respondem: a palavra ficou, ou foi só um pico?</p>
         <h3>Célula</h3>
         <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, só mais clara. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>

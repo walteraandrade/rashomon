@@ -269,7 +269,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    (paintSelection paints both panes). A sibling dl, not a row inside #keyDefault, so #keyDefault
    stays exactly the four rows test/leitura-ui-acceptance.test.ts pins (Tamanho/Cor/Posição/
    Clique, unchanged). */
-.key-bridge { display: inline-block; width: 22px; height: 2px; margin-right: var(--space-2); vertical-align: middle; background: var(--accent); }
 .key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
@@ -284,7 +283,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
 .compare .ruler, .compare .butterfly, .compare .detail, .rising .ruler, .rising .note,
-.lenses .ruler, .lenses .detail, .attention .attention-chart, .attention .note, .agenda .agenda-grid, .persistence .persistence-chart { transition: opacity .16s ease-out; }
+.attention .attention-chart, .attention .note, .agenda .agenda-grid, .persistence .persistence-chart { transition: opacity .16s ease-out; }
 .figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .ruler, .figure.is-loading .butterfly, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
@@ -647,6 +646,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .chapter-nav a:hover { color: var(--accent); }
 .chapter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-7) var(--space-7); align-items: start; }
 .chapter-grid > div { scroll-margin-top: var(--space-5); }
+.chapter-grid #lentes { margin-top: var(--space-6); scroll-margin-top: var(--space-5); }
 .chapter h2[id], .chapter h3[id] { scroll-margin-top: var(--space-5); }
 /* Inside the grid a column is narrow, so prose drops one step to --t-sm and stays muted: the
    headings above it are what a reader scans, and the body is what they land on. */
@@ -724,9 +724,9 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 @media (max-width: 900px) { .about-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .about-steps, .about-cols { grid-template-columns: 1fr; } }
 
-/* ---------- the ruler (figure 3, compare two people, issue #91; figure 4, one person's own
-   before/now, issue #151) — one set of rules, since both figures draw a term on a -1..1 axis
-   with the same --cmp-a/--cmp-b pair, only the words at either end and axis prose differ. ---------- */
+/* ---------- the ruler (figure 4, one person's own
+   before/now, issues #91 and #151): a term on a -1..1 axis with the --cmp-a/--cmp-b pair.
+   Figure 3 draws the butterfly instead and no longer uses it. ---------- */
 .ruler { margin: 18px 0 0; padding: 6px 0 10px; }
 .ruler-end-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-xs); padding-bottom: var(--space-1); }
 .ruler-end { font-weight: 600; overflow-wrap: anywhere; }
@@ -767,7 +767,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 #compareHiddenNote { margin: 10px 0 0; }
 #compareA, #compareB { font-family: var(--mono); }
 
-/* ---------- the butterfly (figure 3, compare two people, issue #325): one row per word, the word
+/* ---------- the butterfly (figure 3, compare two people or one person's two lenses, issue #325): one row per word, the word
    in the middle, one bar per person growing outward from it. A bar is the person's share of her
    own documents on one scale for both sides, so a bar is never longer because the other person
    wrote more. The axes and the rows share one grid so a tick sits over the bar length it names.
@@ -856,7 +856,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-overflow .quiet-button.is-selected { color: var(--ink); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); font-weight: 600; }
 #weekNote { margin-top: var(--space-3); }
 
-/* ---------- the attention figure (figure 7, wikipedia pageviews against press mentions,
+/* ---------- the attention figure (figure 6, wikipedia pageviews against press mentions,
    issue #216): two bar-chart rows on one shared day axis, each scaled off its own maximum --
    pageviews and documents live in different orders of magnitude and are never read as one
    number against the other. [data-row] tells the rows apart, in the row head text; both draw
@@ -879,7 +879,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .attention-mark:hover .attention-hit, .attention-mark:focus-visible .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .attention-mark.is-selected .attention-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
 #attentionNote { margin-bottom: var(--space-3); }
-/* ---------- agenda (figure 8, domain × person coverage share, issue #208): a plain table --
+/* ---------- agenda (figure 7, domain × person coverage share, issue #208): a plain table --
    the mark is a percentage, not a position to lay out, so it earns no swarm/ruler of its own.
    Ink only: no new hue, share alone drives how dark a cell's own number reads. */
 .agenda-grid { display: block; margin-top: 18px; }
@@ -899,7 +899,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .lean-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); vertical-align: middle; }
 .agenda-ghost { display: flex; flex-direction: column; gap: var(--space-3); padding-top: 6px; }
 .agenda-ghost-row { display: flex; align-items: center; gap: var(--space-4); }
-/* ---------- the comention matrix (figure 9, issue #207): a 27x27 half-matrix, upper triangle
+/* ---------- the comention matrix (figure 8, issue #207): a 27x27 half-matrix, upper triangle
    only (a < b). One ink ramp, --ink only, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
    evaluation. Both .comention-grid and .comention-list are always in the DOM; only the media
    query below decides which one shows, the same move the week figure's own breakpoint uses. ---- */
@@ -985,7 +985,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .comention-listitem.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 .comention-listitem.ghost { background: var(--soft); min-height: 2.3em; }
 
-/* ---------- persistence (figure 10, issue #215): one row per word, one cell per week, --ink only.
+/* ---------- persistence (figure 9, issue #215): one row per word, one cell per week, --ink only.
    A filled cell's ink is its data-lv (1..5) on one ramp for the whole figure, so any positive count is
    visibly filled; an outline cell is a week the word was outside that week's top 50 (or before
    the series began), never a zero. No --hostile/--favor/--cmp-a/--cmp-b. ---------- */

@@ -6,7 +6,7 @@ import { pageMarkup } from './pages.js'
 // The docs and the prerendered page carry the facts the components rely on; the components'
 // own behaviour is in test/components/.
 
-describe('figure 10 querystring keys are documented (issue #215)', () => {
+describe('figure 9 querystring keys are documented (issue #215)', () => {
   it('names the persistence figure id, person and limit bare or prefixed, and weeks prefixed only', () => {
     assert.match(docsText, /persistence\.weeks/)
     assert.match(docsText, /persistence[\s\S]{0,600}\bperson\b[\s\S]{0,120}\blimit\b[\s\S]{0,200}(bare|prefixed)/i)
@@ -14,7 +14,7 @@ describe('figure 10 querystring keys are documented (issue #215)', () => {
   })
 })
 
-describe('figure 9 is a Svelte component', () => {
+describe('the comention figure is a Svelte component', () => {
   it('documents that comention is a Svelte component seeded from days, source, lean and min, sharing the single /api/people fetch (AC16)', () => {
     assert.match(docsText, /comention[\s\S]{0,300}Svelte component/i)
     assert.match(docsText, /Comention\.svelte/)

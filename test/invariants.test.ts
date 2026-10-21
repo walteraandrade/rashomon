@@ -150,7 +150,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
 
   it('the import graph is acyclic and matches the documented direction', () => {
     const expected: Record<string, string[]> = {
-      // Issue #208: figure 8's grid needs a domain's lean for its badge, and the route itself
+      // Issue #208: the agenda grid needs a domain's lean for its badge, and the route itself
       // carries no lean field (out of scope for that issue), so agendaRows reads outlets.json
       // directly -- a data import, not a ui-module one, so it adds no edge to the acyclic
       // module graph this test otherwise enforces.
@@ -159,11 +159,11 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'perf.ts': [],
       'api.ts': ['./perf.js'],
       'layout.ts': ['./format.js'],
-      // The searchable face over a <select> (figure 6's two lens controls): its pure halves,
+      // The searchable face over a <select> (the two lens controls of #compare's lens mode): its pure halves,
       // built with format.ts's tag only.
       'combobox.ts': ['./format.js'],
       'measure.ts': ['./layout.js', './format.js'],
-      'ruler-model.ts': ['./format.js'],
+      'compare-model.ts': ['./format.js'],
       'butterfly-model.ts': ['./format.js'],
       'strip-model.ts': ['./format.js', './layout.js'],
       'docs-paint.ts': ['./format.js'],
@@ -189,9 +189,8 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Comention.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './seed.js'],
       'Atlas.svelte': ['./api.js', './atlas-model.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './seed.js'],
       'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './strip-model.js', './seed.js'],
-      'Compare.svelte': ['./Butterfly.svelte', './api.js', './boot.svelte.js', './butterfly-model.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
+      'Compare.svelte': ['./Butterfly.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './butterfly-model.js', './compare-model.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
       'Butterfly.svelte': ['./format.js', './butterfly-model.js'],
-      'Lenses.svelte': ['./Ruler.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './ruler-model.js', './seed.js'],
       'Ruler.svelte': ['./format.js'],
       'Rising.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './seed.js'],
     }
@@ -474,11 +473,9 @@ describe('the pmi ordering, signature floor and own-name filter live only in src
 
 // AC12 (issue #207): CLAUDE.md's public/atlas.html bullet is exhaustive over every figure on
 // the page, so a builder who adds one without updating it leaves the repo's own map of itself
-// wrong. The spec drafted this criterion naming "six" figures, before issue #206's lenses ruler
-// landed as figure 6; the fact worth pinning is that the enumeration is exhaustive and current
-// (matching the real figure count on the page) and names #comention with its DOM id and its
-// docs-card entry point at the same level of detail every other figure gets there -- not the
-// stale literal count, which the spec fixed before #206 shipped.
+// wrong. The fact worth pinning is that the enumeration is exhaustive and current (matching the
+// real figure count on the page) and names #comention with its DOM id and its docs-card entry
+// point at the same level of detail every other figure gets there -- not a literal count.
 describe('CLAUDE.md documents the comention figure (issue #207)', () => {
   const claudeMd = () => srcSource('../CLAUDE.md')
   // The whole bullet is one very long line, so a per-line split (used for src/scoring.ts above)
@@ -521,9 +518,9 @@ describe('CLAUDE.md documents the persistence figure', () => {
     assert.match(md(), /`Persistence\.svelte` use it/, 'CLAUDE.md must say Persistence.svelte uses createFigure')
   })
 
-  it('counts ten figures on the page, the tenth being the persistence card (AC23)', () => {
-    assert.match(md(), /sequence of ten `\.figure` cards/)
-    assert.doesNotMatch(md(), /sequence of nine `\.figure` cards/)
+  it('counts nine figures on the page, the ninth being the persistence card (AC23, #326 AC33)', () => {
+    assert.match(md(), /sequence of nine `\.figure` cards/)
+    assert.doesNotMatch(md(), /sequence of ten `\.figure` cards/)
   })
 })
 
@@ -747,9 +744,9 @@ describe('component test harness', () => {
   })
 })
 
-describe('figure 9 lives only in Comention.svelte', () => {
+describe('the comention figure lives only in Comention.svelte', () => {
   const ui = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'ui')
-  it('figures/comention.ts is gone and no .ts module wires figure 9 any more (AC12)', () => {
+  it('figures/comention.ts is gone and no .ts module wires the comention figure any more (AC12)', () => {
     assert.equal(existsSync(join(ui, 'figures', 'comention.ts')), false)
     const tsFiles = readdirSync(ui).filter((f) => f.endsWith('.ts')).map((f) => join(ui, f))
     for (const file of tsFiles) assert.doesNotMatch(readFileSync(file, 'utf8'), /Comention\.svelte|paintComention/, file)
@@ -811,5 +808,45 @@ describe('#298 imperative front-end leftovers are gone', () => {
 
   it('#298 AC7: ALLOWED_PACKAGES is still empty', () => {
     assert.match(testFileSource('invariants.test.ts'), /ALLOWED_PACKAGES[^=\n]*=\s*\[\s*\]/)
+  })
+})
+
+describe('#326 the lenses figure is gone; #compare owns its ids and removals stay removed', () => {
+  const walkAll = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : walkAll(join(dir, e.name))) : [join(dir, e.name)]))
+  const retired = ['', 'Title', 'Person', 'A', 'B', 'Days', 'Limit', 'Ruler', 'Status', 'Detail', 'HiddenNote', 'Retry', 'AOutlets', 'BOutlets'].map((suffix) => 'lenses' + suffix)
+  const scanned = () =>
+    ['src', 'web', 'test']
+      .flatMap((dir) => walkAll(join(root, dir)))
+      .filter((f) => /\.(ts|svelte|js)$/.test(f) && !f.endsWith(join('components', 'combobox.spec.ts')) && !f.endsWith('invariants.test.ts'))
+
+  it('criterion 25: none of the retired whole ids appears as an id attribute or an element lookup in src, web or test', () => {
+    const quoted = retired.map((id) => `["']${id}["']`).join('|')
+    const idAttr = new RegExp(`\\bid=(${quoted})`)
+    const lookup = new RegExp(`(getElementById|\\$|querySelector)\\((${quoted.replace(/\["']/g, '["\'#]')})\\)`)
+    for (const f of scanned()) {
+      const text = readFileSync(f, 'utf8')
+      assert.doesNotMatch(text, idAttr, `${f} still carries a retired lenses id`)
+      assert.doesNotMatch(text, lookup, `${f} still looks up a retired lenses id`)
+    }
+  })
+
+  it('criterion 25: no .lenses selector remains in atlas.css, and .key-bridge is gone iff nothing in src or web uses it', () => {
+    const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+    assert.doesNotMatch(css, /\.lenses\b/)
+    const used = [...walkAll(join(root, 'src')), ...walkAll(join(root, 'web'))].some((f) => /key-bridge/.test(readFileSync(f, 'utf8')))
+    assert.equal(/\.key-bridge\b/.test(css), used, '.key-bridge must be in atlas.css exactly when src or web use it')
+  })
+
+  it('criterion 26: the Lenses component, its specs and its page slot are gone', () => {
+    for (const f of [join(jsDir, 'Lenses.svelte'), join(testDir, 'components', 'Lenses.server.spec.ts'), join(testDir, 'components', 'lenses.spec.ts')]) assert.equal(existsSync(f), false, `${f} must not exist`)
+    assert.doesNotMatch(readFileSync(join(root, 'web', 'routes', '+page.svelte'), 'utf8'), /Lenses/)
+    assert.equal(existsSync(join(jsDir, 'compare-model.ts')), true)
+  })
+
+  it('criterion 29: ruler-model.ts exists exactly when a module under src still imports rulerTerms', () => {
+    const callers = walkAll(srcDir).filter((f) => /\.(ts|svelte)$/.test(f) && !f.endsWith('ruler-model.ts') && /\brulerTerms\b/.test(readFileSync(f, 'utf8')))
+    assert.equal(existsSync(join(jsDir, 'ruler-model.ts')), callers.length > 0, `rulerTerms callers: ${callers.join(', ') || 'none'}`)
+    assert.equal(/'ruler-model\.ts':/.test(testFileSource('invariants.test.ts')), callers.length > 0)
   })
 })

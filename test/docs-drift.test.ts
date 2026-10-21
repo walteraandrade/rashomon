@@ -669,12 +669,32 @@ describe('figure 1 is a Svelte component (#297)', () => {
   })
 })
 
-describe('#294 figure 6 (lenses) is a Svelte component', () => {
-  it('docs say figure 6 is Lenses.svelte, and that Combobox takes { select, inputId, listId, label, listLabel } and is mounted by it', () => {
-    assert.ok(docsText.includes('Lenses.svelte'), 'docs never mention Lenses.svelte')
-    for (const prop of ['inputId', 'listId', 'listLabel']) assert.ok(docsText.includes(prop), `docs never mention the Combobox prop ${prop}`)
-    assert.match(docsText, /Combobox\.svelte[\s\S]{0,600}Lenses|Lenses\.svelte[\s\S]{0,1200}Combobox/)
-    assert.doesNotMatch(docsText, /figures\/lenses\.ts/, 'docs still describe the deleted figures/lenses.ts')
+describe('#326 the lenses figure is #compare\'s lens mode', () => {
+  it('docs say the compare figure id reads mode (pessoas, recortes), prefixed only, with no bare equivalent', () => {
+    assert.match(docsText, /compare\.mode/)
+    assert.match(docsText, /`pessoas`[\s\S]{0,40}`recortes`/)
+    assert.match(docsText, /compare\.mode[\s\S]{0,300}prefixed only/)
+    assert.match(docsText, /\bmode\b[\s\S]{0,120}no bare equivalent/)
+  })
+
+  it('docs say the legacy lenses.* keys still open lens mode and a and b never fall back to a bare key', () => {
+    for (const key of ['lenses.person', 'lenses.a', 'lenses.b', 'lenses.days', 'lenses.limit']) assert.ok(docsText.includes(key), `docs never mention ${key}`)
+    assert.match(docsText, /lenses\.person[\s\S]{0,600}open lens mode/)
+    assert.match(docsText, /`a` and `b` never fall back to a bare key/)
+  })
+
+  it('docs say Compare.svelte mounts Combobox with its props and calls sync() after programmatic writes, and #compare fetches /lenses/bridges', () => {
+    assert.match(docsText, /Compare\.svelte[\s\S]{0,1200}Combobox\.svelte/)
+    for (const prop of ['select', 'inputId', 'listId', 'label', 'listLabel']) assert.ok(docsText.includes(prop), `docs never mention the Combobox prop ${prop}`)
+    assert.match(docsText, /sync\(\)[\s\S]{0,60}programmatic write/)
+    assert.match(docsText, /lenses\/bridges[\s\S]{0,200}#compare[\s\S]{0,60}lens mode|#compare[\s\S]{0,120}lens mode[\s\S]{0,200}lenses\/bridges/)
+  })
+
+  it('docs name no Lenses.svelte, no lenses figure and no figure 10', () => {
+    assert.ok(!docsText.includes('Lenses.svelte'))
+    assert.doesNotMatch(docsText, /figures\/lenses\.ts/)
+    assert.doesNotMatch(docsText, /figure id `lenses`|`lenses` \(figure/)
+    assert.doesNotMatch(docsText, /[Ff]igure 10\b/)
   })
 })
 

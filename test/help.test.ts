@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { pageMarkup } from './pages.js'
-import { closeHelp, openHelp } from '../src/ui/help.svelte.js'
+import { HELP_SECTIONS, closeHelp, openHelp } from '../src/ui/help.svelte.js'
 
 const atlasPage = () => pageMarkup('/')
 
@@ -82,9 +82,9 @@ describe('help.svelte.ts: openHelp and closeHelp (link interception lives in tes
     })
   })
 
-  // issue #207: figure 9's "Como ler" link (como-ler.html#junto) must resolve like every other
+  // issue #207: figure 8's "Como ler" link (como-ler.html#junto) must resolve like every other
   // figure's, not fall through HELP_SECTIONS and scroll nowhere.
-  it("openHelp('#junto') opens the dialog at figure 9's section", () => {
+  it("openHelp('#junto') opens the dialog at figure 8's section", () => {
     withHelpDom(({ dialog, scrolled }) => {
       openHelp('#junto')
       assert.equal(dialog.open, true)
@@ -92,14 +92,36 @@ describe('help.svelte.ts: openHelp and closeHelp (link interception lives in tes
     })
   })
 
-  // issue #215: figure 10's "Como ler" link (como-ler.html#persistencia) must resolve like every
+  // issue #215: figure 9's "Como ler" link (como-ler.html#persistencia) must resolve like every
   // other figure's, not fall through HELP_SECTIONS and scroll nowhere.
-  it("openHelp('#persistencia') opens the dialog at figure 10's section", () => {
+  it("openHelp('#persistencia') opens the dialog at figure 9's section", () => {
     withHelpDom(({ dialog, scrolled }) => {
       openHelp('#persistencia')
       assert.equal(dialog.open, true)
       assert.deepEqual(scrolled, ['help-persistencia'])
     })
+  })
+
+  // issue #326: the lenses figure became #compare's lens mode, so its guide is a block inside
+  // the compare section; the old anchor still has to land there.
+  it("openHelp('#lentes') opens the dialog and scrolls to help-lentes", () => {
+    assert.ok(HELP_SECTIONS.has('lentes'))
+    withHelpDom(({ dialog, scrolled }) => {
+      openHelp('#lentes')
+      assert.equal(dialog.open, true)
+      assert.deepEqual(scrolled, ['help-lentes'])
+    })
+  })
+
+  it('help-lentes sits inside help-comparar, uses no "régua", and the dialog numbers its figures 1 to 9', () => {
+    const html = atlasPage()
+    const comparar = html.match(/<div id="help-comparar">[\s\S]*?<div id="help-em-alta">/)?.[0] ?? ''
+    assert.match(comparar, /<div id="help-lentes">/)
+    const lentes = html.match(/<div id="help-lentes">[\s\S]*?<\/div>/)?.[0] ?? ''
+    assert.doesNotMatch(lentes, /régua/i)
+    assert.doesNotMatch(html, /Gráfico 6 · Uma pessoa, duas lentes/)
+    const dialog = html.match(/id="helpDialog"[\s\S]*?<\/dialog>/)?.[0] ?? ''
+    assert.deepEqual([...dialog.matchAll(/<h3>Gráfico (\d+) ·/g)].map((m) => Number(m[1])), [1, 2, 3, 4, 5, 6, 7, 8, 9])
   })
 
   it('every como-ler.html#<x> link in the atlas page resolves through openHelp and has a matching id="help-<x>"', () => {

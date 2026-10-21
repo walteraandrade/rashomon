@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushSync, mount, unmount } from 'svelte'
 import FigureProbe from './FigureProbe.svelte'
-import { clearScopes } from '../../src/ui/state.js'
+import { clearScopes, readScope } from '../../src/ui/state.js'
 
 type Deferred = { promise: Promise<any>; resolve: (v: any) => void; reject: (e: unknown) => void; signal: AbortSignal }
 const deferred = (signal: AbortSignal): Deferred => {
@@ -220,5 +220,129 @@ describe('createFigure', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     el.querySelector('.bg')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     expect(calls.release).toBe(0)
+  })
+
+  it('abort(): drops a late response, makes repaint a no-op until the next load, harmless when idle', async () => {
+    const { calls, handle, set } = setup()
+    handle.abort()
+    expect(calls.fetches).toHaveLength(0)
+    set('a=1')
+    const first = handle.load()
+    calls.fetches[0].resolve({ v: 1 })
+    await first
+    flushSync()
+    expect(handle.loading).toBe(false)
+    const painted = calls.paint.length
+    let width = 300
+    Object.defineProperty(el, 'clientWidth', { get: () => width, configurable: true })
+
+    set('a=2')
+    const second = handle.load()
+    handle.abort()
+    expect(calls.fetches[1].signal.aborted).toBe(true)
+    expect(handle.loading).toBe(true)
+    calls.fetches[1].resolve({ v: 2 })
+    await second
+    flushSync()
+    expect(calls.paint.length).toBe(painted)
+    observers[0].cb()
+    expect(calls.paint.length, 'repaint is inert after abort').toBe(painted)
+    expect(handle.loading).toBe(true)
+
+    set('a=3')
+    const third = handle.load()
+    calls.fetches[2].resolve({ v: 3 })
+    await third
+    flushSync()
+    expect(calls.paint.at(-1)).toEqual({ v: 3 })
+    expect(handle.loading).toBe(false)
+    width = 500
+    observers[0].cb()
+    expect(calls.paint.length).toBe(painted + 2)
+
+    handle.abort()
+    set('a=4')
+    const fourth = handle.load()
+    calls.fetches[3].reject(new Error('boom'))
+    await fourth
+    flushSync()
+    const afterFailure = calls.paint.length
+    width = 700
+    observers[0].cb()
+    expect(calls.paint.length, 'a failed load leaves nothing to repaint').toBe(afterFailure)
+    expect(calls.paintError).toBe(1)
+  })
+
+  it('abort() with nothing in flight still marks the figure loading, so a resize repaints nothing (criterion 36)', async () => {
+    const { calls, handle } = setup()
+    const first = handle.load()
+    calls.fetches[0].resolve({ v: 1 })
+    await first
+    flushSync()
+    expect(handle.loading).toBe(false)
+    const painted = calls.paint.length
+    Object.defineProperty(el, 'clientWidth', { get: () => 420, configurable: true })
+    handle.abort()
+    expect(handle.loading).toBe(true)
+    observers[0].cb()
+    expect(calls.paint.length).toBe(painted)
+  })
+
+  it('abort() also cancels a reload still waiting on its debounce', async () => {
+    const { calls, handle } = setup()
+    handle.reload()
+    handle.abort()
+    await vi.advanceTimersByTimeAsync(300)
+    expect(calls.fetches).toHaveLength(0)
+    handle.reload()
+    await vi.advanceTimersByTimeAsync(300)
+    expect(calls.fetches).toHaveLength(1)
+  })
+
+  it('scope: a getter is evaluated per load, picks the memo bucket and the api:<scope> mark; a string behaves as before', async () => {
+    let bucket = 'lensesProbe'
+    const { calls, handle, opts } = setup({ scope: () => bucket })
+    const first = handle.load()
+    expect(calls.ghost).toBe(1)
+    calls.fetches[0].resolve({ v: 'x' })
+    await first
+    expect(readScope('lensesProbe', 'a=1')).not.toBeNull()
+    expect(readScope(opts.name, 'a=1')).toBeNull()
+
+    const measure = vi.spyOn(performance, 'measure')
+    await handle.load()
+    expect(calls.ghost, 'a hit in the same bucket does not ghost').toBe(1)
+    expect(calls.fetches).toHaveLength(1)
+    const hit = measure.mock.calls.find(([name, o]) => name === 'api:lensesProbe' && (o as { detail: { cache: string } }).detail.cache === 'memory')
+    expect(hit).toBeDefined()
+    measure.mockRestore()
+
+    bucket = 'otherProbe'
+    const second = handle.load()
+    expect(calls.ghost, 'another bucket is a miss').toBe(2)
+    calls.fetches[1].resolve({ v: 'y' })
+    await second
+    expect(calls.fetches).toHaveLength(2)
+    expect(readScope('otherProbe', 'a=1')).not.toBeNull()
+
+    bucket = 'lensesProbe'
+    await handle.load()
+    expect(calls.fetches, 'the first bucket still holds its own entry').toHaveLength(2)
+  })
+
+  it('scope: a string names the bucket, and with none the figure name does', async () => {
+    const named = setup({ scope: 'fixedProbe' })
+    const first = named.handle.load()
+    named.calls.fetches[0].resolve({ v: 1 })
+    await first
+    expect(readScope('fixedProbe', 'a=1')).not.toBeNull()
+    expect(readScope(named.opts.name, 'a=1')).toBeNull()
+    unmount(instance!)
+    instance = undefined
+    const bare = setup()
+    const second = bare.handle.load()
+    bare.calls.fetches[0].resolve({ v: 2 })
+    await second
+    expect(readScope(bare.opts.name, 'a=1')).not.toBeNull()
   })
 })

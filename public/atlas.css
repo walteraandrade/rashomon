@@ -339,6 +339,28 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-dot.is-active .dot-halo, .strip-dot.is-selected .dot-halo, .strip-dot.is-match .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
 /* Figure 1's own strip: a word that does not match the search dims, like a list row. */
 .strip-dot.is-dim { opacity: .35; }
+/* #testimony's outlet chart: one row per outlet on a fixed-size svg. The svg never takes
+   width: 100%; below 420px the container scrolls and the ink stays inside the figure. */
+.rank-scroll { overflow-x: auto; }
+.rank-svg { display: block; }
+.rank-grid { stroke: var(--line); stroke-width: 1; }
+.rank-grid.is-zero { stroke: var(--muted); stroke-width: 2; }
+.rank-tick, .rank-caption { font-family: var(--mono); font-size: var(--t-xs); fill: var(--muted); }
+.rank-mean { font-family: var(--mono); font-size: var(--t-2xs); fill: var(--accent); }
+.rank-label { font-family: var(--mono); font-size: var(--t-2xs); fill: var(--ink); }
+.rank-n { font-family: var(--mono); font-size: var(--t-2xs); fill: var(--muted); }
+.rank-row { cursor: pointer; outline: none; --wc: var(--tone, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
+.rank-hit { fill: transparent; }
+.rank-stem { stroke: var(--wc); stroke-width: 1.5; opacity: .6; }
+.rank-row .dot-face { fill: var(--wc); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: fill-opacity .12s; }
+.rank-row .dot-halo { fill: transparent; }
+.rank-row:hover .dot-halo, .rank-row:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
+.rank-row:focus-visible .dot-halo { stroke: var(--accent); stroke-width: 1.5; }
+.rank-row:hover .dot-face, .rank-row:focus-visible .dot-face, .rank-row.is-active .dot-face { fill-opacity: 1; }
+.rank-row.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
+.rank-arrow { fill: var(--wc, var(--accent)); stroke: none; }
+.strip-overall-mark .rank-arrow { fill: var(--accent); }
+.rank-svg circle.ghost, .rank-svg rect.ghost { fill: color-mix(in srgb, var(--ink) 36%, var(--soft)); }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 

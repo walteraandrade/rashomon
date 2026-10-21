@@ -355,7 +355,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .rank-row .dot-face { fill: var(--wc); stroke: var(--bg); stroke-width: 1.5; fill-opacity: .9; transition: fill-opacity .12s; }
 .rank-row .dot-halo { fill: transparent; }
 .rank-row:hover .dot-halo, .rank-row:focus-visible .dot-halo { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.rank-row:focus-visible .dot-halo { stroke: var(--accent); stroke-width: 1.5; }
+.rank-row:focus-visible .dot-face { stroke: var(--accent); }
 .rank-row:hover .dot-face, .rank-row:focus-visible .dot-face, .rank-row.is-active .dot-face { fill-opacity: 1; }
 .rank-row.is-active .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
 .rank-arrow { fill: var(--wc, var(--accent)); stroke: none; }

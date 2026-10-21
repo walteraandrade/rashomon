@@ -424,23 +424,72 @@ export const shareBalance = (t: { count_recent_raw: number; count_baseline_raw: 
   return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
 }
 
-// The server's +1 smoothing keeps it finite.
-export const liftOfPerson = (about: { recent: number; baseline: number }, days: number, baselineDays: number) => about.recent / days / ((about.baseline + 1) / baselineDays)
-
-export const liftBalance = (t: { lift: number }, liftPerson: number) => {
-  const ratio = liftPerson > 0 ? t.lift / liftPerson : t.lift > 0 ? Infinity : 1
-  return Math.max(-1, Math.min(1, Math.log2(ratio) / 3))
-}
-
-export type RisingItem = { term: string; kind: string; balance: number; combined: number }
-
-// Exact counts, so size never compounds rounding.
-export const risingRulerItems = (terms: RisingTerm[], balance: (t: RisingTerm) => number): RisingItem[] =>
-  terms.map((t) => ({ term: t.term, kind: t.kind, balance: balance(t), combined: t.count_recent_raw + t.count_baseline_raw }))
-
 export const RARE_SHOWN = 12
 
 export const rareRisers = (terms: RisingTerm[], present: RisingTerm[]) => {
   const ruled = new Set(present.map((t) => `${t.kind}:${t.term}`))
   return terms.filter((t) => t.lift > 1 && !ruled.has(`${t.kind}:${t.term}`))
+}
+
+export const DUMBBELL_ROWS = 20
+
+export type DumbbellUnit = 'mil' | 'cem'
+export type DumbbellRow = { term: string; kind: string; before: number | null; now: number | null; ratio: number | null; isNew: boolean }
+export type AxisTick = { value: number; label: string }
+export type DumbbellModel = { unit: DumbbellUnit; rows: DumbbellRow[]; max: number; ticks: AxisTick[] }
+
+const ptDecimals = (value: number, decimals: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+
+// A step is mantissa x 10^exp with an integer mantissa, so every tick is exact at its own decimals.
+export const axisTicks = (max: number): AxisTick[] => {
+  const top = Number.isFinite(max) && max > 0 ? max : 1
+  const e = Math.floor(Math.log10(top))
+  const steps = [e + 1, e, e - 1, e - 2]
+    .flatMap((k) => [[1, k] as const, [2, k] as const, [25, k - 1] as const, [5, k] as const])
+    .map(([mantissa, exp]) => ({ step: exp < 0 ? mantissa / 10 ** -exp : mantissa * 10 ** exp, decimals: Math.max(0, -exp) }))
+    .filter(({ step }) => Math.floor(top / step + 1e-9) >= 3)
+    .sort((x, y) => y.step - x.step)
+  const { step, decimals } = steps[0]
+  const count = Math.floor(top / step + 1e-9)
+  return Array.from({ length: count + 1 }, (_, i) => {
+    const value = Number((i * step).toFixed(decimals))
+    return { value, label: ptDecimals(value, decimals) }
+  })
+}
+
+export const ratioLabel = (ratio: number) => `×${ptDecimals(ratio, 1)}`
+
+export const ratioText = (row: DumbbellRow) => (row.ratio !== null ? ratioLabel(row.ratio) : row.isNew ? 'nova' : '–')
+
+const finite = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+// Raw shares per thousand words, so a word's dot is what it is and the x column prints the plain ratio;
+// rows sort by the smoothed ratio, the one shareBalance clamps, so a word new this week cannot fake an infinite lift.
+export const dumbbellModel = (data: Rising, limit = DUMBBELL_ROWS): DumbbellModel => {
+  const shares = hasShares(data) && data.about.words_recent > 0 && data.about.words_baseline > 0
+  const unit: DumbbellUnit = shares ? 'mil' : 'cem'
+  const scale = shares ? 1000 : 100
+  const denomRecent = finite(shares ? data.about.words_recent : data.about.recent)
+  const denomBaseline = finite(shares ? data.about.words_baseline : data.about.baseline)
+  const byName = (x: RisingTerm, y: RisingTerm) => x.term.localeCompare(y.term, 'pt-BR') || x.kind.localeCompare(y.kind)
+  const source = Array.isArray(data.present) ? data.present : data.terms
+  const cut = [...source].sort((x, y) => finite(y.count_recent_raw) - finite(x.count_recent_raw) || byName(x, y)).slice(0, limit)
+  const smoothed = (t: RisingTerm) =>
+    denomRecent > 0 && denomBaseline > 0 ? finite(t.count_recent_raw) / denomRecent / ((finite(t.count_baseline_raw) + 1) / denomBaseline) : 0
+  const rows = cut
+    .map((t) => ({ t, key: smoothed(t) }))
+    .sort((x, y) => y.key - x.key || finite(y.t.count_recent_raw) - finite(x.t.count_recent_raw) || byName(x.t, y.t))
+    .map(({ t }): DumbbellRow => {
+      const cr = finite(t.count_recent_raw)
+      const cb = finite(t.count_baseline_raw)
+      const now = denomRecent > 0 ? (cr / denomRecent) * scale : null
+      const isNew = cb === 0
+      const before = isNew ? null : denomBaseline > 0 ? (cb / denomBaseline) * scale : null
+      const ratio = now !== null && before !== null && before > 0 ? now / before : null
+      return { term: t.term, kind: t.kind, before, now, ratio, isNew }
+    })
+  const dots = rows.flatMap((r) => [r.before, r.now]).filter((v): v is number => v !== null)
+  const largest = dots.length ? Math.max(...dots) : 0
+  const max = largest > 0 ? largest : 1
+  return { unit, rows, max, ticks: axisTicks(max) }
 }

@@ -248,33 +248,34 @@ describe('atlas.css styles the butterfly rows', () => {
     assert.ok(narrow, 'a max-width: 519px block must restyle .butterfly-row')
   })
 
-  it('extends the loading dim to the butterfly and keeps the ruler selectors for the other figures', () => {
+  it('extends the loading dim to the butterfly and the dumbbell', () => {
     assert.match(css(), /\.compare \.butterfly[^{]*\{[^}]*transition:\s*opacity/)
     assert.match(css(), /\.figure\.is-loading \.butterfly/)
-    assert.match(css(), /\.rising \.ruler/)
+    assert.match(css(), /\.rising \.dumbbell/)
     assert.doesNotMatch(css(), /\.lenses\b/, 'the lenses figure is gone (issue #326)')
   })
 })
 
-describe('atlas.css styles words, not dots (issue #99 AC7)', () => {
-  it('carries the ruler word rules Rising still uses and no longer carries the dot rules', () => {
-    const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
-    assert.match(css, /\.ruler-text \{/)
-    // Neither the cursor nor the pick repaints the word: the box behind it carries both, in the
-    // word's own side colour, at two strengths. A selected word painted --accent threw away the
-    // side it leans to, which is the only thing this figure draws.
-    assert.match(css, /\.ruler-text \{[^}]*fill:\s*var\(--wc\)/)
-    assert.match(css, /\.ruler-word\.is-selected \.ruler-hit \{[^}]*var\(--wc-soft\)/)
+describe('atlas.css styles the atlas wash and the dumbbell, and carries no ruler rule (issue #99 AC7, #327)', () => {
+  const css = () => readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
+
+  it('keeps the atlas hover wash blurred and strokeless', () => {
     // No outline on a mark, anywhere: this site draws no borders, so hover and pick are a wash
     // the word sits on, at two strengths, never a box drawn around it.
-    for (const rule of css.match(/\.(?:ruler-hit|ruler-glow|atlas-hit|atlas-glow|center-hit|dot-halo)[^{]*\{[^}]*\}/g) ?? []) assert.doesNotMatch(rule, /stroke/, rule)
-    // Core plus penumbra: one uniformly blurred rectangle is fog, and fog has no edge to read.
-    assert.match(css, /\.atlas-glow, \.ruler-glow \{[^}]*blur\((\d+)px\)/)
-    assert.match(css, /\.atlas-hit, \.ruler-hit \{[^}]*blur\((\d+)px\)/)
-    assert.doesNotMatch(css, /\.ruler-word:hover \.ruler-text/, 'the cursor must not repaint the word')
-    assert.doesNotMatch(css, /\.ruler-word\.is-selected \{[^}]*--wc:\s*var\(--accent\)/, 'nor must the pick')
-    assert.match(css, /\.ruler-overflow \{/)
-    assert.doesNotMatch(css, /\.ruler-dot/, 'nothing draws a ruler dot any more')
+    for (const rule of css().match(/\.(?:atlas-hit|atlas-glow|center-hit|dot-halo)[^{]*\{[^}]*\}/g) ?? []) assert.doesNotMatch(rule, /stroke/, rule)
+    assert.match(css(), /\.atlas-glow[^{]*\{[^}]*blur\((\d+)px\)/)
+    assert.match(css(), /\.atlas-hit[^{]*\{[^}]*blur\((\d+)px\)/)
+  })
+
+  it('no rule styles the retired ruler', () => {
+    assert.doesNotMatch(css(), /\.ruler\b/)
+  })
+
+  it('draws the dumbbell dots at --x and keeps the rare list styled', () => {
+    assert.match(css(), /\.dumbbell-dot[^{]*\{[^}]*var\(--x\)/)
+    assert.match(css(), /\.dumbbell-dot\.cmp-a[^{]*\{[^}]*var\(--cmp-a\)/)
+    assert.match(css(), /\.dumbbell-dot\.cmp-b[^{]*\{[^}]*var\(--cmp-b\)/)
+    assert.match(css(), /\.dumbbell-rare[^{]*\{/)
   })
 })
 
@@ -285,7 +286,8 @@ describe('figure 3 as a Svelte component (#293)', () => {
       assert.match(html, new RegExp(`id="${id}"`), `#${id}`)
     assert.ok(existsSync(join(root, 'src', 'ui', 'Compare.svelte')))
     assert.ok(existsSync(join(root, 'src', 'ui', 'Butterfly.svelte')))
-    assert.ok(existsSync(join(root, 'src', 'ui', 'Ruler.svelte')), 'Rising still draws a ruler')
+    assert.ok(existsSync(join(root, 'src', 'ui', 'Dumbbell.svelte')))
+    assert.ok(!existsSync(join(root, 'src', 'ui', 'Ruler.svelte')), 'nothing draws a ruler any more (issue #327)')
   })
 })
 

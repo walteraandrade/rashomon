@@ -191,8 +191,8 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'Testimony.svelte': ['./api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './strip-model.js', './seed.js'],
       'Compare.svelte': ['./Butterfly.svelte', './Combobox.svelte', './api.js', './boot.svelte.js', './butterfly-model.js', './compare-model.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
       'Butterfly.svelte': ['./format.js', './butterfly-model.js'],
-      'Ruler.svelte': ['./format.js'],
-      'Rising.svelte': ['./Ruler.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './layout.js', './measure.js', './seed.js'],
+      'Dumbbell.svelte': ['./format.js'],
+      'Rising.svelte': ['./Dumbbell.svelte', './api.js', './boot.svelte.js', './docs-card.svelte.js', './figure.svelte.js', './format.js', './seed.js'],
     }
     for (const [file, allowed] of Object.entries(components)) {
       const specs = scriptSpecs(readFileSync(join(jsDir, file), 'utf8')).filter((spec) => spec !== 'svelte' && !spec.startsWith('svelte/'))

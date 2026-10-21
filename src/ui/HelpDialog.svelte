@@ -77,8 +77,10 @@
     </div>
     <div id="help-em-alta">
       <h3>Gráfico 4 · Em alta</h3>
-      <p>A régua traz as 40 palavras mais presentes na semana. Cada uma fica onde a sua fatia mudou: a fatia é quantos textos sobre a pessoa trazem a palavra, dividido por todas as palavras escritas sobre ela naquela janela. Ao centro, a mesma fatia de antes; à direita, fatia maior; à esquerda, menor.</p>
-      <p>Embaixo, as que subiram fora da régua: palavras com poucos textos na semana, fora das 40 mais presentes, mas com lift acima de 1, da maior subida para a menor (até 12, e a lista diz quantas ficaram de fora). Os dois números absolutos, textos nos últimos 7 dias e nos 14 dias antes, ficam escritos embaixo da régua. Clique abre os textos da última semana com aquela palavra.</p>
+      <p>O gráfico traz as 20 palavras mais presentes nos últimos 7 dias de textos sobre a pessoa, uma linha por palavra. Não as que mais subiram: um grupo escolhido por subir só diria o que sobe.</p>
+      <p>Cada palavra tem duas bolinhas na mesma escala: a de antes (os 14 dias anteriores) e a de agora (os 7 últimos dias). A escala é ocorrências a cada mil palavras escritas sobre a pessoa: quantos textos trazem a palavra, dividido pelo total de pares texto-palavra da janela, vezes mil. Uma palavra conta uma vez por texto. Dividir pelo total da janela, e não por textos, cancela o que muda quando um veículo passa a mandar o texto inteiro em vez do título: cada documento traz muito mais palavras, e toda palavra "sobe" junto sem que nada tenha mudado sobre a pessoa.</p>
+      <p>A coluna da direita é a razão agora ÷ antes, com uma casa decimal: ×3,2 quer dizer que a palavra ocupa uma fatia 3,2 vezes maior que a de antes. "nova" quer dizer que a palavra não apareceu nos 14 dias antes, e só a bolinha de agora é desenhada. As linhas vão da maior razão para a menor, e essa razão ganha um texto de brinde (+1) do lado do antes, o mesmo alisamento que o lift da API usa, para uma palavra nova não ir ao infinito. Quando faltam os totais de palavras, a escala passa a ser textos com a palavra a cada cem textos sobre a pessoa.</p>
+      <p>Embaixo, as que subiram fora do gráfico: palavras com poucos textos na semana, fora das mais presentes, mas com lift acima de 1, da maior subida para a menor (até 12, e a lista diz quantas ficaram de fora). Os dois números absolutos, textos nos últimos 7 dias e nos 14 dias antes, ficam escritos embaixo do gráfico. Clique abre os textos da última semana com aquela palavra.</p>
     </div>
     <div id="help-semana">
       <h3>Gráfico 5 · A semana</h3>

@@ -370,6 +370,57 @@ describe('Comention', () => {
     expect(about()).toBe('Zeca tem 0 parceiros nos 21 dias, com 3 textos em comum ou mais.')
   })
 
+  it('the about line reads the days of the shown payload, not the live select', async () => {
+    await start(teamPayload, team)
+    await change('comentionPerson', 'a1')
+    hold = true
+    const sel = select('comentionDays')
+    sel.value = '7'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+    flushSync()
+    await vi.advanceTimersByTimeAsync(300)
+    flushSync()
+    expect(about()).toBe('Zeca tem 3 parceiros nos 21 dias, com 3 textos em comum ou mais.')
+    pending.at(-1)!.resolve({ ...teamPayload, days: 7 })
+    await settle()
+    expect(about()).toBe('Zeca tem 3 parceiros nos 7 dias, com 3 textos em comum ou mais.')
+  })
+
+  it('a seeded person outside bootData.people leaves the list in todas mode', async () => {
+    await start(teamPayload, team, '?person=nobody')
+    expect(items()).toHaveLength(4)
+    expect(about()).toBe('4 pares de pessoas citadas juntas nos 21 dias.')
+  })
+
+  it('a seeded person never reaches the first /comention request', async () => {
+    await start(teamPayload, team, '?person=a1')
+    expect(names()).toEqual(['Yara', 'Wanda', 'Xuxa'])
+    expect(comentionUrls()).toHaveLength(1)
+    expect(searchOf(comentionUrls()[0]).has('person')).toBe(false)
+    expect(comentionUrls()[0]).not.toContain('a1')
+  })
+
+  it('names fall back from the payload persons to bootData.people and then to the id', async () => {
+    const partial = payload([{ id: 'a1', name: 'Zeca' }], [
+      { a: 'a1', b: 'b2', count: 6 },
+      { a: 'a1', b: 'zz9', count: 4 },
+    ])
+    await start(partial, team)
+    expect(names()).toEqual(['Zeca × Yara', 'Zeca × zz9'])
+    await change('comentionPerson', 'a1')
+    expect(names()).toEqual(['Yara', 'zz9'])
+    expect(items()[1].getAttribute('aria-label')).toBe(`Zeca e zz9: ${fmt(4)} textos juntos`)
+  })
+
+  it('the toggle sits between the head and the body, and the body has a neutral label', async () => {
+    await start(filled)
+    const section = target.querySelector('#comention')!
+    const kids = [...section.children]
+    expect(kids.indexOf(toggle()!)).toBe(kids.indexOf(matrix()) - 1)
+    expect(kids.indexOf(kids.find((k) => k.classList.contains('figure-head'))!)).toBeLessThan(kids.indexOf(toggle()!))
+    expect(matrix().getAttribute('aria-label')).toBe('Pares de pessoas citadas juntas')
+  })
+
   it('a row opens one docs side with with=<partner> in person mode, smaller id first in todas', async () => {
     await start(payload(inverted, [{ a: 'bolsonaro', b: 'dino', count: 4 }]), inverted)
     await change('comentionLean', 'left')

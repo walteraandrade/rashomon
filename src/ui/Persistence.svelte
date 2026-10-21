@@ -143,8 +143,8 @@
       <div><dt>Palavra</dt><dd>uma linha por palavra, das que ficaram mais tempo às que ficaram menos</dd></div>
       <div><dt><span class="ink-scale" aria-hidden="true"></span>Célula</dt><dd>uma semana; a tinta é o número de documentos</dd></div>
       <div><dt><span class="persistence-gap-swatch" aria-hidden="true"></span>Vazia</dt><dd>fora das 50 palavras mais fortes da semana; não é zero</dd></div>
-      <div><dt>Sequência</dt><dd>seguidas com a palavra, até agora</dd></div>
-      <div><dt>Meia-vida</dt><dd>do pico até cair à metade; &ldquo;sem queda&rdquo; se ainda não caiu</dd></div>
+      <div><dt>Sequência</dt><dd>quantas seguidas com a palavra, até agora</dd></div>
+      <div><dt>Meia-vida</dt><dd>quanto do pico até cair à metade; &ldquo;sem queda&rdquo; se ainda não caiu</dd></div>
       <div><dt>Unidade</dt><dd>sequência e meia-vida são contadas em semanas</dd></div>
       <div><dt>Clique</dt><dd>os textos daquela semana</dd></div>
       <div><dt>Início</dt><dd id="persistenceSince">{since}</dd></div>

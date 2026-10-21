@@ -96,7 +96,7 @@
     <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
     <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="/como-ler#agenda">Como ler</a>.</p>
     <dl class="figure-key">
-      <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo, relativa à maior fatia da grade mostrada: mais clara, maior a fatia; a mesma porcentagem pode ler mais clara ou mais fraca em outro recorte</dd></div>
+      <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo, relativa à maior fatia da grade mostrada: mais clara, maior a fatia; a mesma porcentagem pode aparecer mais clara ou mais apagada em outro recorte</dd></div>
       <div><dt>Posição</dt><dd>veículo na linha, pessoa na coluna</dd></div>
       <div><dt>Clique</dt><dd>documentos daquela pessoa naquele veículo</dd></div>
     </dl>

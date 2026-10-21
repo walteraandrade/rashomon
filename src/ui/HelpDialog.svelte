@@ -100,7 +100,7 @@
       <h3>Gráfico 7 · Agenda por veículo</h3>
       <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total.</p>
       <p>A soma de uma linha pode passar de 100%: um documento que cita duas pessoas acompanhadas conta para as duas, uma vez cada. Um veículo com poucos documentos rastreados nem entra na tabela. Clique numa célula abre os documentos daquela pessoa naquele veículo.</p>
-      <p>O número de cada célula é a fatia absoluta, mas a tinta é relativa à maior fatia da grade mostrada: a célula de maior fatia tem a tinta mais clara, e a mais fraca é a que fica perto do cinza. A mesma porcentagem pode ler mais clara ou mais fraca em outro recorte. A coluna dos veículos fica à vista quando a grade rola para o lado.</p>
+      <p>O número de cada célula é a fatia absoluta, mas a tinta é relativa à maior fatia da grade mostrada: a célula de maior fatia tem a tinta mais clara, e a mais fraca é a que fica perto do cinza. A mesma porcentagem pode aparecer mais clara ou mais apagada em outro recorte. A coluna dos veículos fica à vista quando a grade rola para o lado.</p>
     </div>
     <div id="help-junto">
       <h3>Gráfico 8 · Quem aparece junto</h3>

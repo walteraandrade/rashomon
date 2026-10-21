@@ -90,16 +90,18 @@
       </div>
       <div id="semana">
         <h2>Gráfico 5 · A semana</h2>
-        <p>Cada coluna é um dia do calendário, na hora de Brasília: o mais antigo à esquerda, hoje à direita. A palavra é a marca; não há linha, cor de avaliação nem comparação entre pessoas aqui.</p>
-        <h3>Tamanho</h3>
-        <p>Quantos documentos daquele dia têm a palavra. Uma palavra em vários dias aparece de novo em cada um, sem ligação entre as repetições.</p>
-        <h3>Posição</h3>
-        <p>Só o dia. Dentro da coluna a posição apenas evita que uma palavra cubra outra. Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna; uma palavra só não quebra na figura, e se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe o que passa da altura da coluna num dia com mais palavras do que ela comporta.</p>
+        <p>Uma tabela: cada linha é uma palavra, cada coluna um dia do calendário, na hora de Brasília, o mais antigo à esquerda e hoje à direita. Não há cor de avaliação nem comparação entre pessoas aqui.</p>
+        <h3>Linhas</h3>
+        <p>As linhas seguem o total da palavra na semana, das que mais apareceram às que menos; a mesma palavra como hashtag é outra linha. Uma palavra que ficou a semana toda se lê numa linha só.</p>
+        <h3>A célula</h3>
+        <p>O número é quantos documentos daquele dia têm a palavra, e a tinta é o mesmo número: a mais clara é a maior célula da semana, numa escala só para a figura inteira.</p>
+        <h3>A célula vazia</h3>
+        <p>Tracejada, a célula vazia não é zero: a palavra ficou fora das N mais citadas daquele dia (N é o número que a frase pede). Num dia com menos de N palavras, a célula vazia quer dizer que a palavra não apareceu.</p>
         <h3>O número do dia</h3>
-        <p>Junto do rótulo de cada dia, quantos documentos citam a pessoa naquele dia, mesmo quando nenhuma palavra sobrevive ao corte de nomes próprios. Um dia sem documentos aparece com esse número em zero, não some da semana.</p>
+        <p>Junto do rótulo de cada dia, quantos documentos citam a pessoa naquele dia, mesmo quando nenhuma palavra sobrevive ao corte de nomes próprios. Um dia sem documentos mostra 0 e não some da semana.</p>
         <h3>Clique</h3>
-        <p>Abre os textos daquele dia com aquela palavra.</p>
-        <p>O gráfico 1 tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do gráfico 1.</p>
+        <p>Abre os textos daquele dia com aquela palavra. Clicar de novo na mesma célula, ou fora da tabela, fecha. Em telas estreitas a tabela rola para o lado e a coluna das palavras fica fixa.</p>
+        <p>O atlas tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do atlas.</p>
       </div>
       <div id="atencao">
         <h2>Gráfico 6 · Atenção e menções</h2>

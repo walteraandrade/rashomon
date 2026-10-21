@@ -79,8 +79,7 @@
   const measured = () => (measure ??= createCanvasMeasure())
   const aborted = (e: unknown) => e instanceof Error && e.name === 'AbortError'
 
-  // The server ranks by count and packing, the list and the inspector all follow array order,
-  // so a word sized by reach has to lead them too.
+  // sort=reach re-sorts client-side so the list and the inspector lead with reach.
   const byReach = (list: Term[], by: string) =>
     by === 'reach' ? [...list].sort((a, b) => score(b, 'reach') - score(a, 'reach') || a.term.localeCompare(b.term) || a.kind.localeCompare(b.kind)) : list
 
@@ -505,8 +504,8 @@
             {#if scatter.zeroY !== null}<line class="scatter-zero" x1={scatter.plot.left} x2={scatter.plot.right} y1={scatter.zeroY} y2={scatter.zeroY}/><text class="scatter-zero-note" x={scatter.plot.right} y={scatter.zeroY - 5} text-anchor="end">0 = acaso</text>{/if}
             {#each scatter.xTicks as t (t.value)}<text class="scatter-tick" x={t.x} y={scatter.plot.bottom + 16} text-anchor="middle">{fmt(t.value)}</text>{/each}
             {#each scatter.yTicks as t (t.value)}<text class="scatter-tick" x={scatter.plot.left - 8} y={t.y} text-anchor="end" dominant-baseline="central">{fmt(t.value)}</text>{/each}
-            <text class="scatter-caption" x={(scatter.plot.left + scatter.plot.right) / 2} y={scatter.plot.bottom + 40} text-anchor="middle">documentos (escala log)</text>
-            <text class="scatter-caption" x={scatter.plot.left} y="14">PMI: quanto a palavra é específica da pessoa</text>
+            <text class="scatter-caption" x={scatter.captions.x.x} y={scatter.captions.x.y} text-anchor="middle">{scatter.captions.x.text}</text>
+            <text class="scatter-caption" x={scatter.captions.y.x}>{#each scatter.captions.y.lines as line (line.y)}<tspan x={scatter.captions.y.x} y={line.y}>{line.text}</tspan>{/each}</text>
             {#each scatter.points as p (p.id)}
               {@const n = byId.get(p.id) as Term}
               {@const s = states.get(p.id)}

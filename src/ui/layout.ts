@@ -98,6 +98,16 @@ export const SCATTER_LABEL_H = 14
 export const SCATTER_LABEL_GAP = 4
 export const SCATTER_DEFAULT_WIDTH = 860
 
+export const SCATTER_X_CAPTION = 'documentos (escala log)'
+export const SCATTER_Y_CAPTION = 'PMI: quanto a palavra é específica da pessoa'
+const SCATTER_CAPTION_LINE = 13
+
+export type ScatterCaptions = {
+  x: { text: string; x: number; y: number }
+  // Starts at x = 0; one line when it fits the width, else two split after "PMI:".
+  y: { x: number; lines: { text: string; y: number }[] }
+}
+
 export type ScatterPoint = { id: string; x: number; y: number }
 export type ScatterLayout = {
   width: number
@@ -109,6 +119,7 @@ export type ScatterLayout = {
   yTicks: { value: number; y: number }[]
   zeroY: number | null
   labels: Map<string, LabelPlacement>
+  captions: ScatterCaptions
 }
 
 const finite = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
@@ -116,7 +127,13 @@ const finite = (v: number | null | undefined) => (typeof v === 'number' && Numbe
 // A count of 0 is read as 1 before the log, a missing pmi as 0, so the layout only ever sees finite numbers.
 export const scatterLayout = (measure: Measure, nodes: Term[], width: number): ScatterLayout => {
   const height = Math.round(Math.max(320, Math.min(460, width * 0.55)))
-  const plot = { left: SCATTER_PAD.left, top: SCATTER_PAD.top, right: Math.max(SCATTER_PAD.left + 1, width - SCATTER_PAD.right), bottom: height - SCATTER_PAD.bottom }
+  const captionWidth = (text: string) => measure(text, SCATTER_LABEL_SIZE, FONT_MONO, 500)
+  const yText = captionWidth(SCATTER_Y_CAPTION) > width ? [SCATTER_Y_CAPTION.slice(0, 4), SCATTER_Y_CAPTION.slice(5)] : [SCATTER_Y_CAPTION]
+  const yLines = yText.map((text, i) => ({ text, y: 14 + i * SCATTER_CAPTION_LINE }))
+  const top = Math.max(SCATTER_PAD.top, yLines[yLines.length - 1].y + 12)
+  const plot = { left: SCATTER_PAD.left, top, right: Math.max(SCATTER_PAD.left + 1, width - SCATTER_PAD.right), bottom: height - SCATTER_PAD.bottom }
+  const half = captionWidth(SCATTER_X_CAPTION) / 2
+  const xCaptionX = Math.max(half, Math.min(width - half, (plot.left + plot.right) / 2))
   const counts = nodes.map((n) => Math.max(1, finite(n.count)))
   const pmis = nodes.map((n) => finite(n.pmi))
   const minCount = counts.length ? Math.min(...counts) : 1
@@ -144,6 +161,7 @@ export const scatterLayout = (measure: Measure, nodes: Term[], width: number): S
     yTicks: yTicksRaw.map((value) => ({ value, y: y(value) })),
     zeroY: yFirst <= 0 && yLast >= 0 ? y(0) : null,
     labels,
+    captions: { x: { text: SCATTER_X_CAPTION, x: xCaptionX, y: plot.bottom + 40 }, y: { x: 0, lines: yLines } },
   }
 }
 

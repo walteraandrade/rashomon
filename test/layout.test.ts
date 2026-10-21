@@ -677,6 +677,26 @@ describe('scatterLayout scales (issue #328 AC12)', () => {
   })
 })
 
+describe('scatter captions stay inside the svg (validator round 1)', () => {
+  const nodes = [{ id: 'a', term: 'a', kind: 'word', count: 5, pmi: 1 }, { id: 'b', term: 'b', kind: 'word', count: 50, pmi: 2 }]
+  it('every caption line starts at 0 or inside and ends within the width, splitting the y caption after "PMI:"', () => {
+    for (const width of [300, 260, 860]) {
+      const { captions, plot } = scatterLayout(measure, nodes, width)
+      const lines = [...captions.y.lines.map((l) => ({ ...l, start: captions.y.x, w: measure(l.text, 11) })), { text: captions.x.text, start: captions.x.x - measure(captions.x.text, 11) / 2, w: measure(captions.x.text, 11) }]
+      for (const l of lines) assert.ok(l.start >= 0 && l.start + l.w <= width, `${width}: "${l.text}" runs ${l.start}..${l.start + l.w}`)
+      assert.equal(captions.y.lines.map((l) => l.text).join(' '), 'PMI: quanto a palavra é específica da pessoa')
+      assert.ok(plot.top > captions.y.lines[captions.y.lines.length - 1].y, 'the plot starts below the caption')
+    }
+  })
+
+  it('splits only when one line would overflow', () => {
+    assert.equal(scatterLayout(measure, nodes, 860).captions.y.lines.length, 1)
+    const narrow = scatterLayout(measure, nodes, 260)
+    assert.deepEqual(narrow.captions.y.lines.map((l) => l.text), ['PMI:', 'quanto a palavra é específica da pessoa'])
+    assert.ok(narrow.plot.top > scatterLayout(measure, nodes, 860).plot.top)
+  })
+})
+
 describe('placeLabels order and bounds (issue #328 AC14)', () => {
   const bounds: LabelBounds = { left: 0, top: 0, right: 400, bottom: 200 }
   const gap = 4

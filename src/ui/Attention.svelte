@@ -231,7 +231,7 @@
 {#snippet bars(marks: AttentionMark[], other: Companion, interactive: boolean)}
   {#each marks as m (m.day)}
     {@const isSelected = selected === m.day}
-    {@const title = interactive ? `${attentionDayLabel(m.day)}, ${m.text} documentos, ${other.get(m.day) ?? '0'} visualizações` : `${attentionDayLabel(m.day)}, ${other.get(m.day) ?? '0'} documentos, ${m.text} visualizações`}
+    {@const title = interactive ? (viewsPeak === null ? `${attentionDayLabel(m.day)}, ${m.text} documentos` : `${attentionDayLabel(m.day)}, ${m.text} documentos, ${other.get(m.day) ?? '0'} visualizações`) : `${attentionDayLabel(m.day)}, ${other.get(m.day) ?? '0'} documentos, ${m.text} visualizações`}
     {#if interactive}
       <g class="attention-mark {isSelected ? 'is-selected' : ''}" transform="translate({m.x},{BASELINE})" data-day={m.day} role="button" tabindex="0" aria-pressed={isSelected} aria-label={title} onclick={() => pick(m.day)} onkeydown={(e) => onKey(e, m.day)}>
         <title>{title}</title>
@@ -314,7 +314,7 @@
       {:else}
         <div class="attention-row" data-row="views">
           <div class="attention-row-head"><span>{VIEWS_LABEL}</span><span>{viewsPeak ? `pico: ${fmt(viewsPeakValue)} visualizações em ${attentionDayLabel(viewsPeak)}` : ROW_NOTE.views}</span></div>
-          {@render svgRow(VIEWS_LABEL, layout.views, mentionsByDay, false)}
+          {#if viewsPeak}{@render svgRow(VIEWS_LABEL, layout.views, mentionsByDay, false)}{/if}
         </div>
       {/if}
     {/if}

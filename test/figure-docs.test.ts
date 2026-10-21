@@ -15,11 +15,24 @@ describe('figure 9 querystring keys are documented (issue #215)', () => {
 })
 
 describe('the comention figure is a Svelte component', () => {
-  it('documents that comention is a Svelte component seeded from days, source, lean and min, sharing the single /api/people fetch (AC16)', () => {
+  it('documents that comention is a Svelte component seeded from person, days, source, lean and min, sharing the single /api/people fetch (AC16)', () => {
     assert.match(docsText, /comention[\s\S]{0,300}Svelte component/i)
     assert.match(docsText, /Comention\.svelte/)
-    assert.match(docsText, /comention[\s\S]{0,600}\bdays\b[\s\S]{0,120}\bsource\b[\s\S]{0,200}\blean\b[\s\S]{0,120}\bmin\b/i)
+    assert.match(docsText, /comention[\s\S]{0,600}\bperson\b[\s\S]{0,60}\bdays\b[\s\S]{0,120}\bsource\b[\s\S]{0,200}\blean\b[\s\S]{0,120}\bmin\b/i)
     assert.match(docsText, /comention[\s\S]{0,1200}\/api\/people[\s\S]{0,200}(once|single|shared|one fetch)/i)
+  })
+})
+
+describe('the comention figure seeds a client-only person (#330)', () => {
+  it('documents person as bare or prefixed, lean and min prefixed-only, person never sent to /comention nor changing the request', () => {
+    assert.match(docsText, /`comention`[\s\S]{0,200}reads `person`, `days` and\s+`source` \(bare or prefixed\)/)
+    assert.match(docsText, /comention[\s\S]{0,300}`lean` and `min`, prefixed only/)
+    assert.match(docsText, /`person` is client-only[\s\S]{0,200}never sent to `\/comention`[\s\S]{0,100}never changes the request/)
+  })
+
+  it('no longer claims the comention figure has no person key', () => {
+    assert.doesNotMatch(docsText, /comention[\s\S]{0,400}no `person` key at all/)
+    assert.doesNotMatch(docsText, /no `person` control at all/)
   })
 })
 

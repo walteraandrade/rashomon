@@ -860,8 +860,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .agenda-ghost-row { display: flex; align-items: center; gap: var(--space-4); }
 /* ---------- the comention matrix (figure 8, issue #207): a 27x27 half-matrix, upper triangle
    only (a < b). One ink ramp, --ink only, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
-   evaluation. Both .comention-grid and .comention-list are always in the DOM; only the media
-   query at 700px, below, decides which one shows. ---- */
+   evaluation. The list is the default view; #comentionToggle swaps in the grid from 900px. ---- */
 .comention-body { margin: 18px 0 0; overflow-x: auto; }
 .comention-grid { display: block; }
 /* Every row, header included, shares one track list from matrixLayout: a column header and its
@@ -923,12 +922,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .comention-grid.is-ghost { opacity: 0.6; }
 .comention-list.is-ghost { opacity: 0.6; }
 #comentionAbout { margin-top: var(--space-3); }
-/* The narrow-viewport fallback: count first, then the pair, ranked high to low. Hidden above
-   700px, where the matrix itself is legible. */
-.comention-list { display: none; margin: 18px 0 0; padding: 0; list-style: none; }
+/* The default view: one row per pair, name, a bar scaled to the list's largest count, the count. */
+.comention-list { margin: 18px 0 0; padding: 0; list-style: none; }
 .comention-list li + li { margin-top: var(--space-2); }
 .comention-listitem {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) 4.5rem;
+  align-items: center;
+  gap: var(--space-3);
   width: 100%;
   text-align: left;
   background: none;
@@ -940,7 +941,12 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   color: var(--ink);
   cursor: pointer;
 }
-.comention-listitem b { font-family: var(--mono); font-weight: 600; color: var(--ink); margin-right: var(--space-2); font-variant-numeric: tabular-nums; }
+.comention-name { font-family: var(--display); font-size: var(--t-sm); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.comention-bar { display: block; height: 8px; background: var(--soft); border-radius: 2px; position: relative; }
+.comention-bar::before { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 100%); background: var(--ink); border-radius: 2px; }
+.comention-count { font-family: var(--mono); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+.comention-toggle { border: 1px solid var(--line); border-radius: 2px; background: transparent; color: var(--muted); padding: 6px var(--space-4); font-family: var(--mono); font-size: var(--t-xs); margin-top: var(--space-4); cursor: pointer; }
+.comention-toggle:hover, .comention-toggle:focus-visible { border-color: var(--accent); color: var(--ink); outline: none; }
 .comention-listitem.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 .comention-listitem.ghost { background: var(--soft); min-height: 2.3em; }
 
@@ -1029,8 +1035,10 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
   .chapter-grid { grid-template-columns: 1fr; }
   .pmi-scale { grid-template-columns: repeat(2, 1fr); }
   .chapter-foot { flex-direction: column; }
-  .comention-grid { display: none; }
-  .comention-list { display: block; }
+  .comention-listitem { grid-template-columns: minmax(0, 1fr) 4.5rem; row-gap: var(--space-1); }
+  .comention-name { grid-column: 1; }
+  .comention-count { grid-column: 2; grid-row: 1; }
+  .comention-bar { grid-column: 1 / -1; grid-row: 2; }
 }
 
 .app-root { display: contents; }

@@ -103,8 +103,9 @@
     </div>
     <div id="help-junto">
       <h3>Gráfico 8 · Quem aparece junto</h3>
-      <p>Cada célula conta os textos que citam as duas pessoas ao mesmo tempo, na mesma janela. Aparecer junto não é concordar: a célula não diz se as duas foram citadas a favor, contra ou uma da outra, só que o mesmo texto falou das duas.</p>
-      <p>O mínimo escolhido na frase esconde os pares com poucos textos em comum: um par abaixo dele fica em branco na matriz, não desaparece dela. Clicar numa célula preenchida abre os textos daquele par; clique de novo, ou fora da matriz, fecha.</p>
+      <p>A lista é a vista de partida. Com uma pessoa escolhida na frase, cada linha é alguém que apareceu junto com ela: o nome, uma barra e quantos textos citam as duas ao mesmo tempo, na mesma janela. Com &ldquo;todas as pessoas&rdquo;, a lista mostra os 15 pares com mais textos em comum. A barra mais longa é o maior número daquela lista, não uma fatia do total.</p>
+      <p>Aparecer junto não é concordar: a linha não diz se as duas foram citadas a favor, contra ou uma da outra, só que o mesmo texto falou das duas. O mínimo escolhido na frase esconde os pares com menos textos em comum que ele. Clicar numa linha abre os textos daquele par; clique de novo, ou fora da lista, fecha.</p>
+      <p>Em telas de 900px ou mais, o botão &ldquo;ver a grade inteira&rdquo; troca a lista pela matriz com todas as pessoas rastreadas nas duas margens, uma célula por par; &ldquo;ver a lista&rdquo; volta. A matriz mostra todos os pares, seja qual for a pessoa escolhida. Contagens grandes que não cabem na célula aparecem em milhares (&ldquo;10k&rdquo; é 10 mil), com o número exato ao passar o mouse.</p>
     </div>
     <div id="help-persistencia">
       <h3>Gráfico 9 · Persistência</h3>

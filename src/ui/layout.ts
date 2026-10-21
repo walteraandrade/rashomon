@@ -198,7 +198,7 @@ export const swarmBy = <T extends { x: number }>(
   return { placed, overflow }
 }
 
-// Circle swarm; no overflow, the strip shrinks its radii in strip-model.ts instead.
+// Circle swarm; no overflow, `termStripLayout` shrinks its radii instead.
 export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5): (T & { y: number })[] =>
   swarmBy(items, {
     size: (d) => d.r,

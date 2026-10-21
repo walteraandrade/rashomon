@@ -54,12 +54,27 @@ describe('the page holds the figure and explains it', () => {
     assert.deepEqual(sizes.filter((s) => s === '--t-micro'), [], 'the 11px floor is for SVG labels only')
   })
 
-  it('the strip is the chart of the second figure, and the como-ler page explains it', () => {
+  it('the strip is the chart of the second figure, and its key names the -5 and +5 ends', () => {
     const figure = figureOf(pageMarkup('/'))
     assert.match(figure, /<\/header>\s*<figure class="strip"[^>]* id="strip" aria-label="Veículos na régua da avaliação"/)
-    const chapter = read('como-ler.html').match(/<section class="chapter[^"]*" id="como-ler"[\s\S]*?<\/section>/)?.[0] ?? ''
-    assert.match(chapter, /<b>A régua<\/b>/)
-    assert.match(chapter, /a linha vertical é a média da pessoa/)
+    for (const name of ['Posição', 'Tamanho', 'Clique']) assert.match(figure, new RegExp(`<dt>${name}</dt>`))
+    assert.match(figure.match(/<dt>Posição<\/dt><dd>[^<]*/)?.[0] ?? '', /−5 a \+5/)
+  })
+
+  it('como-ler and the in-page guide state the ranked-dots facts and keep "mesma régua" off the atlas mode (#331)', () => {
+    const chapter = read('como-ler.html').match(/<div id="avaliacao">[\s\S]*?(?=\n\s*<div id="pmi">)/)?.[0] ?? ''
+    const help = read('atlas.html').match(/id="help-avaliacao"[\s\S]*?(?=<div id="help-comparar")/)?.[0] ?? ''
+    for (const [name, text] of [['como-ler', chapter], ['help', help]] as const) {
+      assert.ok(text, `${name}: the avaliação section must exist`)
+      assert.match(text, /20 com mais textos avaliados/, name)
+      assert.match(text, /de −5 a \+5/, name)
+      assert.match(text, /além disso é desenhada na borda, com uma seta/, name)
+      assert.match(text, /linha vertical[^.]*média da pessoa/, name)
+      assert.match(text, /3 ou mais textos avaliados/, name)
+      assert.match(text, /modo <b>Avaliação<\/b> (do atlas )?usa a mesma nota do kikori/, name)
+      assert.doesNotMatch(text, /mesma régua/, name)
+      assert.doesNotMatch(text, /o tamanho é quantos textos/, name)
+    }
   })
 
   it('the figure is one column, with no second ruler and no second outlet ranking', () => {

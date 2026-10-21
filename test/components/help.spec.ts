@@ -146,6 +146,18 @@ describe('HelpDialog', () => {
     expect(text).toContain('14 dias antes')
   })
 
+  it('the avaliação section states the ranked-dots facts and keeps "mesma régua" off the atlas mode (issue #331)', () => {
+    const section = document.getElementById('help-avaliacao')!.textContent ?? ''
+    expect(section).toMatch(/20 com mais textos avaliados/)
+    expect(section).toMatch(/de −5 a \+5/)
+    expect(section).toMatch(/além disso é desenhada na borda, com uma seta/)
+    expect(section).toMatch(/linha vertical[^.]*média da pessoa/)
+    expect(section).toMatch(/3 ou mais textos avaliados/)
+    expect(section).toMatch(/modo Avaliação usa a mesma nota do kikori/)
+    expect(section).not.toContain('mesma régua')
+    expect(section).not.toContain('o tamanho é quantos textos')
+  })
+
   it('closeHelp closes', () => {
     openHelp('#pmi')
     flushSync()

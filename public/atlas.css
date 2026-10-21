@@ -390,7 +390,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .scatter-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: .8; }
 .scatter-zero-note, .scatter-tick, .scatter-caption, .scatter-label { font-family: var(--mono); font-size: var(--t-micro); }
 .scatter-zero-note, .scatter-tick, .scatter-caption { fill: var(--muted); }
-.scatter-label { font-family: var(--mono); fill: var(--ink); pointer-events: none; }
+.scatter-label { font-family: var(--mono); fill: var(--ink); stroke: var(--panel); stroke-width: 3px; paint-order: stroke; pointer-events: none; }
 .scatter-point { cursor: pointer; outline: none; --wc: var(--muted); }
 .scatter-halo { fill: transparent; transition: fill .16s ease-out; }
 .scatter-dot { fill: var(--wc, var(--muted)); stroke: var(--bg); stroke-width: 1.5; }
@@ -1038,6 +1038,10 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
   .top nav { margin-left: 0; width: 100%; }
   .masthead { padding: var(--space-5) 0 var(--space-6); }
   .masthead h1 { max-width: none; }
+  .list-row, .columns.has-dot .list-row { grid-template-columns: 2.4ch minmax(0, 1fr) auto; row-gap: var(--space-1); }
+  .list-bar { grid-column: 2 / 3; grid-row: 2; }
+  .list-dot { grid-column: 3; grid-row: 2; justify-self: end; }
+  .list-value { text-align: right; }
   .related { grid-template-columns: 1fr; }
   .chapter-grid { grid-template-columns: 1fr; }
   .pmi-scale { grid-template-columns: repeat(2, 1fr); }

@@ -112,7 +112,7 @@
       <h3>Gráfico 9 · Persistência</h3>
       <p>Cada linha é uma palavra; cada célula, uma semana de segunda a domingo, no calendário de Brasília, da mais antiga à esquerda à atual à direita. A célula mostra quantos documentos sobre a pessoa trazem a palavra naquela semana. A palavra só entra na semana se estiver entre as 50 mais fortes dela, com pelo menos 2 documentos.</p>
       <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
-      <p>Sequência e meia-vida são duas colunas na borda direita da tabela, que ficam à vista quando as semanas rolam para o lado; as duas são contadas em semanas.</p>
+      <p>Sequência e meia-vida são duas colunas na borda direita da tabela; em telas largas ficam à vista quando as semanas rolam para o lado, e em telas estreitas rolam junto com elas, no fim; as duas são contadas em semanas.</p>
       <p>A sequência conta as semanas seguidas com a palavra, até agora. A semana em curso ainda está incompleta e não interrompe a conta se estiver vazia. A meia-vida é o número de semanas do pico até a primeira semana completa em que a palavra caiu à metade ou menos; &ldquo;sem queda&rdquo; quer dizer que isso ainda não aconteceu.</p>
       <p>Clicar numa célula abre os textos daquela semana com a palavra. Semanas mais antigas que o período de documentos guardado mostram o número, mas não abrem textos.</p>
     </div>

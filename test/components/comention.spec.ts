@@ -779,6 +779,29 @@ describe('Comention', () => {
     expect(cell('p25', 'p26')!.parentElement).toBe(rows()[26])
   })
 
+  it('a matrix cell never clips a number: thousands go compact, the title and aria-label keep the full count', async () => {
+    const big = [
+      { a: 'p00', b: 'p01', count: 10420 },
+      { a: 'p00', b: 'p02', count: 1234 },
+      { a: 'p00', b: 'p03', count: 120 },
+    ]
+    await startGrid(payload(many, big), many)
+    for (const width of [1440, 600]) {
+      await resizeTo(width)
+      const size = matrixLayout(many, big, width).cellSize
+      expect(cell('p00', 'p01')!.textContent).toBe('10k')
+      expect(cell('p00', 'p01')!.getAttribute('title')).toBe('10.420')
+      expect(cell('p00', 'p01')!.getAttribute('aria-label')).toContain('10.420')
+      expect(cell('p00', 'p02')!.textContent).toBe(size >= 38 ? '1.234' : '1k')
+      expect(cell('p00', 'p02')!.getAttribute('title')).toBe('1.234')
+      expect(cell('p00', 'p03')!.textContent).toBe('120')
+    }
+    expect(matrixLayout(many, big, 1440).cellSize).toBeGreaterThanOrEqual(38)
+    expect(matrixLayout(many, big, 600).cellSize).toBe(26)
+    await showGrid()
+    expect(item('p00', 'p01')!.querySelector('.comention-count')!.textContent).toBe('10.420')
+  })
+
   it('below the floor width the pitch still equals cell plus two gaps (AC6)', async () => {
     await startGrid(manyPayload, many)
     await resizeTo(600)

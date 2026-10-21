@@ -4,7 +4,7 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { fmt, personInitials, sourceLabels, SOURCE_SEGMENTS, type Comention } from './format.js'
+  import { cellCount, fmt, personInitials, sourceLabels, SOURCE_SEGMENTS, type Comention } from './format.js'
   import { matrixLayout } from './layout.js'
   import { seedFor } from './seed.js'
 
@@ -267,7 +267,7 @@
                   <span class="comention-cell is-empty" aria-hidden="true"></span>
                 {:else}
                   {@const on = isSelected(cell.a, cell.b)}
-                  <button type="button" class="comention-cell" class:is-selected={on} style:--w={cell.ink} data-a={cell.a} data-b={cell.b} aria-pressed={on} aria-label="{row.name} e {col.name}: {fmt(cell.count)} textos juntos" onclick={() => pick(cell.a, cell.b)}>{fmt(cell.count)}</button>
+                  <button type="button" class="comention-cell" class:is-selected={on} style:--w={cell.ink} data-a={cell.a} data-b={cell.b} aria-pressed={on} title={fmt(cell.count)} aria-label="{row.name} e {col.name}: {fmt(cell.count)} textos juntos" onclick={() => pick(cell.a, cell.b)}>{cellCount(cell.count, layout.cellSize)}</button>
                 {/if}
               {/if}
             {/each}

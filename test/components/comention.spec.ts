@@ -835,6 +835,8 @@ describe('Comention', () => {
       { a: 'p00', b: 'p01', count: 10420 },
       { a: 'p00', b: 'p02', count: 1234 },
       { a: 'p00', b: 'p03', count: 120 },
+      { a: 'p00', b: 'p04', count: 10600 },
+      { a: 'p00', b: 'p05', count: 1999 },
     ]
     await startGrid(payload(many, big), many)
     for (const width of [1440, 600]) {
@@ -846,6 +848,10 @@ describe('Comention', () => {
       expect(cell('p00', 'p02')!.textContent).toBe(size >= 38 ? '1.234' : '1k')
       expect(cell('p00', 'p02')!.getAttribute('title')).toBe('1.234')
       expect(cell('p00', 'p03')!.textContent).toBe('120')
+      expect(cell('p00', 'p04')!.textContent).toBe('11k')
+      expect(cell('p00', 'p04')!.getAttribute('title')).toBe('10.600')
+      expect(cell('p00', 'p05')!.textContent).toBe(size >= 38 ? '1.999' : '2k')
+      expect(cell('p00', 'p05')!.getAttribute('aria-label')).toContain('1.999')
     }
     expect(matrixLayout(many, big, 1440).cellSize).toBeGreaterThanOrEqual(38)
     expect(matrixLayout(many, big, 600).cellSize).toBe(26)

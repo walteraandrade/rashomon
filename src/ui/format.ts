@@ -107,11 +107,12 @@ export const fmt = (value: unknown) => Number(value || 0).toLocaleString('pt-BR'
 // two. The cell is a mono glyph at --t-2xs (12px, 0.6em wide) inside its 1px borders, which holds
 // 3 characters at the 26px floor and 5 at 39px; what does not fit becomes whole thousands ("10k"),
 // the one compact form short enough for the floor ("10,4 mil" is wider than the 42px ceiling).
+// Rounded, not floored: 1.999 is "2k", never "1k".
 const CELL_CHAR_PX = 7.2
 export const cellCount = (count: number, cellSize: number) => {
   const full = fmt(count)
   if (full.length * CELL_CHAR_PX <= cellSize - 2 || count < 1000) return full
-  return `${Math.floor(count / 1000)}k`
+  return `${Math.round(count / 1000)}k`
 }
 
 export const label = (n: { kind?: string; term: string }) => (n.kind === 'hashtag' ? '#' : '') + n.term

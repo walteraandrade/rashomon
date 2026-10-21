@@ -810,8 +810,8 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
 .week-ghost-row .week-cell { flex: 1 1 0; }
 .week-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.week-table { min-width: calc(12ch + 7 * 36px); }
-.week-day-head { vertical-align: bottom; min-width: 24px; }
+.week-table { min-width: calc(12ch + 7 * 58px); }
+.week-day-head { vertical-align: bottom; min-width: 56px; }
 .week-table thead th { padding-bottom: var(--space-2); }
 .week-day-head .stat { margin: 0; }
 .week-term, .week-table .week-term { position: sticky; left: 0; z-index: 1; max-width: 24ch; min-width: 12ch; padding-right: var(--space-4); background: var(--panel); color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -219,6 +219,20 @@ describe('Week.svelte (#329): a word by day table', () => {
     expect($('#week .figure-key').textContent).toMatch(/fora das 12 mais citadas/)
   })
 
+  it('a memo hit shows the limit its payload was loaded with in the key and the gap labels', async () => {
+    const day = (i: number) => ['a', 'b', 'c', 'd', i % 2 ? 'e' : 'f'].map((term, k) => ({ term, kind: 'word', count: 9 - k }))
+    weekBody = () => ({ days: 7, tz: 'America/Sao_Paulo', buckets: Array.from({ length: 7 }, (_, i) => bucketAt(i, { terms: day(i) })) })
+    boot({ search: '?week.limit=5' })
+    await mountWeek()
+    select('#weekLimit', '12')
+    await settle(200)
+    select('#weekLimit', '5')
+    await settle(200)
+    expect(weekCalls().map((u) => qs(u).get('limit'))).toEqual(['5', '12'])
+    expect($('#week .figure-key').textContent).toMatch(/fora das 5 mais citadas/)
+    for (const g of all('#weekChart .week-cell.is-gap')) expect(g.getAttribute('aria-label')).toMatch(/: fora das 5 mais citadas do dia$/)
+  })
+
   it('AC1: renders one row per word ordered by weekly total, then term, then kind', async () => {
     weekBody = rich
     boot()

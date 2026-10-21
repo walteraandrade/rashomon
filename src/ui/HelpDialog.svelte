@@ -88,7 +88,7 @@
       <h3>Gráfico 5 · A semana</h3>
       <p>Uma tabela: cada linha é uma palavra, cada coluna um dia do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. As linhas seguem o total da palavra na semana, das que mais apareceram às que menos; uma palavra que ficou a semana toda se lê numa linha só.</p>
       <p>O número na célula é quantos documentos daquele dia têm a palavra, e a tinta é o mesmo número: a mais clara é a maior célula da semana. Uma célula vazia, tracejada, não é zero: a palavra ficou fora das N mais citadas daquele dia (N é o que a frase pede). Num dia com menos de N palavras, a célula vazia quer dizer que a palavra não apareceu.</p>
-      <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte, que então mostra 0. Clique numa célula abre os textos daquele dia com aquela palavra. Em telas estreitas a tabela rola para o lado e a coluna das palavras fica fixa.</p>
+      <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte, que então mostra 0. Clique numa célula abre os textos daquele dia com aquela palavra. Clicar de novo na mesma célula, num espaço vazio da tabela ou apertar Esc fecha. Em telas estreitas a tabela rola para o lado e a coluna das palavras fica fixa.</p>
       <p>O atlas tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do atlas.</p>
     </div>
     <div id="help-atencao">

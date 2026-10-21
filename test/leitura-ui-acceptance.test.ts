@@ -497,7 +497,7 @@ describe('the week figure is read as a word by day table (issue #329)', () => {
       assert.match(text, /vazia[^.]{0,80}n[ãa]o é zero/i, `${name}: an empty cell is not zero`)
       assert.match(text, /fora das N mais citadas/i, `${name}: outside the day's top N`)
       assert.match(text, /menos de N palavras[^.]{0,80}n[ãa]o apareceu/i, `${name}: a short day's empty cell means it did not appear`)
-      assert.match(text, /(?:mostra|em) 0|zero/i, `${name}: a day head can read 0`)
+      assert.match(text, /(?:mostra|em|com) 0\b|número[^.]{0,40}zero/i, `${name}: a day head can read 0`)
       assert.match(text, /textos? daquele dia/i, `${name}: a click opens that day's texts`)
     }
   })

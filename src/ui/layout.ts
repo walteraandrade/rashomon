@@ -307,7 +307,6 @@ export const heatLevel = (count: number | null, top: number, levels = 5): number
   count === null ? 0 : Math.min(levels, Math.max(1, Math.ceil((count / Math.max(1, top)) * levels)))
 
 // Figure 9: one ramp keyed to the largest count shown.
-
 export type PersistenceCell = { week: string; count: number | null; level: number }
 export type PersistenceRow = { term: string; kind: string; cells: PersistenceCell[] }
 

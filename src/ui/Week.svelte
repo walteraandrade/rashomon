@@ -19,8 +19,6 @@
   let source = $state(SOURCE_SEGMENTS[0][0])
   let limit = $state('8')
   let selected = $state.raw<Picked | null>(null)
-  // The limit the data on screen was asked with; the select may already say another while it reloads.
-  let shownLimit = $state('8')
   let started = false
   let lastData: Week | undefined
 
@@ -73,10 +71,17 @@
     selected = null
   }
 
+  // The limit each payload was asked with, kept beside the payload so a memo hit carries it too.
+  const limitOf = new WeakMap<Week, string>()
+
   const figure = createFigure<Week>({
     name: 'week',
     params,
-    fetch: (qp, signal) => api.loadWeek(qp.get('person')!, api.weekParams({ source: qp.get('source')!, limit: qp.get('limit')! }), signal),
+    fetch: async (qp, signal) => {
+      const result = await api.loadWeek(qp.get('person')!, api.weekParams({ source: qp.get('source')!, limit: qp.get('limit')! }), signal)
+      limitOf.set(result, qp.get('limit')!)
+      return result
+    },
     ghost: () => {},
     paint: (result) => {
       if (result !== lastData) dropStalePick()
@@ -86,10 +91,7 @@
       lastData = undefined
       dropStalePick()
     },
-    detail: (_data, qp) => {
-      shownLimit = qp.get('limit') ?? shownLimit
-      return { person: qp.get('person') }
-    },
+    detail: (_data, qp) => ({ person: qp.get('person') }),
     el: () => chartEl,
     markSelector: '[data-term]',
     onRelease: () => {
@@ -118,6 +120,9 @@
       void figure.load()
     })
   })
+
+  // The select may already say another limit while the data on screen is still the old one.
+  const shownLimit = $derived((figure.data && limitOf.get(figure.data)) ?? limit)
 
   const table = $derived.by(() => {
     const data = figure.data

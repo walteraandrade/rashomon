@@ -59,7 +59,7 @@
           <div><dt>2</dt><dd>quatro vezes</dd></div>
           <div><dt>3</dt><dd>oito vezes</dd></div>
         </dl>
-        <p>Cada +1 dobra. <b>PMI ponderado</b> segura a palavra rara: o tamanho usa PMI × ln(1 + documentos).</p>
+        <p>Cada +1 dobra. <b>PMI ponderado</b> segura a palavra rara: a barra da lista usa PMI × ln(1 + documentos).</p>
       </div>
       <div id="comparar">
         <h2>Gráfico 3 · Duas pessoas ou dois recortes</h2>

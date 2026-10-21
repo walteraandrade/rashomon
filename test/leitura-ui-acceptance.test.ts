@@ -447,6 +447,7 @@ describe('the atlas is read as Lista, Dispersão and Avaliação (issue #328)', 
       ['/como-ler #analise', plain(part(page, 'analise', 'atlas'))],
       ['/como-ler #atlas', plain(part(page, 'atlas', 'avaliacao'))],
       ['/como-ler #avaliacao', plain(part(page, 'avaliacao', 'pmi'))],
+      ['/como-ler #pmi', plain(part(page, 'pmi', 'comparar'))],
       ['#help-atlas', plain(part(dialog, 'help-atlas', 'help-pmi'))],
     ]
     for (const [name, text] of scopes) {
@@ -455,6 +456,7 @@ describe('the atlas is read as Lista, Dispersão and Avaliação (issue #328)', 
       assert.doesNotMatch(text, /máscara do mapa/i, `${name} still speaks of the map mask`)
       assert.doesNotMatch(text, /(posi[çc][õo]?[ãe]?s?|posição)[^.]{0,50}evit[ao]m?\s+colis/i, `${name} still says position avoids collisions`)
       assert.doesNotMatch(text, /Linha entre duas palavras|zoom/i, `${name} still speaks of the term-term line or zoom`)
+      assert.doesNotMatch(text, /o tamanho usa/i, `${name} still sizes a word by a number`)
     }
     assert.match(scopes[2][1], /máscara da lista e da dispersão/i)
   })

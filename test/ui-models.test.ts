@@ -148,17 +148,13 @@ describe('the six --theme-* tokens are distinct and readable (issue #217 AC14)',
     }
   })
 
-  it('.map-svg.is-themed .atlas-word and .columns.is-themed .column-card both fall back to --muted, so an uncoloured node never vanishes (code review fix #4)', () => {
-    assert.match(
-      css,
-      /\.map-svg\.is-themed \.atlas-word[^{]*\{[^}]*--wc:\s*var\(--theme,\s*var\(--muted\)\)/,
-      'the atlas map must keep the --muted fallback on --wc in tema mode',
-    )
-    assert.match(
-      css,
-      /\.columns\.is-themed \.column-card\s*\{[^}]*--wc:\s*var\(--theme,\s*var\(--muted\)\)/,
-      'the columns list must keep the --muted fallback on --wc in tema mode',
-    )
+  it('a list dot and a scatter point fall back to --muted under both masks, so an uncoloured term never vanishes (issue #328 AC7)', () => {
+    for (const [mask, token] of [['is-masked', '--mask'], ['is-themed', '--theme']]) {
+      assert.match(css, new RegExp(`\\.columns\\.${mask} \\.list-dot\\s*\\{[^}]*background:\\s*var\\(${token},\\s*var\\(--muted\\)\\)`), `the list dot must keep the --muted fallback under ${mask}`)
+      assert.match(css, new RegExp(`\\.scatter-svg\\.${mask} \\.scatter-point[^{]*\\{[^}]*--wc:\\s*var\\(${token},\\s*var\\(--muted\\)\\)`), `the scatter must keep the --muted fallback on --wc under ${mask}`)
+    }
+    assert.match(css, /\.list-dot\s*\{[^}]*background:\s*var\(--muted\)/, 'a dot with no mask rule is neutral')
+    assert.match(css, /\.scatter-dot\s*\{[^}]*fill:\s*var\(--wc,\s*var\(--muted\)\)/)
   })
 })
 
@@ -420,7 +416,7 @@ describe('axisTicks (#327)', () => {
   })
 })
 
-describe('one rx source for the word marks', () => {
+describe('one rx source for the week word marks', () => {
   const root = dirname(dirname(fileURLToPath(import.meta.url)))
   const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
 
@@ -440,13 +436,7 @@ describe('one rx source for the word marks', () => {
     return found ? Number(found[1]) : undefined
   }
 
-  it('the map-svg.is-masked mask-and-underline rule still targets the atlas word class', () => {
-    assert.match(css, /\.map-svg\.is-masked \.atlas-word/)
-  })
-
-  it('atlas.css sets rx on the four rules, at the same values the markup used to carry', () => {
-    assert.equal(rxOf('.atlas-glow'), 9)
-    assert.equal(rxOf('.atlas-hit'), 6)
+  it('atlas.css sets rx on the week word marks, at the same values the markup used to carry', () => {
     assert.equal(rxOf('.week-glow'), 8)
     assert.equal(rxOf('.week-hit'), 5)
   })

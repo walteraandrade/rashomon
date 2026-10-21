@@ -8,8 +8,8 @@ vi.mock('../../src/ui/docs-card.svelte.js', async (orig) => ({ ...(await orig<ob
 import Atlas from '../../src/ui/Atlas.svelte'
 import { docsQuery, scopeKeys } from '../../src/ui/atlas-model.js'
 import { params } from '../../src/ui/api.js'
-import { termStripLayout } from '../../src/ui/layout.js'
-import { signed, termMask } from '../../src/ui/format.js'
+import { scatterLayout, termStripLayout } from '../../src/ui/layout.js'
+import { communityRanking, fmt, score, signed, termMask, themeMask } from '../../src/ui/format.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { SCOPE_TTL_MS, clearScopes, readScope } from '../../src/ui/state.js'
 
@@ -62,7 +62,11 @@ const settle = async (ms = 300) => {
   flushSync()
 }
 const nodeEl = (id: string) => document.querySelector<HTMLElement>(`[data-node="${id}"]`)!
-const mapNodes = () => all('#viewport [data-node]')
+// The colour lives on the list row's dot and on the scatter point itself.
+const paintOf = (id: string, prop: string) => (nodeEl(id).querySelector<HTMLElement>('.list-dot') ?? nodeEl(id)).style.getPropertyValue(prop)
+const rows = () => all('#columns [data-node]')
+const points = () => all('#scatter [data-node]')
+const toScatter = () => fire($('modeScatter'))
 const okResponse = (body: unknown) => ({ ok: true, status: 200, headers: new Headers(), json: async () => body })
 const start = async (search = '') => {
   setBoot({ ready: true, people, peopleError: null, search })
@@ -135,7 +139,7 @@ afterEach(() => {
 
 const IDS = [
   'workspace', 'atlasTitle', 'atlasStats', 'keyDefault', 'keyDefaultColor', 'keyTheme', 'keyThemeText', 'keyStrip', 'person', 'days', 'source', 'sort', 'limit', 'status',
-  'search', 'searchNote', 'modeMap', 'modeColumns', 'modeStrip', 'mask', 'zoomGroup', 'zoomOut', 'zoomReset', 'zoomIn', 'clear', 'viewport', 'overflow', 'columns',
+  'search', 'searchNote', 'modeColumns', 'modeScatter', 'modeStrip', 'mask', 'clear', 'columns', 'scatter', 'keyScatter', 'keyScatterColor',
   'atlasStrip', 'stripHiddenNote', 'legend', 'inspector', 'selectionNote',
 ]
 
@@ -155,9 +159,9 @@ describe('Atlas (issue #297)', () => {
     expect(section.nextElementSibling).toBe(note)
     expect(note.classList.contains('sr-only')).toBe(true)
     expect(note.getAttribute('role')).toBe('status')
-    expect(all('#workspace dl.figure-key').map((d) => d.id)).toEqual(['keyDefault', 'keyTheme', 'keyStrip'])
-    expect(all('#workspace .segment button').map((b) => b.id)).toEqual(['modeMap', 'modeColumns', 'modeStrip'])
-    expect(document.querySelector('.mobile-hint')).not.toBeNull()
+    expect(all('#workspace dl.figure-key').map((d) => d.id)).toEqual(['keyDefault', 'keyScatter', 'keyTheme', 'keyStrip'])
+    expect(all('#workspace .segment button').map((b) => b.id)).toEqual(['modeColumns', 'modeScatter', 'modeStrip'])
+    for (const gone of ['modeMap', 'zoomGroup', 'viewport', 'overflow']) expect(document.getElementById(gone), gone).toBeNull()
     expect(document.querySelector('h2#atlasTitle')!.textContent).toContain('Atlas de palavras')
     expect(all('#person option').map((o) => o.getAttribute('value'))).toEqual(['lula', 'tarcisio'])
   })
@@ -167,8 +171,12 @@ describe('Atlas (issue #297)', () => {
     flushSync()
     await settle()
     expect($('status').textContent).toBe('Lendo as pessoas.')
-    expect($('viewport').querySelector('.ghost-field, .ghost')).not.toBeNull()
-    expect($('viewport').textContent).not.toContain('Carregando')
+    expect($('modeColumns').getAttribute('aria-pressed')).toBe('true')
+    expect($('columns').hidden).toBe(false)
+    expect($('columns').querySelector('.ghost-field, .ghost')).not.toBeNull()
+    expect($('columns').querySelectorAll('.list-row.is-ghost')).toHaveLength(18)
+    expect($('columns').querySelector('[data-node], svg')).toBeNull()
+    expect($('columns').textContent).not.toContain('Carregando')
     expect(urls).toEqual([])
   })
 
@@ -192,9 +200,9 @@ describe('Atlas (issue #297)', () => {
     await settle()
     expect($('status').textContent).toBe('Não foi possível carregar dados reais.')
     expect($('status').classList.contains('error')).toBe(true)
-    expect($('viewport').textContent).toContain('Falha de rede ou base indisponível')
-    expect($('viewport').textContent).toContain('Nenhum grafo fictício será exibido')
-    expect($('viewport').textContent).not.toContain('seed.json')
+    expect($('columns').textContent).toContain('Falha de rede ou base indisponível')
+    expect($('columns').textContent).toContain('Nenhum grafo fictício será exibido')
+    expect($('columns').textContent).not.toContain('seed.json')
     expect(document.getElementById('retry')).not.toBeNull()
     expect(urls).toEqual([])
   })
@@ -205,8 +213,8 @@ describe('Atlas (issue #297)', () => {
     flushSync()
     await settle()
     expect($('status').textContent).toBe('Nenhuma pessoa cadastrada.')
-    expect($('viewport').textContent).toMatch(/seed\.json/)
-    expect($('viewport').textContent).not.toMatch(/Falha de rede/)
+    expect($('columns').textContent).toMatch(/seed\.json/)
+    expect($('columns').textContent).not.toMatch(/Falha de rede/)
     expect(urls).toEqual([])
   })
 
@@ -282,18 +290,18 @@ describe('Atlas (issue #297)', () => {
     expect(q(graphUrls()[0]).get('days')).toBe('21')
   })
 
-  it('atlas: first load is a ghost of the map (aria-busy), a reload only dims the section', async () => {
+  it('atlas AC2: first paint is a list ghost (aria-busy), a reload only dims the section', async () => {
     holding = /\/graph/
     setBoot({ ready: true, people, peopleError: null, search: '' })
     instance = mount(Atlas, { target })
     flushSync()
     await settle()
     expect($('status').textContent).toBe('Lendo o recorte.')
-    expect($('viewport').getAttribute('aria-busy')).toBe('true')
-    expect($('viewport').querySelector('.ghost-field, .ghost')).not.toBeNull()
+    expect($('columns').getAttribute('aria-busy')).toBe('true')
+    expect($('columns').querySelector('.ghost-field, .ghost')).not.toBeNull()
     held[0].resolve(graphOf(nodes2))
     await settle()
-    expect($('viewport').getAttribute('aria-busy')).toBe('false')
+    expect($('columns').getAttribute('aria-busy')).toBe('false')
     expect($('workspace').classList.contains('is-loading')).toBe(false)
     change('days', '7')
     flushSync()
@@ -309,8 +317,10 @@ describe('Atlas (issue #297)', () => {
     await start()
     expect($('status').textContent).toBe('Não foi possível carregar dados reais.')
     expect($('status').classList.contains('error')).toBe(true)
-    expect($('viewport').textContent).toContain('Falha de rede ou base indisponível')
-    expect($('columns').hidden).toBe(true)
+    expect($('columns').textContent).toContain('Falha de rede ou base indisponível')
+    expect($('columns').hidden).toBe(false)
+    expect($('columns').querySelector('#retry')).not.toBeNull()
+    expect($('scatter').hidden).toBe(true)
     expect($('atlasStrip').hidden).toBe(true)
     const retry = document.getElementById('retry')!
     expect(retry).not.toBeNull()
@@ -318,11 +328,11 @@ describe('Atlas (issue #297)', () => {
     fire(retry)
     await settle()
     expect(graphUrls()).toHaveLength(2)
-    expect(mapNodes().length).toBe(2)
+    expect(rows().length).toBe(2)
     expect($('status').classList.contains('error')).toBe(false)
   })
 
-  it('atlas AC5: paints one word node per term, dashed kind for org, kind on every node', async () => {
+  it('atlas AC3: paints one list row per term in payload order, with the person entry first', async () => {
     bodies.graph = graphOf([
       golpe,
       { id: 'hashtag:stf', term: 'stf', kind: 'hashtag', count: 30, pmi: 1.8 },
@@ -330,22 +340,21 @@ describe('Atlas (issue #297)', () => {
       { id: 'phrase:primeiro turno', term: 'primeiro turno', kind: 'phrase', count: 9, pmi: 1 },
     ])
     await start()
-    const ids = [...mapNodes(), ...all('#overflow [data-node]')].map((n) => n.dataset.node).sort()
-    expect(ids).toEqual(['hashtag:stf', 'org:pt', 'phrase:primeiro turno', 'word:golpe'])
-    expect(nodeEl('org:pt').getAttribute('data-kind')).toBe('org')
-    expect(nodeEl('word:golpe').getAttribute('data-kind')).toBe('word')
-    expect(nodeEl('word:golpe').getAttribute('role')).toBe('button')
+    expect(rows().map((n) => n.dataset.node)).toEqual(['word:golpe', 'hashtag:stf', 'org:pt', 'phrase:primeiro turno'])
+    expect(nodeEl('word:golpe').tagName).toBe('BUTTON')
     expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
-    expect(document.querySelector('#viewport .center-label[data-person-docs]')).not.toBeNull()
-    expect($('viewport').textContent).toContain('NO CENTRO DA CONVERSA')
+    expect(rows().map((r) => r.querySelector('.list-rank')!.textContent)).toEqual(['01', '02', '03', '04'])
+    expect(rows().map((r) => r.querySelector('.list-term')!.textContent!.trim())).toEqual(['golpe', '#stf', 'PT org', 'primeiro turno'])
+    expect($('columns').firstElementChild!.matches('.column-person[data-person-docs]')).toBe(true)
+    expect($('columns').textContent).not.toContain('NO CENTRO DA CONVERSA')
   })
 
-  it('atlas AC5: nodes are coloured against the person mean only when they carry a testimony; a null tone is neutral', async () => {
+  it('atlas AC7: rows are coloured against the person mean only when they carry a testimony; a null tone is neutral', async () => {
     bodies.graph = graphOf([golpe, { id: 'word:neutro', term: 'neutro', kind: 'word', count: 12, pmi: 1 }])
     await start()
-    expect(nodeEl('word:golpe').style.getPropertyValue('--mask')).not.toBe('')
-    expect(nodeEl('word:neutro').style.getPropertyValue('--mask')).toBe('')
-    expect(document.querySelector('#viewport svg')!.classList.contains('is-masked')).toBe(true)
+    expect(paintOf('word:golpe', '--mask')).toBe(termMask(golpe as never, -1))
+    expect(paintOf('word:neutro', '--mask')).toBe('')
+    expect($('columns').classList.contains('is-masked')).toBe(true)
   })
 
   it('atlas AC5: the mask button cycles avaliação -> tema -> off -> avaliação and swaps the keys', async () => {
@@ -379,10 +388,10 @@ describe('Atlas (issue #297)', () => {
     ])
     await start()
     fire($('mask'))
-    expect(document.querySelector('#viewport svg')!.classList.contains('is-themed')).toBe(true)
-    expect(nodeEl('word:golpe').style.getPropertyValue('--theme')).toBe('var(--theme-1)')
-    expect(nodeEl('word:stf').style.getPropertyValue('--theme')).toBe('var(--theme-1)')
-    expect(nodeEl('word:solto').style.getPropertyValue('--theme')).toBe('')
+    expect($('columns').classList.contains('is-themed')).toBe(true)
+    expect(paintOf('word:golpe', '--theme')).toBe('var(--theme-1)')
+    expect(paintOf('word:stf', '--theme')).toBe('var(--theme-1)')
+    expect(paintOf('word:solto', '--theme')).toBe('')
     expect($('keyThemeText').textContent).toMatch(/caminharam juntas/)
     expect($('keyThemeText').textContent).not.toMatch(/não tem temas/)
   })
@@ -392,7 +401,7 @@ describe('Atlas (issue #297)', () => {
     fire($('mask'))
     expect($('keyThemeText').textContent).toMatch(/não tem temas/)
     expect($('keyThemeText').textContent).not.toMatch(/caminharam juntas/)
-    expect(all('#viewport [style*="--theme"]')).toHaveLength(0)
+    expect(all('#columns [style*="--theme"]')).toHaveLength(0)
   })
 
   it('atlas AC5: the chosen mask survives a round trip through strip mode, and the control hides there', async () => {
@@ -401,13 +410,15 @@ describe('Atlas (issue #297)', () => {
     fire($('modeStrip'))
     expect($('mask').hidden).toBe(true)
     expect($('keyTheme').hidden).toBe(true)
-    fire($('modeMap'))
+    fire($('modeColumns'))
     expect($('mask').hidden).toBe(false)
     expect($('mask').textContent).toBe('Colorir por tema')
     expect($('keyTheme').hidden).toBe(false)
+    toScatter()
+    expect($('keyTheme').hidden).toBe(false)
     fire($('mask'))
     fire($('modeStrip'))
-    fire($('modeMap'))
+    fire($('modeColumns'))
     expect($('mask').textContent).toBe('Sem cor')
   })
 
@@ -418,8 +429,7 @@ describe('Atlas (issue #297)', () => {
       { ...reforma, community: 9 },
     ])
     await start()
-    fire($('modeColumns'))
-    fire(document.querySelector('[data-col="word:golpe"]')!)
+    fire(nodeEl('word:golpe'))
     await settle()
     expect($('inspector').textContent).not.toMatch(/No mesmo tema/)
     fire($('mask'))
@@ -480,16 +490,25 @@ describe('Atlas (issue #297)', () => {
     expect(docsCard.open).toHaveBeenCalledTimes(2)
   })
 
-  it('atlas AC6: empty space in the map releases the selection; a word and the centre do not count as empty', async () => {
+  it('atlas AC9: empty space in the list or the scatter releases the selection; a row, a point and the person entry do not count as empty', async () => {
     await start()
     fire(nodeEl('word:golpe'))
     docsCard.close.mockClear()
-    fire(document.querySelector('#viewport .center-label')!)
+    fire(document.querySelector('#columns .column-person')!)
     expect(docsCard.open).toHaveBeenCalledTimes(2)
     fire(nodeEl('word:golpe'))
-    fire($('viewport'))
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    fire($('columns'))
     expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
     expect(docsCard.close).toHaveBeenCalled()
+    toScatter()
+    fire(nodeEl('word:golpe'))
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    fire(document.querySelector('#scatter .column-person')!)
+    fire(nodeEl('word:golpe'))
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    fire($('scatter'))
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
   })
 
   it('atlas AC6: a click on the heading, the sentence or a select keeps the pick', async () => {
@@ -520,7 +539,7 @@ describe('Atlas (issue #297)', () => {
 
   it('atlas AC6: empty space with nothing selected does nothing', async () => {
     await start()
-    fire($('viewport'))
+    fire($('columns'))
     expect(docsCard.close).not.toHaveBeenCalled()
     expect($('selectionNote').textContent).toBe('')
   })
@@ -557,11 +576,11 @@ describe('Atlas (issue #297)', () => {
     expect(graphUrls()).toHaveLength(1)
   })
 
-  it('atlas AC6: the centre of the map opens the person\'s documents with no term, and clears a selected word first', async () => {
+  it('atlas AC8: the person entry opens her documents with no term, and clears a selected word first', async () => {
     await start()
     fire(nodeEl('word:golpe'))
     docsCard.open.mockClear()
-    fire(document.querySelector('#viewport .center-label[data-person-docs]')!)
+    fire(document.querySelector('#columns .column-person[data-person-docs]')!)
     expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
     expect(docsCard.open).toHaveBeenCalledTimes(1)
     const req = docsCard.open.mock.calls[0][0] as any
@@ -571,15 +590,21 @@ describe('Atlas (issue #297)', () => {
     expect(req.sides[0].query.get('kind')).toBe('all')
   })
 
-  it('atlas AC6: the head of the list opens the person\'s documents too', async () => {
+  it('atlas AC8: the same entry point heads the scatter, before its svg, and in Avaliação there is none', async () => {
     await start()
-    fire($('modeColumns'))
+    toScatter()
     docsCard.open.mockClear()
-    const head = document.querySelector<HTMLElement>('#columns .column-person[data-person-docs]')!
+    const head = document.querySelector<HTMLElement>('#scatter .column-person[data-person-docs]')!
     expect(head).not.toBeNull()
+    expect($('scatter').firstElementChild).toBe(head)
+    expect(head.nextElementSibling!.tagName.toLowerCase()).toBe('svg')
+    expect(head.textContent).toMatch(/Textos sobre\s+Lula\s+·\s+10 documentos/)
     fire(head)
     expect(docsCard.open).toHaveBeenCalledTimes(1)
     expect((docsCard.open.mock.calls[0][0] as any).sides[0].query.get('term')).toBe('')
+    fire($('modeStrip'))
+    expect(all('#atlasStrip [data-person-docs]')).toHaveLength(0)
+    expect(document.querySelector('.center-label')).toBeNull()
   })
 
   it('atlas AC6: the word inspector sparkline is one /timeline?days=7&bucket=day on the atlas source, seven bars', async () => {
@@ -676,7 +701,7 @@ describe('Atlas (issue #297)', () => {
     await settle()
     held[0].resolve(graphOf([golpe]))
     await settle()
-    expect(mapNodes().map((n) => n.dataset.node)).toEqual(['word:reforma'])
+    expect(rows().map((n) => n.dataset.node)).toEqual(['word:reforma'])
   })
 
   it('atlas AC7: a repeated identical recorte inside SCOPE_TTL_MS is served from the memo, with no second request', async () => {
@@ -687,7 +712,7 @@ describe('Atlas (issue #297)', () => {
     change('days', '21')
     await settle()
     expect(graphUrls()).toHaveLength(2)
-    expect(mapNodes().length).toBe(2)
+    expect(rows().length).toBe(2)
     vi.setSystemTime(Date.now() + SCOPE_TTL_MS + 1000)
     change('days', '7')
     await settle()
@@ -723,7 +748,7 @@ describe('Atlas (issue #297)', () => {
     expect(held).toHaveLength(1)
     held[0].resolve(graphOf(nodes2))
     await settle()
-    expect(all('#viewport [aria-pressed="true"]')).toHaveLength(0)
+    expect(all('#columns [aria-pressed="true"]')).toHaveLength(0)
     expect(docsCard.close).toHaveBeenCalled()
     expect($('selectionNote').textContent).toBe('')
   })
@@ -758,8 +783,7 @@ describe('Atlas (issue #297)', () => {
     ]
     bodies.graph = graphOf([...viaReach, ...tied], { stats: { about: 10 } })
     await start('?sort=reach&limit=24')
-    fire($('modeColumns'))
-    expect(all('#columns [data-col]').map((c) => c.dataset.col)).toEqual(['word:raro', 'word:medio', 'word:a', 'hashtag:b', 'word:b', 'word:comum'])
+    expect(rows().map((c) => c.dataset.node)).toEqual(['word:raro', 'word:medio', 'word:a', 'hashtag:b', 'word:b', 'word:comum'])
     expect(document.querySelector<HTMLElement>('#inspector [data-related]')?.dataset.related).toBe('word:raro')
     for (const sort of ['pmi', 'count']) {
       unmount(instance!)
@@ -767,8 +791,7 @@ describe('Atlas (issue #297)', () => {
       target.replaceChildren()
       clearScopes()
       await start(`?sort=${sort}&limit=24`)
-      fire($('modeColumns'))
-      expect(all('#columns [data-col]')[0].dataset.col, sort).toBe('word:comum')
+      expect(rows()[0].dataset.node, sort).toBe('word:comum')
     }
   })
 
@@ -780,7 +803,7 @@ describe('Atlas (issue #297)', () => {
     await start('?sort=reach')
     expect($('legend').textContent).toMatch(/alcance/)
     expect($('legend').textContent).toMatch(/Nenhum documento do Bluesky/)
-    expect($('viewport').innerHTML).not.toMatch(/NaN/)
+    expect($('columns').innerHTML).not.toMatch(/NaN/)
     unmount(instance!)
     instance = undefined
     target.replaceChildren()
@@ -790,33 +813,35 @@ describe('Atlas (issue #297)', () => {
     expect($('legend').textContent).not.toMatch(/Nenhum documento do Bluesky/)
   })
 
-  it('atlas AC8: columns mode paints the ranked list and the person head, without a request', async () => {
+  it('atlas AC1: Lista is the default and the segment reads Lista, Dispersão, Avaliação', async () => {
     await start()
     const before = urls.length
-    fire($('modeColumns'))
-    expect($('columns').hidden).toBe(false)
-    expect($('viewport').hidden).toBe(true)
-    expect($('atlasStrip').hidden).toBe(true)
+    expect(all('#workspace .segment button').map((b) => [b.id, b.textContent])).toEqual([['modeColumns', 'Lista'], ['modeScatter', 'Dispersão'], ['modeStrip', 'Avaliação']])
     expect($('modeColumns').getAttribute('aria-pressed')).toBe('true')
-    expect($('modeMap').getAttribute('aria-pressed')).toBe('false')
-    expect(all('#columns [data-col]').map((c) => c.dataset.col)).toEqual(['word:golpe', 'word:reforma'])
-    expect(document.querySelector('#columns .column-person')).not.toBeNull()
+    expect($('modeScatter').getAttribute('aria-pressed')).toBe('false')
+    expect($('modeStrip').getAttribute('aria-pressed')).toBe('false')
+    expect($('columns').hidden).toBe(false)
+    expect($('scatter').hidden).toBe(true)
+    expect($('atlasStrip').hidden).toBe(true)
+    expect(rows().map((c) => c.dataset.node)).toEqual(['word:golpe', 'word:reforma'])
+    expect($('columns').firstElementChild!.matches('.column-person')).toBe(true)
+    expect(points()).toHaveLength(0)
     expect(urls.length).toBe(before)
   })
 
-  it('atlas AC8: strip mode is a local repaint with its own key, hiding the map, the mask and the zoom', async () => {
+  it('atlas AC10: strip mode is a local repaint with its own key, hiding the list, the scatter and the mask', async () => {
     await start()
     const before = urls.length
     fire($('modeStrip'))
-    expect($('viewport').hidden).toBe(true)
     expect($('columns').hidden).toBe(true)
+    expect($('scatter').hidden).toBe(true)
     expect($('atlasStrip').hidden).toBe(false)
     expect($('mask').hidden).toBe(true)
-    expect($('zoomGroup').hidden).toBe(true)
     expect($('keyDefault').hidden).toBe(true)
+    expect($('keyScatter').hidden).toBe(true)
     expect($('keyStrip').hidden).toBe(false)
     expect(urls.length).toBe(before)
-    fire($('modeMap'))
+    fire($('modeColumns'))
     expect($('atlasStrip').hidden).toBe(true)
     expect($('stripHiddenNote').hidden).toBe(true)
     expect($('keyStrip').hidden).toBe(true)
@@ -861,7 +886,7 @@ describe('Atlas (issue #297)', () => {
     expect($('stripHiddenNote').hidden).toBe(false)
     expect($('stripHiddenNote').textContent).toMatch(/não tem média de avaliação/)
     expect($('atlasStrip').innerHTML).not.toMatch(/NaN/)
-    expect(all('#viewport [style*="--mask"]')).toHaveLength(0)
+    expect(all('#columns [style*="--mask"]')).toHaveLength(0)
   })
 
   it('atlas AC8: a strip pick opens one side for the word, and empty space in the strip releases it', async () => {
@@ -882,8 +907,7 @@ describe('Atlas (issue #297)', () => {
 
   it('atlas AC8: a word selected before switching to the strip keeps its mark there', async () => {
     await start()
-    fire($('modeColumns'))
-    fire(document.querySelector('[data-col="word:golpe"]')!)
+    fire(nodeEl('word:golpe'))
     await settle()
     fire($('modeStrip'))
     expect(document.querySelector('#atlasStrip [data-node="word:golpe"]')!.classList.contains('is-selected')).toBe(true)
@@ -895,47 +919,38 @@ describe('Atlas (issue #297)', () => {
     failing = /\/graph/
     change('person', 'tarcisio')
     await settle()
-    expect($('viewport').hidden).toBe(false)
-    expect($('columns').hidden).toBe(true)
+    expect($('columns').hidden).toBe(false)
+    expect($('scatter').hidden).toBe(true)
     expect($('atlasStrip').hidden).toBe(true)
     expect($('stripHiddenNote').hidden).toBe(true)
   })
 
-  it('atlas AC9: the zoom group scales the map, disables at the ends and resets', async () => {
+  it('atlas AC11: the scatter draws at the container width (860 until measured) and redraws only on a width change', async () => {
     await start()
-    const width = () => (document.querySelector<HTMLElement>('#viewport svg')!.style.getPropertyValue('--map-width') || $('viewport').style.getPropertyValue('--map-width'))
-    expect($('zoomReset').textContent).toBe('100%')
-    expect((select('zoomOut') as unknown as HTMLButtonElement).disabled).toBe(true)
-    const base = parseFloat(width())
-    fire($('zoomIn'))
-    expect($('zoomReset').textContent).toBe('125%')
-    expect(parseFloat(width())).toBeCloseTo(base * 1.25)
-    fire($('zoomIn'))
-    fire($('zoomIn'))
-    fire($('zoomIn'))
-    expect($('zoomReset').textContent).toBe('200%')
-    expect((select('zoomIn') as unknown as HTMLButtonElement).disabled).toBe(true)
-    fire($('zoomOut'))
-    expect($('zoomReset').textContent).toBe('175%')
-    fire($('zoomReset'))
-    expect($('zoomReset').textContent).toBe('100%')
-    expect(parseFloat(width())).toBeCloseTo(base)
-    expect(graphUrls()).toHaveLength(1)
+    toScatter()
+    const svg = () => $('scatter').querySelector('svg')!
+    expect(svg().getAttribute('width')).toBe('860')
+    expect(svg().getAttribute('viewBox')).toMatch(/^0 0 860 /)
+    expect(svg().getAttribute('style') ?? '').toBe('')
+    const before = urls.length
+    widths.scatter = 500
+    observers.find((o) => o.target === $('scatter'))!.cb()
+    flushSync()
+    expect(svg().getAttribute('width')).toBe('500')
+    expect(svg().getAttribute('viewBox')).toMatch(/^0 0 500 /)
+    const drawn = svg().innerHTML
+    observers.find((o) => o.target === $('scatter'))!.cb()
+    flushSync()
+    expect(svg().innerHTML).toBe(drawn)
+    expect(svg().getAttribute('width')).toBe('500')
+    expect(urls.length).toBe(before)
   })
 
-  it('atlas AC9: resizing #viewport repaints the map width without a fetch', async () => {
+  it('atlas AC11: a measured container width is used as soon as the scatter opens', async () => {
+    widths.scatter = 640
     await start()
-    const width = () => (document.querySelector<HTMLElement>('#viewport svg')!.style.getPropertyValue('--map-width') || $('viewport').style.getPropertyValue('--map-width'))
-    const before = urls.length
-    widths.viewport = 1200
-    observers.find((o) => o.target === $('viewport'))!.cb()
-    flushSync()
-    expect(parseFloat(width())).toBe(900)
-    widths.viewport = 700
-    observers.find((o) => o.target === $('viewport'))!.cb()
-    flushSync()
-    expect(parseFloat(width())).toBe(676)
-    expect(urls.length).toBe(before)
+    toScatter()
+    expect($('scatter').querySelector('svg')!.getAttribute('width')).toBe('640')
   })
 
   it('atlas AC9: #atlasStrip paints at its own measured width and repaints on resize, without a fetch', async () => {
@@ -960,7 +975,7 @@ describe('Atlas (issue #297)', () => {
     flushSync()
     await settle()
     expect(held).toHaveLength(1)
-    const mine = observers.filter((o) => o.target === $('viewport') || o.target === $('atlasStrip'))
+    const mine = observers.filter((o) => o.target === $('scatter') || o.target === $('atlasStrip'))
     expect(mine).toHaveLength(2)
     unmount(instance)
     instance = undefined
@@ -978,7 +993,7 @@ describe('Atlas (issue #297)', () => {
     expect(docsCard.close).not.toHaveBeenCalled()
   })
 
-  it('atlas: search dims what does not match, counts the matches and never reloads or closes the card', async () => {
+  it('atlas AC17: search marks matching rows and points, dims the rest, counts them and never reloads or closes the card', async () => {
     await start()
     fire(nodeEl('word:golpe'))
     await settle()
@@ -987,33 +1002,59 @@ describe('Atlas (issue #297)', () => {
     const search = $('search') as HTMLInputElement
     search.value = 'gol'
     fire(search, 'input')
-    expect($('searchNote').textContent).toMatch(/1 termo encontrado no recorte\. A busca não muda as posições\./)
+    expect($('searchNote').textContent).toBe('1 termo encontrado no recorte.')
+    expect($('searchNote').textContent).not.toMatch(/posições/)
     expect(nodeEl('word:reforma').classList.contains('is-dim')).toBe(true)
     expect(nodeEl('word:golpe').classList.contains('is-match')).toBe(true)
+    toScatter()
+    docsCard.close.mockClear()
+    expect(nodeEl('word:reforma').classList.contains('is-dim')).toBe(true)
+    expect(nodeEl('word:golpe').classList.contains('is-match')).toBe(true)
+    search.value = 'o'
+    fire(search, 'input')
+    expect($('searchNote').textContent).toBe('2 termos encontrados no recorte.')
+    search.value = ''
+    fire(search, 'input')
+    expect($('searchNote').textContent).toBe('')
+    expect(all('#scatter .is-match')).toHaveLength(0)
     expect(urls.length).toBe(before)
     expect(docsCard.close).not.toHaveBeenCalled()
   })
 
-  it('atlas: an empty recorte says so, without NaN', async () => {
+  it('atlas AC18: an empty recorte says so in the list and in the scatter, draws neither rows, entry nor svg, and never paints NaN', async () => {
     bodies.graph = graphOf([], { stats: stats({ about: 0 }) })
     await start()
-    expect($('viewport').textContent).toContain('Nenhum termo neste recorte.')
     expect($('columns').textContent).toContain('Nenhum termo neste recorte.')
+    expect($('columns').querySelector('[data-node], [data-person-docs]')).toBeNull()
     expect($('legend').textContent).toBe('Sem dados para desenhar.')
-    expect($('overflow').hidden).toBe(true)
+    toScatter()
+    expect($('scatter').hidden).toBe(false)
+    expect($('scatter').textContent).toContain('Nenhum termo neste recorte.')
+    expect($('scatter').querySelector('svg, [data-node], [data-person-docs]')).toBeNull()
     expect(document.body.innerHTML).not.toMatch(/NaN/)
+  })
+
+  it('atlas AC18: an absent stats.about prints 0, never NaN or undefined', async () => {
+    bodies.graph = graphOf(nodes2, { stats: { testimony: { method: 'kikori', score: -1, n: 100 } } })
+    await start()
+    expect($('atlasStats').textContent).toBe('0 docs · todas as fontes')
+    expect($('columns').querySelector('.column-person')!.textContent).toMatch(/· 0 documentos/)
+    expect($('status').textContent).toMatch(/^0 documentos sobre Lula/)
+    toScatter()
+    expect($('scatter').querySelector('.column-person')!.textContent).toMatch(/· 0 documentos/)
+    expect(document.body.innerHTML).not.toMatch(/NaN|undefined/)
   })
 
   it('atlas: the empty recorte suggests a wider window only below 21 days, the widest', async () => {
     bodies.graph = graphOf([], { stats: stats({ about: 0 }) })
     await start()
     expect(select('days').value).toBe('21')
-    expect($('viewport').textContent).toContain('Experimente outra pessoa.')
-    expect($('viewport').textContent).not.toContain('período maior')
+    expect($('columns').textContent).toContain('Experimente outra pessoa.')
+    expect($('columns').textContent).not.toContain('período maior')
     change('days', '7')
     await settle()
-    expect($('viewport').textContent).toContain('Nenhum termo neste recorte.')
-    expect($('viewport').textContent).toContain('Experimente outra pessoa ou um período maior.')
+    expect($('columns').textContent).toContain('Nenhum termo neste recorte.')
+    expect($('columns').textContent).toContain('Experimente outra pessoa ou um período maior.')
   })
 
   it('atlas: the figure never touches figure 2\'s #strip, #testimonyList or #outletList', async () => {
@@ -1041,50 +1082,58 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
   const withPerson = (nodes: unknown[], over: Record<string, unknown> = {}) => graphOf(nodes, { stats: stats({ testimony: person }), ...over })
   const at = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', count: 9, pmi: 1, ...over })
 
-  it('the mask colour and the testimony in the title appear only when the word has one; under MASK_MIN the title stays and the colour goes', async () => {
+  it('a point carries the mask colour and the testimony in its title only when the word has one; under MASK_MIN the title stays and the colour goes', async () => {
     bodies.graph = withPerson([at({ id: 'word:a', term: 'a', testimony: tone(-4.9, 12) }), at({ id: 'word:b', term: 'b' }), at({ id: 'word:c', term: 'c', testimony: tone(-4.9, 2) })])
     await start()
-    expect(nodeEl('word:a').style.getPropertyValue('--mask')).toBe('rgb(255,122,138)')
+    toScatter()
+    expect(paintOf('word:a', '--mask')).toBe('rgb(255,122,138)')
     expect(nodeEl('word:a').querySelector('title')!.textContent).toMatch(/· avaliação -4,9 em 12 textos$/)
-    expect(nodeEl('word:b').style.getPropertyValue('--mask')).toBe('')
+    expect(paintOf('word:b', '--mask')).toBe('')
     expect(nodeEl('word:b').querySelector('title')!.textContent).not.toMatch(/avaliação/)
-    expect(nodeEl('word:c').style.getPropertyValue('--mask')).toBe('')
+    expect(paintOf('word:c', '--mask')).toBe('')
     expect(nodeEl('word:c').querySelector('title')!.textContent).toMatch(/avaliação/)
   })
 
-  it('every word carries data-kind for word, hashtag, phrase and org, and size only through --size', async () => {
-    bodies.graph = withPerson(['word', 'hashtag', 'phrase', 'org'].map((kind) => at({ id: `${kind}:x`, term: 'x', kind })))
+  it('atlas AC6: only an org row carries the org tag, and nothing sets a size from the term', async () => {
+    bodies.graph = withPerson(['word', 'hashtag', 'phrase', 'org', 'weird'].map((kind) => at({ id: `${kind}:x`, term: 'x', kind })))
     await start('?limit=24')
-    const seen = [...mapNodes(), ...all('#overflow [data-node]')]
-    for (const kind of ['word', 'hashtag', 'phrase', 'org']) expect(document.querySelector(`#viewport [data-node="${kind}:x"]`)?.getAttribute('data-kind') ?? kind).toBe(kind)
-    expect(seen.length).toBe(4)
-    for (const el of all('#viewport *[style]')) expect(el.getAttribute('style')!.split(';').every((d) => !d.trim() || d.trim().startsWith('--')), el.getAttribute('style')!).toBe(true)
+    expect(rows()).toHaveLength(5)
+    for (const kind of ['word', 'hashtag', 'phrase', 'weird']) expect(nodeEl(`${kind}:x`).querySelector('.list-tag'), kind).toBeNull()
+    const tag = nodeEl('org:x').querySelector('.list-tag')!
+    expect(tag.textContent).toBe('org')
+    expect(all('#workspace .list-tag')).toHaveLength(1)
+    expect($('workspace').querySelector('.underline, [data-kind]')).toBeNull()
+    for (const el of all('#workspace [style]')) expect(el.getAttribute('style')!.split(';').every((d) => !d.trim() || /^--(w|mask|theme|pos|tone|h):/.test(d.trim())), el.getAttribute('style')!).toBe(true)
+    expect($('workspace').innerHTML).not.toMatch(/--size|font-size/)
+    toScatter()
+    expect($('workspace').innerHTML).not.toMatch(/--size|font-size/)
+    expect(all('#workspace .list-tag')).toHaveLength(0)
   })
 
-  it('the columns colour cards the same way, spell the score out and add --theme only inside the ranking', async () => {
+  it('atlas AC7: the dot of a row holds termMask in --mask and, only inside the ranking, themeMask in --theme', async () => {
     bodies.graph = withPerson([
       at({ id: 'word:a', term: 'a', testimony: tone(0.1, 20), community: 3 }),
       at({ id: 'word:b', term: 'b', count: 5, testimony: null, community: 9 }),
       at({ id: 'word:c', term: 'c', count: 4, community: null }),
     ])
     await start('?sort=count')
-    fire($('modeColumns'))
-    const a = document.querySelector<HTMLElement>('[data-col="word:a"]')!
-    const b = document.querySelector<HTMLElement>('[data-col="word:b"]')!
-    expect(a.style.getPropertyValue('--mask')).toBe('rgb(116,220,134)')
-    expect(a.style.getPropertyValue('--theme')).toBe('var(--theme-1)')
-    expect(a.textContent).toMatch(/· avaliação \+0,1/)
-    expect(b.style.getPropertyValue('--mask')).toBe('')
-    expect(b.style.getPropertyValue('--theme')).toBe('var(--theme-2)')
-    expect(document.querySelector<HTMLElement>('[data-col="word:c"]')!.getAttribute('style') ?? '').toBe('')
-    expect(a.textContent).toMatch(/^01 · /)
+    const a = nodeEl('word:a')
+    expect(paintOf('word:a', '--mask')).toBe('rgb(116,220,134)')
+    expect(paintOf('word:a', '--theme')).toBe('var(--theme-1)')
+    expect(a.querySelector('.list-dot')).not.toBeNull()
+    expect(paintOf('word:b', '--mask')).toBe('')
+    expect(paintOf('word:b', '--theme')).toBe('var(--theme-2)')
+    expect(paintOf('word:c', '--mask')).toBe('')
+    expect(paintOf('word:c', '--theme')).toBe('')
+    expect(nodeEl('word:c').querySelector('.list-dot')).not.toBeNull()
+    expect(a.querySelector('.list-rank')!.textContent).toBe('01')
   })
 
   it('a top-6 community paints --theme on every placed word, not only the first, and the key names build coverage', async () => {
     bodies.graph = withPerson([at({ id: 'word:a', term: 'a', community: 11 }), at({ id: 'word:b', term: 'b', count: 5, community: 22 })])
     await start()
-    expect(nodeEl('word:a').style.getPropertyValue('--theme')).toBe('var(--theme-1)')
-    expect(nodeEl('word:b').style.getPropertyValue('--theme')).toBe('var(--theme-2)')
+    expect(paintOf('word:a', '--theme')).toBe('var(--theme-1)')
+    expect(paintOf('word:b', '--theme')).toBe('var(--theme-2)')
     expect($('legend').querySelector('#themeLegend')!.textContent).toMatch(/caminharam juntas/)
     expect(($('legend').querySelector('#themeLegend') as HTMLElement).hidden).toBe(true)
   })
@@ -1094,13 +1143,12 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     await start()
     expect($('legend').querySelector('#themeLegend')!.textContent).toMatch(/não tem temas calculados/)
     expect($('legend').querySelector('#themeLegend')!.textContent).not.toMatch(/textos avaliados/)
-    expect(all('#viewport [style*="--theme"]')).toHaveLength(0)
+    expect(all('#columns [style*="--theme"]')).toHaveLength(0)
   })
 
   it('is-masked needs a person mean to compare against, is-themed only in tema, and the two never coexist', async () => {
     bodies.graph = withPerson([at({ id: 'word:a', term: 'a', testimony: tone(0.1, 20), community: 3 })])
     await start()
-    fire($('modeColumns'))
     const cls = () => [$('columns').classList.contains('is-masked'), $('columns').classList.contains('is-themed')]
     expect(cls()).toEqual([true, false])
     fire($('mask'))
@@ -1113,7 +1161,6 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     clearScopes()
     bodies.graph = graphOf([at({ id: 'word:a', term: 'a', testimony: tone(0.1, 20) })], { stats: stats({ testimony: { method: 'kikori', score: null, n: 0 } }) })
     await start()
-    fire($('modeColumns'))
     expect(cls()).toEqual([false, false])
   })
 
@@ -1211,30 +1258,48 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     })
   })
 
-  it('the centre of the map is one entry point and a word is never the person; painting opens nothing', async () => {
+  it('atlas AC8: the person entry is one real button-like entry point per container, painting opens nothing, and a row is never the person', async () => {
     await start()
-    expect(all('#viewport [data-person-docs]')).toHaveLength(1)
-    expect(all('#viewport .atlas-word[data-person-docs]')).toHaveLength(0)
-    expect(document.querySelector('#viewport .center-label')!.getAttribute('role')).toBe('button')
-    expect(document.querySelector('#viewport .center-label')!.getAttribute('tabindex')).toBe('0')
-    expect(docsCard.open).not.toHaveBeenCalled()
-    fire($('modeColumns'))
     expect(all('#columns [data-person-docs]')).toHaveLength(1)
-    expect(document.querySelector('#columns .column-person strong')!.textContent).toBe('Lula')
+    expect(all('#columns .list-row[data-person-docs]')).toHaveLength(0)
+    const entry = document.querySelector('#columns .column-person')!
+    expect(entry.getAttribute('role')).toBe('button')
+    expect(entry.getAttribute('tabindex')).toBe('0')
+    expect(entry.querySelector('strong')!.textContent).toBe('Lula')
+    expect(docsCard.open).not.toHaveBeenCalled()
+    toScatter()
+    expect(all('#scatter [data-person-docs]')).toHaveLength(1)
     expect(docsCard.open).not.toHaveBeenCalled()
   })
 
-  it('the centre and a word are keyboard-operable: Enter picks, Space picks, other keys do nothing', async () => {
+  it('atlas AC8: rows, points and the person entry are keyboard-operable: Enter and Space pick, other keys do nothing', async () => {
     await start()
-    fire(nodeEl('word:golpe'), 'keydown')
+    const key = (el: Element, k: string) => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+      flushSync()
+    }
+    key(nodeEl('word:golpe'), 'a')
     expect(docsCard.open).not.toHaveBeenCalled()
-    nodeEl('word:golpe').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    flushSync()
+    fire(nodeEl('word:golpe'))
     expect(docsCard.open).toHaveBeenCalledTimes(1)
-    document.querySelector('#viewport .center-label')!.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
-    flushSync()
+    key(document.querySelector('#columns .column-person')!, 'Enter')
     expect(docsCard.open).toHaveBeenCalledTimes(2)
-    expect((docsCard.open.mock.calls[1][0] as any).title).toBe('Lula')
+    key(document.querySelector('#columns .column-person')!, ' ')
+    expect(docsCard.open).toHaveBeenCalledTimes(3)
+    expect((docsCard.open.mock.calls[2][0] as any).title).toBe('Lula')
+    expect((docsCard.open.mock.calls[2][0] as any).sides[0].query.get('term')).toBe('')
+    toScatter()
+    docsCard.open.mockClear()
+    key(nodeEl('word:reforma'), 'a')
+    expect(docsCard.open).not.toHaveBeenCalled()
+    key(nodeEl('word:reforma'), 'Enter')
+    expect(docsCard.open).toHaveBeenCalledTimes(1)
+    expect(nodeEl('word:reforma').getAttribute('aria-pressed')).toBe('true')
+    key(nodeEl('word:golpe'), ' ')
+    expect(docsCard.open).toHaveBeenCalledTimes(2)
+    key(document.querySelector('#scatter .column-person')!, 'Enter')
+    expect(docsCard.open).toHaveBeenCalledTimes(3)
+    expect((docsCard.open.mock.calls[2][0] as any).sides[0].query.get('term')).toBe('')
   })
 
   it('a word opens its texts under its own kind in the kicker', async () => {
@@ -1268,16 +1333,6 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     const layout = termStripLayout(nodes as never, person as never, 860)
     const labels = [...$('atlasStrip').querySelectorAll('.strip-axis-labels span')].map((el) => el.textContent)
     expect(labels).toEqual([`${signed(layout.domainMin)} contra`, `${signed(layout.domainMax)} a favor`])
-  })
-
-  it('the map word uses atlas-word / atlas-glow / atlas-hit / atlas-text and its glow and hit rects carry no rx', async () => {
-    await start()
-    const word = nodeEl('word:golpe')
-    expect(word.classList.contains('atlas-word')).toBe(true)
-    expect(word.querySelector('rect.atlas-glow')).not.toBeNull()
-    expect(word.querySelector('rect.atlas-hit')).not.toBeNull()
-    expect(word.querySelector('text.atlas-text')).not.toBeNull()
-    for (const r of word.querySelectorAll('rect.atlas-glow, rect.atlas-hit')) expect(r.hasAttribute('rx')).toBe(false)
   })
 
   it('strip: with no person mean there is neither the mean label nor the dashed line', async () => {
@@ -1318,19 +1373,20 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     expect(note()).toBe('2 palavras deixadas de fora: esta pessoa não tem média de avaliação neste recorte.')
   })
 
-  it('the boot and first-load ghost holds the map ring, the ghost bars and the inspector silhouette, with no inline style that is not a --var', async () => {
+  it('atlas AC2: the boot and first-load ghost holds the entry bar, limit-many ghost rows and the inspector silhouette, with no inline style that is not a --var', async () => {
     await start().then(() => unmount(instance!))
     instance = undefined
     target.replaceChildren()
     instance = mount(Atlas, { target })
     flushSync()
-    expect($('viewport').innerHTML).toMatch(/ghost-field/)
-    expect($('viewport').innerHTML).toMatch(/class="boundary"/)
-    expect($('viewport').innerHTML).toMatch(/<rect class="ghost"/)
-    expect($('viewport').innerHTML).not.toMatch(/Carregando/)
+    expect($('columns').innerHTML).toMatch(/ghost-field/)
+    expect($('columns').querySelectorAll('.list-row .ghost')).toHaveLength(18 * 4)
+    expect($('columns').querySelector('.column-person.is-ghost')).not.toBeNull()
+    expect($('columns').querySelector('[data-node], svg, [data-person-docs]')).toBeNull()
+    expect($('columns').innerHTML).not.toMatch(/Carregando/)
     expect($('inspector').innerHTML).toMatch(/ghost-kicker/)
-    expect($('viewport').getAttribute('aria-busy')).toBe('true')
-    for (const el of all('#viewport [style], #inspector [style]')) expect(el.getAttribute('style')!.startsWith('--')).toBe(true)
+    expect($('columns').getAttribute('aria-busy')).toBe('true')
+    for (const el of all('#columns [style], #inspector [style]')) expect(el.getAttribute('style')!.startsWith('--')).toBe(true)
   })
 
   it('a control change reloads /graph alone: no other route is asked', async () => {
@@ -1347,8 +1403,8 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     instance = mount(Atlas, { target })
     flushSync()
     await settle()
-    expect($('viewport').innerHTML).toMatch(/src="\/pet-caracara-perched\.png"/)
-    expect($('viewport').innerHTML).toMatch(/id="retry"/)
+    expect($('columns').innerHTML).toMatch(/src="\/pet-caracara-perched\.png"/)
+    expect($('columns').innerHTML).toMatch(/id="retry"/)
     fire(document.getElementById('retry')!)
     expect((window.location.reload as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalled()
     expect($('inspector').textContent).toMatch(/Use tentar novamente quando a API estiver disponível/)
@@ -1359,30 +1415,30 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     instance = mount(Atlas, { target })
     flushSync()
     await settle()
-    expect($('viewport').innerHTML).not.toMatch(/pet-caracara/)
+    expect($('columns').innerHTML).not.toMatch(/pet-caracara/)
   })
 })
 
 // Behaviour the port's first pass left unpinned, several of it asserted by the deleted painter suites.
 describe('Atlas: mode, reload, layout and mask edges', () => {
   const at = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', count: 9, pmi: 1, ...over })
-  it('alcance: the packer places the highest reach first on the map', async () => {
+  it('alcance: the list leads with the highest reach', async () => {
     bodies.graph = graphOf([
       { id: 'word:comum', term: 'comum', kind: 'word', count: 40, pmi: 1, reach: 2 },
       { id: 'word:raro', term: 'raro', kind: 'word', count: 3, pmi: 1, reach: 900 },
       { id: 'word:medio', term: 'medio', kind: 'word', count: 10, pmi: 1, reach: 50 },
     ], { stats: { about: 10 } })
     await start('?sort=reach')
-    expect(mapNodes()[0].dataset.node).toBe('word:raro')
+    expect(rows()[0].dataset.node).toBe('word:raro')
   })
 
   it('no stats.testimony at all: nothing is masked', async () => {
     bodies.graph = graphOf([at({ id: 'word:a', term: 'a', testimony: tone(0.1, 20) })], { stats: { about: 10 } })
     await start()
-    expect(document.querySelector('#viewport svg')!.classList.contains('is-masked')).toBe(false)
-    expect(nodeEl('word:a').style.getPropertyValue('--mask')).toBe('')
-    fire($('modeColumns'))
     expect($('columns').classList.contains('is-masked')).toBe(false)
+    expect(paintOf('word:a', '--mask')).toBe('')
+    toScatter()
+    expect($('scatter').querySelector('svg')!.classList.contains('is-masked')).toBe(false)
   })
 
   it('"No mesmo tema" disappears again once the mask cycles to off', async () => {
@@ -1415,15 +1471,52 @@ describe('Atlas: mode, reload, layout and mask edges', () => {
     for (const d of expected.dots) expect(Number(nodeEl(d.id).querySelector('circle.dot-face')!.getAttribute('r'))).toBeCloseTo(d.r)
   })
 
-  it('switching mode closes the card (setMode)', async () => {
-    await start()
+  it('atlas AC10: switching mode closes the card, keeps the pick, the search and the sentence, and switching back keeps the pick', async () => {
+    await start('?days=7&sort=count')
     fire(nodeEl('word:golpe'))
+    const search = $('search') as HTMLInputElement
+    search.value = 'o'
+    fire(search, 'input')
     docsCard.close.mockClear()
-    fire($('modeColumns'))
+    const before = urls.length
+    toScatter()
     expect(docsCard.close).toHaveBeenCalled()
+    expect($('scatter').hidden).toBe(false)
+    expect($('columns').hidden).toBe(true)
+    expect($('modeScatter').getAttribute('aria-pressed')).toBe('true')
+    expect($('modeColumns').getAttribute('aria-pressed')).toBe('false')
+    expect($('keyScatter').hidden).toBe(false)
+    expect($('keyDefault').hidden).toBe(true)
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    expect(nodeEl('word:golpe').classList.contains('is-selected')).toBe(true)
+    expect(search.value).toBe('o')
+    expect(select('days').value).toBe('7')
+    expect(select('sort').value).toBe('count')
+    fire($('modeColumns'))
+    expect($('columns').hidden).toBe(false)
+    expect($('scatter').hidden).toBe(true)
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    expect(urls.length).toBe(before)
   })
 
-  it('a failed reload drops the pick, closes its card and clears #atlasStats and #overflow', async () => {
+  it('atlas AC10: a person, days, source, sort or limit change keeps the chosen mode', async () => {
+    await start()
+    toScatter()
+    for (const [id, value] of [['person', 'tarcisio'], ['days', '7'], ['source', 'gnews'], ['sort', 'count'], ['limit', '24']] as const) {
+      change(id, value)
+      await settle()
+      expect($('modeScatter').getAttribute('aria-pressed'), id).toBe('true')
+      expect($('scatter').hidden, id).toBe(false)
+      expect(points(), id).toHaveLength(2)
+    }
+    fire($('modeStrip'))
+    change('days', '21')
+    await settle()
+    expect($('modeStrip').getAttribute('aria-pressed')).toBe('true')
+    expect($('atlasStrip').hidden).toBe(false)
+  })
+
+  it('a failed reload drops the pick, closes its card and clears #atlasStats', async () => {
     await start()
     fire(nodeEl('word:golpe'))
     docsCard.close.mockClear()
@@ -1432,7 +1525,7 @@ describe('Atlas: mode, reload, layout and mask edges', () => {
     await settle()
     expect(docsCard.close).toHaveBeenCalled()
     expect($('atlasStats').textContent).toBe('')
-    expect($('overflow').hidden).toBe(true)
+    expect(rows()).toHaveLength(0)
   })
 
   it('unmounting aborts an in-flight sparkline too', async () => {
@@ -1445,56 +1538,53 @@ describe('Atlas: mode, reload, layout and mask edges', () => {
     expect(held[0].signal?.aborted).toBe(true)
   })
 
-  it('new data resets zoom and the search box', async () => {
+  it('new data resets the search box', async () => {
     await start()
-    fire($('zoomIn'))
     const search = $('search') as HTMLInputElement
     search.value = 'gol'
     fire(search, 'input')
     change('days', '7')
     await settle()
-    expect($('zoomReset').textContent).toBe('100%')
     expect(search.value).toBe('')
   })
 
-  it('#maskLegend hides outside avaliação; #overflow hides when every word fits', async () => {
+  it('#maskLegend hides outside avaliação', async () => {
     await start()
-    expect($('overflow').hidden).toBe(true)
     fire($('mask'))
     expect(($('maskLegend') as HTMLElement).hidden).toBe(true)
   })
 
-  it('a reload keeps the viewport aria-busy and the status on "Lendo o recorte." until it lands', async () => {
+  it('a reload keeps the list aria-busy and the status on "Lendo o recorte." until it lands', async () => {
     await start()
     holding = /\/graph/
     change('days', '7')
     await settle()
-    expect($('viewport').getAttribute('aria-busy')).toBe('true')
+    expect($('columns').getAttribute('aria-busy')).toBe('true')
     expect($('status').textContent).toBe('Lendo o recorte.')
     held[0].resolve(graphOf(nodes2))
     await settle()
-    expect($('viewport').getAttribute('aria-busy')).toBe('false')
+    expect($('columns').getAttribute('aria-busy')).toBe('false')
   })
 
   it('limit cuts the payload, and #atlasStats names the source label', async () => {
     bodies.graph = graphOf(Array.from({ length: 14 }, (_, i) => at({ id: `word:w${i}`, term: `w${i}`, count: 30 - i })))
     await start('?limit=12&source=bluesky')
-    expect([...mapNodes(), ...all('#overflow [data-node]')]).toHaveLength(12)
+    expect(rows()).toHaveLength(12)
     expect($('atlasStats').textContent).toBe('10 docs · Bluesky')
   })
 
-  it('columns: the picked card is is-selected, the others dim; search dims the non-matches', async () => {
+  it('list: the picked row is is-selected, its linked row is-neighbor, the others dim', async () => {
     bodies.graph = graphOf([golpe, reforma, at({ id: 'word:z', term: 'z' })], { links: [{ source: 'word:golpe', target: 'word:reforma', count: 2 }] })
     await start()
-    fire($('modeColumns'))
-    fire(document.querySelector('[data-col="word:golpe"]')!)
-    const card = (id: string) => document.querySelector<HTMLElement>(`[data-col="${id}"]`)!
+    fire(nodeEl('word:golpe'))
+    const card = (id: string) => nodeEl(id)
     expect(card('word:golpe').classList.contains('is-selected')).toBe(true)
     expect(card('word:reforma').classList.contains('is-dim')).toBe(false)
+    expect(card('word:reforma').classList.contains('is-neighbor')).toBe(true)
     expect(card('word:z').classList.contains('is-dim')).toBe(true)
   })
 
-  it('map: a search hides the neighbour mark', async () => {
+  it('a search hides the neighbour mark', async () => {
     bodies.graph = graphOf([golpe, reforma], { links: [{ source: 'word:golpe', target: 'word:reforma', count: 2 }] })
     await start()
     fire(nodeEl('word:golpe'))
@@ -1529,14 +1619,6 @@ describe('Atlas: mode, reload, layout and mask edges', () => {
     expect($('legend').textContent).not.toMatch(/Nenhum documento do Bluesky/)
   })
 
-  it('the map never goes narrower than 640px', async () => {
-    await start()
-    widths.viewport = 300
-    observers.find((o) => o.target === $('viewport'))!.cb()
-    flushSync()
-    expect(parseFloat($('viewport').style.getPropertyValue('--map-width'))).toBe(640)
-  })
-
   it('sparkline bars: a zero day is 2px, the loudest 34px', async () => {
     bodies.timeline = [0, 1, 2, 10, 3, 0, 1].map((count, i) => ({ bucket_start: `2026-09-0${i + 1}T00:00:00.000Z`, count }))
     await start()
@@ -1557,14 +1639,348 @@ describe('Atlas: mode, reload, layout and mask edges', () => {
     const pos = parseFloat(document.querySelector<HTMLElement>('.strip-mean')!.style.getPropertyValue('--pos'))
     expect(pos).toBeCloseTo(((l.x(-1) - 28) / (500 - 56)) * 100)
   })
+})
 
-  it('a selected word routes its edge with the weighted stroke and no route note when every edge is drawn', async () => {
-    bodies.graph = graphOf([golpe, reforma], { links: [{ source: 'word:golpe', target: 'word:reforma', count: 4 }] })
+describe('Atlas: Lista and Dispersão (issue #328)', () => {
+  const at = (over: Record<string, unknown>) => ({ id: 'word:x', term: 'x', kind: 'word', count: 9, pmi: 1, ...over })
+  const share = (id: string) => parseFloat(nodeEl(id).querySelector<HTMLElement>('.list-bar')!.style.getPropertyValue('--w'))
+  const value = (id: string) => nodeEl(id).querySelector('.list-value')!.textContent
+  const ofKey = (id: string) => [...$(id).querySelectorAll('dt')].map((dt) => dt.textContent!.trim())
+  const press = (el: Element, key: string) => {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+    flushSync()
+  }
+
+  it('AC3: each row shows its rank, label and a mono value equal to fmt(score) in the sentence measure', async () => {
+    const list = [at({ id: 'word:a', term: 'a', count: 40, pmi: 0.5 }), at({ id: 'hashtag:b', term: 'b', kind: 'hashtag', count: 12, pmi: 2 }), at({ id: 'word:c', term: 'c', count: 3, pmi: 3.3 })]
+    bodies.graph = graphOf(list)
+    await start('?sort=count')
+    expect(rows().map((r) => r.dataset.node)).toEqual(['word:a', 'hashtag:b', 'word:c'])
+    expect(rows().map((r) => r.querySelector('.list-value')!.textContent)).toEqual(['40', '12', '3'])
+    expect(nodeEl('hashtag:b').querySelector('.list-term')!.textContent!.trim()).toBe('#b')
+    expect(nodeEl('hashtag:b').getAttribute('aria-label')).toBe('#b, 12 documentos; frequência em documentos: 12')
+    unmount(instance!)
+    instance = undefined
+    target.replaceChildren()
+    clearScopes()
+    await start('?sort=pmi')
+    expect(rows().map((r) => r.querySelector('.list-value')!.textContent)).toEqual(list.map((n) => fmt(score(n as never, 'pmi'))))
+    expect(nodeEl('word:a').getAttribute('aria-label')).toBe(`a, 40 documentos; PMI × ln(1 + docs): ${fmt(score(list[0] as never, 'pmi'))}`)
+  })
+
+  it('AC4: the bar share is score over the largest score shown, and never NaN', async () => {
+    bodies.graph = graphOf([at({ id: 'word:a', term: 'a', count: 8 }), at({ id: 'word:b', term: 'b', count: 4 }), at({ id: 'word:c', term: 'c', count: 2 })])
+    await start('?sort=count')
+    expect([share('word:a'), share('word:b'), share('word:c')]).toEqual([1, 0.5, 0.25])
+    unmount(instance!)
+    instance = undefined
+    target.replaceChildren()
+    clearScopes()
+    bodies.graph = graphOf([at({ id: 'word:a', term: 'a', count: 8, pmi: 1 }), at({ id: 'word:n', term: 'n', count: 8, pmi: -2 })])
+    await start('?sort=pmi')
+    expect(share('word:a')).toBe(1)
+    expect(share('word:n')).toBe(0)
+    expect(value('word:n')).toBe(fmt(-2 * Math.log1p(8)))
+    unmount(instance!)
+    instance = undefined
+    target.replaceChildren()
+    clearScopes()
+    bodies.graph = graphOf([at({ id: 'word:a', term: 'a', count: 0, pmi: 0 }), at({ id: 'word:b', term: 'b', count: 0, pmi: null })])
+    await start('?sort=count')
+    expect([share('word:a'), share('word:b')]).toEqual([0, 0])
+    expect($('columns').innerHTML).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('AC5: sort=reach without reach gives empty bars, a 0 value and the legend sentence; a node at 0 beside one with reach prints 0', async () => {
+    bodies.graph = graphOf([at({ id: 'word:a', term: 'a', reach: null }), at({ id: 'word:b', term: 'b', reach: 0 })])
+    await start('?sort=reach')
+    expect([share('word:a'), share('word:b')]).toEqual([0, 0])
+    expect([value('word:a'), value('word:b')]).toEqual(['0', '0'])
+    expect($('legend').textContent).toContain('Nenhum documento do Bluesky neste recorte tem alcance registrado: as barras ficam vazias.')
+    expect($('columns').textContent).not.toMatch(/[—–]|NaN/)
+    unmount(instance!)
+    instance = undefined
+    target.replaceChildren()
+    clearScopes()
+    bodies.graph = graphOf([at({ id: 'word:a', term: 'a', reach: 5 }), at({ id: 'word:b', term: 'b', reach: 0 })])
+    await start('?sort=reach')
+    expect([share('word:a'), share('word:b')]).toEqual([1, 0])
+    expect([value('word:a'), value('word:b')]).toEqual(['5', '0'])
+    expect($('legend').textContent).not.toMatch(/alcance registrado/)
+  })
+
+  it('AC7: the dot follows the mask, is neutral without a colour, and the column goes with the mask off', async () => {
+    const list = [at({ id: 'word:a', term: 'a', testimony: tone(0.1, 20), community: 3 }), at({ id: 'word:b', term: 'b', testimony: tone(4, 2) })]
+    bodies.graph = graphOf(list, { stats: stats({ testimony: { method: 'kikori', score: -2.4, n: 500 } }) })
     await start()
+    expect(rows().every((r) => r.querySelector('.list-dot'))).toBe(true)
+    expect($('columns').classList.contains('has-dot')).toBe(true)
+    expect(paintOf('word:a', '--mask')).toBe(termMask(list[0] as never, -2.4))
+    expect(paintOf('word:b', '--mask')).toBe('')
+    fire($('mask'))
+    expect(paintOf('word:a', '--theme')).toBe(themeMask(list[0] as never, communityRanking(list as { community?: number | null }[])))
+    expect(paintOf('word:b', '--theme')).toBe('')
+    expect($('columns').classList.contains('is-themed')).toBe(true)
+    fire($('mask'))
+    expect($('mask').textContent).toBe('Sem cor')
+    expect(all('#columns .list-dot')).toHaveLength(0)
+    expect($('columns').classList.contains('has-dot')).toBe(false)
+    expect(rows()).toHaveLength(2)
+    toScatter()
+    expect(paintOf('word:a', '--mask')).toBe(termMask(list[0] as never, -2.4))
+    fire($('mask'))
+    expect($('mask').textContent).toBe('Colorir por avaliação')
+    fire($('modeColumns'))
+    expect(all('#columns .list-dot')).toHaveLength(2)
+  })
+
+  it('AC9: a row pick fills the inspector, asks for /timeline once and opens one side; again releases it', async () => {
+    await start('?source=bluesky')
     fire(nodeEl('word:golpe'))
-    const edges = all('#edges path.edge')
-    expect(edges).toHaveLength(1)
-    expect(Number(edges[0].getAttribute('stroke-width'))).toBeCloseTo(2.6)
-    expect($('routeNote').textContent).toBe('')
+    await settle()
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    expect($('termHeading').textContent).toBe('golpe')
+    expect($('inspector').textContent).toContain(fmt(2.1))
+    expect($('inspector').textContent).toContain('41')
+    expect(timelineUrls()).toHaveLength(1)
+    expect(q(timelineUrls()[0]).get('days')).toBe('7')
+    expect(q(timelineUrls()[0]).get('bucket')).toBe('day')
+    expect(q(timelineUrls()[0]).get('source')).toBe('bluesky')
+    const req = docsCard.open.mock.calls[0][0] as any
+    expect(req.owner ?? 'atlas').toBe('atlas')
+    expect(req.sides).toHaveLength(1)
+    expect(req.sides[0].query.get('term')).toBe('golpe')
+    expect(req.sides[0].query.get('kind')).toBe('word')
+    docsCard.close.mockClear()
+    fire(nodeEl('word:golpe'))
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
+    expect(docsCard.close).toHaveBeenCalled()
+  })
+
+  it('AC11: the scatter holds one focusable point per node, with title and aria-label', async () => {
+    bodies.graph = graphOf([golpe, reforma, { id: 'org:pt', term: 'PT', kind: 'org', count: 12, pmi: 1.1 }])
+    widths.scatter = 720
+    await start()
+    toScatter()
+    expect(all('#scatter svg')).toHaveLength(1)
+    expect(points().map((p) => p.dataset.node)).toEqual(['word:golpe', 'word:reforma', 'org:pt'])
+    for (const p of points()) {
+      expect(p.getAttribute('role')).toBe('button')
+      expect(p.getAttribute('tabindex')).toBe('0')
+      expect(p.getAttribute('aria-pressed')).toBe('false')
+      expect(p.querySelector('title')!.textContent).toMatch(/ · \d+ documentos · PMI /)
+      expect(p.getAttribute('aria-label')).toMatch(/documentos; PMI /)
+    }
+    expect(nodeEl('word:golpe').querySelector('title')!.textContent).toMatch(/^golpe · Palavra · 41 documentos · PMI 2,1 · avaliação -3,97 em 12 textos$/)
+    expect(nodeEl('org:pt').querySelector('title')!.textContent).toBe('PT · Organização · 12 documentos · PMI 1,1')
+    expect($('scatter').querySelector('svg')!.getAttribute('width')).toBe('720')
+    expect($('scatter').querySelector('svg')!.getAttribute('aria-label')).toBe('Dispersão: documentos por PMI')
+  })
+
+  it('AC11: a point sits where scatterLayout puts it, and the axes carry the captions and a label for every tick', async () => {
+    const list = [golpe, reforma, { id: 'word:neg', term: 'neg', kind: 'word', count: 6, pmi: -0.8 }]
+    bodies.graph = graphOf(list)
+    widths.scatter = 700
+    await start()
+    toScatter()
+    const layout = scatterLayout(((t: string, size: number) => t.length * size * 0.6) as never, list as never, 700)
+    const circle = (id: string) => nodeEl(id).querySelector('circle.scatter-dot')!
+    for (const p of layout.points) {
+      expect(Number(circle(p.id).getAttribute('cx'))).toBeCloseTo(p.x)
+      expect(Number(circle(p.id).getAttribute('cy'))).toBeCloseTo(p.y)
+      expect(Number(circle(p.id).getAttribute('r'))).toBe(layout.r)
+    }
+    const text = [...$('scatter').querySelectorAll('svg > text')].map((t) => t.textContent)
+    for (const t of [...layout.xTicks, ...layout.yTicks]) expect(text).toContain(fmt(t.value))
+    expect(text).toContain('documentos (escala log)')
+    expect(text).toContain('PMI: quanto a palavra é específica da pessoa')
+    expect(text).toContain('0 = acaso')
+    expect($('scatter').querySelectorAll('.scatter-zero')).toHaveLength(1)
+  })
+
+  it('AC11: with every pmi above the first tick there is no zero line', async () => {
+    bodies.graph = graphOf([at({ id: 'word:a', term: 'a', count: 5, pmi: 1.4 }), at({ id: 'word:b', term: 'b', count: 9, pmi: 2.1 })])
+    await start()
+    toScatter()
+    expect($('scatter').querySelector('.scatter-zero')).toBeNull()
+    expect($('scatter').textContent).not.toContain('0 = acaso')
+  })
+
+  it('AC11: a missing pmi lays out as 0 and the row prints 0, never NaN', async () => {
+    bodies.graph = graphOf([at({ id: 'word:a', term: 'a', pmi: null }), at({ id: 'word:b', term: 'b', pmi: 2 })])
+    await start()
+    expect(value('word:a')).toBe('0')
+    toScatter()
+    expect(nodeEl('word:a').querySelector('title')!.textContent).toMatch(/PMI 0$/)
+    expect($('scatter').innerHTML).not.toMatch(/NaN/)
+  })
+
+  it('AC15: an unlabelled point stays clickable and keyboard reachable', async () => {
+    bodies.graph = graphOf(Array.from({ length: 24 }, (_, i) => at({ id: `word:p${i}`, term: `ponto${i}`, count: 9, pmi: 1 })))
+    widths.scatter = 300
+    await start('?limit=24')
+    toScatter()
+    expect(points()).toHaveLength(24)
+    const bare = points().filter((p) => !p.querySelector('text'))
+    expect(bare.length).toBeGreaterThanOrEqual(1)
+    expect(bare.length).toBeLessThan(24)
+    const lone = bare.at(-1)!
+    expect(lone.querySelector('title')!.textContent).toMatch(/ponto\d+ · Palavra · 9 documentos · PMI 1/)
+    expect(lone.getAttribute('role')).toBe('button')
+    expect(lone.getAttribute('tabindex')).toBe('0')
+    fire(lone)
+    expect(docsCard.open).toHaveBeenCalledTimes(1)
+    expect(lone.getAttribute('aria-pressed')).toBe('true')
+    fire(lone)
+    expect(lone.getAttribute('aria-pressed')).toBe('false')
+    const other = bare[0]
+    press(other, 'Enter')
+    expect(docsCard.open).toHaveBeenCalledTimes(2)
+    expect(other.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('AC16: picking a point highlights its linked terms and dims the rest, with no line, and the labels do not move', async () => {
+    bodies.graph = graphOf([golpe, reforma, { id: 'word:stf', term: 'stf', kind: 'word', count: 30, pmi: 1.8 }, { id: 'word:solo', term: 'solo', kind: 'word', count: 15, pmi: 1.1 }, { id: 'word:fora', term: 'fora', kind: 'word', count: 5, pmi: 0.4 }], {
+      links: [
+        { source: 'word:golpe', target: 'word:reforma', count: 4 },
+        { source: 'word:golpe', target: 'word:stf', count: 2 },
+        { source: 'word:golpe', target: 'word:ausente', count: 9 },
+      ],
+    })
+    await start()
+    toScatter()
+    const labelled = () => points().filter((p) => p.querySelector('text')).map((p) => p.dataset.node)
+    const before = labelled()
+    expect(before.length).toBeGreaterThan(0)
+    fire(nodeEl('word:golpe'))
+    const cls = (c: string) => points().filter((p) => p.classList.contains(c)).map((p) => p.dataset.node)
+    expect(cls('is-selected')).toEqual(['word:golpe'])
+    expect(cls('is-neighbor').sort()).toEqual(['word:reforma', 'word:stf'])
+    expect(cls('is-dim').sort()).toEqual(['word:fora', 'word:solo'])
+    expect($('scatter').querySelectorAll('path, .edge')).toHaveLength(0)
+    expect($('scatter').querySelectorAll('svg line:not(.scatter-gridline):not(.scatter-axis):not(.scatter-zero)')).toHaveLength(0)
+    expect(labelled()).toEqual(before)
+    fire(nodeEl('word:golpe'))
+    expect(cls('is-selected')).toEqual([])
+    expect(cls('is-neighbor')).toEqual([])
+    expect(cls('is-dim')).toEqual([])
+    expect(labelled()).toEqual(before)
+  })
+
+  it('AC7: a scatter point is coloured by --mask under avaliação, --theme under tema and falls to --muted with the mask off or no person score', async () => {
+    const list = [at({ id: 'word:a', term: 'a', testimony: tone(0.1, 20), community: 3 }), at({ id: 'word:b', term: 'b', count: 5, testimony: null, community: null })]
+    bodies.graph = graphOf(list, { stats: stats({ testimony: { method: 'kikori', score: -2.4, n: 500 } }) })
+    await start()
+    toScatter()
+    const svg = () => $('scatter').querySelector('svg')!
+    expect(svg().classList.contains('is-masked')).toBe(true)
+    expect(svg().classList.contains('is-themed')).toBe(false)
+    expect(paintOf('word:a', '--mask')).toBe(termMask(list[0] as never, -2.4))
+    expect(paintOf('word:b', '--mask')).toBe('')
+    fire($('mask'))
+    expect(svg().classList.contains('is-themed')).toBe(true)
+    expect(svg().classList.contains('is-masked')).toBe(false)
+    expect(paintOf('word:a', '--theme')).toBe(themeMask(list[0] as never, communityRanking(list as { community?: number | null }[])))
+    expect(paintOf('word:b', '--theme')).toBe('')
+    fire($('mask'))
+    expect($('mask').textContent).toBe('Sem cor')
+    expect(svg().classList.contains('is-masked') || svg().classList.contains('is-themed')).toBe(false)
+    unmount(instance!)
+    instance = undefined
+    target.replaceChildren()
+    clearScopes()
+    bodies.graph = graphOf(list, { stats: stats({ testimony: null }) })
+    await start()
+    expect($('columns').classList.contains('is-masked')).toBe(false)
+    expect(all('#columns .list-dot')).toHaveLength(2)
+    toScatter()
+    expect(svg().classList.contains('is-masked')).toBe(false)
+  })
+
+  it('AC9: Escape closes an open card first, keeps the pick, and the next Escape clears it, in Dispersão too', async () => {
+    await start()
+    toScatter()
+    fire(nodeEl('word:golpe'))
+    docsCard.isOpen.mockReturnValue(true)
+    docsCard.close.mockClear()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    flushSync()
+    expect(docsCard.close).toHaveBeenCalled()
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    docsCard.isOpen.mockReturnValue(false)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    flushSync()
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('AC15: every point is reachable with Tab and picked with Enter or Space, labelled or not', async () => {
+    bodies.graph = graphOf(Array.from({ length: 24 }, (_, i) => at({ id: `word:p${i}`, term: `ponto${i}`, count: 9, pmi: 1 })))
+    widths.scatter = 300
+    await start('?limit=24')
+    toScatter()
+    const tabbable = all('#scatter [tabindex="0"]').filter((e) => e.dataset.node)
+    expect(tabbable).toHaveLength(24)
+    const unlabelled = points().filter((p) => !p.querySelector('text'))
+    expect(unlabelled.length).toBeGreaterThan(0)
+    for (const p of unlabelled) {
+      expect(p.getAttribute('aria-label')).toMatch(/^ponto\d+, 9 documentos; PMI /)
+      expect(p.tagName.toLowerCase()).toBe('g')
+    }
+    for (const key of ['Enter', ' ']) {
+      docsCard.open.mockClear()
+      const p = unlabelled[0]
+      press(p, key)
+      expect(docsCard.open, key).toHaveBeenCalledTimes(1)
+      expect(p.getAttribute('aria-pressed')).toBe('true')
+      press(p, key)
+      expect(p.getAttribute('aria-pressed')).toBe('false')
+    }
+  })
+
+  it('AC19: each mode shows its own key and the Barra line is the same in the page and in the dialog', async () => {
+    await start()
+    expect(ofKey('keyDefault')).toEqual(['Barra', 'Cor', 'Organização', 'Clique'])
+    expect(ofKey('keyScatter')).toEqual(['Posição', 'Cor', 'Clique'])
+    expect(ofKey('keyStrip')).toEqual(['Posição', 'AaAaTamanho', 'Cor', 'Clique'])
+    expect([...$('keyStrip').querySelectorAll('dd')].map((d) => d.textContent)).toEqual(['média da avaliação dos textos com a palavra', 'quantos textos', 'distância da média da pessoa', 'textos da palavra'])
+    const hidden = () => ['keyDefault', 'keyScatter', 'keyStrip'].map((id) => $(id).hidden)
+    expect(hidden()).toEqual([false, true, true])
+    expect($('keyDefault').querySelector('dd')!.textContent).toBe('frequência, PMI ponderado ou alcance: a medida escolhida na frase')
+    toScatter()
+    expect(hidden()).toEqual([true, false, true])
+    fire($('modeStrip'))
+    expect(hidden()).toEqual([true, true, false])
+    fire($('modeColumns'))
+    fire($('mask'))
+    expect($('keyDefaultColor').hidden).toBe(true)
+    toScatter()
+    expect($('keyScatterColor').hidden).toBe(true)
+    expect($('keyTheme').hidden).toBe(false)
+    fire($('mask'))
+    fire($('mask'))
+    expect($('keyScatterColor').hidden).toBe(false)
+  })
+
+  it('the sentence names the measure, the legend explains the scatter axes, and the inspector speaks of the bar', async () => {
+    await start()
+    expect(select('sort').getAttribute('aria-label')).toBe('Medida')
+    expect($('workspace').querySelector('.figure-sub')!.textContent).toBe('Palavras nos textos que citam a pessoa, na ordem da medida da frase. Como ler.')
+    expect($('legend').textContent).toContain('Barra = PMI × ln(1 + docs)')
+    expect($('legend').textContent).not.toMatch(/Linha = documentos em comum|zoom e rolagem|Tamanho/)
+    expect($('inspector').textContent).toContain('A pessoa')
+    expect($('inspector').textContent).not.toMatch(/no centro|campo limpo/i)
+    toScatter()
+    expect($('legend').textContent).toContain('Eixo x = documentos, escala log · eixo y = PMI bruto · Tab + Enter para selecionar')
+    fire(nodeEl('word:golpe'))
+    expect($('inspector').textContent).toMatch(/PMI × ln\(1 \+ docs\) · medida da barra\./)
+    expect($('inspector').textContent).not.toMatch(/score usado no tamanho/)
+  })
+
+  it('AC20: no radial markup is rendered in any mode', async () => {
+    await start()
+    for (const mode of ['modeColumns', 'modeScatter', 'modeStrip']) {
+      fire($(mode))
+      expect($('workspace').querySelector('.map-svg, .atlas-word, .center-label, .zoom, .mobile-hint, .edge, .viewport, .map-stage, .overflow')).toBeNull()
+    }
   })
 })

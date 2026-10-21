@@ -25,12 +25,6 @@ export type TestimonySourceRow = { source: string; score: number | null; n: numb
 export type TestimonyDomainRow = { domain: string; source: string; score: number | null; n: number }
 export type Testimony = { method: string; overall: TestimonyOverall; by_source: TestimonySourceRow[]; by_domain: TestimonyDomainRow[] }
 export type Measure = (text: string, size: number, family?: string, weight?: number) => number
-export type Box = { x: number; y: number; w: number; h: number }
-export type CenterBox = Box & { lines: string[]; size: number; lineHeight: number; id?: string }
-export type PlacedTerm = Term & Box & { rank: number; size: number; lines: string[]; lineHeight: number; score: number }
-export type Point = { x: number; y: number }
-export type Routing = { points: Point[]; ports: Map<string, number[]>; adjacent: { index: number; weight: number }[][] }
-export type Layout = { placed: PlacedTerm[]; overflow: Term[]; center: CenterBox; routing?: Routing }
 export type PersonRef = { id: string; name: string }
 export type CompareSide = { count: number; pmi: number; tone: number | null }
 export type CompareTerm = { term: string; kind: string; a: CompareSide | 'name' | null; b: CompareSide | 'name' | null; bridge?: number }
@@ -163,6 +157,9 @@ export const SOURCE_SEGMENTS: [string, string][] = [
 // sort='pmi' orders by pmi * ln(1 + count), as src/graph.ts does.
 export const score = (n: { pmi?: number; count?: number; reach?: number | null }, sort: string) =>
   sort === 'reach' ? Number(n.reach || 0) : sort === 'pmi' ? Number(n.pmi || 0) * Math.log1p(Number(n.count || 0)) : Number(n.count || 0)
+
+// The list's bar: a share of the largest score shown, 0 for a non-positive score or max, never NaN.
+export const barShare = (value: number, max: number) => (Number.isFinite(value) && Number.isFinite(max) && value > 0 && max > 0 ? Math.min(1, value / max) : 0)
 
 export const scoreName = (sort: string) => (sort === 'reach' ? 'alcance (reposts)' : sort === 'pmi' ? 'PMI × ln(1 + docs)' : 'frequência em documentos')
 

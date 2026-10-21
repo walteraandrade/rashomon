@@ -219,7 +219,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'this suite must run with no document')
     const model = await import('../src/ui/atlas-model.js')
     assert.equal((globalThis as { document?: unknown }).document, undefined, 'importing atlas-model.js must not touch document at import time')
-    assert.deepEqual(Object.keys(model).sort(), ['docsQuery', 'layoutKey', 'scopeKeys'])
+    assert.deepEqual(Object.keys(model).sort(), ['docsQuery', 'scopeKeys'])
   })
 
   it('#297 AC1: figures/atlas.ts is gone', () => {
@@ -755,7 +755,7 @@ describe('the comention figure lives only in Comention.svelte', () => {
 
 describe('#297 AC2: web/routes/+page.svelte mounts <Atlas /> and holds none of its markup', () => {
   const source = () => pageSource('/')
-  const IDS = ['workspace', 'atlasTitle', 'atlasStats', 'keyDefault', 'keyTheme', 'keyStrip', 'person', 'days', 'source', 'sort', 'limit', 'status', 'search', 'searchNote', 'modeMap', 'modeColumns', 'modeStrip', 'mask', 'zoomGroup', 'viewport', 'overflow', 'columns', 'atlasStrip', 'stripHiddenNote', 'legend', 'inspector', 'selectionNote']
+  const IDS = ['workspace', 'atlasTitle', 'atlasStats', 'keyDefault', 'keyScatter', 'keyTheme', 'keyStrip', 'person', 'days', 'source', 'sort', 'limit', 'status', 'search', 'searchNote', 'modeColumns', 'modeScatter', 'modeStrip', 'mask', 'columns', 'scatter', 'atlasStrip', 'stripHiddenNote', 'legend', 'inspector', 'selectionNote']
 
   it('the page carries <Atlas /> and none of the figure ids as static markup', () => {
     assert.match(source(), /<Atlas \/>/)
@@ -848,5 +848,33 @@ describe('#326 the lenses figure is gone; #compare owns its ids and removals sta
     const callers = walkAll(srcDir).filter((f) => /\.(ts|svelte)$/.test(f) && !f.endsWith('ruler-model.ts') && /\brulerTerms\b/.test(readFileSync(f, 'utf8')))
     assert.equal(existsSync(join(jsDir, 'ruler-model.ts')), callers.length > 0, `rulerTerms callers: ${callers.join(', ') || 'none'}`)
     assert.equal(/'ruler-model\.ts':/.test(testFileSource('invariants.test.ts')), callers.length > 0)
+  })
+})
+
+describe('#328 AC21: the radial map leaves no dead code behind', () => {
+  const walkAll = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : walkAll(join(dir, e.name))) : [join(dir, e.name)]))
+  const textFiles = (dirs: string[]) => dirs.flatMap((d) => walkAll(join(root, d))).filter((f) => /\.(ts|svelte|js|css|md|json)$/.test(f))
+  // Names are assembled so this file is not its own match.
+  const word = (...parts: string[]) => new RegExp(`\\b${parts.join('')}\\b`)
+  const hits = (files: string[], re: RegExp) => files.filter((f) => f !== fileURLToPath(import.meta.url) && re.test(readFileSync(f, 'utf8'))).map((f) => f.replace(root, ''))
+
+  it('(a) the radial packer and its router are gone from src, web, public, test, scripts and CLAUDE.md', () => {
+    const files = [...textFiles(['src', 'web', 'public', 'test', 'scripts']), join(root, 'CLAUDE.md')]
+    const re = new RegExp(['center' + 'Label', 'pack' + 'Pass', 'route' + 'Graph', 'routes' + 'From', 'segment' + 'Blocked', 'size' + 'Range', 'layout' + 'Key'].map((n) => `\\b${n}\\b`).join('|'))
+    assert.deepEqual(hits(files, re), [])
+  })
+
+  it('(b) the map controls and the centre label are gone from src, web, public and CLAUDE.md', () => {
+    const files = [...textFiles(['src', 'web', 'public']), join(root, 'CLAUDE.md')]
+    assert.deepEqual(hits(files, new RegExp(['mode' + 'Map', 'zoom' + 'Group', 'center' + '-label'].join('|'))), [])
+  })
+
+  it('(c) GHOST_WORDS is gone from Atlas.svelte, and the radial helpers and types have no caller left in src', () => {
+    assert.doesNotMatch(readFileSync(join(jsDir, 'Atlas.svelte'), 'utf8'), word('GHOST', '_WORDS'))
+    const files = textFiles(['src', 'web'])
+    for (const name of ['pack', 'overlaps', 'inCircle', 'FONT_DISPLAY', 'Routing']) {
+      assert.deepEqual(hits(files, new RegExp(`\\b${name}\\b`)), [], `${name} has no remaining caller`)
+    }
   })
 })

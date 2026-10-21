@@ -1,152 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, MATRIX_GAP, MATRIX_ROWHEAD, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, MATRIX_GAP, MATRIX_ROWHEAD, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, logTicks, matrixLayout, niceTicks, peakDay, persistenceLayout, placeLabels, scatterLayout, swarm, swarmBy, weekLayout, type LabelBounds, type LabelItem, type LabelPlacement } from '../src/ui/layout.js'
 
 // src/ui/layout.ts: pure geometry.
 
 // Deterministic stand-in for the browser canvas adapter (measure.ts's
-// createCanvasMeasure): width scales linearly with character count and font size, so wrapping
-// and packing behave predictably without a real <canvas>.
+// createCanvasMeasure): width scales linearly with character count and font size, so layout
+// behaves predictably without a real <canvas>.
 const measure = (text: string, size: number) => text.length * size * 0.6
-
-describe('wrapLines', () => {
-  it('keeps text on one line when it fits maxWidth', () => {
-    assert.deepEqual(wrapLines(measure, 'oi', 20, 500), ['oi'])
-  })
-
-  it('wraps at a space/underscore/hyphen when the break falls past 30% of the line', () => {
-    const lines = wrapLines(measure, 'palavra composta longa', 20, 90)
-    assert.ok(lines.length > 1)
-    assert.ok(lines.every((line) => measure(line, 20) <= 90 + 20 * 0.6), 'every line should respect maxWidth within one character')
-  })
-
-  it('never drops characters: rejoining every line reproduces every char in order (spaces collapse at hard breaks)', () => {
-    const text = 'umtermobemgrandeesemespacoparaforcarquebranomeiodapalavra'
-    const lines = wrapLines(measure, text, 14, 60)
-    assert.equal(lines.join(''), text)
-  })
-})
-
-describe('centerLabel', () => {
-  it('returns a box at least 240 wide and tall enough for every line', () => {
-    const c = centerLabel(measure, 'Fulano de Tal')
-    assert.ok(c.w >= 240)
-    assert.equal(c.h, c.lines.length * c.lineHeight + 88)
-    assert.equal(c.x, 0)
-    assert.equal(c.y, 0)
-  })
-
-  it('wraps a long name into more than one line', () => {
-    const c = centerLabel(measure, 'Um Nome Excepcionalmente Longo Para Forcar Quebra De Linha')
-    assert.ok(c.lines.length > 1)
-  })
-})
-
-const term = (id: string, count: number, pmi = 1) => ({ id, term: id, kind: 'word', count, pmi })
-
-describe('sizeRange', () => {
-  it('never passes the ceiling, however few terms there are', () => {
-    for (const count of [1, 3, 8, 10]) assert.ok(sizeRange(count).maxSize <= SIZE_CEILING, `${count} terms exceeded the ceiling`)
-  })
-
-  it('shrinks both the ceiling and the floor as the term count grows', () => {
-    const few = sizeRange(12)
-    const many = sizeRange(24)
-    assert.ok(many.maxSize < few.maxSize, 'a fuller atlas must lower its largest type')
-    assert.ok(many.minSize < few.minSize, 'a fuller atlas must lower its smallest type')
-    assert.ok(many.minSize >= SIZE_FLOOR, 'no term goes under the floor')
-  })
-
-  it('keeps the largest term larger than the smallest at every count', () => {
-    for (const count of [1, 12, 18, 24, 60]) {
-      const { minSize, maxSize } = sizeRange(count)
-      assert.ok(maxSize > minSize, `${count} terms collapsed the ramp`)
-    }
-  })
-})
-
-describe('packing at the atlas term limits', () => {
-  // The three options the sentence in atlas.html offers, with realistically long terms.
-  const words = ['investigacao', 'impeachment', 'revelacoes', 'mensagens', 'relatorio', 'inquerito', 'indicios', 'relatorios', 'anotem', 'acusa', 'fake', 'laranja podre', 'fake news', 'processo', 'ministro', 'decisao', 'tribunal', 'censura', 'impedido votar', 'declara impedido', 'acabar elegendo', 'bandido confiar', 'liminar', 'audiencia']
-
-  for (const limit of [12, 18, 24]) {
-    it(`leaves at most one term of ${limit} in the overflow list`, () => {
-      const terms = words.slice(0, limit).map((w, i) => ({ id: w, term: w, kind: 'word', count: 100 - i * 3, pmi: 1 }))
-      const center = centerLabel(measure, 'Alexandre de Moraes')
-      const result = pack(measure, terms, center, 'count')
-      assert.ok(result.overflow.length <= 1, `${result.overflow.length} terms overflowed: ${result.overflow.map((o) => o.term).join(', ')}`)
-      assert.ok(result.placed.every((p) => p.size <= SIZE_CEILING), 'a placed term passed the ceiling')
-    })
-  }
-})
-
-describe('packPass / pack', () => {
-  it('accounts for every term exactly once, split between placed and overflow', () => {
-    // 40 long equal-score terms in a fixed-size circle: guaranteed to overflow even at the
-    // ramp's floor, since the candidate grid and center box cannot fit unlimited boxes.
-    const terms = Array.from({ length: 40 }, (_, i) => term(`termo bem comprido numero ${i}`, 10))
-    const center = centerLabel(measure, 'Pessoa Central')
-    const result = pack(measure, terms, center, 'count')
-    const seen = new Set([...result.placed.map((p) => p.id), ...result.overflow.map((p) => p.id)])
-    assert.equal(seen.size, terms.length, 'every term must appear exactly once, in placed or overflow')
-    assert.ok(result.overflow.length > 0, 'this term count must overflow the fixed packing circle')
-  })
-
-  it('places every term when there are few of them', () => {
-    const terms = [term('a', 10), term('b', 5), term('c', 1)]
-    const center = centerLabel(measure, 'Pessoa Central')
-    const result = packPass(measure, terms, center, 'count')
-    assert.equal(result.placed.length, 3)
-    assert.equal(result.overflow.length, 0)
-  })
-
-  it('sort=pmi orders placement rank by pmi * ln(1 + count), not by count', () => {
-    // 'low-count-high-pmi' has less count but far higher pmi*ln(1+count) than 'high-count-low-pmi'
-    const terms = [term('high-count-low-pmi', 100, 0.01), term('low-count-high-pmi', 2, 50)]
-    const center = centerLabel(measure, 'Pessoa Central')
-    const bySort = packPass(measure, terms, center, 'pmi')
-    const byHighPmi = bySort.placed.find((p) => p.id === 'low-count-high-pmi')!
-    const byLowPmi = bySort.placed.find((p) => p.id === 'high-count-low-pmi')!
-    assert.ok(byHighPmi.score > byLowPmi.score)
-  })
-})
-
-describe('routeGraph / routesFrom', () => {
-  it('routes from the selected term to every other placed term as an SVG path starting with M', () => {
-    const terms = [term('a', 10), term('b', 8), term('c', 6)]
-    const center = centerLabel(measure, 'Pessoa Central')
-    const layout = packPass(measure, terms, center, 'count')
-    assert.equal(layout.overflow.length, 0)
-    const routes = routesFrom(layout, 'a')
-    assert.ok(routes.has('b'))
-    assert.ok(routes.has('c'))
-    assert.ok(!routes.has('a'), 'a term never routes to itself')
-    for (const path of routes.values()) assert.match(path, /^M/)
-  })
-
-  it('caches the routing graph on layout.routing across calls', () => {
-    const terms = [term('a', 10), term('b', 8)]
-    const center = centerLabel(measure, 'Pessoa Central')
-    // routesFrom stashes its routing graph on the layout object itself, a field layout.js
-    // declares optional; reading it here is the test's own bookkeeping.
-    const layout = packPass(measure, terms, center, 'count')
-    assert.equal(layout.routing, undefined)
-    routesFrom(layout, 'a')
-    const cached = layout.routing
-    assert.ok(cached)
-    routesFrom(layout, 'b')
-    assert.equal(layout.routing, cached, 'second call must reuse the same routing graph, not rebuild it')
-  })
-
-  it('routeGraph is independent of routesFrom: it can be called directly to build the same graph', () => {
-    const terms = [term('a', 10)]
-    const center = centerLabel(measure, 'Pessoa Central')
-    const layout = packPass(measure, terms, center, 'count')
-    const graph = routeGraph(layout)
-    assert.ok(graph.points.length > 0)
-    assert.ok(graph.ports.has('a'))
-  })
-})
 
 describe('swarm / swarmBy: one beeswarm skeleton (issue #99 AC6)', () => {
   it('swarm is swarmBy with circle clearance and still keeps every x, never overlapping', () => {
@@ -331,7 +192,7 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy', () => 
     }
   })
 
-  it('a hyphenated word breaks after its hyphen, the break wrapLines already prefers (#166 review, nit)', () => {
+  it('a hyphenated word breaks after its hyphen, the break weekLayout prefers (#166 review, nit)', () => {
     const [column] = weekLayout(measure, [[term('vice-presidente', 96), term('crise', 3)]], 145)
     const vice = column.words.find((w) => w.term === 'vice-presidente')!
     assert.deepEqual(vice.lines, ['vice-', 'presidente'])
@@ -667,5 +528,271 @@ describe('#149 AC2/AC3/AC4: termStripLayout, words on the kikori axis', () => {
       (layout.dots[0] as { r: number }).r < unshrunk - 1e-6,
       `the shrink loop must have run: dot radius ${(layout.dots[0] as { r: number }).r} must be smaller than the unshrunk ${unshrunk}`,
     )
+  })
+})
+
+describe('logTicks (issue #328 AC13)', () => {
+  it('lists the 1-2-5 values inside the range, ascending', () => {
+    assert.deepEqual(logTicks(3, 480), [5, 10, 20, 50, 100, 200])
+  })
+
+  it('brackets a range with fewer than two values inside', () => {
+    assert.deepEqual(logTicks(1, 1), [1, 2])
+    assert.deepEqual(logTicks(7, 7), [5, 10])
+    assert.deepEqual(logTicks(5, 5), [2, 5, 10])
+  })
+
+  it('clamps a minimum below 1 to 1', () => {
+    assert.equal(logTicks(0, 40)[0], 1)
+    assert.deepEqual(logTicks(-3, 8), [1, 2, 5])
+  })
+})
+
+describe('niceTicks (issue #328 AC13)', () => {
+  it('covers the data, ascending, and keeps 0 when the range crosses it', () => {
+    const ticks = niceTicks(-1.4, 3.2)
+    assert.ok(ticks.includes(0))
+    assert.ok(ticks[0] <= -1.4 && ticks[ticks.length - 1] >= 3.2)
+    assert.deepEqual([...ticks].sort((a, b) => a - b), ticks)
+  })
+
+  it('returns at least two finite values for a single value, bracketing it', () => {
+    const ticks = niceTicks(2, 2)
+    assert.ok(ticks.length >= 2 && ticks.every(Number.isFinite))
+    assert.ok(ticks[0] <= 2 && ticks[ticks.length - 1] >= 2)
+  })
+
+  it('steps are 1, 2 or 5 times a power of ten, with no float residue', () => {
+    for (const [lo, hi] of [[0.2, 2.9], [0, 0.7], [-30, 900], [1.4, 2.1]]) {
+      const ticks = niceTicks(lo, hi)
+      assert.ok(ticks[0] <= lo && ticks[ticks.length - 1] >= hi, `${lo}..${hi}`)
+      const step = ticks[1] - ticks[0]
+      const mantissa = step / 10 ** Math.floor(Math.log10(step))
+      assert.ok([1, 2, 5].some((m) => Math.abs(m - mantissa) < 1e-6), `step ${step}`)
+      for (const t of ticks) assert.equal(t, Number(t.toPrecision(12)))
+    }
+  })
+})
+
+describe('scatterLayout scales (issue #328 AC12)', () => {
+  const pt = (id: string, count: number, pmi: number | null) => ({ id, term: id, kind: 'word', count, pmi: pmi as number })
+  const by = (layout: ReturnType<typeof scatterLayout>, id: string) => layout.points.find((p) => p.id === id)!
+
+  it('x grows with count on a log scale, y falls as pmi rises', () => {
+    const layout = scatterLayout(measure, [pt('a', 1, 0.5), pt('b', 10, 1.5), pt('c', 100, 2.5)], 860)
+    assert.ok(by(layout, 'a').x < by(layout, 'b').x && by(layout, 'b').x < by(layout, 'c').x)
+    assert.ok(by(layout, 'a').y > by(layout, 'b').y && by(layout, 'b').y > by(layout, 'c').y)
+    assert.ok(Math.abs(by(layout, 'b').x - by(layout, 'a').x - (by(layout, 'c').x - by(layout, 'b').x)) < 1e-6, '1, 10, 100 are equally spaced')
+  })
+
+  it('keeps every point inside the plot box and the largest count rightmost', () => {
+    const nodes = [pt('a', 3, -0.4), pt('b', 480, 3.1), pt('c', 40, 1), pt('d', 0, 0)]
+    const layout = scatterLayout(measure, nodes, 600)
+    for (const p of layout.points) {
+      assert.ok(p.x >= layout.plot.left && p.x <= layout.plot.right, `${p.id} x ${p.x}`)
+      assert.ok(p.y >= layout.plot.top && p.y <= layout.plot.bottom, `${p.id} y ${p.y}`)
+    }
+    assert.equal(layout.points.reduce((m, p) => (p.x > m.x ? p : m)).id, 'b')
+  })
+
+  it('draws a tick label position for every tick, inside the plot', () => {
+    const layout = scatterLayout(measure, [pt('a', 3, 0.5), pt('b', 480, 2.5)], 860)
+    assert.deepEqual(layout.xTicks.map((t) => t.value), logTicks(layout.xTicks[0].value, layout.xTicks.at(-1)!.value))
+    for (const t of layout.xTicks) assert.ok(t.x >= layout.plot.left - 1e-6 && t.x <= layout.plot.right + 1e-6)
+    for (const t of layout.yTicks) assert.ok(t.y >= layout.plot.top - 1e-6 && t.y <= layout.plot.bottom + 1e-6)
+  })
+
+  it('puts a negative pmi below the zero line and reads a null pmi as 0', () => {
+    const layout = scatterLayout(measure, [pt('neg', 5, -1.2), pt('pos', 9, 2), pt('none', 7, null)], 860)
+    assert.notEqual(layout.zeroY, null)
+    assert.ok(by(layout, 'neg').y > (layout.zeroY as number))
+    assert.ok(Math.abs(by(layout, 'none').y - (layout.zeroY as number)) < 1e-6)
+    const absent = scatterLayout(measure, [pt('neg', 5, -1.2), pt('pos', 9, 2), { id: 'gone', term: 'gone', kind: 'word', count: 7 } as never], 860)
+    assert.ok(Number.isFinite(by(absent, 'gone').y) && Math.abs(by(absent, 'gone').y - (absent.zeroY as number)) < 1e-6)
+  })
+
+  it('has no zero line when every pmi is above 0 and the first tick stays above it', () => {
+    const layout = scatterLayout(measure, [pt('a', 5, 1.4), pt('b', 9, 2.1)], 860)
+    assert.ok(layout.yTicks[0].value > 0)
+    assert.equal(layout.zeroY, null)
+  })
+
+  it('puts the zero line on the bottom edge when 0 is the first tick', () => {
+    const layout = scatterLayout(measure, [pt('a', 5, 0), pt('b', 9, 2.1)], 860)
+    assert.equal(layout.yTicks[0].value, 0)
+    assert.equal(layout.zeroY, layout.plot.bottom)
+  })
+
+  it('stays finite for one node, equal counts and equal pmi', () => {
+    for (const nodes of [[pt('a', 7, 1)], [pt('a', 7, 1), pt('b', 7, 2)], [pt('a', 3, 1.5), pt('b', 90, 1.5)], [pt('a', 0, 0)]]) {
+      const layout = scatterLayout(measure, nodes, 860)
+      for (const p of layout.points) assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y))
+      assert.equal(layout.points.length, nodes.length)
+    }
+  })
+
+  it('widens the x domain to the 1-2-5 values around the counts and draws its ticks', () => {
+    const span = (nodes: ReturnType<typeof pt>[]) => {
+      const layout = scatterLayout(measure, nodes, 860)
+      return [layout.xTicks[0].value, layout.xTicks.at(-1)!.value, layout]
+    }
+    const [lo, hi, layout] = span([pt('a', 3, 1), pt('b', 480, 2)]) as [number, number, ReturnType<typeof scatterLayout>]
+    assert.deepEqual([lo, hi], [2, 500])
+    assert.equal(layout.xTicks[0].x, layout.plot.left)
+    assert.equal(layout.xTicks.at(-1)!.x, layout.plot.right)
+    assert.deepEqual(span([pt('a', 10, 1), pt('b', 10, 2)]).slice(0, 2), [10, 20])
+    assert.deepEqual(span([pt('a', 7, 1)]).slice(0, 2), [5, 10])
+    assert.deepEqual(span([pt('a', 1, 1), pt('b', 100, 2)]).slice(0, 2), [1, 200])
+  })
+
+  it('spans the plot with the y ticks: the first tick on the bottom edge, the last on the top edge', () => {
+    const layout = scatterLayout(measure, [pt('a', 4, -1.4), pt('b', 9, 3.2)], 860)
+    assert.equal(layout.yTicks[0].y, layout.plot.bottom)
+    assert.equal(layout.yTicks.at(-1)!.y, layout.plot.top)
+    assert.ok(layout.yTicks[0].value <= -1.4 && layout.yTicks.at(-1)!.value >= 3.2)
+    assert.ok(layout.yTicks.every((t, i, all) => i === 0 || (t.value > all[i - 1].value && t.y < all[i - 1].y)))
+  })
+
+  it('reads a count of 0 as 1 before the log', () => {
+    const layout = scatterLayout(measure, [pt('zero', 0, 1), pt('one', 1, 1), pt('ten', 10, 1)], 860)
+    assert.equal(by(layout, 'zero').x, by(layout, 'one').x)
+    assert.ok(Number.isFinite(by(layout, 'zero').x))
+  })
+
+  it('lays a point out the same whatever its neighbours, so a pick or a search never moves it', () => {
+    const a = scatterLayout(measure, [pt('a', 5, 1), pt('b', 90, 2)], 860)
+    const b = scatterLayout(measure, [pt('a', 5, 1), pt('b', 90, 2)].reverse(), 860)
+    assert.deepEqual(by(a, 'a'), by(b, 'a'))
+    assert.deepEqual(by(a, 'b'), by(b, 'b'))
+  })
+
+  it('sizes the height from the width within 320 and 460, and is deterministic', () => {
+    assert.equal(scatterLayout(measure, [pt('a', 2, 1)], 200).height, 320)
+    assert.equal(scatterLayout(measure, [pt('a', 2, 1)], 2000).height, 460)
+    const nodes = [pt('a', 12, 1), pt('b', 14, 1.1), pt('c', 90, 0.4)]
+    const once = scatterLayout(measure, nodes, 700)
+    const twice = scatterLayout(measure, nodes, 700)
+    assert.deepEqual([...once.labels], [...twice.labels])
+    assert.deepEqual(once.points, twice.points)
+  })
+})
+
+describe('scatter captions stay inside the svg (validator round 1)', () => {
+  const nodes = [{ id: 'a', term: 'a', kind: 'word', count: 5, pmi: 1 }, { id: 'b', term: 'b', kind: 'word', count: 50, pmi: 2 }]
+  it('every caption line starts at 0 or inside and ends within the width, splitting the y caption after "PMI:"', () => {
+    for (const width of [300, 260, 860]) {
+      const { captions, plot } = scatterLayout(measure, nodes, width)
+      const lines = [...captions.y.lines.map((l) => ({ ...l, start: captions.y.x, w: measure(l.text, 11) })), { text: captions.x.text, start: captions.x.x - measure(captions.x.text, 11) / 2, w: measure(captions.x.text, 11) }]
+      for (const l of lines) assert.ok(l.start >= 0 && l.start + l.w <= width, `${width}: "${l.text}" runs ${l.start}..${l.start + l.w}`)
+      assert.equal(captions.y.lines.map((l) => l.text).join(' '), 'PMI: quanto a palavra é específica da pessoa')
+      assert.ok(plot.top > captions.y.lines[captions.y.lines.length - 1].y, 'the plot starts below the caption')
+    }
+  })
+
+  it('splits only when one line would overflow', () => {
+    assert.equal(scatterLayout(measure, nodes, 860).captions.y.lines.length, 1)
+    const narrow = scatterLayout(measure, nodes, 260)
+    assert.deepEqual(narrow.captions.y.lines.map((l) => l.text), ['PMI:', 'quanto a palavra é específica da pessoa'])
+    assert.ok(narrow.plot.top > scatterLayout(measure, nodes, 860).plot.top)
+  })
+})
+
+describe('placeLabels order and bounds (issue #328 AC14)', () => {
+  const bounds: LabelBounds = { left: 0, top: 0, right: 400, bottom: 200 }
+  const gap = 4
+  const item = (id: string, x: number, y: number, w = 40, h = 14, r = 5): LabelItem => ({ id, x, y, r, w, h })
+  const box = (it: LabelItem, p: LabelPlacement) => {
+    const left = p.anchor === 'start' ? p.x : p.anchor === 'end' ? p.x - it.w : p.x - it.w / 2
+    return { left, right: left + it.w, top: p.y - it.h / 2, bottom: p.y + it.h / 2 }
+  }
+
+  it('puts an isolated item on its right', () => {
+    const placed = placeLabels([item('a', 100, 100)], bounds, gap)
+    assert.equal(placed.get('a')?.side, 'right')
+    assert.equal(placed.get('a')?.anchor, 'start')
+    assert.equal(placed.get('a')?.x, 100 + 5 + gap)
+    assert.equal(placed.get('a')?.y, 100)
+  })
+
+  it('falls to left, then above, then below as the others are blocked, and gives up boxed in', () => {
+    const wall = (id: string, x: number, y: number) => item(id, x, y, 40, 14, 5)
+    const a = item('a', 200, 100)
+    const right = wall('r', 230, 100)
+    const left = wall('l', 170, 100)
+    const above = wall('u', 200, 80)
+    const below = wall('d', 200, 120)
+    assert.equal(placeLabels([a, right], bounds, gap).get('a')?.side, 'left')
+    assert.equal(placeLabels([a, right, left], bounds, gap).get('a')?.side, 'above')
+    assert.equal(placeLabels([a, right, left, above], bounds, gap).get('a')?.side, 'below')
+    assert.equal(placeLabels([a, right, left, above, below], bounds, gap).has('a'), false)
+  })
+
+  it('never overlaps two labels, a label and another point, or leaves the bounds', () => {
+    const items = Array.from({ length: 30 }, (_, i) => item(`p${i}`, 20 + ((i * 53) % 360), 15 + ((i * 37) % 170), 24 + (i % 5) * 9))
+    const placed = placeLabels(items, bounds, gap)
+    const boxes = [...placed].map(([id, p]) => ({ id, ...box(items.find((i) => i.id === id)!, p) }))
+    for (const b of boxes) {
+      assert.ok(b.left >= bounds.left && b.right <= bounds.right && b.top >= bounds.top && b.bottom <= bounds.bottom, `${b.id} left the bounds`)
+      for (const o of items.filter((i) => i.id !== b.id)) {
+        const nx = Math.max(b.left, Math.min(o.x, b.right))
+        const ny = Math.max(b.top, Math.min(o.y, b.bottom))
+        assert.ok(Math.hypot(o.x - nx, o.y - ny) >= o.r + gap - 1e-9, `${b.id} touches the point ${o.id}`)
+      }
+    }
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i]
+        const b = boxes[j]
+        const clash = a.left < b.right + gap && b.left < a.right + gap && a.top < b.bottom + gap && b.top < a.bottom + gap
+        assert.equal(clash, false, `${a.id} and ${b.id} overlap`)
+      }
+    assert.ok(placed.size > 0 && placed.size < items.length + 1)
+  })
+
+  it('lets the earlier item win a contested spot', () => {
+    const a = item('a', 100, 100)
+    const b = item('b', 100, 100)
+    const placed = placeLabels([a, b], bounds, gap)
+    assert.equal(placed.get('a')?.side, 'right')
+    assert.notEqual(placed.get('b')?.side, 'right')
+    assert.equal(placeLabels([b, a], bounds, gap).get('b')?.side, 'right')
+  })
+
+  it('puts each side at its documented offset, centred on the point', () => {
+    const a = item('a', 200, 100)
+    const wall = (id: string, x: number, y: number) => item(id, x, y, 40, 14, 5)
+    const left = placeLabels([a, wall('r', 230, 100)], bounds, gap).get('a')!
+    assert.deepEqual([left.side, left.anchor, left.x, left.y], ['left', 'end', 200 - 5 - gap, 100])
+    const above = placeLabels([a, wall('r', 230, 100), wall('l', 170, 100)], bounds, gap).get('a')!
+    assert.deepEqual([above.side, above.anchor, above.x, above.y], ['above', 'middle', 200, 100 - 5 - gap - 14 / 2])
+    const below = placeLabels([a, wall('r', 230, 100), wall('l', 170, 100), wall('u', 200, 80)], bounds, gap).get('a')!
+    assert.deepEqual([below.side, below.anchor, below.x, below.y], ['below', 'middle', 200, 100 + 5 + gap + 14 / 2])
+  })
+
+  it('never lets a label cover a point of a later item, and never returns an item it dropped', () => {
+    const a = item('a', 100, 100, 60)
+    const sitting = item('b', 100 + 5 + gap + 20, 100)
+    const placed = placeLabels([a, sitting], bounds, gap)
+    assert.notEqual(placed.get('a')?.side, 'right')
+    assert.deepEqual([...placeLabels([item('tiny', 5, 5, 400, 14)], bounds, gap).keys()], [])
+  })
+
+  it('a label for a point at each corner stays inside the bounds', () => {
+    const corners = [item('tl', 2, 2), item('tr', 398, 2), item('bl', 2, 198), item('br', 398, 198)]
+    for (const [id, p] of placeLabels(corners, bounds, gap)) {
+      const it = corners.find((c) => c.id === id)!
+      const b = box(it, p)
+      assert.ok(b.left >= 0 && b.right <= 400 && b.top >= 0 && b.bottom <= 200, id)
+    }
+  })
+
+  it('flips left instead of leaving the bounds on the right edge', () => {
+    const placed = placeLabels([item('a', 390, 100)], bounds, gap)
+    assert.equal(placed.get('a')?.side, 'left')
+  })
+
+  it('returns equal maps for equal input', () => {
+    const items = Array.from({ length: 12 }, (_, i) => item(`p${i}`, 30 + i * 28, 60 + (i % 3) * 30))
+    assert.deepEqual([...placeLabels(items, bounds, gap)], [...placeLabels(items, bounds, gap)])
   })
 })

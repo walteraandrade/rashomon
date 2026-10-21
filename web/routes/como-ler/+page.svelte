@@ -17,35 +17,36 @@
         <h2>Como fazer uma análise</h2>
         <ol>
           <li><b>Escolha uma pessoa</b>, o período e a fonte. Isso é o recorte.</li>
-          <li><b>Olhe as palavras maiores.</b> Clique numa para ler os textos. O cartão fica aberto na próxima escolha e arrasta pelo topo.</li>
-          <li><b>Clique no nome no centro</b> (na primeira linha da lista) para os textos da pessoa, sem palavra no meio.</li>
+          <li><b>Olhe a lista:</b> as barras mais longas são as palavras que mais pesam na medida da frase. Clique numa para ler os textos. O cartão fica aberto na próxima escolha e arrasta pelo topo.</li>
+          <li><b>Clique na primeira linha da lista</b> para os textos da pessoa, sem palavra no meio. Na Dispersão, o mesmo vale para a linha acima do gráfico.</li>
           <li><b>No gráfico 2</b>, compare veículos da mesma pessoa. <b>No 3</b>, de quem a palavra é, ou leia a mesma pessoa por dois recortes ao mesmo tempo. <b>No 7</b>, veja a fatia de cada veículo por pessoa.</li>
         </ol>
       </div>
       <div id="atlas">
         <h2>Gráfico 1 · Atlas de palavras</h2>
-        <p>O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. As posições evitam colisões; elas não medem distância nem opinião.</p>
+        <p>A lista é a vista padrão: uma linha por palavra, na ordem da medida da frase, com a barra no comprimento dessa medida. A primeira linha da lista abre os textos da pessoa.</p>
         <h3>Frequência</h3>
         <p>Em quantos textos sobre a pessoa a palavra aparece. Frequência diz o que se fala muito.</p>
         <h3>Alcance</h3>
-        <p>Com “alcance” no lugar de frequência, o tamanho da palavra é a soma dos reposts dos posts do Bluesky que a trazem, e não quantos textos a citam. É contado quando o rashomon coletou o post: um post que continuou circulando depois fica subcontado. Só documentos do Bluesky têm alcance; os das outras fontes não têm e contam como zero.</p>
-        <h3>Linha entre duas palavras</h3>
-        <p>As duas aparecem nos mesmos textos. Só isso.</p>
+        <p>Com “alcance” no lugar de frequência, a barra é a soma dos reposts dos posts do Bluesky que a trazem, e não quantos textos a citam. É contado quando o rashomon coletou o post: um post que continuou circulando depois fica subcontado. Só documentos do Bluesky têm alcance; os das outras fontes não têm e contam como zero.</p>
+        <h3>Dispersão</h3>
+        <p>O eixo horizontal é documentos, em escala log: cada passo multiplica a contagem. O eixo vertical é o PMI bruto. O PMI pode ser negativo: abaixo da linha “0 = acaso” a palavra aparece menos com esta pessoa do que o acaso daria. Todos os pontos têm o mesmo tamanho.</p>
+        <p>Clicar num ponto realça as palavras ligadas a ele, as que aparecem nos mesmos textos. Uma palavra sem rótulo não coube sem tapar outra; ela não sumiu. O ponto continua clicável, e Tab e Enter também o escolhem.</p>
         <h3>Tom</h3>
         <p>Só existe nos textos que vêm do GDELT. As outras fontes não têm tom, e o site não inventa um.</p>
-        <h3>Cor</h3>
+        <h3>Cor (o ponto da lista e do gráfico)</h3>
         <p><b>Colorir por avaliação</b> compara a nota média dos textos com a palavra com a média da pessoa no recorte, e não com o zero. Vermelho: mais hostil que o normal para essa pessoa. Verde: mais favorável. Cinza: igual, ou menos de 3 textos avaliados.</p>
         <h3>Expressões</h3>
         <p>Uma expressão é várias palavras como um termo só (“primeiro turno”, “Alexandre de Moraes”). Ela substitui as palavras que cobre. A contagem de uma palavra passa a ser: textos em que ela aparece pelo menos uma vez fora de qualquer expressão.</p>
         <h3>Organizações</h3>
-        <p>Textos vindos do GDELT também trazem organizações citadas na matéria (ministérios, partidos, empresas): um quarto tipo de termo, com sublinhado tracejado no atlas. Vem só do GDELT e nunca é inventado para as outras fontes.</p>
+        <p>Textos vindos do GDELT também trazem organizações citadas na matéria (ministérios, partidos, empresas): um quarto tipo de termo, com a tag org na lista. Vem só do GDELT e nunca é inventado para as outras fontes.</p>
       </div>
       <div id="avaliacao">
         <h2>Gráfico 2 · Avaliação por veículo</h2>
         <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes, ao contrário do tom.</p>
         <p>O nome da pessoa puxa a nota. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
         <p><b>A régua</b> põe cada veículo na sua nota média; o tamanho é quantos textos; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos avaliados.</p>
-        <p>O modo <b>Avaliação</b> do gráfico 1 usa a mesma régua, mas com palavras: cada palavra fica na média das notas dos textos em que aparece, e a cor é a mesma máscara do mapa e da lista, a distância até a média desta pessoa. Não é uma segunda medida, é a mesma nota do kikori vista de outro ângulo.</p>
+        <p>O modo <b>Avaliação</b> do gráfico 1 usa a mesma régua, mas com palavras: cada palavra fica na média das notas dos textos em que aparece, e a cor é a mesma máscara da lista e da dispersão, a distância até a média desta pessoa. Não é uma segunda medida, é a mesma nota do kikori vista de outro ângulo.</p>
         <p>A lista de veículos também os agrupa por vocabulário parecido. Vocabulário parecido não é a mesma coisa que linha editorial: dois veículos podem usar palavras semelhantes por motivos que nada têm a ver com posição política. E o número de cada grupo não significa nada por si só, nem pode ser comparado entre uma reconstrução e outra do site: ele só serve para juntar veículos naquela leitura.</p>
       </div>
       <div id="pmi">
@@ -58,7 +59,7 @@
           <div><dt>2</dt><dd>quatro vezes</dd></div>
           <div><dt>3</dt><dd>oito vezes</dd></div>
         </dl>
-        <p>Cada +1 dobra. <b>PMI ponderado</b> segura a palavra rara: o tamanho usa PMI × ln(1 + documentos).</p>
+        <p>Cada +1 dobra. <b>PMI ponderado</b> segura a palavra rara: a barra da lista usa PMI × ln(1 + documentos).</p>
       </div>
       <div id="comparar">
         <h2>Gráfico 3 · Duas pessoas ou dois recortes</h2>

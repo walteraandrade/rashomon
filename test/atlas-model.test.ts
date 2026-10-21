@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
 import { app } from '../src/server.js'
 import { narrowToSources, params, sourcesParams } from '../src/ui/api.js'
-import { docsQuery, layoutKey, scopeKeys } from '../src/ui/atlas-model.js'
+import { docsQuery, scopeKeys } from '../src/ui/atlas-model.js'
 import { clearScopes, fromScope } from '../src/ui/state.js'
-import { persons, seed } from './fixture.js'
+import { seed } from './fixture.js'
 import './close.js'
 
 // #297: the pure helpers figure 1 keeps after it becomes src/ui/Atlas.svelte. They live in
@@ -143,23 +143,5 @@ describe('docsQuery: the narrowed querystring still asks the API the same questi
     const body = (await (await app.request('/api/people/lula/docs?' + q)).json()) as { docs: { text: string }[] }
     assert.ok(body.docs.length, 'the fixture has documents mentioning reforma')
     for (const doc of body.docs) assert.match(doc.text.toLowerCase(), /reforma/)
-  })
-})
-
-describe('layoutKey (issue #210)', () => {
-  it('layoutKey changes with reach', () => {
-    const a = [{ id: 'word:x', term: 'x', kind: 'word', count: 4, pmi: 1, reach: 10 }]
-    const b = [{ ...a[0], reach: 11 }]
-    const c = [{ ...a[0], reach: null }]
-    assert.notEqual(layoutKey(persons[0], a, 'reach', '18'), layoutKey(persons[0], b, 'reach', '18'))
-    assert.notEqual(layoutKey(persons[0], a, 'reach', '18'), layoutKey(persons[0], c, 'reach', '18'))
-    assert.equal(layoutKey(persons[0], a, 'reach', '18'), layoutKey(persons[0], [...a], 'reach', '18'))
-  })
-
-  it('#297 AC7: sort and limit move the key, no person yields the empty key', () => {
-    const a = [{ id: 'word:x', term: 'x', kind: 'word', count: 4, pmi: 1 }]
-    assert.notEqual(layoutKey(persons[0], a, 'count', '18'), layoutKey(persons[0], a, 'pmi', '18'))
-    assert.notEqual(layoutKey(persons[0], a, 'count', '18'), layoutKey(persons[0], a, 'count', '24'))
-    assert.equal(layoutKey(undefined, a, 'count', '18'), '[]')
   })
 })

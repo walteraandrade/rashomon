@@ -264,11 +264,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .figure-key dt { display: flex; align-items: center; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: none; color: var(--accent); }
 .figure-key dd { margin-top: var(--space-1); font-family: var(--mono); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: none; }
 /* The tema key documents the second colour encoding only while the tema mask is on and the
-   figure is not in strip mode -- toggled from script (atlas.ts's render() and toggleMask()),
-   not CSS, since is-themed can linger on a hidden viewport's leftover svg regardless of mode
-   (paintSelection paints both panes). A sibling dl, not a row inside #keyDefault, so #keyDefault
-   stays exactly the four rows test/leitura-ui-acceptance.test.ts pins (Tamanho/Cor/Posição/
-   Clique, unchanged). */
+   figure is not in strip mode -- toggled from the component, not CSS, since is-themed can
+   linger on a hidden pane's leftover svg regardless of mode. A sibling dl, not a row inside
+   #keyDefault, so #keyDefault stays exactly the four rows the acceptance test pins
+   (Barra/Cor/Organização/Clique). */
 .key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
@@ -278,13 +277,13 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 
 /* ---------- workspace: the atlas figure ---------- */
 /* A reload dims what is on screen instead of blanking it, so the column keeps its height and
-   nothing below the map moves until the new map lands. First paint uses a ghost of the map,
+   nothing below the list moves until the new data lands. First paint uses a ghost of the list,
    not this dim: dimming an empty figure is how the old loading copy looked dead. */
-.workspace .viewport, .workspace .columns, .workspace .inspector, .workspace .strip,
+.workspace .columns, .workspace .scatter, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
 .compare .butterfly, .compare .detail, .rising .dumbbell, .rising .note,
 .attention .attention-chart, .attention .note, .agenda .agenda-grid, .persistence .persistence-chart { transition: opacity .16s ease-out; }
-.figure.is-loading .viewport, .figure.is-loading .columns, .figure.is-loading .inspector,
+.figure.is-loading .columns, .figure.is-loading .scatter, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .dumbbell, .figure.is-loading .butterfly, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
 .figure.is-loading .attention-chart, .figure.is-loading .agenda-grid, .figure.is-loading .persistence-chart,
@@ -297,80 +296,24 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .segment { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--line); border-radius: 2px; padding: 2px; background: var(--bg); }
 .segment button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); border-radius: 2px; padding: 6px var(--space-4); font-family: var(--mono); font-size: var(--t-xs); }
 .segment button[aria-pressed="true"], .segment button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.zoom { display: flex; align-items: center; gap: 6px; }
-.zoom button { width: 34px; height: 34px; padding: 0; font-size: var(--t-md); }
-.zoom #zoomReset { width: 56px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; }
 .quiet-button { background: var(--soft); border: 0; padding: 7px var(--space-3); border-radius: 2px; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .quiet-button:hover { color: var(--ink); background: var(--line); }
 .quiet-button.toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
-.mobile-hint { display: none; margin: var(--space-2) 0; color: var(--muted); font-size: var(--t-xs); }
 .search-note { color: var(--accent); font-family: var(--mono); font-size: var(--t-xs); padding-top: var(--space-2); min-height: 24px; }
 
-.viewport { overflow: auto; min-height: 360px; scrollbar-color: var(--line) var(--bg); }
-.map-stage { width: fit-content; margin: auto; }
-.map-svg { display: block; width: var(--map-width, auto); height: auto; }
-/* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
-   point of the graph. The family and weight are still fixed here, like everywhere else. */
-.map-svg .atlas-text { font-family: var(--mono); font-weight: 500; fill: var(--wc); font-size: var(--size); }
-/* --wc is the word's own colour, resolved once per state on the group so the hit box can borrow
-   it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
-   nearly transparent, so it says "this one" without competing with what the colour means. */
-.atlas-word { cursor: pointer; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.atlas-glow { rx: 9px; }
-.atlas-hit { rx: 6px; }
 .week-glow { rx: 8px; }
 .week-hit { rx: 5px; }
-.atlas-glow, .atlas-hit { fill: transparent; }
-/* Under the cursor a ground; picked or matched, the same ground at twice the strength. Its edge
-   is two shapes, not one: a core barely blurred (2px) and a wider penumbra behind it (7px). One
-   uniformly blurred rectangle has no form -- it is fog, and fog has no boundary to read. Stacked,
-   the alpha falls off in two steps, which is what gives the ground a body and an edge without
-   ever drawing a line, and this site draws no lines. The blur lives on the shapes themselves,
-   never on the state: put it on :hover and it switches off the instant the cursor leaves, so a
-   hard rectangle reappears for the length of the fade.
-   The mark's own colour never changes either: painting a picked word --accent threw away the one
-   thing the colour is there to say. */
-.atlas-glow { filter: blur(7px); transition: fill .16s ease-out; }
-.atlas-hit { filter: blur(2px); transition: fill .16s ease-out; }
-.center-hit, .dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
-.atlas-word:hover .atlas-glow, .atlas-word:focus-visible .atlas-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
-.atlas-word:hover .atlas-hit, .atlas-word:focus-visible .atlas-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
-.atlas-word.is-selected .atlas-glow, .atlas-word.is-match .atlas-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
-.atlas-word.is-selected .atlas-hit, .atlas-word.is-match .atlas-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.atlas-word.is-dim { opacity: .22; }
-.atlas-word.is-neighbor { --wc: var(--green); }
-/* The mask: word colour = its texts' testimony against the person's mean. Neighbours keep the
-   mask and gain the underline, so the relation stays visible without the green competing. So do
-   hover, pick and search match: every one of them is drawn by the box, never by repainting the
-   word, or the mask would go blank exactly on the word the reader is looking at. */
-.map-svg.is-masked .atlas-word, .map-svg.is-masked .atlas-word.is-neighbor { --wc: var(--mask, var(--muted)); }
-.map-svg.is-masked .atlas-word.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
+/* The strip dot's soft ground: the blur lives on the shape itself, never on the state, or a hard
+   rectangle reappears for the length of the fade. */
+.dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
+/* The mask: a mark's colour = its texts' testimony against the person's mean. */
 .mask-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--hostile), color-mix(in srgb, var(--scale-mid) 50%, transparent), var(--favor)); }
-/* The tema mask: same shape as the mask above, one discrete --theme token per word instead of a
-   continuous --mask gradient. Mutually exclusive with is-masked -- paintSelection never sets both. */
-.map-svg.is-themed .atlas-word, .map-svg.is-themed .atlas-word.is-neighbor { --wc: var(--theme, var(--muted)); }
-.map-svg.is-themed .atlas-word.is-neighbor .underline { opacity: .7; stroke-dasharray: 3 3; }
+/* The tema mask: one discrete --theme token per mark instead of a continuous --mask gradient. */
 .theme-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--theme-1) 0 16.67%, var(--theme-2) 16.67% 33.33%, var(--theme-3) 33.33% 50%, var(--theme-4) 50% 66.67%, var(--theme-5) 66.67% 83.33%, var(--theme-6) 83.33% 100%); } /* six hard stops, not a continuous ramp: communities carry no order for the gradient to imply */
 /* Figure 8's own key swatch: muted to full ink, the exact ramp an agenda cell's own share reads
    through -- no new hue, matching the site's "colour means something" rule. */
 .ink-scale { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--muted), var(--ink)); }
-.underline { stroke: var(--wc, var(--accent)); stroke-width: 1.5; opacity: 0; }
-.atlas-word.is-selected .underline { opacity: 1; }
-.atlas-word[data-kind="org"]:not(.is-selected) .underline { opacity: .55; stroke-dasharray: 2 2; }
-.atlas-word[data-kind="org"].is-selected .underline { stroke-dasharray: 2 2; }
-.map-svg.is-masked .atlas-word[data-kind="org"].is-neighbor .underline { stroke-dasharray: 2 2; }
-.person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
-/* The centre is the person's own entry to the documents, so it answers to the cursor the way a
-   word does -- the same soft box, in the colour the name is already written in. */
-.center-label { cursor: pointer; }
-.center-hit { fill: transparent; }
-.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
 .micro { fill: var(--muted); font-family: var(--mono); font-size: var(--t-micro); font-weight: 500; letter-spacing: var(--tr-label); }
-.center-note { fill: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
-.edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
-.boundary { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
-.halo-in { stop-color: var(--accent); stop-opacity: .045; }
-.halo-out { stop-color: var(--accent); stop-opacity: 0; }
 
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 .type-scale { display: inline-flex; align-items: baseline; gap: 5px; margin-right: var(--space-2); color: var(--ink); }
@@ -396,46 +339,68 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-dot:hover .dot-face, .strip-dot:focus-visible .dot-face { fill-opacity: 1; }
 .strip-dot.is-active .dot-face, .strip-dot.is-selected .dot-face, .strip-dot.is-match .dot-face { fill-opacity: 1; }
 .strip-dot.is-active .dot-halo, .strip-dot.is-selected .dot-halo, .strip-dot.is-match .dot-halo { fill: color-mix(in srgb, var(--wc) 45%, transparent); }
-/* Figure 1's own strip: a word that does not match the search dims, the same treatment
-   .column-card.is-dim already gets. */
+/* Figure 1's own strip: a word that does not match the search dims, like a list row. */
 .strip-dot.is-dim { opacity: .35; }
 .strip-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .strip .note { margin-top: var(--space-3); }
 
-/* Figure 1's own strip mode: same .strip skeleton, sitting beside #viewport/#columns
+/* Figure 1's own strip mode: same .strip skeleton, sitting beside #columns and #scatter
    inside .canvas rather than as its own figure, so it needs its own outer spacing. */
 #atlasStrip { margin: var(--space-2) 0 var(--space-3); }
 #stripHiddenNote { margin: 0 0 var(--space-3); }
 
-.overflow { padding: 0 0 var(--space-5); }
-.overflow p { font-size: var(--t-sm); color: var(--muted); margin-bottom: var(--space-2); }
-.overflow button { margin: var(--space-1) 6px 0 0; }
-.overflow .is-dim { opacity: .35; }
-.overflow .is-match, .overflow .is-selected { color: var(--accent); }
-
-.columns { padding: var(--space-2) 0 var(--space-5); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-/* Each card gets a ground of its own: the metadata line and the word under it are one thing,
-   and with no card behind them a reader on a three-column grid ties the line to the wrong word.
-   A very light wash rather than a border, so eighteen of these do not read as a table. */
-.column-card { border: 0; padding: var(--space-3) var(--space-4); border-radius: 2px; background: color-mix(in srgb, var(--soft) 65%, transparent); color: inherit; text-align: left; transition: background-color .12s; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-/* Same rule as the map: the ground behind the card carries hover and pick, in the card's own
-   colour, and the word on it never gets repainted. */
-.column-card:hover { background: color-mix(in srgb, var(--wc-soft) 12%, var(--soft)); }
-.column-card.is-selected { background: color-mix(in srgb, var(--wc-soft) 24%, var(--soft)); }
-/* The word carries the card, so it sits at h3 rank in sans -- the list is the map's other face
-   and the map writes its words in sans too. */
-.column-card strong { display: block; font-family: var(--mono); font-size: var(--t-lg); font-weight: 500; letter-spacing: 0; line-height: var(--lh-snug); overflow-wrap: anywhere; margin-top: var(--space-1); }
-.column-card span { display: block; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
-.column-card.is-dim { opacity: .35; }
-/* The list is the map without its centre, so the person gets the head of it: full width, above
-   the words, saying the same two things the centre of the map says. */
-.column-person { grid-column: 1 / -1; padding: var(--space-3) var(--space-4); border-radius: 2px; background: color-mix(in srgb, var(--accent) 7%, var(--soft)); cursor: pointer; }
-.column-person span { display: block; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); color: var(--muted); }
-.column-person strong { display: block; margin-top: var(--space-1); font-family: var(--display); font-size: var(--t-lg); font-weight: 700; color: var(--accent); letter-spacing: var(--tr-lg); overflow-wrap: anywhere; }
+.columns { padding: var(--space-2) 0 var(--space-5); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* The person is the head of the list: one line, the sentence the row is read against. */
+.column-person { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-2); border-radius: 2px; background: color-mix(in srgb, var(--accent) 7%, var(--soft)); cursor: pointer; }
+.column-person span { font-family: var(--mono); font-size: var(--t-xs); font-weight: 500; color: var(--muted); }
+.column-person strong { font-family: var(--display); font-size: var(--t-lg); font-weight: 700; color: var(--accent); letter-spacing: var(--tr-lg); overflow-wrap: anywhere; }
 .column-person:hover { background: color-mix(in srgb, var(--accent) 13%, var(--soft)); }
-.column-card strong { color: var(--wc); }
-.columns.is-masked .column-card { --wc: var(--mask, var(--muted)); }
-.columns.is-themed .column-card { --wc: var(--theme, var(--muted)); }
+/* A row is a button: rank, word, bar, value, and a dot only while a mask is on. The bar column
+   is the one that shrinks, so the list never scrolls sideways. */
+.list-row { display: grid; grid-template-columns: 2.4ch minmax(0, 14rem) minmax(0, 1fr) 8ch; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-2) var(--space-3); border: 0; border-left: 2px solid transparent; border-radius: 2px; background: transparent; color: inherit; text-align: left; font-variant-numeric: tabular-nums; transition: background-color .12s; }
+.columns.has-dot .list-row { grid-template-columns: 2.4ch minmax(0, 14rem) minmax(0, 1fr) 8ch 10px; }
+.list-row:hover { background: color-mix(in srgb, var(--soft) 80%, transparent); }
+.list-rank, .list-value { font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
+.list-value { text-align: right; color: var(--ink); }
+.list-term { font-family: var(--mono); font-size: var(--t-md); font-weight: 500; color: var(--ink); overflow-wrap: anywhere; line-height: var(--lh-snug); }
+.list-tag { margin-left: var(--space-1); font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; color: var(--muted); }
+.list-bar { --w: 0; display: block; height: 6px; border-radius: 2px; background: color-mix(in srgb, var(--soft) 70%, transparent); position: relative; overflow: hidden; }
+.list-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 100%); background: color-mix(in srgb, var(--ink) 55%, var(--muted)); border-radius: 2px; }
+.list-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.columns.is-masked .list-dot { background: var(--mask, var(--muted)); }
+.columns.is-themed .list-dot { background: var(--theme, var(--muted)); }
+.list-row.is-selected { border-left-color: var(--accent); background: color-mix(in srgb, var(--soft) 90%, transparent); }
+.list-row.is-neighbor { background: color-mix(in srgb, var(--soft) 60%, transparent); }
+.list-row.is-neighbor .list-bar::after, .list-row.is-selected .list-bar::after { background: var(--ink); }
+.list-row.is-match { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.list-row.is-dim { opacity: .35; }
+.list-row.is-ghost, .column-person.is-ghost { cursor: default; pointer-events: none; }
+.ghost-rank { width: 2ch; height: .7em; }
+.ghost-term { width: 9em; max-width: 100%; height: .85em; }
+.ghost-bar { width: 100%; height: 6px; }
+.ghost-value { width: 4ch; height: .7em; justify-self: end; }
+
+/* The scatter: documents (log) by raw PMI. The svg arrives at the measured width, so nothing
+   here scales it. */
+.scatter { margin: 0; min-width: 0; }
+.scatter-svg { display: block; }
+.scatter-axis { stroke: var(--line); stroke-width: 1.5; }
+.scatter-gridline { stroke: var(--line); stroke-width: 1; opacity: .4; }
+.scatter-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: .8; }
+.scatter-zero-note, .scatter-tick, .scatter-caption, .scatter-label { font-family: var(--mono); font-size: var(--t-micro); }
+.scatter-zero-note, .scatter-tick, .scatter-caption { fill: var(--muted); }
+.scatter-label { font-family: var(--mono); fill: var(--ink); stroke: var(--panel); stroke-width: 3px; paint-order: stroke; pointer-events: none; }
+.scatter-point { cursor: pointer; outline: none; --wc: var(--muted); }
+.scatter-halo { fill: transparent; transition: fill .16s ease-out; }
+.scatter-dot { fill: var(--wc, var(--muted)); stroke: var(--bg); stroke-width: 1.5; }
+.scatter-svg.is-masked .scatter-point { --wc: var(--mask, var(--muted)); }
+.scatter-svg.is-themed .scatter-point { --wc: var(--theme, var(--muted)); }
+.scatter-point:hover .scatter-halo, .scatter-point:focus-visible .scatter-halo { fill: color-mix(in srgb, var(--accent) 22%, transparent); }
+.scatter-point:focus-visible .scatter-halo { stroke: var(--accent); stroke-width: 1.5; }
+.scatter-point.is-dim { opacity: .22; }
+.scatter-point.is-selected .scatter-halo { fill: color-mix(in srgb, var(--accent) 38%, transparent); }
+.scatter-point.is-selected .scatter-label, .scatter-point.is-neighbor .scatter-label { fill: var(--ink); font-weight: 600; }
+.scatter-point.is-match .scatter-halo { fill: color-mix(in srgb, var(--accent) 30%, transparent); }
 
 /* ---------- the lists under the strip ---------- */
 .outlets { min-width: 0; padding-top: var(--space-1); }
@@ -525,7 +490,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 }
 @media (prefers-reduced-motion: reduce) {
   .docs-dialog[open] { animation: none; }
-  .atlas-glow, .atlas-hit, .center-hit, .dot-halo, .outlet, .column-card,
+  .scatter-halo, .list-row, .dot-halo, .outlet,
   .attention-glow, .attention-hit { transition: none; }
   .ghost-field { animation: none; }
 }
@@ -1064,18 +1029,19 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
   .figure-head { grid-template-columns: 1fr; }
   .figure-body { grid-template-columns: 1fr; gap: var(--space-5); }
   .inspector { padding: var(--space-4) 0 0; }
-  .columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .related { display: grid; grid-template-columns: 1fr 1fr; gap: 0 25px; }
   .chapter-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 700px) {
-  .mobile-hint { display: block; }
   .top { flex-wrap: wrap; gap: var(--space-3) var(--space-5); }
   .top nav { margin-left: 0; width: 100%; }
   .masthead { padding: var(--space-5) 0 var(--space-6); }
   .masthead h1 { max-width: none; }
-  .columns { grid-template-columns: 1fr; }
+  .list-row, .columns.has-dot .list-row { grid-template-columns: 2.4ch minmax(0, 1fr) auto; row-gap: var(--space-1); }
+  .list-bar { grid-column: 2 / 3; grid-row: 2; }
+  .list-dot { grid-column: 3; grid-row: 2; justify-self: end; }
+  .list-value { text-align: right; }
   .related { grid-template-columns: 1fr; }
   .chapter-grid { grid-template-columns: 1fr; }
   .pmi-scale { grid-template-columns: repeat(2, 1fr); }

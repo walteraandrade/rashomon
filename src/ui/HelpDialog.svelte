@@ -23,25 +23,27 @@
       <h3>Uma análise</h3>
       <ol>
         <li>Escolha pessoa, período e fonte na frase.</li>
-        <li>Leia as palavras maiores. Clique numa para ver os textos.</li>
+        <li>Leia a lista, das barras mais longas para as mais curtas. Clique numa palavra para ver os textos; a primeira linha abre os textos da pessoa.</li>
         <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é, ou como uma pessoa muda de um recorte para outro. No 4, o que ganhou ou perdeu espaço esta semana. No 5, em que dia da semana cada palavra apareceu. No 7, veja a fatia de cada veículo por pessoa.</li>
       </ol>
     </div>
     <div id="help-atlas">
       <h3>Gráfico 1 · Atlas</h3>
       <dl class="figure-key">
-        <div><dt>Tamanho</dt><dd>frequência, PMI ou alcance, o que a frase escolhe</dd></div>
+        <div><dt>Barra</dt><dd>frequência, PMI ponderado ou alcance: a medida escolhida na frase</dd></div>
         <div><dt>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
-        <div><dt>Posição</dt><dd>só evita colisão</dd></div>
-        <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
-        <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
+        <div><dt>Organização</dt><dd>tag org: organização citada no texto, só no GDELT</dd></div>
+        <div><dt>Clique</dt><dd>textos da palavra; na primeira linha, textos da pessoa</dd></div>
       </dl>
+      <p>A lista é a vista padrão: uma linha por palavra, na ordem da medida da frase, com a barra no comprimento dessa medida. A primeira linha da lista abre os textos da pessoa.</p>
       <p>Alcance é a soma dos reposts dos posts do Bluesky que trazem a palavra. É contado quando o rashomon coletou o post, então um post que continuou circulando depois fica subcontado. Só documentos do Bluesky têm alcance; os das outras fontes não têm e contam como zero.</p>
-      <p>Cinza: igual à média, ou menos de 3 textos avaliados. Linha entre duas palavras: estão nos mesmos textos. Só isso.</p>
+      <p>A <b>Dispersão</b> põe as mesmas palavras como pontos de tamanho igual. O eixo horizontal é documentos, em escala log: cada passo multiplica a contagem. O eixo vertical é o PMI bruto. O PMI pode ser negativo: abaixo da linha “0 = acaso” a palavra aparece menos com esta pessoa do que o acaso daria. Clicar num ponto realça as palavras ligadas a ele, as que aparecem nos mesmos textos.</p>
+      <p>Na Dispersão, uma palavra sem rótulo não coube sem tapar outra; ela não sumiu. O ponto continua clicável, e Tab e Enter também o escolhem.</p>
+      <p>Cinza: igual à média, ou menos de 3 textos avaliados.</p>
       <p>No modo <b>Avaliação</b> a posição passa a ser a média das notas dos textos com a palavra; a cor continua a mesma máscara.</p>
       <p>Uma expressão é várias palavras como um termo só. Ela substitui as palavras que cobre; a contagem de uma palavra passa a ser os textos em que ela aparece fora de qualquer expressão.</p>
-      <p>Textos vindos do GDELT também trazem organizações citadas na matéria (ministérios, partidos, empresas): um quarto tipo de termo, com sublinhado tracejado. Vem só do GDELT e nunca é inventado para as outras fontes.</p>
-      <p>Clique numa palavra abre os textos. No nome no centro, e na primeira linha da lista, abre os da pessoa. O cartão fica aberto na próxima escolha e arrasta pelo topo.</p>
+      <p>Textos vindos do GDELT também trazem organizações citadas na matéria (ministérios, partidos, empresas): um quarto tipo de termo, com a tag org. Vem só do GDELT e nunca é inventado para as outras fontes.</p>
+      <p>Clique numa palavra abre os textos. A primeira linha da lista, e o alto da Dispersão, abre os da pessoa. O cartão fica aberto na próxima escolha e arrasta pelo topo.</p>
     </div>
     <div id="help-pmi">
       <h3>PMI</h3>
@@ -58,7 +60,7 @@
       <h3>Gráfico 2 · Avaliação</h3>
       <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes. Nunca compare a nota de uma pessoa com a de outra: o nome puxa a nota.</p>
       <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos.</p>
-      <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara do mapa e da lista. É a mesma nota, não outra medida.</p>
+      <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara da lista e da dispersão. É a mesma nota, não outra medida.</p>
     </div>
     <div id="help-comparar">
       <h3>Gráfico 3 · Duas pessoas ou dois recortes</h3>

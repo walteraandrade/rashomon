@@ -105,11 +105,11 @@
       </div>
       <div id="atencao">
         <h2>Gráfico 6 · Atenção e menções</h2>
-        <p>Uma linha traz quantas pessoas visitaram a página da Wikipédia da pessoa, dia a dia: curiosidade, não opinião. Ninguém escreve nada para gerar uma visita; a página só é procurada. A outra linha traz quantos textos a citam a cada dia, documentos por dia contados em janelas corridas de 24 horas, não o dia-calendário do gráfico 5.</p>
+        <p>Uma linha traz quantas pessoas visitaram a página da Wikipédia da pessoa, dia a dia: curiosidade, não opinião. Ninguém escreve nada para gerar uma visita; a página só é procurada. A outra linha traz quantos textos a citam a cada dia, documentos por dia contados em janelas corridas de 24 horas, não o dia-calendário da semana.</p>
         <h3>Duas escalas, nunca uma</h3>
         <p>As duas linhas nunca são comparadas como um número contra o outro: pageviews e documentos vivem em ordens de grandeza diferentes, e cada linha tem seu próprio tamanho, na sua própria escala, independente da outra. O que se compara é a posição: o dia em que cada linha atingiu seu pico.</p>
         <h3>Quem veio primeiro</h3>
-        <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever, ou se os dois picos caíram no mesmo dia. Quando uma das linhas não tem pico (a pessoa não tem página de Wikipédia rastreada, ou a janela está vazia), não há frase, só uma nota.</p>
+        <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever, ou se os dois picos caíram no mesmo dia. Quando uma das linhas não tem pico (a pessoa não tem página de Wikipédia rastreada, ou a janela está vazia), não há frase, só uma nota. Uma pessoa sem dado de pageviews não ganha barras de pageviews: a linha mostra só uma nota, sem barras, e as menções seguem como estão.</p>
         <h3>Clique</h3>
         <p>Abre os textos de menções daquele dia, em qualquer das duas linhas. Pageviews não têm texto próprio para abrir.</p>
       </div>
@@ -117,7 +117,7 @@
         <h2>Gráfico 7 · Agenda por veículo</h2>
         <p>Uma tabela: uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Diferente dos outros gráficos, ele não olha uma pessoa por vez: compara todas de uma vez, veículo por veículo.</p>
         <h3>A fatia</h3>
-        <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais escura a tinta do número.</p>
+        <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. O número da célula é a fatia absoluta, mas a tinta é relativa à maior fatia da grade mostrada: a célula de maior fatia tem a tinta mais clara, e a mais fraca fica perto do cinza. A mesma porcentagem pode ler mais clara ou mais fraca em outro recorte. A coluna dos veículos fica à vista quando a grade rola para o lado.</p>
         <h3>Por que passa de 100%</h3>
         <p>Um documento que cita duas pessoas acompanhadas conta uma vez para cada uma. Por isso a soma de uma linha pode passar de 100%; a tabela mede quem o veículo cobre, não divide o veículo em partes.</p>
         <h3>Veículo de fora</h3>
@@ -148,6 +148,7 @@
         <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, só mais clara. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>
         <h3>Célula vazia não é zero</h3>
         <p>Cada semana guarda só as 50 palavras mais fortes da pessoa, pela mesma conta do PMI ponderado (PMI × ln(1 + documentos)), com pelo menos 2 documentos. Uma célula vazia diz que a palavra ficou fora dessas 50, não que não apareceu. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A palavra do nome da própria pessoa não entra.</p>
+        <p>Sequência e meia-vida são duas colunas na borda direita da tabela, que ficam à vista quando as semanas rolam para o lado; as duas são contadas em semanas.</p>
         <h3>Sequência</h3>
         <p>Semanas seguidas com a palavra, contadas da atual para trás. A semana em curso ainda está incompleta: se estiver vazia, a contagem parte da anterior. É a leitura de quem ficou.</p>
         <h3>Meia-vida</h3>

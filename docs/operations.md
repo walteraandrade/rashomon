@@ -450,15 +450,18 @@ values, sent explicitly by the figure and never seeded from the querystring. Fig
 Figure 6 reads `person` and `source`; its `days` is always
 21 and a bare `days=` never reaches it. Figure 7 reads only `days` and `source` — it spans every
 tracked person at once, so it has no `person` key, and it sends no `min`, which stays at the
-route's own default of 5. Figure 8 reads `days` and `source` (bare or prefixed) plus `lean` and
-`min`, prefixed only (`comention.lean`, `comention.min`, no bare fallback, like figure 3's
-`b`) — it has no `person` key at all, since a shared count is never one person's.
+route's own default of 5. The figure id `comention` (`#comention`) reads `person`, `days` and
+`source` (bare or prefixed) plus `lean` and `min`, prefixed only (`comention.lean`,
+`comention.min`, no bare fallback, like figure 3's `b`). `person` is client-only there: it picks
+the partner list and is never sent to `/comention`, never changes the request and is never
+written back to the URL; an id outside the tracked people is ignored and the figure stays on
+`todas as pessoas`.
 Figure 1 is a Svelte component (`src/ui/Atlas.svelte`) too, reading boot data (`bootData`) and
 seeding through `seedFor('atlas', ['person', 'days', 'source', 'sort', 'limit'], bootData.search)`
 once `bootData.ready`; its graph load is `createFigure`, while the inspector sparkline (`GET
 /timeline?days=7&bucket=day`) is the atlas's own fetch outside `createFigure`.
-Figure 8 is a Svelte component (`src/ui/Comention.svelte`): it seeds
-from `days`, `source`, `lean` and `min` with `seedFor` over `bootData.search`, starts its first
+The `#comention` figure is a Svelte component (`src/ui/Comention.svelte`): it seeds
+from `person`, `days`, `source`, `lean` and `min` with `seedFor` over `bootData.search`, starts its first
 load only once `bootData.ready`, and shares the single `/api/people` fetch the page makes once
 (it never fetches people itself).
 Figure 4 (`rising`) is a Svelte component (`src/ui/Rising.svelte`), prop-less like the others: it seeds

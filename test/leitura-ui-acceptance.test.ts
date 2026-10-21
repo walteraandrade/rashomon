@@ -219,9 +219,9 @@ describe('the page is a sequence of graphs', () => {
     assert.doesNotMatch(html, /id="domainChip"/)
     // Per figure: workspace 5, testimony 3, compare 10 (mode, A, B, source, measure, days, limit,
     // plus person and both lenses for the lens mode; issue #326), rising 2, week 3, attention 2,
-    // agenda 2, comention 4, persistence 3. Both of #compare's sentence variants are always in
+    // agenda 2, comention 5, persistence 3. Both of #compare's sentence variants are always in
     // the markup, so the count is static.
-    assert.equal(html.match(/<span class="pick">/g)?.length, 34)
+    assert.equal(html.match(/<span class="pick">/g)?.length, 35)
     const workspace = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const testimony = html.match(/id="testimony"[\s\S]*?<\/section>/)?.[0] ?? ''
     const compare = html.match(/id="compare"[\s\S]*?<\/section>/)?.[0] ?? ''
@@ -238,7 +238,8 @@ describe('the page is a sequence of graphs', () => {
     assert.equal(week.match(/<span class="pick">/g)?.length, 3, "figure 5's own sentence has person, source and limit; days stays fixed at 7, no period select")
     assert.equal(attention.match(/<span class="pick">/g)?.length, 2, "figure 6's own sentence has only person and source; days stays fixed at 30")
     assert.equal(agenda.match(/<span class="pick">/g)?.length, 2, "figure 7's own sentence has only days and source; no person select, it spans every tracked person")
-    assert.equal(comention.match(/<span class="pick">/g)?.length, 4, "figure 8's own sentence has days, source, lean and min; no person control")
+    assert.equal(comention.match(/<span class="pick">/g)?.length, 5, "the comention sentence has person (todas as pessoas or one tracked person), days, source, lean and min")
+    assert.match(comention, /<select id="comentionPerson"/)
     assert.equal(persistence.match(/<span class="pick">/g)?.length, 3, "figure 9's own sentence has person, weeks and limit; no source or kind control")
   })
 

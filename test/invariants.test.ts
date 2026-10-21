@@ -489,18 +489,27 @@ describe('CLAUDE.md documents the comention figure (issue #207)', () => {
     for (const id of ids) assert.match(md, new RegExp('`#' + id + '`'), `CLAUDE.md's atlas.html bullet must name #${id}`)
   })
 
-  it('names #comention as a 27×27 half-matrix from GET /api/comention, ink-weight only (exposure, not evaluation)', () => {
+  it('names #comention as a partner list with a 27×27 half-matrix on demand from GET /api/comention, ink-weight only (exposure, not evaluation)', () => {
     const md = claudeMd()
-    assert.match(md, /`#comention`[\s\S]{0,80}27×27 half-matrix/)
-    assert.match(md, /`#comention`[\s\S]{0,300}GET \/api\/comention/)
-    assert.match(md, /`#comention`[\s\S]{0,400}`--ink` only/)
-    assert.match(md, /`#comention`[\s\S]{0,700}exposure, not evaluation/)
+    assert.match(md, /`#comention`[\s\S]{0,200}GET \/api\/comention/)
+    assert.match(md, /`#comention`[\s\S]{0,200}`--ink` only/)
+    assert.match(md, /`#comention`[\s\S]{0,1600}27×27 half-matrix/)
+    assert.match(md, /`#comention`[\s\S]{0,2200}exposure, not evaluation/)
   })
 
-  it("describes #comention's docs-card entry point: a filled cell opens one side via with=, never two columns", () => {
+  it('states the person select, the top 15, the 900px toggle and that person is client-only', () => {
     const md = claudeMd()
-    assert.match(md, /`#comention`[\s\S]{0,1000}one side[\s\S]{0,150}with=/)
-    assert.match(md, /`#comention`[\s\S]{0,1000}never two columns/)
+    assert.match(md, /`#comention`[\s\S]{0,1200}`person` select[\s\S]{0,200}`todas as pessoas`/)
+    assert.match(md, /`#comention`[\s\S]{0,1200}15 pairs/)
+    assert.match(md, /`#comention`[\s\S]{0,2200}`#comentionToggle`[\s\S]{0,200}matchMedia\('\(min-width: 900px\)'\)/)
+    assert.match(md, /`#comention`[\s\S]{0,1200}`person` is client-only[\s\S]{0,120}never sent to `\/comention`/)
+    assert.doesNotMatch(md, /no `person` control at all/)
+  })
+
+  it("describes #comention's docs-card entry point: a row or a filled cell opens one side via with=, never two columns", () => {
+    const md = claudeMd()
+    assert.match(md, /`#comention`[\s\S]{0,3200}one side[\s\S]{0,150}with=/)
+    assert.match(md, /`#comention`[\s\S]{0,3200}never two columns/)
   })
 })
 

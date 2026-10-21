@@ -814,7 +814,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-day-head { vertical-align: bottom; min-width: 56px; }
 .week-table thead th { padding-bottom: var(--space-2); }
 .week-day-head .stat { margin: 0; }
-.week-term, .week-table .week-term { position: sticky; left: 0; z-index: 1; max-width: 24ch; min-width: 12ch; padding-right: var(--space-4); background: var(--panel); color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.week-term, .week-table .week-term { position: sticky; left: 0; z-index: 1; width: 1%; max-width: min(24ch, 26vw); padding-right: var(--space-4); background: var(--panel); color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .week-table thead th:first-child { position: sticky; left: 0; z-index: 2; background: var(--panel); }
 .week-table .week-c { padding: 1px; }
 .week-gap-swatch { display: inline-block; width: 14px; height: 10px; margin-right: var(--space-2); border: 1px solid; border-style: dashed; border-color: color-mix(in srgb, var(--line) 60%, transparent); border-radius: 2px; }

@@ -123,3 +123,32 @@ describe('the testimony outlet chart is ranked dots (#331)', () => {
     assert.doesNotMatch(docsText, /beeswarm/i)
   })
 })
+
+describe('the legibility fixes are in the reading page and the in-page guide (#332)', () => {
+  const section = (page: string, id: string) => {
+    const body = pageMarkup(page).match(new RegExp(`<div id="${id}">([\\s\\S]*?)</div>`))?.[1] ?? ''
+    return [...body.matchAll(/<(?:p|h3)>([\s\S]*?)<\/(?:p|h3)>/g)].map((m) => m[1].replace(/<[^>]+>/g, '')).join('\n')
+  }
+  const facts: [string, string, RegExp][] = [
+    ['atencao', 'a person with no pageviews data shows no pageviews bars, only a note', /sem dado de pageviews[\s\S]{0,200}(sem barras|nenhuma barra)/],
+    ['agenda', "a cell's ink is relative to the largest share in the grid shown", /tinta[\s\S]{0,120}relativa à maior fatia da grade/],
+    ['persistencia', 'sequência and meia-vida are two columns at the table edge, counted in weeks', /duas colunas[\s\S]{0,200}borda[\s\S]{0,300}contadas em semanas/],
+  ]
+
+  for (const [label, page, prefix] of [
+    ['the in-page guide', '/', 'help-'],
+    ['the reading page', '/como-ler', ''],
+  ] as const) {
+    for (const [id, fact, pattern] of facts) {
+      it(`${label} states, for ${id}, that ${fact}`, () => {
+        const text = section(page, `${prefix}${id}`)
+        assert.ok(text, `#${prefix}${id} must exist`)
+        assert.match(text, pattern)
+      })
+    }
+
+    it(`${label} never calls the agenda ink darker`, () => {
+      assert.doesNotMatch(section(page, `${prefix}agenda`), /escur/i)
+    })
+  }
+})

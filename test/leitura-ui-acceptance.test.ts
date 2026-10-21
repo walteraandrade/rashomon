@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { FONT_MONO } from '../src/ui/layout.js'
 import { SOURCE_SEGMENTS } from '../src/ui/format.js'
 import { VERCEL_INSIGHTS_TAG } from './pages.js'
+import { atlasCss, declared, rulesOf } from './css.js'
 import { ROUTES, appTemplate, pageMarkup, siteFile } from './pages.js'
 
 // The "Leitura" redesign: one sentence of controls, the map as the figure, a "Como ler"
@@ -256,6 +257,34 @@ describe('the page is a sequence of graphs', () => {
     assert.doesNotMatch(week, /Tamanho|Posição|type-scale/)
     assert.match(week, /href="\/como-ler#semana"/, 'the figure\'s own "Como ler" points at the #semana chapter')
     assert.match(html, /id="help-semana"/, 'the in-page guide carries a matching chapter for that href to land on')
+  })
+})
+
+describe('persistence stat columns', () => {
+  const rules = rulesOf(atlasCss())
+  const streak = '.persistence-table .persistence-streak'
+  const halfLife = '.persistence-table .persistence-half-life'
+
+  it('sequência and meia-vida are two sticky right columns, opaque, one fixed ch width, one line', () => {
+    const width = declared(rules, '.persistence-table', '--stat-w')
+    assert.match(width ?? '', /^\d+(?:\.\d+)?ch$/, 'the shared width is held in one custom property, in ch')
+    for (const selector of [streak, halfLife]) {
+      assert.equal(declared(rules, selector, 'position'), 'sticky', `${selector} is sticky`)
+      assert.equal(declared(rules, selector, 'background'), 'var(--panel)', `${selector} is opaque`)
+      assert.equal(declared(rules, selector, 'white-space'), 'nowrap', `${selector} stays on one line`)
+      for (const prop of ['width', 'min-width', 'max-width']) assert.equal(declared(rules, selector, prop), 'var(--stat-w)', `${selector} ${prop} is the shared width`)
+      assert.equal(declared(rules, selector, 'box-sizing'), 'border-box', 'the width covers the padding')
+      assert.equal(declared(rules, selector, 'font-size'), undefined, `${selector} takes the table's own font-size`)
+      assert.equal(declared(rules, selector, 'letter-spacing'), undefined)
+    }
+    assert.equal(declared(rules, halfLife, 'right'), '0')
+    assert.equal(declared(rules, streak, 'right'), 'var(--stat-w)', 'the inner column sits one full column width in')
+  })
+
+  it('the header cells use the same columns, and no .persistence-stats .stat rule remains', () => {
+    const css = atlasCss()
+    assert.doesNotMatch(css, /\.persistence-stats/)
+    for (const selector of ['.persistence-table thead .persistence-streak', '.persistence-table thead .persistence-half-life']) assert.equal(declared(rules, selector, 'font-size'), undefined)
   })
 })
 

@@ -62,6 +62,13 @@ const startAll = async (opts: { search?: string; withCard?: boolean } = {}) => {
   await settle()
 }
 
+const expectNoViewsMarks = () => {
+  const row = chart().querySelector('[data-row="views"]')!
+  expect(row.querySelector('svg')).toBeNull()
+  expect(row.querySelector('[data-day]')).toBeNull()
+  expect(row.querySelector('.attention-tick')).toBeNull()
+}
+
 const day = (d: string) => [...chart().querySelectorAll('[data-day]')].filter((e) => (e as HTMLElement).dataset.day === d) as HTMLElement[]
 
 beforeEach(() => {
@@ -202,6 +209,60 @@ describe('Attention (issue #295)', () => {
     expect(text).toMatch(/sem dado de pageviews para esta pessoa/)
     expect(text).not.toMatch(/dias antes|mesmo dia|os dois picos/)
     expect(chart().querySelector('[data-row="mentions"]')).not.toBeNull()
+    expectNoViewsMarks()
+    expect(chart().querySelectorAll('[data-row="mentions"] [data-day]')).toHaveLength(2)
+    expect(chart().querySelectorAll('[data-row="mentions"] .attention-tick')).toHaveLength(2)
+  })
+
+  it('AC1: an all-zero views series draws no pageviews marks, only the note', async () => {
+    auto = { '/attention': att([{ day: '2026-08-15', views: 0 }, { day: '2026-08-16', views: 0 }]), '/timeline': [bucket('2026-08-15', 6), bucket('2026-08-16', 2)] }
+    await startAll()
+    expect(chart().querySelector('[data-row="views"]')!.textContent).toMatch(/sem dado de pageviews para esta pessoa/)
+    expectNoViewsMarks()
+    expect(chart().querySelectorAll('[data-row="mentions"] [data-day]')).toHaveLength(2)
+    expect(chart().querySelectorAll('[data-row="mentions"] .attention-tick')).toHaveLength(2)
+  })
+
+  it('AC1: a series wholly outside the mentions days draws no pageviews marks either', async () => {
+    auto = { '/attention': att([{ day: '2026-07-01', views: 800 }]), '/timeline': [bucket('2026-08-15', 6)] }
+    await startAll()
+    expect(chart().querySelector('[data-row="views"]')!.textContent).toMatch(/sem dado de pageviews para esta pessoa/)
+    expectNoViewsMarks()
+  })
+
+  it('without pageviews data a mentions mark never claims views, in title or name', async () => {
+    const titleOf = () => chart().querySelector('[data-row="mentions"] [data-day]')!
+    auto = { '/attention': att([]), '/timeline': [bucket('2026-08-15', 6)] }
+    await startAll()
+    for (const text of [titleOf().querySelector('title')!.textContent!, titleOf().getAttribute('aria-label')!]) {
+      expect(text).toMatch(/, 6 documentos$/)
+      expect(text).not.toMatch(/visualiza/)
+    }
+    clearScopes()
+    for (const i of instances.splice(0)) unmount(i)
+    for (const t of targets.splice(0)) t.remove()
+    setBoot({ ready: false, people: [], peopleError: null, search: '' })
+    auto = { '/attention': att([{ day: '2026-08-15', views: 0 }]), '/timeline': [bucket('2026-08-15', 6)] }
+    await startAll()
+    expect(titleOf().getAttribute('aria-label')).toMatch(/, 6 documentos$/)
+  })
+
+  it('while views are pending or errored a mentions mark names no views', async () => {
+    render()
+    boot()
+    await settle()
+    respond('/timeline', [bucket('2026-08-15', 6)])
+    await settle()
+    expect(chart().querySelector('[data-row="mentions"] [data-day]')!.getAttribute('aria-label')).toMatch(/, 6 documentos$/)
+    named('/attention')[0].fail()
+    await settle()
+    expect(chart().querySelector('[data-row="mentions"] [data-day]')!.getAttribute('aria-label')).toMatch(/, 6 documentos$/)
+  })
+
+  it('a zero-padded day keeps its 0 visualizações when the person has views elsewhere', async () => {
+    auto = { '/attention': att([{ day: '2026-08-16', views: 500 }]), '/timeline': [bucket('2026-08-15', 6), bucket('2026-08-16', 2)] }
+    await startAll()
+    expect(day('2026-08-15')[0].getAttribute('aria-label')).toMatch(/, 6 documentos, 0 visualizações$/)
   })
 
   it('AC7: one row error keeps the other painted', async () => {
@@ -670,6 +731,9 @@ describe('Attention (issue #295)', () => {
     const views = chart().querySelector('[data-row="views"] svg')!
     expect(views.getAttribute('role')).toBe('group')
     expect(views.getAttribute('aria-label')).toBe('Pageviews (Wikipédia)')
+    expect(chart().querySelectorAll('[data-row="views"] [data-day]')).toHaveLength(1)
+    expect(chart().querySelectorAll('[data-row="views"] .attention-tick')).toHaveLength(1)
+    expect(chart().querySelector('[data-row="views"]')!.textContent).not.toMatch(/sem dado de pageviews/)
     expect(chart().querySelectorAll('[data-row="mentions"] .attention-tick')).toHaveLength(1)
   })
 

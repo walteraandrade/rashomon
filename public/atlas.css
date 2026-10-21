@@ -1069,7 +1069,7 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
   .comention-count { grid-column: 2; grid-row: 1; }
   .comention-bar { grid-column: 1 / -1; grid-row: 2; }
   .agenda-table th, .agenda-table td { padding-left: var(--space-2); padding-right: var(--space-2); }
-  .agenda-table tbody th .d { display: block; max-width: min(28ch, 28vw); overflow: hidden; text-overflow: ellipsis; margin-right: 0; }
+  .agenda-table tbody th .d { display: block; width: min(28ch, 34vw); white-space: normal; overflow-wrap: anywhere; margin-right: 0; }
   .agenda-table tbody th .lean-chip { display: table; margin: 2px 0 0; }
   .agenda-table thead th:not(:first-child) { white-space: normal; min-width: 9ch; }
 }

@@ -133,13 +133,13 @@
         <h3>A barra</h3>
         <p>A barra mais longa é o maior número daquela lista; as outras seguem em proporção. Não é uma fatia do total de textos, e a escala muda quando a lista muda.</p>
         <h3>Aparecer junto não é concordar</h3>
-        <p>A linha só diz que o mesmo texto falou das duas pessoas. Não diz se foi a favor, contra, ou uma da outra: exposição, não avaliação. É por isso que a barra usa só uma tonalidade de tinta, nunca as cores de avaliação da avaliação por veículo.</p>
+        <p>A linha só diz que o mesmo texto falou das duas pessoas. Não diz se foi a favor, contra, ou uma da outra: exposição, não avaliação. É por isso que a barra usa só uma tonalidade de tinta, nunca o par de cores da avaliação por veículo.</p>
         <h3>Mínimo</h3>
         <p>O mínimo escolhido na frase esconde os pares com menos textos em comum que ele. Com o mínimo em 1 aparecem todos os pares.</p>
         <h3>Clique</h3>
         <p>Abre os textos daquele par, os mesmos textos que citam as duas pessoas juntas. Clique de novo na mesma linha, ou fora da lista, fecha.</p>
         <h3>A matriz</h3>
-        <p>Em telas de 900px ou mais, o botão &ldquo;ver a grade inteira&rdquo; troca a lista pela matriz: todas as pessoas rastreadas nas duas margens, uma célula por par, com a mesma cor de tinta. A matriz mostra todos os pares, seja qual for a pessoa escolhida. &ldquo;Ver a lista&rdquo; volta, e o clique funciona igual.</p>
+        <p>Em telas de 900px ou mais, o botão &ldquo;ver a grade inteira&rdquo; troca a lista pela matriz: todas as pessoas rastreadas nas duas margens, uma célula por par, com a mesma cor de tinta. A matriz mostra todos os pares, seja qual for a pessoa escolhida. Contagens grandes que não cabem na célula aparecem em milhares, arredondadas (&ldquo;10k&rdquo; é 10 mil), e o número exato aparece ao passar o mouse. &ldquo;Ver a lista&rdquo; volta, e o clique funciona igual.</p>
       </div>
       <div id="persistencia">
         <h2>Gráfico 9 · Persistência</h2>

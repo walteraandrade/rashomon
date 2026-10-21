@@ -7,7 +7,7 @@ import { setBoot } from '../../src/ui/boot.svelte.js'
 import { docsParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
 import { testimonyColor } from '../../src/ui/format.js'
-import { rankedRows } from '../../src/ui/strip-model.js'
+import { rankFrame, rankedRows } from '../../src/ui/strip-model.js'
 import { existsSync } from 'node:fs'
 
 // Issue #296: figure 2 as one component. Mirrors the assertions of the retired
@@ -1128,12 +1128,15 @@ describe('Testimony ranked dots (issue #331)', () => {
   })
 
   it('colours a dot by testimonyColor', async () => {
-    serve(byDomainRows(3).map((d, i) => ({ ...d, score: [-4, 4, 0][i] })))
+    expect(testimonyColor(-4.3)).not.toBe(testimonyColor(-4))
+    expect(testimonyColor(0.3)).not.toBe(testimonyColor(0))
+    serve(byDomainRows(4).map((d, i) => ({ ...d, score: [-4.3, 4.3, 0, 0.3][i] })))
     mountAll()
     await startBoot('?person=p1')
-    expect(toneOf('d00.example')).toBe(testimonyColor(-4))
-    expect(toneOf('d01.example')).toBe(testimonyColor(4))
+    expect(toneOf('d00.example')).toBe(testimonyColor(-4.3))
+    expect(toneOf('d01.example')).toBe(testimonyColor(4.3))
     expect(toneOf('d02.example')).toBe(testimonyColor(0))
+    expect(toneOf('d03.example')).toBe(testimonyColor(0.3))
   })
 
   it('labels the axis ticks and strengthens the zero line', async () => {
@@ -1200,6 +1203,109 @@ describe('Testimony ranked dots (issue #331)', () => {
     expect(openedBy('testimony')).toBe(false)
   })
 
+  it('cuts at 20 after folding: a domain split across two sources climbs into the top 20', async () => {
+    serve([
+      ...byDomainRows(20).map((d) => ({ ...d, n: 10 })),
+      { domain: 'split.example', source: 'gnews', score: 1, n: 6 },
+      { domain: 'split.example', source: 'bluesky', score: 3, n: 6 },
+    ])
+    mountAll()
+    await startBoot('?person=p1')
+    expect(rowsOf()).toHaveLength(20)
+    expect(rowsOf()[0].getAttribute('data-strip-domain')).toBe('split.example')
+    expect(rowOf('split.example').getAttribute('aria-label')).toBe('split.example, +2 em 12 textos')
+    expect(q('#strip [data-strip-domain="d19.example"]')).toBeNull()
+  })
+
+  it('draws a 13-character domain as 11 characters and an ellipsis at 320 px, whole at 1000 px', async () => {
+    serve([{ domain: 'abcdefghi.com', source: 'gnews', score: 0, n: 5 }])
+    mountAll()
+    width(320)
+    await startBoot('?person=p1')
+    const label = () => rowOf('abcdefghi.com').querySelector('.rank-label')!.textContent
+    expect(label()).toBe('abcdefghi.c…')
+    expect(rowOf('abcdefghi.com').querySelector('title')!.textContent).toContain('abcdefghi.com')
+    const watcher = observers.find((o) => o.target === byId('strip'))!
+    width(1000)
+    watcher.cb()
+    flushSync()
+    expect(label()).toBe('abcdefghi.com')
+  })
+
+  it('draws a stem from the zero line to the dot, the count at the right and a full-width hit area', async () => {
+    serve([
+      { domain: 'a.example', source: 'gnews', score: 3, n: 1234 },
+      { domain: 'b.example', source: 'gnews', score: -2.5, n: 7 },
+    ])
+    mountAll()
+    width(800)
+    await startBoot('?person=p1')
+    const zero = tickXs()[2]
+    for (const d of ['a.example', 'b.example']) {
+      const row = rowOf(d)
+      const stem = row.querySelector('.rank-stem')!
+      expect(num(stem, 'x1')).toBe(zero)
+      expect(num(stem, 'x2')).toBe(num(row.querySelector('.dot-face'), 'cx'))
+      expect(num(row.querySelector('.rank-hit'), 'width')).toBe(800)
+      expect(num(row.querySelector('.rank-hit'), 'height')).toBe(22)
+    }
+    expect(rowOf('a.example').querySelector('.rank-n')!.textContent).toBe('1.234')
+    expect(rowOf('b.example').querySelector('.rank-n')!.textContent).toBe('7')
+    expect(num(rowOf('a.example').querySelector('.rank-n'), 'x')).toBe(800)
+  })
+
+  it('keeps the mean text inside the chart and flags exactly +5 and -5 as not clipped', async () => {
+    serve(byDomainRows(2), 5)
+    mountAll()
+    width(420)
+    await startBoot('?person=p1')
+    const text = () => q('#strip .strip-overall-mark text')!
+    const half = (text().textContent!.length * 7.2) / 2
+    expect(q('#strip .strip-overall-mark')!.getAttribute('data-clipped')).toBe('0')
+    expect(q('#strip .strip-overall-mark .rank-arrow')).toBeNull()
+    expect(num(q('#strip .strip-overall-mark line.strip-overall'), 'x1')).toBe(tickXs()[4])
+    expect(num(text(), 'x')).toBeLessThanOrEqual(420 - half)
+    serve(byDomainRows(2), -5)
+    restart()
+    width(420)
+    await startBoot('?person=p1')
+    expect(q('#strip .strip-overall-mark')!.getAttribute('data-clipped')).toBe('0')
+    expect(num(text(), 'x')).toBeGreaterThanOrEqual(half - 2)
+    serve(byDomainRows(2), 8)
+    restart()
+    width(420)
+    await startBoot('?person=p1')
+    expect(q('#strip .strip-overall-mark')!.getAttribute('data-clipped')).toBe('1')
+    expect(text().textContent).toBe('média da pessoa +8')
+    expect(num(text(), 'x')).toBeLessThanOrEqual(420 - (text().textContent!.length * 7.2) / 2)
+  })
+
+  it('the mean line is drawn before the rows, so the dots sit in front of it', async () => {
+    serve(byDomainRows(2), 0)
+    mountAll()
+    await startBoot('?person=p1')
+    const mark = q('#strip .strip-overall-mark')!
+    const first = rowsOf()[0]
+    expect(mark.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('a control change drops a focused row and asks for the new recorte only', async () => {
+    mountDocsHost()
+    serve(byDomainRows(3))
+    mountAll()
+    await startBoot('?person=p1')
+    rowOf('d01.example').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await settle(0)
+    expect(openedBy('testimony')).toBe(true)
+    const person = byId('testimonyPerson') as HTMLSelectElement
+    person.value = 'p2'
+    person.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle(400)
+    expect(openedBy('testimony')).toBe(false)
+    expect(rowsOf().filter((r) => r.getAttribute('aria-pressed') === 'true')).toHaveLength(0)
+    expect(q('#testimonyList .focus')).toBeNull()
+  })
+
   it('Enter and Space toggle a row', async () => {
     serve(byDomainRows(2))
     mountAll()
@@ -1258,6 +1364,8 @@ describe('Testimony ranked dots (issue #331)', () => {
     expect(strip.getAttribute('aria-busy')).toBe('true')
     expect(strip.querySelector('.ghost-field')!.getAttribute('aria-hidden')).toBe('true')
     expect(strip.querySelectorAll('circle.ghost')).toHaveLength(6)
+    expect(strip.querySelectorAll('rect.ghost')).toHaveLength(6)
+    expect(Number(strip.querySelector('svg')!.getAttribute('height'))).toBe(rankFrame(0, 6).height)
     expect(strip.querySelector('.rank-grid.is-zero')).not.toBeNull()
     expect(strip.querySelector('[data-strip-domain]')).toBeNull()
     expect(strip.textContent).not.toContain('média da pessoa')

@@ -77,6 +77,21 @@ describe('the page holds the figure and explains it', () => {
     }
   })
 
+  it('atlas.css scrolls the chart in its own container, strengthens the zero line and draws the mean amber and dashed (#331)', () => {
+    const css = read('atlas.css')
+    assert.match(css, /\.rank-scroll \{[^}]*overflow-x:\s*auto/)
+    assert.doesNotMatch(css, /\.rank-svg \{[^}]*width:\s*100%/, 'the svg keeps its own width instead of squeezing')
+    const grid = Number(css.match(/\.rank-grid \{[^}]*stroke-width:\s*([\d.]+)/)?.[1])
+    const zero = Number(css.match(/\.rank-grid\.is-zero \{[^}]*stroke-width:\s*([\d.]+)/)?.[1])
+    assert.ok(zero > grid, 'the 0 line is stronger than the other grid lines')
+    const mean = css.match(/\.strip-overall \{[^}]*\}/)?.[0] ?? ''
+    assert.match(mean, /stroke:\s*var\(--accent\)/)
+    assert.match(mean, /stroke-dasharray/)
+    assert.doesNotMatch(css, /\.rank-[a-z-]+[^{]*\{[^}]*font-size:\s*\d+px/, 'rank rules size from the ramp')
+    assert.match(css, /\.rank-label \{[^}]*font-family:\s*var\(--mono\)[^}]*font-size:\s*var\(--t-2xs\)/, 'the 0.6 em truncation rule assumes mono at --t-2xs')
+    assert.match(css, /--t-2xs:\s*12px/)
+  })
+
   it('the figure is one column, with no second ruler and no second outlet ranking', () => {
     const figure = figureOf(pageMarkup('/'))
     assert.ok(figure, 'the second figure must exist')

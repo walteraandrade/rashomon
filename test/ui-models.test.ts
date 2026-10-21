@@ -5,7 +5,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { butterflyRows } from '../src/ui/butterfly-model.js'
 import { THIN_ABOUT, compareModeFor, thinNoteText } from '../src/ui/compare-model.js'
-import { rankedRows } from '../src/ui/strip-model.js'
+import * as stripModel from '../src/ui/strip-model.js'
+import * as format from '../src/ui/format.js'
+import { meanLabelX, rankedRows } from '../src/ui/strip-model.js'
 import { axisTicks, dumbbellModel, hasShares, rareRisers, ratioLabel, ratioText, shareBalance, type CompareTerm, type Rising, type RisingTerm } from '../src/ui/format.js'
 
 // The pure models behind the figures (compare-model, strip-model, format's rising helpers) and the
@@ -93,6 +95,72 @@ describe('rankedRows: the outlets as ranked dots (issue #331)', () => {
     assert.equal(wide.rows[1].label, 'x'.repeat(25), 'a 25-character domain fits 220 px')
     assert.equal(wide.rows[1].truncated, false)
     assert.equal(wide.rows[0].label, 'twenty-five-characters.examp…', '29 characters fit 212 px, so a 30-character domain keeps 28 and the ellipsis')
+  })
+})
+
+describe('rankedRows: boundaries and dead code (issue #331)', () => {
+  const row = (domain: string, score: number, n: number, source = 'gnews') => ({ domain, source, score, n })
+
+  it('rankedRows: the 20-row cut applies after folding, so two sources add up to climb into it', () => {
+    const rows = [
+      ...Array.from({ length: 20 }, (_, i) => row(`o${String(i).padStart(2, '0')}.example`, 1, 10)),
+      row('split.example', 1, 6, 'gnews'),
+      row('split.example', 1, 6, 'bluesky'),
+    ]
+    const model = rankedRows(rows, 860)
+    assert.equal(model.rows.length, 20)
+    assert.equal(model.rows[0].domain, 'split.example', '6 + 6 beats 10')
+    assert.equal(model.rows[0].n, 12)
+    assert.equal(model.rows.filter((r) => r.domain === 'split.example').length, 1)
+    assert.equal(model.rows.at(-1)!.domain, 'o18.example', 'the 20th folded row is the 19th plain one; ties fall to the domain')
+    assert.equal(model.rows[0].r, 9, 'radius scales on the largest folded n')
+  })
+
+  it('rankedRows: a label of exactly 12 characters fits 96 px and 13 keeps 11 plus the ellipsis', () => {
+    const model = rankedRows([row('abcdefgh.com', 0, 9), row('abcdefghi.com', 0, 8)], 320)
+    assert.equal(model.rows[0].label, 'abcdefgh.com')
+    assert.equal(model.rows[0].truncated, false)
+    assert.equal(model.rows[1].label, 'abcdefghi.c…')
+    assert.equal(model.rows[1].label.length, 12)
+    assert.equal(model.rows[1].truncated, true)
+    assert.equal(model.rows[1].domain, 'abcdefghi.com', 'the full domain stays on the row')
+  })
+
+  it('rankedRows: a mean of exactly +-5 or 0 is not clipped, strictly beyond is', () => {
+    const at = (score: number) => rankedRows([row('a.example', 0, 3)], 860, score).mean
+    const model = rankedRows([row('a.example', 0, 3)], 860)
+    assert.equal(at(5)!.clipped, 0)
+    assert.equal(at(-5)!.clipped, 0)
+    assert.equal(at(0)!.clipped, 0)
+    assert.equal(at(5.01)!.clipped, 1)
+    assert.equal(at(-5.01)!.clipped, -1)
+    assert.equal(at(5)!.x, model.plot.right)
+    assert.equal(at(9)!.x, model.plot.right)
+    assert.equal(at(-9)!.x, model.plot.left)
+  })
+
+  it('rankedRows: the plot is bounded by the label column and the 56 px n column at every width', () => {
+    for (const w of [320, 420, 600, 1000, 1440]) {
+      const m = rankedRows([row('a.example', 0, 3)], w)
+      assert.equal(m.svgWidth, Math.max(420, w))
+      assert.equal(m.labelCol, Math.min(220, Math.max(96, 0.28 * w)))
+      assert.equal(m.plot.left, m.labelCol)
+      assert.equal(m.plot.right, m.svgWidth - 56)
+    }
+  })
+
+  it('meanLabelX keeps the mean text inside the chart by the 0.6 em rule', () => {
+    const text = 'média da pessoa +5'
+    const half = (text.length * 7.2) / 2
+    assert.equal(meanLabelX(10, text, 420), half)
+    assert.equal(meanLabelX(415, text, 420), 420 - half)
+    assert.equal(meanLabelX(200, text, 420), 200)
+  })
+
+  it('the swarm strip model is gone: no stripLayout, no STRIP_PAD re-export, no testimonyPosition', () => {
+    assert.deepEqual(Object.keys(stripModel).filter((k) => /^(stripLayout|STRIP_PAD)$/.test(k)), [])
+    assert.equal('testimonyPosition' in format, false)
+    assert.equal(typeof stripModel.rankedRows, 'function')
   })
 })
 

@@ -1,4 +1,4 @@
-import { fmt, label, termMask, type PersonTestimony, type ComentionPair, type ComentionPerson, type Measure, type Persistence, type Term, type WeekTerm } from './format.js'
+import { fmt, label, termMask, type PersonTestimony, type ComentionPair, type ComentionPerson, type Measure, type Persistence, type Term, type WeekBucket } from './format.js'
 
 // Literal copy of atlas.css's --mono: canvas measurement cannot read custom properties.
 export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -210,88 +210,22 @@ export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5)
     escape: (item, candidates) => Math.max(...candidates.map(Math.abs)) + item.r + gap,
   }).placed
 
-// Figure 5: one column per day, words stacked around the column's centre (x = 0) by swarmBy's clearance.
-export const WEEK_SIZE_MIN = 12
-const WEEK_SIZE_MAX = 30
-// The cap only guards a runaway day: the widest limit the sentence offers (12) always fits.
-export const WEEK_MAX_HEIGHT = 480
-const WEEK_MAX_TERMS = 12
-export const WEEK_COLUMN_WIDTH = 120
-const WEEK_GAP_X = 6
-const WEEK_GAP_Y = 3
-const WEEK_PAD_X = 6
+// Figure 5: one row per word, one column per day; a cell's ink is heatLevel on the week's largest cell.
+export type WeekRow = { term: string; kind: string; total: number; cells: (number | null)[] }
 
-export type WeekColumnLayout<T> = {
-  words: (T & { text: string; lines: string[]; x: number; y: number; size: number; w: number; h: number })[]
-  overflow: (T & { text: string; size: number })[]
-  half: number
-  height: number
-}
-
-const weekMaxWidth = (width: number) => Math.max(20, width - WEEK_PAD_X)
-
-// A phrase breaks at spaces or after a hyphen, never inside a word; greedy, first fit.
-const weekLines = (measure: Measure, text: string, size: number, maxWidth: number): string[] =>
-  text.split(/(?<=-)| /).reduce<string[]>((lines, piece) => {
-    const last = lines[lines.length - 1]
-    const joined = last === undefined ? piece : last.endsWith('-') ? last + piece : last + ' ' + piece
-    if (last !== undefined && measure(joined, size) + 6 <= maxWidth) lines[lines.length - 1] = joined
-    else lines.push(piece)
-    return lines
-  }, [])
-
-const weekLineWidth = (measure: Measure, lines: string[], size: number) => Math.max(...lines.map((line) => measure(line, size))) + 6
-
-// The largest size at which a word still fits the column once wrapped, down to the floor.
-const fitSize = (measure: Measure, text: string, maxWidth: number) => {
-  let size = WEEK_SIZE_MAX
-  while (size > WEEK_SIZE_MIN && weekLineWidth(measure, weekLines(measure, text, size, maxWidth), size) > maxWidth) size--
-  return size
-}
-
-const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: number, lo: number, hi: number, top: number): WeekColumnLayout<T> => {
-  if (!terms.length) return { words: [], overflow: [], half: 30, height: 60 }
-  const maxWidth = weekMaxWidth(width)
-  const sized = terms.map((t) => {
-    const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
-    // One ramp for the week, its ceiling `top` shared by every column, so a larger count is
-    // never a smaller size; a word wider than the column at its ramp size goes to overflow.
-    const size = Math.round(WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction)
-    const text = label(t)
-    const lines = weekLines(measure, text, size, maxWidth)
-    const w = weekLineWidth(measure, lines, size)
-    return { ...t, text, lines, x: 0, size, w, h: Math.round(size * 1.24) * lines.length }
+export const weekRows = (buckets: WeekBucket[]): { top: number; rows: WeekRow[] } => {
+  const rows = new Map<string, WeekRow>()
+  buckets.forEach((bucket, i) => {
+    for (const t of bucket.terms) {
+      const key = t.kind + '\u0000' + t.term
+      const row = rows.get(key) ?? { term: t.term, kind: t.kind, total: 0, cells: buckets.map(() => null) }
+      row.cells[i] = (row.cells[i] ?? 0) + t.count
+      row.total += t.count
+      rows.set(key, row)
+    }
   })
-  // A word wider than the column even wrapped is listed under it, never drawn across the next
-  // day; lowering the shared ceiling for it would flatten the whole week.
-  const tooWide = sized.filter((d) => d.w > maxWidth)
-  const fitting = sized.filter((d) => d.w <= maxWidth)
-  // The stack alternates sides, so one side may carry up to one box more than the other.
-  const boxes = [...fitting].sort((a, b) => b.size - a.size).slice(0, WEEK_MAX_TERMS)
-  const budget = boxes.reduce((sum, d) => sum + d.h + WEEK_GAP_Y, 0) + (boxes[0]?.h ?? 0)
-  const half = Math.max(WEEK_MAX_HEIGHT, budget) / 2
-  const { placed, overflow: unplaced } = swarmBy(fitting, {
-    size: (d) => d.size,
-    reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + WEEK_GAP_X ? (p.h + item.h) / 2 + WEEK_GAP_Y : null),
-    fits: (item, y) => Math.abs(y) + item.h / 2 <= half,
-  })
-  const reach = placed.reduce((m, p) => Math.max(m, Math.abs(p.y) + p.h / 2), 0)
-  const used = Math.max(30, Math.ceil(reach) + 6)
-  const overflow = [...unplaced, ...tooWide].sort((a, b) => b.count - a.count)
-  return { words: placed, overflow, half: used, height: used * 2 }
-}
-
-// Each column gets its own height but the size ramp is one for the week, its ceiling the largest
-// size at which the loudest words fit, so no per-word shrink can invert the ramp.
-export const weekLayout = <T extends WeekTerm>(measure: Measure, days: T[][], width = WEEK_COLUMN_WIDTH): WeekColumnLayout<T>[] => {
-  const all = days.flat()
-  const counts = all.map((t) => t.count)
-  const lo = counts.length ? Math.min(...counts) : 0
-  const hi = counts.length ? Math.max(...counts) : 0
-  const maxWidth = weekMaxWidth(width)
-  const fits = all.filter((t) => t.count === hi).map((t) => fitSize(measure, label(t), maxWidth))
-  const top = Math.max(WEEK_SIZE_MIN + 2, Math.min(WEEK_SIZE_MAX, ...fits))
-  return days.map((terms) => weekColumn(measure, terms, width, lo, hi, top))
+  const ordered = [...rows.values()].sort((a, b) => b.total - a.total || a.term.localeCompare(b.term, 'pt-BR') || a.kind.localeCompare(b.kind))
+  return { top: Math.max(1, ...ordered.flatMap((r) => r.cells.map((c) => c ?? 0))), rows: ordered }
 }
 
 // Figure 6: the day of a series' maximum, oldest on a tie, null when all zero.
@@ -368,16 +302,17 @@ export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[],
   return { cellSize, gap: MATRIX_GAP, pitch: cellSize + 2 * MATRIX_GAP, rowhead: MATRIX_ROWHEAD, cells }
 }
 
-// Figure 9: level 1..PERSISTENCE_LEVELS on one ramp keyed to the largest count; 0 is only a null count.
-const PERSISTENCE_LEVELS = 5
+// Level 1..levels on one ramp keyed to the largest count `top`; 0 is only a null count.
+export const heatLevel = (count: number | null, top: number, levels = 5): number =>
+  count === null ? 0 : Math.min(levels, Math.max(1, Math.ceil((count / Math.max(1, top)) * levels)))
 
+// Figure 9: one ramp keyed to the largest count shown.
 export type PersistenceCell = { week: string; count: number | null; level: number }
 export type PersistenceRow = { term: string; kind: string; cells: PersistenceCell[] }
 
 export const persistenceLayout = (data: Persistence): { rows: PersistenceRow[] } => {
   const top = Math.max(1, ...data.terms.flatMap((t) => t.series.map((s) => s.count ?? 0)))
-  const level = (count: number | null) => (count === null ? 0 : Math.min(PERSISTENCE_LEVELS, Math.max(1, Math.ceil((count / top) * PERSISTENCE_LEVELS))))
-  return { rows: data.terms.map((t) => ({ term: t.term, kind: t.kind, cells: t.series.map((s) => ({ week: s.week, count: s.count, level: level(s.count) })) })) }
+  return { rows: data.terms.map((t) => ({ term: t.term, kind: t.kind, cells: t.series.map((s) => ({ week: s.week, count: s.count, level: heatLevel(s.count, top) })) })) }
 }
 
 export const STRIP_PAD = 28

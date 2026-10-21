@@ -282,7 +282,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .workspace .columns, .workspace .scatter, .workspace .inspector, .workspace .strip,
 .testimony .strip, .testimony .testimony-lists, .testimony .outlets,
 .compare .butterfly, .compare .detail, .rising .dumbbell, .rising .note,
-.attention .attention-chart, .attention .note, .agenda .agenda-grid, .persistence .persistence-chart { transition: opacity .16s ease-out; }
+.attention .attention-chart, .attention .note, .agenda .agenda-grid, .week .week-chart, .persistence .persistence-chart { transition: opacity .16s ease-out; }
 .figure.is-loading .columns, .figure.is-loading .scatter, .figure.is-loading .inspector,
 .figure.is-loading .strip, .figure.is-loading .testimony-lists, .figure.is-loading .outlets,
 .figure.is-loading .dumbbell, .figure.is-loading .butterfly, .figure.is-loading .detail, .figure.is-loading .week-chart, .rising.is-loading .note,
@@ -301,8 +301,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .quiet-button.toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
 .search-note { color: var(--accent); font-family: var(--mono); font-size: var(--t-xs); padding-top: var(--space-2); min-height: 24px; }
 
-.week-glow { rx: 8px; }
-.week-hit { rx: 5px; }
 /* The strip dot's soft ground: the blur lives on the shape itself, never on the state, or a hard
    rectangle reappears for the length of the fade. */
 .dot-halo { filter: blur(4px); transition: fill .16s ease-out; }
@@ -800,36 +798,21 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   .butterfly-ghost-row { grid-template-columns: minmax(0, 1fr) var(--space-4) minmax(0, 1fr); }
 }
 
-/* ---------- the week (figure 5, calendar days, issue #147): seven columns, oldest at the
-   left; each column is a day head (the .stat pattern above: --accent label, ink number) and an
-   SVG swarm of that day's words, sized by that day's count, positioned only to avoid collision.
-   Same glow/hit/text triad as the atlas; no --hostile/--favor/--cmp-a/--cmp-b
-   here, --ink only. ---------- */
-.week-chart { margin: 18px 0 0; padding: 6px 0 10px; }
-.week-columns { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
-.week-day { min-width: 0; }
-/* Only the gap separates the day head from its swarm: no second hairline inside a figure. */
-.week-day .stat { margin-bottom: var(--space-3); }
-/* Drawn at the measured column width, so max-width never scales it in steady state; it only
-   keeps the svg inside the column in the instant before a resize repaints. */
-.week-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
-.week-word { cursor: pointer; outline: none; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
-.week-glow, .week-hit { fill: transparent; }
-.week-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
-.week-word:hover .week-glow, .week-word:focus-visible .week-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
-.week-word:hover .week-hit, .week-word:focus-visible .week-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
-.week-word.is-selected .week-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
-.week-word.is-selected .week-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.week-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); min-width: 0; }
-/* The label takes its own row; narrower than about 120px it wraps, it never clips. */
-.week-overflow .eyebrow { flex-basis: 100%; margin: 0; }
-/* This overflow list undoes .quiet-button's nowrap; a week column is 145px at 1280px and a
-   phrase button must wrap inside it, never draw across the next day (#148 review, 1). A word
-   longer than the column breaks with a hyphen where the page's pt-BR lets the browser find
-   one, and anywhere as the last resort: this list is where such words go, so it cannot refuse. */
-.week-overflow .quiet-button { white-space: normal; text-align: left; max-width: 100%; hyphens: auto; overflow-wrap: anywhere; }
-.week-overflow .quiet-button b { margin-left: 6px; font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; }
-.week-overflow .quiet-button.is-selected { color: var(--ink); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); font-weight: 600; }
+/* ---------- the week (issue #329): a table, one row per word, one column per BRT calendar day,
+   oldest at the left. A cell's ink is its day's document count on the week's one five-step
+   ramp, the same look as persistence below (grouped selectors there); a dashed cell is a word
+   outside that day's top N, never a zero. The word column is pinned, so the table scrolls
+   sideways inside .week-scroll at every width instead of squeezing. --ink only, no
+   --hostile/--favor/--cmp-a/--cmp-b. ---------- */
+.week-chart { margin: 18px 0 0; }
+.week-table { min-width: calc(12ch + 7 * 58px); }
+.week-day-head { vertical-align: bottom; min-width: 56px; }
+.week-table thead th { padding-bottom: var(--space-2); }
+.week-day-head .stat { margin: 0; }
+.week-term, .week-table .week-term { position: sticky; left: 0; z-index: 1; width: 1%; max-width: min(24ch, 26vw); padding-right: var(--space-4); background: var(--panel); color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* the second selector outranks .week-table th's reset; the bare one is what the stylesheet test reads */ }
+.week-table thead th:first-child { position: sticky; left: 0; z-index: 2; background: var(--panel); }
+.week-table .week-c { padding: 1px; }
+.week-gap-swatch { display: inline-block; width: 14px; height: 10px; margin-right: var(--space-2); border: 1px solid; border-style: dashed; border-color: color-mix(in srgb, var(--line) 60%, transparent); border-radius: 2px; }
 #weekNote { margin-top: var(--space-3); }
 
 /* ---------- the attention figure (figure 6, wikipedia pageviews against press mentions,
@@ -878,7 +861,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* ---------- the comention matrix (figure 8, issue #207): a 27x27 half-matrix, upper triangle
    only (a < b). One ink ramp, --ink only, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
    evaluation. Both .comention-grid and .comention-list are always in the DOM; only the media
-   query below decides which one shows, the same move the week figure's own breakpoint uses. ---- */
+   query at 700px, below, decides which one shows. ---- */
 .comention-body { margin: 18px 0 0; overflow-x: auto; }
 .comention-grid { display: block; }
 /* Every row, header included, shares one track list from matrixLayout: a column header and its
@@ -941,7 +924,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .comention-list.is-ghost { opacity: 0.6; }
 #comentionAbout { margin-top: var(--space-3); }
 /* The narrow-viewport fallback: count first, then the pair, ranked high to low. Hidden above
-   700px, where the matrix itself is legible (same breakpoint the week figure uses). */
+   700px, where the matrix itself is legible. */
 .comention-list { display: none; margin: 18px 0 0; padding: 0; list-style: none; }
 .comention-list li + li { margin-top: var(--space-2); }
 .comention-listitem {
@@ -966,49 +949,49 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    visibly filled; an outline cell is a week the word was outside that week's top 50 (or before
    the series began), never a zero. No --hostile/--favor/--cmp-a/--cmp-b. ---------- */
 .persistence-chart { margin: 18px 0 0; }
-.persistence-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.persistence-table { border-collapse: separate; border-spacing: 0; width: 100%; font-family: var(--mono); font-size: var(--t-xs); }
-.persistence-table th, .persistence-table td { padding: 0; font-weight: 400; text-align: left; }
+.persistence-scroll, .week-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.persistence-table, .week-table { border-collapse: separate; border-spacing: 0; width: 100%; font-family: var(--mono); font-size: var(--t-xs); }
+.persistence-table th, .persistence-table td, .week-table th, .week-table td { padding: 0; font-weight: 400; text-align: left; }
 .persistence-table thead th { height: 1.6em; vertical-align: bottom; }
 .persistence-week { position: relative; min-width: 24px; }
 .persistence-week span { position: absolute; bottom: 4px; left: 0; white-space: nowrap; font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); color: var(--muted); }
 .persistence-table .persistence-term { padding: 0 var(--space-4) 0 0; max-width: 24ch; min-width: 12ch; color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .persistence-table .persistence-c { padding: 1px; }
-.persistence-cell {
+.persistence-cell, .week-cell {
   display: flex; align-items: center; justify-content: center;
   width: 100%; min-width: 24px; height: 26px; padding: 0;
   border: 1px solid var(--line); border-radius: 2px;
   font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; font-variant-numeric: tabular-nums;
   color: var(--ink); overflow: hidden;
 }
-.persistence-cell[data-lv="1"] { --lv: 1; }
-.persistence-cell[data-lv="2"] { --lv: 2; }
-.persistence-cell[data-lv="3"] { --lv: 3; }
-.persistence-cell[data-lv="4"] { --lv: 4; }
-.persistence-cell[data-lv="5"] { --lv: 5; }
-button.persistence-cell, .persistence-cell.is-expired {
+.persistence-cell[data-lv="1"], .week-cell[data-lv="1"] { --lv: 1; }
+.persistence-cell[data-lv="2"], .week-cell[data-lv="2"] { --lv: 2; }
+.persistence-cell[data-lv="3"], .week-cell[data-lv="3"] { --lv: 3; }
+.persistence-cell[data-lv="4"], .week-cell[data-lv="4"] { --lv: 4; }
+.persistence-cell[data-lv="5"], .week-cell[data-lv="5"] { --lv: 5; }
+button.persistence-cell, .persistence-cell.is-expired, button.week-cell {
   background: color-mix(in srgb, var(--ink) calc(var(--lv, 1) * 17%), var(--panel));
   border-color: transparent;
 }
 /* From 51% ink up the number would be light on light. */
-.persistence-cell[data-lv="3"], .persistence-cell[data-lv="4"], .persistence-cell[data-lv="5"] { color: var(--accent-ink); }
-button.persistence-cell { cursor: pointer; }
-button.persistence-cell:hover, button.persistence-cell:focus-visible { border-color: var(--accent); outline: none; }
-button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.persistence-cell[data-lv="3"], .persistence-cell[data-lv="4"], .persistence-cell[data-lv="5"], .week-cell[data-lv="3"], .week-cell[data-lv="4"], .week-cell[data-lv="5"] { color: var(--accent-ink); }
+button.persistence-cell, button.week-cell { cursor: pointer; }
+button.persistence-cell:hover, button.persistence-cell:focus-visible, button.week-cell:hover, button.week-cell:focus-visible { border-color: var(--accent); outline: none; }
+button.persistence-cell.is-selected, button.week-cell.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .persistence-cell.is-expired { cursor: default; }
 .persistence-cell.is-gap { background: transparent; }
-.persistence-cell.is-nodata { background: transparent; border-style: dashed; border-color: color-mix(in srgb, var(--line) 60%, transparent); }
-.persistence-cell.ghost { background: var(--soft); border-color: var(--line); }
+.persistence-cell.is-nodata, .week-cell.is-gap { background: transparent; border-style: dashed; border-color: color-mix(in srgb, var(--line) 60%, transparent); }
+.persistence-cell.ghost, .week-cell.ghost { background: var(--soft); border-color: var(--line); }
 .persistence-gap-swatch { display: inline-block; width: 14px; height: 10px; margin-right: var(--space-2); border: 1px solid var(--line); border-radius: 2px; }
 .persistence-table .persistence-stats { padding-left: var(--space-4); white-space: nowrap; }
 .persistence-stats .stat { display: flex; gap: var(--space-5); margin: 0; }
 .persistence-stats .stat > div { flex-direction: row-reverse; align-items: baseline; justify-content: flex-end; gap: var(--space-2); }
 .persistence-stats .stat dd { font-size: var(--t-sm); }
 .persistence-stats .stat dt { font-size: var(--t-2xs); color: var(--muted); }
-.persistence-ghost { display: flex; flex-direction: column; gap: 2px; }
-.persistence-ghost-row { display: flex; align-items: center; gap: 2px; }
-.persistence-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
-.persistence-ghost-row .persistence-cell { flex: 1 1 0; }
+.persistence-ghost, .week-ghost { display: flex; flex-direction: column; gap: 2px; }
+.persistence-ghost-row, .week-ghost-row { display: flex; align-items: center; gap: 2px; }
+.persistence-ghost-row .ghost-outlet-d, .week-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
+.persistence-ghost-row .persistence-cell, .week-ghost-row .week-cell { flex: 1 1 0; }
 #persistenceNote { margin-top: var(--space-3); }
 
 /* ---------- the pet ---------- */
@@ -1046,7 +1029,6 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
   .chapter-grid { grid-template-columns: 1fr; }
   .pmi-scale { grid-template-columns: repeat(2, 1fr); }
   .chapter-foot { flex-direction: column; }
-  .week-columns { grid-template-columns: 1fr; }
   .comention-grid { display: none; }
   .comention-list { display: block; }
 }

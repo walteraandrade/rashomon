@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, MATRIX_GAP, MATRIX_ROWHEAD, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, logTicks, matrixLayout, niceTicks, peakDay, persistenceLayout, placeLabels, scatterLayout, swarm, swarmBy, weekLayout, type LabelBounds, type LabelItem, type LabelPlacement } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, MATRIX_GAP, MATRIX_ROWHEAD, attentionLayout, logTicks, matrixLayout, niceTicks, peakDay, persistenceLayout, placeLabels, scatterLayout, swarm, swarmBy, heatLevel, weekRows, type LabelBounds, type LabelItem, type LabelPlacement } from '../src/ui/layout.js'
 
 // src/ui/layout.ts: pure geometry.
 
@@ -63,146 +63,119 @@ describe('swarm / swarmBy: one beeswarm skeleton (issue #99 AC6)', () => {
   })
 })
 
-describe('weekLayout (issue #147): one column per day, built on swarmBy', () => {
-  const term = (t: string, count: number, kind = 'word') => ({ term: t, kind, count })
-
-  it('returns one column per day, in the order given', () => {
-    const days = [[term('reforma', 4)], [], [term('eleicao', 2), term('pauta', 5)]]
-    const columns = weekLayout(measure, days)
-    assert.equal(columns.length, 3)
-    assert.equal(columns[1].words.length, 0, 'an empty day is an empty column, not dropped')
+describe('heatLevel: one ink ramp for the week and persistence figures', () => {
+  it('a null count is level 0, never a filled one', () => {
+    assert.equal(heatLevel(null, 9), 0)
   })
 
-  it('every word in a day is either placed or listed as overflow, never lost', () => {
-    const day = Array.from({ length: 40 }, (_, i) => term(`palavradodiaaaaaaaaaaaaaaaaaa${i}`, 40 - i))
-    const [column] = weekLayout(measure, [day])
-    assert.ok(column.overflow.length > 0, 'this many words cannot fit one column')
-    assert.equal(column.words.length + column.overflow.length, day.length)
-    for (const w of column.words) assert.ok(w.size >= WEEK_SIZE_MIN, `${w.term} at ${w.size}px is under the floor`)
-    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20, 'the column trades overflow for height, not an unbounded column')
+  it('the largest count is the top level and the smallest nonzero is never 0', () => {
+    assert.equal(heatLevel(9, 9, 5), 5)
+    assert.equal(heatLevel(1, 100), 1)
   })
 
-  it('two placed words in the same day never overlap vertically', () => {
-    const day = [term('reforma', 10), term('pauta', 8), term('eleicao', 6), term('governo', 4)]
-    const [column] = weekLayout(measure, [day])
-    for (let i = 0; i < column.words.length; i++)
-      for (let j = i + 1; j < column.words.length; j++) {
-        const a = column.words[i]
-        const b = column.words[j]
-        assert.ok(Math.abs(a.y - b.y) >= (a.h + b.h) / 2 - 1e-6, `${a.term} and ${b.term} overlap vertically`)
-      }
+  it('steps at 20, 40, 60 and 80 percent of the top', () => {
+    const at = (pct: number) => heatLevel(pct, 100)
+    assert.deepEqual([20, 21, 40, 41, 60, 61, 80, 81, 100].map(at), [1, 2, 2, 3, 3, 4, 4, 5, 5])
   })
 
-  it('the loudest word of the day sizes larger than the quietest', () => {
-    const [column] = weekLayout(measure, [[term('grande', 20), term('pequena', 1)]])
-    const big = column.words.find((w) => w.term === 'grande')!
-    const small = column.words.find((w) => w.term === 'pequena')!
-    assert.ok(big.size > small.size)
+  it('a zero or negative top divides by nothing', () => {
+    assert.equal(heatLevel(1, 0), 5)
+    assert.equal(heatLevel(1, -3), 5)
+    assert.ok(Number.isFinite(heatLevel(2, 0)))
   })
 
-  it('sizes on one ramp for the whole week: a loud word on a loud day outsizes the loudest word of a quiet day (#148 review, 5)', () => {
-    const [quiet, loud] = weekLayout(measure, [[term('crise', 3), term('pauta', 1)], [term('lei', 300), term('governo', 100)]])
-    const quietTop = quiet.words.find((w) => w.term === 'crise')!
-    const loudTop = loud.words.find((w) => w.term === 'lei')!
-    assert.ok(loudTop.size > quietTop.size, `${loudTop.size}px should beat ${quietTop.size}px`)
-    assert.ok(loudTop.size >= 28, 'the loudest word of the week reaches the ruler ceiling, not a 24px cap')
+  it('a custom number of levels caps and scales', () => {
+    assert.equal(heatLevel(3, 3, 3), 3)
+    assert.equal(heatLevel(1, 3, 3), 1)
+    assert.equal(heatLevel(50, 3, 3), 3)
+  })
+})
+
+describe('heatLevel keeps persistenceLayout byte-identical (issue #329 AC5)', () => {
+  // The pre-refactor rule, restated here as the oracle.
+  const old = (count: number | null, top: number) => (count === null ? 0 : Math.min(5, Math.max(1, Math.ceil((count / top) * 5))))
+
+  it('agrees with the old persistence rule on every count up to the top, for several tops', () => {
+    for (const top of [1, 2, 3, 5, 7, 9, 10, 40, 100, 333])
+      for (let count = 1; count <= top; count++) assert.equal(heatLevel(count, top), old(count, top), `${count} of ${top}`)
   })
 
-  it('is deterministic: the same day packs to the same picture', () => {
-    const day = [term('reforma', 10), term('pauta', 8), term('eleicao', 6)]
-    const once = weekLayout(measure, [day])[0]
-    const twice = weekLayout(measure, [day])[0]
-    assert.deepEqual(once.words, twice.words)
-    assert.deepEqual(once.overflow, twice.overflow)
-    assert.equal(once.height, twice.height)
-  })
-
-  it('the loudest word sets a week-wide ceiling so the largest count is never the one the column hides (validator round 2, 2)', () => {
-    const day = [term('presidente', 96), term('candidato', 14), term('crise', 3)]
-    const [column] = weekLayout(measure, [day], 120)
-    const presidente = column.words.find((w) => w.term === 'presidente')
-    assert.ok(presidente, 'presidente leads the day and must be drawn in the column, not listed under it')
-    assert.ok(presidente.w <= 120 - 6 + 1e-6, `presidente at ${presidente.w}px overflows the 120px column`)
-    assert.equal(column.overflow.length, 0)
-    const byCount = [...column.words].sort((a, b) => b.count - a.count)
-    for (let i = 1; i < byCount.length; i++) {
-      assert.ok(byCount[i - 1].size > byCount[i].size, `${byCount[i - 1].term}@${byCount[i - 1].size} must be larger than ${byCount[i].term}@${byCount[i].size}`)
+  it('persistenceLayout still produces the old levels for a mixed payload, gaps included', () => {
+    const counts = [[3, null, 10, 1], [40, 3, null, 7], [null, null, 2, 20]]
+    const top = 40
+    const payload = {
+      weeks: 4,
+      since: '2026-09-09',
+      first_week: '2026-08-03',
+      horizon: 60,
+      terms: counts.map((row, r) => ({ term: `t${r}`, kind: 'word', streak: 0, half_life: null, series: row.map((count, i) => ({ week: `2026-08-0${i + 3}`, count })) })),
     }
-    assert.ok(presidente.size < 30, 'a 120px column cannot hold presidente at 30px, so the ceiling drops')
-    assert.equal(column.words.find((w) => w.term === 'crise')!.size, WEEK_SIZE_MIN, 'the floor never moves')
+    const rows = (persistenceLayout(payload as never) as unknown as { rows: { term: string; kind: string; cells: { week: string; count: number | null; level: number }[] }[] }).rows
+    assert.deepEqual(rows, payload.terms.map((t) => ({ term: t.term, kind: t.kind, cells: t.series.map((s) => ({ week: s.week, count: s.count, level: old(s.count, top) })) })))
+  })
+})
+
+describe('weekRows: the word by day table behind the week figure', () => {
+  const bucket = (...terms: [string, string, number][]) => ({ start: '2026-09-02T03:00:00.000Z', about: 1, terms: terms.map(([term, kind, count]) => ({ term, kind, count })) })
+
+  it('is the union of every bucket\'s terms, a null where a day does not list the word', () => {
+    const { rows } = weekRows([bucket(['a', 'word', 3], ['b', 'word', 5]), bucket(['a', 'word', 2]), bucket()])
+    assert.deepEqual(rows.find((r) => r.term === 'a')?.cells, [3, 2, null])
+    assert.deepEqual(rows.find((r) => r.term === 'b')?.cells, [5, null, null])
   })
 
-  it('the ceiling only drops when the column forces it: the same day reaches 30px at 342px', () => {
-    const day = [term('presidente', 96), term('candidato', 14), term('crise', 3)]
-    const [column] = weekLayout(measure, [day], 342)
-    assert.equal(column.words.find((w) => w.term === 'presidente')!.size, 30)
+  it('orders by weekly total, then pt-BR term, then kind', () => {
+    const { rows } = weekRows([
+      bucket(['bola', 'word', 2], ['água', 'word', 2], ['reforma', 'word', 1], ['reforma', 'hashtag', 1], ['topo', 'word', 9]),
+      bucket(['bola', 'word', 1], ['água', 'word', 1]),
+    ])
+    assert.deepEqual(rows.map((r) => [r.term, r.kind, r.total]), [
+      ['topo', 'word', 9],
+      ['água', 'word', 3],
+      ['bola', 'word', 3],
+      ['reforma', 'hashtag', 1],
+      ['reforma', 'word', 1],
+    ])
   })
 
-  it('the ceiling is shared by the whole week: a quiet day never outsizes the loud one whose word forced it down', () => {
-    const [loud, quiet] = weekLayout(measure, [[term('presidente', 96), term('crise', 3)], [term('lei', 60), term('voto', 3)]], 120)
-    const presidente = loud.words.find((w) => w.term === 'presidente')!
-    const lei = quiet.words.find((w) => w.term === 'lei')!
-    assert.ok(presidente.size > lei.size, `presidente:96@${presidente.size} must beat lei:60@${lei.size}`)
+  it('keys a row by kind and term: one term under two kinds is two rows', () => {
+    assert.equal(weekRows([bucket(['reforma', 'word', 1], ['reforma', 'hashtag', 4])]).rows.length, 2)
   })
 
-  it('eight short words at mixed counts all place in a 159px column, none pushed out by the height cap (validator round 1, 2)', () => {
-    const day = [term('governo', 67), term('reforma', 40), term('pauta', 31), term('eleicao', 20), term('crise', 12), term('lei', 8), term('voto', 5), term('urna', 3)]
-    const [column] = weekLayout(measure, [day], 159)
-    assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit`)
-    assert.equal(column.words.length, 8)
-    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20)
+  it('adds up a key a bucket repeats', () => {
+    const { rows, top } = weekRows([bucket(['a', 'word', 2], ['a', 'word', 3])])
+    assert.deepEqual(rows[0].cells, [5])
+    assert.equal(rows[0].total, 5)
+    assert.equal(top, 5)
   })
 
-  it('a word wider than a narrow column even at the floor size is listed under the column, never drawn across the next day (#148 review, 1)', () => {
-    const day = [term('pronunciamento', 96), term('crise', 3)]
-    const [column] = weekLayout(measure, [day], 84)
-    assert.ok(!column.words.some((w) => w.term === 'pronunciamento'), 'one word cannot break, does not fit 84px at 12px and must not be placed')
-    assert.ok(column.overflow.some((w) => w.term === 'pronunciamento'), 'it is still reachable in the overflow list')
-    for (const w of column.words) assert.ok(w.w <= 84 - 6 + 1e-6)
+  it('top is the largest single cell, not a total', () => {
+    assert.equal(weekRows([bucket(['a', 'word', 4]), bucket(['a', 'word', 2]), bucket(['a', 'word', 6])]).top, 6)
   })
 
-  it('a phrase wraps at its spaces, never inside a word, and is placed as one box as tall as its lines', () => {
-    const day = [term('supremo tribunal federal', 96, 'phrase'), term('crise', 3)]
-    const [column] = weekLayout(measure, [day], 145)
-    const stf = column.words.find((w) => w.term === 'supremo tribunal federal')
-    assert.ok(stf, 'the phrase fits once wrapped and is drawn, not listed')
-    assert.deepEqual(stf!.lines, ['supremo', 'tribunal', 'federal'])
-    assert.equal(stf!.h, Math.round(stf!.size * 1.24) * 3)
-    assert.ok(stf!.w <= 145 - 6 + 1e-6, 'the box is as wide as its longest line')
-    assert.ok(stf!.size > WEEK_SIZE_MIN, 'the loudest word wraps at a size well above the floor instead of pulling the ceiling down')
-    assert.equal(column.overflow.length, 0)
+  it('breaks a tie by pt-BR collation, not code points: água and ônibus before zebra, é before f', () => {
+    const { rows } = weekRows([bucket(['zebra', 'word', 2], ['ônibus', 'word', 2], ['água', 'word', 2], ['fé', 'word', 2], ['ferro', 'word', 2])])
+    assert.deepEqual(rows.map((r) => r.term), ['água', 'ferro', 'fé', 'ônibus', 'zebra'].sort((x, y) => x.localeCompare(y, 'pt-BR')))
+    assert.equal(rows[0].term, 'água')
+    assert.equal(rows[rows.length - 1].term, 'zebra')
   })
 
-  it('a long one-word term below the loudest phrase is listed, not placed, since the ceiling is the loudest words\' and lowering it for every unwrappable word would flatten the week (#166 review, 1)', () => {
-    const day = [term('supremo tribunal federal', 96, 'phrase'), term('presidente', 90), term('crise', 3)]
-    const [column] = weekLayout(measure, [day], 145)
-    const stf = column.words.find((w) => w.term === 'supremo tribunal federal')!
-    assert.ok(stf.size > 20, `the wrapped phrase keeps the ceiling up, at ${stf.size}px`)
-    assert.ok(column.overflow.some((w) => w.term === 'presidente'), 'presidente does not fit at the size its count earns and is listed with its count')
-    assert.ok(!column.words.some((w) => w.term === 'presidente'))
+  it('total outranks the term: a quiet word that sorts first still comes last', () => {
+    const { rows } = weekRows([bucket(['aaa', 'word', 1], ['zzz', 'word', 4]), bucket(['zzz', 'word', 4])])
+    assert.deepEqual(rows.map((r) => r.term), ['zzz', 'aaa'])
   })
 
-  it('twelve mixed phrases and words, the widest limit the sentence offers, all place at 145px and 159px: the height cap counts lines (#166 review, 2)', () => {
-    const day = [term('supremo tribunal federal', 96, 'phrase'), term('ministro da fazenda', 80, 'phrase'), term('primeiro turno', 70, 'phrase'), term('reforma tributaria', 60, 'phrase'), term('presidente', 50), term('governo', 45), term('congresso', 40), term('camara dos deputados', 35, 'phrase'), term('senado', 30), term('eleicao', 20), term('lei', 10), term('voto', 5)]
-    for (const width of [145, 159]) {
-      const [column] = weekLayout(measure, [day], width)
-      assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit at ${width}px`)
-      assert.equal(column.words.length, 12)
-      assert.ok(column.height > WEEK_MAX_HEIGHT, 'the column grows past the one-line cap instead of dropping the quietest words')
-    }
+  it('every row has one cell per bucket, whatever order a word is listed in', () => {
+    const { rows } = weekRows([bucket(['a', 'word', 1]), bucket(), bucket(['b', 'word', 2]), bucket(), bucket(['a', 'word', 5])])
+    for (const r of rows) assert.equal(r.cells.length, 5)
+    assert.deepEqual(rows.find((r) => r.term === 'a')?.cells, [1, null, null, null, 5])
+    assert.deepEqual(rows.find((r) => r.term === 'b')?.cells, [null, null, 2, null, null])
+    assert.equal(rows.find((r) => r.term === 'a')?.total, 6)
   })
 
-  it('a hyphenated word breaks after its hyphen, the break weekLayout prefers (#166 review, nit)', () => {
-    const [column] = weekLayout(measure, [[term('vice-presidente', 96), term('crise', 3)]], 145)
-    const vice = column.words.find((w) => w.term === 'vice-presidente')!
-    assert.deepEqual(vice.lines, ['vice-', 'presidente'])
-    assert.ok(vice.size > WEEK_SIZE_MIN + 2, `the ceiling stays up at ${vice.size}px instead of the one-line floor`)
-  })
-
-  it('a one-word line keeps every single word on one line: no wrap means lines is [text]', () => {
-    const [column] = weekLayout(measure, [[term('crise', 3)]], 145)
-    assert.deepEqual(column.words[0].lines, ['crise'])
-    assert.equal(column.words[0].h, Math.round(column.words[0].size * 1.24))
+  it('an empty week has no rows and a top of 1', () => {
+    assert.deepEqual(weekRows([bucket(), bucket()]), { rows: [], top: 1 })
+    assert.deepEqual(weekRows([]), { rows: [], top: 1 })
   })
 })
 

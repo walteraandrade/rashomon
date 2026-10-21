@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FONT_MONO } from '../src/ui/layout.js'
@@ -128,7 +128,6 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       assert.match(hay, /expressão/i, `${label} names phrases`)
       assert.match(hay, /arrasta pelo topo/, `${label} names the floating docs card`)
       assert.match(hay, /primeira linha da lista/, `${label} names the list-head entry`)
-      assert.match(hay, /não couberam/, `${label} names the week overflow list`)
       assert.match(hay, /próprio nome[\s\S]{0,200}(de fora|não entra|não ganha)/, `${label} names own-name words dropped from the compare chart`)
     }
   })
@@ -243,17 +242,17 @@ describe('the page is a sequence of graphs', () => {
     assert.equal(persistence.match(/<span class="pick">/g)?.length, 3, "figure 9's own sentence has person, weeks and limit; no source or kind control")
   })
 
-  // issue #147 AC17 (the automatable half; the seven-column render itself is manual): the
-  // week's own key names tamanho/posição/clique and, on purpose, no colour encoding.
-  it("figure 5's key has no Cor row, unlike figure 4's", () => {
+  // issue #329: the week figure is a table, so its key names the word, the cell, the empty cell
+  // and the click, and no longer a size or a position.
+  it("figure 5's key reads Palavra, Célula, Vazia, Clique, with no colour encoding", () => {
     const html = read('atlas.html')
     const dts = (chunk: string) =>
-      [...(chunk.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) =>
-        m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim(),
-      )
+      [...(chunk.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? '').matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').trim())
     const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
-    assert.deepEqual(dts(week), ['Tamanho', 'Posição', 'Clique'])
-    assert.match(week, /<dt>Posição<\/dt><dd>só o dia; a altura na coluna não mede nada<\/dd>/, 'the key says the vertical position means nothing, so the swarm never reads as a ranking')
+    assert.deepEqual(dts(week), ['Palavra', 'Célula', 'Vazia', 'Clique'])
+    assert.match(week, /<dt>[^<]*(?:<span[^>]*><\/span>)?Célula<\/dt><dd>a tinta é o número de textos no dia<\/dd>/, 'the ink is the number of documents of the day')
+    assert.match(week, /Vazia<\/dt><dd>fora das [^<]*mais citadas do dia; não é zero<\/dd>/, 'an empty cell is outside the top N, never zero')
+    assert.doesNotMatch(week, /Tamanho|Posição|type-scale/)
     assert.match(week, /href="\/como-ler#semana"/, 'the figure\'s own "Como ler" points at the #semana chapter')
     assert.match(html, /id="help-semana"/, 'the in-page guide carries a matching chapter for that href to land on')
   })
@@ -397,14 +396,124 @@ describe("figure 5 (week) 'a refetch dims what is on screen'", () => {
   })
 })
 
-describe('the overflow list under a day column stays inside the column', () => {
-  it('a week overflow button wraps instead of inheriting .quiet-button\'s nowrap (validator round 2, 1)', () => {
-    const css = read('atlas.css')
-    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*white-space: normal/, 'a phrase button at 145px must wrap inside its column, never draw across the next day')
-    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*max-width: 100%/)
-    assert.match(css, /\.week-overflow \.quiet-button \{[^}]*overflow-wrap: anywhere/)
-    assert.match(css, /\.week-overflow \{[^}]*min-width: 0/)
-    assert.match(css, /\.quiet-button \{[^}]*white-space: nowrap/, "the ruler's own overflow keeps the shared nowrap")
+describe('the quiet button keeps the shared nowrap', () => {
+  it("the ruler's own overflow list keeps .quiet-button's nowrap", () => {
+    assert.match(read('atlas.css'), /\.quiet-button \{[^}]*white-space: nowrap/)
+  })
+})
+
+describe('the week figure is a table that scrolls sideways at every width (issue #329)', () => {
+  const css = () => read('atlas.css')
+  // The body of the first rule whose selector list contains `selector`.
+  const ruleFor = (selector: string) => {
+    for (const m of css().matchAll(/([^{}]+)\{([^}]*)\}/g)) if (m[1].split(',').map((x) => x.trim()).includes(selector)) return m[2]
+    return ''
+  }
+
+  it('the scroller overflows sideways and the term column is sticky over an opaque ground', () => {
+    assert.match(ruleFor('.week-scroll'), /overflow-x:\s*auto/)
+    const term = ruleFor('.week-term')
+    assert.match(term, /position:\s*sticky/)
+    assert.match(term, /left:\s*0/)
+    assert.match(term, /background:\s*var\(--panel\)/, 'a transparent ground would show the cells passing under the pinned column')
+  })
+
+  it('has no .week-columns rule and no 700px rule that mentions a .week-* selector', () => {
+    const text = css()
+    assert.doesNotMatch(text, /\.week-columns/)
+    for (const m of text.matchAll(/@media \(max-width: 700px\) \{([\s\S]*?)\n\}/g)) assert.doesNotMatch(m[1], /\.week-/)
+  })
+
+  it('shares the persistence figure\'s gap look and five-step ramp through grouped selectors', () => {
+    const text = css()
+    assert.match(text, /\.persistence-cell\.is-nodata,[^{]*\.week-cell\.is-gap[^{]*\{|\.week-cell\.is-gap,[^{]*\.persistence-cell\.is-nodata[^{]*\{/)
+    for (const lv of [1, 2, 3, 4, 5]) assert.match(text, new RegExp(`\\.persistence-cell\\[data-lv="${lv}"\\][^{]*\\.week-cell\\[data-lv="${lv}"\\][^{]*\\{|\\.week-cell\\[data-lv="${lv}"\\][^{]*\\.persistence-cell\\[data-lv="${lv}"\\][^{]*\\{`))
+  })
+
+  it('the corner head is pinned too, so a day head never slides under the term column', () => {
+    const rules = [...css().matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].split(',').some((x) => /^\.week-table thead th:first-child$/.test(x.trim())))
+    assert.ok(rules.length, 'a rule pins the corner')
+    const body = rules.map((m) => m[2]).join(';')
+    assert.match(body, /position:\s*sticky/)
+    assert.match(body, /left:\s*0/)
+    assert.match(body, /background:\s*var\(--panel\)/)
+  })
+
+  it('the table keeps separate borders, a floor width, and a term column that truncates instead of growing', () => {
+    const rules = (selector: string) => [...css().matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].split(',').map((x) => x.trim()).includes(selector)).map((m) => m[2]).join(';')
+    assert.match(rules('.week-table'), /border-collapse:\s*separate/, 'sticky cells need separate borders to keep theirs')
+    assert.match(rules('.week-table'), /min-width:/, 'below a floor the table scrolls instead of squeezing')
+    const term = rules('.week-term')
+    assert.match(term, /max-width:/)
+    assert.match(term, /text-overflow:\s*ellipsis/)
+  })
+
+  it('a filled cell is a button on the persistence ramp and the selected and hover looks are grouped with it', () => {
+    const text = css()
+    assert.match(text, /button\.persistence-cell\.is-selected,\s*button\.week-cell\.is-selected/)
+    assert.match(text, /button\.persistence-cell:hover[^{]*button\.week-cell:hover/)
+    assert.match(text, /\.persistence-cell\.ghost,\s*\.week-cell\.ghost/)
+  })
+
+  it('the key\'s gap swatch takes the colour of the dashed no-data cell', () => {
+    const rules = (selector: string) => [...css().matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].split(',').map((x) => x.trim()).includes(selector)).map((m) => m[2]).join(';')
+    const colour = (body: string) => body.match(/border-color:\s*([^;]+)/)?.[1].trim()
+    assert.ok(colour(rules('.week-gap-swatch')))
+    assert.equal(colour(rules('.week-gap-swatch')), colour(rules('.week-cell.is-gap')))
+  })
+
+  it('draws the key\'s empty swatch dashed', () => {
+    assert.match(ruleFor('.week-gap-swatch'), /border-style:\s*dashed/)
+  })
+
+  it('keeps no trace of the old swarm figure anywhere it is read', () => {
+    const gone = /weekLayout|WEEK_COLUMN_WIDTH|WEEK_SIZE_MIN|WEEK_MAX_HEIGHT|WEEK_MAX_TERMS|WeekColumnLayout|weekMaxWidth|weekLines|weekLineWidth|fitSize|weekColumn|week-overflow|week-svg|week-word|week-glow|week-hit|week-text|week-columns/
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        if (['node_modules', 'build', '.svelte-kit'].includes(e.name)) return []
+        const path = join(dir, e.name)
+        return e.isDirectory() ? walk(path) : /\.(ts|svelte|css|md)$/.test(e.name) ? [path] : []
+      })
+    const files = ['src', 'web', 'test', 'public'].flatMap((d) => walk(join(root, d))).concat(join(root, 'CLAUDE.md'))
+    const offenders = files.filter((f) => !f.endsWith('leitura-ui-acceptance.test.ts') && gone.test(readFileSync(f, 'utf8')))
+    assert.deepEqual(offenders, [])
+  })
+})
+
+describe('the week figure is read as a word by day table (issue #329)', () => {
+  const plain = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  const part = (html: string, id: string, until: string) => html.match(new RegExp(`<div id="${id}"[\\s\\S]*?(?=<div id="${until}")`))?.[0] ?? ''
+  const surfaces = (): [string, string][] => [
+    ['/como-ler #semana', plain(part(read('como-ler.html'), 'semana', 'atencao'))],
+    ['#help-semana', plain(part(read('atlas.html'), 'help-semana', 'help-atencao'))],
+  ]
+
+  it('both surfaces state the facts of the table', () => {
+    for (const [name, text] of surfaces()) {
+      assert.ok(text.length > 100, `${name}: the section exists`)
+      assert.match(text, /linha[^.]{0,40}palavra/i, `${name}: a row is a word`)
+      assert.match(text, /total[^.]{0,60}semana/i, `${name}: rows follow the week's total`)
+      assert.match(text, /tinta[^.]{0,80}(?:mesmo n[úu]mero|n[úu]mero)/i, `${name}: the ink is the number`)
+      assert.match(text, /vazia[^.]{0,80}n[ãa]o é zero/i, `${name}: an empty cell is not zero`)
+      assert.match(text, /fora das N mais citadas/i, `${name}: outside the day's top N`)
+      assert.match(text, /menos de N palavras[^.]{0,80}n[ãa]o apareceu/i, `${name}: a short day's empty cell means it did not appear`)
+      assert.match(text, /(?:mostra|em|com) 0\b|número[^.]{0,40}zero/i, `${name}: a day head can read 0`)
+      assert.match(text, /textos? daquele dia/i, `${name}: a click opens that day's texts`)
+    }
+  })
+
+  it('neither surface still describes the old swarm', () => {
+    for (const [name, text] of surfaces()) {
+      assert.doesNotMatch(text, /o tamanho da palavra|tamanho d[ao]/i, `${name}: no word size`)
+      assert.doesNotMatch(text, /mede nada|n[ãa]o mede/i, `${name}: no position remark`)
+      assert.doesNotMatch(text, /couberam|n[ãa]o coube/i, `${name}: no overflow list`)
+    }
+  })
+
+  it('the analysis summary names the week figure by its section and what it answers', () => {
+    const analise = plain(read('atlas.html').match(/<div id="help-analise"[\s\S]*?(?=<div id="help-atlas")/)?.[0] ?? '')
+    assert.match(analise, /A semana[^.]{0,60}quais dias/i)
+    assert.doesNotMatch(analise, /No 5\b/)
   })
 })
 

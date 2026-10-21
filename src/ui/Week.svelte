@@ -4,20 +4,14 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { fmt, kinds, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
-  import { WEEK_COLUMN_WIDTH, weekLayout } from './layout.js'
-  import { createCanvasMeasure } from './measure.js'
+  import { fmt, kinds, label, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
+  import { heatLevel, weekRows } from './layout.js'
   import { seedFor } from './seed.js'
 
   type Picked = { day: string; term: string; kind: string }
 
   const LIMITS = ['5', '8', '12']
-  const GHOST_WORDS: [number, number][] = [
-    [-30, 44],
-    [18, 78],
-    [-14, 112],
-  ]
-  const GHOST_HEIGHT = 150
+  const GHOST_WIDTHS = ['', 'is-mid', 'is-short']
 
   let mounted = $state(false)
   let chartEl: HTMLElement | undefined = $state()
@@ -25,11 +19,8 @@
   let source = $state(SOURCE_SEGMENTS[0][0])
   let limit = $state('8')
   let selected = $state.raw<Picked | null>(null)
-  let width = $state(WEEK_COLUMN_WIDTH)
-  let tick = $state(0)
   let started = false
   let lastData: Week | undefined
-  let metrics: ReturnType<typeof createCanvasMeasure> | null = null
 
   const people = $derived(bootData.people)
   const peopleFailed = $derived(bootData.ready && !!bootData.peopleError)
@@ -44,6 +35,8 @@
 
   const isSelected = (day: string, d: { term: string; kind: string }) =>
     !!selected && selected.day === day && selected.term === d.term && selected.kind === d.kind
+
+  const count = (n: number) => `${fmt(n)} ${n === 1 ? 'documento' : 'documentos'}`
 
   const showDocs = (word: Picked) => {
     const found = people.find((p) => p.id === person)
@@ -78,15 +71,21 @@
     selected = null
   }
 
+  // The limit each payload was asked with, kept beside the payload so a memo hit carries it too.
+  const limitOf = new WeakMap<Week, string>()
+
   const figure = createFigure<Week>({
     name: 'week',
     params,
-    fetch: (qp, signal) => api.loadWeek(qp.get('person')!, api.weekParams({ source: qp.get('source')!, limit: qp.get('limit')! }), signal),
+    fetch: async (qp, signal) => {
+      const result = await api.loadWeek(qp.get('person')!, api.weekParams({ source: qp.get('source')!, limit: qp.get('limit')! }), signal)
+      limitOf.set(result, qp.get('limit')!)
+      return result
+    },
     ghost: () => {},
     paint: (result) => {
       if (result !== lastData) dropStalePick()
       lastData = result
-      tick++
     },
     paintError: () => {
       lastData = undefined
@@ -122,30 +121,16 @@
     })
   })
 
-  // The svg is drawn at the column's real width, never scaled; the grid sets it, not the content.
-  $effect(() => {
-    void tick
-    void figure.data
-    void ghost
-    if (!chartEl) return
-    const measured = chartEl.querySelector<HTMLElement>('.week-day')?.clientWidth
-    if (measured && Math.floor(measured) !== untrack(() => width)) width = Math.floor(measured)
-  })
+  // The select may already say another limit while the data on screen is still the old one.
+  const shownLimit = $derived((figure.data && limitOf.get(figure.data)) ?? limit)
 
-  const layouts = $derived.by(() => {
+  const table = $derived.by(() => {
     const data = figure.data
-    if (!data) return []
-    metrics ??= createCanvasMeasure()
-    return weekLayout(
-      metrics,
-      data.buckets.map((b) => b.terms),
-      width,
-    )
+    if (!data) return null
+    const { rows, top } = weekRows(data.buckets)
+    const days = data.buckets.map((bucket) => ({ bucket, day: weekDayIso(bucket.start), label: weekDayLabel(bucket.start), short: bucket.terms.length < Number(shownLimit) }))
+    return { rows, top, days }
   })
-
-  const columns = $derived(
-    (figure.data?.buckets ?? []).map((bucket, i) => ({ bucket, layout: layouts[i], day: weekDayIso(bucket.start), label: weekDayLabel(bucket.start) })),
-  )
 
   const ghost = $derived(mounted && !peopleFailed && !peopleEmpty && figure.data === undefined && (figure.loading || !figure.error))
   const failed = $derived(!ghost && !!figure.error && !figure.loading && figure.data === undefined)
@@ -163,12 +148,6 @@
   )
   const shown = $derived(ghost || (!!figure.data && !peopleFailed && !peopleEmpty))
   const dimmed = $derived(figure.loading && figure.data !== undefined)
-  const keyPick = (event: KeyboardEvent, go: () => void) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      go()
-    }
-  }
 </script>
 
 <section class="figure week" class:is-loading={dimmed} id="week" aria-labelledby="weekTitle">
@@ -176,8 +155,9 @@
     <div class="figure-title"><span class="eyebrow">Gráfico 5</span><h2 id="weekTitle">A semana</h2></div>
     <p class="figure-sub">Quais palavras ocuparam cada dia dos últimos sete. <a href="/como-ler#semana">Como ler</a>.</p>
     <dl class="figure-key">
-      <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>documentos naquele dia</dd></div>
-      <div><dt>Posição</dt><dd>só o dia; a altura na coluna não mede nada</dd></div>
+      <div><dt>Palavra</dt><dd>uma linha por palavra; a ordem é o total da semana</dd></div>
+      <div><dt><span class="ink-scale" aria-hidden="true"></span>Célula</dt><dd>a tinta é o número de textos no dia</dd></div>
+      <div><dt><span class="week-gap-swatch" aria-hidden="true"></span>Vazia</dt><dd>fora das {shownLimit} mais citadas do dia; não é zero</dd></div>
       <div><dt>Clique</dt><dd>os textos daquele dia</dd></div>
     </dl>
     <div class="sentence">
@@ -188,67 +168,60 @@
       </p>
     </div>
   </header>
-  <figure class="week-chart" id="weekChart" aria-label="Palavras da semana, uma coluna por dia" aria-busy={ghost} hidden={!shown} bind:this={chartEl}>
+  <figure class="week-chart" id="weekChart" aria-label="Palavras da semana, uma linha por palavra e uma coluna por dia" aria-busy={ghost} hidden={!shown} bind:this={chartEl}>
     {#if ghost}
-      <div class="ghost-field" aria-hidden="true">
-        <div class="week-columns">
-          {#each { length: 7 } as _, i (i)}
-            <div class="week-day">
-              <span class="ghost ghost-line is-short"></span>
-              <svg class="week-svg" viewBox="0 0 {WEEK_COLUMN_WIDTH} {GHOST_HEIGHT}" width={WEEK_COLUMN_WIDTH} height={GHOST_HEIGHT}>
-                {#each GHOST_WORDS as [y, w] (y)}
-                  <rect class="ghost" x={WEEK_COLUMN_WIDTH / 2 - w / 2} y={GHOST_HEIGHT / 2 + y - 8} width={w} height="16" rx="5" />
-                {/each}
-              </svg>
-            </div>
-          {/each}
-        </div>
-      </div>
-      <p class="sr-only">Lendo a semana.</p>
-    {:else if figure.data}
-      <div class="week-columns">
-        {#each columns as { bucket, layout, day, label } (bucket.start)}
-          <div class="week-day">
-            <dl class="stat"><div><dt>{label}</dt><dd>{fmt(bucket.about)}</dd></div></dl>
-            {#if layout.words.length}
-              <svg class="week-svg" {width} height={layout.height} viewBox="0 0 {width} {layout.height}" role="group" aria-label="Palavras de {label}">
-                {#each layout.words as d (d.kind + '\u0000' + d.term)}
-                  {@const on = isSelected(day, d)}
-                  {@const lineHeight = d.h / d.lines.length}
-                  <!-- svelte-ignore a11y_click_events_have_key_events -- Enter and Space are handled by onkeydown on the same element -->
-                  <g
-                    class="week-word {on ? 'is-selected' : ''}"
-                    transform="translate({width / 2 + d.x},{layout.half + d.y})"
-                    style:--size="{d.size}px"
-                    data-term={d.term}
-                    data-kind={d.kind}
-                    data-day={day}
-                    role="button"
-                    tabindex="0"
-                    aria-pressed={on}
-                    aria-label="{d.text}, {fmt(d.count)} documentos neste dia"
-                    onclick={() => pick(day, d.term, d.kind)}
-                    onkeydown={(event) => keyPick(event, () => pick(day, d.term, d.kind))}
-                  >
-                    <title>{d.text} · {kinds[d.kind] || d.kind || 'Tipo desconhecido'} · {fmt(d.count)} documentos</title>
-                    <rect class="week-glow" x={-d.w / 2 - 4} y={-d.h / 2 - 3} width={d.w + 8} height={d.h + 6} />
-                    <rect class="week-hit" x={-d.w / 2} y={-d.h / 2} width={d.w} height={d.h} />
-                    <text class="week-text" text-anchor="middle" dominant-baseline="central">{#each d.lines as line, li (li)}<tspan x="0" y={(li - (d.lines.length - 1) / 2) * lineHeight}>{line}</tspan>{/each}</text>
-                  </g>
-                {/each}
-              </svg>
-            {/if}
-            {#if layout.overflow.length}
-              <div class="week-overflow">
-                <p class="eyebrow">{layout.overflow.length === 1 ? 'Não coube' : 'Não couberam'}</p>
-                {#each layout.overflow as d (d.kind + '\u0000' + d.term)}
-                  {@const on = isSelected(day, d)}
-                  <button class="quiet-button {on ? 'is-selected' : ''}" data-term={d.term} data-kind={d.kind} data-day={day} aria-pressed={on} aria-label="{d.text}, {fmt(d.count)} documentos neste dia" onclick={() => pick(day, d.term, d.kind)}>{d.text}<b>{fmt(d.count)}</b></button>
-                {/each}
-              </div>
-            {/if}
+      <div class="week-ghost ghost-field" aria-hidden="true">
+        {#each [0, 1, 2, 3, 4, 5] as i (i)}
+          <div class="week-ghost-row">
+            <span class="ghost ghost-outlet-d {GHOST_WIDTHS[i % 3]}"></span>
+            {#each Array(7) as _, j (j)}<span class="week-cell ghost"></span>{/each}
           </div>
         {/each}
+      </div>
+      <p class="sr-only">Lendo a semana.</p>
+    {:else if table && !emptyWeek}
+      <div class="week-scroll">
+        <table class="week-table">
+          <caption class="sr-only">Palavras por dia da semana</caption>
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              {#each table.days as { bucket, day, label: dayLabel } (bucket.start)}
+                <th scope="col" class="week-day-head" data-day={day}><dl class="stat"><div><dt>{dayLabel}</dt><dd>{fmt(bucket.about)}</dd></div></dl></th>
+              {/each}
+            </tr>
+          </thead>
+          <tbody>
+            {#each table.rows as row (row.kind + '\u0000' + row.term)}
+              {@const text = label(row)}
+              <tr>
+                <th scope="row" class="week-term" title="{text} · {kinds[row.kind] || row.kind || 'Tipo desconhecido'} · {count(row.total)} na semana">{text}</th>
+                {#each row.cells as cell, i (table.days[i].day)}
+                  {@const d = table.days[i]}
+                  <td class="week-c">
+                    {#if cell === null}
+                      {@const gap = `${text}, ${d.label}: ${d.short ? 'não apareceu neste dia' : `fora das ${shownLimit} mais citadas do dia`}`}
+                      <span class="week-cell is-gap" data-gap="1" data-day={d.day} role="img" aria-label={gap} title={gap}></span>
+                    {:else}
+                      {@const on = isSelected(d.day, row)}
+                      <button
+                        type="button"
+                        class="week-cell"
+                        class:is-selected={on}
+                        data-lv={heatLevel(cell, table.top)}
+                        data-term={row.term}
+                        data-kind={row.kind}
+                        data-day={d.day}
+                        aria-pressed={on}
+                        aria-label="{text}, {d.label}: {count(cell)}"
+                        onclick={() => pick(d.day, row.term, row.kind)}>{fmt(cell)}</button>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     {/if}
   </figure>

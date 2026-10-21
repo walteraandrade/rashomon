@@ -1019,6 +1019,10 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
 .persistence-table .persistence-half-life { right: 0; }
 .persistence-table .persistence-streak { right: var(--stat-w); }
 .persistence-table thead .persistence-streak, .persistence-table thead .persistence-half-life { color: var(--muted); vertical-align: bottom; }
+/* Narrow: pinned, the two columns and the word leave no room for a week, so they scroll with the table and come last. */
+@media (max-width: 560px) {
+  .persistence-table .persistence-streak, .persistence-table .persistence-half-life { position: static; }
+}
 .persistence-ghost, .week-ghost { display: flex; flex-direction: column; gap: 2px; }
 .persistence-ghost-row, .week-ghost-row { display: flex; align-items: center; gap: 2px; }
 .persistence-ghost-row .ghost-outlet-d, .week-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }

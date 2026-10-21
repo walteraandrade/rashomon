@@ -101,6 +101,7 @@ describe('Agenda (issue #288)', () => {
     expect(grid().querySelectorAll('.agenda-cell').length).toBe(4)
     expect(grid().querySelectorAll('.agenda-cell.is-empty').length).toBe(1)
     expect(grid().querySelector('.lean-chip')).not.toBeNull()
+    expect([...grid().querySelectorAll('tbody th .d')].map((d) => d.getAttribute('title'))).toEqual(['g1.globo.com', 'poder360.com.br'])
     expect(document.getElementById('agendaDays')).not.toBeNull()
     expect(document.getElementById('agendaSource')).not.toBeNull()
     expect(grid().textContent).toContain('80%')

@@ -148,7 +148,7 @@
         <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, só mais clara. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>
         <h3>Célula vazia não é zero</h3>
         <p>Cada semana guarda só as 50 palavras mais fortes da pessoa, pela mesma conta do PMI ponderado (PMI × ln(1 + documentos)), com pelo menos 2 documentos. Uma célula vazia diz que a palavra ficou fora dessas 50, não que não apareceu. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A palavra do nome da própria pessoa não entra.</p>
-        <p>Sequência e meia-vida são duas colunas na borda direita da tabela, que ficam à vista quando as semanas rolam para o lado; as duas são contadas em semanas.</p>
+        <p>Sequência e meia-vida são duas colunas na borda direita da tabela; em telas largas ficam à vista quando as semanas rolam para o lado, e em telas estreitas rolam junto com elas, no fim; as duas são contadas em semanas.</p>
         <h3>Sequência</h3>
         <p>Semanas seguidas com a palavra, contadas da atual para trás. A semana em curso ainda está incompleta: se estiver vazia, a contagem parte da anterior. É a leitura de quem ficou.</p>
         <h3>Meia-vida</h3>

@@ -123,7 +123,7 @@
         <thead><tr><th scope="col"></th>{#each data.persons as p (p.id)}<th scope="col">{p.name}</th>{/each}</tr></thead>
         <tbody>
           {#each rows as row (row.domain)}
-            <tr><th scope="row"><span class="d">{row.domain}</span>{#if row.lean}<span class="lean-chip">{LEAN_LABELS[row.lean] ?? row.lean}</span>{/if}</th>
+            <tr><th scope="row"><span class="d" title={row.domain}>{row.domain}</span>{#if row.lean}<span class="lean-chip">{LEAN_LABELS[row.lean] ?? row.lean}</span>{/if}</th>
               {#each data.persons as p (p.id)}
                 {@const cell = row.cells.get(p.id)}
                 {#if !cell}

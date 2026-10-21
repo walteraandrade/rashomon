@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { FONT_MONO } from '../src/ui/layout.js'
 import { SOURCE_SEGMENTS } from '../src/ui/format.js'
 import { VERCEL_INSIGHTS_TAG } from './pages.js'
-import { atlasCss, declared, rulesOf } from './css.js'
+import { atlasCss, declared, rulesFor, rulesOf } from './css.js'
 import { ROUTES, appTemplate, pageMarkup, siteFile } from './pages.js'
 
 // The "Leitura" redesign: one sentence of controls, the map as the figure, a "Como ler"
@@ -269,7 +269,8 @@ describe('persistence stat columns', () => {
     const width = declared(rules, '.persistence-table', '--stat-w')
     assert.match(width ?? '', /^\d+(?:\.\d+)?ch$/, 'the shared width is held in one custom property, in ch')
     for (const selector of [streak, halfLife]) {
-      assert.equal(declared(rules, selector, 'position'), 'sticky', `${selector} is sticky`)
+      assert.equal(rulesFor(rules, selector)[0]?.decls.get('position'), 'sticky', `${selector} is sticky on wide screens`)
+      assert.equal(declared(rules, selector, 'position'), 'static', `${selector} is released by the narrow override that follows`)
       assert.equal(declared(rules, selector, 'background'), 'var(--panel)', `${selector} is opaque`)
       assert.equal(declared(rules, selector, 'white-space'), 'nowrap', `${selector} stays on one line`)
       for (const prop of ['width', 'min-width', 'max-width']) assert.equal(declared(rules, selector, prop), 'var(--stat-w)', `${selector} ${prop} is the shared width`)
@@ -279,6 +280,10 @@ describe('persistence stat columns', () => {
     }
     assert.equal(declared(rules, halfLife, 'right'), '0')
     assert.equal(declared(rules, streak, 'right'), 'var(--stat-w)', 'the inner column sits one full column width in')
+  })
+
+  it('the narrow override sits in a max-width media block and names no week selector', () => {
+    assert.match(atlasCss(), /@media \(max-width: 560px\) \{\s*\.persistence-table \.persistence-streak, \.persistence-table \.persistence-half-life \{ position: static; \}\s*\}/)
   })
 
   it('the header cells use the same columns, and no .persistence-stats .stat rule remains', () => {

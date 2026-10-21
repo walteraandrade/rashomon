@@ -4,7 +4,7 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { agendaRows, fmt, LEAN_LABELS, SOURCE_SEGMENTS, sourceLabels, type Agenda } from './format.js'
+  import { agendaInk, agendaMax, agendaRows, fmt, LEAN_LABELS, SOURCE_SEGMENTS, sourceLabels, type Agenda } from './format.js'
   import { seedFor } from './seed.js'
 
   const DAY_CHOICES = ['7', '21']
@@ -67,6 +67,7 @@
   }
   const view = $derived(viewOf())
   const rows = $derived(figure.data ? agendaRows(figure.data) : [])
+  const maxShare = $derived(figure.data ? agendaMax(rows, figure.data.persons.map((p) => p.id)) : 0)
 
   const onControl = () => {
     figure.release()
@@ -95,7 +96,7 @@
     <div class="figure-title"><span class="eyebrow">Gráfico 7</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
     <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="/como-ler#agenda">Como ler</a>.</p>
     <dl class="figure-key">
-      <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo</dd></div>
+      <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo, relativa à maior fatia da grade mostrada: mais clara, maior a fatia; a mesma porcentagem pode ler mais clara ou mais fraca em outro recorte</dd></div>
       <div><dt>Posição</dt><dd>veículo na linha, pessoa na coluna</dd></div>
       <div><dt>Clique</dt><dd>documentos daquela pessoa naquele veículo</dd></div>
     </dl>
@@ -130,7 +131,7 @@
                 {:else}
                   {@const active = !!selected && selected.person === p.id && selected.domain === row.domain}
                   {@const pct = Math.round(cell.share * 100)}
-                  <td class="agenda-cell"><button class="agenda-pick" class:is-active={active} data-person={p.id} data-domain={row.domain} aria-pressed={active} style:--share="{Math.max(pct, 1)}%" title="{fmt(cell.docs)} {cell.docs === 1 ? 'documento' : 'documentos'}" onclick={() => pick(p.id, p.name, row.domain)}>{cell.docs > 0 && pct === 0 ? '<1%' : `${pct}%`}</button></td>
+                  <td class="agenda-cell"><button class="agenda-pick" class:is-active={active} data-person={p.id} data-domain={row.domain} aria-pressed={active} style:--share={agendaInk(cell.share, maxShare)} title="{fmt(cell.docs)} {cell.docs === 1 ? 'documento' : 'documentos'}" onclick={() => pick(p.id, p.name, row.domain)}>{cell.docs > 0 && pct === 0 ? '<1%' : `${pct}%`}</button></td>
                 {/if}
               {/each}
             </tr>

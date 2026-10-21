@@ -91,6 +91,30 @@ describe('heatLevel: one ink ramp for the week and persistence figures', () => {
   })
 })
 
+describe('heatLevel keeps persistenceLayout byte-identical (issue #329 AC5)', () => {
+  // The pre-refactor rule, restated here as the oracle.
+  const old = (count: number | null, top: number) => (count === null ? 0 : Math.min(5, Math.max(1, Math.ceil((count / top) * 5))))
+
+  it('agrees with the old persistence rule on every count up to the top, for several tops', () => {
+    for (const top of [1, 2, 3, 5, 7, 9, 10, 40, 100, 333])
+      for (let count = 1; count <= top; count++) assert.equal(heatLevel(count, top), old(count, top), `${count} of ${top}`)
+  })
+
+  it('persistenceLayout still produces the old levels for a mixed payload, gaps included', () => {
+    const counts = [[3, null, 10, 1], [40, 3, null, 7], [null, null, 2, 20]]
+    const top = 40
+    const payload = {
+      weeks: 4,
+      since: '2026-09-09',
+      first_week: '2026-08-03',
+      horizon: 60,
+      terms: counts.map((row, r) => ({ term: `t${r}`, kind: 'word', streak: 0, half_life: null, series: row.map((count, i) => ({ week: `2026-08-0${i + 3}`, count })) })),
+    }
+    const rows = (persistenceLayout(payload as never) as unknown as { rows: { term: string; kind: string; cells: { week: string; count: number | null; level: number }[] }[] }).rows
+    assert.deepEqual(rows, payload.terms.map((t) => ({ term: t.term, kind: t.kind, cells: t.series.map((s) => ({ week: s.week, count: s.count, level: old(s.count, top) })) })))
+  })
+})
+
 describe('weekRows: the word by day table behind the week figure', () => {
   const bucket = (...terms: [string, string, number][]) => ({ start: '2026-09-02T03:00:00.000Z', about: 1, terms: terms.map(([term, kind, count]) => ({ term, kind, count })) })
 
@@ -127,6 +151,26 @@ describe('weekRows: the word by day table behind the week figure', () => {
 
   it('top is the largest single cell, not a total', () => {
     assert.equal(weekRows([bucket(['a', 'word', 4]), bucket(['a', 'word', 2]), bucket(['a', 'word', 6])]).top, 6)
+  })
+
+  it('breaks a tie by pt-BR collation, not code points: água and ônibus before zebra, é before f', () => {
+    const { rows } = weekRows([bucket(['zebra', 'word', 2], ['ônibus', 'word', 2], ['água', 'word', 2], ['fé', 'word', 2], ['ferro', 'word', 2])])
+    assert.deepEqual(rows.map((r) => r.term), ['água', 'ferro', 'fé', 'ônibus', 'zebra'].sort((x, y) => x.localeCompare(y, 'pt-BR')))
+    assert.equal(rows[0].term, 'água')
+    assert.equal(rows[rows.length - 1].term, 'zebra')
+  })
+
+  it('total outranks the term: a quiet word that sorts first still comes last', () => {
+    const { rows } = weekRows([bucket(['aaa', 'word', 1], ['zzz', 'word', 4]), bucket(['zzz', 'word', 4])])
+    assert.deepEqual(rows.map((r) => r.term), ['zzz', 'aaa'])
+  })
+
+  it('every row has one cell per bucket, whatever order a word is listed in', () => {
+    const { rows } = weekRows([bucket(['a', 'word', 1]), bucket(), bucket(['b', 'word', 2]), bucket(), bucket(['a', 'word', 5])])
+    for (const r of rows) assert.equal(r.cells.length, 5)
+    assert.deepEqual(rows.find((r) => r.term === 'a')?.cells, [1, null, null, null, 5])
+    assert.deepEqual(rows.find((r) => r.term === 'b')?.cells, [null, null, 2, null, null])
+    assert.equal(rows.find((r) => r.term === 'a')?.total, 6)
   })
 
   it('an empty week has no rows and a top of 1', () => {

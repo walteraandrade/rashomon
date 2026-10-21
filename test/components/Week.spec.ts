@@ -55,8 +55,13 @@ const escape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 
 const weekCalls = () => calls.filter((u) => u.includes('/week'))
 const docsCalls = () => calls.filter((u) => u.includes('/docs'))
 const qs = (u: string) => new URL(u, 'http://localhost').searchParams
+// happy-dom never matches ':checked' on an <option>, and Svelte's bind:value reads the choice
+// through exactly that selector, so a bare `el.value = x` binds undefined (the request loses its
+// limit and the select falls back to its first option, 5). The shim answers what a browser would.
 const select = (id: string, value: string) => {
   const el = $(id) as HTMLSelectElement
+  const query = el.querySelector.bind(el)
+  el.querySelector = ((sel: string) => (sel === ':checked' ? el.options[el.selectedIndex] : query(sel))) as typeof el.querySelector
   el.value = value
   el.dispatchEvent(new Event('change', { bubbles: true }))
   flushSync()
@@ -183,6 +188,37 @@ describe('Week.svelte (#329): a word by day table', () => {
     expect(weekCalls()).toHaveLength(before)
   })
 
+  // The select keeps 12. A spec that reads the last request after picking 12 a second time sees
+  // 5 instead: a repeated recorte is answered from the 20 s scope memo with no request, so the
+  // last call is still the previous pick.
+  it('the limit select keeps 12: a seed of 12 and a fresh pick of 12 both reach the select and the request', async () => {
+    boot({ search: '?week.limit=12' })
+    await mountWeek()
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('12')
+    expect(qs(weekCalls()[0]).get('limit')).toBe('12')
+    expect([...($('#weekLimit') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['5', '8', '12'])
+    select('#weekLimit', '8')
+    await settle(200)
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('8')
+    expect(weekCalls().map((u) => qs(u).get('limit'))).toEqual(['12', '8'])
+  })
+
+  it('a fresh pick of 12 from the default asks for 12 and the select reads 12 back', async () => {
+    boot()
+    await mountWeek()
+    select('#weekLimit', '12')
+    await settle(200)
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('12')
+    expect(qs(weekCalls()[1]).get('limit')).toBe('12')
+    select('#weekLimit', '5')
+    await settle(200)
+    select('#weekLimit', '12')
+    await settle(200)
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('12')
+    expect(weekCalls().map((u) => qs(u).get('limit'))).toEqual(['8', '12', '5'])
+    expect($('#week .figure-key').textContent).toMatch(/fora das 12 mais citadas/)
+  })
+
   it('AC1: renders one row per word ordered by weekly total, then term, then kind', async () => {
     weekBody = rich
     boot()
@@ -270,6 +306,75 @@ describe('Week.svelte (#329): a word by day table', () => {
     const gap = (term: string, iso: string) => all('#weekChart .week-cell.is-gap').find((g) => g.getAttribute('aria-label')!.startsWith(term + ',') && g.getAttribute('data-day') === iso)!
     expect(gap('a', '2026-09-03').getAttribute('aria-label')).toMatch(/fora das 5 mais citadas do dia$/)
     expect(gap('w0', '2026-09-02').getAttribute('aria-label')).toMatch(/não apareceu neste dia$/)
+  })
+
+  it('AC4: a gap label uses the limit the shown data was loaded with, not the select that is still reloading', async () => {
+    const day = (i: number) => ['a', 'b', 'c', 'd', i % 2 ? 'e' : 'f'].map((term, k) => ({ term, kind: 'word', count: 9 - k }))
+    weekBody = () => ({ days: 7, tz: 'America/Sao_Paulo', buckets: Array.from({ length: 7 }, (_, i) => bucketAt(i, { terms: day(i) })) })
+    boot({ search: '?week.limit=5' })
+    await mountWeek()
+    const labels = () => all('#weekChart .week-cell.is-gap').map((g) => g.getAttribute('aria-label')!)
+    expect(labels()).toHaveLength(7)
+    for (const l of labels()) expect(l).toMatch(/: fora das 5 mais citadas do dia$/)
+    hold = true
+    select('#weekLimit', '12')
+    await settle(200)
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('12')
+    for (const l of labels()) expect(l, 'the select says 12 but the data on screen was loaded with 5').toMatch(/: fora das 5 mais citadas do dia$/)
+    hold = false
+    pending.splice(0).forEach((f) => f())
+    await settle()
+    expect(qs(weekCalls()[1]).get('limit')).toBe('12')
+    for (const l of labels()) expect(l, 'with 12 asked and 5 terms back the day was not cut').toMatch(/: não apareceu neste dia$/)
+  })
+
+  it('AC4: a day with fewer terms than 12 says the word did not appear, naming no limit', async () => {
+    const terms = (n: number) => Array.from({ length: n }, (_, k) => ({ term: `w${k}`, kind: 'word', count: 20 - k }))
+    weekBody = () => ({ days: 7, tz: 'America/Sao_Paulo', buckets: Array.from({ length: 7 }, (_, i) => bucketAt(i, { terms: terms(i === 0 ? 11 : 12) })) })
+    boot({ search: '?week.limit=12' })
+    await mountWeek()
+    expect(($('#weekLimit') as HTMLSelectElement).value).toBe('12')
+    expect(qs(weekCalls()[0]).get('limit')).toBe('12')
+    const gaps = all('#weekChart .week-cell.is-gap')
+    expect(gaps).toHaveLength(1)
+    expect(gaps[0].getAttribute('data-day')).toBe('2026-09-02')
+    expect(gaps[0].getAttribute('aria-label')).toMatch(/^w11, [^:,]+ 2: não apareceu neste dia$/)
+  })
+
+  it('AC4: a day that carries exactly the limit and lacks a word says outside the top N, with that limit', async () => {
+    const terms = (names: string[]) => names.map((term, k) => ({ term, kind: 'word', count: 9 - k }))
+    weekBody = () => ({
+      days: 7,
+      tz: 'America/Sao_Paulo',
+      buckets: Array.from({ length: 7 }, (_, i) => bucketAt(i, { terms: terms(i === 3 ? ['a', 'b', 'x', 'y', 'z'] : ['a', 'b', 'c', 'd', 'e']) })),
+    })
+    boot({ search: '?week.limit=5' })
+    await mountWeek()
+    const gaps = all('#weekChart .week-cell.is-gap')
+    expect(gaps).toHaveLength(21)
+    for (const g of gaps) expect(g.getAttribute('aria-label')).toMatch(/: fora das 5 mais citadas do dia$/)
+    expect(gaps.filter((g) => g.getAttribute('data-day') === '2026-09-05')).toHaveLength(3)
+  })
+
+  it('AC8: changing person or source releases the pick, closes its card and reloads', async () => {
+    boot()
+    await mountWeek()
+    click(word())
+    await settle()
+    expect(openedBy('week')).toBe(true)
+    select('#weekPerson', 'bolsonaro')
+    await settle(200)
+    expect(openedBy('week')).toBe(false)
+    expect(weekCalls()).toHaveLength(2)
+    expect(weekCalls()[1]).toMatch(/\/people\/bolsonaro\/week/)
+    click(word())
+    await settle()
+    expect(openedBy('week')).toBe(true)
+    select('#weekSource', 'bluesky')
+    await settle(200)
+    expect(openedBy('week')).toBe(false)
+    expect(weekCalls()).toHaveLength(3)
+    expect(qs(weekCalls()[2]).get('source')).toBe('bluesky')
   })
 
   it("AC6: a cell click opens the week card for the person, term, kind, day and source; the kicker names the day", async () => {

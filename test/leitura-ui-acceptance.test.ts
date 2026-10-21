@@ -430,6 +430,38 @@ describe('the week figure is a table that scrolls sideways at every width (issue
     for (const lv of [1, 2, 3, 4, 5]) assert.match(text, new RegExp(`\\.persistence-cell\\[data-lv="${lv}"\\][^{]*\\.week-cell\\[data-lv="${lv}"\\][^{]*\\{|\\.week-cell\\[data-lv="${lv}"\\][^{]*\\.persistence-cell\\[data-lv="${lv}"\\][^{]*\\{`))
   })
 
+  it('the corner head is pinned too, so a day head never slides under the term column', () => {
+    const rules = [...css().matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].split(',').some((x) => /^\.week-table thead th:first-child$/.test(x.trim())))
+    assert.ok(rules.length, 'a rule pins the corner')
+    const body = rules.map((m) => m[2]).join(';')
+    assert.match(body, /position:\s*sticky/)
+    assert.match(body, /left:\s*0/)
+    assert.match(body, /background:\s*var\(--panel\)/)
+  })
+
+  it('the table keeps separate borders, a floor width, and a term column that truncates instead of growing', () => {
+    const rules = (selector: string) => [...css().matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].split(',').map((x) => x.trim()).includes(selector)).map((m) => m[2]).join(';')
+    assert.match(rules('.week-table'), /border-collapse:\s*separate/, 'sticky cells need separate borders to keep theirs')
+    assert.match(rules('.week-table'), /min-width:/, 'below a floor the table scrolls instead of squeezing')
+    const term = rules('.week-term')
+    assert.match(term, /max-width:/)
+    assert.match(term, /text-overflow:\s*ellipsis/)
+  })
+
+  it('a filled cell is a button on the persistence ramp and the selected and hover looks are grouped with it', () => {
+    const text = css()
+    assert.match(text, /button\.persistence-cell\.is-selected,\s*button\.week-cell\.is-selected/)
+    assert.match(text, /button\.persistence-cell:hover[^{]*button\.week-cell:hover/)
+    assert.match(text, /\.persistence-cell\.ghost,\s*\.week-cell\.ghost/)
+  })
+
+  it('the key\'s gap swatch takes the colour of the dashed no-data cell', () => {
+    const rules = (selector: string) => [...css().matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].split(',').map((x) => x.trim()).includes(selector)).map((m) => m[2]).join(';')
+    const colour = (body: string) => body.match(/border-color:\s*([^;]+)/)?.[1].trim()
+    assert.ok(colour(rules('.week-gap-swatch')))
+    assert.equal(colour(rules('.week-gap-swatch')), colour(rules('.week-cell.is-gap')))
+  })
+
   it('draws the key\'s empty swatch dashed', () => {
     assert.match(ruleFor('.week-gap-swatch'), /border-style:\s*dashed/)
   })

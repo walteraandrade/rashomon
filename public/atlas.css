@@ -805,15 +805,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    sideways inside .week-scroll at every width instead of squeezing. --ink only, no
    --hostile/--favor/--cmp-a/--cmp-b. ---------- */
 .week-chart { margin: 18px 0 0; }
-.week-ghost { display: flex; flex-direction: column; gap: 2px; }
-.week-ghost-row { display: flex; align-items: center; gap: 2px; }
-.week-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
-.week-ghost-row .week-cell { flex: 1 1 0; }
-.week-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .week-table { min-width: calc(12ch + 7 * 58px); }
 .week-day-head { vertical-align: bottom; min-width: 56px; }
 .week-table thead th { padding-bottom: var(--space-2); }
 .week-day-head .stat { margin: 0; }
+/* The second selector outranks .week-table th's reset; the bare one is what the stylesheet test reads. */
 .week-term, .week-table .week-term { position: sticky; left: 0; z-index: 1; width: 1%; max-width: min(24ch, 26vw); padding-right: var(--space-4); background: var(--panel); color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .week-table thead th:first-child { position: sticky; left: 0; z-index: 2; background: var(--panel); }
 .week-table .week-c { padding: 1px; }
@@ -954,7 +950,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    visibly filled; an outline cell is a week the word was outside that week's top 50 (or before
    the series began), never a zero. No --hostile/--favor/--cmp-a/--cmp-b. ---------- */
 .persistence-chart { margin: 18px 0 0; }
-.persistence-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.persistence-scroll, .week-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .persistence-table, .week-table { border-collapse: separate; border-spacing: 0; width: 100%; font-family: var(--mono); font-size: var(--t-xs); }
 .persistence-table th, .persistence-table td, .week-table th, .week-table td { padding: 0; font-weight: 400; text-align: left; }
 .persistence-table thead th { height: 1.6em; vertical-align: bottom; }
@@ -993,10 +989,10 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
 .persistence-stats .stat > div { flex-direction: row-reverse; align-items: baseline; justify-content: flex-end; gap: var(--space-2); }
 .persistence-stats .stat dd { font-size: var(--t-sm); }
 .persistence-stats .stat dt { font-size: var(--t-2xs); color: var(--muted); }
-.persistence-ghost { display: flex; flex-direction: column; gap: 2px; }
-.persistence-ghost-row { display: flex; align-items: center; gap: 2px; }
-.persistence-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
-.persistence-ghost-row .persistence-cell { flex: 1 1 0; }
+.persistence-ghost, .week-ghost { display: flex; flex-direction: column; gap: 2px; }
+.persistence-ghost-row, .week-ghost-row { display: flex; align-items: center; gap: 2px; }
+.persistence-ghost-row .ghost-outlet-d, .week-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
+.persistence-ghost-row .persistence-cell, .week-ghost-row .week-cell { flex: 1 1 0; }
 #persistenceNote { margin-top: var(--space-3); }
 
 /* ---------- the pet ---------- */

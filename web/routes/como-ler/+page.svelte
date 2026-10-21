@@ -100,7 +100,7 @@
         <h3>O número do dia</h3>
         <p>Junto do rótulo de cada dia, quantos documentos citam a pessoa naquele dia, mesmo quando nenhuma palavra sobrevive ao corte de nomes próprios. Um dia sem documentos mostra 0 e não some da semana.</p>
         <h3>Clique</h3>
-        <p>Abre os textos daquele dia com aquela palavra. Clicar de novo na mesma célula, ou fora da tabela, fecha. Em telas estreitas a tabela rola para o lado e a coluna das palavras fica fixa.</p>
+        <p>Abre os textos daquele dia com aquela palavra. Clicar de novo na mesma célula, num espaço vazio da tabela ou apertar Esc fecha. Em telas estreitas a tabela rola para o lado e a coluna das palavras fica fixa.</p>
         <p>O atlas tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do atlas.</p>
       </div>
       <div id="atencao">

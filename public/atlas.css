@@ -863,7 +863,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* ---------- agenda (figure 7, domain × person coverage share, issue #208): a plain table --
    the mark is a percentage, not a position to lay out, so it earns no swarm of its own.
    Ink only: no new hue, share alone drives how dark a cell's own number reads. */
-.agenda-grid { display: block; margin-top: 18px; }
+.agenda-grid { display: block; margin: 18px 0 0; }
 .agenda-scroll { position: relative; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .agenda-table { border-collapse: separate; border-spacing: 0; font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .agenda-table th, .agenda-table td { padding: 6px var(--space-3); border-bottom: 1px solid var(--line); text-align: left; }
@@ -1064,7 +1064,10 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
   .comention-name { grid-column: 1; }
   .comention-count { grid-column: 2; grid-row: 1; }
   .comention-bar { grid-column: 1 / -1; grid-row: 2; }
-  .agenda-table tbody th .d { display: inline-block; max-width: min(28ch, 34vw); overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+  .agenda-table th, .agenda-table td { padding-left: var(--space-2); padding-right: var(--space-2); }
+  .agenda-table tbody th .d { display: block; max-width: min(28ch, 28vw); overflow: hidden; text-overflow: ellipsis; margin-right: 0; }
+  .agenda-table tbody th .lean-chip { display: table; margin: 2px 0 0; }
+  .agenda-table thead th:not(:first-child) { white-space: normal; min-width: 9ch; }
 }
 
 .app-root { display: contents; }

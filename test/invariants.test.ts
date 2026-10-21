@@ -165,7 +165,7 @@ describe('the module boundaries CLAUDE.md declares actually hold', () => {
       'measure.ts': ['./layout.js', './format.js'],
       'compare-model.ts': ['./format.js'],
       'butterfly-model.ts': ['./format.js'],
-      'strip-model.ts': ['./format.js', './layout.js'],
+      'strip-model.ts': ['./format.js'],
       'docs-paint.ts': ['./format.js'],
       'docs-card.svelte.ts': ['./api.js', './docs-paint.js', './perf.js', './state.js'],
       'help.svelte.ts': [],

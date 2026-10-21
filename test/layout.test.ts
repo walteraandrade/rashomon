@@ -504,6 +504,15 @@ describe('#149 AC2/AC3/AC4: termStripLayout, words on the kikori axis', () => {
   })
 })
 
+describe('stripRadius: the atlas strip mode dot size', () => {
+  it('grows with the square root of texts, caps at 30 and shrinks on a narrow strip down to 55%', () => {
+    assert.equal(stripRadius(3), 4 + 2.8 * Math.sqrt(3))
+    assert.equal(stripRadius(10_000), 30, 'capped')
+    assert.equal(stripRadius(10_000, 328), 30 * 0.55, 'a phone-wide strip shrinks the dots, floor 55%')
+    assert.equal(stripRadius(3, 2000), 4 + 2.8 * Math.sqrt(3), 'a wide strip never grows them')
+  })
+})
+
 describe('logTicks (issue #328 AC13)', () => {
   it('lists the 1-2-5 values inside the range, ascending', () => {
     assert.deepEqual(logTicks(3, 480), [5, 10, 20, 50, 100, 200])

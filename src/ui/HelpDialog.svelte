@@ -59,8 +59,8 @@
     <div id="help-avaliacao">
       <h3>Gráfico 2 · Avaliação</h3>
       <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes. Nunca compare a nota de uma pessoa com a de outra: o nome puxa a nota.</p>
-      <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos.</p>
-      <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara da lista e da dispersão. É a mesma nota, não outra medida.</p>
+      <p><b>O gráfico</b> mostra uma linha por veículo, os 20 com mais textos avaliados, e só entram veículos com 3 ou mais textos avaliados. Cada ponto fica na nota média do veículo, de −5 a +5; uma média além disso é desenhada na borda, com uma seta, e o número continua o real. O tamanho do ponto é quantos textos; a linha vertical tracejada é a média da pessoa.</p>
+      <p>No atlas, o modo <b>Avaliação</b> usa a mesma nota do kikori, mas com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara da lista e da dispersão. É a mesma nota, não outra medida.</p>
     </div>
     <div id="help-comparar">
       <h3>Gráfico 3 · Duas pessoas ou dois recortes</h3>

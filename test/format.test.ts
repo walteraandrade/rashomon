@@ -33,7 +33,6 @@ import {
   testimonyClass,
   testimonyColor,
   testimonyFocus,
-  testimonyPosition,
   themeMask,
 } from '../src/ui/format.js'
 
@@ -273,7 +272,7 @@ describe('bskyUrl', () => {
   })
 })
 
-describe('testimony helpers: testimonyClass, testimonyColor, testimonyPosition, signed', () => {
+describe('testimony helpers: testimonyClass, testimonyColor, signed', () => {
   it('testimonyClass follows the model cut at ±2.5 and stays null without a score', () => {
     assert.equal(testimonyClass(-2.5), 'negativo')
     assert.equal(testimonyClass(-2.49), 'neutro')
@@ -290,11 +289,7 @@ describe('testimony helpers: testimonyClass, testimonyColor, testimonyPosition, 
     assert.notEqual(testimonyColor(-2), testimonyColor(2))
   })
 
-  it('testimonyPosition maps -10..+10 onto 0..100% and signed() shows the sign', () => {
-    assert.equal(testimonyPosition(-10), 0)
-    assert.equal(testimonyPosition(0), 50)
-    assert.equal(testimonyPosition(10), 100)
-    assert.equal(testimonyPosition(25), 100, 'clamped')
+  it('signed() shows the sign', () => {
     assert.equal(signed(1.5), '+1,5')
     assert.equal(signed(-2.16), '-2,16')
     assert.equal(signed(0), '0')

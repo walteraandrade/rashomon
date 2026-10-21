@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import * as api from './api.js'
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
@@ -14,26 +14,24 @@
     testimonyClass,
     testimonyColor,
     testimonyFocus,
-    testimonyPosition,
     type OutletRow,
     type Testimony,
   } from './format.js'
-  import { STRIP_PAD, stripLayout } from './strip-model.js'
+  import { arrowPoints, meanLabelX, rankedRows, rankFrame } from './strip-model.js'
   import { seedFor } from './seed.js'
 
   type Merged = ReturnType<typeof mergeOutlets>[number]
   type Phase = 'ghost' | 'data' | 'error'
 
-  const GHOST_DOTS: [number, number][] = [
-    [92, 11],
-    [210, 8],
-    [348, 17],
-    [430, 10],
-    [528, 21],
-    [656, 9],
-    [768, 14],
+  // Scores and label-bar widths of the six placeholder rows, drawn over the real axis frame.
+  const GHOST_ROWS: [number, number][] = [
+    [-2, 70],
+    [1, 52],
+    [3, 64],
+    [-0.5, 44],
+    [2, 58],
+    [0.5, 38],
   ]
-  const TICKS = [-10, -5, 0, 5, 10]
   const DAYS = ['7', '21']
   const WIDEST = DAYS.at(-1)
   const GHOST_WIDTHS = ['', 'is-mid', 'is-short']
@@ -183,6 +181,10 @@
     },
   })
 
+  onMount(() => {
+    stripWidth = stripEl?.clientWidth || stripWidth
+  })
+
   const onControlChange = () => {
     testimonyFigure.release()
     outletsFigure.reload()
@@ -224,9 +226,10 @@
     return ungrouped.length ? [...numbered, { eyebrow: 'Sem agrupamento suficiente', group: ungrouped }] : numbered
   })
 
-  const layout = $derived(testimony ? stripLayout(testimony.by_domain, stripWidth) : null)
   const overall = $derived(testimony?.overall.score ?? null)
-  const stripShown = $derived(!unavailable && (testimonyPhase === 'ghost' || (testimonyPhase === 'data' && !!layout?.dots.length && overall !== null)))
+  const ranked = $derived(testimony ? rankedRows(testimony.by_domain, stripWidth, overall) : null)
+  const ghostFrame = $derived(rankFrame(stripWidth, GHOST_ROWS.length))
+  const stripShown = $derived(!unavailable && (testimonyPhase === 'ghost' || (testimonyPhase === 'data' && !!ranked?.rows.length && overall !== null)))
   const hasScore = $derived(overall !== null && !!testimony?.overall.n)
   const focus = $derived(testimony ? testimonyFocus(testimony.by_domain, outlet) : null)
   const busy = (phase: Phase) => phase === 'ghost'
@@ -237,19 +240,21 @@
     <div class="figure-title"><span class="eyebrow">Gráfico 2</span><h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel">{testimonyPhase === 'data' && hasScore && !unavailable ? signed(overall) : ''}</b></h2></div>
     <p class="figure-sub">Compare veículos falando da mesma pessoa. Nunca compare pessoas. <a href="/como-ler#avaliacao">Como ler</a>.</p>
     <dl class="figure-key">
-      <div><dt>Posição</dt><dd>nota do kikori, um modelo treinado para ler se o texto é contra (−10) ou a favor (+10)</dd></div>
-      <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
+      <div><dt>Posição</dt><dd>nota média do veículo, de −5 a +5; mais longe que isso fica na borda, com seta. A nota é do kikori, um modelo treinado para ler se o texto é contra (−10) ou a favor (+10)</dd></div>
+      <div><dt>Tamanho</dt><dd>área do ponto: quantos textos o veículo tem</dd></div>
       <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
     </dl>
     <div class="sentence"><p class="sentence-line">Avaliação por veículo sobre <span class="pick"><select id="testimonyPerson" aria-label="Pessoa (avaliação por veículo)" value={person} onchange={(e) => { person = e.currentTarget.value; onControlChange() }}>{#each people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="testimonyDays" aria-label="Período (avaliação por veículo)" value={days} onchange={(e) => { days = e.currentTarget.value; onControlChange() }}><option value="7">últimos 7 dias</option><option value="21">últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="testimonySource" aria-label="Fonte (avaliação por veículo)" value={source} onchange={(e) => { source = e.currentTarget.value; onControlChange() }}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>.</span></p></div>
   </header>
   <figure class="strip" class:is-loading={testimonyDim} id="strip" aria-label="Veículos na régua da avaliação" aria-busy={busy(testimonyPhase)} hidden={!stripShown} bind:this={stripEl}>
     {#if testimonyPhase === 'ghost' && !unavailable}
-      <div class="ghost-field" aria-hidden="true"><div class="strip-mean-row"></div><svg class="strip-svg" viewBox="0 0 860 96" width="860" height="96"><line class="strip-axis" x1={STRIP_PAD} x2={860 - STRIP_PAD} y1="48" y2="48"/>{#each TICKS as s (s)}{@const gx = STRIP_PAD + ((s + 10) / 20) * (860 - 2 * STRIP_PAD)}<line class="strip-tick" x1={gx} x2={gx} y1="43" y2="53"/>{/each}{#each GHOST_DOTS as [gx, r] (gx)}<circle class="ghost" cx={gx} cy="48" r={r}/>{/each}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div></div>
-    {:else if stripShown && layout && overall !== null}
-      {@const { dots, x, half, height } = layout}
-      <div class="strip-mean-row"><span class="strip-mean" style:--pos="{testimonyPosition(overall)}%">média da pessoa {signed(overall)}</span></div>
-      <svg class="strip-svg" viewBox="0 0 {stripWidth} {height}" width={stripWidth} {height} role="group" aria-label="Veículos na régua da avaliação, de −10 a +10"><line class="strip-axis" x1={STRIP_PAD} x2={stripWidth - STRIP_PAD} y1={half} y2={half}/>{#each TICKS as s (s)}<line class="strip-tick" x1={x(s)} x2={x(s)} y1={half - 5} y2={half + 5}/>{/each}<line class="strip-overall" x1={x(overall)} x2={x(overall)} y1="4" y2={height - 4}/>{#each dots as d (d.domain)}<g class="strip-dot {d.domain === outlet ? 'is-active' : ''}" style:--tone={testimonyColor(d.score)} data-strip-domain={d.domain} role="button" tabindex="0" aria-pressed={d.domain === outlet} aria-label="{d.domain}, {signed(d.score)} em {fmt(d.n)} textos" onclick={() => toggle(d.domain)} onkeydown={(e) => onStripKey(e, d.domain)}><title>{`${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}`}</title><circle class="dot-halo" cx={d.x} cy={half + d.y} r={d.r + 5}/><circle class="dot-face" cx={d.x} cy={half + d.y} r={d.r}/></g>{/each}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui{outlet === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>
+      {@const g = ghostFrame}
+      <div class="rank-scroll ghost-field" aria-hidden="true"><svg class="rank-svg" viewBox="0 0 {g.svgWidth} {g.height}" width={g.svgWidth} height={g.height}>{#each g.ticks as t (t.value)}<line class="rank-grid" class:is-zero={t.value === 0} x1={t.x} x2={t.x} y1={g.top} y2={g.axisY}/>{/each}<line class="strip-axis rank-axis" x1={g.plot.left} x2={g.plot.right} y1={g.axisY} y2={g.axisY}/>{#each GHOST_ROWS as [score, bar], i (i)}{@const y = g.top + i * 22 + 11}<rect class="ghost" x="0" y={y - 4} width={bar} height="8" rx="2"/><circle class="ghost" cx={g.x(score)} cy={y} r="6"/>{/each}</svg></div>
+    {:else if stripShown && ranked && overall !== null}
+      {@const rk = ranked}
+      {@const meanText = `média da pessoa ${signed(overall)}`}
+      <div class="rank-scroll"><svg class="rank-svg" viewBox="0 0 {rk.svgWidth} {rk.height}" width={rk.svgWidth} height={rk.height} role="group" aria-label="Veículos na régua da avaliação, de −5 a +5">{#each rk.ticks as t (t.value)}<line class="rank-grid" class:is-zero={t.value === 0} x1={t.x} x2={t.x} y1={rk.top} y2={rk.axisY}/>{/each}<line class="strip-axis rank-axis" x1={rk.plot.left} x2={rk.plot.right} y1={rk.axisY} y2={rk.axisY}/>{#each rk.ticks as t (t.value)}<text class="rank-tick" x={t.x} y={rk.axisY + 16} text-anchor="middle">{t.label}</text>{/each}<text class="rank-caption" x={rk.plot.left} y={rk.axisY + 34}>contra</text><text class="rank-caption" x={rk.plot.right} y={rk.axisY + 34} text-anchor="end">a favor</text>{#if rk.mean}<g class="strip-overall-mark" data-clipped={rk.mean.clipped}><line class="strip-overall" x1={rk.mean.x} x2={rk.mean.x} y1={rk.top - 6} y2={rk.rowsBottom}/><text class="rank-mean" x={meanLabelX(rk.mean.x, meanText, rk.svgWidth)} y="11" text-anchor="middle">{meanText}</text>{#if rk.mean.clipped}<polygon class="rank-arrow" points={arrowPoints(rk.mean.x, rk.top - 6, 0, rk.mean.clipped)}/>{/if}</g>{/if}{#each rk.rows as d (d.domain)}<g class="rank-row" class:is-active={d.domain === outlet} style:--tone={testimonyColor(d.score)} data-strip-domain={d.domain} data-clipped={d.clipped} role="button" tabindex="0" aria-pressed={d.domain === outlet} aria-label="{d.domain}, {signed(d.score)} em {fmt(d.n)} textos" onclick={() => toggle(d.domain)} onkeydown={(e) => onStripKey(e, d.domain)}><title>{`${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}`}</title><rect class="rank-hit" x="0" y={d.y - 11} width={rk.svgWidth} height="22" fill="transparent"/><text class="rank-label" x="0" y={d.y} dominant-baseline="central">{d.label}</text><line class="rank-stem" x1={rk.zero} x2={d.x} y1={d.y} y2={d.y}/><circle class="dot-halo" cx={d.x} cy={d.y} r={d.r + 2}/><circle class="dot-face" cx={d.x} cy={d.y} r={d.r}/>{#if d.clipped}<polygon class="rank-arrow" points={arrowPoints(d.x, d.y, d.r, d.clipped)}/>{/if}<text class="rank-n" x={rk.svgWidth} y={d.y} text-anchor="end" dominant-baseline="central">{fmt(d.n)}</text></g>{/each}</svg></div>
+      <p class="note">Um veículo por linha: os 20 com mais textos avaliados, 3 ou mais cada. Notas além de −5 ou +5 ficam desenhadas na borda, com seta. Toque numa linha para destacá-la aqui{outlet === 'all' ? '' : '; toque de novo, ou fora das linhas, para soltar'}. O atlas acima não muda.</p>
     {/if}
   </figure>
   <div class="testimony-lists" class:is-loading={testimonyDim} id="testimonyList" aria-busy={busy(unavailable ? 'data' : testimonyPhase)} bind:this={listEl}>

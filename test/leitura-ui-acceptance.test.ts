@@ -363,8 +363,8 @@ describe('markup for figure 1\'s third view, Avaliação', () => {
 
   it('the reading guide states the strip positions words by the same kikori score the mask already colours by', () => {
     const chapter = read('como-ler.html').match(/<div id="avaliacao">[\s\S]*?(?=<div id="pmi">)/)?.[0] ?? ''
-    assert.match(chapter, /modo\s*<b>Avaliação<\/b>\s*do gráfico 1/i, 'names the strip mode of figure 1')
-    assert.match(chapter, /mesma régua/, 'ties it to the same kikori axis figure 2 already explains')
+    assert.match(chapter, /modo\s*<b>Avaliação<\/b>\s*do atlas/i, 'names the strip mode of the atlas')
+    assert.match(chapter, /mesma nota do kikori/, 'ties it to the same kikori score the outlet chart already explains')
     assert.match(chapter, /mesma\s+(?:cor|máscara)/i, 'says the colour is the same mask, not a second metric')
     assert.match(chapter, /não é uma segunda medida/i, 'explicitly rules out a second metric')
   })

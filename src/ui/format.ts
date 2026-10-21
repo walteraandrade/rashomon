@@ -279,8 +279,6 @@ export const themeMask = (term: { community?: number | null }, ranking: Map<numb
   return rank === undefined ? null : `var(--theme-${rank})`
 }
 
-export const testimonyPosition = (s: number) => ((Math.max(-10, Math.min(10, Number(s))) + 10) / 20) * 100
-
 export const signed = (value: unknown) => (Number(value) > 0 ? '+' : '') + fmt(value)
 
 export const foldTestimonyDomains = (rows: TestimonyDomainRow[]): { domain: string; sources: string[]; score: number; n: number }[] => {

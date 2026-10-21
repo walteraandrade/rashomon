@@ -110,3 +110,16 @@ describe('the rising figure key and copy in the page (#327)', () => {
     assert.doesNotMatch(text, /\b(30|60) dias\b/)
   })
 })
+
+describe('the testimony outlet chart is ranked dots (#331)', () => {
+  it('documents the 20-outlet cap, the -5..+5 axis and the edge arrow', () => {
+    assert.match(docsText, /20 outlets with the most evaluated texts/)
+    assert.match(docsText, /mean on a −5 to \+5 axis/)
+    assert.match(docsText, /beyond ±5 is drawn at the edge with an arrow/)
+  })
+
+  it('no longer describes an outlet as a dot on a strip or a swarm', () => {
+    assert.doesNotMatch(docsText, /a dot on the strip/)
+    assert.doesNotMatch(docsText, /beeswarm/i)
+  })
+})

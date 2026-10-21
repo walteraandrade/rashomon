@@ -927,7 +927,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .comention-list li + li { margin-top: var(--space-2); }
 .comention-listitem {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) 4.5rem;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
@@ -1035,7 +1035,7 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
   .chapter-grid { grid-template-columns: 1fr; }
   .pmi-scale { grid-template-columns: repeat(2, 1fr); }
   .chapter-foot { flex-direction: column; }
-  .comention-listitem { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-1); }
+  .comention-listitem { grid-template-columns: minmax(0, 1fr) 4.5rem; row-gap: var(--space-1); }
   .comention-name { grid-column: 1; }
   .comention-count { grid-column: 2; grid-row: 1; }
   .comention-bar { grid-column: 1 / -1; grid-row: 2; }

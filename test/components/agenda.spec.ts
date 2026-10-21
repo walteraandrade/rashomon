@@ -181,6 +181,22 @@ describe('Agenda (issue #288)', () => {
     expect(picks()[0].textContent!.trim()).toBe('7%')
   })
 
+  it('agenda: the lean chip stays inside the sticky domain header cell', async () => {
+    body = data({ domains: ['poder360.com.br'], cells: [{ person_id: 'lula', domain: 'poder360.com.br', docs: 8, share: 0.8 }] })
+    await start()
+    const chips = [...grid().querySelectorAll('.lean-chip')]
+    expect(chips.length).toBeGreaterThan(0)
+    for (const chip of chips) expect(chip.closest('tbody th[scope="row"]')).not.toBeNull()
+    expect(grid().querySelectorAll('thead th')[0].textContent).toBe('')
+  })
+
+  it('agenda: the largest share is 100% in any recorte, whatever its absolute value', async () => {
+    body = data({ cells: [{ person_id: 'lula', domain: 'g1.globo.com', docs: 40, share: 0.9 }, { person_id: 'tarcisio', domain: 'g1.globo.com', docs: 4, share: 0.09 }] })
+    await start()
+    expect(picks().map((p) => p.style.getPropertyValue('--share'))).toEqual(['100%', '10%'])
+    expect(picks().map((p) => p.textContent!.trim())).toEqual(['90%', '9%'])
+  })
+
   it('agenda: the key says the ink is relative to the largest share', async () => {
     await start()
     const key = document.querySelector('#agenda .figure-key')!

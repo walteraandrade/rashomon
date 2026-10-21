@@ -259,6 +259,29 @@ describe('Attention (issue #295)', () => {
     expect(chart().querySelector('[data-row="mentions"] [data-day]')!.getAttribute('aria-label')).toMatch(/, 6 documentos$/)
   })
 
+  it('a series with no overlap names no views on a mentions mark, and the mentions bars keep their floor', async () => {
+    auto = { '/attention': att([{ day: '2026-07-01', views: 800 }]), '/timeline': [bucket('2026-08-15', 0), bucket('2026-08-16', 0)] }
+    await startAll()
+    const marks = [...chart().querySelectorAll('[data-row="mentions"] [data-day]')]
+    expect(marks).toHaveLength(2)
+    for (const m of marks) {
+      expect(m.getAttribute('aria-label')).toMatch(/, 0 documentos$/)
+      expect(m.querySelector('title')!.textContent).toBe(m.getAttribute('aria-label'))
+      expect(Number(m.querySelector('.attention-bar')!.getAttribute('height'))).toBe(3)
+    }
+    expectNoViewsMarks()
+  })
+
+  it('all-zero mentions with views keep one pageviews mark per mentions day', async () => {
+    auto = { '/attention': att([{ day: '2026-08-15', views: 90 }, { day: '2026-08-16', views: 30 }]), '/timeline': [bucket('2026-08-15', 0), bucket('2026-08-16', 0)] }
+    await startAll()
+    expect(chart().querySelectorAll('[data-row="views"] [data-day]')).toHaveLength(2)
+    expect(chart().querySelectorAll('[data-row="views"] .attention-tick')).toHaveLength(2)
+    expect(chart().querySelector('[data-row="views"] svg')!.getAttribute('aria-label')).toBe('Pageviews (Wikipédia)')
+    expect(chart().querySelector('[data-row="views"]')!.textContent).not.toMatch(/sem dado de pageviews/)
+    expect(Number(chart().querySelector('[data-row="mentions"] .attention-bar')!.getAttribute('height'))).toBe(3)
+  })
+
   it('a zero-padded day keeps its 0 visualizações when the person has views elsewhere', async () => {
     auto = { '/attention': att([{ day: '2026-08-16', views: 500 }]), '/timeline': [bucket('2026-08-15', 6), bucket('2026-08-16', 2)] }
     await startAll()

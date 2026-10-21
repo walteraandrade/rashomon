@@ -147,6 +147,14 @@ describe('the legibility fixes are in the reading page and the in-page guide (#3
       })
     }
 
+    it(`${label} words its new legibility sentences without a figure number`, () => {
+      for (const [id, , pattern] of facts) {
+        const paragraph = section(page, `${prefix}${id}`).split('\n').find((p) => pattern.test(p) || /relativa à maior fatia|sem barras|duas colunas/.test(p))
+        assert.ok(paragraph, `#${prefix}${id} carries its legibility sentence`)
+        assert.doesNotMatch(paragraph, /\b(gráfico|figura)\s+\d/i)
+      }
+    })
+
     it(`${label} never calls the agenda ink darker`, () => {
       assert.doesNotMatch(section(page, `${prefix}agenda`), /escur/i)
     })

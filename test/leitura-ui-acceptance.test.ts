@@ -260,6 +260,16 @@ describe('the page is a sequence of graphs', () => {
   })
 })
 
+describe('figure scrollers contain their own sr-only text', () => {
+  it('every horizontal scroller in a figure is the containing block of its absolutely positioned children', () => {
+    const rules = rulesOf(atlasCss())
+    for (const selector of ['.agenda-scroll', '.persistence-scroll', '.week-scroll', '.rank-scroll', '.comention-body']) {
+      assert.equal(declared(rules, selector, 'overflow-x'), 'auto', `${selector} scrolls on its own`)
+      assert.equal(declared(rules, selector, 'position'), 'relative', `${selector} must be position: relative or its .sr-only widens the page`)
+    }
+  })
+})
+
 describe('persistence stat columns', () => {
   const rules = rulesOf(atlasCss())
   const streak = '.persistence-table .persistence-streak'

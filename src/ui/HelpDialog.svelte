@@ -94,12 +94,13 @@
     <div id="help-atencao">
       <h3>Gráfico 6 · Atenção e menções</h3>
       <p>Uma linha traz quantas pessoas visitaram a página da Wikipédia da pessoa, dia a dia: curiosidade, não opinião. A outra traz quantos textos a citam naquele mesmo dia. As duas nunca são comparadas como um número contra o outro: vivem em ordens de grandeza diferentes, cada uma na sua própria escala.</p>
-      <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever. Sem pico em nenhuma das duas (pessoa sem página rastreada, ou janela vazia), não há frase, só uma nota. Clique em qualquer das duas linhas abre os textos de menções do dia; pageviews não têm texto próprio para abrir.</p>
+      <p>Uma frase compara os dois picos: quantos dias a imprensa veio antes da curiosidade, ou quantos dias o público buscou antes de a imprensa escrever. Sem pico em nenhuma das duas (pessoa sem página rastreada, ou janela vazia), não há frase, só uma nota. Uma pessoa sem dado de pageviews não ganha barras de pageviews: a linha mostra só uma nota, sem barras, e as menções seguem como estão. Clique em qualquer das duas linhas abre os textos de menções do dia; pageviews não têm texto próprio para abrir.</p>
     </div>
     <div id="help-agenda">
       <h3>Gráfico 7 · Agenda por veículo</h3>
       <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total.</p>
       <p>A soma de uma linha pode passar de 100%: um documento que cita duas pessoas acompanhadas conta para as duas, uma vez cada. Um veículo com poucos documentos rastreados nem entra na tabela. Clique numa célula abre os documentos daquela pessoa naquele veículo.</p>
+      <p>O número de cada célula é a fatia absoluta, mas a tinta é relativa à maior fatia da grade mostrada: a célula de maior fatia tem a tinta mais clara, e a mais fraca é a que fica perto do cinza. A mesma porcentagem pode ler mais clara ou mais fraca em outro recorte. A coluna dos veículos fica à vista quando a grade rola para o lado.</p>
     </div>
     <div id="help-junto">
       <h3>Gráfico 8 · Quem aparece junto</h3>
@@ -111,6 +112,7 @@
       <h3>Gráfico 9 · Persistência</h3>
       <p>Cada linha é uma palavra; cada célula, uma semana de segunda a domingo, no calendário de Brasília, da mais antiga à esquerda à atual à direita. A célula mostra quantos documentos sobre a pessoa trazem a palavra naquela semana. A palavra só entra na semana se estiver entre as 50 mais fortes dela, com pelo menos 2 documentos.</p>
       <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
+      <p>Sequência e meia-vida são duas colunas na borda direita da tabela, que ficam à vista quando as semanas rolam para o lado; as duas são contadas em semanas.</p>
       <p>A sequência conta as semanas seguidas com a palavra, até agora. A semana em curso ainda está incompleta e não interrompe a conta se estiver vazia. A meia-vida é o número de semanas do pico até a primeira semana completa em que a palavra caiu à metade ou menos; &ldquo;sem queda&rdquo; quer dizer que isso ainda não aconteceu.</p>
       <p>Clicar numa célula abre os textos daquela semana com a palavra. Semanas mais antigas que o período de documentos guardado mostram o número, mas não abrem textos.</p>
     </div>

@@ -127,15 +127,19 @@
       </div>
       <div id="junto">
         <h2>Gráfico 8 · Quem aparece junto</h2>
-        <p>Uma matriz com todas as pessoas rastreadas nas duas margens. Cada célula conta os textos que citam as duas pessoas daquela linha e coluna ao mesmo tempo, na mesma janela de dias.</p>
+        <p>A lista é a vista de partida. Cada linha é um par de pessoas rastreadas: o nome, uma barra e quantos textos citam as duas ao mesmo tempo, na mesma janela de dias.</p>
+        <h3>Uma pessoa ou todas</h3>
+        <p>Com uma pessoa escolhida na frase, a lista traz quem apareceu junto com ela, uma linha por parceiro. Com &ldquo;todas as pessoas&rdquo;, traz os 15 pares com mais textos em comum.</p>
+        <h3>A barra</h3>
+        <p>A barra mais longa é o maior número daquela lista; as outras seguem em proporção. Não é uma fatia do total de textos, e a escala muda quando a lista muda.</p>
         <h3>Aparecer junto não é concordar</h3>
-        <p>A célula só diz que o mesmo texto falou das duas pessoas. Não diz se foi a favor, contra, ou uma da outra: exposição, não avaliação. É por isso que a cor usa só uma tonalidade de tinta, nunca as cores de avaliação do gráfico 2.</p>
+        <p>A linha só diz que o mesmo texto falou das duas pessoas. Não diz se foi a favor, contra, ou uma da outra: exposição, não avaliação. É por isso que a barra usa só uma tonalidade de tinta, nunca as cores de avaliação da avaliação por veículo.</p>
         <h3>Mínimo</h3>
-        <p>O mínimo escolhido na frase esconde pares com poucos textos em comum: um par abaixo dele fica em branco na matriz, não desaparece dela. A matriz mantém sempre o mesmo formato, com ou sem pares.</p>
+        <p>O mínimo escolhido na frase esconde os pares com menos textos em comum que ele. Com o mínimo em 1 aparecem todos os pares.</p>
         <h3>Clique</h3>
-        <p>Abre os textos daquele par, os mesmos textos que citam as duas pessoas juntas. Clique de novo na mesma célula, ou fora da matriz, fecha.</p>
-        <h3>Tela estreita</h3>
-        <p>Abaixo de 700px de largura a matriz vira uma lista, do par com mais textos em comum para o com menos, e o clique funciona igual.</p>
+        <p>Abre os textos daquele par, os mesmos textos que citam as duas pessoas juntas. Clique de novo na mesma linha, ou fora da lista, fecha.</p>
+        <h3>A matriz</h3>
+        <p>Em telas de 900px ou mais, o botão &ldquo;ver a grade inteira&rdquo; troca a lista pela matriz: todas as pessoas rastreadas nas duas margens, uma célula por par, com a mesma cor de tinta. A matriz mostra todos os pares, seja qual for a pessoa escolhida. &ldquo;Ver a lista&rdquo; volta, e o clique funciona igual.</p>
       </div>
       <div id="persistencia">
         <h2>Gráfico 9 · Persistência</h2>

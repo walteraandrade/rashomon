@@ -101,6 +101,7 @@ describe('Agenda (issue #288)', () => {
     expect(grid().querySelectorAll('.agenda-cell').length).toBe(4)
     expect(grid().querySelectorAll('.agenda-cell.is-empty').length).toBe(1)
     expect(grid().querySelector('.lean-chip')).not.toBeNull()
+    expect([...grid().querySelectorAll('tbody th .d')].map((d) => d.getAttribute('title'))).toEqual(['g1.globo.com', 'poder360.com.br'])
     expect(document.getElementById('agendaDays')).not.toBeNull()
     expect(document.getElementById('agendaSource')).not.toBeNull()
     expect(grid().textContent).toContain('80%')
@@ -124,8 +125,83 @@ describe('Agenda (issue #288)', () => {
   it('agenda AC5: under 1% reads <1%, never 0%', async () => {
     await start()
     expect(picks()[0].textContent!.trim()).toBe('<1%')
-    expect(picks()[0].style.getPropertyValue('--share')).toBe('1%')
+    expect(picks()[0].style.getPropertyValue('--share')).toBe('100%')
     expect(grid().textContent).not.toMatch(/(^|[^\d])0%/)
+  })
+
+  it("agenda: --share is share over the grid's largest share, floored at 1%", async () => {
+    body = data({
+      domains: ['g1.globo.com', 'poder360.com.br'],
+      cells: [
+        { person_id: 'lula', domain: 'g1.globo.com', docs: 50, share: 0.5 },
+        { person_id: 'tarcisio', domain: 'g1.globo.com', docs: 13, share: 0.13 },
+        { person_id: 'lula', domain: 'poder360.com.br', docs: 2, share: 0.004 },
+      ],
+    })
+    await start()
+    const read = (person: string, domain: string) => {
+      const b = picks().find((p) => p.dataset.person === person && p.dataset.domain === domain)!
+      return [b.style.getPropertyValue('--share'), b.textContent!.trim()]
+    }
+    expect(read('lula', 'g1.globo.com')).toEqual(['100%', '50%'])
+    expect(read('tarcisio', 'g1.globo.com')).toEqual(['26%', '13%'])
+    expect(read('lula', 'poder360.com.br')).toEqual(['1%', '<1%'])
+  })
+
+  it('agenda: a cell the grid does not paint never sets the maximum', async () => {
+    body = data({
+      domains: ['g1.globo.com'],
+      cells: [
+        { person_id: 'lula', domain: 'g1.globo.com', docs: 5, share: 0.2 },
+        { person_id: 'lula', domain: 'fora.com.br', docs: 90, share: 0.9 },
+        { person_id: 'ghost', domain: 'g1.globo.com', docs: 90, share: 0.9 },
+      ],
+    })
+    await start()
+    expect(picks()).toHaveLength(1)
+    expect(picks()[0].style.getPropertyValue('--share')).toBe('100%')
+  })
+
+  it('agenda: an all-zero grid never writes NaN', async () => {
+    body = data({
+      cells: [
+        { person_id: 'lula', domain: 'g1.globo.com', docs: 3, share: 0 },
+        { person_id: 'tarcisio', domain: 'g1.globo.com', docs: 1, share: 0 },
+      ],
+    })
+    await start()
+    expect(picks().map((p) => p.style.getPropertyValue('--share'))).toEqual(['1%', '1%'])
+    expect(grid().outerHTML).not.toMatch(/NaN|-\d+%/)
+  })
+
+  it('agenda: a single filled cell is the maximum', async () => {
+    body = data({ cells: [{ person_id: 'tarcisio', domain: 'g1.globo.com', docs: 9, share: 0.07 }] })
+    await start()
+    expect(picks()[0].style.getPropertyValue('--share')).toBe('100%')
+    expect(picks()[0].textContent!.trim()).toBe('7%')
+  })
+
+  it('agenda: the lean chip stays inside the sticky domain header cell', async () => {
+    body = data({ domains: ['poder360.com.br'], cells: [{ person_id: 'lula', domain: 'poder360.com.br', docs: 8, share: 0.8 }] })
+    await start()
+    const chips = [...grid().querySelectorAll('.lean-chip')]
+    expect(chips.length).toBeGreaterThan(0)
+    for (const chip of chips) expect(chip.closest('tbody th[scope="row"]')).not.toBeNull()
+    expect(grid().querySelectorAll('thead th')[0].textContent).toBe('')
+  })
+
+  it('agenda: the largest share is 100% in any recorte, whatever its absolute value', async () => {
+    body = data({ cells: [{ person_id: 'lula', domain: 'g1.globo.com', docs: 40, share: 0.9 }, { person_id: 'tarcisio', domain: 'g1.globo.com', docs: 4, share: 0.09 }] })
+    await start()
+    expect(picks().map((p) => p.style.getPropertyValue('--share'))).toEqual(['100%', '10%'])
+    expect(picks().map((p) => p.textContent!.trim())).toEqual(['90%', '9%'])
+  })
+
+  it('agenda: the key says the ink is relative to the largest share', async () => {
+    await start()
+    const key = document.querySelector('#agenda .figure-key')!
+    expect(key.textContent).toMatch(/relativa à maior fatia da grade/)
+    expect(key.textContent).not.toMatch(/escur/)
   })
 
   it('agenda AC6: pick opens one side with domain and no term', async () => {

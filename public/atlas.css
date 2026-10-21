@@ -341,7 +341,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .strip-dot.is-dim { opacity: .35; }
 /* #testimony's outlet chart: one row per outlet on a fixed-size svg. The svg never takes
    width: 100%; below 420px the container scrolls and the ink stays inside the figure. */
-.rank-scroll { overflow-x: auto; }
+.rank-scroll { position: relative; overflow-x: auto; }
 .rank-svg { display: block; }
 .rank-grid { stroke: var(--line); stroke-width: 1; }
 .rank-grid.is-zero { stroke: var(--muted); stroke-width: 2; }
@@ -863,18 +863,20 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* ---------- agenda (figure 7, domain × person coverage share, issue #208): a plain table --
    the mark is a percentage, not a position to lay out, so it earns no swarm of its own.
    Ink only: no new hue, share alone drives how dark a cell's own number reads. */
-.agenda-grid { display: block; margin-top: 18px; }
-.agenda-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.agenda-table { border-collapse: collapse; font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
+.agenda-grid { display: block; margin: 18px 0 0; }
+.agenda-scroll { position: relative; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.agenda-table { border-collapse: separate; border-spacing: 0; font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .agenda-table th, .agenda-table td { padding: 6px var(--space-3); border-bottom: 1px solid var(--line); text-align: left; }
 .agenda-table thead th { color: var(--muted); font-weight: 500; vertical-align: bottom; }
 .agenda-table tbody th { color: var(--ink); font-weight: 500; }
 .agenda-table tbody th .d { margin-right: 6px; }
+/* The domain column stays in view while the people scroll under it; opaque, or a person column shows through. */
+.agenda-table thead th:first-child, .agenda-table tbody th { position: sticky; left: 0; background: var(--panel); }
 .agenda-cell { text-align: right; font-variant-numeric: tabular-nums; }
 .agenda-cell.is-empty { color: var(--muted); text-align: center; }
 .agenda-pick { border: 0; background: none; padding: 2px 4px; font: inherit; cursor: pointer; color: color-mix(in srgb, var(--ink) var(--share, 0%), var(--muted)); }
 .agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: underline; }
-.agenda-pick.is-active { font-weight: 600; text-decoration: none; background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
+.agenda-pick.is-active { font-weight: 600; text-decoration: none; color: var(--ink); background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 .agenda-grid > .note { margin-top: var(--space-3); }
 /* Ink weight, not a lean colour: a small neutral chip beside the domain name it labels. */
 .lean-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); vertical-align: middle; }
@@ -883,7 +885,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 /* ---------- the comention matrix (figure 8, issue #207): a 27x27 half-matrix, upper triangle
    only (a < b). One ink ramp, --ink only, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
    evaluation. The list is the default view; #comentionToggle swaps in the grid from 900px. ---- */
-.comention-body { margin: 18px 0 0; overflow-x: auto; }
+.comention-body { position: relative; margin: 18px 0 0; overflow-x: auto; }
 .comention-grid { display: block; }
 /* Every row, header included, shares one track list from matrixLayout: a column header and its
    cells sit in the same track, so they cannot drift apart whatever a cell's margin or border. */
@@ -977,7 +979,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    visibly filled; an outline cell is a week the word was outside that week's top 50 (or before
    the series began), never a zero. No --hostile/--favor/--cmp-a/--cmp-b. ---------- */
 .persistence-chart { margin: 18px 0 0; }
-.persistence-scroll, .week-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.persistence-scroll, .week-scroll { position: relative; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .persistence-table, .week-table { border-collapse: separate; border-spacing: 0; width: 100%; font-family: var(--mono); font-size: var(--t-xs); }
 .persistence-table th, .persistence-table td, .week-table th, .week-table td { padding: 0; font-weight: 400; text-align: left; }
 .persistence-table thead th { height: 1.6em; vertical-align: bottom; }
@@ -1011,11 +1013,16 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
 .persistence-cell.is-nodata, .week-cell.is-gap { background: transparent; border-style: dashed; border-color: color-mix(in srgb, var(--line) 60%, transparent); }
 .persistence-cell.ghost, .week-cell.ghost { background: var(--soft); border-color: var(--line); }
 .persistence-gap-swatch { display: inline-block; width: 14px; height: 10px; margin-right: var(--space-2); border: 1px solid var(--line); border-radius: 2px; }
-.persistence-table .persistence-stats { padding-left: var(--space-4); white-space: nowrap; }
-.persistence-stats .stat { display: flex; gap: var(--space-5); margin: 0; }
-.persistence-stats .stat > div { flex-direction: row-reverse; align-items: baseline; justify-content: flex-end; gap: var(--space-2); }
-.persistence-stats .stat dd { font-size: var(--t-sm); }
-.persistence-stats .stat dt { font-size: var(--t-2xs); color: var(--muted); }
+.persistence-table { --stat-w: 13ch; }
+/* Two fixed columns pinned to the right edge while the weeks scroll under them. Width includes the padding; font-size is the table's own. */
+.persistence-table .persistence-streak, .persistence-table .persistence-half-life { position: sticky; box-sizing: border-box; width: var(--stat-w); min-width: var(--stat-w); max-width: var(--stat-w); padding: 0 var(--space-3); background: var(--panel); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.persistence-table .persistence-half-life { right: 0; }
+.persistence-table .persistence-streak { right: var(--stat-w); }
+.persistence-table thead .persistence-streak, .persistence-table thead .persistence-half-life { color: var(--muted); vertical-align: bottom; }
+/* Narrow: pinned, the two columns and the word leave no room for a week, so they scroll with the table and come last. */
+@media (max-width: 560px) {
+  .persistence-table .persistence-streak, .persistence-table .persistence-half-life { position: static; }
+}
 .persistence-ghost, .week-ghost { display: flex; flex-direction: column; gap: 2px; }
 .persistence-ghost-row, .week-ghost-row { display: flex; align-items: center; gap: 2px; }
 .persistence-ghost-row .ghost-outlet-d, .week-ghost-row .ghost-outlet-d { flex: 0 0 12ch; margin-right: var(--space-3); }
@@ -1061,6 +1068,10 @@ button.persistence-cell.is-selected, button.week-cell.is-selected { border-color
   .comention-name { grid-column: 1; }
   .comention-count { grid-column: 2; grid-row: 1; }
   .comention-bar { grid-column: 1 / -1; grid-row: 2; }
+  .agenda-table th, .agenda-table td { padding-left: var(--space-2); padding-right: var(--space-2); }
+  .agenda-table tbody th .d { display: block; width: min(28ch, 34vw); white-space: normal; overflow-wrap: anywhere; margin-right: 0; }
+  .agenda-table tbody th .lean-chip { display: table; margin: 2px 0 0; }
+  .agenda-table thead th:not(:first-child) { white-space: normal; min-width: 9ch; }
 }
 
 .app-root { display: contents; }

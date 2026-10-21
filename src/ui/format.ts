@@ -339,6 +339,12 @@ export const agendaRows = (data: Agenda): { domain: string; lean: string | null;
   return data.domains.map((domain) => ({ domain, lean: leanFor(domain), cells: byDomain.get(domain) ?? new Map() }))
 }
 
+// The ink is relative to the largest share the grid paints; a max of 0 floors every cell instead of dividing.
+export const agendaMax = (rows: ReturnType<typeof agendaRows>, personIds: string[]): number =>
+  Math.max(0, ...rows.flatMap((r) => personIds.flatMap((id) => (r.cells.has(id) ? [r.cells.get(id)!.share] : []))))
+
+export const agendaInk = (share: number, max: number): string => `${Math.max(max > 0 ? Math.round((share / max) * 100) : 0, 1)}%`
+
 export const bskyUrl = (d: Doc | null | undefined) => {
   try {
     if (!d || d.source !== 'bluesky' || !d.domain || typeof d.uri !== 'string' || !d.uri.startsWith('at://')) return null

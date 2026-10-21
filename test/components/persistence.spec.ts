@@ -519,11 +519,36 @@ describe('Persistence table markup (#290)', () => {
     expect(rows).toHaveLength(2)
     expect(rows[0].textContent).toContain('sem queda')
     expect(rows[1].textContent).not.toContain('sem queda')
-    const stats = (r: Element) => [...r.querySelectorAll('.stat dd')].map((d) => d.textContent)
+    const stats = (r: Element) => [r.querySelector('td.persistence-streak')!.textContent, r.querySelector('td.persistence-half-life')!.textContent]
     expect(stats(rows[0])).toEqual(['3', 'sem queda'])
     expect(stats(rows[1])).toEqual(['0', '2'])
-    expect(chart().querySelectorAll('.stat').length).toBeGreaterThanOrEqual(4)
+    for (const r of rows) for (const sel of ['td.persistence-streak', 'td.persistence-half-life']) expect(r.querySelector(sel)!.children).toHaveLength(0)
+    expect(chart().querySelectorAll('.stat, dl, dt, dd')).toHaveLength(0)
     for (const bad of ['—', 'null', 'NaN', 'undefined']) expect(html()).not.toContain(bad)
+  })
+
+  it('persistence: the table ends with two named column headers', async () => {
+    await start('', twoRows())
+    const heads = [...chart().querySelectorAll('thead th')]
+    expect(heads.slice(-2).map((h) => h.textContent)).toEqual(['sequência', 'meia-vida'])
+    for (const h of heads.slice(-2)) expect(h.getAttribute('scope')).toBe('col')
+    expect(heads[0].textContent).toBe('')
+    const cols = chart().querySelectorAll('tbody tr')[0].children.length
+    expect(heads).toHaveLength(cols)
+  })
+
+  it('persistence: the unit semanas is named once in the key', async () => {
+    await start('', twoRows())
+    const entries = [...document.querySelectorAll('#persistence .figure-key > div')]
+    const withWeeks = entries.filter((e) => /semanas/.test(e.textContent!))
+    expect(withWeeks).toHaveLength(1)
+    expect(withWeeks[0].textContent).toMatch(/sequência e meia-vida/)
+    const named = (n: string) => entries.find((e) => e.querySelector('dt')!.textContent === n)!
+    expect(named('Sequência')).toBeDefined()
+    expect(named('Meia-vida')).toBeDefined()
+    expect(named('Sequência').textContent).not.toMatch(/semanas/)
+    expect(named('Meia-vida').textContent).not.toMatch(/semanas/)
+    expect(named('Meia-vida').textContent).toMatch(/sem queda/)
   })
 
   it('an expired cell is filled, labelled, not a button; buttons and expired partition the filled cells inside the horizon', async () => {

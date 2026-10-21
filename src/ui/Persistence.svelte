@@ -143,8 +143,9 @@
       <div><dt>Palavra</dt><dd>uma linha por palavra, das que ficaram mais tempo às que ficaram menos</dd></div>
       <div><dt><span class="ink-scale" aria-hidden="true"></span>Célula</dt><dd>uma semana; a tinta é o número de documentos</dd></div>
       <div><dt><span class="persistence-gap-swatch" aria-hidden="true"></span>Vazia</dt><dd>fora das 50 palavras mais fortes da semana; não é zero</dd></div>
-      <div><dt>Sequência</dt><dd>semanas seguidas com a palavra, até agora</dd></div>
-      <div><dt>Meia-vida</dt><dd>semanas do pico até cair à metade; &ldquo;sem queda&rdquo; se ainda não caiu</dd></div>
+      <div><dt>Sequência</dt><dd>quantas seguidas com a palavra, até agora</dd></div>
+      <div><dt>Meia-vida</dt><dd>quanto do pico até cair à metade; &ldquo;sem queda&rdquo; se ainda não caiu</dd></div>
+      <div><dt>Unidade</dt><dd>sequência e meia-vida são contadas em semanas</dd></div>
       <div><dt>Clique</dt><dd>os textos daquela semana</dd></div>
       <div><dt>Início</dt><dd id="persistenceSince">{since}</dd></div>
     </dl>
@@ -177,7 +178,8 @@
               {#each rows[0]?.cells ?? [] as c, i (c.week)}
                 <th scope="col" class="persistence-week">{#if i === 0 || c.week.slice(8) <= '07'}<span>{weekHeadLabel(c.week)}</span>{/if}</th>
               {/each}
-              <th scope="col"></th>
+              <th scope="col" class="persistence-streak">sequência</th>
+              <th scope="col" class="persistence-half-life">meia-vida</th>
             </tr>
           </thead>
           <tbody>
@@ -207,9 +209,8 @@
                     {/if}
                   </td>
                 {/each}
-                <td class="persistence-stats">
-                  <dl class="stat"><div><dt>sequência</dt><dd>{fmt(data.terms[i].streak)}</dd></div></dl><dl class="stat"><div><dt>meia-vida</dt><dd>{data.terms[i].half_life === null ? 'sem queda' : fmt(data.terms[i].half_life)}</dd></div></dl>
-                </td>
+                <td class="persistence-streak">{fmt(data.terms[i].streak)}</td>
+                <td class="persistence-half-life">{data.terms[i].half_life === null ? 'sem queda' : fmt(data.terms[i].half_life)}</td>
               </tr>
             {/each}
           </tbody>

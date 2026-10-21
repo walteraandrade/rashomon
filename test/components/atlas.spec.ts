@@ -1867,6 +1867,76 @@ describe('Atlas: Lista and Dispersão (issue #328)', () => {
     expect(labelled()).toEqual(before)
   })
 
+  it('AC7: a scatter point is coloured by --mask under avaliação, --theme under tema and falls to --muted with the mask off or no person score', async () => {
+    const list = [at({ id: 'word:a', term: 'a', testimony: tone(0.1, 20), community: 3 }), at({ id: 'word:b', term: 'b', count: 5, testimony: null, community: null })]
+    bodies.graph = graphOf(list, { stats: stats({ testimony: { method: 'kikori', score: -2.4, n: 500 } }) })
+    await start()
+    toScatter()
+    const svg = () => $('scatter').querySelector('svg')!
+    expect(svg().classList.contains('is-masked')).toBe(true)
+    expect(svg().classList.contains('is-themed')).toBe(false)
+    expect(paintOf('word:a', '--mask')).toBe(termMask(list[0] as never, -2.4))
+    expect(paintOf('word:b', '--mask')).toBe('')
+    fire($('mask'))
+    expect(svg().classList.contains('is-themed')).toBe(true)
+    expect(svg().classList.contains('is-masked')).toBe(false)
+    expect(paintOf('word:a', '--theme')).toBe(themeMask(list[0] as never, communityRanking(list as { community?: number | null }[])))
+    expect(paintOf('word:b', '--theme')).toBe('')
+    fire($('mask'))
+    expect($('mask').textContent).toBe('Sem cor')
+    expect(svg().classList.contains('is-masked') || svg().classList.contains('is-themed')).toBe(false)
+    unmount(instance!)
+    instance = undefined
+    target.replaceChildren()
+    clearScopes()
+    bodies.graph = graphOf(list, { stats: stats({ testimony: null }) })
+    await start()
+    expect($('columns').classList.contains('is-masked')).toBe(false)
+    expect(all('#columns .list-dot')).toHaveLength(2)
+    toScatter()
+    expect(svg().classList.contains('is-masked')).toBe(false)
+  })
+
+  it('AC9: Escape closes an open card first, keeps the pick, and the next Escape clears it, in Dispersão too', async () => {
+    await start()
+    toScatter()
+    fire(nodeEl('word:golpe'))
+    docsCard.isOpen.mockReturnValue(true)
+    docsCard.close.mockClear()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    flushSync()
+    expect(docsCard.close).toHaveBeenCalled()
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('true')
+    docsCard.isOpen.mockReturnValue(false)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    flushSync()
+    expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('AC15: every point is reachable with Tab and picked with Enter or Space, labelled or not', async () => {
+    bodies.graph = graphOf(Array.from({ length: 24 }, (_, i) => at({ id: `word:p${i}`, term: `ponto${i}`, count: 9, pmi: 1 })))
+    widths.scatter = 300
+    await start('?limit=24')
+    toScatter()
+    const tabbable = all('#scatter [tabindex="0"]').filter((e) => e.dataset.node)
+    expect(tabbable).toHaveLength(24)
+    const unlabelled = points().filter((p) => !p.querySelector('text'))
+    expect(unlabelled.length).toBeGreaterThan(0)
+    for (const p of unlabelled) {
+      expect(p.getAttribute('aria-label')).toMatch(/^ponto\d+, 9 documentos; PMI /)
+      expect(p.tagName.toLowerCase()).toBe('g')
+    }
+    for (const key of ['Enter', ' ']) {
+      docsCard.open.mockClear()
+      const p = unlabelled[0]
+      press(p, key)
+      expect(docsCard.open, key).toHaveBeenCalledTimes(1)
+      expect(p.getAttribute('aria-pressed')).toBe('true')
+      press(p, key)
+      expect(p.getAttribute('aria-pressed')).toBe('false')
+    }
+  })
+
   it('AC19: each mode shows its own key and the Barra line is the same in the page and in the dialog', async () => {
     await start()
     expect(ofKey('keyDefault')).toEqual(['Barra', 'Cor', 'Organização', 'Clique'])

@@ -256,15 +256,15 @@ describe('atlas.css styles the butterfly rows', () => {
   })
 })
 
-describe('atlas.css styles the atlas wash and the dumbbell, and carries no ruler rule (issue #99 AC7, #327)', () => {
+describe('atlas.css styles the dot halo and the dumbbell, and carries no ruler rule (issue #99 AC7, #327)', () => {
   const css = () => readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
 
-  it('keeps the atlas hover wash blurred and strokeless', () => {
-    // No outline on a mark, anywhere: this site draws no borders, so hover and pick are a wash
-    // the word sits on, at two strengths, never a box drawn around it.
-    for (const rule of css().match(/\.(?:atlas-hit|atlas-glow|center-hit|dot-halo)[^{]*\{[^}]*\}/g) ?? []) assert.doesNotMatch(rule, /stroke/, rule)
-    assert.match(css(), /\.atlas-glow[^{]*\{[^}]*blur\((\d+)px\)/)
-    assert.match(css(), /\.atlas-hit[^{]*\{[^}]*blur\((\d+)px\)/)
+  it('keeps the dot halo blurred and strokeless, and the radial wash rules are gone', () => {
+    const rules = css().match(/\.dot-halo[^{]*\{[^}]*\}/g) ?? []
+    assert.ok(rules.length > 0, 'a .dot-halo rule must remain')
+    for (const rule of rules) assert.doesNotMatch(rule, /stroke/, rule)
+    assert.match(css(), /\.dot-halo[^{]*\{[^}]*blur\((\d+)px\)/)
+    assert.doesNotMatch(css(), /\.(?:atlas-glow|atlas-hit|center-hit)\b/)
   })
 
   it('no rule styles the retired ruler', () => {

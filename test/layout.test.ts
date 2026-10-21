@@ -607,6 +607,8 @@ describe('scatterLayout scales (issue #328 AC12)', () => {
     assert.notEqual(layout.zeroY, null)
     assert.ok(by(layout, 'neg').y > (layout.zeroY as number))
     assert.ok(Math.abs(by(layout, 'none').y - (layout.zeroY as number)) < 1e-6)
+    const absent = scatterLayout(measure, [pt('neg', 5, -1.2), pt('pos', 9, 2), { id: 'gone', term: 'gone', kind: 'word', count: 7 } as never], 860)
+    assert.ok(Number.isFinite(by(absent, 'gone').y) && Math.abs(by(absent, 'gone').y - (absent.zeroY as number)) < 1e-6)
   })
 
   it('has no zero line when every pmi is above 0 and the first tick stays above it', () => {
@@ -627,6 +629,41 @@ describe('scatterLayout scales (issue #328 AC12)', () => {
       for (const p of layout.points) assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y))
       assert.equal(layout.points.length, nodes.length)
     }
+  })
+
+  it('widens the x domain to the 1-2-5 values around the counts and draws its ticks', () => {
+    const span = (nodes: ReturnType<typeof pt>[]) => {
+      const layout = scatterLayout(measure, nodes, 860)
+      return [layout.xTicks[0].value, layout.xTicks.at(-1)!.value, layout]
+    }
+    const [lo, hi, layout] = span([pt('a', 3, 1), pt('b', 480, 2)]) as [number, number, ReturnType<typeof scatterLayout>]
+    assert.deepEqual([lo, hi], [2, 500])
+    assert.equal(layout.xTicks[0].x, layout.plot.left)
+    assert.equal(layout.xTicks.at(-1)!.x, layout.plot.right)
+    assert.deepEqual(span([pt('a', 10, 1), pt('b', 10, 2)]).slice(0, 2), [10, 20])
+    assert.deepEqual(span([pt('a', 7, 1)]).slice(0, 2), [5, 10])
+    assert.deepEqual(span([pt('a', 1, 1), pt('b', 100, 2)]).slice(0, 2), [1, 200])
+  })
+
+  it('spans the plot with the y ticks: the first tick on the bottom edge, the last on the top edge', () => {
+    const layout = scatterLayout(measure, [pt('a', 4, -1.4), pt('b', 9, 3.2)], 860)
+    assert.equal(layout.yTicks[0].y, layout.plot.bottom)
+    assert.equal(layout.yTicks.at(-1)!.y, layout.plot.top)
+    assert.ok(layout.yTicks[0].value <= -1.4 && layout.yTicks.at(-1)!.value >= 3.2)
+    assert.ok(layout.yTicks.every((t, i, all) => i === 0 || (t.value > all[i - 1].value && t.y < all[i - 1].y)))
+  })
+
+  it('reads a count of 0 as 1 before the log', () => {
+    const layout = scatterLayout(measure, [pt('zero', 0, 1), pt('one', 1, 1), pt('ten', 10, 1)], 860)
+    assert.equal(by(layout, 'zero').x, by(layout, 'one').x)
+    assert.ok(Number.isFinite(by(layout, 'zero').x))
+  })
+
+  it('lays a point out the same whatever its neighbours, so a pick or a search never moves it', () => {
+    const a = scatterLayout(measure, [pt('a', 5, 1), pt('b', 90, 2)], 860)
+    const b = scatterLayout(measure, [pt('a', 5, 1), pt('b', 90, 2)].reverse(), 860)
+    assert.deepEqual(by(a, 'a'), by(b, 'a'))
+    assert.deepEqual(by(a, 'b'), by(b, 'b'))
   })
 
   it('sizes the height from the width within 320 and 460, and is deterministic', () => {
@@ -699,6 +736,34 @@ describe('placeLabels order and bounds (issue #328 AC14)', () => {
     assert.equal(placed.get('a')?.side, 'right')
     assert.notEqual(placed.get('b')?.side, 'right')
     assert.equal(placeLabels([b, a], bounds, gap).get('b')?.side, 'right')
+  })
+
+  it('puts each side at its documented offset, centred on the point', () => {
+    const a = item('a', 200, 100)
+    const wall = (id: string, x: number, y: number) => item(id, x, y, 40, 14, 5)
+    const left = placeLabels([a, wall('r', 230, 100)], bounds, gap).get('a')!
+    assert.deepEqual([left.side, left.anchor, left.x, left.y], ['left', 'end', 200 - 5 - gap, 100])
+    const above = placeLabels([a, wall('r', 230, 100), wall('l', 170, 100)], bounds, gap).get('a')!
+    assert.deepEqual([above.side, above.anchor, above.x, above.y], ['above', 'middle', 200, 100 - 5 - gap - 14 / 2])
+    const below = placeLabels([a, wall('r', 230, 100), wall('l', 170, 100), wall('u', 200, 80)], bounds, gap).get('a')!
+    assert.deepEqual([below.side, below.anchor, below.x, below.y], ['below', 'middle', 200, 100 + 5 + gap + 14 / 2])
+  })
+
+  it('never lets a label cover a point of a later item, and never returns an item it dropped', () => {
+    const a = item('a', 100, 100, 60)
+    const sitting = item('b', 100 + 5 + gap + 20, 100)
+    const placed = placeLabels([a, sitting], bounds, gap)
+    assert.notEqual(placed.get('a')?.side, 'right')
+    assert.deepEqual([...placeLabels([item('tiny', 5, 5, 400, 14)], bounds, gap).keys()], [])
+  })
+
+  it('a label for a point at each corner stays inside the bounds', () => {
+    const corners = [item('tl', 2, 2), item('tr', 398, 2), item('bl', 2, 198), item('br', 398, 198)]
+    for (const [id, p] of placeLabels(corners, bounds, gap)) {
+      const it = corners.find((c) => c.id === id)!
+      const b = box(it, p)
+      assert.ok(b.left >= 0 && b.right <= 400 && b.top >= 0 && b.bottom <= 200, id)
+    }
   })
 
   it('flips left instead of leaving the bounds on the right edge', () => {

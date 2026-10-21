@@ -24,7 +24,7 @@
       <ol>
         <li>Escolha pessoa, período e fonte na frase.</li>
         <li>Leia a lista, das barras mais longas para as mais curtas. Clique numa palavra para ver os textos; a primeira linha abre os textos da pessoa.</li>
-        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é, ou como uma pessoa muda de um recorte para outro. No 4, o que ganhou ou perdeu espaço esta semana. No 5, em que dia da semana cada palavra apareceu. No 7, veja a fatia de cada veículo por pessoa.</li>
+        <li>No gráfico 2, compare veículos da mesma pessoa. No 3, de quem a palavra é, ou como uma pessoa muda de um recorte para outro. No 4, o que ganhou ou perdeu espaço esta semana. Em A semana, em quais dias cada palavra apareceu. No 7, veja a fatia de cada veículo por pessoa.</li>
       </ol>
     </div>
     <div id="help-atlas">
@@ -86,10 +86,10 @@
     </div>
     <div id="help-semana">
       <h3>Gráfico 5 · A semana</h3>
-      <p>Cada coluna é um dia, do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. O tamanho da palavra é quantos documentos daquele dia a têm; a posição é só o dia, não mede nada dentro da coluna. Uma palavra que aparece em vários dias repete em cada coluna, sem linha ligando uma à outra.</p>
-      <p>Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna. Uma palavra só não quebra na figura: se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe o que passa da altura da coluna num dia com mais palavras do que ela comporta.</p>
-      <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte. Clique numa palavra abre os textos daquele dia com aquela palavra.</p>
-      <p>O gráfico 1 tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do gráfico 1.</p>
+      <p>Uma tabela: cada linha é uma palavra, cada coluna um dia do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. As linhas seguem o total da palavra na semana, das que mais apareceram às que menos; uma palavra que ficou a semana toda se lê numa linha só.</p>
+      <p>O número na célula é quantos documentos daquele dia têm a palavra, e a tinta é o mesmo número: a mais escura é a maior célula da semana. Uma célula vazia, tracejada, não é zero: a palavra ficou fora das N mais citadas daquele dia (N é o que a frase pede). Num dia com menos de N palavras, a célula vazia quer dizer que a palavra não apareceu.</p>
+      <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte, que então mostra 0. Clique numa célula abre os textos daquele dia com aquela palavra. Em telas estreitas a tabela rola para o lado e a coluna das palavras fica fixa.</p>
+      <p>O atlas tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do atlas.</p>
     </div>
     <div id="help-atencao">
       <h3>Gráfico 6 · Atenção e menções</h3>

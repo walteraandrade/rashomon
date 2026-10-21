@@ -416,32 +416,6 @@ describe('axisTicks (#327)', () => {
   })
 })
 
-describe('one rx source for the week word marks', () => {
-  const root = dirname(dirname(fileURLToPath(import.meta.url)))
-  const css = readFileSync(join(root, 'public', 'atlas.css'), 'utf8')
-
-  // The block-body finder for a class selector, tolerant of a rule declared with several
-  // comma-separated selectors (".atlas-glow, .week-glow { rx: 8px }" would be how the spec's own
-  // example groups the shared value).
-  const ruleFor = (selector: string) => {
-    for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-      const selectors = m[1].split(',').map((s) => s.trim())
-      if (selectors.includes(selector)) return m[2]
-    }
-    return ''
-  }
-  const rxOf = (selector: string) => {
-    const body = ruleFor(selector)
-    const found = body.match(/rx\s*:\s*([\d.]+)px/)
-    return found ? Number(found[1]) : undefined
-  }
-
-  it('atlas.css sets rx on the week word marks, at the same values the markup used to carry', () => {
-    assert.equal(rxOf('.week-glow'), 8)
-    assert.equal(rxOf('.week-hit'), 5)
-  })
-})
-
 // --accent is reserved for the live control elsewhere on the page (CLAUDE.md); the views row
 // must never carry a colour rule of its own -- the row head already names the row.
 describe('atlas.css never gives the attention views row --accent', () => {

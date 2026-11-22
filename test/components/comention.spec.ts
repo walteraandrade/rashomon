@@ -140,6 +140,14 @@ describe('Comention', () => {
     expect(select('comentionDays').value).toBe('7')
   })
 
+  it('a filled cell above half the heaviest pair flips to dark text (is-hot), none below does', async () => {
+    await start(filled)
+    const cells = [...document.querySelectorAll<HTMLElement>('button.comention-cell')]
+    expect(cells.length).toBeGreaterThan(0)
+    for (const c of cells) expect(c.classList.contains('is-hot')).toBe(Number(c.style.getPropertyValue('--w')) > 0.5)
+    expect(cells.some((c) => c.classList.contains('is-hot'))).toBe(true)
+  })
+
   it('opens one side with with=<b>, smaller id first (AC2)', async () => {
     await start(filled)
     await pick('lula', 'tarcisio')

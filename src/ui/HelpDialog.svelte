@@ -58,7 +58,7 @@
     <div id="help-avaliacao">
       <h3>Gráfico 2 · Avaliação</h3>
       <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes. Nunca compare a nota de uma pessoa com a de outra: o nome puxa a nota.</p>
-      <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos.</p>
+      <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa e uma linha mais fraca marca o zero. O eixo vai a ±2, ±5 ou ±10, o menor que cabe todos. Só entram veículos com 3 ou mais textos.</p>
       <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara do mapa e da lista. É a mesma nota, não outra medida.</p>
     </div>
     <div id="help-comparar">
@@ -93,7 +93,7 @@
     </div>
     <div id="help-agenda">
       <h3>Gráfico 8 · Agenda por veículo</h3>
-      <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total.</p>
+      <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais forte o tom, medido contra a maior fatia da tabela.</p>
       <p>A soma de uma linha pode passar de 100%: um documento que cita duas pessoas acompanhadas conta para as duas, uma vez cada. Um veículo com poucos documentos rastreados nem entra na tabela. Clique numa célula abre os documentos daquela pessoa naquele veículo.</p>
     </div>
     <div id="help-junto">
@@ -104,7 +104,7 @@
     <div id="help-persistencia">
       <h3>Gráfico 10 · Persistência</h3>
       <p>Cada linha é uma palavra; cada célula, uma semana de segunda a domingo, no calendário de Brasília, da mais antiga à esquerda à atual à direita. A célula mostra quantos documentos sobre a pessoa trazem a palavra naquela semana. A palavra só entra na semana se estiver entre as 50 mais fortes dela, com pelo menos 2 documentos.</p>
-      <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
+      <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. A tabela começa na primeira semana gravada para a pessoa. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
       <p>A sequência conta as semanas seguidas com a palavra, até agora. A semana em curso ainda está incompleta e não interrompe a conta se estiver vazia. A meia-vida é o número de semanas do pico até a primeira semana completa em que a palavra caiu à metade ou menos; &ldquo;sem queda&rdquo; quer dizer que isso ainda não aconteceu.</p>
       <p>Clicar numa célula abre os textos daquela semana com a palavra. Semanas mais antigas que o período de documentos guardado mostram o número, mas não abrem textos.</p>
     </div>

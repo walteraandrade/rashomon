@@ -44,14 +44,15 @@ const inCircle = (box: Box, radius = 346) =>
 const candidates: { x: number; y: number; r: number }[] = []
 for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.push({ x: r * Math.cos((a * Math.PI) / 180), y: r * Math.sin((a * Math.PI) / 180), r })
 
-// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill. The
-// floor is in viewBox units (860 wide): 16 keeps a word at 14px or more on a map 752px wide or wider.
+// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill. Sizes
+// are viewBox units (860 wide) on a map never narrower than ATLAS_MIN_WIDTH, so the floor stays 14px.
+export const ATLAS_MIN_WIDTH = 640
 export const SIZE_CEILING = 38
-export const SIZE_FLOOR = 16
+export const SIZE_FLOOR = Math.ceil((14 * 860) / ATLAS_MIN_WIDTH)
 
 export const sizeRange = (count: number): { minSize: number; maxSize: number } => {
   const density = Math.max(0, Math.min(1, (count - 8) / 14))
-  return { minSize: 20 - (20 - SIZE_FLOOR) * density, maxSize: SIZE_CEILING - 16 * density }
+  return { minSize: 22 - (22 - SIZE_FLOOR) * density, maxSize: SIZE_CEILING - 16 * density }
 }
 
 export const packPass = (measure: Measure, terms: Term[], center: CenterBox, sort: string, phase = 0): Layout => {
@@ -238,7 +239,7 @@ export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5)
   }).placed
 
 export const RULER_PAD = 28
-// Words cannot shrink past 11px, so the ruler trades height for legibility before dropping.
+// Words cannot shrink past RULER_SIZE_MIN, so the ruler trades height for legibility before dropping.
 export const RULER_MAX_HEIGHT = 520
 export const RULER_SIZE_MIN = 14
 const RULER_SIZE_MAX = 34
@@ -451,6 +452,8 @@ export const attentionLayout = (measure: Measure, mentions: { day: string; count
 export const MATRIX_CELL_MIN = 22
 export const MATRIX_CELL_MAX = 42
 const MATRIX_ROWHEAD = 150
+// Room after the last column, so its name, rotated -55°, stays inside the figure.
+export const MATRIX_HEAD_LEAN = 96
 
 export type MatrixCell = { a: string; b: string; count: number | null; ink: number }
 export type MatrixLayout = { cellSize: number; cells: MatrixCell[] }

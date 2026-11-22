@@ -362,7 +362,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .center-hit { fill: transparent; }
 .center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
 .micro { fill: var(--muted); font-family: var(--mono); font-size: var(--t-micro); font-weight: 500; letter-spacing: var(--tr-label); }
-.center-note { fill: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
 .boundary { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
 .halo-in { stop-color: var(--accent); stop-opacity: .045; }
@@ -819,7 +818,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    the mark is a percentage, not a position to lay out, so it earns no swarm/ruler of its own.
    Ink only: no new hue, share alone drives how dark a cell's own number reads. */
 .agenda-grid { display: block; margin-top: 18px; }
-.agenda-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.agenda-scroll { overflow-x: auto; padding: 0 96px 4px 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .agenda-table { border-collapse: collapse; font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .agenda-table th, .agenda-table td { padding: 6px var(--space-3); border-bottom: 1px solid var(--line); text-align: left; }
 .agenda-table thead th { color: var(--muted); font-weight: 500; vertical-align: bottom; }
@@ -827,16 +826,13 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .agenda-table tbody th .d { margin-right: 6px; }
 .agenda-cell { text-align: right; font-variant-numeric: tabular-nums; }
 .agenda-cell.is-empty { color: var(--muted); text-align: center; }
-.agenda-pick { border: 0; background: none; padding: 2px 4px; font: inherit; cursor: pointer; color: color-mix(in srgb, var(--ink) var(--share, 0%), var(--muted)); }
-.agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: underline; }
-.agenda-pick.is-active { font-weight: 600; text-decoration: none; background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 .agenda-grid > .note { margin-top: var(--space-3); }
 /* Ink weight, not a lean colour: a small neutral chip beside the domain name it labels. */
 .lean-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); vertical-align: middle; }
 .agenda-ghost { display: flex; flex-direction: column; gap: var(--space-3); padding-top: 6px; }
 .agenda-ghost-row { display: flex; align-items: center; gap: var(--space-4); }
 /* ---------- the comention matrix (figure 9, issue #207): a 27x27 half-matrix, upper triangle
-   only (a < b). One ink ramp, --ink only, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
+   only (a < b). One sequential --heat ramp, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
    evaluation. Both .comention-grid and .comention-list are always in the DOM; only the media
    query below decides which one shows, the same move the week figure's own breakpoint uses. ---- */
 .comention-body { margin: 18px 0 0; overflow-x: auto; }
@@ -845,9 +841,9 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .comention-rowhead {
   flex: 0 0 150px;
   width: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  display: block;
+  align-self: center;
+  text-align: right;
   padding-right: var(--space-3);
   font-family: var(--sans);
   font-weight: 500;
@@ -857,7 +853,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.comention-headrow .comention-rowhead { flex-basis: 140px; }
 .comention-colhead {
   flex: 1 1 var(--cell, 26px);
   width: var(--cell, 26px);
@@ -989,7 +984,8 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
    read through one sequential hue, --heat, from the panel up; it never means a side or a verdict. */
 
 /* The atlas: no ring, no ticks, no captions in the field. The person's name is the centre. */
-.center-note { fill: var(--muted); font-family: var(--mono); font-size: var(--t-xs); letter-spacing: .02em; }
+/* viewBox units on a map as narrow as 640px: --t-base keeps the note at the 11px floor or above. */
+.center-note { fill: var(--muted); font-family: var(--mono); font-size: var(--t-base); letter-spacing: .02em; }
 .halo-in { stop-color: var(--ink); stop-opacity: .035; }
 .halo-out { stop-color: var(--ink); stop-opacity: 0; }
 .center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--ink) 7%, transparent); }
@@ -1041,13 +1037,15 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .agenda-colhead span { display: block; width: clamp(24px, 2.1vw, 34px); transform: translate(11px, -6px) rotate(-55deg); transform-origin: left bottom; white-space: nowrap; font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
 .agenda-cell { padding: 0; }
 /* The heat ramp jumps over its middle band (mixes of about 45-60%), where neither --ink nor --bg
-   text reaches 4.5:1: below half the peak a cell stays light under --ink, above it dark under --bg. */
-.agenda-pick { --hv: calc(var(--heat-v, 0) * .8 + .28 * clamp(0, (var(--heat-v, 0) - .5) * 10000, 1));
-  display: block; height: 26px; padding: 0; border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); text-align: center;
+   text reaches 4.5:1: below half the peak a cell stays light under --ink, above it (.is-hot) dark
+   under --bg. */
+.agenda-pick { --hv: calc(var(--heat-v, 0) * .8);
+  display: block; border: 0; cursor: pointer; height: 26px; padding: 0; border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); text-align: center;
   background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft));
-  color: color-mix(in srgb, var(--bg) clamp(0%, calc((var(--heat-v, 0) - .5) * 10000%), 100%), var(--ink)); }
+  color: var(--ink); }
+.agenda-pick.is-hot, .comention-cell.is-hot { --hv: calc(var(--heat-v, var(--w, 0)) * .8 + .28); color: var(--bg); }
 .agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: none; box-shadow: inset 0 0 0 1px var(--accent); }
-.agenda-pick.is-active { background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft)); box-shadow: inset 0 0 0 2px var(--accent); }
+.agenda-pick.is-active { font-weight: 600; background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft)); box-shadow: inset 0 0 0 2px var(--accent); }
 .agenda-cell.is-empty { width: 34px; }
 .ink-scale { background: linear-gradient(90deg, var(--soft), var(--heat)); }
 .lean-chip { border: 0; padding: 0; margin-left: var(--space-2); font-size: var(--t-2xs); color: var(--muted); }
@@ -1056,8 +1054,8 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .comention-headrow { height: 132px; align-items: flex-end; }
 .comention-colhead { position: relative; overflow: visible; padding: 0; }
 .comention-colhead span { position: absolute; left: 50%; bottom: 6px; transform: rotate(-55deg); transform-origin: left bottom; white-space: nowrap; font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
-.comention-cell { --hv: calc(var(--w, 0) * .8 + .28 * clamp(0, (var(--w, 0) - .5) * 10000, 1));
-  border-color: transparent; color: color-mix(in srgb, var(--bg) clamp(0%, calc((var(--w, 0) - .5) * 10000%), 100%), var(--ink));
+.comention-cell { --hv: calc(var(--w, 0) * .8);
+  border-color: transparent; color: var(--ink);
   background: color-mix(in srgb, var(--heat) calc(var(--hv) * 90%), var(--soft)); }
 .comention-cell.is-empty { background: color-mix(in srgb, var(--soft) 45%, transparent); }
 .comention-cell:hover:not(.is-empty):not(.is-blank), .comention-cell:focus-visible, .comention-cell.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

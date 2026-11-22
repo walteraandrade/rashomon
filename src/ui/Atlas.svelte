@@ -28,7 +28,7 @@
     type Sparkline,
     type Term,
   } from './format.js'
-  import { centerLabel, pack, routesFrom, STRIP_PAD, termStripLayout } from './layout.js'
+  import { ATLAS_MIN_WIDTH, centerLabel, pack, routesFrom, STRIP_PAD, termStripLayout } from './layout.js'
   import { seedFor } from './seed.js'
   import { createCanvasMeasure } from './measure.js'
 
@@ -172,7 +172,7 @@
   })
   const routeNote = $derived(selected && edges.length < related.size ? `${edges.length} de ${related.size} relações no mapa; lista completa no painel.` : '')
   const noReach = $derived(viewSort === 'reach' && nodes.every((n) => score(n, 'reach') === 0))
-  const mapWidth = $derived(Math.max(640, Math.min(900, viewportWidth - 24)) * zoom)
+  const mapWidth = $derived(Math.max(ATLAS_MIN_WIDTH, Math.min(900, viewportWidth - 24)) * zoom)
 
   const stripW = $derived(stripWidth || 860)
   const strip = $derived(eff === 'strip' && nodes.length ? termStripLayout(nodes, personTestimony, stripW) : null)

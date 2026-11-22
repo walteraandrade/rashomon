@@ -44,7 +44,7 @@
         <h2>Gráfico 2 · Avaliação por veículo</h2>
         <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes, ao contrário do tom.</p>
         <p>O nome da pessoa puxa a nota. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
-        <p><b>A régua</b> põe cada veículo na sua nota média; o tamanho é quantos textos; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos avaliados.</p>
+        <p><b>A régua</b> põe cada veículo na sua nota média; o tamanho é quantos textos; a linha vertical é a média da pessoa, e uma linha mais fraca marca o zero. O eixo se ajusta às notas: ±2, ±5 ou ±10, o menor que cabe todos os veículos. Só entram veículos com 3 ou mais textos avaliados.</p>
         <p>O modo <b>Avaliação</b> do gráfico 1 usa a mesma régua, mas com palavras: cada palavra fica na média das notas dos textos em que aparece, e a cor é a mesma máscara do mapa e da lista, a distância até a média desta pessoa. Não é uma segunda medida, é a mesma nota do kikori vista de outro ângulo.</p>
         <p>A lista de veículos também os agrupa por vocabulário parecido. Vocabulário parecido não é a mesma coisa que linha editorial: dois veículos podem usar palavras semelhantes por motivos que nada têm a ver com posição política. E o número de cada grupo não significa nada por si só, nem pode ser comparado entre uma reconstrução e outra do site: ele só serve para juntar veículos naquela leitura.</p>
       </div>
@@ -122,7 +122,7 @@
         <h2>Gráfico 8 · Agenda por veículo</h2>
         <p>Uma tabela: uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Diferente dos outros gráficos, ele não olha uma pessoa por vez: compara todas de uma vez, veículo por veículo.</p>
         <h3>A fatia</h3>
-        <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais escura a tinta do número.</p>
+        <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais forte o tom da célula, medido contra a maior fatia da tabela; acima da metade dela, o número passa a escuro para continuar legível.</p>
         <h3>Por que passa de 100%</h3>
         <p>Um documento que cita duas pessoas acompanhadas conta uma vez para cada uma. Por isso a soma de uma linha pode passar de 100%; a tabela mede quem o veículo cobre, não divide o veículo em partes.</p>
         <h3>Veículo de fora</h3>
@@ -146,9 +146,9 @@
         <h2>Gráfico 10 · Persistência</h2>
         <p>Uma linha por palavra, uma célula por semana, de segunda a domingo na hora de Brasília: a mais antiga à esquerda, a atual à direita. A figura responde a uma pergunta que os outros não respondem: a palavra ficou, ou foi só um pico?</p>
         <h3>Célula</h3>
-        <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, só mais clara. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>
+        <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, num tom mais fraco. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>
         <h3>Célula vazia não é zero</h3>
-        <p>Cada semana guarda só as 50 palavras mais fortes da pessoa, pela mesma conta do PMI ponderado (PMI × ln(1 + documentos)), com pelo menos 2 documentos. Uma célula vazia diz que a palavra ficou fora dessas 50, não que não apareceu. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A palavra do nome da própria pessoa não entra.</p>
+        <p>Cada semana guarda só as 50 palavras mais fortes da pessoa, pela mesma conta do PMI ponderado (PMI × ln(1 + documentos)), com pelo menos 2 documentos. Uma célula vazia diz que a palavra ficou fora dessas 50, não que não apareceu. A tabela começa na primeira semana gravada para a pessoa; semanas anteriores não aparecem. A palavra do nome da própria pessoa não entra.</p>
         <h3>Sequência</h3>
         <p>Semanas seguidas com a palavra, contadas da atual para trás. A semana em curso ainda está incompleta: se estiver vazia, a contagem parte da anterior. É a leitura de quem ficou.</p>
         <h3>Meia-vida</h3>

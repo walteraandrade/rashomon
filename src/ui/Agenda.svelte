@@ -96,7 +96,7 @@
     <div class="figure-title"><span class="eyebrow">Gráfico 8</span><h2 id="agendaTitle">Agenda por veículo</h2></div>
     <p class="figure-sub">Qual fatia da cobertura rastreada de cada veículo pertence a cada pessoa. <a href="/como-ler#agenda">Como ler</a>.</p>
     <dl class="figure-key">
-      <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo</dd></div>
+      <div><dt><span class="ink-scale" aria-hidden="true"></span>Tinta</dt><dd>fatia da cobertura rastreada do veículo, contra a maior fatia da tabela</dd></div>
       <div><dt>Posição</dt><dd>veículo na linha, pessoa na coluna</dd></div>
       <div><dt>Clique</dt><dd>documentos daquela pessoa naquele veículo</dd></div>
     </dl>
@@ -131,7 +131,7 @@
                 {:else}
                   {@const active = !!selected && selected.person === p.id && selected.domain === row.domain}
                   {@const pct = Math.round(cell.share * 100)}
-                  <td class="agenda-cell"><button class="agenda-pick" class:is-active={active} data-person={p.id} data-domain={row.domain} aria-pressed={active} style:--share="{Math.max(pct, 1)}%" style:--heat-v={cell.share / peakShare} title="{fmt(cell.docs)} {cell.docs === 1 ? 'documento' : 'documentos'}" onclick={() => pick(p.id, p.name, row.domain)}>{cell.docs > 0 && pct === 0 ? '<1%' : `${pct}%`}</button></td>
+                  <td class="agenda-cell"><button class="agenda-pick" class:is-active={active} class:is-hot={cell.share / peakShare > 0.5} data-person={p.id} data-domain={row.domain} aria-pressed={active} style:--heat-v={cell.share / peakShare} title="{fmt(cell.docs)} {cell.docs === 1 ? 'documento' : 'documentos'}" onclick={() => pick(p.id, p.name, row.domain)}>{cell.docs > 0 && pct === 0 ? '<1%' : `${pct}%`}</button></td>
                 {/if}
               {/each}
             </tr>

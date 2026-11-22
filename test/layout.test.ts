@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_TERMS, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, ATLAS_MIN_WIDTH, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_TERMS, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/ruler-model.js'
 import type { CompareTerm } from '../src/ui/format.js'
 import { balanceColor } from '../src/ui/format.js'
@@ -59,6 +59,10 @@ describe('sizeRange', () => {
     assert.ok(many.maxSize < few.maxSize, 'a fuller atlas must lower its largest type')
     assert.ok(many.minSize < few.minSize, 'a fuller atlas must lower its smallest type')
     assert.ok(many.minSize >= SIZE_FLOOR, 'no term goes under the floor')
+  })
+
+  it('keeps every atlas word at 14px or more on the narrowest map', () => {
+    for (const count of [1, 12, 18, 24, 60]) assert.ok((sizeRange(count).minSize * ATLAS_MIN_WIDTH) / 860 >= 14, `${count} terms drew under 14px`)
   })
 
   it('keeps the largest term larger than the smallest at every count', () => {

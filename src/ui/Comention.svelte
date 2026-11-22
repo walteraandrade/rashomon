@@ -5,7 +5,7 @@
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
   import { fmt, sourceLabels, SOURCE_SEGMENTS, type Comention } from './format.js'
-  import { matrixLayout } from './layout.js'
+  import { MATRIX_HEAD_LEAN, matrixLayout } from './layout.js'
   import { seedFor } from './seed.js'
 
   const OWNER = 'comention'
@@ -61,7 +61,7 @@
 
   const measure = () => {
     const w = matrixEl?.clientWidth
-    if (w) width = Math.floor(w)
+    if (w) width = Math.floor(w) - MATRIX_HEAD_LEAN
   }
 
   const showDocs = (a: string, b: string) => {
@@ -199,7 +199,7 @@
                   <span class="comention-cell is-empty" aria-hidden="true"></span>
                 {:else}
                   {@const on = isSelected(cell.a, cell.b)}
-                  <button type="button" class="comention-cell" class:is-selected={on} style:--w={cell.ink} data-a={cell.a} data-b={cell.b} aria-pressed={on} aria-label="{row.name} e {col.name}: {fmt(cell.count)} textos juntos" onclick={() => pick(cell.a, cell.b)}>{fmt(cell.count)}</button>
+                  <button type="button" class="comention-cell" class:is-selected={on} class:is-hot={cell.ink > 0.5} style:--w={cell.ink} data-a={cell.a} data-b={cell.b} aria-pressed={on} aria-label="{row.name} e {col.name}: {fmt(cell.count)} textos juntos" onclick={() => pick(cell.a, cell.b)}>{fmt(cell.count)}</button>
                 {/if}
               {/if}
             {/each}

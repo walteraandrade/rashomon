@@ -232,14 +232,10 @@ const trackedCte = sql`
     select s.id from scope s where exists (select 1 from doc_persons dp where dp.doc_id = s.id)
   )`
 
-// One statement for nodes, signature and stats; `materialized` is spelled out rather than left
-// to the planner. term_p is not kind-filtered: signature ignores kind, and the nodes filter is
-// on a group key, so applying it after the aggregate selects the same rows. term_all stays
-// unrestricted even though it only feeds an inner join against term_p: narrowing it is slower
-// (index scan + merge-join vs seq scan). c_pt/c_t are count(*): doc_terms' PK makes doc_id
-// unique per (term, kind) group, so count(distinct) is pure cost. A person's own name
-// words are dropped by the exclude filter; phrases carrying them by isName. `position(' ' in
-// ...)` guards the string_to_array split so single words (the vast majority) never pay for it.
+// One statement for nodes, signature and stats; `materialized` is spelled out. term_p is not
+// kind-filtered (signature ignores kind; the nodes filter is on a group key). Narrowing term_all
+// is slower (index scan + merge-join vs seq scan). c_pt/c_t are count(*): doc_terms' PK makes
+// doc_id unique per group. `position(' ' in ...)` spares single words the string_to_array split.
 
 // Bare `pmi` in ORDER BY names the rounded output column; inside an expression it names the raw one.
 const graphQuery = (person: Person, q: GraphQuery) => {
@@ -294,13 +290,10 @@ const graphQuery = (person: Person, q: GraphQuery) => {
     ), '[]'::json) as signature`
 }
 
-// The same shape as graphQuery over the tables `pnpm aggregate` builds: one indexed range
-// per (days, source, person) instead of a scan of the window. Zero rows when that window
-// was never built, which is what sends graphFor to the live query. A scope row alone is not
-// a build: graph_terms can be emptied under it (the 2026-09-18 truncate, a build that died
-// mid-window), so a scope with about > 0 and no term rows also yields zero rows rather than
-// an empty graph. domain/lean never come here: the aggregates know only days and a single source.
-// communities=1 left-joins term_communities on graph_terms' own key; a missing row reads null.
+// graphQuery's shape over the `pnpm aggregate` tables: one indexed range per (days, source,
+// person). Zero rows when the window was never built or its graph_terms are gone under a scope
+// row, which sends graphFor to the live query. domain/lean never reach it. communities=1
+// left-joins term_communities on graph_terms' key; a missing row reads null.
 const graphFastQuery = (person: Person, q: GraphQuery) => {
   const sortKeyExpr = sortKey(q.sort, sql.raw('count'))
   const communityJoin = q.communities
@@ -369,15 +362,10 @@ export const isFullKindSet = (kind: string) => {
   return given.length === KINDS.length && KINDS.every((k) => given.includes(k))
 }
 
-// The term list arrives as `kind:term` ids (what the route names a node) and is matched as
-// (kind, term) pairs: an expression like `kind || ':' || term = any(...)` has no index, and the
-// planner answered it with a parallel seq scan of doc_terms plus a Parallel Hash whose barrier
-// waited seconds on a CPU-starved instance (issue #163). `wantedTerms` resolves the pairs to
-// term_ids through terms' unique (kind, term) index, and doc_terms_term_id_idx then finds each
-// term's rows directly. count(*): doc_terms' PK + about's PK (doc_persons with person_id fixed)
-// make doc_id unique inside each (s, t) group. The pair is deduplicated on the ids (a < b) and
-// then oriented by text, so which of two terms leads never depends on id order. Order by is
-// spelled out rather than relying on plan emission order.
+// Ids arrive as `kind:term` and match as (kind, term) pairs through terms' unique index:
+// `kind || ':' || term = any(...)` has no index and plans a parallel seq scan of doc_terms.
+// count(*): doc_terms' PK and about's PK make doc_id unique per (s, t). Pairs dedupe on ids
+// (a < b) and are then oriented by text, so id order never decides which term leads.
 const splitIds = (ids: string[]) => {
   const at = ids.map((id) => id.indexOf(':'))
   return { kinds: ids.map((id, i) => id.slice(0, at[i])), terms: ids.map((id, i) => id.slice(at[i] + 1)) }
@@ -533,13 +521,10 @@ const docsWhere = (term: string, kind: string) => sql`(
   )`
 export const docsWhereSql = docsWhere('', 'all').text
 
-// A doc's calendar day is published_at in America/Sao_Paulo, except a published_at after the
-// end of today BRT folds into today (the `least(...)`) -- so day=<today> also returns every
-// future-dated doc. The fold is deliberate: it is what makes /week's bucket.about for a day equal
-// this predicate's total for day=<that day> (issue #150). The predicate stays unconditionally
-// bound (day = '' or ...) rather than branching the query text on day === '', because
-// `statements` in this file pins each builder's rendered text to its SHAPE, not its values
-// (test/graph.test.ts "statements render the same text the routes run").
+// A doc's day is published_at in America/Sao_Paulo, a future date folding into today (the
+// `least(...)`), so /week's bucket.about for a day equals this predicate's total for that day.
+// Always bound (day = '' or ...), never branched on day === '': `statements` pins each
+// builder's text to its shape, not its values.
 const docsDay = (day: string) =>
   sql`(${day} = '' or least((d.published_at at time zone 'America/Sao_Paulo')::date, (now() at time zone 'America/Sao_Paulo')::date) = nullif(${day}, '')::date)`
 
@@ -763,16 +748,12 @@ export const testimonyFor = async (person: Person, q: TestimonyQuery) => {
   }
 }
 
-// Two disjoint windows (recent, then the baseline immediately before it) so a doc is never
-// double-counted. c_recent/c_baseline are count(*) for the same reason as graphQuery's term_p.
-// `terms` are the `limit` highest lifts, as they always were. `present` are the `limit` most
-// present terms of the recent window, ordered by lift too: a set picked by lift is the top of
-// one tail and can only ever sit on one side of a ruler, so the page rules by `present` and
-// lists what `terms` adds beyond it. words_recent/words_baseline total the same filtered
-// doc_terms rows per window, before `min` and `limit`, so a caller can compare a term's share
-// of everything written about the person rather than its doc count, which a corpus that grows
-// text per doc inflates for every term at once. `kind` closes every order by because
-// (lift, term) alone does not break ties between two kinds of one term text.
+// Two disjoint windows (recent, then the baseline before it), so no doc counts twice; count(*)
+// as in graphQuery's term_p. `terms` are the highest lifts, `present` the most present recent
+// terms ordered by lift (a lift-picked set sits on one side of a ruler). words_recent/
+// words_baseline total the filtered rows per window before `min`/`limit`, so a caller compares
+// shares rather than doc counts, which longer docs inflate. `kind` closes every order by
+// because (lift, term) does not break ties across kinds.
 const risingQuery = (person: Person, q: RisingQuery) => {
   const exclude = nameTokens(person)
   const { domain } = resolveScope(q.domain, q.lean)
@@ -976,13 +957,10 @@ export const risingFor = async (person: Person, q: RisingQuery) => {
   }
 }
 
-// links stays a second statement: its `any(ids)` term list is the output of the first one,
-// so folding it in would mean recomputing the ranking to feed itself.
-// Precomputed first, live when the window was never built (local dev before `pnpm aggregate`,
-// or a scope the tables cannot hold); both render the same shape. Zero rows means never built
-// for this person, or built and since emptied: the fast query refuses a scope row whose
-// graph_terms are missing. Links probe term_links through linksFor below, which the build
-// leaves empty (disk), so they run live; termTestimonyQuery always does.
+// links is a second statement: its `any(ids)` list is the first one's output. Precomputed
+// first, live when the window was never built or its graph_terms were emptied; both render
+// the same shape. Links probe term_links via linksFor, which the build leaves empty, so they
+// run live; termTestimonyQuery always does.
 const graphAggregates = async (person: Person, q: GraphQuery): Promise<{ data: GraphAggregates; fastNodes: boolean }> => {
   const fast = precomputable(q) ? (await run<GraphAggregates>(graphFastQuery(person, q))).rows[0] : undefined
   return fast ? { data: fast, fastNodes: true } : { data: (await run<GraphAggregates>(graphQuery(person, q))).rows[0], fastNodes: false }
@@ -1115,11 +1093,9 @@ const compareQuery = (a: Person, b: Person, q: CompareQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
-// issue #247: compareQuery over graph_terms/graph_scopes. s_a/s_b mirror graphFastQuery's own
-// "about = 0 or exists" gate, one per person (compare shares one days/source scope but scores
-// two people). A missing graph_scopes row on either side leaves that CTE empty, so `from s_a,
-// s_b` yields zero rows overall and compareFor falls back live for the whole request -- never a
-// fast side mixed with a live one. pmi is graphFastQuery's own formula, not pmiLog2.
+// compareQuery over graph_terms/graph_scopes. s_a/s_b are graphFastQuery's "about = 0 or exists"
+// gate per person; either empty makes the whole result empty, so compareFor falls back live
+// whole, never one fast side and one live. pmi is graphFastQuery's own formula, not pmiLog2.
 const compareSideFastCte = (side: 'a' | 'b', person: Person, q: CompareQuery) => {
   const s = sql.raw(`s_${side}`)
   const scored = sql.raw(`scored_${side}`)
@@ -1283,11 +1259,9 @@ type WeekBucketRow = { start: Date; about: number; terms: { term: string; kind: 
 // entirely (see the acceptance criterion this pins in test/graph.test.ts), not present as null.
 type WeekBucket = WeekBucketRow & { testimony?: { score: number; n: number } | null }
 
-// Two round-trips, each with its own `today as (select now() ...)` CTE (weekScopeCte), so a
-// request straddling BRT midnight can see weekQuery and weekTestimonyQuery resolve `today` to
-// different dates: their `dates.start` values would then disagree, and the byStart lookup below
-// would miss the day that shifted rather than merge it. Inherent to running the mean as its own
-// builder (see weekTestimonyQuery's comment) rather than one statement; a narrow, once-a-day race.
+// Two round-trips, each with its own `today` (weekScopeCte): a request straddling BRT midnight
+// can see the two resolve different dates and byStart miss the shifted day. A narrow,
+// once-a-day race, inherent to running the mean as its own builder.
 export const weekFor = async (person: Person, q: WeekQuery): Promise<{ days: number; tz: 'America/Sao_Paulo'; buckets: WeekBucket[] }> => {
   const { rows } = await run<WeekBucketRow>(weekQuery(person, q))
   if (!q.method) return { days: q.days, tz: 'America/Sao_Paulo', buckets: rows }
@@ -1423,12 +1397,9 @@ const lensesQuery = (person: Person, q: LensesQuery) => sql`
       from unioned
     ), '[]'::json) as terms`
 
-// issue #247: lensesQuery over graph_terms/graph_scopes, run only when both lenses are `all` or
-// a `source:` lens (lensesFastEligible below). Same "s_a/s_b empty -> whole result empty ->
-// caller falls back live" shape as compareFastQuery, per lens (one person, two source scopes).
-// graph_terms never carries a person's own name words (personTermsQuery's own exclusion), so
-// unlike lensesQuery's live names_a/names_b union, the fast path has no name keys to add: a
-// person's own name words never appear on a precomputed lenses ruler (docs/api.md).
+// lensesQuery over graph_terms/graph_scopes, only when both lenses are `all` or `source:`
+// (lensesFastEligible). Same empty-side fallback as compareFastQuery. graph_terms holds no
+// own-name words, so a person's own name never appears on a precomputed lenses ruler.
 const lensSideFastCte = (side: 'a' | 'b', person: Person, lens: LensSide, q: LensesQuery) => {
   const names = nameTokens(person)
   const s = sql.raw(`s_${side}`)

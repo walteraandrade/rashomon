@@ -90,7 +90,7 @@
     docsCard.open({
       owner: OWNER,
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'} · ${weekSpanLabel(word.week)}`,
-      title: word.term,
+      title: label(word),
       sides: [
         {
           personId,
@@ -213,7 +213,7 @@
                         data-term={row.term}
                         data-kind={row.kind}
                         aria-pressed={isSelected(cell.week, row)}
-                        aria-label="{row.term}, semana {weekSpanLabel(cell.week)}: {fmt(cell.count)} {cell.count === 1 ? 'documento' : 'documentos'}"
+                        aria-label="{label(row)}, semana {weekSpanLabel(cell.week)}: {fmt(cell.count)} {cell.count === 1 ? 'documento' : 'documentos'}"
                         onclick={() => pick(cell.week, row.term, row.kind)}>{fmt(cell.count)}</button>
                     {/if}
                   </td>

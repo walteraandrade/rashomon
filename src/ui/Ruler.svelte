@@ -91,7 +91,7 @@
       <rect class="ruler-hit" x={-d.w / 2} y={-d.h / 2} width={d.w} height={d.h} />
       <text class="ruler-text" text-anchor="middle" dominant-baseline="central"><tspan x="0" y="0">{d.text}</tspan></text>
       {#if d.bridge}
-        <path class="ruler-bridge-mark" d="M{-d.w / 2 - 12} 0l4.5-4.5 4.5 4.5-4.5 4.5z" />
+        <path class="ruler-bridge-mark" d="M{-d.w / 2 - 10} 0l4.5-4.5 4.5 4.5-4.5 4.5z" />
       {/if}
     </g>
   {/each}

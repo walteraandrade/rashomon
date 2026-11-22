@@ -4,7 +4,7 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { fmt, kinds, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
+  import { fmt, kinds, label, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
   import { WEEK_COLUMN_WIDTH, weekLayout } from './layout.js'
   import { createCanvasMeasure } from './measure.js'
   import { seedFor } from './seed.js'
@@ -52,7 +52,7 @@
     void docsCard.open({
       owner: 'week',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'} · ${day}`,
-      title: word.term,
+      title: label(word),
       sides: [
         {
           personId: person,

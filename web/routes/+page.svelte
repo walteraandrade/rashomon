@@ -31,10 +31,10 @@
     } catch (e) {
       peopleError = e
     }
-    await Promise.race([labels, new Promise((r) => setTimeout(r, 1500))])
-    // Words are measured on a canvas before they are drawn; measuring in the fallback face would
-    // pack them for the wrong widths. Wait for the word face, never longer than a moment.
-    await Promise.race([document.fonts?.load?.("500 20px 'Newsreader'"), new Promise((r) => setTimeout(r, 1500))]).catch(() => {})
+    // Words are measured on a canvas before they are drawn, so the word face is waited for too:
+    // both waits run together and the page starts after 1.5 s at most.
+    const font = Promise.resolve(document.fonts?.load?.("500 20px 'Newsreader'")).catch(() => {})
+    await Promise.race([Promise.all([labels, font]), new Promise((r) => setTimeout(r, 1500))])
     setBoot({ people, peopleError, ready: true })
   })
 </script>

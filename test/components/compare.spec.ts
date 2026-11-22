@@ -6,7 +6,7 @@ import * as docsCard from '../../src/ui/docs-card.svelte.js'
 import { setBoot } from '../../src/ui/boot.svelte.js'
 import { compareParams } from '../../src/ui/api.js'
 import { clearScopes } from '../../src/ui/state.js'
-import { balanceColor } from '../../src/ui/format.js'
+import { balanceColor, setLabels } from '../../src/ui/format.js'
 import type { Compare as CompareData, CompareTerm } from '../../src/ui/format.js'
 
 const lula = { id: 'lula', name: 'Lula' }
@@ -611,6 +611,19 @@ describe('Compare (#293)', () => {
     expect(document.body.textContent).toContain('Lula')
     expect([...document.querySelectorAll('#docsDialog h3, #docsDialog .docs-column-head, #docsDialog [class*=side]')].map((e) => e.textContent).join('|')).toMatch(/Lula[\s\S]*Bolsonaro/)
   })
+  it('the card title is the reader spelling, not the stored key', async () => {
+    setLabels({ reforma: 'refórma' })
+    try {
+      boot()
+      await start()
+      click(words()[0])
+      await settle()
+      expect($('docsTitle').textContent).toBe('refórma')
+    } finally {
+      setLabels({})
+    }
+  })
+
   it('review K10: detail prints counts and the bridge line', async () => {
     handlers['/api/compare'] = () => payload([{ term: 'stf', kind: 'word', a: side(7, 1.5), b: side(3, 0.5) }])
     handlers['/api/compare/bridges'] = () => ({ bridges: { 'word:stf': 1 } })

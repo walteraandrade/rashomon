@@ -6,33 +6,34 @@ import { inTransaction } from './store.js'
 export const CAPITALISED = 0.9
 export const UPPERCASE = 0.8
 
-const ACCENTED = 'áàâãäéèêëíìîïóòôõöúùûüçñ'
-const PLAIN = 'aaaaaeeeeiiiiooooouuuucn'
-
-// URLs and @/# handles cut as the extractor does; NFC so a decomposed accent never splits a word.
-const tokens = `
-  raw as (
+// URLs and handles cut and every combining mark stripped from the key, as extract.ts does; NFC so a
+// decomposed accent never splits a word. Served words' tokens only, once for both statements.
+export const labelTokensQuery = `
+  create temp table label_toks on commit drop as
+  with served as (
+    select term from graph_terms union select term from term_weeks
+  ), keys as (
+    select distinct w as key from served, unnest(string_to_array(served.term, ' ')) w
+  ), raw as (
     select d.id, regexp_replace(normalize(d.text, NFC), 'https?://\\S+|[#@]\\S+', ' ', 'g') as t
     from docs d where d.country is distinct from 'pt'
   ), toks as (
-    select r.id, s.ord, s.tok, lower(s.tok) as low, translate(lower(s.tok), '${ACCENTED}', '${PLAIN}') as key
+    select r.id, s.ord, s.tok, lower(s.tok) as low,
+      regexp_replace(normalize(lower(s.tok), NFD), '[\u0300-\u036f]', '', 'g') as key
     from raw r, regexp_split_to_table(r.t, '[^[:alnum:]]+') with ordinality s(tok, ord)
     where s.tok <> ''
-  )`
+  )
+  select t.* from toks t join keys k on k.key = t.key`
 
 // A word: its most common lower-case form, capitalised when the corpus nearly always is, in
 // capitals when a short word is mostly written so (a headline "STF" never yields "Stf").
 export const termLabelsQuery = `
   insert into term_labels (term, label)
-  with served as (
-    select term from graph_terms union select term from term_weeks
-  ), keys as (
-    select distinct w as key from served, unnest(string_to_array(served.term, ' ')) w
-  ), ${tokens}, counted as (
+  with counted as (
     select t.key, t.low, count(*) as c,
       count(*) filter (where t.tok ~ '^[[:upper:]]') as caps,
       count(*) filter (where t.tok ~ '^[[:upper:]]+$' and length(t.tok) > 1) as ups
-    from toks t join keys k on k.key = t.key
+    from label_toks t
     group by t.key, t.low
   ), ranked as (
     select key, low,
@@ -44,7 +45,7 @@ export const termLabelsQuery = `
   ), labelled as (
     select key,
       case
-        when length(low) <= 5 and (ups::float8 / total > ${UPPERCASE} or (caps::float8 / total > ${CAPITALISED} and ups::float8 / caps > 0.5)) then upper(low)
+        when length(low) <= 5 and (ups::float8 / total > ${UPPERCASE} or (caps::float8 / total > ${CAPITALISED} and ups::float8 / nullif(caps, 0) > 0.5)) then upper(low)
         when caps::float8 / total > ${CAPITALISED} then upper(left(low, 1)) || substr(low, 2)
         else low
       end as label
@@ -53,7 +54,7 @@ export const termLabelsQuery = `
   select key, label from labelled where label <> key`
 
 // A phrase is spelled whole (per word, "São Paulo" would take the verb "são"), all-caps forms last,
-// and stored even when equal to its key so the page never respells it word by word.
+// and stored even when equal to its key; only one written as 2-4 adjacent words gets an entry.
 export const phraseLabelsQuery = `
   insert into term_labels (term, label)
   with phrases as (
@@ -61,8 +62,8 @@ export const phraseLabelsQuery = `
     union select term from term_weeks where position(' ' in term) > 0
   ), words as (
     select distinct w as key from phrases, unnest(string_to_array(phrases.term, ' ')) w
-  ), ${tokens}, kept as (
-    select t.* from toks t join words w on w.key = t.key
+  ), kept as (
+    select t.* from label_toks t join words w on w.key = t.key
   ), grams as (
     select
       case when lead(ord, 1) over w = ord + 1 then key || ' ' || lead(key, 1) over w end as k2,
@@ -85,9 +86,11 @@ export const phraseLabelsQuery = `
   )
   select key, form from ranked where rn = 1`
 
-// One transaction: a reader never sees the table half rebuilt.
+// One transaction, so a reader never sees the table half rebuilt; work_mem as the window builds.
 export const buildTermLabels = async (): Promise<number> =>
   inTransaction(async () => {
+    await db.exec(`set local work_mem = '128MB'`)
+    await db.exec(labelTokensQuery)
     await db.exec('delete from term_labels')
     await db.exec(termLabelsQuery)
     await db.exec(phraseLabelsQuery)

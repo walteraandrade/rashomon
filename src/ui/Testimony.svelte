@@ -243,7 +243,7 @@
     <div class="figure-title"><span class="eyebrow">Gráfico 2</span><h2 id="testimonyTitle">Avaliação por veículo <b id="testimonyLabel">{testimonyPhase === 'data' && hasScore && !unavailable ? signed(overall) : ''}</b></h2></div>
     <p class="figure-sub">Compare veículos falando da mesma pessoa. Nunca compare pessoas. <a href="/como-ler#avaliacao">Como ler</a>.</p>
     <dl class="figure-key">
-      <div><dt>Posição</dt><dd>nota do kikori, um modelo treinado para ler se o texto é contra (−10) ou a favor (+10)</dd></div>
+      <div><dt>Posição</dt><dd>nota do kikori, um modelo treinado para ler se o texto é contra (−10) ou a favor (+10); o eixo mostra só a faixa ocupada</dd></div>
       <div><dt>Tamanho</dt><dd>quantos textos o veículo tem</dd></div>
       <div><dt>Clique</dt><dd>textos daquele veículo, só neste gráfico</dd></div>
     </dl>

@@ -112,7 +112,7 @@
     void docsCard.open({
       owner: 'lenses',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
-      title: word.term,
+      title: label(word),
       sides: [side(data.a.lens), side(data.b.lens)],
     })
   }

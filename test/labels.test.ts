@@ -48,8 +48,9 @@ describe('term labels: the voting rules', () => {
     'Eles são bons e são muitos; o órgão é público. Veja https://exemplo.com/sao-paulo-flavio @flavio_x',
     'Flávio diz que a CPI ouve Flávio; a cpi segue em São Paulo.',
     'A CPI vota hoje e a CPI chama o STF.',
+    'Erdoğan fala do golpe de Estado; Erdoğan recua.',
   ]
-  const served = ['stf', 'flavio', 'cpi', 'sao', 'paulo', 'publico', 'sao paulo', 'ministerio publico']
+  const served = ['stf', 'flavio', 'cpi', 'sao', 'paulo', 'publico', 'sao paulo', 'ministerio publico', 'erdogan', 'golpe estado']
 
   before(async () => {
     await seed()
@@ -80,5 +81,37 @@ describe('term labels: the voting rules', () => {
 
   it('ignores URLs and handles when voting', async () => {
     assert.equal((await labelsFor()).paulo, 'Paulo')
+  })
+
+  it('keys a word by every combining mark the extractor strips, not only Portuguese ones', async () => {
+    assert.equal((await labelsFor()).erdogan, 'Erdoğan')
+  })
+
+  it('leaves a collocation that skips a stopword to the word-by-word fallback', async () => {
+    assert.equal((await labelsFor())['golpe estado'], undefined)
+  })
+})
+
+describe('term labels: a failed build', () => {
+  before(async () => {
+    await seed()
+    await buildGraphAggregates(persons)
+  })
+
+  it('is logged, never fails the aggregate build, and keeps the previous labels', async () => {
+    const previous = await labelsFor()
+    assert.ok(Object.keys(previous).length > 0)
+    await db.exec('alter table term_labels rename to term_labels_away')
+    const warn = console.warn
+    const warned: unknown[] = []
+    console.warn = (...args: unknown[]) => void warned.push(args[0])
+    try {
+      await buildGraphAggregates(persons)
+    } finally {
+      console.warn = warn
+      await db.exec('alter table term_labels_away rename to term_labels')
+    }
+    assert.ok(warned.some((w) => String(w).includes('[labels] build failed')))
+    assert.deepEqual(await labelsFor(), previous)
   })
 })

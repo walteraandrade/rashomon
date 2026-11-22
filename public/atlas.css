@@ -81,8 +81,7 @@
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* The ramp. Nine steps, ratio around 1.25, the top three fluid so a 375px phone and a 1440px
-     desktop read the same ranks rather than the same pixels. The condensed display face is
-     narrow, so the top steps run smaller than a wide face would need. --t-micro is the floor and
+     desktop read the same ranks rather than the same pixels. --t-micro is the floor and
      exists for SVG labels only; nothing on this site is smaller. */
   --t-mega: clamp(38px, 5.4vw, 66px);
   --t-xl: clamp(28px, 3vw, 38px);
@@ -102,7 +101,7 @@
   --lh-body: 1.6;
   --lh-chip: 2;
 
-  /* The condensed face is already tight; capitals need a little air, and mono labels need none. */
+  /* Capitals need a little air; mono labels need none. */
   --tr-mega: -.015em;
   --tr-xl: -.01em;
   --tr-lg: 0;
@@ -179,7 +178,7 @@ code { font-family: var(--mono); font-size: .92em; color: var(--ink); }
    eye can skip every one of them and still get the page. */
 .lede { max-width: var(--measure-lede); font-family: var(--sans); font-size: var(--t-md); line-height: var(--lh-body); color: var(--muted); text-wrap: pretty; }
 .figure-sub, .chapter-intro { font-family: var(--sans); font-size: var(--t-base); line-height: var(--lh-body); color: var(--muted); max-width: var(--measure); text-wrap: pretty; }
-.note, .meta, .empty-hint { font-size: var(--t-xs); line-height: var(--lh-body); color: var(--muted); }
+.note, .meta, .empty-hint { font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); }
 
 /* ---------- definition pairs ---------- */
 /* dt names, dd answers. The default is a real definition list: the term in display type, its
@@ -263,14 +262,10 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    itself -- the same ramps the marks use. */
 .figure-key { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); }
 .figure-key > div { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; max-width: none; }
-.figure-key dt { display: inline-flex; align-items: center; flex: 0 0 auto; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); }
-.figure-key dd { font-family: var(--sans); font-size: var(--t-xs); line-height: 1.45; color: var(--muted); max-width: none; }
-/* The tema key documents the second colour encoding only while the tema mask is on and the
-   figure is not in strip mode -- toggled from script (atlas.ts's render() and toggleMask()),
-   not CSS, since is-themed can linger on a hidden viewport's leftover svg regardless of mode
-   (paintSelection paints both panes). A sibling dl, not a row inside #keyDefault, so #keyDefault
-   stays exactly the four rows test/leitura-ui-acceptance.test.ts pins (Tamanho/Cor/Posição/
-   Clique, unchanged). */
+.figure-key dt { display: inline-flex; align-items: center; flex: 0 0 auto; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--ink); }
+.figure-key dd { font-family: var(--sans); font-size: var(--t-sm); line-height: 1.45; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); max-width: none; }
+.figure-key dt .type-scale { text-transform: none; }
+/* The tema key is a sibling dl, shown only while the tema mask is on and the figure is not in strip mode. */
 .key-bridge { display: inline-block; width: 8px; height: 8px; margin: 0 var(--space-2) 0 3px; vertical-align: middle; background: var(--accent); transform: rotate(45deg); }
 .key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -748,10 +743,9 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .detail-bridge { margin: var(--space-1) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--accent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
-.ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }
 .ruler-overflow .quiet-button:hover { color: var(--ink); }
 .ruler-overflow .quiet-button.is-selected { color: var(--cmp, var(--ink)); background: color-mix(in srgb, var(--cmp, var(--muted)) 22%, var(--soft)); font-weight: 600; }
-.ruler-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
+.ruler-axis-labels { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .ruler .note { margin-top: var(--space-3); }
 /* The detail line: the word at h4 rank because it is the subject of the line, then one stat pair
    per person. Both sides keep the same shape whether the number is real or missing. */
@@ -937,7 +931,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .persistence-table thead th { height: 1.6em; vertical-align: bottom; }
 .persistence-week { position: relative; min-width: 24px; }
 .persistence-week span { position: absolute; bottom: 4px; left: 0; white-space: nowrap; font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); color: var(--muted); }
-.persistence-table .persistence-term { padding: 0 var(--space-4) 0 0; max-width: 24ch; min-width: 12ch; color: var(--ink); font-family: var(--word); font-size: var(--t-base); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.persistence-table .persistence-term { padding: 0 var(--space-5) 0 0; max-width: 24ch; min-width: 12ch; color: var(--ink); font-family: var(--word); font-size: var(--t-base); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .persistence-table .persistence-c { padding: 1px; }
 .persistence-cell {
   display: flex; align-items: center; justify-content: center;
@@ -1018,16 +1012,19 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .ruler-tick { stroke: var(--muted); stroke-width: 1; opacity: .55; }
 .ruler-end-row { font-family: var(--display); font-size: var(--t-lg); padding-bottom: var(--space-3); }
 .ruler-end { font-weight: 500; }
+.ruler-axis-labels > span { flex: 1 1 0; }
+.ruler-axis-labels > span:nth-child(2) { flex: 0 0 auto; text-align: center; }
+.ruler-axis-labels > span:last-child { text-align: right; }
 .ruler-axis-labels, .strip-axis-labels { font-family: var(--sans); font-size: var(--t-xs); color: var(--muted); padding-top: var(--space-1); }
 .ruler-overflow .quiet-button, .week-overflow .quiet-button { font-family: var(--word); font-size: var(--t-sm); }
 
 /* The week: a ranking per day, the day's volume as a bar under its number. */
 .week-day .stat { margin-bottom: var(--space-1); }
-.week-volume { display: block; height: 3px; margin: 0 0 var(--space-3); border-radius: 2px; background: linear-gradient(90deg, var(--ink) calc(var(--v, 0) * 100%), var(--line) 0); opacity: .75; }
+.week-volume { display: block; height: 4px; margin: 0 0 var(--space-3); border-radius: 2px; background: linear-gradient(90deg, var(--heat) calc(var(--v, 0) * 100%), var(--soft) 0); }
 
 /* Outlets: a ranked bar list. The bar is the outlet's share of the largest outlet's texts. */
-.outlet { position: relative; padding: 5px var(--space-2); font-family: var(--sans); font-size: var(--t-sm); color: var(--ink); border-radius: 2px; isolation: isolate; }
-.outlet { background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 9%, transparent) calc(var(--bar, 0) * 100%), transparent 0) no-repeat 0 50% / 100% calc(100% - 4px); }
+.outlet { position: relative; padding: 5px var(--space-2); font-family: var(--sans); font-size: var(--t-sm); color: var(--ink); border-radius: 2px; isolation: isolate;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 9%, transparent) calc(var(--bar, 0) * 100%), transparent 0) no-repeat 0 50% / 100% calc(100% - 4px); }
 .outlet .n { font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .outlet:hover { color: var(--ink); background-color: color-mix(in srgb, var(--ink) 5%, transparent); }
 .outlet.is-static, .outlet.is-static:hover { color: var(--muted); }
@@ -1053,7 +1050,7 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .agenda-pick.is-active { background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft)); box-shadow: inset 0 0 0 2px var(--accent); }
 .agenda-cell.is-empty { width: 34px; }
 .ink-scale { background: linear-gradient(90deg, var(--soft), var(--heat)); }
-.lean-chip { border: 0; padding: 0; margin-left: var(--space-2); font-size: var(--t-micro); color: var(--faint); }
+.lean-chip { border: 0; padding: 0; margin-left: var(--space-2); font-size: var(--t-2xs); color: var(--muted); }
 
 /* Quem aparece junto: full names over the columns, the same --heat ramp in the cells. */
 .comention-headrow { height: 132px; align-items: flex-end; }
@@ -1086,7 +1083,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 
 /* Stats and notes. */
 .stat dt { color: var(--muted); }
-.note, .meta, .empty-hint { font-size: var(--t-sm); color: var(--muted); }
 .eyebrow::before { color: var(--accent); }
 
 /* ---------- smaller screens ---------- */
@@ -1123,7 +1119,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 .status-row.is-quiet { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; min-height: 0; }
 .legend { font-family: var(--sans); font-size: var(--t-xs); padding: var(--space-3) 0 0; }
 .persistence-table { width: auto; }
-.persistence-table .persistence-term { padding-right: var(--space-5); }
 /* The recorte's mean already heads the figure; below the strip it is one line, number first. */
 .testimony .verdict { display: inline-block; padding: 0; margin-right: var(--space-3); vertical-align: baseline; }
 .testimony .verdict > div { flex-direction: row-reverse; align-items: baseline; gap: var(--space-2); }
@@ -1144,8 +1139,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 .figure-head > .figure-title, .figure-head > .figure-sub { margin-bottom: var(--space-2); }
 .figure-head > .sentence { margin: var(--space-3) 0 var(--space-5); }
 .figure-key { order: 90; margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--line); gap: var(--space-2) var(--space-6); }
-.figure-key dt { font-size: var(--t-2xs); color: var(--ink); }
-.figure-key dd { font-size: var(--t-sm); color: var(--muted); }
 .figure > .note, .figure > p.note { order: 80; }
 .figure-head > .figure-title { order: -4; }
 .figure-head > .figure-sub { order: -3; max-width: 72ch; }
@@ -1155,7 +1148,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
    kept for nothing, so no toggle outshouts the graph it serves. */
 .segment button[aria-pressed="true"], .segment button.active,
 .quiet-button.toggle[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; box-shadow: inset 0 -2px 0 var(--accent); }
-.week-volume { height: 4px; opacity: 1; background: linear-gradient(90deg, var(--heat) calc(var(--v, 0) * 100%), var(--soft) 0); }
 /* Rotated names over a matrix are read as often as the row names, so they get the same ink. */
 .agenda-colhead span, .comention-colhead span { color: var(--ink); }
 /* Quem aparece junto: the row under the pointer and its column light up, so a long row reads across. */
@@ -1176,7 +1168,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 .key-line { display: inline-block; width: 22px; height: 0; border-top: 1px solid var(--accent); vertical-align: middle; margin-right: var(--space-2); }
 
 /* ---------- round 4: contrast floors and quieter chrome ---------- */
-.figure-key dd { color: color-mix(in srgb, var(--ink) 72%, var(--muted)); }
 .persistence-table .persistence-stat.is-flat { color: color-mix(in srgb, var(--ink) 80%, var(--muted)); }
 /* A bridge is a small amber diamond under the word, never an underline that reads as a link. */
 .ruler-bridge .ruler-bridge-mark { fill: var(--accent); stroke: none; }

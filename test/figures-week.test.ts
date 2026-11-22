@@ -47,7 +47,7 @@ describe('the prerendered page keeps the week section hooks', { skip: existsSync
     assert.match(week, /<span class="eyebrow">Gráfico 5<\/span><h2 id="weekTitle">A semana<\/h2>/)
     for (const id of ['weekPerson', 'weekSource', 'weekLimit', 'weekChart', 'weekNote']) assert.match(week, new RegExp(`id="${id}"`))
     assert.match(week, /class="week-chart"/)
-    assert.match(week, /<dt>Posição<\/dt><dd>só o dia; a altura na coluna não mede nada<\/dd>/)
+    assert.match(week, /<dt>Posição<\/dt><dd>o dia; em cada coluna, da mais citada para a menos<\/dd>/)
     assert.doesNotMatch(week, /id="weekDays"|\{@html/)
   })
 })

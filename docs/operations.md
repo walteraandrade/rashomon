@@ -22,7 +22,6 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 | `TESTIMONY_MODEL` / `TESTIMONY_REVISION` / `TESTIMONY_DTYPE` | kikori / unset / `q8` | the model, its Hub revision and its precision |
 | `MODEL_DIR` | `./data/models` | model cache |
 | `PERF` | unset | opt-in request instrumentation |
-| `OPENROUTER_API_KEY` | unset | CI secret for `.github/workflows/jev-review.yml`, the Jev shadow review; empty (a fork PR gets no secrets) makes `pnpm jev-review` skip itself and exit 0. See [Jev shadow review](factory.md#jev-shadow-review). `pnpm bench:jev collect` reads it from the environment too, never from a file ([Jev benchmark](factory.md#jev-benchmark)) |
 | `WARM_STORE_URL`, `BLOB_READ_WRITE_TOKEN` | retired | nothing reads them since issue #317: the warm store is the `warm_entries` table, in the database the function and `pnpm materialize` already open. Remove the repository variable, the repository secret and the Vercel Production env once `x-warm-store: hit` is confirmed ([the warm store](#the-warm-store)) |
 | `API_CACHE_*` | see [HTTP caching](#http-caching) | cache windows in whole hours |
 

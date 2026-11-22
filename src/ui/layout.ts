@@ -239,7 +239,7 @@ export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5)
 export const RULER_PAD = 28
 // Words cannot shrink past 11px, so the ruler trades height for legibility before dropping.
 export const RULER_MAX_HEIGHT = 520
-export const RULER_SIZE_MIN = 13
+export const RULER_SIZE_MIN = 14
 const RULER_SIZE_MAX = 34
 const RULER_GAP_X = 10
 const RULER_GAP_Y = 4
@@ -285,39 +285,47 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
   return { words: placed, overflow, x, half: used, height: used * 2, width }
 }
 
+// Only the strongest few bridges get the mark: when most words carry it, it marks nothing.
+export const RULER_BRIDGES = 5
+const topBridges = (words: RulerItem[]) =>
+  new Set(words.filter(isBridge).sort((a, b) => (b.bridge ?? 0) - (a.bridge ?? 0) || a.term.localeCompare(b.term)).slice(0, RULER_BRIDGES).map((d) => `${d.kind}:${d.term}`))
+
 // What Ruler.svelte draws, from rulerLayout's output.
-export const rulerModel = (layout: RulerLayout<RulerItem>) => ({
-  width: layout.width,
-  height: layout.height,
-  half: layout.half,
-  x0: RULER_PAD,
-  x1: layout.width - RULER_PAD,
-  ticks: [-1, -0.5, 0, 0.5, 1].map(layout.x),
-  words: layout.words.map((d) => ({
-    term: d.term,
-    kind: d.kind,
-    text: d.text,
-    x: d.x,
-    y: d.y,
-    size: d.size,
-    w: d.w,
-    h: d.h,
-    cmp: balanceColor(d.balance),
-    bridge: isBridge(d),
-    aria: `${d.text}, ${fmt(d.combined)} documentos`,
-    title: `${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos`,
-  })),
-  overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
-})
+export const rulerModel = (layout: RulerLayout<RulerItem>) => {
+  const bridges = topBridges(layout.words)
+  return {
+    width: layout.width,
+    height: layout.height,
+    half: layout.half,
+    x0: RULER_PAD,
+    x1: layout.width - RULER_PAD,
+    ticks: [-1, -0.5, 0, 0.5, 1].map(layout.x),
+    words: layout.words.map((d) => ({
+      term: d.term,
+      kind: d.kind,
+      text: d.text,
+      x: d.x,
+      y: d.y,
+      size: d.size,
+      w: d.w,
+      h: d.h,
+      cmp: balanceColor(d.balance),
+      bridge: bridges.has(`${d.kind}:${d.term}`),
+      aria: `${d.text}, ${fmt(d.combined)} documentos`,
+      title: `${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos`,
+    })),
+    overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
+  }
+}
 
 // Figure 5: one column per day, words stacked around the column's centre (x = 0) by swarmBy's clearance.
-export const WEEK_SIZE_MIN = 13
+export const WEEK_SIZE_MIN = 14
 const WEEK_SIZE_MAX = 30
 // The cap only guards a runaway day: the widest limit the sentence offers (12) always fits.
 export const WEEK_MAX_HEIGHT = 480
 const WEEK_MAX_TERMS = 12
 export const WEEK_COLUMN_WIDTH = 120
-const WEEK_GAP_Y = 3
+const WEEK_GAP_Y = 6
 const WEEK_PAD_X = 6
 
 export type WeekColumnLayout<T> = {
@@ -355,7 +363,7 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
     const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
     // One ramp for the week, its ceiling `top` shared by every column, so a larger count is
     // never a smaller size; a word wider than the column at its ramp size goes to overflow.
-    const size = Math.round(WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction)
+    const size = Math.round((WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction) * 10) / 10
     const text = label(t)
     const lines = weekLines(measure, text, size, maxWidth)
     const w = weekLineWidth(measure, lines, size)

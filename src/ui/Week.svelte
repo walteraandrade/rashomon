@@ -217,7 +217,7 @@
               <svg class="week-svg" {width} height={layout.height} viewBox="0 0 {width} {layout.height}" role="group" aria-label="Palavras de {label}">
                 {#each layout.words as d, wi (d.kind + '\u0000' + d.term)}
                   {@const on = isSelected(day, d)}
-                  {@const lineHeight = d.h / d.lines.length}
+                  {@const lineHeight = d.lines.length > 1 ? d.size * 1.04 : d.h}
                   <!-- svelte-ignore a11y_click_events_have_key_events -- Enter and Space are handled by onkeydown on the same element -->
                   <g
                     class="week-word {on ? 'is-selected' : ''}"

@@ -145,15 +145,16 @@ afterEach(() => {
 const ALL_ALL = '?lenses.a=all&lenses.b=all'
 
 describe('Lenses (#294)', () => {
-  it('AC2: lenses: request params and defaults (unseeded, the lenses open on opposite leans)', async () => {
+  it('AC2: lenses: request params and defaults (unseeded, the lenses open on the two largest outlets)', async () => {
+    handlers.sources = () => [folha, g1]
     boot()
     await start()
     expect(lensesCalls()).toHaveLength(1)
     const c = lensesCalls()[0]
     expect(c.path).toBe('/api/people/lula/lenses')
-    expect(c.url).toBe('/api/people/lula/lenses?' + lensesParams({ a: 'lean:left', b: 'lean:right', days: '21', limit: '40' }).toString())
-    expect(c.params.get('a')).toBe('lean:left')
-    expect(c.params.get('b')).toBe('lean:right')
+    expect(c.url).toBe('/api/people/lula/lenses?' + lensesParams({ a: 'domain:folha.uol.com.br', b: 'domain:g1.globo.com', days: '21', limit: '40' }).toString())
+    expect(c.params.get('a')).toBe('domain:folha.uol.com.br')
+    expect(c.params.get('b')).toBe('domain:g1.globo.com')
     expect(c.params.get('days')).toBe('21')
     expect(c.params.get('limit')).toBe('40')
     expect(c.params.get('kind')).toBe('word,hashtag,phrase')
@@ -204,10 +205,10 @@ describe('Lenses (#294)', () => {
     expect(of('sources')[0].params.get('days')).toBe('7')
 
     remount()
-    boot({ search: '?a=source:rss&lenses.b=lean:right' })
+    boot({ search: '?a=lean:left&lenses.b=lean:right' })
     await start()
-    expect(select('lensesA').value).toBe('lean:left')
-    expect(lensesCalls()[0].params.get('a')).toBe('lean:left')
+    expect(select('lensesA').value).toBe('all')
+    expect(lensesCalls()[0].params.get('a')).toBe('all')
     expect(lensesCalls()[0].params.get('b')).toBe('lean:right')
 
     remount()
@@ -872,7 +873,7 @@ describe('Lenses (#294)', () => {
   })
 
   it('AC12: lenses: combobox sync after programmatic writes', async () => {
-    boot({ search: '?lenses.a=lean:left&lenses.b=all' })
+    boot({ search: '?lenses.a=lean:left' })
     await start()
     for (const id of ['lensesA', 'lensesB']) expect(select(id).hasAttribute('hidden')).toBe(true)
     expect(input('lensesAInput').value).toBe('Esquerda')
@@ -951,7 +952,7 @@ describe('Lenses (#294)', () => {
     expect([...select('lensesPerson').options].map((o) => o.value)).toEqual(['lula', 'bolsonaro'])
   })
 
-  it('the ruler carries the lens labels as ends, the axis prose, the aria-label and the note', async () => {
+  it('the ruler carries the lens labels as ends, the axis prose and the aria-label; the click hint lives in the detail alone', async () => {
     handlers.lenses = () => payload([reforma], 'domain:folha.uol.com.br', 'lean:right')
     boot()
     await start()
@@ -960,9 +961,8 @@ describe('Lenses (#294)', () => {
     const svg = $('lensesRuler').querySelector('svg')!
     expect(svg.getAttribute('aria-label')).toBe('Régua comparando folha.uol.com.br e Direita para a mesma pessoa')
     expect(svg.getAttribute('role')).toBe('group')
-    expect($('lensesRuler').querySelector('p.note')?.textContent).toBe(
-      'Toque numa palavra para ver os números das duas lentes.',
-    )
+    expect($('lensesRuler').querySelector('p.note')).toBeNull()
+    expect($('lensesDetail').textContent).toContain('Clique numa palavra para ver os números das duas lentes.')
     expect($('lensesRuler').getAttribute('aria-label')).toBe('Régua comparando duas lentes da mesma pessoa')
     expect($('lensesRuler').hidden).toBe(false)
   })

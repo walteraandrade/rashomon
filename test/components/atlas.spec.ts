@@ -1121,7 +1121,8 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
   it('the mask legend reads the person mean, and says so when there is none', async () => {
     bodies.graph = withPerson([at({ id: 'word:a', term: 'a' })])
     await start()
-    expect($('maskLegend').textContent).toMatch(/Média da pessoa \(-2,4\)/)
+    expect($('keyDefaultColor').textContent).toMatch(/média desta pessoa \(-2,4\): vermelho/)
+    expect($('legend').textContent).not.toMatch(/-2,4/)
     expect($('maskLegend').textContent).toMatch(/menos de 3 textos avaliados/)
     expect(($('maskLegend') as HTMLElement).hidden).toBe(false)
     unmount(instance!)
@@ -1130,7 +1131,7 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     clearScopes()
     bodies.graph = graphOf([at({ id: 'word:a', term: 'a' })], { stats: stats({ testimony: { method: 'kikori', score: null, n: 0 } }) })
     await start()
-    expect($('maskLegend').textContent).toMatch(/Sem avaliação neste recorte para colorir as palavras/)
+    expect($('maskLegend').textContent).toMatch(/sem avaliação neste recorte para colorir as palavras/)
   })
 
   it('the inspector reads the two numbers out for the selected term, against the person mean', async () => {

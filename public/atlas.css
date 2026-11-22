@@ -1216,3 +1216,13 @@ svg .strip-mean { position: static; transform: none; font-family: var(--mono); f
   .masthead .lede { margin: 0 0 6px; }
   .masthead + .figure { margin-top: var(--space-4); }
 }
+.outlet .t { min-width: 46px; text-align: right; padding: 0; background: none; color: var(--tone); font-size: var(--t-xs); }
+.comention-colhead { margin: 0 1px; }
+
+/* ---------- round 5 ---------- */
+/* The atlas's own notes row folds away when it has nothing to say. */
+.legend:not(:has(> span:not(:empty):not([hidden]))) { display: none; }
+/* At 100% the map never runs taller than the screen under the figure head. */
+.map-svg.is-fitted { max-height: max(560px, calc(100svh - 240px)); }
+.key-bridge { width: 8px; height: 8px; }
+.strip-zero { stroke: var(--muted); stroke-width: 1; opacity: .35; }

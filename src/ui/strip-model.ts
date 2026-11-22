@@ -35,15 +35,12 @@ export const stripLabels = (dots: StripDot[], half: number, width: number, count
   if (!dots.length) return []
   const byScore = [...dots].sort((a, b) => a.score - b.score)
   const bySize = [...dots].sort((a, b) => b.n - a.n || a.domain.localeCompare(b.domain))
-  const wanted: StripDot[] = []
-  for (const d of [byScore[0], byScore[byScore.length - 1], ...bySize]) {
-    if (wanted.length >= count) break
-    if (!wanted.includes(d)) wanted.push(d)
-  }
+  const wanted = [...new Set([byScore[0], byScore[byScore.length - 1], ...bySize])]
   const bands: { top: [number, number][]; bottom: [number, number][] } = { top: keep ? [keep] : [], bottom: [] }
   const free = (spans: [number, number][], a: number, b: number) => spans.every(([s, e]) => b + LABEL_GAP <= s || a >= e + LABEL_GAP)
   const placed: { domain: string; x: number; y: number; dotX: number; dotY: number; side: 'top' | 'bottom' }[] = []
   for (const d of wanted) {
+    if (placed.length >= count) break
     const w = d.domain.length * LABEL_CHAR
     const x = Math.max(w / 2, Math.min(width - w / 2, d.x))
     const order: ('top' | 'bottom')[] = d.y <= 0 ? ['top', 'bottom'] : ['bottom', 'top']

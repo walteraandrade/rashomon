@@ -215,7 +215,7 @@ describe('the words never overlap and never leave the frame', () => {
 describe('no word is drawn below the size floor the site sets', () => {
   it('every word is at least RULER_SIZE_MIN px, at any width', () => {
     const { items } = rulerTerms(corpus(), 'count')
-    assert.equal(RULER_SIZE_MIN, 13, 'a ruler word is never smaller than the body copy it sits beside')
+    assert.equal(RULER_SIZE_MIN, 14, 'a ruler word is never smaller than the body copy it sits beside')
     for (const width of [1280, 860, 375]) for (const w of rulerLayout(metrics, items, width).words) assert.ok(w.size >= RULER_SIZE_MIN, `${w.term} at ${w.size}px is under the floor`)
   })
 

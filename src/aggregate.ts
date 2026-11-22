@@ -434,7 +434,8 @@ export const buildGraphAggregates = async (persons: Person[], windows: readonly 
   const started = performance.now()
   await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons, top))), Promise.resolve())
   await buildTermWeeks(persons)
-  await buildTermLabels()
+  // Spelling is cosmetic: a failed build keeps the previous labels and never fails the run.
+  await buildTermLabels().catch((e: unknown) => console.warn('[labels] build failed, kept the previous labels:', e))
   const { rows: s } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
   const { rows: t } = await db.query<{ n: number }>(`select count(*)::int as n from graph_terms`)
   return { windows: [...windows], scopes: s[0].n, terms: t[0].n, ms: performance.now() - started }

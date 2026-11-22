@@ -44,9 +44,10 @@ const inCircle = (box: Box, radius = 346) =>
 const candidates: { x: number; y: number; r: number }[] = []
 for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.push({ x: r * Math.cos((a * Math.PI) / 180), y: r * Math.sin((a * Math.PI) / 180), r })
 
-// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill.
+// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill. The
+// floor is in viewBox units (860 wide): 16 keeps a word at 14px or more on a map 752px wide or wider.
 export const SIZE_CEILING = 38
-export const SIZE_FLOOR = 13
+export const SIZE_FLOOR = 16
 
 export const sizeRange = (count: number): { minSize: number; maxSize: number } => {
   const density = Math.max(0, Math.min(1, (count - 8) / 14))
@@ -318,12 +319,11 @@ export const rulerModel = (layout: RulerLayout<RulerItem>) => {
   }
 }
 
-// Figure 5: one column per day, words stacked around the column's centre (x = 0) by swarmBy's clearance.
+// Figure 5: one column per day, its words stacked top to bottom from most to least cited.
 export const WEEK_SIZE_MIN = 14
 const WEEK_SIZE_MAX = 30
-// The cap only guards a runaway day: the widest limit the sentence offers (12) always fits.
-export const WEEK_MAX_HEIGHT = 480
-const WEEK_MAX_TERMS = 12
+// The widest limit the sentence offers; past it a day's words go to the overflow list.
+export const WEEK_MAX_TERMS = 12
 export const WEEK_COLUMN_WIDTH = 120
 const WEEK_GAP_Y = 6
 const WEEK_PAD_X = 6
@@ -373,7 +373,7 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
   // day; lowering the shared ceiling for it would flatten the whole week.
   const tooWide = sized.filter((d) => d.w > maxWidth)
   const fitting = sized.filter((d) => d.w <= maxWidth)
-  // Each column is a ranking, loudest first; a long day grows taller instead of dropping words.
+  // Each column is a ranking, loudest first; a long day grows taller, and past the cap words are listed, never dropped.
   const ranked = [...fitting].sort((a, b) => b.count - a.count || a.term.localeCompare(b.term))
   const stacked: { d: (typeof fitting)[number]; top: number }[] = []
   const unplaced: typeof fitting = []

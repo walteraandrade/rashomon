@@ -110,12 +110,12 @@ export const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_TH
 export const fmt = (value: unknown) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
 // Reader spellings of the stored accent-free words (GET /api/labels), set once at boot. A word
-// with no entry reads as stored; a phrase is spelled word by word.
+// with no entry reads as stored; a phrase is spelled whole when the corpus shows it, else word by word.
 let labels: ReadonlyMap<string, string> = new Map()
 export const setLabels = (map: Record<string, string>) => {
   labels = new Map(Object.entries(map))
 }
-export const spell = (term: string) => (labels.size ? term.split(' ').map((w) => labels.get(w) ?? w).join(' ') : term)
+export const spell = (term: string) => labels.get(term) ?? (labels.size ? term.split(' ').map((w) => labels.get(w) ?? w).join(' ') : term)
 export const label = (n: { kind?: string; term: string }) => (n.kind === 'hashtag' ? '#' + n.term : spell(n.term))
 
 export const normalize = (s: unknown) =>
@@ -197,16 +197,6 @@ export const relatedTo = (nodes: Term[], links: Link[], id: string | null): { no
     .sort((a, b) => b.count - a.count)
 
 export const domainSuffix = (domain: string) => (domain === 'all' ? '' : ` · ${domain}`)
-
-// One upper-case letter per word, up to three; the row head and docs card carry the full name.
-export const personInitials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 3)
-    .toUpperCase()
 
 const hex = (c: string) => [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16))
 

@@ -24,14 +24,14 @@
     setBoot({ search: location.search })
     let people: Person[] = []
     let peopleError: unknown = null
-    // Labels only respell words; a failure leaves the stored spelling, never blocks the page.
+    // Labels only respell words; a failure or a slow answer leaves the stored spelling, never blocks the page.
     const labels = loadLabels().then(setLabels, () => {})
     try {
       people = await loadPeople()
     } catch (e) {
       peopleError = e
     }
-    await labels
+    await Promise.race([labels, new Promise((r) => setTimeout(r, 1500))])
     // Words are measured on a canvas before they are drawn; measuring in the fallback face would
     // pack them for the wrong widths. Wait for the word face, never longer than a moment.
     await Promise.race([document.fonts?.load?.("500 20px 'Newsreader'"), new Promise((r) => setTimeout(r, 1500))]).catch(() => {})

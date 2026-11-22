@@ -349,7 +349,7 @@ describe('markup for figure 1\'s third view, Avaliação', () => {
     assert.match(keyStrip!, /hidden/, '#keyStrip starts hidden: the default view is the map, not the strip')
     const rows = [...keyStrip!.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim())
     assert.deepEqual(rows, ['Posição', 'Tamanho', 'Cor', 'Clique'])
-    const dds = [...keyStrip!.matchAll(/<dd>([\s\S]*?)<\/dd>/g)].map((m) => m[1].trim())
+    const dds = [...keyStrip!.matchAll(/<dd>([\s\S]*?)<\/dd>/g)].map((m) => m[1].replace(/\{@render [^}]*\}/g, '').trim())
     assert.deepEqual(dds, [
       'média da avaliação dos textos com a palavra',
       'quantos textos',

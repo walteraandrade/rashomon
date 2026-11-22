@@ -24,7 +24,7 @@
       </div>
       <div id="atlas">
         <h2>Gráfico 1 · Atlas de palavras</h2>
-        <p>O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. As posições evitam colisões; elas não medem distância nem opinião.</p>
+        <p>O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. Quanto mais perto do centro, mais alta no ranking; a posição exata desvia para não cobrir outra palavra. Ela não mede distância nem opinião.</p>
         <h3>Frequência</h3>
         <p>Em quantos textos sobre a pessoa a palavra aparece. Frequência diz o que se fala muito.</p>
         <h3>Alcance</h3>
@@ -84,7 +84,7 @@
         <h3>Tamanho</h3>
         <p>Quantos documentos daquele dia têm a palavra. Uma palavra em vários dias aparece de novo em cada um, sem ligação entre as repetições.</p>
         <h3>Posição</h3>
-        <p>Só o dia. Dentro da coluna a posição apenas evita que uma palavra cubra outra. Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna; uma palavra só não quebra na figura, e se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe o que passa da altura da coluna num dia com mais palavras do que ela comporta.</p>
+        <p>A coluna é o dia. Dentro dela, de cima para baixo, vai da palavra mais citada para a menos citada, até 12 por dia. Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna; uma palavra só não quebra na figura, e se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe as palavras além das 12 do dia.</p>
         <h3>O número do dia</h3>
         <p>Junto do rótulo de cada dia, quantos documentos citam a pessoa naquele dia, mesmo quando nenhuma palavra sobrevive ao corte de nomes próprios. Um dia sem documentos aparece com esse número em zero, não some da semana.</p>
         <h3>Clique</h3>

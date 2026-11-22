@@ -224,10 +224,6 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
 /* Figure 1's stats badge, next to its title -- same spot and voice as #testimonyLabel next to
    #testimonyTitle: no colour of its own, so .figure-title h2 b's accent wins on both. */
 #atlasStats { font-size: var(--t-sm); font-weight: 500; white-space: nowrap; margin-left: var(--space-2); letter-spacing: 0; }
-/* Each figure's sentence lives inside its own .figure-head, which is a two-column grid
-   (title | subtitle); both figure heads wrap their sentence in the same .sentence div, so one
-   rule spans it across both columns to read as its own row underneath them. */
-.figure-head > .sentence { grid-column: 1 / -1; margin-top: var(--space-5); }
 .sentence { margin-bottom: 0; }
 /* The sentence sits at lede rank but in sans 500 and full --ink: it is the one paragraph on the
    page a reader can edit, and it has to read as a control surface, not as a caption. Each
@@ -261,13 +257,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 
 /* ---------- figures: one card per graph ---------- */
 .figure { margin-top: var(--space-7); padding: var(--space-6) var(--space-6) var(--space-5); border: 1px solid var(--line); border-radius: 2px; background: var(--panel); }
-/* Title, then one sentence of what the figure says, then the sentence you edit, then a single
-   line of key. The data starts within the first ~240px of every card. */
-.figure-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); align-items: start; padding-bottom: var(--space-2); margin-bottom: var(--space-4); }
-.figure-head > .figure-key { grid-column: 1 / -1; order: 4; margin-top: var(--space-3); }
-.figure-head > .sentence { order: 3; }
-.figure-head > .figure-title { order: 1; }
-.figure-head > .figure-sub { order: 2; max-width: 72ch; }
 
 /* The encoding, always on the figure: a named variant of dt/dd, compact so it sits under the
    title without becoming a second essay. Swatches in the dt are the colour hierarchy teaching
@@ -282,7 +271,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    (paintSelection paints both panes). A sibling dl, not a row inside #keyDefault, so #keyDefault
    stays exactly the four rows test/leitura-ui-acceptance.test.ts pins (Tamanho/Cor/Posição/
    Clique, unchanged). */
-.key-bridge { display: inline-block; width: 22px; height: 2px; margin-right: var(--space-2); vertical-align: middle; background: var(--accent); }
+.key-bridge { display: inline-block; width: 8px; height: 8px; margin: 0 var(--space-2) 0 3px; vertical-align: middle; background: var(--accent); transform: rotate(45deg); }
 .key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
 .figure-title { display: flex; flex-direction: column; gap: var(--space-1); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
@@ -310,13 +299,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .search input::placeholder { color: var(--muted); }
 .segment { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--line); border-radius: 2px; padding: 2px; background: var(--bg); }
 .segment button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); border-radius: 2px; padding: 6px var(--space-4); font-family: var(--mono); font-size: var(--t-xs); }
-.segment button[aria-pressed="true"], .segment button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .zoom { display: flex; align-items: center; gap: 6px; }
 .zoom button { width: 34px; height: 34px; padding: 0; font-size: var(--t-md); }
 .zoom #zoomReset { width: 56px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; }
 .quiet-button { background: var(--soft); border: 0; padding: 7px var(--space-3); border-radius: 2px; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .quiet-button:hover { color: var(--ink); background: var(--line); }
-.quiet-button.toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
 .mobile-hint { display: none; margin: var(--space-2) 0; color: var(--muted); font-size: var(--t-xs); }
 .search-note { color: var(--accent); font-family: var(--mono); font-size: var(--t-xs); padding-top: var(--space-2); min-height: 24px; }
 
@@ -325,7 +312,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .map-svg { display: block; width: var(--map-width, auto); height: auto; }
 /* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
    point of the graph. The family and weight are still fixed here, like everywhere else. */
-.map-svg .atlas-text { font-family: var(--word); font-weight: 500; fill: var(--wc); fill-opacity: calc(1 - var(--fade, 0) * .42); font-size: var(--size); font-optical-sizing: auto; }
+.map-svg .atlas-text { font-family: var(--word); font-weight: 500; fill: var(--wc); fill-opacity: calc(1 - var(--fade, 0) * .22); font-size: var(--size); font-optical-sizing: auto; }
 /* --wc is the word's own colour, resolved once per state on the group so the hit box can borrow
    it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
    nearly transparent, so it says "this one" without competing with what the colour means. */
@@ -758,7 +745,6 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .ruler-word.is-selected .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
 .ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.ruler-bridge .ruler-bridge-mark { stroke: var(--accent); stroke-width: 2; }
 .detail-bridge { margin: var(--space-1) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--accent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
@@ -795,7 +781,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
 .week-word { cursor: pointer; outline: none; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .week-glow, .week-hit { fill: transparent; }
-.week-text { font-family: var(--word); font-weight: 500; font-size: var(--size); fill: var(--wc); fill-opacity: calc(1 - var(--fade, 0) * .4); font-optical-sizing: auto; }
+.week-text { font-family: var(--word); font-weight: 500; font-size: var(--size); fill: var(--wc); fill-opacity: calc(1 - var(--fade, 0) * .25); font-optical-sizing: auto; }
 .week-word:hover .week-glow, .week-word:focus-visible .week-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
 .week-word:hover .week-hit, .week-word:focus-visible .week-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .week-word.is-selected .week-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
@@ -1014,8 +1000,6 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .halo-out { stop-color: var(--ink); stop-opacity: 0; }
 .center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--ink) 7%, transparent); }
 .edge { stroke: var(--accent); opacity: .55; }
-.quiet-button.toggle[aria-pressed="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--soft)); font-weight: 500; }
-.segment button[aria-pressed="true"], .segment button.active { background: var(--ink); color: var(--bg); font-weight: 600; }
 .search input { font-family: var(--sans); font-size: var(--t-sm); }
 .search input::placeholder { color: var(--faint); }
 .quiet-button { font-family: var(--sans); font-size: var(--t-xs); color: var(--muted); }
@@ -1035,7 +1019,6 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .ruler-end-row { font-family: var(--display); font-size: var(--t-lg); padding-bottom: var(--space-3); }
 .ruler-end { font-weight: 500; }
 .ruler-axis-labels, .strip-axis-labels { font-family: var(--sans); font-size: var(--t-xs); color: var(--muted); padding-top: var(--space-1); }
-.ruler-bridge .ruler-bridge-mark { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
 .ruler-overflow .quiet-button, .week-overflow .quiet-button { font-family: var(--word); font-size: var(--t-sm); }
 
 /* The week: a ranking per day, the day's volume as a bar under its number. */
@@ -1057,14 +1040,17 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .agenda-table { font-size: var(--t-xs); border-collapse: separate; border-spacing: 2px; }
 .agenda-table th, .agenda-table td { border-bottom: 0; padding: 0; }
 .agenda-table tbody th { position: sticky; left: 0; z-index: 1; padding: 0 var(--space-3) 0 0; background: var(--panel); font-family: var(--sans); font-size: var(--t-sm); font-weight: 400; color: var(--ink); }
-.agenda-colhead { height: 128px; width: 34px; min-width: 34px; vertical-align: bottom; }
-.agenda-colhead span { display: block; width: 34px; transform: translate(11px, -6px) rotate(-55deg); transform-origin: left bottom; white-space: nowrap; font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
+.agenda-colhead { height: 128px; width: clamp(24px, 2.1vw, 34px); min-width: clamp(24px, 2.1vw, 34px); vertical-align: bottom; }
+.agenda-colhead span { display: block; width: clamp(24px, 2.1vw, 34px); transform: translate(11px, -6px) rotate(-55deg); transform-origin: left bottom; white-space: nowrap; font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
 .agenda-cell { padding: 0; }
-.agenda-pick { display: block; height: 26px; padding: 0; border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); text-align: center;
-  background: color-mix(in srgb, var(--heat) calc(var(--heat-v, 0) * 88%), var(--soft));
-  color: color-mix(in srgb, var(--bg) clamp(0%, calc((var(--heat-v, 0) - .55) * 10000%), 100%), var(--ink)); }
+/* The heat ramp jumps over its middle band (mixes of about 45-60%), where neither --ink nor --bg
+   text reaches 4.5:1: below half the peak a cell stays light under --ink, above it dark under --bg. */
+.agenda-pick { --hv: calc(var(--heat-v, 0) * .8 + .28 * clamp(0, (var(--heat-v, 0) - .5) * 10000, 1));
+  display: block; height: 26px; padding: 0; border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); text-align: center;
+  background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft));
+  color: color-mix(in srgb, var(--bg) clamp(0%, calc((var(--heat-v, 0) - .5) * 10000%), 100%), var(--ink)); }
 .agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: none; box-shadow: inset 0 0 0 1px var(--accent); }
-.agenda-pick.is-active { background: color-mix(in srgb, var(--heat) calc(var(--heat-v, 0) * 88%), var(--soft)); box-shadow: inset 0 0 0 2px var(--accent); }
+.agenda-pick.is-active { background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft)); box-shadow: inset 0 0 0 2px var(--accent); }
 .agenda-cell.is-empty { width: 34px; }
 .ink-scale { background: linear-gradient(90deg, var(--soft), var(--heat)); }
 .lean-chip { border: 0; padding: 0; margin-left: var(--space-2); font-size: var(--t-micro); color: var(--faint); }
@@ -1073,8 +1059,9 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 .comention-headrow { height: 132px; align-items: flex-end; }
 .comention-colhead { position: relative; overflow: visible; padding: 0; }
 .comention-colhead span { position: absolute; left: 50%; bottom: 6px; transform: rotate(-55deg); transform-origin: left bottom; white-space: nowrap; font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
-.comention-cell { border-color: transparent; color: color-mix(in srgb, var(--bg) clamp(0%, calc((var(--w, 0) - .55) * 10000%), 100%), var(--ink));
-  background: color-mix(in srgb, var(--heat) calc(var(--w, 0) * 90%), var(--soft)); }
+.comention-cell { --hv: calc(var(--w, 0) * .8 + .28 * clamp(0, (var(--w, 0) - .5) * 10000, 1));
+  border-color: transparent; color: color-mix(in srgb, var(--bg) clamp(0%, calc((var(--w, 0) - .5) * 10000%), 100%), var(--ink));
+  background: color-mix(in srgb, var(--heat) calc(var(--hv) * 90%), var(--soft)); }
 .comention-cell.is-empty { background: color-mix(in srgb, var(--soft) 45%, transparent); }
 .comention-cell:hover:not(.is-empty):not(.is-blank), .comention-cell:focus-visible, .comention-cell.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .comention-row:hover .comention-rowhead { color: var(--accent); }
@@ -1088,7 +1075,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 .persistence-week span { font-family: var(--mono); color: var(--muted); }
 .persistence-table .persistence-stat-head { padding: 0 0 6px var(--space-5); font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); text-align: left; vertical-align: bottom; white-space: nowrap; }
 .persistence-table .persistence-stat { padding-left: var(--space-5); font-family: var(--mono); font-size: var(--t-xs); color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.persistence-table .persistence-stat.is-flat { color: var(--muted); }
 .persistence-gap-swatch { border-style: dashed; }
 
 /* Atenção: the two rows in --ink; an empty row says so instead of drawing a floor of zeros. */
@@ -1162,20 +1148,16 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 .figure-key dd { font-size: var(--t-sm); color: var(--muted); }
 .figure > .note, .figure > p.note { order: 80; }
 .figure-head > .figure-title { order: -4; }
-.figure-head > .figure-sub { order: -3; }
+.figure-head > .figure-sub { order: -3; max-width: 72ch; }
 .figure-head > .sentence { order: -2; }
 .figure-head > .figure-key { order: 90; margin-top: var(--space-5); }
 /* One active state for every control: a raised tile with an amber rule under it. Amber fill is
    kept for nothing, so no toggle outshouts the graph it serves. */
 .segment button[aria-pressed="true"], .segment button.active,
 .quiet-button.toggle[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; box-shadow: inset 0 -2px 0 var(--accent); }
-.map-svg .atlas-text { fill-opacity: calc(1 - var(--fade, 0) * .22); }
-.week-text { fill-opacity: calc(1 - var(--fade, 0) * .25); }
 .week-volume { height: 4px; opacity: 1; background: linear-gradient(90deg, var(--heat) calc(var(--v, 0) * 100%), var(--soft) 0); }
 /* Rotated names over a matrix are read as often as the row names, so they get the same ink. */
 .agenda-colhead span, .comention-colhead span { color: var(--ink); }
-.persistence-table .persistence-stat.is-flat { color: var(--muted); }
-.lean-chip { display: none; }
 /* Quem aparece junto: the row under the pointer and its column light up, so a long row reads across. */
 .comention-row:not(.comention-headrow):hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .comention-row:not(.comention-headrow):nth-child(even) { background: color-mix(in srgb, var(--ink) 2%, transparent); }
@@ -1189,8 +1171,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 .strip-name line { stroke: var(--muted); stroke-width: 1; opacity: .5; }
 .strip-tick { opacity: .9; }
 /* The agenda's 27 columns fit a laptop screen: the cell gives up width before the table scrolls. */
-.agenda-colhead { width: clamp(24px, 2.1vw, 34px); min-width: clamp(24px, 2.1vw, 34px); }
-.agenda-colhead span { width: clamp(24px, 2.1vw, 34px); }
 .agenda-pick, .agenda-cell.is-empty { width: clamp(24px, 2.1vw, 34px); }
 .comention-cell { letter-spacing: -0.04em; }
 .key-line { display: inline-block; width: 22px; height: 0; border-top: 1px solid var(--accent); vertical-align: middle; margin-right: var(--space-2); }
@@ -1200,7 +1180,6 @@ button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in
 .persistence-table .persistence-stat.is-flat { color: color-mix(in srgb, var(--ink) 80%, var(--muted)); }
 /* A bridge is a small amber diamond under the word, never an underline that reads as a link. */
 .ruler-bridge .ruler-bridge-mark { fill: var(--accent); stroke: none; }
-.key-bridge { width: 7px; height: 7px; background: var(--accent); transform: rotate(45deg); margin: 0 var(--space-2) 0 3px; }
 /* A word sitting on a guide keeps its letters whole: a stroke in the panel colour under the fill. */
 .ruler-word:not(.is-selected):not(:hover):not(:focus-visible) .ruler-text { paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 svg .strip-mean { position: static; transform: none; font-family: var(--mono); font-size: var(--t-2xs); fill: var(--accent); text-anchor: middle; }
@@ -1222,8 +1201,5 @@ svg .strip-mean { position: static; transform: none; font-family: var(--mono); f
 /* ---------- round 5 ---------- */
 /* The atlas's own notes row folds away when it has nothing to say. */
 .legend:not(:has(> span:not(:empty):not([hidden]))) { display: none; }
-/* At 100% the map never runs taller than the screen under the figure head. */
-.map-svg.is-fitted { max-height: max(560px, calc(100svh - 240px)); }
-.key-bridge { width: 8px; height: 8px; }
 .strip-zero { stroke: var(--muted); stroke-width: 1; opacity: .35; }
 .ruler-overflow .quiet-button, .ruler-rare .quiet-button { color: color-mix(in srgb, var(--cmp, var(--ink)) 65%, var(--ink)); }

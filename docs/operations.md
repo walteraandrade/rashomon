@@ -339,7 +339,13 @@ The writer is one statement (`INSERT_DOC_TERMS_SQL` in `src/store.ts`): it inser
 
 ## Term labels
 
-`term_labels (term primary key, label)` holds the reader spelling of each served word (`src/labels.ts`, `GET /api/labels`). `buildTermLabels` rebuilds it in one transaction as the last step of `buildGraphAggregates`: it reads `docs.text` once, tokenising only the words `graph_terms` and `term_weeks` serve, so it grows with the served vocabulary, not the corpus. It is derived, so `pnpm push` does not copy it and `pnpm aggregate` rebuilds it; `pnpm size` lists it.
+`term_labels (term primary key, label)` holds the reader spelling of each served word and phrase (`src/labels.ts`, `GET /api/labels`). `buildTermLabels` rebuilds it in one transaction as the last step of `buildGraphAggregates`, and its failure is logged and swallowed: the previous labels stay and the ingest still succeeds.
+
+The build tokenises the text of every non-`.pt` doc in the corpus (21 days under retention), after cutting URLs and `@`/`#` handles and normalising to NFC. Its cost grows with the corpus, not with the served vocabulary.
+- **Words:** each word some `graph_terms` or `term_weeks` term uses takes its most common lower-case form. It is capitalised when more than 90% of its uses are. A word of five letters or fewer is written in capitals when more than 80% of its uses are, or when it is capitalised that often and most of those capitalised uses are capitals. Only a word whose label differs from its key is stored.
+- **Phrases:** each served phrase of two to four words takes its most common adjacent written form, preferring any form that is not all capitals. It is stored even when equal to its key, so the page never respells it word by word.
+
+The table is derived, so `pnpm push` does not copy it and `pnpm aggregate` rebuilds it; `pnpm size` lists it. Time the build against production (see "Timing source" below) before relying on it after a large corpus change.
 
 ## The tone side table
 

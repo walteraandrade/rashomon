@@ -32,7 +32,7 @@
       <dl class="figure-key">
         <div><dt>Tamanho</dt><dd>frequência, PMI ou alcance, o que a frase escolhe</dd></div>
         <div><dt>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
-        <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Posição</dt><dd>mais perto do centro, mais alta no ranking; a posição exata desvia para não cobrir outra palavra</dd></div>
         <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
         <div><dt><i class="key-line" aria-hidden="true"></i>Linha</dt><dd>textos em comum com a palavra escolhida</dd></div>
         <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
@@ -74,8 +74,8 @@
     </div>
     <div id="help-semana">
       <h3>Gráfico 5 · A semana</h3>
-      <p>Cada coluna é um dia, do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. O tamanho da palavra é quantos documentos daquele dia a têm; a posição é só o dia, não mede nada dentro da coluna. Uma palavra que aparece em vários dias repete em cada coluna, sem linha ligando uma à outra.</p>
-      <p>Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna. Uma palavra só não quebra na figura: se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe o que passa da altura da coluna num dia com mais palavras do que ela comporta.</p>
+      <p>Cada coluna é um dia, do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. O tamanho da palavra é quantos documentos daquele dia a têm. Em cada coluna, de cima para baixo, vai da mais citada para a menos citada, até 12 palavras por dia; o resto vai para a lista "não couberam". Uma palavra que aparece em vários dias repete em cada coluna, sem linha ligando uma à outra.</p>
+      <p>Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna. Uma palavra só não quebra na figura: se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe as palavras além das 12 do dia.</p>
       <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte. Clique numa palavra abre os textos daquele dia com aquela palavra.</p>
       <p>O gráfico 1 tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do gráfico 1.</p>
     </div>
@@ -84,7 +84,7 @@
       <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara as duas lentes escolhidas para a mesma pessoa, do mesmo jeito que o gráfico 3 compara duas pessoas: a posição diz de qual lente a palavra é mais, o tamanho é documentos das duas lentes somados. Clique abre os textos das duas lentes.</p>
       <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". O nome da pessoa não entra na régua; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas, já que é a mesma pessoa nos dois lados.</p>
       <p>Uma lente inválida ou vazia volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
-      <p>O sublinhado âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa.</p>
+      <p>O losango âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa.</p>
     </div>
     <div id="help-atencao">
       <h3>Gráfico 7 · Atenção e menções</h3>

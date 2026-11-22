@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_TERMS, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/ruler-model.js'
 import type { CompareTerm } from '../src/ui/format.js'
 import { balanceColor } from '../src/ui/format.js'
@@ -371,7 +371,7 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     assert.ok(column.overflow.length > 0, 'this many words cannot fit one column')
     assert.equal(column.words.length + column.overflow.length, day.length)
     for (const w of column.words) assert.ok(w.size >= WEEK_SIZE_MIN, `${w.term} at ${w.size}px is under the floor`)
-    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20, 'the column trades overflow for height, not an unbounded column')
+    assert.ok(column.words.length <= WEEK_MAX_TERMS, 'a column draws at most the cap, the rest is listed')
   })
 
   it('two placed words in the same day never overlap vertically', () => {
@@ -442,7 +442,8 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     const [column] = weekLayout(measure, [day], 159)
     assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit`)
     assert.equal(column.words.length, 8)
-    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20)
+    const byY = [...column.words].sort((a, b) => a.y - b.y).map((w) => w.count)
+    assert.deepEqual(byY, [...byY].sort((a, b) => b - a), 'drawn top to bottom from most to least cited')
   })
 
   it('a word wider than a narrow column even at the floor size is listed under the column, never drawn across the next day (#148 review, 1)', () => {
@@ -480,7 +481,7 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
       const [column] = weekLayout(measure, [day], width)
       assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit at ${width}px`)
       assert.equal(column.words.length, 12)
-      assert.ok(column.height > WEEK_MAX_HEIGHT, 'the column grows past the one-line cap instead of dropping the quietest words')
+      assert.equal(column.words.length, WEEK_MAX_TERMS, 'the column grows taller instead of dropping the quietest words')
     }
   })
 

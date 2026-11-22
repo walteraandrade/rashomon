@@ -468,11 +468,11 @@
 
 <svelte:document onkeydown={onKey} />
 
-{#snippet maskLegend()}
+{#snippet maskLegend(id: string)}
   {#if personTestimony && personScore !== null}
-    <span id="maskLegend" hidden={mask !== 'avaliacao'}>{' '}({signed(personScore)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de {MASK_MIN} textos avaliados</span>
+    <span {id} hidden={mask !== 'avaliacao'}>{' '}({signed(personScore)}): vermelho mais hostil, verde mais favorável, cinza igual ou com menos de {MASK_MIN} textos avaliados</span>
   {:else}
-    <span id="maskLegend" hidden={mask !== 'avaliacao'}>; sem avaliação neste recorte para colorir as palavras</span>
+    <span {id} hidden={mask !== 'avaliacao'}>; sem avaliação neste recorte para colorir as palavras</span>
   {/if}
 {/snippet}
 
@@ -492,7 +492,7 @@
     <p class="figure-sub">As palavras que mais grudam na pessoa aparecem maiores e mais perto do centro. <a href="/como-ler#atlas">Como ler</a>.</p>
     <dl class="figure-key" id="keyDefault" hidden={eff === 'strip'}>
       <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>frequência, PMI ou alcance, o que a frase escolhe</dd></div>
-      <div id="keyDefaultColor" hidden={mask === 'tema'}><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa{@render maskLegend()}</dd></div>
+      <div id="keyDefaultColor" hidden={mask === 'tema'}><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>avaliação contra a média desta pessoa{@render maskLegend('maskLegend')}</dd></div>
       <div><dt>Posição</dt><dd>mais perto do centro, mais forte</dd></div>
       <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
       <div><dt><i class="key-line" aria-hidden="true"></i>Linha</dt><dd>textos em comum com a palavra escolhida</dd></div>
@@ -504,7 +504,7 @@
     <dl class="figure-key" id="keyStrip" hidden={eff !== 'strip'}>
       <div><dt>Posição</dt><dd>média da avaliação dos textos com a palavra</dd></div>
       <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>quantos textos</dd></div>
-      <div><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>distância da média da pessoa</dd></div>
+      <div><dt><span class="mask-scale" aria-hidden="true"></span>Cor</dt><dd>distância da média da pessoa{@render maskLegend('maskLegendStrip')}</dd></div>
       <div><dt>Clique</dt><dd>textos da palavra</dd></div>
     </dl>
     <div class="sentence">
@@ -529,7 +529,7 @@
           <div class="empty">Nenhum termo neste recorte.<br>{shown?.days === WIDEST ? 'Experimente outra pessoa.' : 'Experimente outra pessoa ou um período maior.'}</div>
         {:else if view === 'data' && layout}
           {@const c = layout.center}
-          <div class="map-stage"><svg class="map-svg" class:is-fitted={zoom === 1} class:is-masked={masked} class:is-themed={themed} viewBox={mapBox} aria-label="Mapa de palavras associadas a {personName}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="372" fill="url(#halo)"/><g id="edges">{#each edges as e (e.key)}<path class="edge" d={e.d} stroke-linejoin="round" stroke-width={e.w}/>{/each}</g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os {fmt(about)} documentos sobre {personName}" onclick={showPerson} onkeydown={activate(showPerson)}><rect class="center-hit" x={-c.w / 2} y={-c.h / 2} width={c.w} height={c.h} rx="10"/><text class="person-name" style:--size="{c.size}px" text-anchor="middle" dominant-baseline="central">{#each c.lines as line, i}<tspan x="0" y={-((c.lines.length - 1) * c.lineHeight) / 2 - 12 + i * c.lineHeight}>{line}</tspan>{/each}</text><text class="center-note" text-anchor="middle" y={c.h / 2 - 22}>{fmt(about)} documentos</text></g><g id="words">{#each layout.placed as p (p.id)}{@const s = states.get(p.id)}{@const tone = termMask(p, personScore)}{@const theme = themeMask(p, ranking)}<g class="atlas-word" class:is-selected={s?.on} class:is-neighbor={s?.neighbor} class:is-dim={s?.dim} class:is-match={s?.match} data-kind={p.kind} transform="translate({p.x},{p.y})" style:--size="{p.size}px" style:--fade={layout.placed.length > 1 ? p.rank / (layout.placed.length - 1) : 0} style:--mask={tone} style:--theme={theme} data-node={p.id} role="button" tabindex="0" aria-pressed={!!s?.on} aria-label="{label(p)}, {fmt(p.count)} documentos; {scoreName(viewSort)}: {fmt(p.score)}" onclick={() => pick(p.id)} onkeydown={activate(() => pick(p.id))}><title>{label(p)} · {kinds[p.kind] || p.kind || 'Tipo desconhecido'} · {fmt(p.count)} documentos · {scoreName(viewSort)}: {fmt(p.score)}{p.testimony ? ` · avaliação ${signed(p.testimony.score)} em ${fmt(p.testimony.n)} textos` : ''}</title><rect class="atlas-glow" x={-p.w / 2 - 4} y={-p.h / 2 - 3} width={p.w + 8} height={p.h + 6}/><rect class="atlas-hit" x={-p.w / 2} y={-p.h / 2} width={p.w} height={p.h}/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">{#each p.lines as line, i}<tspan x="0" y={(i - (p.lines.length - 1) / 2) * p.lineHeight}>{line}</tspan>{/each}</text><line class="underline" x1={-Math.min(p.w * 0.35, 40)} x2={Math.min(p.w * 0.35, 40)} y1={p.h / 2 - 2} y2={p.h / 2 - 2}/></g>{/each}</g></svg></div>
+          <div class="map-stage"><svg class="map-svg" class:is-masked={masked} class:is-themed={themed} viewBox={mapBox} aria-label="Mapa de palavras associadas a {personName}"><defs><radialGradient id="halo"><stop class="halo-in" offset="0"/><stop class="halo-out" offset="1"/></radialGradient></defs><circle r="372" fill="url(#halo)"/><g id="edges">{#each edges as e (e.key)}<path class="edge" d={e.d} stroke-linejoin="round" stroke-width={e.w}/>{/each}</g><g class="center-label" data-person-docs role="button" tabindex="0" aria-label="Ler os {fmt(about)} documentos sobre {personName}" onclick={showPerson} onkeydown={activate(showPerson)}><rect class="center-hit" x={-c.w / 2} y={-c.h / 2} width={c.w} height={c.h} rx="10"/><text class="person-name" style:--size="{c.size}px" text-anchor="middle" dominant-baseline="central">{#each c.lines as line, i}<tspan x="0" y={-((c.lines.length - 1) * c.lineHeight) / 2 - 12 + i * c.lineHeight}>{line}</tspan>{/each}</text><text class="center-note" text-anchor="middle" y={c.h / 2 - 22}>{fmt(about)} documentos</text></g><g id="words">{#each layout.placed as p (p.id)}{@const s = states.get(p.id)}{@const tone = termMask(p, personScore)}{@const theme = themeMask(p, ranking)}<g class="atlas-word" class:is-selected={s?.on} class:is-neighbor={s?.neighbor} class:is-dim={s?.dim} class:is-match={s?.match} data-kind={p.kind} transform="translate({p.x},{p.y})" style:--size="{p.size}px" style:--fade={layout.placed.length > 1 ? p.rank / (layout.placed.length - 1) : 0} style:--mask={tone} style:--theme={theme} data-node={p.id} role="button" tabindex="0" aria-pressed={!!s?.on} aria-label="{label(p)}, {fmt(p.count)} documentos; {scoreName(viewSort)}: {fmt(p.score)}" onclick={() => pick(p.id)} onkeydown={activate(() => pick(p.id))}><title>{label(p)} · {kinds[p.kind] || p.kind || 'Tipo desconhecido'} · {fmt(p.count)} documentos · {scoreName(viewSort)}: {fmt(p.score)}{p.testimony ? ` · avaliação ${signed(p.testimony.score)} em ${fmt(p.testimony.n)} textos` : ''}</title><rect class="atlas-glow" x={-p.w / 2 - 4} y={-p.h / 2 - 3} width={p.w + 8} height={p.h + 6}/><rect class="atlas-hit" x={-p.w / 2} y={-p.h / 2} width={p.w} height={p.h}/><text class="atlas-text" text-anchor="middle" dominant-baseline="central">{#each p.lines as line, i}<tspan x="0" y={(i - (p.lines.length - 1) / 2) * p.lineHeight}>{line}</tspan>{/each}</text><line class="underline" x1={-Math.min(p.w * 0.35, 40)} x2={Math.min(p.w * 0.35, 40)} y1={p.h / 2 - 2} y2={p.h / 2 - 2}/></g>{/each}</g></svg></div>
         {/if}
       </div>
       <div class="overflow" id="overflow" hidden={!layout || !layout.overflow.length}>

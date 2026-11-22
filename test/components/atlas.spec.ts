@@ -1508,11 +1508,12 @@ describe('Atlas: mode, reload, layout and mask edges', () => {
   })
 
   it('the inspector starts with the top eight and a pick lists co-occurrence counts', async () => {
-    bodies.graph = graphOf(Array.from({ length: 7 }, (_, i) => at({ id: `word:w${i}`, term: `w${i}`, count: 30 - i })), {
+    bodies.graph = graphOf(Array.from({ length: 10 }, (_, i) => at({ id: `word:w${9 - i}`, term: `w${9 - i}`, count: 21 + i, pmi: 1 + i / 10 })), {
       links: [{ source: 'word:w0', target: 'word:w1', count: 17 }],
     })
     await start()
-    expect(all('#inspector [data-related]')).toHaveLength(7)
+    const related = all('#inspector [data-related]').map((el) => el.getAttribute('data-related'))
+    expect(related).toEqual(['word:w0', 'word:w1', 'word:w2', 'word:w3', 'word:w4', 'word:w5', 'word:w6', 'word:w7'])
     fire(nodeEl('word:w0'))
     expect(document.querySelector('#inspector [data-related="word:w1"] b')!.textContent).toBe('17')
   })

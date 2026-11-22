@@ -34,6 +34,7 @@
         <div><dt>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
         <div><dt>Posição</dt><dd>só evita colisão</dd></div>
         <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
+        <div><dt><i class="key-line" aria-hidden="true"></i>Linha</dt><dd>textos em comum com a palavra escolhida</dd></div>
         <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
       </dl>
       <p>Alcance é a soma dos reposts dos posts do Bluesky que trazem a palavra. É contado quando o rashomon coletou o post, então um post que continuou circulando depois fica subcontado. Só documentos do Bluesky têm alcance; os das outras fontes não têm e contam como zero.</p>

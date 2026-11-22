@@ -337,7 +337,7 @@ describe('Atlas (issue #297)', () => {
     expect(nodeEl('word:golpe').getAttribute('role')).toBe('button')
     expect(nodeEl('word:golpe').getAttribute('aria-pressed')).toBe('false')
     expect(document.querySelector('#viewport .center-label[data-person-docs]')).not.toBeNull()
-    expect($('viewport').textContent).toContain('NO CENTRO DA CONVERSA')
+    expect($('viewport').querySelector('.center-note')!.textContent).toBe('10 documentos')
   })
 
   it('atlas AC5: nodes are coloured against the person mean only when they carry a testimony; a null tone is neutral', async () => {
@@ -737,8 +737,7 @@ describe('Atlas (issue #297)', () => {
     change('sort', 'reach')
     await settle(200)
     expect(graphUrls()).toHaveLength(1)
-    expect($('legend').textContent).toMatch(/alcance/)
-    expect($('legend').textContent).not.toMatch(/frequência/)
+    expect(nodeEl('word:raro').getAttribute('aria-label')).toMatch(/alcance \(reposts\)/)
     change('sort', 'pmi')
     await settle(200)
     expect(graphUrls()).toHaveLength(2)
@@ -840,8 +839,9 @@ describe('Atlas (issue #297)', () => {
     expect(cx('word:golpe')).toBeLessThan(cx('word:reforma'))
     expect($('stripHiddenNote').hidden).toBe(false)
     expect($('stripHiddenNote').textContent).toMatch(/1 palavra deixada de fora por ter menos de 3 textos avaliados/)
-    expect($('legend').textContent).toMatch(/Tamanho = quantos textos/)
-    expect($('legend').textContent).not.toMatch(/Linha = documentos em comum/)
+    expect($('keyStrip').textContent).toMatch(/Tamanho\s*quantos textos/)
+    expect($('keyStrip').hidden).toBe(false)
+    expect($('legend').textContent).not.toMatch(/Tamanho/)
     expect($('legend').textContent).not.toMatch(/zoom e rolagem/)
     expect($('atlasStrip').textContent).toMatch(/média da pessoa/)
   })
@@ -1085,7 +1085,8 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     await start()
     expect(nodeEl('word:a').style.getPropertyValue('--theme')).toBe('var(--theme-1)')
     expect(nodeEl('word:b').style.getPropertyValue('--theme')).toBe('var(--theme-2)')
-    expect($('legend').querySelector('#themeLegend')!.textContent).toMatch(/caminharam juntas/)
+    expect($('keyThemeText').textContent).toMatch(/caminharam juntas/)
+    expect($('legend').querySelector('#themeLegend')!.textContent).toMatch(/não se comparam entre construções/)
     expect(($('legend').querySelector('#themeLegend') as HTMLElement).hidden).toBe(true)
   })
 
@@ -1120,7 +1121,7 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
   it('the mask legend reads the person mean, and says so when there is none', async () => {
     bodies.graph = withPerson([at({ id: 'word:a', term: 'a' })])
     await start()
-    expect($('maskLegend').textContent).toMatch(/média da pessoa \(-2,4\)/)
+    expect($('maskLegend').textContent).toMatch(/Média da pessoa \(-2,4\)/)
     expect($('maskLegend').textContent).toMatch(/menos de 3 textos avaliados/)
     expect(($('maskLegend') as HTMLElement).hidden).toBe(false)
     unmount(instance!)
@@ -1325,7 +1326,7 @@ describe('Atlas: word marks, map, selection, columns, inspector, strip and loadi
     instance = mount(Atlas, { target })
     flushSync()
     expect($('viewport').innerHTML).toMatch(/ghost-field/)
-    expect($('viewport').innerHTML).toMatch(/class="boundary"/)
+    expect($('viewport').innerHTML).toMatch(/fill="url\(#halo\)"/)
     expect($('viewport').innerHTML).toMatch(/<rect class="ghost"/)
     expect($('viewport').innerHTML).not.toMatch(/Carregando/)
     expect($('inspector').innerHTML).toMatch(/ghost-kicker/)
@@ -1505,12 +1506,12 @@ describe('Atlas: mode, reload, layout and mask edges', () => {
     expect(nodeEl('word:reforma').classList.contains('is-neighbor')).toBe(false)
   })
 
-  it('the inspector starts with the top five and a pick lists co-occurrence counts', async () => {
+  it('the inspector starts with the top eight and a pick lists co-occurrence counts', async () => {
     bodies.graph = graphOf(Array.from({ length: 7 }, (_, i) => at({ id: `word:w${i}`, term: `w${i}`, count: 30 - i })), {
       links: [{ source: 'word:w0', target: 'word:w1', count: 17 }],
     })
     await start()
-    expect(all('#inspector [data-related]')).toHaveLength(5)
+    expect(all('#inspector [data-related]')).toHaveLength(7)
     fire(nodeEl('word:w0'))
     expect(document.querySelector('#inspector [data-related="word:w1"] b')!.textContent).toBe('17')
   })

@@ -265,6 +265,10 @@ export const schema = `
       c_t int not null,
       primary key (person_id, term, kind, week)
     );
+    create table if not exists term_labels (
+      term text primary key,
+      label text not null
+    );
     create table if not exists warm_entries (
       pathname text primary key,
       person_id text not null references persons(id) on delete cascade,

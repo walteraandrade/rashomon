@@ -4,6 +4,7 @@ import personsSeed from '../seed.json' with { type: 'json' }
 import { CACHE_TAG, cacheControl, NO_STORE } from './cache.js'
 import { db, migrateP } from './db.js'
 import { agendaFor, attentionFor, candidatesFor, comentionFor, compareBridgesFor, compareFor, docsFor, graphFor, lensBridgesFor, lensesFor, persistenceFor, risingFor, sourcesFor, testimonyFor, timelineFor, toneFor, weekFor } from './graph.js'
+import { labelsFor } from './labels.js'
 import { measure, perfEnabled, perfLine, perfLogEnabled, round, serverTiming } from './perf.js'
 import type { Person } from './types.js'
 import { eligibleKey, lookup, pgWarmStore, type WarmReader, type WarmRoute } from './warmstore.js'
@@ -62,6 +63,9 @@ app.use('/api/*', async (c, next) => {
   c.header('cache-control', control)
   if (control !== NO_STORE) c.header('vercel-cache-tag', CACHE_TAG)
 })
+
+// Reader spellings of the stored, accent-free terms (src/labels.ts); one map for every figure.
+app.get('/api/labels', async (c) => c.json(await labelsFor()))
 
 app.get('/api/people', async (c) => {
   const { rows } = await db.query<Person>(`select id, name, aliases from persons order by name`)

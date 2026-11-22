@@ -4,7 +4,7 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { fmt, personInitials, sourceLabels, SOURCE_SEGMENTS, type Comention } from './format.js'
+  import { fmt, sourceLabels, SOURCE_SEGMENTS, type Comention } from './format.js'
   import { matrixLayout } from './layout.js'
   import { seedFor } from './seed.js'
 
@@ -185,7 +185,7 @@
       <div class="comention-grid" style:--cell="{layout.cellSize}px">
         <div class="comention-row comention-headrow">
           <div class="comention-rowhead" aria-hidden="true"></div>
-          {#each persons as p (p.id)}<span class="comention-colhead" title={p.name}>{personInitials(p.name)}</span>{/each}
+          {#each persons as p (p.id)}<span class="comention-colhead" title={p.name}><span>{p.name}</span></span>{/each}
         </div>
         {#each persons as row, i (row.id)}
           <div class="comention-row">

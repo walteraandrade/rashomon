@@ -35,7 +35,7 @@ describe('centerLabel', () => {
   it('returns a box at least 240 wide and tall enough for every line', () => {
     const c = centerLabel(measure, 'Fulano de Tal')
     assert.ok(c.w >= 240)
-    assert.equal(c.h, c.lines.length * c.lineHeight + 88)
+    assert.equal(c.h, c.lines.length * c.lineHeight + 64)
     assert.equal(c.x, 0)
     assert.equal(c.y, 0)
   })
@@ -215,7 +215,7 @@ describe('the words never overlap and never leave the frame', () => {
 describe('no word is drawn below the size floor the site sets', () => {
   it('every word is at least RULER_SIZE_MIN px, at any width', () => {
     const { items } = rulerTerms(corpus(), 'count')
-    assert.equal(RULER_SIZE_MIN, 11, 'atlas.css sets 11px as the smallest type on the site')
+    assert.equal(RULER_SIZE_MIN, 13, 'a ruler word is never smaller than the body copy it sits beside')
     for (const width of [1280, 860, 375]) for (const w of rulerLayout(metrics, items, width).words) assert.ok(w.size >= RULER_SIZE_MIN, `${w.term} at ${w.size}px is under the floor`)
   })
 

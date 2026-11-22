@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { FONT_DISPLAY, FONT_MONO } from '../src/ui/layout.js'
+import { FONT_DISPLAY, FONT_MONO, FONT_WORD } from '../src/ui/layout.js'
 import { SOURCE_SEGMENTS } from '../src/ui/format.js'
 import { VERCEL_INSIGHTS_TAG } from './pages.js'
 import { ROUTES, appTemplate, pageMarkup, siteFile } from './pages.js'
@@ -114,7 +114,7 @@ describe('Leitura UI: the site explains itself on its own page', () => {
       )
     const figure = html.match(/id="workspace"[\s\S]*?<\/section>/)?.[0] ?? ''
     const help = html.match(/id="help-atlas"[\s\S]*?(?=<div id="help-pmi")/)?.[0] ?? ''
-    assert.deepEqual(dts(figure), ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Clique'])
+    assert.deepEqual(dts(figure), ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Linha', 'Clique'])
     assert.deepEqual(dts(help), dts(figure))
   })
 
@@ -136,22 +136,24 @@ describe('Leitura UI: the site explains itself on its own page', () => {
 })
 
 describe('Leitura UI: one stylesheet, one type system', () => {
-  it('atlas.css declares the two faces and layout.js measures text with the same families', () => {
+  it('atlas.css declares the three faces and layout.js measures text with the same families', () => {
     const css = read('atlas.css')
     assert.match(css, /--sans:\s*'IBM Plex Sans'/)
     assert.match(css, /--mono:\s*'IBM Plex Mono'/)
-    assert.match(css, /--display:\s*'IBM Plex Sans Condensed'/)
-    assert.ok(FONT_MONO.startsWith("'IBM Plex Mono'"), 'canvas measurement must use the face the map is painted with')
-    assert.match(css, /\.map-svg \.atlas-text \{[^}]*var\(--mono\)/, 'the map paints words in the face layout.js measures them with')
-    assert.ok(FONT_DISPLAY.startsWith("'IBM Plex Sans Condensed'"), 'the centre name is measured with the display face')
+    assert.match(css, /--display:\s*'Newsreader'/)
+    assert.ok(FONT_MONO.startsWith("'IBM Plex Mono'"), 'numbers are measured in the mono face they are painted with')
+    assert.match(css, /--word:\s*'Newsreader'/)
+    assert.equal(FONT_WORD, FONT_DISPLAY, 'canvas measurement must use the face the map is painted with')
+    assert.match(css, /\.map-svg \.atlas-text \{[^}]*var\(--word\)/, 'the map paints words in the face layout.js measures them with')
+    assert.ok(FONT_DISPLAY.startsWith("'Newsreader'"), 'the centre name is measured with the display face')
     // compare.html is gone (issue #91): the ruler now lives on atlas.html, already in this
     // loop, so the deleted page's own slot is dropped rather than replaced.
-    assert.match(appTemplate(), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*IBM\+Plex\+Sans\+Condensed/, 'the shared shell loads the three faces')
+    assert.match(appTemplate(), /fonts\.googleapis\.com\/css2\?family=IBM\+Plex\+Mono[^"]*IBM\+Plex\+Sans[^"]*Newsreader/, 'the shared shell loads the three faces')
   })
 
   it('the mask and ruler swatches use SCALE_MID, not --muted', () => {
     const css = read('atlas.css')
-    assert.match(css, /--scale-mid:\s*#8b909c/)
+    assert.match(css, /--scale-mid:\s*#a3a8b3/)
     assert.match(css, /\.mask-scale \{[^}]*var\(--scale-mid\)/)
     assert.match(css, /\.key-pair \{[^}]*var\(--scale-mid\)/)
     assert.doesNotMatch(css, /\.top nav \.help-link \{[^}]*--accent/, '"como ler" in the nav is chrome, not a live control')
@@ -254,7 +256,7 @@ describe('the page is a sequence of graphs', () => {
       )
     const week = html.match(/id="week"[\s\S]*?<\/section>/)?.[0] ?? ''
     assert.deepEqual(dts(week), ['Tamanho', 'Posição', 'Clique'])
-    assert.match(week, /<dt>Posição<\/dt><dd>só o dia; a altura na coluna não mede nada<\/dd>/, 'the key says the vertical position means nothing, so the swarm never reads as a ranking')
+    assert.match(week, /<dt>Posição<\/dt><dd>o dia; em cada coluna, da mais citada para a menos<\/dd>/, 'each column is a ranking and the key says so')
     assert.match(week, /href="\/como-ler#semana"/, 'the figure\'s own "Como ler" points at the #semana chapter')
     assert.match(html, /id="help-semana"/, 'the in-page guide carries a matching chapter for that href to land on')
   })
@@ -332,12 +334,12 @@ describe('markup for figure 1\'s third view, Avaliação', () => {
     assert.match(segment, /<button id="modeColumns"/)
     assert.match(segment, /<button id="modeStrip"[^>]*>Avaliação<\/button>/, 'the third button reads "Avaliação"')
     // #keyDefault must stay the first <dl class="figure-key"> in #workspace, with exactly the
-    // five rows Tamanho/Cor/Posição/Tracejado/Clique, unchanged (test/leitura-ui-acceptance.test.ts
+    // six rows Tamanho/Cor/Posição/Tracejado/Linha/Clique, unchanged (test/leitura-ui-acceptance.test.ts
     // "figure 1's key on the page and in the dialog name the same encodings" relies on this order).
     const firstKey = workspace.match(/<dl class="figure-key"[^>]*>[\s\S]*?<\/dl>/)?.[0] ?? ''
     assert.match(firstKey, /id="keyDefault"/)
     const rows = [...firstKey.matchAll(/<dt>([\s\S]*?)<\/dt>/g)].map((m) => m[1].replace(/<[^>]+>/g, '').replace(/Aa/g, '').trim())
-    assert.deepEqual(rows, ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Clique'])
+    assert.deepEqual(rows, ['Tamanho', 'Cor', 'Posição', 'Tracejado', 'Linha', 'Clique'])
   })
 
   it('#keyStrip is a second, initially-hidden figure-key with the four Posição/Tamanho/Cor/Clique rows', () => {

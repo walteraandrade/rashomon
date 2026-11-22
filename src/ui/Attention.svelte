@@ -301,7 +301,7 @@
       {#if mentionsErrored}
         {@render emptyRow('Não foi possível carregar as menções.', 'Menções', 'mentions')}
       {:else}
-        <div class="attention-row" data-row="mentions">
+        <div class="attention-row" class:is-flat={!mentionsPeak} data-row="mentions">
           <div class="attention-row-head"><span>Menções</span><span>{mentionsPeak ? `pico: ${fmt(mentionsPeakValue)} documentos em ${attentionDayLabel(mentionsPeak)}` : ROW_NOTE.mentions}</span></div>
           {@render svgRow('Menções', layout.mentions, viewsByDay, true)}
         </div>
@@ -312,7 +312,7 @@
         <div class="ghost-field" aria-hidden="true">{@render emptyRow(null, VIEWS_LABEL, 'views')}</div>
         <p class="sr-only">Lendo os pageviews.</p>
       {:else}
-        <div class="attention-row" data-row="views">
+        <div class="attention-row" class:is-flat={!viewsPeak} data-row="views">
           <div class="attention-row-head"><span>{VIEWS_LABEL}</span><span>{viewsPeak ? `pico: ${fmt(viewsPeakValue)} visualizações em ${attentionDayLabel(viewsPeak)}` : ROW_NOTE.views}</span></div>
           {@render svgRow(VIEWS_LABEL, layout.views, mentionsByDay, false)}
         </div>

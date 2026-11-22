@@ -141,16 +141,19 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+// Both lenses on Tudo: the cases written against one shared starting recorte.
+const ALL_ALL = '?lenses.a=all&lenses.b=all'
+
 describe('Lenses (#294)', () => {
-  it('AC2: lenses: request params and defaults', async () => {
+  it('AC2: lenses: request params and defaults (unseeded, the lenses open on opposite leans)', async () => {
     boot()
     await start()
     expect(lensesCalls()).toHaveLength(1)
     const c = lensesCalls()[0]
     expect(c.path).toBe('/api/people/lula/lenses')
-    expect(c.url).toBe('/api/people/lula/lenses?' + lensesParams({ a: 'all', b: 'all', days: '21', limit: '40' }).toString())
-    expect(c.params.get('a')).toBe('all')
-    expect(c.params.get('b')).toBe('all')
+    expect(c.url).toBe('/api/people/lula/lenses?' + lensesParams({ a: 'lean:left', b: 'lean:right', days: '21', limit: '40' }).toString())
+    expect(c.params.get('a')).toBe('lean:left')
+    expect(c.params.get('b')).toBe('lean:right')
     expect(c.params.get('days')).toBe('21')
     expect(c.params.get('limit')).toBe('40')
     expect(c.params.get('kind')).toBe('word,hashtag,phrase')
@@ -201,10 +204,10 @@ describe('Lenses (#294)', () => {
     expect(of('sources')[0].params.get('days')).toBe('7')
 
     remount()
-    boot({ search: '?a=lean:left&lenses.b=lean:right' })
+    boot({ search: '?a=source:rss&lenses.b=lean:right' })
     await start()
-    expect(select('lensesA').value).toBe('all')
-    expect(lensesCalls()[0].params.get('a')).toBe('all')
+    expect(select('lensesA').value).toBe('lean:left')
+    expect(lensesCalls()[0].params.get('a')).toBe('lean:left')
     expect(lensesCalls()[0].params.get('b')).toBe('lean:right')
 
     remount()
@@ -404,7 +407,7 @@ describe('Lenses (#294)', () => {
     ['lensesPerson', 'bolsonaro', 'person'],
   ]) {
     it(`AC5: lenses: control changes refetch and release (#${id})`, async () => {
-      boot()
+      boot({ search: ALL_ALL })
       await start()
       const before = lensesCalls().length
       await change(id, value)
@@ -417,7 +420,7 @@ describe('Lenses (#294)', () => {
   }
 
   it('AC6: lenses: status notice for identical lenses', async () => {
-    boot()
+    boot({ search: ALL_ALL })
     await start()
     expect($('lensesStatus').hidden).toBe(false)
     expect($('lensesStatus').textContent).toBe('Os dois lados mostram o mesmo recorte.')
@@ -623,7 +626,7 @@ describe('Lenses (#294)', () => {
   })
 
   it('AC8: lenses: stale pick dropped mid-reload (data lands)', async () => {
-    boot()
+    boot({ search: ALL_ALL })
     await start()
     const gate = held()
     handlers.lenses = () => gate.promise
@@ -678,7 +681,7 @@ describe('Lenses (#294)', () => {
     ]
     handlers.lenses = () => payload(terms)
     handlers.bridges = () => ({ bridges: { 'word:stf': 1, 'word:pix': 0 } })
-    boot()
+    boot({ search: ALL_ALL })
     await start()
     const ruler = calls.findIndex((c) => c.route === 'lenses')
     const bridges = calls.findIndex((c) => c.route === 'bridges')
@@ -869,7 +872,7 @@ describe('Lenses (#294)', () => {
   })
 
   it('AC12: lenses: combobox sync after programmatic writes', async () => {
-    boot({ search: '?lenses.a=lean:left' })
+    boot({ search: '?lenses.a=lean:left&lenses.b=all' })
     await start()
     for (const id of ['lensesA', 'lensesB']) expect(select(id).hasAttribute('hidden')).toBe(true)
     expect(input('lensesAInput').value).toBe('Esquerda')
@@ -895,7 +898,7 @@ describe('Lenses (#294)', () => {
   })
 
   it('AC12: picking a listbox option writes the select, fires change and the figure reloads', async () => {
-    boot()
+    boot({ search: ALL_ALL })
     await start()
     const before = lensesCalls().length
     let changes = 0
@@ -958,7 +961,7 @@ describe('Lenses (#294)', () => {
     expect(svg.getAttribute('aria-label')).toBe('Régua comparando folha.uol.com.br e Direita para a mesma pessoa')
     expect(svg.getAttribute('role')).toBe('group')
     expect($('lensesRuler').querySelector('p.note')?.textContent).toBe(
-      'Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem das duas lentes somados. Toque numa palavra para ver os números das duas lentes.',
+      'Toque numa palavra para ver os números das duas lentes.',
     )
     expect($('lensesRuler').getAttribute('aria-label')).toBe('Régua comparando duas lentes da mesma pessoa')
     expect($('lensesRuler').hidden).toBe(false)

@@ -67,7 +67,7 @@
         endB,
         axisLabels: [`Só de ${endA}`, 'dividida', `Só de ${endB}`] as [string, string, string],
         ariaLabel: `Régua comparando ${endA} e ${endB} para a mesma pessoa`,
-        note: 'Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem das duas lentes somados. Toque numa palavra para ver os números das duas lentes.',
+        note: 'Toque numa palavra para ver os números das duas lentes.',
       },
     }
   })
@@ -285,8 +285,9 @@
       person = resolvePerson(initial.person)
       days = seeded(initial.days, DAYS, days)
       limit = seeded(initial.limit, LIMITS, limit)
-      if (!isDomainSeed(initial.a)) applySeed(selA, initial.a)
-      if (!isDomainSeed(initial.b)) applySeed(selB, initial.b)
+      // Unseeded, the two lenses open on opposite leans: all-against-all would stack every word in the middle.
+      if (!isDomainSeed(initial.a)) applySeed(selA, initial.a ?? 'lean:left')
+      if (!isDomainSeed(initial.b)) applySeed(selB, initial.b ?? 'lean:right')
       syncCombos()
       void loadOutlets().then((applied) => {
         if (applied) {

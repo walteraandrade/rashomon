@@ -15,10 +15,12 @@
     testimonyColor,
     testimonyFocus,
     testimonyPosition,
+    foldTestimonyDomains,
+    stripSpan,
     type OutletRow,
     type Testimony,
   } from './format.js'
-  import { STRIP_PAD, stripLayout } from './strip-model.js'
+  import { LABEL_BAND, STRIP_PAD, stripLabels, stripLayout } from './strip-model.js'
   import { seedFor } from './seed.js'
 
   type Merged = ReturnType<typeof mergeOutlets>[number]
@@ -220,11 +222,15 @@
     const numbered = [...byField.values()]
       .map((g) => g.slice().sort(byDocs))
       .sort((a, b) => docsOf(b) - docsOf(a) || a[0].domain.localeCompare(b[0].domain))
-      .map((g) => ({ eyebrow: `grupo · ${g.slice(0, 3).map((r) => r.domain).join(', ')}`, group: g }))
+      .map((g, i) => ({ eyebrow: `Grupo ${i + 1} · vocabulário parecido`, group: g }))
     return ungrouped.length ? [...numbered, { eyebrow: 'Sem agrupamento suficiente', group: ungrouped }] : numbered
   })
 
-  const layout = $derived(testimony ? stripLayout(testimony.by_domain, stripWidth) : null)
+  // A row named after its source (Bluesky's handles fold into one) is not an outlet and would set every bar's scale.
+  const peakDocs = $derived(Math.max(1, ...merged.filter((r) => !r.sources.includes(r.domain)).map((r) => r.docs)))
+  const span = $derived(testimony ? stripSpan([testimony.overall.score, ...foldTestimonyDomains(testimony.by_domain).map((d) => d.score)]) : 10)
+  const ticks = $derived([-span, -span / 2, 0, span / 2, span])
+  const layout = $derived(testimony ? stripLayout(testimony.by_domain, stripWidth, span) : null)
   const overall = $derived(testimony?.overall.score ?? null)
   const stripShown = $derived(!unavailable && (testimonyPhase === 'ghost' || (testimonyPhase === 'data' && !!layout?.dots.length && overall !== null)))
   const hasScore = $derived(overall !== null && !!testimony?.overall.n)
@@ -248,8 +254,11 @@
       <div class="ghost-field" aria-hidden="true"><div class="strip-mean-row"></div><svg class="strip-svg" viewBox="0 0 860 96" width="860" height="96"><line class="strip-axis" x1={STRIP_PAD} x2={860 - STRIP_PAD} y1="48" y2="48"/>{#each TICKS as s (s)}{@const gx = STRIP_PAD + ((s + 10) / 20) * (860 - 2 * STRIP_PAD)}<line class="strip-tick" x1={gx} x2={gx} y1="43" y2="53"/>{/each}{#each GHOST_DOTS as [gx, r] (gx)}<circle class="ghost" cx={gx} cy="48" r={r}/>{/each}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div></div>
     {:else if stripShown && layout && overall !== null}
       {@const { dots, x, half, height } = layout}
-      <div class="strip-mean-row"><span class="strip-mean" style:--pos="{testimonyPosition(overall)}%">média da pessoa {signed(overall)}</span></div>
-      <svg class="strip-svg" viewBox="0 0 {stripWidth} {height}" width={stripWidth} {height} role="group" aria-label="Veículos na régua da avaliação, de −10 a +10"><line class="strip-axis" x1={STRIP_PAD} x2={stripWidth - STRIP_PAD} y1={half} y2={half}/>{#each TICKS as s (s)}<line class="strip-tick" x1={x(s)} x2={x(s)} y1={half - 5} y2={half + 5}/>{/each}<line class="strip-overall" x1={x(overall)} x2={x(overall)} y1="4" y2={height - 4}/>{#each dots as d (d.domain)}<g class="strip-dot {d.domain === outlet ? 'is-active' : ''}" style:--tone={testimonyColor(d.score)} data-strip-domain={d.domain} role="button" tabindex="0" aria-pressed={d.domain === outlet} aria-label="{d.domain}, {signed(d.score)} em {fmt(d.n)} textos" onclick={() => toggle(d.domain)} onkeydown={(e) => onStripKey(e, d.domain)}><title>{`${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}`}</title><circle class="dot-halo" cx={d.x} cy={half + d.y} r={d.r + 5}/><circle class="dot-face" cx={d.x} cy={half + d.y} r={d.r}/></g>{/each}</svg><div class="strip-axis-labels"><span>−10 contra</span><span>0</span><span>+10 a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui{outlet === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>
+      {@const meanText = `média da pessoa ${signed(overall)}`}
+      {@const meanW = meanText.length * 7.2}
+      {@const meanX = Math.max(meanW / 2, Math.min(stripWidth - meanW / 2, x(overall)))}
+      {@const names = stripLabels(dots, half, stripWidth, 6, [meanX - meanW / 2, meanX + meanW / 2])}
+            <svg class="strip-svg" viewBox="0 {-LABEL_BAND} {stripWidth} {height + 2 * LABEL_BAND}" width={stripWidth} height={height + 2 * LABEL_BAND} role="group" aria-label="Veículos na régua da avaliação, de −{span} a +{span}"><line class="strip-axis" x1={STRIP_PAD} x2={stripWidth - STRIP_PAD} y1={half} y2={half}/>{#each ticks as s (s)}<line class="strip-tick" x1={x(s)} x2={x(s)} y1={half - 5} y2={half + 5}/>{/each}<line class="strip-overall" x1={x(overall)} x2={x(overall)} y1={-LABEL_BAND + 17} y2={height - 4}/><text class="strip-mean" x={meanX} y={-LABEL_BAND + 12}>{meanText}</text>{#each names as l (l.domain)}<g class="strip-name" aria-hidden="true"><line x1={l.dotX} x2={l.dotX} y1={l.side === 'top' ? l.y + 4 : l.y - 13} y2={l.dotY}/><text x={l.x} y={l.y}>{l.domain}</text></g>{/each}{#each dots as d (d.domain)}<g class="strip-dot {d.domain === outlet ? 'is-active' : ''}" style:--tone={testimonyColor(d.score)} data-strip-domain={d.domain} role="button" tabindex="0" aria-pressed={d.domain === outlet} aria-label="{d.domain}, {signed(d.score)} em {fmt(d.n)} textos" onclick={() => toggle(d.domain)} onkeydown={(e) => onStripKey(e, d.domain)}><title>{`${d.domain} · ${d.sources.map((s) => sourceLabels[s] ?? s).join(', ')} · ${signed(d.score)} em ${fmt(d.n)} ${d.n === 1 ? 'texto' : 'textos'}`}</title><circle class="dot-halo" cx={d.x} cy={half + d.y} r={d.r + 5}/><circle class="dot-face" cx={d.x} cy={half + d.y} r={d.r}/></g>{/each}</svg><div class="strip-axis-labels"><span>−{span} contra</span><span>0</span><span>+{span} a favor</span></div><p class="note">Uma bolinha por veículo com 3 ou mais textos avaliados; o tamanho é quantos textos. Toque numa bolinha para destacá-la aqui{outlet === 'all' ? '' : '; toque de novo, ou fora das bolinhas, para soltar'}. O atlas acima não muda.</p>
     {/if}
   </figure>
   <div class="testimony-lists" class:is-loading={testimonyDim} id="testimonyList" aria-busy={busy(unavailable ? 'data' : testimonyPhase)} bind:this={listEl}>
@@ -264,7 +273,7 @@
     {:else if testimonyPhase === 'error'}
       <p class="note">Não foi possível carregar a avaliação.</p>
     {:else if testimony && !hasScore}
-      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note">Nenhum texto avaliado neste recorte (método {testimony.method}).<br>{testimonyDays === WIDEST ? 'Tente outra fonte.' : 'Tente um período maior ou outra fonte.'}</p></div>
+      <div class="pet-empty"><img class="pet" src="/pet-caracara.png" alt="" width="106" height="78"><p class="note" title="método {testimony.method}">Nenhum texto avaliado neste recorte: a avaliação ainda não chegou a estes textos.<br>{testimonyDays === WIDEST ? 'Tente outra fonte.' : 'Tente um período maior ou outra fonte.'}</p></div>
     {:else if testimony && overall !== null}
       <dl class="verdict stat"><div><dt>Média do recorte</dt><dd style:--tone={testimonyColor(overall)}>{signed(overall)}</dd></div></dl><p class="verdict-class">{testimonyClass(overall)} · média de {fmt(testimony.overall.n)} {testimony.overall.n === 1 ? 'texto avaliado' : 'textos avaliados'}</p>
       {#if outlet !== 'all'}
@@ -291,9 +300,9 @@
           <div class="outlet-grid">
             {#each g.group as r (r.domain)}
               {#if r.sources.includes(r.domain)}
-                <span class="outlet is-static" title="Textos sem veículo nesta fonte"><span class="d">{r.domain}</span><span class="n">{fmt(r.docs)}</span><span class="t">{r.score === null ? '' : signed(r.score)}</span></span>
+                <span class="outlet is-static" title="Textos sem veículo nesta fonte" style:--bar={r.docs / peakDocs}><span class="d">{r.domain}</span><span class="n">{fmt(r.docs)}</span><span class="t">{r.score === null ? '' : signed(r.score)}</span></span>
               {:else}
-                <button class="outlet {r.domain === outlet ? 'is-active' : ''}" data-domain={r.domain} aria-pressed={r.domain === outlet} style:--tone={testimonyColor(r.score)} title={r.sources.map((x) => sourceLabels[x] ?? x).join(', ')} onclick={() => toggle(r.domain)}><span class="d">{r.domain}</span><span class="n">{fmt(r.docs)}</span><span class="t">{r.score === null ? '' : signed(r.score)}</span></button>
+                <button class="outlet {r.domain === outlet ? 'is-active' : ''}" data-domain={r.domain} aria-pressed={r.domain === outlet} style:--tone={testimonyColor(r.score)} style:--bar={r.docs / peakDocs} title={r.sources.map((x) => sourceLabels[x] ?? x).join(', ')} onclick={() => toggle(r.domain)}><span class="d">{r.domain}</span><span class="n">{fmt(r.docs)}</span><span class="t">{r.score === null ? '' : signed(r.score)}</span></button>
               {/if}
               {#if r.domain === outlet}
                 <dl class="metric stat"><div><dt>Vocabulário mais parecido com</dt><dd>{#if r.neighbors.length}{#each r.neighbors.slice(0, 5) as nb (nb.domain)}<span class="outlet-neighbor">{nb.domain} · <span class="n">{nb.similarity.toFixed(2)}</span></span>{/each}{:else}Nenhum veículo com vocabulário parecido neste recorte{/if}</dd></div></dl>

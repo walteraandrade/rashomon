@@ -109,7 +109,14 @@ export const isBridge = (t: { bridge?: number }) => (t.bridge ?? 0) >= BRIDGE_TH
 
 export const fmt = (value: unknown) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
-export const label = (n: { kind?: string; term: string }) => (n.kind === 'hashtag' ? '#' : '') + n.term
+// Reader spellings of the stored accent-free words (GET /api/labels), set once at boot. A word
+// with no entry reads as stored; a phrase is spelled word by word.
+let labels: ReadonlyMap<string, string> = new Map()
+export const setLabels = (map: Record<string, string>) => {
+  labels = new Map(Object.entries(map))
+}
+export const spell = (term: string) => (labels.size ? term.split(' ').map((w) => labels.get(w) ?? w).join(' ') : term)
+export const label = (n: { kind?: string; term: string }) => (n.kind === 'hashtag' ? '#' + n.term : spell(n.term))
 
 export const normalize = (s: unknown) =>
   String(s || '')
@@ -207,7 +214,7 @@ type Ramp = [number[], number[], number]
 
 const mix = (from: number[], to: number[], k: number) => from.map((v, i) => Math.round(v + (to[i] - v) * k)).join(',')
 
-export const SCALE_MID = '#8b909c'
+export const SCALE_MID = '#a3a8b3'
 
 const scaleColor = (value: number | null | undefined, span: number, fade = false) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return 'transparent'
@@ -215,7 +222,7 @@ const scaleColor = (value: number | null | undefined, span: number, fade = false
   const [from, to, k]: Ramp = x < 0 ? [hex('#ff7a8a'), hex(SCALE_MID), (x + span) / span] : [hex(SCALE_MID), hex('#74dc86'), x / span]
   const rgb = mix(from, to, k)
   const strength = Math.abs(x) / span
-  return fade && strength < 1 ? `rgba(${rgb},${(0.5 + 0.5 * strength).toFixed(2)})` : `rgb(${rgb})`
+  return fade && strength < 1 ? `rgba(${rgb},${(0.75 + 0.25 * strength).toFixed(2)})` : `rgb(${rgb})`
 }
 
 const TESTIMONY_CUT = 2.5
@@ -270,7 +277,14 @@ export const themeMask = (term: { community?: number | null }, ranking: Map<numb
   return rank === undefined ? null : `var(--theme-${rank})`
 }
 
-export const testimonyPosition = (s: number) => ((Math.max(-10, Math.min(10, Number(s))) + 10) / 20) * 100
+export const testimonyPosition = (s: number, span = 10) => ((Math.max(-span, Math.min(span, Number(s))) + span) / (2 * span)) * 100
+
+// The smallest half-width of 2, 5 and 10 that holds every score: scores bunch near zero.
+export const STRIP_SPANS = [2, 5, 10] as const
+export const stripSpan = (scores: (number | null | undefined)[]) => {
+  const reach = scores.reduce<number>((m, s) => (s === null || s === undefined || !Number.isFinite(Number(s)) ? m : Math.max(m, Math.abs(Number(s)))), 0)
+  return STRIP_SPANS.find((k) => reach <= k * 0.95) ?? 10
+}
 
 export const signed = (value: unknown) => (Number(value) > 0 ? '+' : '') + fmt(value)
 

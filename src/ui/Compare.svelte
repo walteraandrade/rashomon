@@ -66,7 +66,7 @@
         endB: nameB,
         axisLabels: [`Só de ${nameA}`, 'dividida', `Só de ${nameB}`] as [string, string, string],
         ariaLabel: `Régua comparando ${nameA} e ${nameB}`,
-        note: `Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.`,
+        note: `${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte: cada pessoa entra com as mais frequentes e com as mais grudentas, por isso passam do número escolhido acima.`,
       },
     }
   })

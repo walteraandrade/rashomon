@@ -283,12 +283,12 @@ describe('testimony helpers: testimonyClass, testimonyColor, testimonyPosition, 
 
 describe('the mask colours: maskColor and termMask', () => {
   it('maskColor is translucent on the mean and opaque at the ends; the chip ramps stay opaque', () => {
-    assert.equal(maskColor(0), 'rgba(139,144,156,0.50)')
-    assert.equal(maskColor(-0.75), 'rgba(197,133,147,0.75)', 'halfway: colour and alpha both halfway')
+    assert.equal(maskColor(0), 'rgba(163,168,179,0.75)')
+    assert.equal(maskColor(-0.75), 'rgba(209,145,159,0.88)', 'halfway: colour halfway, alpha between its 0.75 floor and 1')
     assert.equal(maskColor(-1.5), 'rgb(255,122,138)')
     assert.equal(maskColor(9), 'rgb(116,220,134)')
-    assert.equal(SCALE_MID, '#8b909c')
-    assert.equal(testimonyColor(0), 'rgb(139,144,156)', 'a chip with dark text needs a solid background')
+    assert.equal(SCALE_MID, '#a3a8b3')
+    assert.equal(testimonyColor(0), 'rgb(163,168,179)', 'a chip with dark text needs a solid background')
   })
 
   it('termMask centres on the person, is null under MASK_MIN texts or without a person mean', () => {

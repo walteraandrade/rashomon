@@ -546,7 +546,7 @@ describe('Compare (#293)', () => {
     handlers['/api/compare'] = () => payload([reforma, { term: 'pix', kind: 'word', a: null, b: side(2) }, { term: 'stf', kind: 'word', a: side(3), b: side(3) }])
     boot()
     await start()
-    expect($('compareRuler').querySelector('p.note')?.textContent).toMatch(/: 3 palavras neste recorte\.$/)
+    expect($('compareRuler').querySelector('p.note')?.textContent).toMatch(/^3 palavras neste recorte:/)
   })
   it('review K5: word label, title, hooks and text shape', async () => {
     boot()
@@ -560,17 +560,18 @@ describe('Compare (#293)', () => {
     expect(w.querySelector('text.ruler-text > tspan[x="0"][y="0"]')?.textContent).toBe('reforma')
     expect(w.getAttribute('style')).toContain(`--cmp: ${balanceColor(-1)}`)
     const svg = $('compareRuler').querySelector('svg')!
-    const half = Number(svg.getAttribute('height')) / 2
+    // The svg's last 30px hold the scale under the words; the words' own band is the rest.
+    const half = (Number(svg.getAttribute('height')) - 30) / 2
     expect(w.getAttribute('transform')).toMatch(new RegExp(`,${half}\\)$`))
   })
-  it('review K6: axis: RULER_PAD ends, five ticks 10px tall', async () => {
+  it('review K6: axis: RULER_PAD ends, five ticks 12px tall under the words', async () => {
     boot()
     await start()
     const axis = $('compareRuler').querySelector('.ruler-axis')!
-    expect(axis.getAttribute('x1')).toBe('28')
+    expect(axis.getAttribute('x')).toBe('28')
     const ticks = [...$('compareRuler').querySelectorAll('.ruler-tick')]
     expect(ticks).toHaveLength(5)
-    expect(Number(ticks[0].getAttribute('y2')) - Number(ticks[0].getAttribute('y1'))).toBe(10)
+    expect(Number(ticks[0].getAttribute('y2')) - Number(ticks[0].getAttribute('y1'))).toBe(12)
   })
   it('review K7: ends, axis prose and svg label name both people', async () => {
     boot()

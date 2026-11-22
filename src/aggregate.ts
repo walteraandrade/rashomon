@@ -5,6 +5,7 @@ import { nameTokens } from './extract.js'
 import { DAYS, LIMITS, MINS, SOURCES, WEEK_TZ } from './query.js'
 import { countryFilter, isName, outletDomain, pmiRank, signatureFloor } from './scoring.js'
 import { sql } from './sql.js'
+import { buildTermLabels } from './labels.js'
 import { inTransaction } from './store.js'
 import type { Person } from './types.js'
 
@@ -433,6 +434,7 @@ export const buildGraphAggregates = async (persons: Person[], windows: readonly 
   const started = performance.now()
   await windows.reduce<Promise<void>>(async (acc, d) => (await acc, void (await buildWindow(d, persons, top))), Promise.resolve())
   await buildTermWeeks(persons)
+  await buildTermLabels()
   const { rows: s } = await db.query<{ n: number }>(`select count(*)::int as n from graph_scopes`)
   const { rows: t } = await db.query<{ n: number }>(`select count(*)::int as n from graph_terms`)
   return { windows: [...windows], scopes: s[0].n, terms: t[0].n, ms: performance.now() - started }

@@ -6,34 +6,34 @@ import { inTransaction } from './store.js'
 export const CAPITALISED = 0.9
 export const UPPERCASE = 0.8
 
-// URLs and handles cut and every combining mark stripped from the key, as extract.ts does; NFC so a
-// decomposed accent never splits a word. Served words' tokens only, once for both statements.
-export const labelTokensQuery = `
-  create temp table label_toks on commit drop as
+// URLs, handles and combining marks cut as extract.ts does, NFC first; only tokens in `keys`, and
+// each statement aggregates them as they stream, so no per-occurrence row is ever stored.
+const MARKS = '[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]'
+const tokens = `
+  raw as (
+    select d.id, regexp_replace(normalize(d.text, NFC), 'https?://\\S+|[#@]\\S+', ' ', 'g') as t
+    from docs d where d.country is distinct from 'pt'
+  ), split as (
+    select r.id, s.ord, s.tok, lower(s.tok) as low,
+      regexp_replace(normalize(lower(s.tok), NFD), '${MARKS}', '', 'g') as key
+    from raw r, regexp_split_to_table(r.t, '[^[:alnum:]]+') with ordinality s(tok, ord)
+    where s.tok <> ''
+  ), toks as (
+    select t.* from split t join keys k on k.key = t.key
+  )`
+
+// A short word mostly written in capitals stays so: a headline "STF" never yields "Stf".
+export const termLabelsQuery = `
+  insert into term_labels (term, label)
   with served as (
     select term from graph_terms union select term from term_weeks
   ), keys as (
     select distinct w as key from served, unnest(string_to_array(served.term, ' ')) w
-  ), raw as (
-    select d.id, regexp_replace(normalize(d.text, NFC), 'https?://\\S+|[#@]\\S+', ' ', 'g') as t
-    from docs d where d.country is distinct from 'pt'
-  ), toks as (
-    select r.id, s.ord, s.tok, lower(s.tok) as low,
-      regexp_replace(normalize(lower(s.tok), NFD), '[\u0300-\u036f]', '', 'g') as key
-    from raw r, regexp_split_to_table(r.t, '[^[:alnum:]]+') with ordinality s(tok, ord)
-    where s.tok <> ''
-  )
-  select t.* from toks t join keys k on k.key = t.key`
-
-// A word: its most common lower-case form, capitalised when the corpus nearly always is, in
-// capitals when a short word is mostly written so (a headline "STF" never yields "Stf").
-export const termLabelsQuery = `
-  insert into term_labels (term, label)
-  with counted as (
+  ), ${tokens}, counted as (
     select t.key, t.low, count(*) as c,
       count(*) filter (where t.tok ~ '^[[:upper:]]') as caps,
       count(*) filter (where t.tok ~ '^[[:upper:]]+$' and length(t.tok) > 1) as ups
-    from label_toks t
+    from toks t
     group by t.key, t.low
   ), ranked as (
     select key, low,
@@ -60,11 +60,9 @@ export const phraseLabelsQuery = `
   with phrases as (
     select term from graph_terms where position(' ' in term) > 0
     union select term from term_weeks where position(' ' in term) > 0
-  ), words as (
+  ), keys as (
     select distinct w as key from phrases, unnest(string_to_array(phrases.term, ' ')) w
-  ), kept as (
-    select t.* from label_toks t join words w on w.key = t.key
-  ), grams as (
+  ), ${tokens}, grams as (
     select
       case when lead(ord, 1) over w = ord + 1 then key || ' ' || lead(key, 1) over w end as k2,
       tok || ' ' || lead(tok, 1) over w as r2,
@@ -72,7 +70,7 @@ export const phraseLabelsQuery = `
       tok || ' ' || lead(tok, 1) over w || ' ' || lead(tok, 2) over w as r3,
       case when lead(ord, 3) over w = ord + 3 then key || ' ' || lead(key, 1) over w || ' ' || lead(key, 2) over w || ' ' || lead(key, 3) over w end as k4,
       tok || ' ' || lead(tok, 1) over w || ' ' || lead(tok, 2) over w || ' ' || lead(tok, 3) over w as r4
-    from kept window w as (partition by id order by ord)
+    from toks window w as (partition by id order by ord)
   ), seen as (
     select k2 as key, r2 as form from grams union all
     select k3, r3 from grams union all
@@ -90,7 +88,6 @@ export const phraseLabelsQuery = `
 export const buildTermLabels = async (): Promise<number> =>
   inTransaction(async () => {
     await db.exec(`set local work_mem = '128MB'`)
-    await db.exec(labelTokensQuery)
     await db.exec('delete from term_labels')
     await db.exec(termLabelsQuery)
     await db.exec(phraseLabelsQuery)

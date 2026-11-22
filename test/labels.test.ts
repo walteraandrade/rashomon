@@ -83,7 +83,7 @@ describe('term labels: the voting rules', () => {
     assert.equal((await labelsFor()).paulo, 'Paulo')
   })
 
-  it('keys a word by every combining mark the extractor strips, not only Portuguese ones', async () => {
+  it('keys a word by its combining marks stripped, not only Portuguese ones', async () => {
     assert.equal((await labelsFor()).erdogan, 'Erdoğan')
   })
 
@@ -98,10 +98,11 @@ describe('term labels: a failed build', () => {
     await buildGraphAggregates(persons)
   })
 
-  it('is logged, never fails the aggregate build, and keeps the previous labels', async () => {
+  it('is logged, never fails the aggregate build, and rolls back to the previous labels', async () => {
     const previous = await labelsFor()
-    assert.ok(Object.keys(previous).length > 0)
-    await db.exec('alter table term_labels rename to term_labels_away')
+    assert.ok(Object.keys(previous).some((k) => !k.includes(' ')), 'the words were rebuilt before the failure')
+    // The phrase insert fails after the delete and the word insert have run.
+    await db.exec(`alter table term_labels add constraint no_phrase check (position(' ' in term) = 0) not valid`)
     const warn = console.warn
     const warned: unknown[] = []
     console.warn = (...args: unknown[]) => void warned.push(args[0])
@@ -109,7 +110,7 @@ describe('term labels: a failed build', () => {
       await buildGraphAggregates(persons)
     } finally {
       console.warn = warn
-      await db.exec('alter table term_labels_away rename to term_labels')
+      await db.exec('alter table term_labels drop constraint no_phrase')
     }
     assert.ok(warned.some((w) => String(w).includes('[labels] build failed')))
     assert.deepEqual(await labelsFor(), previous)

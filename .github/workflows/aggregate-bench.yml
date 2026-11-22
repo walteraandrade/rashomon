@@ -37,7 +37,6 @@ jobs:
       PG_SSL_CA: ${{ secrets.PG_SSL_CA }}
       PG_IMAGE: postgres:${{ inputs.pg_major }}
       LOCAL_URL: postgres://postgres:bench@127.0.0.1:5432/bench
-      DUMP_DIR: ${{ runner.temp }}/dump
       TABLES: persons docs doc_persons terms doc_terms doc_tone
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +53,7 @@ jobs:
       # needs a session: the transaction-mode pooler port 6543 becomes the session port 5432.
       - name: Prepare production connection
         run: |
-          mkdir -p "$DUMP_DIR"
+          mkdir -p "$RUNNER_TEMP/dump"
           node -e "process.stdout.write(process.env.PG_SSL_CA.replace(/\\\\r\\\\n/g,'\r\n').replace(/\\\\n/g,'\n'))" > "$RUNNER_TEMP/ca.pem"
           grep -q -- '-----BEGIN CERTIFICATE-----' "$RUNNER_TEMP/ca.pem"
           url=$(node -e "const u=new URL(process.env.PROD_URL);u.searchParams.delete('sslmode');if(u.port==='6543')u.port='5432';process.stdout.write(u.toString())")
@@ -93,7 +92,7 @@ jobs:
             -e PGSSLMODE=verify-full -e PGSSLROOTCERT=/w/ca.pem "$PG_IMAGE" \
             pg_dump "$DUMP_URL" --data-only --no-owner --no-privileges -Fc -Z 1 $args -f /w/dump/input.dump
           echo "DUMP_S=$(( $(date +%s) - s ))" >> "$GITHUB_ENV"
-          echo "DUMP_BYTES=$(stat -c %s "$DUMP_DIR/input.dump")" >> "$GITHUB_ENV"
+          echo "DUMP_BYTES=$(stat -c %s "$RUNNER_TEMP/dump/input.dump")" >> "$GITHUB_ENV"
 
       # --disable-triggers lets the parallel workers load child tables before their parents.
       - name: Restore into local Postgres

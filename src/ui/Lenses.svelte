@@ -67,7 +67,7 @@
         endB,
         axisLabels: [`Só de ${endA}`, 'dividida', `Só de ${endB}`] as [string, string, string],
         ariaLabel: `Régua comparando ${endA} e ${endB} para a mesma pessoa`,
-        note: 'Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem das duas lentes somados. Toque numa palavra para ver os números das duas lentes.',
+        note: '',
       },
     }
   })
@@ -112,7 +112,7 @@
     void docsCard.open({
       owner: 'lenses',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
-      title: word.term,
+      title: label(word),
       sides: [side(data.a.lens), side(data.b.lens)],
     })
   }
@@ -292,6 +292,13 @@
         if (applied) {
           if (isDomainSeed(initial.a) && !touchedA) applySeed(selA, initial.a)
           if (isDomainSeed(initial.b) && !touchedB) applySeed(selB, initial.b)
+          // Unseeded, the lenses open on the person's two largest outlets: Tudo against Tudo would
+          // stack every word on the middle line.
+          const top = [...(selA?.querySelectorAll<HTMLOptionElement>('optgroup[label="Veículo"] option') ?? [])].map((o) => o.value).filter((v) => v.includes('.'))
+          if (initial.a === undefined && initial.b === undefined && !touchedA && !touchedB && top.length >= 2) {
+            applySeed(selA, top[0])
+            applySeed(selB, top[1])
+          }
           syncCombos()
         }
         void figure.load()
@@ -310,7 +317,7 @@
       <div><dt>Posição</dt><dd>de qual lente a palavra é mais</dd></div>
       <div><dt>Tamanho</dt><dd>documentos das duas lentes, somados</dd></div>
       <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>para que lente ela pende</dd></div>
-      <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>palavra que liga o vocabulário das duas lentes</dd></div>
+      <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>as cinco palavras que mais ligam as duas lentes</dd></div>
       <div><dt>Clique</dt><dd>textos das duas lentes, neste gráfico</dd></div>
     </dl>
     <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="lensesPerson" aria-label="Pessoa (lentes)" value={person} onchange={onPerson}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> sob <span class="pick"><select id="lensesA" aria-label="Lente A" hidden bind:this={selA} onchange={onLensA}>{@render groups('lensesAOutlets')}</select><Combobox bind:this={comboA} select={selA} inputId="lensesAInput" listId="lensesAList" label="Lente A" listLabel="Opções da lente A" /></span> e <span class="keep"><span class="pick"><select id="lensesB" aria-label="Lente B" hidden bind:this={selB} onchange={onLensB}>{@render groups('lensesBOutlets')}</select><Combobox bind:this={comboB} select={selB} inputId="lensesBInput" listId="lensesBList" label="Lente B" listLabel="Opções da lente B" /></span>,</span> nos últimos <span class="keep"><span class="pick"><select id="lensesDays" aria-label="Período (lentes)" value={days} onchange={onDays}><option value="7">7 dias</option><option value="21">21 dias</option></select></span>.</span> Mostrar <span class="pick"><select id="lensesLimit" aria-label="Quantidade de palavras (lentes)" value={limit} onchange={onLimit}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras.</p></div>

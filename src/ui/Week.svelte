@@ -4,7 +4,7 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { fmt, kinds, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
+  import { fmt, kinds, label, SOURCE_SEGMENTS, sourceLabels, weekDayIso, weekDayLabel, type Week } from './format.js'
   import { WEEK_COLUMN_WIDTH, weekLayout } from './layout.js'
   import { createCanvasMeasure } from './measure.js'
   import { seedFor } from './seed.js'
@@ -52,7 +52,7 @@
     void docsCard.open({
       owner: 'week',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'} · ${day}`,
-      title: word.term,
+      title: label(word),
       sides: [
         {
           personId: person,
@@ -147,6 +147,8 @@
     (figure.data?.buckets ?? []).map((bucket, i) => ({ bucket, layout: layouts[i], day: weekDayIso(bucket.start), label: weekDayLabel(bucket.start) })),
   )
 
+  const peakAbout = $derived(Math.max(0, ...(figure.data?.buckets ?? []).map((b) => b.about)))
+
   const ghost = $derived(mounted && !peopleFailed && !peopleEmpty && figure.data === undefined && (figure.loading || !figure.error))
   const failed = $derived(!ghost && !!figure.error && !figure.loading && figure.data === undefined)
   const emptyWeek = $derived(!!figure.data && figure.data.buckets.every((b) => !b.terms.length))
@@ -177,7 +179,7 @@
     <p class="figure-sub">Quais palavras ocuparam cada dia dos últimos sete. <a href="/como-ler#semana">Como ler</a>.</p>
     <dl class="figure-key">
       <div><dt><span class="type-scale" aria-hidden="true"><span>Aa</span><span>Aa</span></span>Tamanho</dt><dd>documentos naquele dia</dd></div>
-      <div><dt>Posição</dt><dd>só o dia; a altura na coluna não mede nada</dd></div>
+      <div><dt>Posição</dt><dd>o dia; em cada coluna, da mais citada para a menos</dd></div>
       <div><dt>Clique</dt><dd>os textos daquele dia</dd></div>
     </dl>
     <div class="sentence">
@@ -210,16 +212,18 @@
         {#each columns as { bucket, layout, day, label } (bucket.start)}
           <div class="week-day">
             <dl class="stat"><div><dt>{label}</dt><dd>{fmt(bucket.about)}</dd></div></dl>
+            <span class="week-volume" aria-hidden="true" style:--v={peakAbout ? bucket.about / peakAbout : 0}></span>
             {#if layout.words.length}
               <svg class="week-svg" {width} height={layout.height} viewBox="0 0 {width} {layout.height}" role="group" aria-label="Palavras de {label}">
-                {#each layout.words as d (d.kind + '\u0000' + d.term)}
+                {#each layout.words as d, wi (d.kind + '\u0000' + d.term)}
                   {@const on = isSelected(day, d)}
-                  {@const lineHeight = d.h / d.lines.length}
+                  {@const lineHeight = d.lines.length > 1 ? d.size * 1.04 : d.h}
                   <!-- svelte-ignore a11y_click_events_have_key_events -- Enter and Space are handled by onkeydown on the same element -->
                   <g
                     class="week-word {on ? 'is-selected' : ''}"
                     transform="translate({width / 2 + d.x},{layout.half + d.y})"
                     style:--size="{d.size}px"
+                    style:--fade={layout.words.length > 1 ? wi / (layout.words.length - 1) : 0}
                     data-term={d.term}
                     data-kind={d.kind}
                     data-day={day}

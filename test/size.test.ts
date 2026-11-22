@@ -121,6 +121,7 @@ describe('pnpm size', () => {
           'phrases',
           'terms',
           'term_communities',
+          'term_labels',
           'term_links',
           'outlet_fields',
           'outlet_neighbors',

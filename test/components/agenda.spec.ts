@@ -124,8 +124,16 @@ describe('Agenda (issue #288)', () => {
   it('agenda AC5: under 1% reads <1%, never 0%', async () => {
     await start()
     expect(picks()[0].textContent!.trim()).toBe('<1%')
-    expect(picks()[0].style.getPropertyValue('--share')).toBe('1%')
     expect(grid().textContent).not.toMatch(/(^|[^\d])0%/)
+  })
+
+  it('a cell above half the peak share flips to dark text (is-hot), none below does', async () => {
+    await start()
+    const hot = picks().filter((p) => Number(p.style.getPropertyValue('--heat-v')) > 0.5)
+    const cool = picks().filter((p) => Number(p.style.getPropertyValue('--heat-v')) <= 0.5)
+    expect(hot.length).toBeGreaterThan(0)
+    for (const p of hot) expect(p.classList.contains('is-hot')).toBe(true)
+    for (const p of cool) expect(p.classList.contains('is-hot')).toBe(false)
   })
 
   it('agenda AC6: pick opens one side with domain and no term', async () => {

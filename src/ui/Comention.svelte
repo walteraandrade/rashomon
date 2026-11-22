@@ -4,8 +4,8 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { fmt, personInitials, sourceLabels, SOURCE_SEGMENTS, type Comention } from './format.js'
-  import { matrixLayout } from './layout.js'
+  import { fmt, sourceLabels, SOURCE_SEGMENTS, type Comention } from './format.js'
+  import { MATRIX_HEAD_LEAN, matrixLayout } from './layout.js'
   import { seedFor } from './seed.js'
 
   const OWNER = 'comention'
@@ -61,7 +61,7 @@
 
   const measure = () => {
     const w = matrixEl?.clientWidth
-    if (w) width = Math.floor(w)
+    if (w) width = Math.floor(w) - MATRIX_HEAD_LEAN
   }
 
   const showDocs = (a: string, b: string) => {
@@ -185,7 +185,7 @@
       <div class="comention-grid" style:--cell="{layout.cellSize}px">
         <div class="comention-row comention-headrow">
           <div class="comention-rowhead" aria-hidden="true"></div>
-          {#each persons as p (p.id)}<span class="comention-colhead" title={p.name}>{personInitials(p.name)}</span>{/each}
+          {#each persons as p (p.id)}<span class="comention-colhead" title={p.name}><span>{p.name}</span></span>{/each}
         </div>
         {#each persons as row, i (row.id)}
           <div class="comention-row">
@@ -199,7 +199,7 @@
                   <span class="comention-cell is-empty" aria-hidden="true"></span>
                 {:else}
                   {@const on = isSelected(cell.a, cell.b)}
-                  <button type="button" class="comention-cell" class:is-selected={on} style:--w={cell.ink} data-a={cell.a} data-b={cell.b} aria-pressed={on} aria-label="{row.name} e {col.name}: {fmt(cell.count)} textos juntos" onclick={() => pick(cell.a, cell.b)}>{fmt(cell.count)}</button>
+                  <button type="button" class="comention-cell" class:is-selected={on} class:is-hot={cell.ink > 0.5} style:--w={cell.ink} data-a={cell.a} data-b={cell.b} aria-pressed={on} aria-label="{row.name} e {col.name}: {fmt(cell.count)} textos juntos" onclick={() => pick(cell.a, cell.b)}>{fmt(cell.count)}</button>
                 {/if}
               {/if}
             {/each}

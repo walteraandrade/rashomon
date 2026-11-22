@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_HEIGHT, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
+import { STRIP_MAX_HEIGHT, STRIP_PAD, stripRadius, termStripLayout, MATRIX_CELL_MAX, MATRIX_CELL_MIN, RULER_MAX_HEIGHT, RULER_SIZE_MIN, ATLAS_MIN_WIDTH, SIZE_CEILING, SIZE_FLOOR, WEEK_MAX_TERMS, WEEK_SIZE_MIN, attentionLayout, centerLabel, matrixLayout, pack, packPass, peakDay, persistenceLayout, routeGraph, routesFrom, rulerLayout, rulerModel, sizeRange, swarm, swarmBy, weekLayout, wrapLines } from '../src/ui/layout.js'
 import { rulerTerms } from '../src/ui/ruler-model.js'
 import type { CompareTerm } from '../src/ui/format.js'
 import { balanceColor } from '../src/ui/format.js'
@@ -35,7 +35,7 @@ describe('centerLabel', () => {
   it('returns a box at least 240 wide and tall enough for every line', () => {
     const c = centerLabel(measure, 'Fulano de Tal')
     assert.ok(c.w >= 240)
-    assert.equal(c.h, c.lines.length * c.lineHeight + 88)
+    assert.equal(c.h, c.lines.length * c.lineHeight + 64)
     assert.equal(c.x, 0)
     assert.equal(c.y, 0)
   })
@@ -59,6 +59,10 @@ describe('sizeRange', () => {
     assert.ok(many.maxSize < few.maxSize, 'a fuller atlas must lower its largest type')
     assert.ok(many.minSize < few.minSize, 'a fuller atlas must lower its smallest type')
     assert.ok(many.minSize >= SIZE_FLOOR, 'no term goes under the floor')
+  })
+
+  it('keeps every atlas word at 14px or more on the narrowest map', () => {
+    for (const count of [1, 12, 18, 24, 60]) assert.ok((sizeRange(count).minSize * ATLAS_MIN_WIDTH) / 860 >= 14, `${count} terms drew under 14px`)
   })
 
   it('keeps the largest term larger than the smallest at every count', () => {
@@ -215,7 +219,7 @@ describe('the words never overlap and never leave the frame', () => {
 describe('no word is drawn below the size floor the site sets', () => {
   it('every word is at least RULER_SIZE_MIN px, at any width', () => {
     const { items } = rulerTerms(corpus(), 'count')
-    assert.equal(RULER_SIZE_MIN, 11, 'atlas.css sets 11px as the smallest type on the site')
+    assert.equal(RULER_SIZE_MIN, 14, 'a ruler word is never smaller than the body copy it sits beside')
     for (const width of [1280, 860, 375]) for (const w of rulerLayout(metrics, items, width).words) assert.ok(w.size >= RULER_SIZE_MIN, `${w.term} at ${w.size}px is under the floor`)
   })
 
@@ -371,7 +375,7 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     assert.ok(column.overflow.length > 0, 'this many words cannot fit one column')
     assert.equal(column.words.length + column.overflow.length, day.length)
     for (const w of column.words) assert.ok(w.size >= WEEK_SIZE_MIN, `${w.term} at ${w.size}px is under the floor`)
-    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20, 'the column trades overflow for height, not an unbounded column')
+    assert.ok(column.words.length <= WEEK_MAX_TERMS, 'a column draws at most the cap, the rest is listed')
   })
 
   it('two placed words in the same day never overlap vertically', () => {
@@ -442,7 +446,8 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
     const [column] = weekLayout(measure, [day], 159)
     assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit`)
     assert.equal(column.words.length, 8)
-    assert.ok(column.height <= WEEK_MAX_HEIGHT + 20)
+    const byY = [...column.words].sort((a, b) => a.y - b.y).map((w) => w.count)
+    assert.deepEqual(byY, [...byY].sort((a, b) => b - a), 'drawn top to bottom from most to least cited')
   })
 
   it('a word wider than a narrow column even at the floor size is listed under the column, never drawn across the next day (#148 review, 1)', () => {
@@ -480,7 +485,7 @@ describe('weekLayout (issue #147): one column per day, built on swarmBy, same ov
       const [column] = weekLayout(measure, [day], width)
       assert.equal(column.overflow.length, 0, `${column.overflow.map((w) => w.term).join(', ')} did not fit at ${width}px`)
       assert.equal(column.words.length, 12)
-      assert.ok(column.height > WEEK_MAX_HEIGHT, 'the column grows past the one-line cap instead of dropping the quietest words')
+      assert.equal(column.words.length, WEEK_MAX_TERMS, 'the column grows taller instead of dropping the quietest words')
     }
   })
 

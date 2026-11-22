@@ -2,9 +2,11 @@ import { balanceColor, fmt, isBridge, kinds, label, score, termMask, type Person
 
 // Literal copies of atlas.css's --sans / --mono / --display: canvas measurement cannot read custom properties.
 export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
-export const FONT_DISPLAY = "'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif"
+export const FONT_DISPLAY = "'Newsreader', Georgia, 'Times New Roman', serif"
+// Every word a figure draws is measured and painted in this face (atlas.css's --word).
+export const FONT_WORD = FONT_DISPLAY
 
-export const wrapLines = (measure: Measure, text: string, size: number, maxWidth: number, family = FONT_MONO, weight = 500): string[] => {
+export const wrapLines = (measure: Measure, text: string, size: number, maxWidth: number, family = FONT_WORD, weight = 500): string[] => {
   if (measure(text, size, family, weight) <= maxWidth) return [text]
   const units = Array.from(text)
   const lines: string[] = []
@@ -26,11 +28,11 @@ export const wrapLines = (measure: Measure, text: string, size: number, maxWidth
 }
 
 export const centerLabel = (measure: Measure, name: string): CenterBox => {
-  const size = 52
-  const lines = wrapLines(measure, name, size, 286, FONT_DISPLAY, 700)
-  const lineHeight = 57
-  const w = Math.max(...lines.map((line) => measure(line, size, FONT_DISPLAY, 700))) + 28
-  return { lines, size, lineHeight, w: Math.max(240, w), h: lines.length * lineHeight + 88, x: 0, y: 0 }
+  const size = 46
+  const lines = wrapLines(measure, name, size, 286, FONT_DISPLAY, 500)
+  const lineHeight = 50
+  const w = Math.max(...lines.map((line) => measure(line, size, FONT_DISPLAY, 500))) + 28
+  return { lines, size, lineHeight, w: Math.max(200, w), h: lines.length * lineHeight + 64, x: 0, y: 0 }
 }
 
 const overlaps = (a: Box, b: Box, gap = 7) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 + gap && Math.abs(a.y - b.y) < (a.h + b.h) / 2 + gap
@@ -42,13 +44,15 @@ const inCircle = (box: Box, radius = 346) =>
 const candidates: { x: number; y: number; r: number }[] = []
 for (let r = 110; r <= 334; r += 4) for (let a = 0; a < 360; a += 3) candidates.push({ x: r * Math.cos((a * Math.PI) / 180), y: r * Math.sin((a * Math.PI) / 180), r })
 
-// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill.
+// Type size is relative to ring fullness: a crowded atlas shrinks to fit rather than spill. Sizes
+// are viewBox units (860 wide) on a map never narrower than ATLAS_MIN_WIDTH, so the floor stays 14px.
+export const ATLAS_MIN_WIDTH = 640
 export const SIZE_CEILING = 38
-export const SIZE_FLOOR = 13
+export const SIZE_FLOOR = Math.ceil((14 * 860) / ATLAS_MIN_WIDTH)
 
 export const sizeRange = (count: number): { minSize: number; maxSize: number } => {
   const density = Math.max(0, Math.min(1, (count - 8) / 14))
-  return { minSize: 20 - (20 - SIZE_FLOOR) * density, maxSize: SIZE_CEILING - 16 * density }
+  return { minSize: 22 - (22 - SIZE_FLOOR) * density, maxSize: SIZE_CEILING - 16 * density }
 }
 
 export const packPass = (measure: Measure, terms: Term[], center: CenterBox, sort: string, phase = 0): Layout => {
@@ -235,12 +239,12 @@ export const swarm = <T extends { x: number; r: number }>(items: T[], gap = 1.5)
   }).placed
 
 export const RULER_PAD = 28
-// Words cannot shrink past 11px, so the ruler trades height for legibility before dropping.
+// Words cannot shrink past RULER_SIZE_MIN, so the ruler trades height for legibility before dropping.
 export const RULER_MAX_HEIGHT = 520
-export const RULER_SIZE_MIN = 11
-const RULER_SIZE_MAX = 30
-const RULER_GAP_X = 8
-const RULER_GAP_Y = 3
+export const RULER_SIZE_MIN = 14
+const RULER_SIZE_MAX = 34
+const RULER_GAP_X = 10
+const RULER_GAP_Y = 4
 
 export type RulerItem = { term: string; kind: string; balance: number; combined: number; bridge?: number }
 
@@ -283,40 +287,46 @@ export const rulerLayout = <T extends RulerItem>(measure: Measure, items: T[], w
   return { words: placed, overflow, x, half: used, height: used * 2, width }
 }
 
-// What Ruler.svelte draws, from rulerLayout's output.
-export const rulerModel = (layout: RulerLayout<RulerItem>) => ({
-  width: layout.width,
-  height: layout.height,
-  half: layout.half,
-  x0: RULER_PAD,
-  x1: layout.width - RULER_PAD,
-  ticks: [-1, -0.5, 0, 0.5, 1].map(layout.x),
-  words: layout.words.map((d) => ({
-    term: d.term,
-    kind: d.kind,
-    text: d.text,
-    x: d.x,
-    y: d.y,
-    size: d.size,
-    w: d.w,
-    h: d.h,
-    cmp: balanceColor(d.balance),
-    bridge: isBridge(d),
-    aria: `${d.text}, ${fmt(d.combined)} documentos`,
-    title: `${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos`,
-  })),
-  overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
-})
+// Only the strongest few bridges get the mark: when most words carry it, it marks nothing.
+export const RULER_BRIDGES = 5
+const topBridges = (words: RulerItem[]) =>
+  new Set(words.filter(isBridge).sort((a, b) => (b.bridge ?? 0) - (a.bridge ?? 0) || a.term.localeCompare(b.term)).slice(0, RULER_BRIDGES).map((d) => `${d.kind}:${d.term}`))
 
-// Figure 5: one column per day, words stacked around the column's centre (x = 0) by swarmBy's clearance.
-export const WEEK_SIZE_MIN = 12
+// What Ruler.svelte draws, from rulerLayout's output.
+export const rulerModel = (layout: RulerLayout<RulerItem>) => {
+  const bridges = topBridges(layout.words)
+  return {
+    width: layout.width,
+    height: layout.height,
+    half: layout.half,
+    x0: RULER_PAD,
+    x1: layout.width - RULER_PAD,
+    ticks: [-1, -0.5, 0, 0.5, 1].map(layout.x),
+    words: layout.words.map((d) => ({
+      term: d.term,
+      kind: d.kind,
+      text: d.text,
+      x: d.x,
+      y: d.y,
+      size: d.size,
+      w: d.w,
+      h: d.h,
+      cmp: balanceColor(d.balance),
+      bridge: bridges.has(`${d.kind}:${d.term}`),
+      aria: `${d.text}, ${fmt(d.combined)} documentos`,
+      title: `${d.text} · ${kinds[d.kind] || d.kind || 'Tipo desconhecido'} · ${fmt(d.combined)} documentos`,
+    })),
+    overflow: layout.overflow.map((d) => ({ term: d.term, kind: d.kind, text: d.text, cmp: balanceColor(d.balance) })),
+  }
+}
+
+// Figure 5: one column per day, its words stacked top to bottom from most to least cited.
+export const WEEK_SIZE_MIN = 14
 const WEEK_SIZE_MAX = 30
-// The cap only guards a runaway day: the widest limit the sentence offers (12) always fits.
-export const WEEK_MAX_HEIGHT = 480
-const WEEK_MAX_TERMS = 12
+// The widest limit the sentence offers; past it a day's words go to the overflow list.
+export const WEEK_MAX_TERMS = 12
 export const WEEK_COLUMN_WIDTH = 120
-const WEEK_GAP_X = 6
-const WEEK_GAP_Y = 3
+const WEEK_GAP_Y = 6
 const WEEK_PAD_X = 6
 
 export type WeekColumnLayout<T> = {
@@ -352,29 +362,29 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
   const maxWidth = weekMaxWidth(width)
   const sized = terms.map((t) => {
     const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
-    // One ramp for the week, its ceiling `top` shared by every column, so a larger count is
-    // never a smaller size; a word wider than the column at its ramp size goes to overflow.
-    const size = Math.round(WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction)
+    // One week-wide ramp: a larger count is never a smaller size.
+    const size = Math.round((WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction) * 10) / 10
     const text = label(t)
     const lines = weekLines(measure, text, size, maxWidth)
     const w = weekLineWidth(measure, lines, size)
     return { ...t, text, lines, x: 0, size, w, h: Math.round(size * 1.24) * lines.length }
   })
-  // A word wider than the column even wrapped is listed under it, never drawn across the next
-  // day; lowering the shared ceiling for it would flatten the whole week.
+  // A word too wide even wrapped is listed, never drawn across the next day.
   const tooWide = sized.filter((d) => d.w > maxWidth)
   const fitting = sized.filter((d) => d.w <= maxWidth)
-  // The stack alternates sides, so one side may carry up to one box more than the other.
-  const boxes = [...fitting].sort((a, b) => b.size - a.size).slice(0, WEEK_MAX_TERMS)
-  const budget = boxes.reduce((sum, d) => sum + d.h + WEEK_GAP_Y, 0) + (boxes[0]?.h ?? 0)
-  const half = Math.max(WEEK_MAX_HEIGHT, budget) / 2
-  const { placed, overflow: unplaced } = swarmBy(fitting, {
-    size: (d) => d.size,
-    reach: (p, item) => (Math.abs(p.x - item.x) < (p.w + item.w) / 2 + WEEK_GAP_X ? (p.h + item.h) / 2 + WEEK_GAP_Y : null),
-    fits: (item, y) => Math.abs(y) + item.h / 2 <= half,
-  })
-  const reach = placed.reduce((m, p) => Math.max(m, Math.abs(p.y) + p.h / 2), 0)
-  const used = Math.max(30, Math.ceil(reach) + 6)
+  // Each column is a ranking, loudest first; a long day grows taller, and past the cap words are listed, never dropped.
+  const ranked = [...fitting].sort((a, b) => b.count - a.count || a.term.localeCompare(b.term))
+  const stacked: { d: (typeof fitting)[number]; top: number }[] = []
+  const unplaced: typeof fitting = []
+  let cursor = 0
+  for (const d of ranked) {
+    if (stacked.length < WEEK_MAX_TERMS) {
+      stacked.push({ d, top: cursor })
+      cursor += d.h + WEEK_GAP_Y
+    } else unplaced.push(d)
+  }
+  const used = Math.max(30, Math.ceil(cursor / 2) + 3)
+  const placed = stacked.map(({ d, top }) => ({ ...d, y: top + d.h / 2 - used }))
   const overflow = [...unplaced, ...tooWide].sort((a, b) => b.count - a.count)
   return { words: placed, overflow, half: used, height: used * 2 }
 }
@@ -437,9 +447,11 @@ export const attentionLayout = (measure: Measure, mentions: { day: string; count
 }
 
 // The comention matrix (figure 9): a half-matrix, upper triangle only; a two-axis grid, no packing.
-export const MATRIX_CELL_MIN = 26
+export const MATRIX_CELL_MIN = 22
 export const MATRIX_CELL_MAX = 42
-const MATRIX_ROWHEAD = 140
+const MATRIX_ROWHEAD = 150
+// Room after the last column, so its name, rotated -55°, stays inside the figure.
+export const MATRIX_HEAD_LEAN = 96
 
 export type MatrixCell = { a: string; b: string; count: number | null; ink: number }
 export type MatrixLayout = { cellSize: number; cells: MatrixCell[] }
@@ -449,14 +461,14 @@ const pairKey = (x: string, y: string) => (x < y ? `${x}\u0000${y}` : `${y}\u000
 
 export const matrixLayout = (persons: ComentionPerson[], pairs: ComentionPair[], width: number): MatrixLayout => {
   const ids = persons.map((p) => p.id)
-  const cellSize = Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, Math.floor((width - MATRIX_ROWHEAD) / Math.max(1, ids.length))))
+  const cellSize = Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, Math.floor((width - MATRIX_ROWHEAD) / Math.max(1, ids.length)) - 2))
   const byPair = new Map(pairs.map((p) => [pairKey(p.a, p.b), p.count]))
   const max = pairs.reduce((m, p) => Math.max(m, p.count), 0)
   const cells: MatrixCell[] = []
   for (let i = 0; i < ids.length; i++) {
     for (let j = i + 1; j < ids.length; j++) {
       const count = byPair.get(pairKey(ids[i], ids[j])) ?? null
-      cells.push({ a: ids[i], b: ids[j], count, ink: count && max ? Math.max(0.18, count / max) : 0 })
+      cells.push({ a: ids[i], b: ids[j], count, ink: count && max ? Math.max(0.12, Math.sqrt(count / max)) : 0 })
     }
   }
   return { cellSize, cells }

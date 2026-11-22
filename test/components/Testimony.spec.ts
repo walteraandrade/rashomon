@@ -378,14 +378,14 @@ describe('Testimony (issue #296)', () => {
     const strip = byId('strip')
     Object.defineProperty(strip, 'clientWidth', { value: 800, configurable: true })
     await startBoot('?person=p1')
-    expect(q('#strip svg')!.getAttribute('viewBox')).toMatch(/^0 0 800/)
+    expect(q('#strip svg')!.getAttribute('viewBox')).toMatch(/^0 -26 800/)
     const watcher = observers.find((o) => o.target === strip)!
     expect(watcher).toBeTruthy()
     const fetched = urls.length
     Object.defineProperty(strip, 'clientWidth', { value: 400, configurable: true })
     watcher.cb()
     flushSync()
-    expect(q('#strip svg')!.getAttribute('viewBox')).toMatch(/^0 0 400/)
+    expect(q('#strip svg')!.getAttribute('viewBox')).toMatch(/^0 -26 400/)
     expect(urls).toHaveLength(fetched)
   })
 
@@ -426,7 +426,7 @@ describe('Testimony (issue #296, review gaps)', () => {
     const grids = all('#outletList .outlet-grid')
     expect(grids).toHaveLength(3)
     const eyebrows = all('#outletList > p.eyebrow').map((e) => e.textContent)
-    expect(eyebrows).toEqual(['grupo · a.example, b.example', 'grupo · c.example', 'Sem agrupamento suficiente'])
+    expect(eyebrows).toEqual(['Grupo 1 · vocabulário parecido', 'Grupo 2 · vocabulário parecido', 'Sem agrupamento suficiente'])
     expect(byId('outletList').textContent!.replace(/\d+/g, '')).not.toMatch(/\bfield\b|grupo\s*\d/i)
     const text = byId('outletList').textContent!
     expect(text.indexOf('a.example')).toBeLessThan(text.indexOf('Sem agrupamento suficiente'))
@@ -440,8 +440,9 @@ describe('Testimony (issue #296, review gaps)', () => {
     mountAll()
     await startBoot('?person=p1')
     const text = byId('outletList').textContent!
-    expect(text.indexOf('grupo · big.example')).toBeGreaterThanOrEqual(0)
-    expect(text.indexOf('grupo · big.example')).toBeLessThan(text.indexOf('grupo · small.example'))
+    expect(text.indexOf('Grupo 1')).toBeLessThan(text.indexOf('big.example'))
+    expect(text.indexOf('big.example')).toBeLessThan(text.indexOf('Grupo 2'))
+    expect(text.indexOf('Grupo 2')).toBeLessThan(text.indexOf('small.example'))
   })
 
   it("the focused outlet's row is followed by its neighbours or the empty line (#218)", async () => {
@@ -463,13 +464,13 @@ describe('Testimony (issue #296, review gaps)', () => {
     expect(none.querySelectorAll('.outlet-neighbor')).toHaveLength(0)
   })
 
-  it('carries tone only as a --tone custom property on rows and strip dots', async () => {
+  it('carries tone only as a --tone custom property on rows and strip dots (rows add their --bar)', async () => {
     mountAll()
     await startBoot('?person=p1')
     for (const el of [q('#outletList button.outlet')!, q('#strip .strip-dot')!]) {
       const style = el.getAttribute('style') ?? ''
       expect(style).toMatch(/^--tone:/)
-      expect(style.split(';').filter((d) => d.trim()).every((d) => d.trim().startsWith('--tone:'))).toBe(true)
+      expect(style.split(';').filter((d) => d.trim()).every((d) => /^--(tone|bar):/.test(d.trim()))).toBe(true)
     }
   })
 
@@ -510,7 +511,7 @@ describe('Testimony (issue #296, review gaps)', () => {
     Object.defineProperty(strip, 'clientWidth', { value: 400, configurable: true })
     watcher.cb()
     flushSync()
-    expect(q('#strip svg')!.getAttribute('viewBox')).toMatch(/^0 0 800/)
+    expect(q('#strip svg')!.getAttribute('viewBox')).toMatch(/^0 -26 800/)
     expect(strip.classList.contains('is-loading')).toBe(true)
     release()
     await settle(0)
@@ -652,7 +653,8 @@ describe('Testimony (issue #296, ported paintTestimony/paintStrip/docs-card asse
     mountAll()
     await startBoot('?person=p1')
     expect(byId('testimonyLabel').textContent).toBe('')
-    expect(byId('testimonyList').textContent).toContain('Nenhum texto avaliado neste recorte (método kikori:q8:abc)')
+    expect(byId('testimonyList').textContent).toContain('Nenhum texto avaliado neste recorte')
+    expect(byId('testimonyList').querySelector('[title="método kikori:q8:abc"]')).not.toBeNull()
     expect(byId('testimonyList').querySelector('strong')).toBeNull()
     expect(byId('outletList').textContent).not.toContain('Nenhum veículo neste recorte.')
   })
@@ -672,12 +674,12 @@ describe('Testimony (issue #296, ported paintTestimony/paintStrip/docs-card asse
     expect(strip.hidden).toBe(false)
     const domains = all('#strip [data-strip-domain]').map((e) => e.getAttribute('data-strip-domain'))
     expect(domains).toEqual(['g1.globo.com', 'bbc.com', 'fdusp.bsky.social'])
-    expect(strip.querySelector('.strip-mean')!.getAttribute('style')).toMatch(/^--pos:\s*39\.2%;?$/)
+    expect(Number(strip.querySelector('.strip-mean')!.getAttribute('x'))).toBeCloseTo(Number(strip.querySelector('.strip-overall')!.getAttribute('x1')), 0)
     expect(strip.querySelector('.strip-mean')!.textContent).toBe('média da pessoa -2,16')
     expect(strip.querySelector('.strip-overall')).not.toBeNull()
     const g1 = q('#strip [data-strip-domain="g1.globo.com"] title')!.textContent
     expect(g1).toBe('g1.globo.com · Google News · -3,62 em 13 textos')
-    expect([...strip.querySelectorAll('.strip-axis-labels span')].map((e) => e.textContent)).toEqual(['−10 contra', '0', '+10 a favor'])
+    expect([...strip.querySelectorAll('.strip-axis-labels span')].map((e) => e.textContent)).toEqual(['−5 contra', '0', '+5 a favor'])
     expect(strip.querySelector('.note')!.textContent).toContain('O atlas acima não muda.')
     expect(strip.querySelector('.note')!.textContent).not.toContain('toque de novo, ou fora das bolinhas, para soltar')
     const cx = (d: string) => Number(q(`#strip [data-strip-domain="${d}"] .dot-face`)!.getAttribute('cx'))

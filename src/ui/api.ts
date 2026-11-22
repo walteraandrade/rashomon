@@ -68,6 +68,7 @@ export const json = async (url: string, signal?: AbortSignal): Promise<any> => {
 }
 
 export const loadPeople = (signal?: AbortSignal) => json('/api/people', signal)
+export const loadLabels = (signal?: AbortSignal) => json('/api/labels', signal)
 
 export const loadGraph = (personId: string, queryParams: URLSearchParams, signal?: AbortSignal) =>
   json(endpoint(personId) + '/graph?' + queryParams, signal)

@@ -24,7 +24,7 @@
       </div>
       <div id="atlas">
         <h2>Gráfico 1 · Atlas de palavras</h2>
-        <p>O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. As posições evitam colisões; elas não medem distância nem opinião.</p>
+        <p>O nome fica no centro. As palavras ao redor aparecem nos textos que citam a pessoa. Quanto mais perto do centro, mais alta no ranking; a posição exata desvia para não cobrir outra palavra. Ela não mede distância nem opinião.</p>
         <h3>Frequência</h3>
         <p>Em quantos textos sobre a pessoa a palavra aparece. Frequência diz o que se fala muito.</p>
         <h3>Alcance</h3>
@@ -44,7 +44,7 @@
         <h2>Gráfico 2 · Avaliação por veículo</h2>
         <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes, ao contrário do tom.</p>
         <p>O nome da pessoa puxa a nota. Por isso, compare veículos falando da mesma pessoa; nunca compare a nota de uma pessoa com a de outra.</p>
-        <p><b>A régua</b> põe cada veículo na sua nota média; o tamanho é quantos textos; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos avaliados.</p>
+        <p><b>A régua</b> põe cada veículo na sua nota média; o tamanho é quantos textos; a linha vertical é a média da pessoa, e uma linha mais fraca marca o zero. O eixo se ajusta às notas: ±2, ±5 ou ±10, o menor que cabe todos os veículos. Só entram veículos com 3 ou mais textos avaliados.</p>
         <p>O modo <b>Avaliação</b> do gráfico 1 usa a mesma régua, mas com palavras: cada palavra fica na média das notas dos textos em que aparece, e a cor é a mesma máscara do mapa e da lista, a distância até a média desta pessoa. Não é uma segunda medida, é a mesma nota do kikori vista de outro ângulo.</p>
         <p>A lista de veículos também os agrupa por vocabulário parecido. Vocabulário parecido não é a mesma coisa que linha editorial: dois veículos podem usar palavras semelhantes por motivos que nada têm a ver com posição política. E o número de cada grupo não significa nada por si só, nem pode ser comparado entre uma reconstrução e outra do site: ele só serve para juntar veículos naquela leitura.</p>
       </div>
@@ -68,7 +68,7 @@
         <p>As que não couberam sem cobrir outra ficam numa lista abaixo da régua, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
         <p>Uma palavra desenhada toda numa ponta pode ter sido usada também pela outra pessoa, só que abaixo do que a construção pré-computada deste recorte guardou: nesses casos o outro lado não é sempre zero, é só o que sobrou de fora dela. Esse lado conta como zero também no tamanho da letra e na escolha das palavras que concorrem a ponte, então a palavra pode sair um pouco menor do que a soma real.</p>
         <h3 id="ponte">Ponte</h3>
-        <p>Uma palavra sublinhada em âmbar é uma ponte: pelos documentos das duas pessoas, ela liga palavras de um vocabulário às do outro. A conta junta as palavras que aparecem juntas no mesmo texto, dos dois lados, e mede por quantos caminhos mais curtos entre duas palavras quaisquer ela passa (centralidade de intermediação). A mais atravessada vale 1; sublinhadas ficam as que passam de 0,5. A ponte não muda a posição: uma palavra pode pender para um lado e ainda assim ligar os dois.</p>
+        <p>Uma palavra marcada com um losango âmbar é uma ponte: pelos documentos das duas pessoas, ela liga palavras de um vocabulário às do outro. A conta junta as palavras que aparecem juntas no mesmo texto, dos dois lados, e mede por quantos caminhos mais curtos entre duas palavras quaisquer ela passa (centralidade de intermediação). A mais atravessada vale 1; ganham o losango as cinco mais atravessadas, desde que passem de 0,5. A ponte não muda a posição: uma palavra pode pender para um lado e ainda assim ligar os dois.</p>
       </div>
       <div id="em-alta">
         <h2>Gráfico 4 · Em alta</h2>
@@ -84,7 +84,7 @@
         <h3>Tamanho</h3>
         <p>Quantos documentos daquele dia têm a palavra. Uma palavra em vários dias aparece de novo em cada um, sem ligação entre as repetições.</p>
         <h3>Posição</h3>
-        <p>Só o dia. Dentro da coluna a posição apenas evita que uma palavra cubra outra. Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna; uma palavra só não quebra na figura, e se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe o que passa da altura da coluna num dia com mais palavras do que ela comporta.</p>
+        <p>A coluna é o dia. Dentro dela, de cima para baixo, vai da palavra mais citada para a menos citada, até 12 por dia. Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna; uma palavra só não quebra na figura, e se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe as palavras além das 12 do dia.</p>
         <h3>O número do dia</h3>
         <p>Junto do rótulo de cada dia, quantos documentos citam a pessoa naquele dia, mesmo quando nenhuma palavra sobrevive ao corte de nomes próprios. Um dia sem documentos aparece com esse número em zero, não some da semana.</p>
         <h3>Clique</h3>
@@ -95,7 +95,7 @@
         <h2>Gráfico 6 · Uma pessoa, duas lentes</h2>
         <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara duas lentes escolhidas para a mesma pessoa, do mesmo jeito que o gráfico 3 compara duas pessoas.</p>
         <h3>Posição e tamanho</h3>
-        <p>A posição diz de qual lente a palavra é mais; no meio, ela é dividida entre as duas. O tamanho da letra é quantos documentos ela tem nas duas lentes, somados.</p>
+        <p>A posição diz de qual lente a palavra é mais; no meio, ela é dividida entre as duas. O tamanho da letra é quantos documentos ela tem nas duas lentes, somados. Sem escolha sua, o gráfico abre comparando os dois veículos que mais escreveram sobre a pessoa.</p>
         <p>Uma palavra desenhada toda numa ponta pode ter sido usada também pela outra lente, só que abaixo do que a construção pré-computada deste recorte guardou: nesses casos o outro lado não é sempre zero, é só o que sobrou de fora dela. Esse lado conta como zero também no tamanho da letra e na escolha das palavras que concorrem a ponte, então a palavra pode sair um pouco menor do que a soma real.</p>
         <h3>Mesmo recorte</h3>
         <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". Não há detecção de recortes equivalentes com nomes diferentes: só a mesma lente, escrita do mesmo jeito, conta.</p>
@@ -104,7 +104,7 @@
         <h3>Lente inválida</h3>
         <p>Uma lente vazia, malformada ou desconhecida volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
         <h3>Ponte</h3>
-        <p>O sublinhado âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa. A conta está em <a href="#ponte">Ponte</a>, no gráfico 3.</p>
+        <p>O losango âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa. A conta está em <a href="#ponte">Ponte</a>, no gráfico 3.</p>
         <h3>Clique</h3>
         <p>Abre os textos das duas lentes ao mesmo tempo, cada uma com o seu recorte de veículo, viés ou fonte.</p>
       </div>
@@ -122,7 +122,7 @@
         <h2>Gráfico 8 · Agenda por veículo</h2>
         <p>Uma tabela: uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Diferente dos outros gráficos, ele não olha uma pessoa por vez: compara todas de uma vez, veículo por veículo.</p>
         <h3>A fatia</h3>
-        <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais escura a tinta do número.</p>
+        <p>Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo pequeno que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais forte o tom da célula, medido contra a maior fatia da tabela; acima da metade dela, o número passa a escuro para continuar legível.</p>
         <h3>Por que passa de 100%</h3>
         <p>Um documento que cita duas pessoas acompanhadas conta uma vez para cada uma. Por isso a soma de uma linha pode passar de 100%; a tabela mede quem o veículo cobre, não divide o veículo em partes.</p>
         <h3>Veículo de fora</h3>
@@ -146,9 +146,9 @@
         <h2>Gráfico 10 · Persistência</h2>
         <p>Uma linha por palavra, uma célula por semana, de segunda a domingo na hora de Brasília: a mais antiga à esquerda, a atual à direita. A figura responde a uma pergunta que os outros não respondem: a palavra ficou, ou foi só um pico?</p>
         <h3>Célula</h3>
-        <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, só mais clara. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>
+        <p>Quantos documentos sobre a pessoa trazem a palavra naquela semana; quanto mais documentos, mais tinta. A escala é uma só para a figura toda, então uma palavra com poucos documentos continua visível, num tom mais fraco. Tudo aqui é tinta, sem cor de avaliação nem de comparação.</p>
         <h3>Célula vazia não é zero</h3>
-        <p>Cada semana guarda só as 50 palavras mais fortes da pessoa, pela mesma conta do PMI ponderado (PMI × ln(1 + documentos)), com pelo menos 2 documentos. Uma célula vazia diz que a palavra ficou fora dessas 50, não que não apareceu. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A palavra do nome da própria pessoa não entra.</p>
+        <p>Cada semana guarda só as 50 palavras mais fortes da pessoa, pela mesma conta do PMI ponderado (PMI × ln(1 + documentos)), com pelo menos 2 documentos. Uma célula vazia diz que a palavra ficou fora dessas 50, não que não apareceu. A tabela começa na primeira semana gravada para a pessoa; semanas anteriores não aparecem. A palavra do nome da própria pessoa não entra.</p>
         <h3>Sequência</h3>
         <p>Semanas seguidas com a palavra, contadas da atual para trás. A semana em curso ainda está incompleta: se estiver vazia, a contagem parte da anterior. É a leitura de quem ficou.</p>
         <h3>Meia-vida</h3>

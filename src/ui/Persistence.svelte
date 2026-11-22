@@ -4,7 +4,7 @@
   import { bootData } from './boot.svelte.js'
   import * as docsCard from './docs-card.svelte.js'
   import { createFigure } from './figure.svelte.js'
-  import { fmt, kinds, seriesWeeks, shiftDate, sinceLabel, todayBrt, weekHeadLabel, weekSpanLabel, type Persistence } from './format.js'
+  import { fmt, kinds, label, seriesWeeks, shiftDate, sinceLabel, todayBrt, weekHeadLabel, weekSpanLabel, type Persistence } from './format.js'
   import { persistenceLayout } from './layout.js'
   import { seedFor } from './seed.js'
 
@@ -90,7 +90,7 @@
     docsCard.open({
       owner: OWNER,
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'} · ${weekSpanLabel(word.week)}`,
-      title: word.term,
+      title: label(word),
       sides: [
         {
           personId,
@@ -116,6 +116,16 @@
   const dimmed = $derived(figure.loading && !!data)
   const showError = $derived(!failure && !ghosting && !data && !!figure.error)
   const rows = $derived(data ? persistenceLayout(data).rows : [])
+  // Weeks before the series began hold nothing for any word; drawing them as empty cells made a
+  // two-week series look like a broken twelve-week one. They are left out, and the note says why.
+  const skip = $derived.by(() => {
+    const first = data?.first_week
+    const cells = rows[0]?.cells ?? []
+    if (!first) return 0
+    const at = cells.findIndex((c) => c.week >= first)
+    return at < 0 ? 0 : at
+  })
+  const shownWeeks = $derived((rows[0]?.cells.length ?? 0) - skip)
   const oldestPickable = $derived(data ? shiftDate(todayBrt(), -data.horizon) : '')
   const hidden = $derived(!mounted || !!failure || (!ghosting && !(data && data.terms.length)))
 
@@ -174,17 +184,18 @@
           <thead>
             <tr>
               <th scope="col"></th>
-              {#each rows[0]?.cells ?? [] as c, i (c.week)}
-                <th scope="col" class="persistence-week">{#if i === 0 || c.week.slice(8) <= '07'}<span>{weekHeadLabel(c.week)}</span>{/if}</th>
+              {#each (rows[0]?.cells ?? []).slice(skip) as c, i (c.week)}
+                <th scope="col" class="persistence-week">{#if i === 0 || shownWeeks <= 6 || c.week.slice(8) <= '07'}<span>{weekHeadLabel(c.week)}</span>{/if}</th>
               {/each}
-              <th scope="col"></th>
+              <th scope="col" class="persistence-stat-head">sequência</th>
+              <th scope="col" class="persistence-stat-head">meia-vida</th>
             </tr>
           </thead>
           <tbody>
             {#each rows as row, i (row.kind + row.term)}
               <tr>
-                <th scope="row" class="persistence-term" title={row.term}>{row.term}</th>
-                {#each row.cells as cell (cell.week)}
+                <th scope="row" class="persistence-term" title={label(row)}>{label(row)}</th>
+                {#each row.cells.slice(skip) as cell (cell.week)}
                   <td class="persistence-c">
                     {#if cell.count === null}
                       {@const noData = !data.first_week || cell.week < data.first_week}
@@ -202,14 +213,13 @@
                         data-term={row.term}
                         data-kind={row.kind}
                         aria-pressed={isSelected(cell.week, row)}
-                        aria-label="{row.term}, semana {weekSpanLabel(cell.week)}: {fmt(cell.count)} {cell.count === 1 ? 'documento' : 'documentos'}"
+                        aria-label="{label(row)}, semana {weekSpanLabel(cell.week)}: {fmt(cell.count)} {cell.count === 1 ? 'documento' : 'documentos'}"
                         onclick={() => pick(cell.week, row.term, row.kind)}>{fmt(cell.count)}</button>
                     {/if}
                   </td>
                 {/each}
-                <td class="persistence-stats">
-                  <dl class="stat"><div><dt>sequência</dt><dd>{fmt(data.terms[i].streak)}</dd></div></dl><dl class="stat"><div><dt>meia-vida</dt><dd>{data.terms[i].half_life === null ? 'sem queda' : fmt(data.terms[i].half_life)}</dd></div></dl>
-                </td>
+                <td class="persistence-stat">{fmt(data.terms[i].streak)} {data.terms[i].streak === 1 ? 'semana' : 'semanas'}</td>
+                <td class="persistence-stat" class:is-flat={data.terms[i].half_life === null}>{data.terms[i].half_life === null ? 'sem queda' : `${fmt(data.terms[i].half_life)} ${data.terms[i].half_life === 1 ? 'semana' : 'semanas'}`}</td>
               </tr>
             {/each}
           </tbody>

@@ -490,11 +490,11 @@ describe('CLAUDE.md documents the comention figure (issue #207)', () => {
     for (const id of ids) assert.match(md, new RegExp('`#' + id + '`'), `CLAUDE.md's atlas.html bullet must name #${id}`)
   })
 
-  it('names #comention as a 27×27 half-matrix from GET /api/comention, ink-weight only (exposure, not evaluation)', () => {
+  it('names #comention as a 27×27 half-matrix from GET /api/comention, one sequential ramp (exposure, not evaluation)', () => {
     const md = claudeMd()
     assert.match(md, /`#comention`[\s\S]{0,80}27×27 half-matrix/)
     assert.match(md, /`#comention`[\s\S]{0,300}GET \/api\/comention/)
-    assert.match(md, /`#comention`[\s\S]{0,400}`--ink` only/)
+    assert.match(md, /`#comention`[\s\S]{0,400}sequential `--heat` ramp/)
     assert.match(md, /`#comention`[\s\S]{0,700}exposure, not evaluation/)
   })
 

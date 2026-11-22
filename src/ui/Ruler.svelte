@@ -42,6 +42,9 @@
     tail?: Snippet
   } = $props()
 
+  const uid = $props.id()
+  // The scale sits under the words, never through them: a line across a word is a strike-through.
+  const SCALE = 30
   const isPicked = (d: Pick) => !!selected && selected.term === d.term && selected.kind === d.kind
   const onkey = (event: KeyboardEvent, d: Pick) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
@@ -51,10 +54,20 @@
 </script>
 
 <div class="ruler-end-row"><span class="ruler-end cmp-a">{endA}</span><span class="ruler-end cmp-b">{endB}</span></div>
-<svg class="ruler-svg" {width} {height} viewBox="0 0 {width} {height}" role="group" aria-label={ariaLabel}>
-  <line class="ruler-axis" x1={x0} x2={x1} y1={half} y2={half} />
+<svg class="ruler-svg" {width} height={height + SCALE} viewBox="0 0 {width} {height + SCALE}" role="group" aria-label={ariaLabel}>
+  <defs>
+    <linearGradient id="ruler-scale-{uid}" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" class="ruler-stop-a" />
+      <stop offset="0.5" class="ruler-stop-mid" />
+      <stop offset="1" class="ruler-stop-b" />
+    </linearGradient>
+  </defs>
+  {#each ticks as tick, i}
+    <line class="ruler-guide" class:is-centre={i === (ticks.length - 1) / 2} x1={tick} x2={tick} y1="0" y2={height + 6} />
+  {/each}
+  <rect class="ruler-axis" x={x0} y={height + 12} width={x1 - x0} height="4" rx="2" fill="url(#ruler-scale-{uid})" />
   {#each ticks as tick}
-    <line class="ruler-tick" x1={tick} x2={tick} y1={half - 5} y2={half + 5} />
+    <line class="ruler-tick" x1={tick} x2={tick} y1={height + 8} y2={height + 20} />
   {/each}
   {#each words as d (d.kind + ':' + d.term)}
     <g
@@ -78,7 +91,7 @@
       <rect class="ruler-hit" x={-d.w / 2} y={-d.h / 2} width={d.w} height={d.h} />
       <text class="ruler-text" text-anchor="middle" dominant-baseline="central"><tspan x="0" y="0">{d.text}</tspan></text>
       {#if d.bridge}
-        <line class="ruler-bridge-mark" x1={-d.w / 2} x2={d.w / 2} y1={d.h / 2} y2={d.h / 2} />
+        <path class="ruler-bridge-mark" d="M{-d.w / 2 - 10} 0l4.5-4.5 4.5 4.5-4.5 4.5z" />
       {/if}
     </g>
   {/each}

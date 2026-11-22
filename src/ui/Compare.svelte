@@ -66,7 +66,7 @@
         endB: nameB,
         axisLabels: [`Só de ${nameA}`, 'dividida', `Só de ${nameB}`] as [string, string, string],
         ariaLabel: `Régua comparando ${nameA} e ${nameB}`,
-        note: `Cada palavra está escrita onde ela pende, e o tamanho dela é quantos documentos tem dos dois lados somados. Toque numa palavra para ver os números dos dois lados. Cada pessoa entra com as palavras mais frequentes e com as mais grudentas, então a régua costuma mostrar mais palavras do que o número escolhido na frase acima: ${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte.`,
+        note: `${fmt(items.length)} ${items.length === 1 ? 'palavra' : 'palavras'} neste recorte: cada pessoa entra com as mais frequentes e com as mais grudentas, por isso passam do número escolhido acima.`,
       },
     }
   })
@@ -95,7 +95,7 @@
     void docsCard.open({
       owner: 'compare',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
-      title: word.term,
+      title: label(word),
       sides: [side(data.a.person), side(data.b.person)],
     })
   }
@@ -206,7 +206,7 @@
       <div><dt>Posição</dt><dd>de quem a palavra é mais</dd></div>
       <div><dt>Tamanho</dt><dd>documentos dos dois, somados</dd></div>
       <div><dt><span class="key-pair" aria-hidden="true"></span>Cor</dt><dd>de que lado ela pende</dd></div>
-      <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>liga os dois vocabulários</dd></div>
+      <div><dt><span class="key-bridge" aria-hidden="true"></span>Ponte</dt><dd>as cinco palavras que mais ligam os dois vocabulários</dd></div>
       <div><dt>Clique</dt><dd>textos das duas pessoas, neste gráfico</dd></div>
     </dl>
     <div class="sentence"><p class="sentence-line">Comparar <span class="pick"><select id="compareA" aria-label="Pessoa A" value={a} onchange={(e) => change(e, (v) => (a = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> com <span class="pick"><select id="compareB" aria-label="Pessoa B" value={b} onchange={(e) => change(e, (v) => (b = v))}>{#each bootData.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}</select></span> nos <span class="keep"><span class="pick"><select id="compareDays" aria-label="Período" value={days} onchange={(e) => change(e, (v) => (days = v))}><option value="7">últimos 7 dias</option><option value="21" selected>últimos 21 dias</option></select></span>,</span> em <span class="keep"><span class="pick"><select id="compareSource" aria-label="Fonte" value={source} onchange={(e) => change(e, (v) => (source = v))}>{#each SOURCE_SEGMENTS as [value, text] (value)}<option {value}>{sourceLabels[value] ?? text}</option>{/each}</select></span>,</span> por <span class="keep"><span class="pick"><select id="compareMeasure" aria-label="Medida" value={measure} onchange={(e) => (measure = e.currentTarget.value)}><option value="count">documentos</option><option value="pmi">{scoreName('pmi')}</option></select></span>.</span> Mostrar <span class="pick"><select id="compareLimit" aria-label="Quantidade de palavras" value={limit} onchange={(e) => change(e, (v) => (limit = v))}>{#each LIMITS as n (n)}<option value={n}>{n}</option>{/each}</select></span> palavras por pessoa.</p></div>

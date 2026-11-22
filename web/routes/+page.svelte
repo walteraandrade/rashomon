@@ -16,18 +16,25 @@
   import HelpDialog from '$lib/HelpDialog.svelte'
   import Week from '$lib/Week.svelte'
   import Testimony from '$lib/Testimony.svelte'
-  import { loadPeople } from '$lib/api.js'
+  import { loadLabels, loadPeople } from '$lib/api.js'
+  import { setLabels } from '$lib/format.js'
   import { setBoot, type Person } from '$lib/boot.svelte.js'
 
   onMount(async () => {
     setBoot({ search: location.search })
     let people: Person[] = []
     let peopleError: unknown = null
+    // Labels only respell words; a failure or a slow answer leaves the stored spelling, never blocks the page.
+    const labels = loadLabels().then(setLabels, () => {})
     try {
       people = await loadPeople()
     } catch (e) {
       peopleError = e
     }
+    // Words are measured on a canvas before they are drawn, so the word face is waited for too:
+    // both waits run together and the page starts after 1.5 s at most.
+    const font = Promise.resolve(document.fonts?.load?.("500 20px 'Newsreader'")).catch(() => {})
+    await Promise.race([Promise.all([labels, font]), new Promise((r) => setTimeout(r, 1500))])
     setBoot({ people, peopleError, ready: true })
   })
 </script>

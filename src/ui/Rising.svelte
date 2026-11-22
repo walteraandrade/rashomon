@@ -86,7 +86,7 @@
     void docsCard.open({
       owner: 'rising',
       kicker: `Documentos com ${kinds[word.kind] ? kinds[word.kind].toLowerCase() : 'o termo'}`,
-      title: word.term,
+      title: label(word),
       sides: [{ personId: person, personName: found?.name ?? person, label: found?.name ?? person, query: api.docsParams({ days: '7', source, term: word.term, kind: word.kind }) }],
     })
   }

@@ -176,7 +176,8 @@ describe('Persistence table (#290)', () => {
     expect(b.dataset.lv).toBeTruthy()
     expect(b.getAttribute('aria-pressed')).toBe('false')
     expect(b.getAttribute('aria-label')).toBe(`anistia, semana ${weekSpanLabel(prev)}: 4 documentos`)
-    expect(document.querySelectorAll('#persistenceChart [data-gap]')).toHaveLength(6)
+    // The week before first_week is not drawn at all, so one of the six nulls drops out.
+    expect(document.querySelectorAll('#persistenceChart [data-gap]')).toHaveLength(5)
     expect(document.querySelectorAll('#persistenceChart button[data-gap]')).toHaveLength(0)
   })
 
@@ -500,16 +501,15 @@ describe('Persistence table markup (#290)', () => {
       ...over,
     })
 
-  it('labels nulls before first_week "sem dados" (is-nodata) and after it "fora das 50 mais fortes", never buttons', async () => {
+  it('draws no week before first_week, and labels a null after it "fora das 50 mais fortes", never a button', async () => {
     await start('', twoRows())
-    const nodata = chart().querySelectorAll('.persistence-cell.is-nodata')
-    expect(nodata.length).toBeGreaterThan(0)
-    for (const el of nodata) expect(el.getAttribute('aria-label')).toBe('sem dados')
+    expect(chart().querySelectorAll('.persistence-cell.is-nodata')).toHaveLength(0)
+    expect(chart().querySelectorAll('thead th.persistence-week')).toHaveLength(3)
     const gaps = chart().querySelectorAll('.persistence-cell.is-gap')
     expect(gaps.length).toBeGreaterThan(0)
     for (const el of gaps) expect(el.getAttribute('aria-label')).toBe('fora das 50 mais fortes')
     expect(chart().querySelectorAll('button[data-gap]')).toHaveLength(0)
-    expect(chart().querySelectorAll('[data-gap]')).toHaveLength(9 + 7)
+    expect(chart().querySelectorAll('[data-gap]')).toHaveLength(1)
   })
 
   it('half-life null reads "sem queda" once; a number reads as a number in its own row; stats belong to their row', async () => {
@@ -519,10 +519,10 @@ describe('Persistence table markup (#290)', () => {
     expect(rows).toHaveLength(2)
     expect(rows[0].textContent).toContain('sem queda')
     expect(rows[1].textContent).not.toContain('sem queda')
-    const stats = (r: Element) => [...r.querySelectorAll('.stat dd')].map((d) => d.textContent)
-    expect(stats(rows[0])).toEqual(['3', 'sem queda'])
-    expect(stats(rows[1])).toEqual(['0', '2'])
-    expect(chart().querySelectorAll('.stat').length).toBeGreaterThanOrEqual(4)
+    const stats = (r: Element) => [...r.querySelectorAll('.persistence-stat')].map((d) => d.textContent)
+    expect(stats(rows[0])).toEqual(['3 semanas', 'sem queda'])
+    expect(stats(rows[1])).toEqual(['0 semanas', '2 semanas'])
+    expect([...chart().querySelectorAll('thead .persistence-stat-head')].map((h) => h.textContent)).toEqual(['sequência', 'meia-vida'])
     for (const bad of ['—', 'null', 'NaN', 'undefined']) expect(html()).not.toContain(bad)
   })
 
@@ -537,7 +537,7 @@ describe('Persistence table markup (#290)', () => {
     }
     const buttons = [...chart().querySelectorAll<HTMLElement>('button[data-week]')]
     expect(buttons.length).toBeGreaterThanOrEqual(1)
-    expect(buttons.length + expired.length).toBe(12)
+    expect(buttons.length + expired.length).toBe(chart().querySelectorAll('thead th.persistence-week').length)
     const oldest = shiftDate(todayBrt(), -60)
     for (const b of buttons) expect(b.dataset.week! >= oldest).toBe(true)
   })

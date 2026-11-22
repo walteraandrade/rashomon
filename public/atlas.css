@@ -39,24 +39,28 @@
    ========================================================================= */
 
 :root {
-  --bg: #0b0e0d;
-  --panel: #111615;
+  --bg: #0c100f;
+  --panel: #121816;
   --soft: #1a2220;
-  --line: #243029;
-  --ink: #d6ded8;
-  --muted: #7b8a82;
-  --accent: #f0b429;
-  --accent-ink: #111411;
-  --hostile: #ff7a8a;
-  --favor: #74dc86;
+  --line: #27322d;
+  --ink: #e9efea;
+  --muted: #9fada5;
+  --faint: #6f7d75;
+  --accent: #f2b53c;
+  --accent-ink: #141209;
+  --hostile: #ff8593;
+  --favor: #7ee08f;
+  /* Intensity, never evaluation and never "who": the one sequential hue for counts on a grid
+     (agenda, quem aparece junto, persistência). Panel at zero, this at the top of the ramp. */
+  --heat: #8fd8c9;
   --green: #b9cdc0;
   --danger: #ff8a8a;
   /* Quiet grey in the middle of every ramp: SCALE_MID in format.ts. Not --muted (chrome). */
-  --scale-mid: #8b909c;
+  --scale-mid: #a3a8b3;
   /* The ruler figure's own hue pair, one per side (issue #91): kept in step with format.js's
      balanceColor, whose ends resolve to these exact colours. */
-  --cmp-a: #7fa8ff;
-  --cmp-b: #ff9d6b;
+  --cmp-a: #8fb4ff;
+  --cmp-b: #ffa47c;
   /* The tema mask (issue #217): six discrete slots for term communities, a Louvain build's own
      grouping, never comparable across builds. Fixed order, distinct from each other and from
      --hostile/--favor/--cmp-a/--cmp-b, each >=4.5:1 against --bg. A 7th+ community paints --muted
@@ -69,18 +73,21 @@
   --theme-6: #9085e9;
 
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --display: 'IBM Plex Sans Condensed', 'IBM Plex Sans', system-ui, sans-serif;
+  /* Newsreader names things and writes every word a figure draws: the words are what the press
+     printed, so they are set in a face made for reading news on a screen. Its optical sizes keep
+     an 11px label and a 40px word equally sharp. Mono is for numbers and labels only. */
+  --display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --word: 'Newsreader', Georgia, 'Times New Roman', serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* The ramp. Nine steps, ratio around 1.25, the top three fluid so a 375px phone and a 1440px
-     desktop read the same ranks rather than the same pixels. The condensed display face is
-     narrow, so the top steps run smaller than a wide face would need. --t-micro is the floor and
+     desktop read the same ranks rather than the same pixels. --t-micro is the floor and
      exists for SVG labels only; nothing on this site is smaller. */
-  --t-mega: clamp(34px, 5vw, 58px);
-  --t-xl: clamp(24px, 2.8vw, 34px);
-  --t-lg: clamp(18px, 2vw, 23px);
+  --t-mega: clamp(38px, 5.4vw, 66px);
+  --t-xl: clamp(28px, 3vw, 38px);
+  --t-lg: clamp(19px, 2vw, 24px);
   --t-md: 17px;
-  --t-base: 15px;
+  --t-base: 16px;
   --t-sm: 14px;
   --t-xs: 13px;
   --t-2xs: 12px;
@@ -94,8 +101,8 @@
   --lh-body: 1.6;
   --lh-chip: 2;
 
-  /* The condensed face is already tight; capitals need a little air, and mono labels need none. */
-  --tr-mega: -.02em;
+  /* Capitals need a little air; mono labels need none. */
+  --tr-mega: -.015em;
   --tr-xl: -.01em;
   --tr-lg: 0;
   --tr-label: .04em;
@@ -140,11 +147,11 @@ a:focus-visible { color: var(--accent); text-decoration: underline; text-decorat
 /* ---------- the elements, one fixed style each ---------- */
 /* Headings are the display family without exception, and they carry no colour of their own: a
    heading that needed --accent to be found is a heading in the wrong place. */
-h1, h2, h3, h4 { margin: 0; font-family: var(--display); color: var(--ink); text-wrap: balance; text-transform: uppercase; }
-h1 { font-size: var(--t-mega); font-weight: 700; line-height: var(--lh-tight); letter-spacing: var(--tr-mega); }
-h2 { font-size: var(--t-xl); font-weight: 700; line-height: var(--lh-snug); letter-spacing: var(--tr-xl); }
-h3 { font-size: var(--t-lg); font-weight: 600; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); }
-h4 { font-size: var(--t-md); font-weight: 600; line-height: var(--lh-mid); }
+h1, h2, h3, h4 { margin: 0; font-family: var(--display); color: var(--ink); text-wrap: balance; font-optical-sizing: auto; }
+h1 { font-size: var(--t-mega); font-weight: 500; line-height: 1.04; letter-spacing: var(--tr-mega); }
+h2 { font-size: var(--t-xl); font-weight: 500; line-height: var(--lh-snug); letter-spacing: var(--tr-xl); }
+h3 { font-size: var(--t-lg); font-weight: 500; line-height: var(--lh-snug); letter-spacing: var(--tr-lg); }
+h4 { font-size: var(--t-md); font-weight: 600; line-height: var(--lh-mid); font-family: var(--sans); }
 
 p, li { margin: 0; font-size: var(--t-base); line-height: var(--lh-body); }
 p { max-width: var(--measure); }
@@ -169,9 +176,9 @@ code { font-family: var(--mono); font-size: .92em; color: var(--ink); }
 
 /* Supporting prose. Three ranks below body, each one step smaller and all of them muted, so the
    eye can skip every one of them and still get the page. */
-.lede { max-width: var(--measure-lede); font-family: var(--mono); font-size: var(--t-base); line-height: var(--lh-body); color: var(--muted); text-wrap: pretty; }
-.figure-sub, .chapter-intro { font-family: var(--mono); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: var(--measure); text-wrap: pretty; }
-.note, .meta, .empty-hint { font-size: var(--t-xs); line-height: var(--lh-body); color: var(--muted); }
+.lede { max-width: var(--measure-lede); font-family: var(--sans); font-size: var(--t-md); line-height: var(--lh-body); color: var(--muted); text-wrap: pretty; }
+.figure-sub, .chapter-intro { font-family: var(--sans); font-size: var(--t-base); line-height: var(--lh-body); color: var(--muted); max-width: var(--measure); text-wrap: pretty; }
+.note, .meta, .empty-hint { font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); }
 
 /* ---------- definition pairs ---------- */
 /* dt names, dd answers. The default is a real definition list: the term in display type, its
@@ -216,17 +223,13 @@ main { max-width: 1440px; margin: auto; padding: var(--space-2) var(--gutter) va
 /* Figure 1's stats badge, next to its title -- same spot and voice as #testimonyLabel next to
    #testimonyTitle: no colour of its own, so .figure-title h2 b's accent wins on both. */
 #atlasStats { font-size: var(--t-sm); font-weight: 500; white-space: nowrap; margin-left: var(--space-2); letter-spacing: 0; }
-/* Each figure's sentence lives inside its own .figure-head, which is a two-column grid
-   (title | subtitle); both figure heads wrap their sentence in the same .sentence div, so one
-   rule spans it across both columns to read as its own row underneath them. */
-.figure-head > .sentence { grid-column: 1 / -1; margin-top: var(--space-5); }
 .sentence { margin-bottom: 0; }
 /* The sentence sits at lede rank but in sans 500 and full --ink: it is the one paragraph on the
    page a reader can edit, and it has to read as a control surface, not as a caption. Each
    control is a chip on the line -- a filled box with a chevron reads as "this changes", where a
    bare underline read as a link. A <select> ignores line-height for its own box, so the chip
    gets an explicit height; the sentence's line-height is what keeps daylight between lines. */
-.sentence-line { font-family: var(--mono); font-size: var(--t-base); line-height: var(--lh-chip); font-weight: 400; max-width: 1120px; }
+.sentence-line { font-family: var(--sans); font-size: var(--t-base); line-height: var(--lh-chip); font-weight: 400; max-width: 1120px; color: var(--ink); }
 .pick { display: inline-block; position: relative; max-width: 100%; vertical-align: baseline; margin: 0; }
 .keep { white-space: nowrap; }
 /* The chevron is drawn in CSS so it follows --accent; a data-URI SVG cannot read a token. */
@@ -252,28 +255,22 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .status.error { color: var(--danger); }
 
 /* ---------- figures: one card per graph ---------- */
-.figure { margin-top: var(--space-7); padding: var(--space-5) var(--space-5) 18px; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); }
-.figure-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-4) var(--space-7); align-items: end; padding-bottom: var(--space-5); margin-bottom: var(--space-5); }
-.figure-head > .figure-key { grid-column: 1 / -1; margin-top: var(--space-2); }
+.figure { margin-top: var(--space-7); padding: var(--space-6) var(--space-6) var(--space-5); border: 1px solid var(--line); border-radius: 2px; background: var(--panel); }
 
 /* The encoding, always on the figure: a named variant of dt/dd, compact so it sits under the
    title without becoming a second essay. Swatches in the dt are the colour hierarchy teaching
    itself -- the same ramps the marks use. */
-.figure-key { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-6); }
-.figure-key > div { min-width: 12ch; max-width: 28ch; }
-.figure-key dt { display: flex; align-items: center; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: none; color: var(--accent); }
-.figure-key dd { margin-top: var(--space-1); font-family: var(--mono); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--muted); max-width: none; }
-/* The tema key documents the second colour encoding only while the tema mask is on and the
-   figure is not in strip mode -- toggled from script (atlas.ts's render() and toggleMask()),
-   not CSS, since is-themed can linger on a hidden viewport's leftover svg regardless of mode
-   (paintSelection paints both panes). A sibling dl, not a row inside #keyDefault, so #keyDefault
-   stays exactly the four rows test/leitura-ui-acceptance.test.ts pins (Tamanho/Cor/Posição/
-   Clique, unchanged). */
-.key-bridge { display: inline-block; width: 22px; height: 2px; margin-right: var(--space-2); vertical-align: middle; background: var(--accent); }
+.figure-key { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); }
+.figure-key > div { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; max-width: none; }
+.figure-key dt { display: inline-flex; align-items: center; flex: 0 0 auto; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; line-height: 1.3; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--ink); }
+.figure-key dd { font-family: var(--sans); font-size: var(--t-sm); line-height: 1.45; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); max-width: none; }
+.figure-key dt .type-scale { text-transform: none; }
+/* The tema key is a sibling dl, shown only while the tema mask is on and the figure is not in strip mode. */
+.key-bridge { display: inline-block; width: 8px; height: 8px; margin: 0 var(--space-2) 0 3px; vertical-align: middle; background: var(--accent); transform: rotate(45deg); }
 .key-pair { display: inline-block; width: 44px; height: 8px; border-radius: 2px; margin-right: var(--space-2); vertical-align: middle; background: linear-gradient(90deg, var(--cmp-a), var(--scale-mid), var(--cmp-b)); }
-.figure-title { display: flex; flex-direction: column; gap: var(--space-2); }
+.figure-title { display: flex; flex-direction: column; gap: var(--space-1); }
 /* The accent is spent here on purpose: the only word in a figure title that is a live number. */
-.figure-title h2 b { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: inherit; }
+.figure-title h2 b { color: var(--muted); font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 400; }
 
 .figure-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-6); align-items: start; }
 
@@ -297,13 +294,11 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .search input::placeholder { color: var(--muted); }
 .segment { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--line); border-radius: 2px; padding: 2px; background: var(--bg); }
 .segment button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); border-radius: 2px; padding: 6px var(--space-4); font-family: var(--mono); font-size: var(--t-xs); }
-.segment button[aria-pressed="true"], .segment button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .zoom { display: flex; align-items: center; gap: 6px; }
 .zoom button { width: 34px; height: 34px; padding: 0; font-size: var(--t-md); }
 .zoom #zoomReset { width: 56px; font-size: var(--t-2xs); font-variant-numeric: tabular-nums; }
 .quiet-button { background: var(--soft); border: 0; padding: 7px var(--space-3); border-radius: 2px; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .quiet-button:hover { color: var(--ink); background: var(--line); }
-.quiet-button.toggle[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); font-weight: 600; }
 .mobile-hint { display: none; margin: var(--space-2) 0; color: var(--muted); font-size: var(--t-xs); }
 .search-note { color: var(--accent); font-family: var(--mono); font-size: var(--t-xs); padding-top: var(--space-2); min-height: 24px; }
 
@@ -312,7 +307,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .map-svg { display: block; width: var(--map-width, auto); height: auto; }
 /* Inside the map the ramp is data, not design: --size comes from the score, which is the whole
    point of the graph. The family and weight are still fixed here, like everywhere else. */
-.map-svg .atlas-text { font-family: var(--mono); font-weight: 500; fill: var(--wc); font-size: var(--size); }
+.map-svg .atlas-text { font-family: var(--word); font-weight: 500; fill: var(--wc); fill-opacity: calc(1 - var(--fade, 0) * .22); font-size: var(--size); font-optical-sizing: auto; }
 /* --wc is the word's own colour, resolved once per state on the group so the hit box can borrow
    it. --wc-soft is that colour pulled toward --muted: the box is the word's hue, desaturated and
    nearly transparent, so it says "this one" without competing with what the colour means. */
@@ -360,14 +355,13 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .atlas-word[data-kind="org"]:not(.is-selected) .underline { opacity: .55; stroke-dasharray: 2 2; }
 .atlas-word[data-kind="org"].is-selected .underline { stroke-dasharray: 2 2; }
 .map-svg.is-masked .atlas-word[data-kind="org"].is-neighbor .underline { stroke-dasharray: 2 2; }
-.person-name { font-family: var(--display); font-weight: 700; fill: var(--accent); font-size: var(--size); letter-spacing: var(--tr-lg); }
+.person-name { font-family: var(--display); font-weight: 500; fill: var(--ink); font-size: var(--size); letter-spacing: -.01em; font-style: italic; }
 /* The centre is the person's own entry to the documents, so it answers to the cursor the way a
    word does -- the same soft box, in the colour the name is already written in. */
 .center-label { cursor: pointer; }
 .center-hit { fill: transparent; }
 .center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
 .micro { fill: var(--muted); font-family: var(--mono); font-size: var(--t-micro); font-weight: 500; letter-spacing: var(--tr-label); }
-.center-note { fill: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 .edge { fill: none; stroke: var(--accent); stroke-linecap: round; opacity: .46; pointer-events: none; }
 .boundary { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
 .halo-in { stop-color: var(--accent); stop-opacity: .045; }
@@ -425,14 +419,14 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .column-card.is-selected { background: color-mix(in srgb, var(--wc-soft) 24%, var(--soft)); }
 /* The word carries the card, so it sits at h3 rank in sans -- the list is the map's other face
    and the map writes its words in sans too. */
-.column-card strong { display: block; font-family: var(--mono); font-size: var(--t-lg); font-weight: 500; letter-spacing: 0; line-height: var(--lh-snug); overflow-wrap: anywhere; margin-top: var(--space-1); }
+.column-card strong { display: block; font-family: var(--word); font-size: var(--t-lg); font-weight: 500; letter-spacing: 0; line-height: var(--lh-snug); overflow-wrap: anywhere; margin-top: var(--space-1); }
 .column-card span { display: block; color: var(--muted); font-family: var(--mono); font-size: var(--t-xs); }
 .column-card.is-dim { opacity: .35; }
 /* The list is the map without its centre, so the person gets the head of it: full width, above
    the words, saying the same two things the centre of the map says. */
 .column-person { grid-column: 1 / -1; padding: var(--space-3) var(--space-4); border-radius: 2px; background: color-mix(in srgb, var(--accent) 7%, var(--soft)); cursor: pointer; }
 .column-person span { display: block; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); color: var(--muted); }
-.column-person strong { display: block; margin-top: var(--space-1); font-family: var(--display); font-size: var(--t-lg); font-weight: 700; color: var(--accent); letter-spacing: var(--tr-lg); overflow-wrap: anywhere; }
+.column-person strong { display: block; margin-top: var(--space-1); font-family: var(--display); font-size: var(--t-lg); font-weight: 500; color: var(--ink); letter-spacing: var(--tr-lg); overflow-wrap: anywhere; }
 .column-person:hover { background: color-mix(in srgb, var(--accent) 13%, var(--soft)); }
 .column-card strong { color: var(--wc); }
 .columns.is-masked .column-card { --wc: var(--mask, var(--muted)); }
@@ -506,7 +500,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .spark-bar { width: 8px; height: var(--h); background: var(--ink); border-radius: 1px 1px 0 0; }
 .spark-ghost { width: 8px; height: 18px; }
 .related { margin: var(--space-2) 0 var(--space-5); }
-.related button { width: 100%; border: 0; background: none; display: flex; align-items: center; gap: var(--space-3); text-align: left; padding: 10px 0; font-family: var(--mono); font-size: var(--t-base); }
+.related button { width: 100%; border: 0; background: none; display: flex; align-items: center; gap: var(--space-3); text-align: left; padding: 8px 0; font-family: var(--word); font-size: var(--t-md); }
 .related button:hover span { color: var(--accent); }
 .related span { flex: 1; overflow-wrap: anywhere; }
 .related b { font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; font-size: var(--t-sm); }
@@ -740,24 +734,22 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    the word on hover or on a pick would have hidden the one thing this figure draws. */
 .ruler-word { cursor: pointer; outline: none; --wc: var(--cmp, var(--muted)); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .ruler-glow, .ruler-hit { fill: transparent; }
-.ruler-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
+.ruler-text { font-family: var(--word); font-weight: 500; font-size: var(--size); fill: var(--wc); font-optical-sizing: auto; }
 .ruler-word:hover .ruler-glow, .ruler-word:focus-visible .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
 .ruler-word:hover .ruler-hit, .ruler-word:focus-visible .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .ruler-word.is-selected .ruler-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
 .ruler-word.is-selected .ruler-hit { fill: color-mix(in srgb, var(--wc-soft) 26%, transparent); }
-.ruler-bridge .ruler-bridge-mark { stroke: var(--accent); stroke-width: 2; }
 .detail-bridge { margin: var(--space-1) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--accent); }
 .ruler-overflow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-4); }
 .ruler-overflow p { flex: 1 0 100%; margin: 0; max-width: none; }
-.ruler-overflow .quiet-button { color: var(--cmp, var(--muted)); }
 .ruler-overflow .quiet-button:hover { color: var(--ink); }
 .ruler-overflow .quiet-button.is-selected { color: var(--cmp, var(--ink)); background: color-mix(in srgb, var(--cmp, var(--muted)) 22%, var(--soft)); font-weight: 600; }
-.ruler-axis-labels { display: flex; justify-content: space-between; padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
+.ruler-axis-labels { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0 0; font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
 .ruler .note { margin-top: var(--space-3); }
 /* The detail line: the word at h4 rank because it is the subject of the line, then one stat pair
    per person. Both sides keep the same shape whether the number is real or missing. */
 .detail { margin: 18px 0 0; min-height: 26px; }
-.detail .term { display: block; font-family: var(--mono); font-size: var(--t-md); font-weight: 500; line-height: var(--lh-mid); color: var(--ink); }
+.detail .term { display: block; font-family: var(--word); font-size: var(--t-lg); font-weight: 500; line-height: var(--lh-mid); color: var(--ink); }
 .detail-sides { display: flex; flex-wrap: wrap; gap: var(--space-1) 22px; margin-top: var(--space-1); }
 .detail-sides > div { min-width: 0; }
 .detail-sides dt { font-family: var(--mono); font-size: var(--t-xs); font-weight: 500; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ink); overflow-wrap: anywhere; }
@@ -782,7 +774,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .week-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
 .week-word { cursor: pointer; outline: none; --wc: var(--ink); --wc-soft: color-mix(in srgb, var(--wc) 55%, var(--muted)); }
 .week-glow, .week-hit { fill: transparent; }
-.week-text { font-family: var(--mono); font-weight: 500; font-size: var(--size); fill: var(--wc); }
+.week-text { font-family: var(--word); font-weight: 500; font-size: var(--size); fill: var(--wc); fill-opacity: calc(1 - var(--fade, 0) * .25); font-optical-sizing: auto; }
 .week-word:hover .week-glow, .week-word:focus-visible .week-glow { fill: color-mix(in srgb, var(--wc-soft) 9%, transparent); }
 .week-word:hover .week-hit, .week-word:focus-visible .week-hit { fill: color-mix(in srgb, var(--wc-soft) 13%, transparent); }
 .week-word.is-selected .week-glow { fill: color-mix(in srgb, var(--wc-soft) 16%, transparent); }
@@ -826,7 +818,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
    the mark is a percentage, not a position to lay out, so it earns no swarm/ruler of its own.
    Ink only: no new hue, share alone drives how dark a cell's own number reads. */
 .agenda-grid { display: block; margin-top: 18px; }
-.agenda-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.agenda-scroll { overflow-x: auto; padding: 0 96px 4px 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .agenda-table { border-collapse: collapse; font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .agenda-table th, .agenda-table td { padding: 6px var(--space-3); border-bottom: 1px solid var(--line); text-align: left; }
 .agenda-table thead th { color: var(--muted); font-weight: 500; vertical-align: bottom; }
@@ -834,36 +826,33 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .agenda-table tbody th .d { margin-right: 6px; }
 .agenda-cell { text-align: right; font-variant-numeric: tabular-nums; }
 .agenda-cell.is-empty { color: var(--muted); text-align: center; }
-.agenda-pick { border: 0; background: none; padding: 2px 4px; font: inherit; cursor: pointer; color: color-mix(in srgb, var(--ink) var(--share, 0%), var(--muted)); }
-.agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: underline; }
-.agenda-pick.is-active { font-weight: 600; text-decoration: none; background: color-mix(in srgb, var(--muted) 22%, var(--soft)); }
 .agenda-grid > .note { margin-top: var(--space-3); }
 /* Ink weight, not a lean colour: a small neutral chip beside the domain name it labels. */
 .lean-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); vertical-align: middle; }
 .agenda-ghost { display: flex; flex-direction: column; gap: var(--space-3); padding-top: 6px; }
 .agenda-ghost-row { display: flex; align-items: center; gap: var(--space-4); }
 /* ---------- the comention matrix (figure 9, issue #207): a 27x27 half-matrix, upper triangle
-   only (a < b). One ink ramp, --ink only, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
+   only (a < b). One sequential --heat ramp, no --hostile/--favor/--cmp-a/--cmp-b: exposure is not
    evaluation. Both .comention-grid and .comention-list are always in the DOM; only the media
    query below decides which one shows, the same move the week figure's own breakpoint uses. ---- */
 .comention-body { margin: 18px 0 0; overflow-x: auto; }
 .comention-grid { display: table; border-collapse: collapse; }
 .comention-row { display: flex; align-items: stretch; }
 .comention-rowhead {
-  flex: 0 0 140px;
-  width: 140px;
-  display: flex;
-  align-items: center;
-  padding-right: var(--space-2);
-  font-family: var(--display);
-  font-weight: 600;
+  flex: 0 0 150px;
+  width: 150px;
+  display: block;
+  align-self: center;
+  text-align: right;
+  padding-right: var(--space-3);
+  font-family: var(--sans);
+  font-weight: 500;
   font-size: var(--t-xs);
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.comention-headrow .comention-rowhead { flex-basis: 140px; }
 .comention-colhead {
   flex: 1 1 var(--cell, 26px);
   width: var(--cell, 26px);
@@ -937,7 +926,7 @@ select option { background: var(--panel); color: var(--ink); font-size: var(--t-
 .persistence-table thead th { height: 1.6em; vertical-align: bottom; }
 .persistence-week { position: relative; min-width: 24px; }
 .persistence-week span { position: absolute; bottom: 4px; left: 0; white-space: nowrap; font-size: var(--t-2xs); font-weight: 500; letter-spacing: var(--tr-label); color: var(--muted); }
-.persistence-table .persistence-term { padding: 0 var(--space-4) 0 0; max-width: 24ch; min-width: 12ch; color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.persistence-table .persistence-term { padding: 0 var(--space-5) 0 0; max-width: 24ch; min-width: 12ch; color: var(--ink); font-family: var(--word); font-size: var(--t-base); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .persistence-table .persistence-c { padding: 1px; }
 .persistence-cell {
   display: flex; align-items: center; justify-content: center;
@@ -988,6 +977,112 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 /* .empty centres its text, so the perched bird centres with it rather than sitting in a row. */
 .empty .pet { display: block; width: 52px; height: 74px; margin: 0 auto var(--space-4); }
 
+/* ---------- leitura: the second pass over every figure ----------
+   Words are set in --word (Newsreader), numbers in --mono, explanations in --sans. Each figure
+   ranks its own marks by ink as well as size (--fade, 0 for the strongest word, 1 for the
+   weakest), so the eye lands on the top of a ranking before it reads the tail. Grids of counts
+   read through one sequential hue, --heat, from the panel up; it never means a side or a verdict. */
+
+/* The atlas: no ring, no ticks, no captions in the field. The person's name is the centre. */
+/* viewBox units on a map as narrow as 640px: --t-base keeps the note at the 11px floor or above. */
+.center-note { fill: var(--muted); font-family: var(--mono); font-size: var(--t-base); letter-spacing: .02em; }
+.halo-in { stop-color: var(--ink); stop-opacity: .035; }
+.halo-out { stop-color: var(--ink); stop-opacity: 0; }
+.center-label:hover .center-hit, .center-label:focus-visible .center-hit { fill: color-mix(in srgb, var(--ink) 7%, transparent); }
+.edge { stroke: var(--accent); opacity: .55; }
+.search input { font-family: var(--sans); font-size: var(--t-sm); }
+.search input::placeholder { color: var(--faint); }
+.quiet-button { font-family: var(--sans); font-size: var(--t-xs); color: var(--muted); }
+.column-card span, .related b, .docs-summary { font-family: var(--mono); }
+.inspector h3 { font-family: var(--word); font-weight: 500; font-size: var(--t-xl); }
+.related button:hover span { color: var(--ink); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 4px; }
+
+/* The rulers (compare, em alta, lentes): faint verticals at the five marks, the scale beneath
+   the words in the two sides' own hues, and a centre that reads as "dividida". */
+.ruler-guide { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 5; }
+.ruler-guide.is-centre { stroke: color-mix(in srgb, var(--muted) 45%, transparent); stroke-dasharray: none; }
+.ruler-stop-a { stop-color: var(--cmp-a); }
+.ruler-stop-mid { stop-color: var(--scale-mid); stop-opacity: .5; }
+.ruler-stop-b { stop-color: var(--cmp-b); }
+.ruler-axis { stroke: none; }
+.ruler-tick { stroke: var(--muted); stroke-width: 1; opacity: .55; }
+.ruler-end-row { font-family: var(--display); font-size: var(--t-lg); padding-bottom: var(--space-3); }
+.ruler-end { font-weight: 500; }
+.ruler-axis-labels > span { flex: 1 1 0; }
+.ruler-axis-labels > span:nth-child(2) { flex: 0 0 auto; text-align: center; }
+.ruler-axis-labels > span:last-child { text-align: right; }
+.ruler-axis-labels, .strip-axis-labels { font-family: var(--sans); font-size: var(--t-xs); color: var(--muted); padding-top: var(--space-1); }
+.ruler-overflow .quiet-button, .week-overflow .quiet-button { font-family: var(--word); font-size: var(--t-sm); }
+
+/* The week: a ranking per day, the day's volume as a bar under its number. */
+.week-day .stat { margin-bottom: var(--space-1); }
+.week-volume { display: block; height: 4px; margin: 0 0 var(--space-3); border-radius: 2px; background: linear-gradient(90deg, var(--heat) calc(var(--v, 0) * 100%), var(--soft) 0); }
+
+/* Outlets: a ranked bar list. The bar is the outlet's share of the largest outlet's texts. */
+.outlet { position: relative; padding: 5px var(--space-2); font-family: var(--sans); font-size: var(--t-sm); color: var(--ink); border-radius: 2px; isolation: isolate;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 9%, transparent) calc(var(--bar, 0) * 100%), transparent 0) no-repeat 0 50% / 100% calc(100% - 4px); }
+.outlet .n { font-family: var(--mono); font-size: var(--t-xs); color: var(--muted); }
+.outlet:hover { color: var(--ink); background-color: color-mix(in srgb, var(--ink) 5%, transparent); }
+.outlet.is-static, .outlet.is-static:hover { color: var(--muted); }
+.outlets > .eyebrow, .outlets .eyebrow { margin-top: var(--space-4); }
+.outlet-grid { gap: 2px var(--space-6); max-height: 260px; }
+.pet-empty p { font-family: var(--sans); }
+
+/* Agenda: one sequential hue per cell, names written out above their column. */
+.agenda-scroll { position: relative; }
+.agenda-table { font-size: var(--t-xs); border-collapse: separate; border-spacing: 2px; }
+.agenda-table th, .agenda-table td { border-bottom: 0; padding: 0; }
+.agenda-table tbody th { position: sticky; left: 0; z-index: 1; padding: 0 var(--space-3) 0 0; background: var(--panel); font-family: var(--sans); font-size: var(--t-sm); font-weight: 400; color: var(--ink); }
+.agenda-colhead { height: 128px; width: clamp(24px, 2.1vw, 34px); min-width: clamp(24px, 2.1vw, 34px); vertical-align: bottom; }
+.agenda-colhead span { display: block; width: clamp(24px, 2.1vw, 34px); transform: translate(11px, -6px) rotate(-55deg); transform-origin: left bottom; white-space: nowrap; font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
+.agenda-cell { padding: 0; }
+/* The heat ramp jumps over its middle band (mixes of about 45-60%), where neither --ink nor --bg
+   text reaches 4.5:1: below half the peak a cell stays light under --ink, above it (.is-hot) dark
+   under --bg. */
+.agenda-pick { --hv: calc(var(--heat-v, 0) * .8);
+  display: block; border: 0; cursor: pointer; height: 26px; padding: 0; border-radius: 2px; font-family: var(--mono); font-size: var(--t-2xs); text-align: center;
+  background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft));
+  color: var(--ink); }
+.agenda-pick.is-hot, .comention-cell.is-hot { --hv: calc(var(--heat-v, var(--w, 0)) * .8 + .28); color: var(--bg); }
+.agenda-pick:hover, .agenda-pick:focus-visible { text-decoration: none; box-shadow: inset 0 0 0 1px var(--accent); }
+.agenda-pick.is-active { font-weight: 600; background: color-mix(in srgb, var(--heat) calc(var(--hv) * 88%), var(--soft)); box-shadow: inset 0 0 0 2px var(--accent); }
+.agenda-cell.is-empty { width: 34px; }
+.ink-scale { background: linear-gradient(90deg, var(--soft), var(--heat)); }
+.lean-chip { border: 0; padding: 0; margin-left: var(--space-2); font-size: var(--t-2xs); color: var(--muted); }
+
+/* Quem aparece junto: full names over the columns, the same --heat ramp in the cells. */
+.comention-headrow { height: 132px; align-items: flex-end; }
+.comention-colhead { position: relative; overflow: visible; padding: 0; }
+.comention-colhead span { position: absolute; left: 50%; bottom: 6px; transform: rotate(-55deg); transform-origin: left bottom; white-space: nowrap; font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
+.comention-cell { --hv: calc(var(--w, 0) * .8);
+  border-color: transparent; color: var(--ink);
+  background: color-mix(in srgb, var(--heat) calc(var(--hv) * 90%), var(--soft)); }
+.comention-cell.is-empty { background: color-mix(in srgb, var(--soft) 45%, transparent); }
+.comention-cell:hover:not(.is-empty):not(.is-blank), .comention-cell:focus-visible, .comention-cell.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.comention-row:hover .comention-rowhead { color: var(--accent); }
+
+/* Persistência: one week is a cell of --heat; the two series numbers sit on one line. */
+button.persistence-cell, .persistence-cell.is-expired { background: color-mix(in srgb, var(--heat) calc(var(--lv, 1) * 18%), var(--soft)); }
+.persistence-cell[data-lv="3"], .persistence-cell[data-lv="4"], .persistence-cell[data-lv="5"] { color: var(--bg); }
+.persistence-cell { height: 28px; min-width: 56px; border-color: transparent; }
+.persistence-cell.is-gap { border: 1px dashed var(--line); }
+.persistence-table .persistence-c { padding: 2px; }
+.persistence-week span { font-family: var(--mono); color: var(--muted); }
+.persistence-table .persistence-stat-head { padding: 0 0 6px var(--space-5); font-family: var(--sans); font-size: var(--t-xs); font-weight: 400; color: var(--muted); text-align: left; vertical-align: bottom; white-space: nowrap; }
+.persistence-table .persistence-stat { padding-left: var(--space-5); font-family: var(--mono); font-size: var(--t-xs); color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.persistence-gap-swatch { border-style: dashed; }
+
+/* Atenção: the two rows in --ink; an empty row says so instead of drawing a floor of zeros. */
+.attention-row-head { font-family: var(--sans); font-size: var(--t-sm); color: var(--ink); }
+.attention-row-head span + span, .attention-row-head > :last-child { color: var(--muted); font-size: var(--t-xs); }
+
+.attention-row.is-flat .attention-svg { opacity: .3; }
+.attention-bar { fill: color-mix(in srgb, var(--wc) 82%, transparent); }
+
+/* Stats and notes. */
+.stat dt { color: var(--muted); }
+.eyebrow::before { color: var(--accent); }
+
 /* ---------- smaller screens ---------- */
 @media (max-width: 1000px) {
   .figure { padding: 18px var(--space-4) var(--space-4); }
@@ -1016,3 +1111,84 @@ button.persistence-cell.is-selected { border-color: var(--accent); box-shadow: i
 }
 
 .app-root { display: contents; }
+
+/* Atlas: the count already sits beside the title, so the live status speaks only to screen readers
+   while the figure is quiet; the legend keeps only what the key above cannot say. */
+.status-row.is-quiet { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; min-height: 0; }
+.legend { font-family: var(--sans); font-size: var(--t-xs); padding: var(--space-3) 0 0; }
+.persistence-table { width: auto; }
+/* The recorte's mean already heads the figure; below the strip it is one line, number first. */
+.testimony .verdict { display: inline-block; padding: 0; margin-right: var(--space-3); vertical-align: baseline; }
+.testimony .verdict > div { flex-direction: row-reverse; align-items: baseline; gap: var(--space-2); }
+.testimony .verdict dd { font-size: var(--t-lg); }
+.testimony .verdict dt { font-family: var(--sans); font-size: var(--t-sm); letter-spacing: 0; color: var(--muted); }
+.testimony .verdict-class { display: inline; font-size: var(--t-sm); }
+/* Head and body columns share one fixed width, so every rotated name starts over its own column. */
+.comention-headrow .comention-rowhead { flex-basis: 150px; }
+.comention-colhead, .comention-cell { flex: 0 0 var(--cell, 26px); }
+
+/* ---------- round 3: the graph comes first ----------
+   The key is the graph's caption, not its preface: the header's parts become the figure's own
+   rows, so the title and the sentence lead, the graph follows, and the key closes the figure
+   in readable type. Screen readers still meet it in the header, where the markup keeps it. */
+.figure { display: flex; flex-direction: column; }
+.figure > * { min-width: 0; }
+.figure-head { display: contents; }
+.figure-head > .figure-title, .figure-head > .figure-sub { margin-bottom: var(--space-2); }
+.figure-head > .sentence { margin: var(--space-3) 0 var(--space-5); }
+.figure-key { order: 90; margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--line); gap: var(--space-2) var(--space-6); }
+.figure > .note, .figure > p.note { order: 80; }
+.figure-head > .figure-title { order: -4; }
+.figure-head > .figure-sub { order: -3; max-width: 72ch; }
+.figure-head > .sentence { order: -2; }
+.figure-head > .figure-key { order: 90; margin-top: var(--space-5); }
+/* One active state for every control: a raised tile with an amber rule under it. Amber fill is
+   kept for nothing, so no toggle outshouts the graph it serves. */
+.segment button[aria-pressed="true"], .segment button.active,
+.quiet-button.toggle[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; box-shadow: inset 0 -2px 0 var(--accent); }
+/* Rotated names over a matrix are read as often as the row names, so they get the same ink. */
+.agenda-colhead span, .comention-colhead span { color: var(--ink); }
+/* Quem aparece junto: the row under the pointer and its column light up, so a long row reads across. */
+.comention-row:not(.comention-headrow):hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.comention-row:not(.comention-headrow):nth-child(even) { background: color-mix(in srgb, var(--ink) 2%, transparent); }
+/* Em alta's rare risers: a line of words, not a row of chips. */
+.ruler-overflow { gap: 2px 0; align-items: baseline; }
+.ruler-overflow .quiet-button { background: none; border: 0; min-height: 0; padding: 2px 0; font-family: var(--word); font-size: var(--t-base); color: var(--cmp, var(--ink)); }
+.ruler-overflow .quiet-button:hover { background: none; text-decoration: underline; text-underline-offset: 3px; }
+.ruler-overflow .quiet-button.is-selected { background: none; box-shadow: inset 0 -2px 0 var(--accent); }
+.ruler-overflow .quiet-button + .quiet-button::before { content: '·'; display: inline-block; padding: 0 var(--space-2); color: var(--faint); }
+.strip-name text { font-family: var(--sans); font-size: var(--t-2xs); fill: var(--ink); text-anchor: middle; }
+.strip-name line { stroke: var(--muted); stroke-width: 1; opacity: .5; }
+.strip-tick { opacity: .9; }
+/* The agenda's 27 columns fit a laptop screen: the cell gives up width before the table scrolls. */
+.agenda-pick, .agenda-cell.is-empty { width: clamp(24px, 2.1vw, 34px); }
+.comention-cell { letter-spacing: -0.04em; }
+.key-line { display: inline-block; width: 22px; height: 0; border-top: 1px solid var(--accent); vertical-align: middle; margin-right: var(--space-2); }
+
+/* ---------- round 4: contrast floors and quieter chrome ---------- */
+.persistence-table .persistence-stat.is-flat { color: color-mix(in srgb, var(--ink) 80%, var(--muted)); }
+/* A bridge is a small amber diamond under the word, never an underline that reads as a link. */
+.ruler-bridge .ruler-bridge-mark { fill: var(--accent); stroke: none; }
+/* A word sitting on a guide keeps its letters whole: a stroke in the panel colour under the fill. */
+.ruler-word:not(.is-selected):not(:hover):not(:focus-visible) .ruler-text { paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+svg .strip-mean { position: static; transform: none; font-family: var(--mono); font-size: var(--t-2xs); fill: var(--accent); text-anchor: middle; }
+/* Per-source means read as type, like every other number list: no filled badge. */
+.source-chip { background: none; border: none; padding: 2px var(--space-4) 2px 0; }
+.source-chip .t { min-width: 0; padding: 0; background: none; color: var(--tone); font-size: var(--t-xs); }
+.source-chip .t::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--tone); margin-right: 5px; vertical-align: 1px; }
+/* The masthead is one band: title left, lede right, so the atlas starts inside the first screen. */
+@media (min-width: 900px) {
+  .masthead { display: grid; grid-template-columns: auto minmax(0, 42ch); column-gap: var(--space-7); align-items: end; padding: var(--space-5) 0 var(--space-5); }
+  .masthead .eyebrow { grid-column: 1 / -1; }
+  .masthead h1 { margin-top: var(--space-2); }
+  .masthead .lede { margin: 0 0 6px; }
+  .masthead + .figure { margin-top: var(--space-4); }
+}
+.outlet .t { min-width: 46px; text-align: right; padding: 0; background: none; color: var(--tone); font-size: var(--t-xs); }
+.comention-colhead { margin: 0 1px; }
+
+/* ---------- round 5 ---------- */
+/* The atlas's own notes row folds away when it has nothing to say. */
+.legend:not(:has(> span:not(:empty):not([hidden]))) { display: none; }
+.strip-zero { stroke: var(--muted); stroke-width: 1; opacity: .35; }
+.ruler-overflow .quiet-button, .ruler-rare .quiet-button { color: color-mix(in srgb, var(--cmp, var(--ink)) 65%, var(--ink)); }

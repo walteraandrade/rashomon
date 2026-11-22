@@ -32,8 +32,9 @@
       <dl class="figure-key">
         <div><dt>Tamanho</dt><dd>frequência, PMI ou alcance, o que a frase escolhe</dd></div>
         <div><dt>Cor</dt><dd>avaliação contra a média desta pessoa</dd></div>
-        <div><dt>Posição</dt><dd>só evita colisão</dd></div>
+        <div><dt>Posição</dt><dd>mais perto do centro, mais alta no ranking; a posição exata desvia para não cobrir outra palavra</dd></div>
         <div><dt>Tracejado</dt><dd>organização citada no texto, só no GDELT</dd></div>
+        <div><dt><i class="key-line" aria-hidden="true"></i>Linha</dt><dd>textos em comum com a palavra escolhida</dd></div>
         <div><dt>Clique</dt><dd>textos da palavra; no centro e na lista, textos da pessoa</dd></div>
       </dl>
       <p>Alcance é a soma dos reposts dos posts do Bluesky que trazem a palavra. É contado quando o rashomon coletou o post, então um post que continuou circulando depois fica subcontado. Só documentos do Bluesky têm alcance; os das outras fontes não têm e contam como zero.</p>
@@ -57,14 +58,14 @@
     <div id="help-avaliacao">
       <h3>Gráfico 2 · Avaliação</h3>
       <p>A nota não é de um jornalista nem do GDELT. Um modelo treinado só para isso, o <a href="https://huggingface.co/drifting-walter/kikori" target="_blank" rel="noopener">kikori</a>, lê cada texto sobre a pessoa e marca se fala contra (−10) ou a favor (+10). Até −2,5 conta como contra; de +2,5 para cima, a favor. Vale para todas as fontes. Nunca compare a nota de uma pessoa com a de outra: o nome puxa a nota.</p>
-      <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa. Só entram veículos com 3 ou mais textos.</p>
+      <p><b>A régua</b> põe cada veículo na sua média; a linha vertical é a média da pessoa e uma linha mais fraca marca o zero. O eixo vai a ±2, ±5 ou ±10, o menor que cabe todos. Só entram veículos com 3 ou mais textos.</p>
       <p>No gráfico 1, o modo <b>Avaliação</b> usa a mesma régua com palavras: posição é a média dos textos com a palavra; a cor é a mesma máscara do mapa e da lista. É a mesma nota, não outra medida.</p>
     </div>
     <div id="help-comparar">
       <h3>Gráfico 3 · Régua</h3>
       <p>A posição diz de quem a palavra é. O tamanho é documentos dos dois, somados. No meio, a palavra é dividida. Clique abre os textos das duas pessoas.</p>
       <p>As que não couberam sem cobrir outra ficam numa lista abaixo, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
-      <p>Uma palavra sublinhada em âmbar é uma ponte: pelos textos das duas pessoas, ela liga um vocabulário ao outro. A mais atravessada vale 1 e ganham sublinhado as que passam de 0,5. A ponte não muda a posição.</p>
+      <p>Uma palavra marcada com um losango âmbar é uma ponte: pelos textos das duas pessoas, ela liga um vocabulário ao outro. A mais atravessada vale 1 e ganham o losango as cinco mais atravessadas, desde que passem de 0,5. A ponte não muda a posição.</p>
     </div>
     <div id="help-em-alta">
       <h3>Gráfico 4 · Em alta</h3>
@@ -73,8 +74,8 @@
     </div>
     <div id="help-semana">
       <h3>Gráfico 5 · A semana</h3>
-      <p>Cada coluna é um dia, do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. O tamanho da palavra é quantos documentos daquele dia a têm; a posição é só o dia, não mede nada dentro da coluna. Uma palavra que aparece em vários dias repete em cada coluna, sem linha ligando uma à outra.</p>
-      <p>Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna. Uma palavra só não quebra na figura: se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe o que passa da altura da coluna num dia com mais palavras do que ela comporta.</p>
+      <p>Cada coluna é um dia, do calendário de Brasília, do mais antigo à esquerda ao de hoje à direita. O tamanho da palavra é quantos documentos daquele dia a têm. Em cada coluna, de cima para baixo, vai da mais citada para a menos citada, até 12 palavras por dia; o resto vai para a lista "não couberam". Uma palavra que aparece em vários dias repete em cada coluna, sem linha ligando uma à outra.</p>
+      <p>Uma expressão de várias palavras quebra em linhas, nos espaços ou depois de um hífen, para caber na coluna. Uma palavra só não quebra na figura: se fica mais larga que a coluna no tamanho que lhe cabe, vai para a lista "não couberam" embaixo da coluna, com seu número de documentos ao lado, onde pode ser partida com hífen. Ela não encolhe para caber: o tamanho seguiria mentindo. A lista também recebe as palavras além das 12 do dia.</p>
       <p>O número junto do rótulo do dia é quantos documentos citam a pessoa naquele dia, mesmo num dia sem nenhuma palavra sobrevivendo ao corte. Clique numa palavra abre os textos daquele dia com aquela palavra.</p>
       <p>O gráfico 1 tem seu próprio calendário em miniatura: ao focar uma palavra, um pequeno gráfico de barras mostra os últimos 7 dias <b>corridos</b>, não dias de calendário como aqui, e independente do período escolhido na frase do gráfico 1.</p>
     </div>
@@ -83,7 +84,7 @@
       <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara as duas lentes escolhidas para a mesma pessoa, do mesmo jeito que o gráfico 3 compara duas pessoas: a posição diz de qual lente a palavra é mais, o tamanho é documentos das duas lentes somados. Clique abre os textos das duas lentes.</p>
       <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". O nome da pessoa não entra na régua; quantas palavras saíram por isso aparece embaixo, nas duas lentes juntas, já que é a mesma pessoa nos dois lados.</p>
       <p>Uma lente inválida ou vazia volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
-      <p>O sublinhado âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa.</p>
+      <p>O losango âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa.</p>
     </div>
     <div id="help-atencao">
       <h3>Gráfico 7 · Atenção e menções</h3>
@@ -92,7 +93,7 @@
     </div>
     <div id="help-agenda">
       <h3>Gráfico 8 · Agenda por veículo</h3>
-      <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total.</p>
+      <p>Uma linha por veículo, entre os 30 com mais documentos rastreados no recorte; uma coluna por pessoa acompanhada. Cada célula é a fatia dos documentos daquele veículo que citam aquela pessoa, entre todos os documentos daquele veículo que citam alguém acompanhado. A fatia é do veículo, não da pessoa: um veículo que só fala de uma pessoa mostra 100% para ela, mesmo escrevendo pouco no total. Quanto maior a fatia, mais forte o tom, medido contra a maior fatia da tabela.</p>
       <p>A soma de uma linha pode passar de 100%: um documento que cita duas pessoas acompanhadas conta para as duas, uma vez cada. Um veículo com poucos documentos rastreados nem entra na tabela. Clique numa célula abre os documentos daquela pessoa naquele veículo.</p>
     </div>
     <div id="help-junto">
@@ -103,7 +104,7 @@
     <div id="help-persistencia">
       <h3>Gráfico 10 · Persistência</h3>
       <p>Cada linha é uma palavra; cada célula, uma semana de segunda a domingo, no calendário de Brasília, da mais antiga à esquerda à atual à direita. A célula mostra quantos documentos sobre a pessoa trazem a palavra naquela semana. A palavra só entra na semana se estiver entre as 50 mais fortes dela, com pelo menos 2 documentos.</p>
-      <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. Antes da primeira semana gravada a célula diz &ldquo;sem dados&rdquo;. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
+      <p>Uma célula vazia não é zero: quer dizer que a palavra ficou fora das 50 mais fortes daquela semana. A tabela começa na primeira semana gravada para a pessoa. A série começa em 9 de setembro de 2026 e cresce uma semana por vez; com menos de quatro semanas, a figura avisa.</p>
       <p>A sequência conta as semanas seguidas com a palavra, até agora. A semana em curso ainda está incompleta e não interrompe a conta se estiver vazia. A meia-vida é o número de semanas do pico até a primeira semana completa em que a palavra caiu à metade ou menos; &ldquo;sem queda&rdquo; quer dizer que isso ainda não aconteceu.</p>
       <p>Clicar numa célula abre os textos daquela semana com a palavra. Semanas mais antigas que o período de documentos guardado mostram o número, mas não abrem textos.</p>
     </div>

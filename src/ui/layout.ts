@@ -362,16 +362,14 @@ const weekColumn = <T extends WeekTerm>(measure: Measure, terms: T[], width: num
   const maxWidth = weekMaxWidth(width)
   const sized = terms.map((t) => {
     const fraction = hi === lo ? 0.5 : (t.count - lo) / (hi - lo)
-    // One ramp for the week, its ceiling `top` shared by every column, so a larger count is
-    // never a smaller size; a word wider than the column at its ramp size goes to overflow.
+    // One week-wide ramp: a larger count is never a smaller size.
     const size = Math.round((WEEK_SIZE_MIN + (top - WEEK_SIZE_MIN) * fraction) * 10) / 10
     const text = label(t)
     const lines = weekLines(measure, text, size, maxWidth)
     const w = weekLineWidth(measure, lines, size)
     return { ...t, text, lines, x: 0, size, w, h: Math.round(size * 1.24) * lines.length }
   })
-  // A word wider than the column even wrapped is listed under it, never drawn across the next
-  // day; lowering the shared ceiling for it would flatten the whole week.
+  // A word too wide even wrapped is listed, never drawn across the next day.
   const tooWide = sized.filter((d) => d.w > maxWidth)
   const fitting = sized.filter((d) => d.w <= maxWidth)
   // Each column is a ranking, loudest first; a long day grows taller, and past the cap words are listed, never dropped.

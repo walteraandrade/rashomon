@@ -12,7 +12,7 @@ Deploying, writing, indexing, measuring and caching. Everything here assumes one
 | `PG_SSL_CA` | unset | the Postgres server's CA certificate, PEM text (Supabase: Project Settings > Database > SSL configuration > download certificate); required for any non-local `DATABASE_URL`/`POSTGRES_URL` — a missing value stops the connection instead of falling back to an unverified one |
 | `PG_POOL_MAX` | `3` | connections per function instance, managed Postgres only (1..20; a non-number falls back to 3) |
 | `BSKY_HANDLE` / `BSKY_APP_PASSWORD` | unset | authenticated Bluesky, so its collector can paginate |
-| `GKG_SLOTS` | `24` | how many 15-minute GDELT slots to look back (24 = 6h) |
+| `GKG_SLOTS` | `24` | how many 15-minute GDELT slots to look back (24 = 6h; `ingest.yml` sets 52 = 13h, since GitHub drops about half the scheduled runs) |
 | `ANALYZE_MIN_DOCS` | `200` | ingest size from which planner statistics are refreshed |
 | `WRITE_BATCH_ROWS` | `500` | rows per insert statement (1..10000) |
 | `WRITE_BATCH_DOCS` | `200` | documents per transaction (1..5000) |

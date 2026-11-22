@@ -1,7 +1,9 @@
 name: ingest
 
-# Collects every 6 hours into the managed Postgres behind production. GKG_SLOTS=28
-# looks back 7 hours, so one missed run still leaves no gap. Runs never overlap:
+# Collects every 6 hours into the managed Postgres behind production. GitHub drops many
+# scheduled runs (about two of the four fire on a typical day, ~12 h apart), so GKG_SLOTS=52
+# looks back 13 hours: gkg_files skips slots already done, so the wider window costs only the
+# slots a dropped run missed. Runs never overlap:
 # each one is a long-lived pg session doing bulk inserts and an ANALYZE. A full run
 # takes ~25 min, ~20 of them Bluesky (which defaultSources runs last), plus the score
 # of the new pairs.
@@ -28,7 +30,7 @@ jobs:
       PG_SSL_CA: ${{ secrets.PG_SSL_CA }}
       BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
       BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
-      GKG_SLOTS: 28
+      GKG_SLOTS: 52
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       TESTIMONY_MODEL: drifting-walter/kikori
       # Must equal the Vercel project's value: it is part of the testimony `method`, the label

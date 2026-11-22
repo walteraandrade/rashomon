@@ -65,7 +65,7 @@
       <h3>Gráfico 3 · Régua</h3>
       <p>A posição diz de quem a palavra é. O tamanho é documentos dos dois, somados. No meio, a palavra é dividida. Clique abre os textos das duas pessoas.</p>
       <p>As que não couberam sem cobrir outra ficam numa lista abaixo, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
-      <p>Uma palavra sublinhada em âmbar é uma ponte: pelos textos das duas pessoas, ela liga um vocabulário ao outro. A mais atravessada vale 1 e ganham sublinhado as que passam de 0,5. A ponte não muda a posição.</p>
+      <p>Uma palavra marcada com um losango âmbar é uma ponte: pelos textos das duas pessoas, ela liga um vocabulário ao outro. A mais atravessada vale 1 e ganham o losango as cinco mais atravessadas, desde que passem de 0,5. A ponte não muda a posição.</p>
     </div>
     <div id="help-em-alta">
       <h3>Gráfico 4 · Em alta</h3>

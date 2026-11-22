@@ -1226,3 +1226,4 @@ svg .strip-mean { position: static; transform: none; font-family: var(--mono); f
 .map-svg.is-fitted { max-height: max(560px, calc(100svh - 240px)); }
 .key-bridge { width: 8px; height: 8px; }
 .strip-zero { stroke: var(--muted); stroke-width: 1; opacity: .35; }
+.ruler-overflow .quiet-button, .ruler-rare .quiet-button { color: color-mix(in srgb, var(--cmp, var(--ink)) 65%, var(--ink)); }

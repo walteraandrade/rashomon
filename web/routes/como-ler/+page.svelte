@@ -68,7 +68,7 @@
         <p>As que não couberam sem cobrir outra ficam numa lista abaixo da régua, e clicam igual. O nome de uma das duas pessoas não entra na régua dela; quantas saíram aparece embaixo.</p>
         <p>Uma palavra desenhada toda numa ponta pode ter sido usada também pela outra pessoa, só que abaixo do que a construção pré-computada deste recorte guardou: nesses casos o outro lado não é sempre zero, é só o que sobrou de fora dela. Esse lado conta como zero também no tamanho da letra e na escolha das palavras que concorrem a ponte, então a palavra pode sair um pouco menor do que a soma real.</p>
         <h3 id="ponte">Ponte</h3>
-        <p>Uma palavra sublinhada em âmbar é uma ponte: pelos documentos das duas pessoas, ela liga palavras de um vocabulário às do outro. A conta junta as palavras que aparecem juntas no mesmo texto, dos dois lados, e mede por quantos caminhos mais curtos entre duas palavras quaisquer ela passa (centralidade de intermediação). A mais atravessada vale 1; sublinhadas ficam as que passam de 0,5. A ponte não muda a posição: uma palavra pode pender para um lado e ainda assim ligar os dois.</p>
+        <p>Uma palavra marcada com um losango âmbar é uma ponte: pelos documentos das duas pessoas, ela liga palavras de um vocabulário às do outro. A conta junta as palavras que aparecem juntas no mesmo texto, dos dois lados, e mede por quantos caminhos mais curtos entre duas palavras quaisquer ela passa (centralidade de intermediação). A mais atravessada vale 1; ganham o losango as cinco mais atravessadas, desde que passem de 0,5. A ponte não muda a posição: uma palavra pode pender para um lado e ainda assim ligar os dois.</p>
       </div>
       <div id="em-alta">
         <h2>Gráfico 4 · Em alta</h2>
@@ -95,7 +95,7 @@
         <h2>Gráfico 6 · Uma pessoa, duas lentes</h2>
         <p>Uma lente é um recorte do mesmo corpus: um veículo, um viés (esquerda, centro, direita) ou uma fonte. A régua compara duas lentes escolhidas para a mesma pessoa, do mesmo jeito que o gráfico 3 compara duas pessoas.</p>
         <h3>Posição e tamanho</h3>
-        <p>A posição diz de qual lente a palavra é mais; no meio, ela é dividida entre as duas. O tamanho da letra é quantos documentos ela tem nas duas lentes, somados.</p>
+        <p>A posição diz de qual lente a palavra é mais; no meio, ela é dividida entre as duas. O tamanho da letra é quantos documentos ela tem nas duas lentes, somados. Sem escolha sua, o gráfico abre comparando os dois veículos que mais escreveram sobre a pessoa.</p>
         <p>Uma palavra desenhada toda numa ponta pode ter sido usada também pela outra lente, só que abaixo do que a construção pré-computada deste recorte guardou: nesses casos o outro lado não é sempre zero, é só o que sobrou de fora dela. Esse lado conta como zero também no tamanho da letra e na escolha das palavras que concorrem a ponte, então a palavra pode sair um pouco menor do que a soma real.</p>
         <h3>Mesmo recorte</h3>
         <p>Quando as duas lentes escolhidas são exatamente a mesma, aparece o aviso "Os dois lados mostram o mesmo recorte". Não há detecção de recortes equivalentes com nomes diferentes: só a mesma lente, escrita do mesmo jeito, conta.</p>
@@ -104,7 +104,7 @@
         <h3>Lente inválida</h3>
         <p>Uma lente vazia, malformada ou desconhecida volta para "Tudo", o corpus inteiro daquele lado, sem erro.</p>
         <h3>Ponte</h3>
-        <p>O sublinhado âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa. A conta está em <a href="#ponte">Ponte</a>, no gráfico 3.</p>
+        <p>O losango âmbar é o mesmo do gráfico 3, com as duas lentes no lugar das duas pessoas: a palavra que as duas lentes precisam para falar da pessoa. A conta está em <a href="#ponte">Ponte</a>, no gráfico 3.</p>
         <h3>Clique</h3>
         <p>Abre os textos das duas lentes ao mesmo tempo, cada uma com o seu recorte de veículo, viés ou fonte.</p>
       </div>

@@ -193,3 +193,7 @@ Both sides come from the precomputed window tables when both lenses are `all` or
 `persons` is `{ id, name }` for every row in `persons`, ordered by name, present even for someone in no surviving pair — the same shape and rule `/tone`'s `persons` follows. `pairs` holds one `{ a, b, count }` row per unordered pair whose shared-doc count in the window is `>= min`: `a` is always the lexicographically smaller person id (`'bolsonaro' < 'lula' < 'tarcisio'`), so a pair appears exactly once and never in both orders. A pair below `min`, or with zero shared docs, is simply absent from `pairs` — never a zero-count row. Cached with the rolling 6h class, not the 1h trend class.
 
 Clicking a pair's cell on the page opens the documents behind it through [`/docs?with=`](#docs): `GET /api/people/<a>/docs?with=<b>`, one person's documents filtered to those that also name the other.
+
+## labels
+
+`GET /api/labels` returns one object mapping a stored, accent-free term word to its reader spelling: `{ "decisao": "decisão", "flavio": "Flávio", "stf": "STF" }`. A word whose spelling equals its key is absent, so a missing key means "draw it as stored". Built by `pnpm aggregate` (and the end of every ingest/reindex) into `term_labels` from the corpus's most common written form of each word served by `graph_terms` or `term_weeks`; capitalised when more than 90% of occurrences are, in capitals when more than 80% are and the word has at most five letters. A phrase is labelled word by word on the page. Empty (`{}`) before the first build.
